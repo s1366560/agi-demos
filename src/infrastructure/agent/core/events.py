@@ -2,11 +2,25 @@
 
 import json
 import time
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict
 
 from src.domain.events.agent_events import AgentDomainEvent
+
+
+# Deprecation warning helper
+def deprecated(func):
+    def wrapper(*args, **kwargs):
+        warnings.warn(
+            f"{func.__name__} is deprecated. Use from_domain_event or AgentDomainEvent instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 class SSEEventType(str, Enum):
@@ -125,16 +139,19 @@ class SSEEvent:
         }
 
     @classmethod
+    @deprecated
     def status(cls, status: str) -> "SSEEvent":
         """Create a status event."""
         return cls(SSEEventType.STATUS, {"status": status})
 
     @classmethod
+    @deprecated
     def start(cls) -> "SSEEvent":
         """Create a start event."""
         return cls(SSEEventType.START)
 
     @classmethod
+    @deprecated
     def complete(cls, result: Any = None, trace_url: str = None) -> "SSEEvent":
         """Create a complete event."""
         data = {}
@@ -145,6 +162,7 @@ class SSEEvent:
         return cls(SSEEventType.COMPLETE, data)
 
     @classmethod
+    @deprecated
     def error(cls, message: str, code: str = None) -> "SSEEvent":
         """Create an error event."""
         data = {"message": message}
@@ -153,6 +171,7 @@ class SSEEvent:
         return cls(SSEEventType.ERROR, data)
 
     @classmethod
+    @deprecated
     def thought(
         cls,
         content: str,
@@ -169,17 +188,20 @@ class SSEEvent:
         return cls(SSEEventType.THOUGHT, data)
 
     @classmethod
+    @deprecated
     def thought_delta(cls, delta: str) -> "SSEEvent":
         """Create a thought delta event."""
         return cls(SSEEventType.THOUGHT_DELTA, {"delta": delta})
 
     @classmethod
+    @deprecated
     def work_plan(cls, plan: Dict[str, Any]) -> "SSEEvent":
         """Create a work plan event."""
         # Directly use plan data for frontend compatibility
         return cls(SSEEventType.WORK_PLAN, plan)
 
     @classmethod
+    @deprecated
     def step_start(cls, step_index: int, step_description: str) -> "SSEEvent":
         """Create a step start event."""
         return cls(
@@ -191,6 +213,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def step_end(cls, step_index: int, status: str = "completed") -> "SSEEvent":
         """Create a step end event."""
         return cls(
@@ -202,6 +225,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def act(
         cls,
         tool_name: str,
@@ -221,6 +245,7 @@ class SSEEvent:
         return cls(SSEEventType.ACT, data)
 
     @classmethod
+    @deprecated
     def observe(
         cls,
         tool_name: str,
@@ -245,26 +270,31 @@ class SSEEvent:
         return cls(SSEEventType.OBSERVE, data)
 
     @classmethod
+    @deprecated
     def text_start(cls) -> "SSEEvent":
         """Create a text start event."""
         return cls(SSEEventType.TEXT_START)
 
     @classmethod
+    @deprecated
     def text_delta(cls, delta: str) -> "SSEEvent":
         """Create a text delta event."""
         return cls(SSEEventType.TEXT_DELTA, {"delta": delta})
 
     @classmethod
+    @deprecated
     def text_end(cls, full_text: str = None) -> "SSEEvent":
         """Create a text end event."""
         return cls(SSEEventType.TEXT_END, {"full_text": full_text} if full_text else {})
 
     @classmethod
+    @deprecated
     def message(cls, role: str, content: str) -> "SSEEvent":
         """Create a message event."""
         return cls(SSEEventType.MESSAGE, {"role": role, "content": content})
 
     @classmethod
+    @deprecated
     def permission_asked(
         cls,
         request_id: str,
@@ -284,6 +314,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def doom_loop_detected(
         cls,
         tool: str,
@@ -299,6 +330,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def cost_update(
         cls,
         cost: float,
@@ -314,6 +346,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def step_finish(
         cls,
         tokens: Dict[str, int],
@@ -332,6 +365,7 @@ class SSEEvent:
         return cls(SSEEventType.STEP_FINISH, data)
 
     @classmethod
+    @deprecated
     def retry(
         cls,
         attempt: int,
@@ -349,11 +383,13 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def compact_needed(cls) -> "SSEEvent":
         """Create a compact needed event."""
         return cls(SSEEventType.COMPACT_NEEDED)
 
     @classmethod
+    @deprecated
     def context_compressed(
         cls,
         was_compressed: bool,
@@ -396,6 +432,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def pattern_match(
         cls,
         pattern_id: str,
@@ -415,6 +452,7 @@ class SSEEvent:
     # === Human-in-the-Loop Events ===
 
     @classmethod
+    @deprecated
     def clarification_asked(
         cls,
         request_id: str,
@@ -450,6 +488,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def clarification_answered(
         cls,
         request_id: str,
@@ -473,6 +512,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def decision_asked(
         cls,
         request_id: str,
@@ -512,6 +552,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def decision_answered(
         cls,
         request_id: str,
@@ -535,6 +576,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def doom_loop_intervened(
         cls,
         request_id: str,
@@ -560,6 +602,7 @@ class SSEEvent:
     # === Skill Execution Events (L2 Layer) ===
 
     @classmethod
+    @deprecated
     def skill_matched(
         cls,
         skill_id: str,
@@ -592,6 +635,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def skill_execution_start(
         cls,
         skill_id: str,
@@ -621,6 +665,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def skill_execution_complete(
         cls,
         skill_id: str,
@@ -659,6 +704,7 @@ class SSEEvent:
         return cls(SSEEventType.SKILL_EXECUTION_COMPLETE, data)
 
     @classmethod
+    @deprecated
     def skill_fallback(
         cls,
         skill_name: str,
@@ -686,6 +732,7 @@ class SSEEvent:
     # === Plan Mode Events ===
 
     @classmethod
+    @deprecated
     def plan_mode_enter(
         cls,
         conversation_id: str,
@@ -712,6 +759,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def plan_mode_exit(
         cls,
         conversation_id: str,
@@ -741,6 +789,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def plan_created(
         cls,
         plan_id: str,
@@ -767,6 +816,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def plan_updated(
         cls,
         plan_id: str,
@@ -793,6 +843,7 @@ class SSEEvent:
         )
 
     @classmethod
+    @deprecated
     def plan_status_changed(
         cls,
         plan_id: str,
@@ -823,10 +874,10 @@ class SSEEvent:
         """Convert a domain event to an SSE event."""
         # Extract data by dumping the model, excluding type and timestamp
         data = event.model_dump(exclude={"event_type", "timestamp"})
-        
+
         # Handle special cases where domain model fields might differ slightly from SSE expectations
         # For now, we assume they are compatible as we designed them to be
-        
+
         return SSEEvent(
             type=SSEEventType(event.event_type.value),
             data=data,

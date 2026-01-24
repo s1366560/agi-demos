@@ -7,17 +7,28 @@ and managing event streaming.
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Any, AsyncIterator, Callable, Dict, Optional
 
-from src.infrastructure.agent.core.events import SSEEvent, SSEEventType
+from src.domain.events.agent_events import (
+    AgentDomainEvent,
+    AgentEventType,
+    AgentThoughtEvent,
+    AgentTextDeltaEvent,
+    AgentActEvent,
+    AgentObserveEvent,
+    AgentCostUpdateEvent,
+    AgentStartEvent,
+    AgentCompleteEvent,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class SSEBridge:
     """
-    Bridge for converting CUA events to MemStack SSE events.
+    Bridge for converting CUA events to MemStack AgentDomainEvent events.
 
     This class provides:
     - Event type mapping between CUA and MemStack
@@ -28,32 +39,32 @@ class SSEBridge:
         bridge = SSEBridge()
 
         # Convert single event
-        sse_event = bridge.convert_event(cua_event)
+        domain_event = bridge.convert_event(cua_event)
 
         # Stream converted events
         async for event in bridge.stream(cua_event_source):
             yield event
     """
 
-    # Mapping from CUA event types to MemStack SSE event types
+    # Mapping from CUA event types to MemStack AgentEventType
     EVENT_TYPE_MAP = {
         # Run lifecycle
-        "cua_run_start": SSEEventType.START,
-        "cua_run_end": SSEEventType.COMPLETE,
+        "cua_run_start": AgentEventType.START,
+        "cua_run_end": AgentEventType.COMPLETE,
         # Action events
-        "act": SSEEventType.ACT,
-        "observe": SSEEventType.OBSERVE,
+        "act": AgentEventType.ACT,
+        "observe": AgentEventType.OBSERVE,
         # Text events
-        "text_delta": SSEEventType.TEXT_DELTA,
-        "thought": SSEEventType.THOUGHT,
+        "text_delta": AgentEventType.TEXT_DELTA,
+        "thought": AgentEventType.THOUGHT,
         # Cost tracking
-        "cost_update": SSEEventType.COST_UPDATE,
-        # Screenshot (custom type)
-        "screenshot": "screenshot",  # Pass through as custom type
+        "cost_update": AgentEventType.COST_UPDATE,
+        # Screenshot (custom type - no direct mapping in core events yet, mapped to OBSERVE)
+        "screenshot": AgentEventType.OBSERVE,
         # CUA-specific events (pass through)
-        "cua_response": "cua_response",
-        "cua_execution_start": "cua_execution_start",
-        "cua_execution_complete": "cua_execution_complete",
+        "cua_response": AgentEventType.OBSERVE,
+        "cua_execution_start": AgentEventType.THOUGHT,
+        "cua_execution_complete": AgentEventType.THOUGHT,
     }
 
     def __init__(
@@ -71,15 +82,15 @@ class SSEBridge:
         self._filter_fn = filter_fn
         self._transform_fn = transform_fn
 
-    def convert_event(self, cua_event: Dict[str, Any]) -> Optional[SSEEvent]:
+    def convert_event(self, cua_event: Dict[str, Any]) -> Optional[AgentDomainEvent]:
         """
-        Convert a CUA event to MemStack SSEEvent.
+        Convert a CUA event to MemStack AgentDomainEvent.
 
         Args:
             cua_event: CUA event dictionary with 'type' and 'data' keys
 
         Returns:
-            SSEEvent or None if event should be filtered out
+            AgentDomainEvent or None if event should be filtered out
         """
         event_type = cua_event.get("type", "unknown")
         data = cua_event.get("data", {})
@@ -95,33 +106,64 @@ class SSEBridge:
         # Map event type
         mapped_type = self.EVENT_TYPE_MAP.get(event_type)
 
-        if mapped_type is None:
-            # Unknown event type - pass through as custom
-            logger.debug(f"Unknown CUA event type: {event_type}")
-            return SSEEvent(
-                type=SSEEventType.THOUGHT,  # Default to thought
-                data={
-                    "content": f"CUA event: {event_type}",
-                    "original_type": event_type,
-                    "original_data": data,
-                },
+        if mapped_type == AgentEventType.START:
+            return AgentStartEvent()
+
+        elif mapped_type == AgentEventType.COMPLETE:
+            return AgentCompleteEvent(result=data)
+
+        elif mapped_type == AgentEventType.ACT:
+            return AgentActEvent(
+                tool_name=data.get("tool_name", "unknown"),
+                tool_input=data.get("tool_input", {}),
+                call_id=data.get("call_id"),
+                status=data.get("status", "running"),
             )
 
-        # Handle string types (custom events)
-        if isinstance(mapped_type, str):
-            # For custom event types, wrap in a generic SSEEvent
-            return SSEEvent(
-                type=SSEEventType.OBSERVE,  # Use observe as container
-                data={
-                    "cua_event_type": mapped_type,
-                    **data,
-                },
+        elif mapped_type == AgentEventType.OBSERVE:
+            # Handle special screenshot case
+            if event_type == "screenshot":
+                return AgentObserveEvent(
+                    tool_name="screenshot",
+                    result=data,
+                    status="completed",
+                )
+            
+            return AgentObserveEvent(
+                tool_name=data.get("tool_name", "unknown"),
+                result=data.get("result"),
+                error=data.get("error"),
+                duration_ms=data.get("duration_ms"),
+                call_id=data.get("call_id"),
+                status=data.get("status", "completed"),
             )
 
-        # Create SSEEvent with mapped type
-        return SSEEvent(
-            type=mapped_type,
-            data=data,
+        elif mapped_type == AgentEventType.TEXT_DELTA:
+            return AgentTextDeltaEvent(delta=data.get("delta", ""))
+
+        elif mapped_type == AgentEventType.THOUGHT:
+            content = data.get("content", "")
+            if not content and event_type == "cua_execution_start":
+                content = "Starting CUA execution..."
+            elif not content and event_type == "cua_execution_complete":
+                content = "CUA execution completed."
+                
+            return AgentThoughtEvent(
+                content=content,
+                thought_level="task"
+            )
+
+        elif mapped_type == AgentEventType.COST_UPDATE:
+            return AgentCostUpdateEvent(
+                cost=data.get("cost", 0.0),
+                tokens=data.get("tokens", {})
+            )
+
+        # Default fallback for unknown types
+        logger.debug(f"Unknown CUA event type: {event_type}, mapping to Thought")
+        return AgentThoughtEvent(
+            content=f"CUA event: {event_type} - {data}",
+            thought_level="debug"
         )
 
     def convert_to_dict(self, cua_event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -137,16 +179,24 @@ class SSEBridge:
         Returns:
             Event dictionary or None if filtered out
         """
-        sse_event = self.convert_event(cua_event)
-        if sse_event is None:
+        domain_event = self.convert_event(cua_event)
+        if domain_event is None:
             return None
 
+        # Convert domain event to SSE-compatible dict using our new adapter method
+        # But here we need to return a dict, not SSEEvent object, as the stream method expects dicts
+        # We can implement a local helper or import the adapter
+        
+        # Simple manual conversion for now to match legacy behavior
+        event_type = domain_event.event_type.value
+        timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
+        
+        data = domain_event.model_dump(exclude={"event_type", "timestamp"})
+        
         return {
-            "type": sse_event.type.value
-            if hasattr(sse_event.type, "value")
-            else str(sse_event.type),
-            "data": sse_event.data,
-            "timestamp": datetime.utcnow().isoformat(),
+            "type": event_type,
+            "data": data,
+            "timestamp": timestamp,
         }
 
     async def stream(

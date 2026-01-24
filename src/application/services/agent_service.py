@@ -18,6 +18,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
 
+from src.domain.events.agent_events import AgentMessageEvent, AgentEventType
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.llm_providers.llm_types import Message as LLMMessage
 from src.domain.model.agent import (
@@ -203,33 +204,43 @@ class AgentService(AgentServicePort):
 
             # Create user message event (unified event timeline - no messages table)
             user_msg_id = str(uuid.uuid4())
-            user_msg_created_at = datetime.utcnow()
-
-            # Get next sequence number and save user_message event
+            
+            # Use Domain Event
+            user_domain_event = AgentMessageEvent(
+                role="user",
+                content=user_message,
+            )
+            
+            # Get next sequence number
             next_seq = await self._agent_execution_event_repo.get_last_sequence(conversation_id) + 1
-            user_msg_event = AgentExecutionEvent(
-                id=str(uuid.uuid4()),
+            
+            # Convert to persistent entity
+            user_msg_event = AgentExecutionEvent.from_domain_event(
+                event=user_domain_event,
                 conversation_id=conversation_id,
                 message_id=user_msg_id,
-                event_type="user_message",
-                event_data={
-                    "content": user_message,
-                    "message_id": user_msg_id,
-                    "role": "user",
-                },
-                sequence_number=next_seq,
-                created_at=user_msg_created_at,
+                sequence_number=next_seq
             )
+            
+            # Ensure ID is set (from_domain_event might not set it or might set None)
+            if not user_msg_event.id:
+                user_msg_event.id = str(uuid.uuid4())
+                
+            # Additional data fixup if needed for compatibility
+            if not user_msg_event.event_data.get("message_id"):
+                 user_msg_event.event_data["message_id"] = user_msg_id
+
             await self._agent_execution_event_repo.save_and_commit(user_msg_event)
 
-            # Yield user message event
+            # Yield user message event (using SSE adapter manually here or constructing dict)
+            # Since we are returning a dict yield, we construct it to match the legacy format expected by frontend
             yield {
                 "type": "message",
                 "data": {
                     "id": user_msg_id,
                     "role": "user",
                     "content": user_message,
-                    "created_at": user_msg_created_at.isoformat(),
+                    "created_at": user_msg_event.created_at.isoformat(),
                 },
                 "timestamp": datetime.utcnow().isoformat(),
             }
