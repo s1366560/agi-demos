@@ -1,0 +1,130 @@
+[project]
+name = "memstack"
+version = "0.1.0"
+description = "企业级 AI 记忆云平台"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "cluade code" }]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
+    "redis>=5.0.0",
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
+    "alembic>=1.12.0",
+    "httpx[socks]>=0.25.0",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "opentelemetry-exporter-otlp>=1.22.0",
+    "dashscope>=1.20.0",
+    "greenlet>=3.3.0",
+    "openai>=1.77.0,<2.0.0",
+    "aiosqlite>=0.22.1",
+    "psycopg2-binary>=2.9.11",
+    # ZhipuAI (Z.AI) official SDK
+    "zai-sdk>=0.2.0",
+    # LiteLLM for multi-provider LLM support
+    "litellm>=1.0.0",
+    # Web search and scraping tools
+    "tavily-python>=0.5.0",
+    "playwright>=1.45.0",
+    "orjson>=3.11.5",
+    "slowapi>=0.1.9",
+    # Temporal.io for enterprise workflow orchestration
+    "temporalio>=1.6.0",
+    "networkx>=3.6.1",
+    "docker>=7.1.0",
+    "aioboto3>=15.5.0",
+    # MCP (Model Context Protocol) for tool integration
+    "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "responses>=0.24.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+    "faker>=20.0.0",
+]
+
+neo4j = ["neo4j>=5.14.0"]
+
+evaluation = [
+    "datasets>=2.14.0",
+    "transformers>=4.35.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]
+"examples/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+exclude = ["sdk/"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests",
+    "slow: marks tests as slow running",
+    "unit: marks tests as unit tests",
+]
+
+[dependency-groups]
+dev = [
+    "watchdog>=6.0.0",
+]
+
+[tool.uv]
+
+# Disabled aliyun mirror for CI compatibility
+# [[tool.uv.index]]
+# name = "aliyun"
+# url = "https://mirrors.aliyun.com/pypi/simple"
+# default = true

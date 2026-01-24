@@ -1,0 +1,32 @@
+# Temporal Dynamic Configuration for MemStack
+# https://docs.temporal.io/references/dynamic-configuration
+
+# Enable update workflow execution (for signals)
+frontend.enableUpdateWorkflowExecution:
+  - value: true
+    constraints: {}
+
+# History archival (for compliance)
+system.historyArchivalState:
+  - value: "enabled"
+    constraints: {}
+
+# Task queue limits
+limit.maxTaskQueueSize:
+  - value: 10000
+    constraints: {}
+
+# Workflow execution limits
+limit.maxWorkflowExecutionSize:
+  - value: 52428800  # 50MB
+    constraints: {}
+
+# Activity retry limits
+limit.maxActivityRetryAttempts:
+  - value: 10
+    constraints: {}
+
+# Enable search attributes refresh
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}

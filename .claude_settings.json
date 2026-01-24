@@ -1,0 +1,29 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(/Users/tiejunsun/github/mem/memstack/**)",
+      "Write(/Users/tiejunsun/github/mem/memstack/**)",
+      "Edit(/Users/tiejunsun/github/mem/memstack/**)",
+      "Glob(/Users/tiejunsun/github/mem/memstack/**)",
+      "Grep(/Users/tiejunsun/github/mem/memstack/**)",
+      "Read(/Users/tiejunsun/github/mem/memstack/.auto-claude/roadmap/**)",
+      "Write(/Users/tiejunsun/github/mem/memstack/.auto-claude/roadmap/**)",
+      "Edit(/Users/tiejunsun/github/mem/memstack/.auto-claude/roadmap/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)"
+    ]
+  }
+}

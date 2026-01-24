@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Unified Agent Workspace - Task Completed</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0a0a0b",
+                        "surface-dark": "#161618",
+                        "border-dark": "#252d46",
+                        "text-muted": "#95a0c6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .prose h1, .prose h2, .prose h3 {
+            color: inherit;
+            font-weight: 700;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        .prose p {
+            margin-bottom: 1em;
+            line-height: 1.6;
+        }
+        .prose ul {
+            list-style-type: disc;
+            padding-left: 1.5em;
+            margin-bottom: 1em;
+        }
+        .prose table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5em 0;
+            font-size: 0.875rem;
+        }
+        .prose th {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 2px solid #252d46;
+            background: rgba(25, 61, 179, 0.05);
+        }
+        .prose td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #252d46;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white antialiased font-display">
+<div class="flex h-screen overflow-hidden">
+<aside class="w-64 flex flex-col bg-background-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark shrink-0">
+<div class="p-6 flex flex-col h-full">
+<div class="flex items-center gap-3 mb-8">
+<div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-2xl">hub</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-sm font-semibold leading-tight text-slate-900 dark:text-white">Unified Agent</h1>
+<p class="text-xs text-text-muted">v1.0.4</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">grid_view</span>
+<p class="text-sm font-medium">Workspaces</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">folder_open</span>
+<p class="text-sm font-medium">Projects</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">psychology</span>
+<p class="text-sm font-medium">Memory</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">bar_chart</span>
+<p class="text-sm font-medium">Analytics</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-sm font-medium">Settings</p>
+</div>
+</nav>
+<div class="pt-4 border-t border-slate-200 dark:border-border-dark space-y-1">
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">help_outline</span>
+<p class="text-sm font-medium">Support</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">notifications</span>
+<p class="text-sm font-medium">Notifications</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 mt-2">
+<div class="w-8 h-8 rounded-full bg-slate-300 dark:bg-border-dark bg-cover bg-center" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBumZEsnxXuI3ZkkfxyEew7to8RLz4VpsOjEKr0JfOFTrUuF-z2uIGbcNftb0DJEJdJoMLYtaNkM6ZjAlWMSVMu2rxW82Osw4TJ5O6snaPC2NtuIjLWMDfCGJBaO-UQnow6C30m3QYb9P_ZfVzHfcVA1UMtbrt-KzMW_yo9Ad9sRm_vXUczmSrgzGawo1ereHaHw2VwLBoAn7p1wnHcUk3oyKVurMfhMtaLn_5fsJU9vwQO2VzqvL5f6DzPpW28dTmT1CzNt2Plx1s");'></div>
+<p class="text-sm font-medium truncate text-slate-900 dark:text-white">Alex Rivera</p>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col relative overflow-hidden">
+<header class="flex items-center justify-between px-8 py-4 bg-background-light dark:bg-background-dark border-b border-slate-200 dark:border-border-dark shrink-0">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">layers</span>
+<h2 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white">Workspace Alpha</h2>
+</div>
+<div class="h-4 w-px bg-slate-200 dark:bg-border-dark"></div>
+<nav class="flex gap-6">
+<a class="text-sm font-medium text-slate-900 dark:text-white" href="#">Dashboard</a>
+<a class="text-sm font-medium text-slate-500 hover:text-slate-900 dark:text-text-muted dark:hover:text-white transition-colors" href="#">Logs</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">search</span>
+<input class="w-full bg-slate-100 dark:bg-surface-dark border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-text-muted" placeholder="Search memory..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="p-2 bg-slate-100 dark:bg-surface-dark rounded-lg hover:bg-slate-200 dark:hover:bg-border-dark transition-colors text-slate-600 dark:text-white">
+<span class="material-symbols-outlined text-[20px]">cloud_done</span>
+</button>
+<button class="p-2 bg-slate-100 dark:bg-surface-dark rounded-lg hover:bg-slate-200 dark:hover:bg-border-dark transition-colors text-slate-600 dark:text-white">
+<span class="material-symbols-outlined text-[20px]">insights</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+<section class="max-w-5xl mx-auto">
+<div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-5 shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xs font-bold uppercase tracking-wider text-text-muted">Current Work Plan</h3>
+<div class="flex items-center gap-2 text-emerald-500">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+<span class="text-xs font-bold uppercase tracking-wide">Execution Completed</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="flex-1 h-2 bg-emerald-500 rounded-full"></div>
+<div class="flex-1 h-2 bg-emerald-500 rounded-full"></div>
+<div class="flex-1 h-2 bg-emerald-500 rounded-full"></div>
+</div>
+<div class="flex justify-between mt-3">
+<div class="flex flex-col items-center flex-1">
+<span class="text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check</span> Analyzing Request
+                            </span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<span class="text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check</span> Searching Memory
+                            </span>
+</div>
+<div class="flex flex-col items-center flex-1">
+<span class="text-[10px] font-semibold text-emerald-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check</span> Synthesizing Report
+                            </span>
+</div>
+</div>
+</div>
+</section>
+<div class="max-w-5xl mx-auto space-y-6">
+<div class="flex justify-end">
+<div class="bg-primary text-white rounded-2xl rounded-tr-none px-4 py-3 max-w-[80%] shadow-md">
+<p class="text-sm">Identify market trends from Q3 2023 memory logs and compare them with our internal project "Aegis" progress reports.</p>
+</div>
+</div>
+<div class="flex items-start gap-4 opacity-70">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-lg">psychology</span>
+</div>
+<div class="flex-1">
+<div class="bg-slate-50 dark:bg-surface-dark/50 border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none p-4">
+<details class="group/expand">
+<summary class="text-sm text-slate-600 dark:text-slate-300 cursor-pointer list-none flex items-center justify-between select-none">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm group-open/expand:rotate-90 transition-transform">chevron_right</span>
+<span class="font-semibold uppercase text-[10px] text-primary">Reasoning Log</span>
+<span class="text-xs">Decomposed task into 4 sub-goals.</span>
+</div>
+<span class="text-[10px] font-bold text-emerald-500">COMPLETE</span>
+</summary>
+<div class="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed space-y-2">
+<p>1. Extracting key entities from query: "Q3 2023", "market trends", "Project Aegis".</p>
+<p>2. Initiating a semantic search across the memory fabric.</p>
+<p>3. Filtering results based on project 'Aegis' tags.</p>
+<p>4. Cross-referencing timestamps for alignment.</p>
+</div>
+</details>
+</div>
+</div>
+</div>
+<div class="flex items-start gap-4 opacity-70">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-lg">construction</span>
+</div>
+<div class="flex-1">
+<div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm overflow-hidden">
+<div class="px-4 py-2 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-border-dark flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">database</span>
+<span class="text-xs font-semibold">Memory Search Results</span>
+</div>
+<div class="flex items-center gap-2 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
+                                    Success
+                                </div>
+</div>
+<div class="p-3">
+<p class="text-[11px] text-text-muted font-mono italic">Found 14 relevant memory fragments across 2 clusters.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-start gap-4 pt-4">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-white text-lg">auto_awesome</span>
+</div>
+<div class="flex-1 flex gap-6 pb-40">
+<div class="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-200">
+<div class="flex items-center justify-between mb-8 border-b border-slate-100 dark:border-border-dark pb-4">
+<h2 class="m-0 text-2xl">Final Synthesis Report</h2>
+<span class="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded font-bold uppercase">v1.0 Final</span>
+</div>
+<p>Based on the analyzed memory logs from <strong>Q3 2023</strong> and the <strong>Project Aegis</strong> internal progress documentation, here is the synthesized comparison of market trends versus internal milestones.</p>
+<h3>Market Trends Overview</h3>
+<ul>
+<li><strong>Cloud Infrastructure:</strong> Shift towards decentralized GPU clusters peaked in late August 2023.</li>
+<li><strong>Security Compliance:</strong> New regional regulations in the EU drove a 22% increase in automated audit logging requirements.</li>
+<li><strong>Edge Computing:</strong> Significant traction in low-latency memory caching for industrial IoT applications.</li>
+</ul>
+<h3>Comparative Analysis: Project Aegis</h3>
+<table>
+<thead>
+<tr>
+<th>Trend Category</th>
+<th>Market Vector</th>
+<th>Aegis Alignment</th>
+<th>Gap Analysis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Security</td>
+<td>+22% Audit Demand</td>
+<td>Fully Compliant</td>
+<td>Ahead of curve</td>
+</tr>
+<tr>
+<td>GPU Compute</td>
+<td>Decentralized shift</td>
+<td>Local-first only</td>
+<td>Critical priority</td>
+</tr>
+<tr>
+<td>Latency</td>
+<td>Edge optimized</td>
+<td>Sub-10ms achieved</td>
+<td>Market parity</td>
+</tr>
+</tbody>
+</table>
+<h3>Strategic Summary</h3>
+<p>Project Aegis shows exceptional strength in <strong>security and latency compliance</strong>, mirroring the high-growth sectors of Q3 2023. However, the market's rapid pivot towards <strong>decentralized compute resources</strong> was not fully captured in the Q3 roadmap. It is recommended to reallocate resources to the <em>Distributed Vector Core</em> sub-project to address this gap.</p>
+</div>
+<div class="w-64 shrink-0 space-y-4">
+<div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 shadow-sm sticky top-6">
+<h4 class="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-4">Actions</h4>
+<div class="space-y-2">
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-border-dark rounded-lg transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">
+<span class="material-symbols-outlined text-[20px]">content_copy</span>
+                                        Copy to Clipboard
+                                    </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-border-dark rounded-lg transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+                                        Export as PDF
+                                    </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-border-dark rounded-lg transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700">
+<span class="material-symbols-outlined text-[20px]">share</span>
+                                        Share with Team
+                                    </button>
+</div>
+<div class="mt-4 pt-4 border-t border-slate-100 dark:border-border-dark">
+<div class="flex items-center gap-2 text-text-muted">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="text-[10px]">Generated 2m ago</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background-light dark:from-background-dark via-background-light/95 dark:via-background-dark/95 to-transparent pt-20 pb-10 px-8 flex flex-col items-center">
+<div class="w-full max-w-3xl space-y-4">
+<div class="flex items-center gap-3 flex-wrap justify-center">
+<button class="px-3 py-1.5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark hover:border-primary/50 text-xs font-medium rounded-full transition-all shadow-sm">
+                        Explain the "GPU Gap" further
+                    </button>
+<button class="px-3 py-1.5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark hover:border-primary/50 text-xs font-medium rounded-full transition-all shadow-sm">
+                        Create Jira task for resource reallocation
+                    </button>
+<button class="px-3 py-1.5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark hover:border-primary/50 text-xs font-medium rounded-full transition-all shadow-sm">
+                        Compare with Q4 forecasts
+                    </button>
+</div>
+<div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-2xl rounded-2xl p-2 flex items-center gap-2">
+<button class="p-2 text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors">
+<span class="material-symbols-outlined">attach_file</span>
+</button>
+<input class="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white py-3 px-2 placeholder:text-text-muted text-base" placeholder="Ask follow-up questions..." type="text"/>
+<div class="flex items-center gap-2 pr-1">
+<button class="flex items-center justify-center bg-primary hover:bg-primary/90 text-white w-10 h-10 rounded-xl transition-colors shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+<p class="text-[10px] text-center text-text-muted uppercase tracking-widest font-semibold opacity-70">Unified Agent Intelligence Interface • Ready for follow-up</p>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>

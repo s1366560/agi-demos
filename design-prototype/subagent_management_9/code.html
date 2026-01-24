@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Skill Registry - Admin Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111521",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen overflow-hidden">
+<div class="flex h-screen overflow-hidden">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-background-dark z-20">
+<div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+<div class="bg-primary rounded-lg p-1.5">
+<span class="material-symbols-outlined text-white text-2xl">neurology</span>
+</div>
+<div>
+<h1 class="font-bold text-sm tracking-tight">SubAgent Platform</h1>
+<p class="text-[10px] text-slate-500 uppercase font-semibold">Project Administrator</p>
+</div>
+</div>
+<nav class="flex-1 p-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">account_tree</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">smart_toy</span>
+<span class="text-sm font-medium">SubAgents</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary/10 text-primary dark:bg-primary/20 dark:text-blue-400 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1">extension</span>
+<span class="text-sm font-medium">Skill Registry</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">database</span>
+<span class="text-sm font-medium">Memory Banks</span>
+</a>
+<div class="pt-4 pb-2 px-3">
+<p class="text-[10px] text-slate-500 uppercase font-semibold">System</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3 px-3 py-2">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCy0S9vNvQ7sdDMyCoAQ8xPR4I9V-2qb1kl4JY8_Yhy07lQ61hIaLBRam-9y9yRxH9dRFMaqqr41h4y5SG2NoQRLqSY8SMK0JyKr0-mQc9EeqvcYhdOLworQuus9S9zqhZvp0nMeo9S5HtbgDe45twHWRyP1tR546hK25ShkPkDTxDefNmAdZlkVaWR5bawEqqAAadoDm-AxysEvA1jqeQ257iaudBgzzUk8WwopD5cThsUPiJG3-pY1X2EnkjllC62CyOxIoMTqkg'); background-size: cover;"></div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-medium truncate">Alex Rivest</p>
+<p class="text-xs text-slate-500 truncate">Admin</p>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-background-dark">
+<header class="bg-white dark:bg-background-dark border-b border-slate-200 dark:border-slate-800 px-8 py-5 shrink-0">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Skill Registry</h2>
+<p class="text-sm text-slate-500 dark:text-slate-400">Define atomic capabilities and tool integrations for agents.</p>
+</div>
+<button class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-all shadow-md shadow-primary/20">
+<span class="material-symbols-outlined text-lg">add_circle</span>
+                        Register New Skill
+                    </button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<aside class="w-80 flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-md text-sm focus:ring-1 focus:ring-primary text-slate-800 dark:text-white placeholder:text-slate-500" placeholder="Find skill..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 py-1.5 rounded transition-colors">
+                                Active (12)
+                            </button>
+<button class="flex-1 text-[10px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 py-1.5 rounded transition-colors hover:text-primary">
+                                Deprecated (4)
+                            </button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-3 space-y-2">
+<button class="w-full text-left p-3 rounded-xl bg-primary/5 dark:bg-primary/20 border border-primary/30 shadow-sm relative group transition-all">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 bg-white dark:bg-slate-800 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-700 shrink-0">
+<span class="material-symbols-outlined text-blue-500 text-xl" style="font-variation-settings: 'FILL' 1">public</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex justify-between items-center mb-0.5">
+<h3 class="font-bold text-sm text-slate-900 dark:text-white truncate">Web Research</h3>
+<span class="flex h-2 w-2 rounded-full bg-green-500" title="Active"></span>
+</div>
+<p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">Browsing &amp; Synthesis</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-mono bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-500">v2.4</span>
+</div>
+</div>
+</div>
+<div class="absolute inset-y-0 left-0 w-1 bg-primary rounded-l-xl"></div>
+</button>
+<button class="w-full text-left p-3 rounded-xl border border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700 transition-all group">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 bg-white dark:bg-slate-800 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-700 shrink-0">
+<span class="material-symbols-outlined text-purple-500 text-xl" style="font-variation-settings: 'FILL' 1">commit</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex justify-between items-center mb-0.5">
+<h3 class="font-bold text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-primary dark:group-hover:text-blue-400">Git Operations</h3>
+<span class="flex h-2 w-2 rounded-full bg-green-500" title="Active"></span>
+</div>
+<p class="text-[11px] text-slate-500 dark:text-slate-500 truncate">Version Control</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">v1.1</span>
+</div>
+</div>
+</div>
+</button>
+<button class="w-full text-left p-3 rounded-xl border border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700 transition-all group">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 bg-white dark:bg-slate-800 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-700 shrink-0">
+<span class="material-symbols-outlined text-orange-500 text-xl" style="font-variation-settings: 'FILL' 1">terminal</span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex justify-between items-center mb-0.5">
+<h3 class="font-bold text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-primary dark:group-hover:text-blue-400">Shell Execute</h3>
+<span class="flex h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" title="Inactive"></span>
+</div>
+<p class="text-[11px] text-slate-500 dark:text-slate-500 truncate">System Commands</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">v0.9-beta</span>
+</div>
+</div>
+</div>
+</button>
+</div>
+<div class="p-3 border-t border-slate-200 dark:border-slate-800 text-center">
+<button class="text-xs text-slate-400 hover:text-primary flex items-center justify-center gap-1 w-full py-1">
+<span class="material-symbols-outlined text-sm">filter_list</span> Filter by Category
+                        </button>
+</div>
+</aside>
+<section class="flex-1 flex flex-col relative bg-slate-50 dark:bg-background-dark overflow-hidden">
+<form class="flex-1 overflow-y-auto">
+<div class="max-w-5xl mx-auto p-8 pb-32 space-y-10">
+<div class="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-6">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 uppercase tracking-wider">Active</span>
+<span class="text-xs text-slate-400 font-mono">ID: skl_web_99</span>
+</div>
+<h1 class="text-3xl font-bold text-slate-900 dark:text-white">Web Research Skill</h1>
+<p class="text-sm text-slate-500 mt-1">Configure capabilities for internet searching and page summarization.</p>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" title="Duplicate Skill" type="button">
+<span class="material-symbols-outlined">content_copy</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Delete Skill" type="button">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg">info</span>
+</div>
+<h3 class="text-lg font-bold text-slate-800 dark:text-slate-200">General Information</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="space-y-4">
+<div>
+<label class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Skill Name</label>
+<input class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all" type="text" value="Web Research"/>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Category</label>
+<div class="relative">
+<select class="w-full appearance-none bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all">
+<option>Information Retrieval</option>
+<option>System Operations</option>
+<option>External API</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-sm">expand_more</span>
+</div>
+</div>
+</div>
+<div class="md:col-span-2">
+<label class="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">Description</label>
+<textarea class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all resize-none leading-relaxed h-[108px]" rows="3">Allows the agent to perform broad searches, retrieve specific URLs, and summarize page content. Best used for "Look up X" or "Find recent news on Y" tasks.</textarea>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+<span class="material-symbols-outlined text-lg">handyman</span>
+</div>
+<h3 class="text-lg font-bold text-slate-800 dark:text-slate-200">Associated Tools</h3>
+</div>
+<div class="bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex flex-col gap-4">
+<label class="block text-xs font-bold uppercase tracking-wide text-slate-500">Registered Tools</label>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-mono text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-sm text-slate-400">api</span>
+                                                google_serp_v2
+                                                <button class="ml-1 text-slate-400 hover:text-red-500 transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-mono text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-sm text-slate-400">html</span>
+                                                trafilatura_scraper
+                                                <button class="ml-1 text-slate-400 hover:text-red-500 transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+<button class="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-slate-950 border border-dashed border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-500 hover:text-primary hover:border-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">add</span> Add Tool
+                                            </button>
+</div>
+<p class="text-[11px] text-slate-500">These tools will be injected into the agent's context when this skill is activated.</p>
+</div>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
+<span class="material-symbols-outlined text-lg">integration_instructions</span>
+</div>
+<h3 class="text-lg font-bold text-slate-800 dark:text-slate-200">System Prompt Fragment</h3>
+</div>
+<button class="text-xs font-bold text-primary hover:text-primary/80 flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-sm">history</span> History
+                                    </button>
+</div>
+<div class="relative group rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 shadow-sm">
+<div class="absolute top-0 left-0 right-0 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 flex items-center justify-between z-10">
+<span class="text-xs font-mono text-slate-500">skill_instructions.md</span>
+<div class="flex gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-red-400/50"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-yellow-400/50"></span>
+<span class="w-2.5 h-2.5 rounded-full bg-green-400/50"></span>
+</div>
+</div>
+<textarea class="w-full h-80 bg-white dark:bg-slate-950 pt-12 p-6 font-mono text-sm leading-relaxed text-slate-800 dark:text-blue-300 focus:outline-none resize-none custom-scrollbar selection:bg-primary/30" spellcheck="false">### Web Research Guidelines
+When conducting research, you have access to `google_serp_v2` and `trafilatura_scraper`.
+1. **Query Formulation**: Break complex user questions into multiple atomic search queries.
+2. **Result Verification**: Always scrape the top 2-3 distinct results to verify content matches the snippet.
+3. **Citation**: When synthesizing an answer, strictly format citations as `[Source Title](url)`.
+4. **Fallback**: If the search API returns a 429 error, inform the user and suggest a retry after 60 seconds.
+**Do not** invent URLs or cite sources you haven't verified via scraping.</textarea>
+</div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
+<span class="material-symbols-outlined text-lg">security</span>
+</div>
+<h3 class="text-lg font-bold text-slate-800 dark:text-slate-200">Permissions &amp; Constraints</h3>
+</div>
+<div class="bg-white dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<label class="flex items-center gap-3 p-3 rounded-lg border border-primary/40 bg-primary/5 dark:bg-primary/10 cursor-pointer transition-all hover:bg-primary/10">
+<input checked="" class="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary" type="checkbox"/>
+<div class="flex-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">public</span>
+<span class="text-sm font-bold text-slate-700 dark:text-slate-200">Internet Access</span>
+</div>
+<p class="text-[10px] text-slate-500 mt-0.5">Outbound HTTP requests</p>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 cursor-pointer transition-all hover:border-slate-300 dark:hover:border-slate-600">
+<input class="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary" type="checkbox"/>
+<div class="flex-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-lg">folder_open</span>
+<span class="text-sm font-bold text-slate-700 dark:text-slate-200">File System</span>
+</div>
+<p class="text-[10px] text-slate-500 mt-0.5">Read/Write local files</p>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 cursor-pointer transition-all hover:border-slate-300 dark:hover:border-slate-600">
+<input class="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary" type="checkbox"/>
+<div class="flex-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-lg">settings_system_daydream</span>
+<span class="text-sm font-bold text-slate-700 dark:text-slate-200">Env Variables</span>
+</div>
+<p class="text-[10px] text-slate-500 mt-0.5">Access API Keys</p>
+</div>
+</label>
+</div>
+</div>
+</div>
+</div>
+</form>
+<div class="absolute bottom-0 left-0 right-0 p-4 px-8 bg-white/90 dark:bg-background-dark/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-between items-center z-30">
+<div class="text-xs text-slate-500">
+                            Status: <span class="font-medium text-green-600 dark:text-green-400">Synched</span>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" type="button">
+                                Discard
+                            </button>
+<button class="px-6 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-lg">save</span>
+                                Save Changes
+                            </button>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+
+</body></html>

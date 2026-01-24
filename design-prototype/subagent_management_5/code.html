@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Agent Orchestration - Management Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .master-list-item.active {
+            background-color: rgba(25, 61, 179, 0.1);
+            border-left: 3px solid #193db3;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen overflow-hidden">
+<div class="flex h-screen overflow-hidden">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-slate-900/50 z-20">
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+<div class="bg-primary rounded-lg p-1.5 shrink-0">
+<span class="material-symbols-outlined text-white text-xl">neurology</span>
+</div>
+<div class="truncate">
+<h1 class="font-bold text-sm tracking-tight truncate">MemStack.ai</h1>
+<p class="text-[10px] text-slate-500 uppercase font-semibold">Project Administrator</p>
+</div>
+</div>
+<nav class="flex-1 p-3 space-y-1">
+<div class="pb-2 px-3">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Main</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span class="text-sm font-medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">database</span>
+<span class="text-sm font-medium">Memories</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary text-white rounded-lg transition-colors shadow-sm shadow-primary/20" href="#">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1">smart_toy</span>
+<span class="text-sm font-medium">SubAgents</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">account_tree</span>
+<span class="text-sm font-medium">Graph</span>
+</a>
+<div class="pt-4 pb-2 px-3">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">System</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">AR</div>
+<div class="flex-1 min-w-0">
+<p class="text-xs font-semibold truncate">Alex Rivest</p>
+<p class="text-[10px] text-slate-500 truncate">admin@memstack.ai</p>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col overflow-hidden">
+<header class="h-14 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between px-6 shrink-0">
+<div class="flex items-center gap-4">
+<nav class="flex items-center text-xs text-slate-500">
+<span>Home</span>
+<span class="mx-2">/</span>
+<span>Agents</span>
+<span class="mx-2">/</span>
+<span class="text-slate-900 dark:text-white font-medium">Management Hub</span>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="pl-9 pr-3 py-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-lg text-xs w-64 focus:ring-1 focus:ring-primary" placeholder="Search memories or agents..." type="text"/>
+</div>
+<button class="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all">
+<span class="material-symbols-outlined text-sm">add</span>
+                        New Agent
+                    </button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<aside class="w-72 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0">
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col gap-3">
+<h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Project Agents</h2>
+<div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+<button class="flex-1 py-1 text-[10px] font-bold bg-white dark:bg-slate-700 rounded shadow-sm">All</button>
+<button class="flex-1 py-1 text-[10px] font-bold text-slate-500 hover:text-slate-700">Active</button>
+<button class="flex-1 py-1 text-[10px] font-bold text-slate-500 hover:text-slate-700">Drafts</button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+<button class="master-list-item active w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all">
+<div class="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center text-primary shrink-0 border border-primary/20">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1">code</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-slate-900 dark:text-white truncate">Coder Agent</span>
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+</div>
+<span class="text-[10px] text-slate-500 truncate block">Engineering Specialist</span>
+</div>
+</button>
+<button class="w-full flex items-center gap-3 p-3 rounded-lg text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group">
+<div class="w-9 h-9 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary shrink-0 transition-colors">
+<span class="material-symbols-outlined text-xl">travel_explore</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white truncate">Researcher</span>
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+</div>
+<span class="text-[10px] text-slate-500 truncate block">Web Synthesis</span>
+</div>
+</button>
+<button class="w-full flex items-center gap-3 p-3 rounded-lg text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group">
+<div class="w-9 h-9 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary shrink-0 transition-colors">
+<span class="material-symbols-outlined text-xl">terminal</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white truncate">Operator</span>
+<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+</div>
+<span class="text-[10px] text-slate-500 truncate block">System Execution</span>
+</div>
+</button>
+<button class="w-full flex items-center gap-3 p-3 rounded-lg text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all group">
+<div class="w-9 h-9 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary shrink-0 transition-colors">
+<span class="material-symbols-outlined text-xl">edit_note</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="text-xs font-bold text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white truncate">Content Strategist</span>
+<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+</div>
+<span class="text-[10px] text-slate-500 truncate block">Creative Writing</span>
+</div>
+</button>
+</div>
+</aside>
+<section class="flex-1 flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden relative">
+<form class="flex-1 overflow-y-auto custom-scrollbar">
+<div class="max-w-4xl mx-auto px-8 py-8 pb-32 space-y-8">
+<div class="flex items-end justify-between border-b border-slate-200 dark:border-slate-800 pb-6">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Active</span>
+<span class="text-[10px] font-mono text-slate-400">ID: agent_9381_x</span>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Coder Agent Configuration</h2>
+<p class="text-sm text-slate-500">Define the core capabilities and reasoning engine for this specialized instance.</p>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" title="Clone" type="button"><span class="material-symbols-outlined text-xl">content_copy</span></button>
+<button class="p-2 text-slate-400 hover:text-red-500" title="Delete" type="button"><span class="material-symbols-outlined text-xl">delete</span></button>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">badge</span>
+<h3 class="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Identity &amp; Role</h3>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="space-y-4">
+<div>
+<label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Agent Name</label>
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm" type="text" value="Coder Agent"/>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Version Tag</label>
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono" type="text" value="v2.4.0-stable"/>
+</div>
+</div>
+<div class="md:col-span-2">
+<label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Role Description</label>
+<textarea class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm h-[112px] resize-none leading-relaxed" placeholder="Describe what this agent does...">Expert technical assistant focused on full-stack architecture and unit testing. Capable of analyzing complex repositories and suggesting performance optimizations.</textarea>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-purple-500">psychology</span>
+<h3 class="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Model Engine</h3>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<div class="md:col-span-5">
+<label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Base LLM</label>
+<select class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm">
+<option>GPT-4o (OpenAI)</option>
+<option selected="">Claude 3.5 Sonnet (Anthropic)</option>
+<option>Gemini 1.5 Pro (Google)</option>
+<option>Llama 3.1 405B (Meta)</option>
+</select>
+</div>
+<div class="md:col-span-4">
+<label class="flex justify-between text-[11px] font-bold text-slate-500 mb-1.5 uppercase">
+<span>Temperature</span>
+<span class="text-primary">0.2</span>
+</label>
+<input class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary mt-3" max="1" min="0" step="0.1" type="range" value="0.2"/>
+<div class="flex justify-between text-[10px] mt-2 text-slate-400">
+<span>Deterministic</span>
+<span>Creative</span>
+</div>
+</div>
+<div class="md:col-span-3">
+<label class="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Context Limit</label>
+<div class="relative">
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg pl-3 pr-12 py-2 text-sm text-right font-mono" type="number" value="128000"/>
+<span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">Tokens</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-orange-500">integration_instructions</span>
+<h3 class="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">System Prompt</h3>
+</div>
+<button class="text-[11px] font-bold text-primary flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-sm">add_circle</span> Insert Variable
+                                    </button>
+</div>
+<div class="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="bg-slate-100 dark:bg-slate-800 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+<span class="text-[10px] font-mono text-slate-500">agent_instruction.md</span>
+<div class="flex gap-1.5">
+<div class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700"></div>
+</div>
+</div>
+<textarea class="w-full h-96 bg-white dark:bg-slate-900 p-6 font-mono text-sm leading-relaxed text-slate-800 dark:text-blue-200/80 outline-none resize-none custom-scrollbar" spellcheck="false"># Objective
+You are the Coder Agent, a high-performance LLM specialized in code analysis and generation.
+# Core Guidelines
+1. Prioritize type safety and maintainability.
+2. When suggesting changes, always provide the 'Why' before the 'How'.
+3. Use the `file_system` tool to verify the existence of modules before referencing them.
+4. Output should be formatted as valid Markdown with syntax-highlighted blocks.
+# Available Context
+- Active Memory Bank: {{memory_bank_id}}
+- Project Root: {{project_root}}
+# User Persona
+Address the user as a Peer Architect. Keep technical jargon high-level.</textarea>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-500">verified_user</span>
+<h3 class="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Skillset &amp; Permissions</h3>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+<label class="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 cursor-pointer transition-all">
+<input checked="" class="w-4 h-4 text-primary rounded border-slate-300" type="checkbox"/>
+<div>
+<p class="text-xs font-bold text-slate-900 dark:text-white">File Access</p>
+<p class="text-[10px] text-slate-500">Read/Write repo files</p>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 cursor-pointer transition-all">
+<input checked="" class="w-4 h-4 text-primary rounded border-slate-300" type="checkbox"/>
+<div>
+<p class="text-xs font-bold text-slate-900 dark:text-white">Shell Access</p>
+<p class="text-[10px] text-slate-500">Run terminal commands</p>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 cursor-pointer hover:border-slate-300 transition-all">
+<input class="w-4 h-4 text-primary rounded border-slate-300" type="checkbox"/>
+<div>
+<p class="text-xs font-bold text-slate-600 dark:text-slate-400">Web Search</p>
+<p class="text-[10px] text-slate-500">Real-time internet access</p>
+</div>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 cursor-pointer hover:border-slate-300 transition-all">
+<input class="w-4 h-4 text-primary rounded border-slate-300" type="checkbox"/>
+<div>
+<p class="text-xs font-bold text-slate-600 dark:text-slate-400">Git Operations</p>
+<p class="text-[10px] text-slate-500">Manage commits/branches</p>
+</div>
+</label>
+</div>
+</div>
+</div>
+</form>
+<div class="absolute bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between z-10 shadow-lg">
+<div class="flex items-center gap-2 text-[10px] text-slate-500">
+<span class="material-symbols-outlined text-sm">history</span>
+<span>Auto-saved 2 minutes ago</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-5 py-1.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" type="button">Discard Changes</button>
+<button class="px-6 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold shadow-md shadow-primary/20 flex items-center gap-2 transition-all" type="button">
+<span class="material-symbols-outlined text-sm">save</span>
+                                Save Agent
+                            </button>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+
+</body></html>

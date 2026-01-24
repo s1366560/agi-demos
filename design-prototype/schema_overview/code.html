@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Schema Overview - Memory Platform</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#193db3",
+              "background-light": "#f6f6f8",
+              "background-dark": "#111521",
+              "surface-dark": "#1c2333", // Slightly lighter than background-dark for cards
+              "surface-highlight": "#252d46", // Highlight color from provided components
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"],
+              "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white overflow-hidden">
+<div class="relative flex h-screen w-full flex-row overflow-hidden">
+<!-- Sidebar -->
+<aside class="flex w-72 flex-col gap-4 border-r border-[#252d46] bg-background-dark px-4 py-6 shrink-0 z-20">
+<div class="flex items-center gap-3 px-2 mb-4">
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-10 shadow-lg shadow-primary/20" data-alt="Abstract geometric logo in blue gradients" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBkcIt_WxmihMP5OT49O7A2VJ4lFLBeWpNcBB6q6HFKCIzo2ZyBmTgvsqmJKRm8socKMwEu1YZbqOmJ95YZ7wuafxHmz-rNYKq-NwFDJWyyKFYWgzctgtb_4tNQPVj7QiBLaYbaYCVe3WYoSdcqSsZe-gQmKT1Zt-OezaAWjPOOZhhZjzRRbB02zLVFH2DpFa6zR-xO_SPmxo60G4M8Rum6o2sVJ5Ut3ZPdpbjNF-oFzJDjHPAsCqGnGv37EP45dCjWjnIgQM0FifI");'></div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-bold leading-tight tracking-wide">Memory Platform</h1>
+<p class="text-[#95a0c6] text-xs font-normal">Tenant: Acme Corp</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#95a0c6] hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#95a0c6] group-hover:text-white">folder</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#95a0c6] hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#95a0c6] group-hover:text-white">psychology</span>
+<span class="text-sm font-medium">Memory</span>
+</a>
+<!-- Active State -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/20 text-white border border-primary/20" href="#">
+<span class="material-symbols-outlined text-primary fill-1">schema</span>
+<span class="text-sm font-medium">Schema</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#95a0c6] hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#95a0c6] group-hover:text-white">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="mt-auto">
+<div class="rounded-xl bg-gradient-to-br from-primary/20 to-transparent p-4 border border-[#252d46]">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-primary">rocket_launch</span>
+<span class="text-white text-sm font-bold">Pro Plan</span>
+</div>
+<p class="text-[#95a0c6] text-xs mb-3">You are using 80% of your node quota.</p>
+<div class="w-full bg-[#111521] h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 80%"></div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Top Nav -->
+<header class="flex items-center justify-between border-b border-[#252d46] bg-background-dark/80 backdrop-blur-md px-8 py-4 z-10 sticky top-0">
+<!-- Breadcrumbs -->
+<div class="flex items-center gap-2 text-sm">
+<a class="text-[#95a0c6] hover:text-white transition-colors" href="#">Home</a>
+<span class="text-[#56607a]">/</span>
+<a class="text-[#95a0c6] hover:text-white transition-colors" href="#">Project Alpha</a>
+<span class="text-[#56607a]">/</span>
+<span class="text-white font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">schema</span>
+                    Schema Overview
+                </span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-1">
+<button class="size-9 flex items-center justify-center rounded-lg hover:bg-[#252d46] text-[#95a0c6] hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="size-9 flex items-center justify-center rounded-lg hover:bg-[#252d46] text-[#95a0c6] hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+</div>
+<div class="h-6 w-px bg-[#252d46]"></div>
+<button class="flex items-center gap-3 pl-2 pr-1 py-1 rounded-full hover:bg-[#252d46] transition-colors">
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-8" data-alt="User profile picture showing a person smiling" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAT8EWuJPzJjudncvDCAOP36ZOZeUSrjoMwCKReaWTy9sVQHvOfTGILBKp2A4I8NoX8yCHZ8AZlDT68StBefbbEgdSJrNXWxLh2XfZsvLqpV6Ui8x1cV3oZHY7tBf2tUzQXZiDEJ45jLDxODozffEQbay8KrS_jpf7zNiD8D7uW241T0oQrU19C_7v7a0HCFZDd0D9MYKQxxLBhZbhJtO7hdQ-L7fNoXSXAvzVZvUeiiSyt0agJRurerGJJl7HRQLxBQFvgPFvM-dg");'></div>
+<span class="material-symbols-outlined text-[#95a0c6] text-sm">expand_more</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Content -->
+<main class="flex-1 overflow-y-auto p-8">
+<div class="max-w-[1400px] mx-auto flex flex-col gap-8">
+<!-- Page Heading & Actions -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div class="flex flex-col gap-2">
+<h2 class="text-white text-3xl font-bold tracking-tight">Schema Overview</h2>
+<p class="text-[#95a0c6] text-base max-w-2xl">
+                            Visual representation of the Pydantic models defining your graph structure. View entities, relationships, and their attribute definitions.
+                        </p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-[#252d46] bg-[#111521] text-white text-sm font-semibold hover:bg-[#252d46] transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">code</span>
+                            View JSON
+                        </button>
+<button class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20">
+<span class="material-symbols-outlined text-[20px]">download</span>
+                            Export Schema
+                        </button>
+</div>
+</div>
+<!-- Search & Filters -->
+<div class="w-full">
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-[#95a0c6] group-focus-within:text-white transition-colors">search</span>
+</div>
+<input class="w-full h-12 pl-12 pr-4 bg-surface-highlight border-transparent focus:border-primary/50 focus:ring-0 rounded-xl text-white placeholder-[#95a0c6] text-sm font-medium transition-all" placeholder="Filter schema types by name, attribute, or tag..." type="text"/>
+<div class="absolute inset-y-0 right-2 flex items-center">
+<button class="px-2 py-1 text-xs font-medium text-[#95a0c6] bg-[#111521] rounded border border-[#252d46]">CMD + K</button>
+</div>
+</div>
+</div>
+<!-- Main Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+<!-- Entity Types Section -->
+<section class="flex flex-col gap-5">
+<div class="flex items-center justify-between pb-2 border-b border-[#252d46]">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+<span class="material-symbols-outlined text-emerald-500 text-lg">category</span>
+</div>
+<h3 class="text-white text-lg font-bold">Entity Types</h3>
+<span class="px-2 py-0.5 rounded-full bg-[#252d46] text-[#95a0c6] text-xs font-mono">12 Defined</span>
+</div>
+<button class="text-[#95a0c6] hover:text-white text-sm font-medium flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-lg">add</span> New Entity
+                            </button>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Entity Card 1: Person -->
+<div class="group relative flex flex-col gap-4 rounded-xl border border-[#252d46] bg-surface-dark p-5 hover:border-emerald-500/30 transition-all hover:shadow-lg hover:shadow-emerald-900/5">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-[#111521] border border-[#252d46] flex items-center justify-center text-white font-bold text-sm">
+                                            PE
+                                        </div>
+<div>
+<h4 class="text-white font-bold text-base group-hover:text-emerald-400 transition-colors">Person</h4>
+<p class="text-[#95a0c6] text-sm">Represents a human user or external contact.</p>
+</div>
+</div>
+<button class="text-[#56607a] hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<div class="h-px w-full bg-[#252d46]"></div>
+<div class="flex flex-col gap-2">
+<p class="text-xs font-semibold text-[#56607a] uppercase tracking-wider">Attributes</p>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                            name: str
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-blue-500"></span>
+                                            email: EmailStr
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-orange-500"></span>
+                                            age: int
+                                        </span>
+</div>
+</div>
+</div>
+<!-- Entity Card 2: Document -->
+<div class="group relative flex flex-col gap-4 rounded-xl border border-[#252d46] bg-surface-dark p-5 hover:border-emerald-500/30 transition-all hover:shadow-lg hover:shadow-emerald-900/5">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-[#111521] border border-[#252d46] flex items-center justify-center text-white font-bold text-sm">
+                                            DO
+                                        </div>
+<div>
+<h4 class="text-white font-bold text-base group-hover:text-emerald-400 transition-colors">Document</h4>
+<p class="text-[#95a0c6] text-sm">A text-based file or memory object.</p>
+</div>
+</div>
+<button class="text-[#56607a] hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<div class="h-px w-full bg-[#252d46]"></div>
+<div class="flex flex-col gap-2">
+<p class="text-xs font-semibold text-[#56607a] uppercase tracking-wider">Attributes</p>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                            title: str
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-purple-500"></span>
+                                            content: Text
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-slate-500"></span>
+                                            created_at: datetime
+                                        </span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#111521]/50 border border-[#252d46] border-dashed text-xs font-medium text-[#56607a]">
+                                            +4 more
+                                        </span>
+</div>
+</div>
+</div>
+<!-- Entity Card 3: Concept -->
+<div class="group relative flex flex-col gap-4 rounded-xl border border-[#252d46] bg-surface-dark p-5 hover:border-emerald-500/30 transition-all hover:shadow-lg hover:shadow-emerald-900/5">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-[#111521] border border-[#252d46] flex items-center justify-center text-white font-bold text-sm">
+                                            CO
+                                        </div>
+<div>
+<h4 class="text-white font-bold text-base group-hover:text-emerald-400 transition-colors">Concept</h4>
+<p class="text-[#95a0c6] text-sm">Abstract idea or topic extracted from data.</p>
+</div>
+</div>
+<button class="text-[#56607a] hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<div class="h-px w-full bg-[#252d46]"></div>
+<div class="flex flex-col gap-2">
+<p class="text-xs font-semibold text-[#56607a] uppercase tracking-wider">Attributes</p>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                            label: str
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+<span class="size-1.5 rounded-full bg-pink-500"></span>
+                                            relevance: float
+                                        </span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Relationship Types Section -->
+<section class="flex flex-col gap-5">
+<div class="flex items-center justify-between pb-2 border-b border-[#252d46]">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary text-lg">hub</span>
+</div>
+<h3 class="text-white text-lg font-bold">Relationship Types</h3>
+<span class="px-2 py-0.5 rounded-full bg-[#252d46] text-[#95a0c6] text-xs font-mono">8 Defined</span>
+</div>
+<button class="text-[#95a0c6] hover:text-white text-sm font-medium flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-lg">add</span> New Relation
+                            </button>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Relation Card 1: Authored By -->
+<div class="group relative flex flex-col gap-4 rounded-xl border border-[#252d46] bg-surface-dark p-5 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-blue-900/5">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-[#111521] border border-[#252d46] flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">edit_note</span>
+</div>
+<div>
+<h4 class="text-white font-bold text-base group-hover:text-primary transition-colors">authored_by</h4>
+<p class="text-[#95a0c6] text-sm font-mono">Source → Target</p>
+</div>
+</div>
+<button class="text-[#56607a] hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Flow Visualization -->
+<div class="flex items-center gap-2 p-3 rounded-lg bg-[#111521] border border-[#252d46]">
+<span class="px-2 py-1 rounded bg-[#252d46] text-xs font-bold text-white">Document</span>
+<div class="flex-1 flex flex-col items-center gap-1">
+<div class="h-px w-full bg-[#56607a]"></div>
+</div>
+<span class="material-symbols-outlined text-[#56607a] text-sm">arrow_forward</span>
+<span class="px-2 py-1 rounded bg-[#252d46] text-xs font-bold text-white">Person</span>
+</div>
+<div class="flex flex-col gap-2">
+<p class="text-xs font-semibold text-[#56607a] uppercase tracking-wider">Edge Attributes</p>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+                                            revision_id: int
+                                        </span>
+</div>
+</div>
+</div>
+<!-- Relation Card 2: References -->
+<div class="group relative flex flex-col gap-4 rounded-xl border border-[#252d46] bg-surface-dark p-5 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-blue-900/5">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-[#111521] border border-[#252d46] flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">link</span>
+</div>
+<div>
+<h4 class="text-white font-bold text-base group-hover:text-primary transition-colors">references</h4>
+<p class="text-[#95a0c6] text-sm font-mono">Source → Target</p>
+</div>
+</div>
+<button class="text-[#56607a] hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Flow Visualization -->
+<div class="flex items-center gap-2 p-3 rounded-lg bg-[#111521] border border-[#252d46]">
+<span class="px-2 py-1 rounded bg-[#252d46] text-xs font-bold text-white">Document</span>
+<div class="flex-1 flex flex-col items-center gap-1">
+<div class="h-px w-full bg-[#56607a]"></div>
+</div>
+<span class="material-symbols-outlined text-[#56607a] text-sm">arrow_forward</span>
+<span class="px-2 py-1 rounded bg-[#252d46] text-xs font-bold text-white">Document</span>
+</div>
+<div class="flex flex-col gap-2">
+<p class="text-xs font-semibold text-[#56607a] uppercase tracking-wider">Edge Attributes</p>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+                                            confidence_score: float
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+                                            context: str
+                                        </span>
+</div>
+</div>
+</div>
+<!-- Relation Card 3: Employed At -->
+<div class="group relative flex flex-col gap-4 rounded-xl border border-[#252d46] bg-surface-dark p-5 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-blue-900/5">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-[#111521] border border-[#252d46] flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">business_center</span>
+</div>
+<div>
+<h4 class="text-white font-bold text-base group-hover:text-primary transition-colors">employed_at</h4>
+<p class="text-[#95a0c6] text-sm font-mono">Source → Target</p>
+</div>
+</div>
+<button class="text-[#56607a] hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Flow Visualization -->
+<div class="flex items-center gap-2 p-3 rounded-lg bg-[#111521] border border-[#252d46]">
+<span class="px-2 py-1 rounded bg-[#252d46] text-xs font-bold text-white">Person</span>
+<div class="flex-1 flex flex-col items-center gap-1">
+<div class="h-px w-full bg-[#56607a]"></div>
+</div>
+<span class="material-symbols-outlined text-[#56607a] text-sm">arrow_forward</span>
+<span class="px-2 py-1 rounded bg-[#252d46] text-xs font-bold text-white">Organization</span>
+</div>
+<div class="flex flex-col gap-2">
+<p class="text-xs font-semibold text-[#56607a] uppercase tracking-wider">Edge Attributes</p>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+                                            start_date: date
+                                        </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#111521] border border-[#252d46] text-xs font-mono text-[#95a0c6]">
+                                            role: str
+                                        </span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="h-10"></div> <!-- Spacer for bottom scrolling -->
+</div>
+</main>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tenant Console - Overview</title>
+<!-- Google Fonts: Inter and Source Han Sans (simulated with Noto Sans SC for web availability) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1e3fae",
+                        "primary-dark": "#152d7e",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#121520",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1a1f2e",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"],
+                        "sans": ["Inter", "Noto Sans SC", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.375rem", "md": "0.375rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 24px;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display transition-colors duration-200">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Side Navigation -->
+<aside class="flex w-64 flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-slate-800 flex-none z-20">
+<div class="flex items-center gap-3 px-6 py-5 border-b border-slate-100 dark:border-slate-800/50">
+<div class="bg-primary/10 p-2 rounded-lg">
+<span class="material-symbols-outlined text-primary">memory</span>
+</div>
+<h1 class="text-slate-900 dark:text-white text-lg font-bold leading-none tracking-tight">MemStack<span class="text-primary">.ai</span></h1>
+</div>
+<nav class="flex flex-col gap-1 px-4 py-6 overflow-y-auto flex-1">
+<p class="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Platform</p>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary group" href="#">
+<span class="material-symbols-outlined icon-filled text-[20px]">dashboard</span>
+<span class="text-sm font-medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px]">folder</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span class="text-sm font-medium">Users</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px]">monitoring</span>
+<span class="text-sm font-medium">Analytics</span>
+</a>
+<p class="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-6">Administration</p>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px]">credit_card</span>
+<span class="text-sm font-medium">Billing</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/50">
+<div class="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">
+                        TA
+                    </div>
+<div class="flex flex-col overflow-hidden">
+<p class="text-sm font-medium text-slate-900 dark:text-white truncate">Tenant Admin</p>
+<p class="text-xs text-slate-500 truncate">admin@tenant.co</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex flex-col flex-1 h-full overflow-hidden relative">
+<!-- Top Header -->
+<header class="flex items-center justify-between px-8 py-4 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-800 flex-none">
+<!-- Breadcrumbs inside Header for cleaner look -->
+<div class="flex items-center text-sm text-slate-500">
+<a class="hover:text-primary transition-colors" href="#">Home</a>
+<span class="mx-2 text-slate-300">/</span>
+<span class="font-medium text-slate-900 dark:text-white">Overview</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary text-[20px]">search</span>
+<input class="pl-10 pr-4 py-2 w-64 bg-slate-100 dark:bg-slate-800 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-white placeholder-slate-500 transition-all" placeholder="Search resources..." type="text"/>
+</div>
+<button class="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors">
+<span class="material-symbols-outlined text-[22px]">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="h-8 w-[1px] bg-slate-200 dark:bg-slate-700"></div>
+<button class="flex items-center gap-2">
+<div class="size-8 rounded-full bg-cover bg-center border border-slate-200 dark:border-slate-700" data-alt="User profile avatar placeholder showing letter A" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBgOuigtcgms6qU4__74wP_mgNgb4YC_3rkY4MyLncuAupy0499W_QzXawOG6rQSd2Bf5PVZ_FlnfOPRiS8bohk0nbJ838Rht2FoCLu-2oyfL62wTb9XDhUQ3uqbPcZlOrAhZIxapQXvkVktN8y4nAnrRPNoEtngB5gigBOuT1t4W8oN5Yu8mq38u9q48E7v-ujVZUy5hP4d60koS0IUOfqN4UySAN6mv7uCtV-nNKYTLWeKAOLRQQFzqOqmjvJJ2Ur_yfFUVX9IlQ");'></div>
+</button>
+</div>
+</header>
+<!-- Scrollable Body -->
+<div class="flex-1 overflow-y-auto p-8">
+<div class="max-w-7xl mx-auto flex flex-col gap-8">
+<!-- Page Heading -->
+<div class="flex flex-col gap-1">
+<h2 class="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Overview</h2>
+<p class="text-slate-500 dark:text-slate-400">Welcome back, here's what's happening with your tenant today.</p>
+</div>
+<!-- Stats Cards (Gradient) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Card 1 -->
+<div class="relative overflow-hidden rounded-xl p-6 shadow-lg bg-gradient-to-br from-[#1e3fae] to-[#3b82f6] text-white group hover:shadow-xl transition-shadow duration-300">
+<div class="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 -mr-10"></div>
+<div class="relative z-10 flex flex-col justify-between h-full gap-4">
+<div class="flex items-start justify-between">
+<div class="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+<span class="material-symbols-outlined text-white">database</span>
+</div>
+<span class="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">+12%</span>
+</div>
+<div>
+<p class="text-blue-100 text-sm font-medium mb-1">Total Storage</p>
+<div class="flex items-baseline gap-2">
+<h3 class="text-3xl font-bold tracking-tight">12.5 TB</h3>
+<span class="text-blue-200 text-sm">/ 50 TB</span>
+</div>
+</div>
+<div class="w-full bg-black/20 rounded-full h-1.5 mt-1">
+<div class="bg-white h-1.5 rounded-full" style="width: 25%"></div>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="relative overflow-hidden rounded-xl p-6 shadow-lg bg-gradient-to-br from-indigo-600 to-violet-500 text-white group hover:shadow-xl transition-shadow duration-300">
+<div class="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 -mr-10"></div>
+<div class="relative z-10 flex flex-col justify-between h-full gap-4">
+<div class="flex items-start justify-between">
+<div class="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+<span class="material-symbols-outlined text-white">folder_open</span>
+</div>
+<span class="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">8 Active</span>
+</div>
+<div>
+<p class="text-indigo-100 text-sm font-medium mb-1">Active Projects</p>
+<h3 class="text-3xl font-bold tracking-tight">8</h3>
+</div>
+<p class="text-indigo-100 text-sm">+1 new project this week</p>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="relative overflow-hidden rounded-xl p-6 shadow-lg bg-gradient-to-br from-slate-700 to-slate-600 text-white group hover:shadow-xl transition-shadow duration-300">
+<div class="absolute right-0 top-0 h-full w-1/2 bg-white/5 skew-x-12 -mr-10"></div>
+<div class="relative z-10 flex flex-col justify-between h-full gap-4">
+<div class="flex items-start justify-between">
+<div class="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+<span class="material-symbols-outlined text-white">group</span>
+</div>
+<span class="text-xs font-medium bg-white/20 px-2 py-1 rounded text-white backdrop-blur-sm">Total 24</span>
+</div>
+<div>
+<p class="text-slate-200 text-sm font-medium mb-1">Team Members</p>
+<h3 class="text-3xl font-bold tracking-tight">24</h3>
+</div>
+<div class="flex -space-x-2 overflow-hidden mt-1">
+<img alt="" class="inline-block h-6 w-6 rounded-full ring-2 ring-slate-600" data-alt="User avatar A" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmaG0yPMke5dVFVIPApO096eJ7s1CGhgafbyEtkFEaK1EIaXEKPD0M542lDk4JWUUaTMGh84VBsfOlU61BrqOTWRPvLOFbj_IcmHcMcfthlXBv1zV0qSox4Qu10cfEwlhYXeTXEH0Tj2WPgFNODlAddymAAdHE1gWJulehoCPuKc011aDYWYhH0vzs5zojW18qQtk28kKZ_5bPKtQPJnLyJ6IrQAUraZR1nTuTTFgxvhHy5WbR63SNPAyZMq-APyb6_E7NvvOyRKo"/>
+<img alt="" class="inline-block h-6 w-6 rounded-full ring-2 ring-slate-600" data-alt="User avatar B" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5lJtVSegb0CLBuAy2tkwOrMwxxJ8Vyepd5laaaw9viTyQlacQHSg7-LjFZCZcmBfP5KxqYy2wwsVnW1svrA6FyLPaRHdbxv6tnAjWCprv5kObqxREDMkxOW5-OZCLGnWGYwJ1hj-HVDDqJevGSwp53SWumHFblJAF2hYte7NC7QHxrrZFPXNem2UwtIQfER58Hu9AqsxN0MSN2tWEZ3WESv0gmE2seUfPpvE3ZriRn_sebHeyJOBTPm-7gthv1YcXD1HK8IIXzQk"/>
+<img alt="" class="inline-block h-6 w-6 rounded-full ring-2 ring-slate-600" data-alt="User avatar C" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHsMRXX0u9IAf0ynLdcJfZuVIMgTfxkGgOXwamitbeyOidk2yT5Z4ImaZNROVV0GEix2rYHd1gyBQop0P3YakBDTsepx6ERXHHPAR8GSHgUesQs7yXP0pXKhP6rF2yf4aVvthnJwbXHsIA-Jk8DVOwzRdqky_6JmwRiS_FxkmaQn1x1jB03PrJ7bYEsKzyhUz_HcbV0HFmsNi8FSFBBT8-LyRtwWjJJESIWsPaniYztpG54F0iz3Nu21WPfUtfH8h7HPhQ8xBEwGE"/>
+<div class="h-6 w-6 rounded-full bg-slate-500 ring-2 ring-slate-600 flex items-center justify-center text-[10px] font-medium">+21</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Middle Row: Chart & Tenant Info -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Main Chart Area -->
+<div class="lg:col-span-2 bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">Memory Usage History</h3>
+<p class="text-sm text-slate-500">Last 30 Days</p>
+</div>
+<select class="form-select bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg py-1.5 px-3 focus:ring-primary focus:border-primary">
+<option>Last 30 Days</option>
+<option>Last 7 Days</option>
+<option>Last 24 Hours</option>
+</select>
+</div>
+<!-- Simulated Chart using SVG -->
+<div class="flex-1 w-full min-h-[240px] relative">
+<!-- Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between text-xs text-slate-400">
+<div class="flex w-full items-center"><span class="w-8 text-right pr-2">100%</span><div class="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div></div>
+<div class="flex w-full items-center"><span class="w-8 text-right pr-2">75%</span><div class="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div></div>
+<div class="flex w-full items-center"><span class="w-8 text-right pr-2">50%</span><div class="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div></div>
+<div class="flex w-full items-center"><span class="w-8 text-right pr-2">25%</span><div class="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div></div>
+<div class="flex w-full items-center"><span class="w-8 text-right pr-2">0%</span><div class="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div></div>
+</div>
+<!-- Chart Curve -->
+<svg class="absolute inset-0 h-full w-full pl-8 pb-4 pt-2" preserveaspectratio="none" viewbox="0 0 100 50">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#1e3fae" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#1e3fae" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,45 C10,40 15,35 20,38 C25,41 30,20 40,22 C50,24 55,30 60,25 C65,20 75,15 80,18 C85,21 90,10 100,5 V50 H0 Z" fill="url(#chartGradient)"></path>
+<path d="M0,45 C10,40 15,35 20,38 C25,41 30,20 40,22 C50,24 55,30 60,25 C65,20 75,15 80,18 C85,21 90,10 100,5" fill="none" stroke="#1e3fae" stroke-width="0.5" vector-effect="non-scaling-stroke"></path>
+</svg>
+<!-- X-Axis Labels -->
+<div class="absolute bottom-0 left-8 right-0 flex justify-between text-xs text-slate-400 pt-2">
+<span>Sept 1</span>
+<span>Sept 8</span>
+<span>Sept 15</span>
+<span>Sept 22</span>
+<span>Sept 29</span>
+</div>
+</div>
+</div>
+<!-- Tenant Details -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white mb-6">Tenant Information</h3>
+<div class="flex flex-col gap-6">
+<div class="flex items-center gap-4">
+<div class="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg text-primary">
+<span class="material-symbols-outlined">badge</span>
+</div>
+<div>
+<p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Organization ID</p>
+<p class="text-slate-900 dark:text-white font-mono font-medium">#TEN-88219-X</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-lg text-purple-600">
+<span class="material-symbols-outlined">diamond</span>
+</div>
+<div>
+<p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Current Plan</p>
+<p class="text-slate-900 dark:text-white font-medium">Enterprise Pro</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-lg text-emerald-600">
+<span class="material-symbols-outlined">public</span>
+</div>
+<div>
+<p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Region</p>
+<p class="text-slate-900 dark:text-white font-medium">Asia Pacific (CN-East-1)</p>
+</div>
+</div>
+<div class="h-px w-full bg-slate-100 dark:bg-slate-800 my-2"></div>
+<div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-center mb-2">
+<span class="text-sm text-slate-500">Next Billing Date</span>
+<span class="text-sm font-semibold text-slate-900 dark:text-white">Oct 1st, 2023</span>
+</div>
+<button class="w-full py-2 px-4 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">
+                                        View Invoice
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Row: Recent Active Projects -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+<div class="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-wrap gap-4 items-center justify-between">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">Most Active Projects</h3>
+<button class="text-primary text-sm font-medium hover:underline">View All Projects</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+<th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Project Name</th>
+<th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Owner</th>
+<th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider">Memory Consumed</th>
+<th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Status</th>
+<th class="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="bg-primary/10 text-primary p-2 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">api</span>
+</div>
+<div>
+<p class="font-medium text-slate-900 dark:text-white">AI Inference Engine</p>
+<p class="text-xs text-slate-500">ID: #PROJ-001</p>
+</div>
+</div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar for David Li" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAEj_tZNY-46mLwXwcUFqcxGHPLG0YcXfMnM2-fx4rqkWjPTMUgijz6QTjXM8YH9FnyX9p5qKvft25t4e90ppG1rhtRf4fOPAxK8uhBrf3GN0Df4LzjlY6FJofRv8UKMsjzypm7KJPZ3wydHiaqe87kIGYIky3zXcjjhfJ7uDPgnh3dDal44QpTfOKBxFbVMNgaZhc3gC0VOxhEhqrOjqtRNNNZID-ohRL6r445mcAVOAP4puii-tuoN6ZFJQcVuTVd7xZYxCKr5u8");'></div>
+<span class="text-sm text-slate-700 dark:text-slate-300">David Li</span>
+</div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2">
+<div class="w-24 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 75%"></div>
+</div>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">4.2 TB</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                Active
+                                            </span>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 p-2 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">cloud_queue</span>
+</div>
+<div>
+<p class="font-medium text-slate-900 dark:text-white">Data Lake Migration</p>
+<p class="text-xs text-slate-500">ID: #PROJ-045</p>
+</div>
+</div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar for Sarah Jenkins" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBlkW74OCgSzCJ5nM5nscSY6CyBVXuoUKoKTySh3q8MKIdVN0xrR6PpEel_a0lpp0crlDwJFuldfZ55cFzhlte-hjnM3dvyA-TawTg0tH121EVcCH6o6jBiiugnRyrmvKaebnDfeJNLvlGLGfoTcNij8P4ql6irZJDdJRIxy2byguZtpYXkrs2nycoXj8l0LWzgsRadVR2EPAtPe6On06jnVPpaL4oGWS_7cbj4j06uYwJfPU1G9hn3XjzJjJYm8E0pJ78EiFp4_A0");'></div>
+<span class="text-sm text-slate-700 dark:text-slate-300">Sarah Jenkins</span>
+</div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2">
+<div class="w-24 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 45%"></div>
+</div>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">2.1 TB</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                Active
+                                            </span>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="bg-amber-50 dark:bg-amber-900/20 text-amber-600 p-2 rounded-lg">
+<span class="material-symbols-outlined text-[20px]">science</span>
+</div>
+<div>
+<p class="font-medium text-slate-900 dark:text-white">Legacy Sys Archive</p>
+<p class="text-xs text-slate-500">ID: #PROJ-102</p>
+</div>
+</div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar for Mike K" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAus_-ArmjHMDneDVMvjNk1cADZ9PU7lbqSvTmRS7UcCZmg82ZAOSdD346OMVwzd3hMtkmwzEczwUiy2ii-ql7m6HYS1pb5Ti2sKdwJ7Uhh44kNZ8zSUOB01FJCHLNMuYqAWsPWbSWlNErl9G96cNgCqi4hUhXKIYoZ514UEJT0I5zfLsHIX91ijHrc7Ny25iorilVpWQ20qtCIrh4WJ6oS8A-8HEMcdzUTcptlZNtSJhVqNnZM_OUPJcEXZbfmvQl_ZQG5xsfx-iU");'></div>
+<span class="text-sm text-slate-700 dark:text-slate-300">Mike Kowalski</span>
+</div>
+</td>
+<td class="py-4 px-6">
+<div class="flex items-center gap-2">
+<div class="w-24 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 15%"></div>
+</div>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">0.8 TB</span>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+<span class="size-1.5 rounded-full bg-amber-500"></span>
+                                                Paused
+                                            </span>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

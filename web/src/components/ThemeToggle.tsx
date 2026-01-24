@@ -1,0 +1,45 @@
+import React from 'react';
+import { useThemeStore } from '../stores/theme';
+import { Moon, Sun, Monitor } from 'lucide-react';
+
+export const ThemeToggle: React.FC = () => {
+  const { theme, setTheme } = useThemeStore();
+
+  return (
+    <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 border border-slate-200 dark:border-slate-700">
+      <button
+        onClick={() => setTheme('light')}
+        className={`p-1.5 rounded-full transition-all ${
+          theme === 'light'
+            ? 'bg-white dark:bg-slate-600 text-yellow-500 shadow-sm'
+            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+        }`}
+        title="Light Mode"
+      >
+        <Sun size={16} />
+      </button>
+      <button
+        onClick={() => setTheme('system')}
+        className={`p-1.5 rounded-full transition-all ${
+          theme === 'system'
+            ? 'bg-white dark:bg-slate-600 text-blue-500 shadow-sm'
+            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+        }`}
+        title="System Mode"
+      >
+        <Monitor size={16} />
+      </button>
+      <button
+        onClick={() => setTheme('dark')}
+        className={`p-1.5 rounded-full transition-all ${
+          theme === 'dark'
+            ? 'bg-white dark:bg-slate-600 text-indigo-400 shadow-sm'
+            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+        }`}
+        title="Dark Mode"
+      >
+        <Moon size={16} />
+      </button>
+    </div>
+  );
+};

@@ -1,0 +1,277 @@
+"""
+Audit Logging Service
+
+Tracks all sensitive operations for compliance and security.
+Logs provider CRUD operations, configuration changes, and tenant assignments.
+"""
+
+import logging
+from datetime import datetime
+from typing import Any, Dict, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+
+class AuditLogEntry(BaseModel):
+    """Audit log entry model."""
+
+    id: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    actor: Optional[str] = None  # User ID or system
+    action: str  # e.g., "provider.created", "provider.updated"
+    resource_type: str  # e.g., "provider", "tenant_mapping"
+    resource_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    details: Dict[str, Any] = Field(default_factory=dict)
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+
+    class Config:
+        json_encoders = {datetime: lambda v: v.isoformat()}
+
+
+class AuditLogService:
+    """
+    Service for logging audit events.
+
+    Supports multiple backends:
+    - Database (for persistent storage)
+    - File (for development/testing)
+    - Console (for debugging)
+    """
+
+    def __init__(
+        self,
+        backend: str = "console",  # "database", "file", "console"
+        log_file: Optional[str] = None,
+    ):
+        """
+        Initialize audit log service.
+
+        Args:
+            backend: Where to store logs ("database", "file", "console")
+            log_file: File path if backend is "file"
+        """
+        self.backend = backend
+        self.log_file = log_file
+
+    async def log_event(
+        self,
+        action: str,
+        resource_type: str,
+        resource_id: Optional[str] = None,
+        actor: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> AuditLogEntry:
+        """
+        Log an audit event.
+
+        Args:
+            action: Action performed (e.g., "provider.created")
+            resource_type: Type of resource (e.g., "provider")
+            resource_id: ID of the resource
+            actor: User or system performing the action
+            tenant_id: Tenant ID if applicable
+            details: Additional details about the event
+            ip_address: IP address of the actor
+            user_agent: User agent string
+
+        Returns:
+            AuditLogEntry that was created
+        """
+        entry = AuditLogEntry(
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            actor=actor or "system",
+            tenant_id=tenant_id,
+            details=details or {},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        # Store based on backend
+        if self.backend == "database":
+            await self._log_to_database(entry)
+        elif self.backend == "file":
+            await self._log_to_file(entry)
+        else:  # console
+            await self._log_to_console(entry)
+
+        return entry
+
+    async def _log_to_database(self, entry: AuditLogEntry):
+        """Store audit log in database."""
+        try:
+            # For now, just log to console
+            # TODO: Create audit_logs table and store there
+            logger.info(f"Audit: {entry.action} on {entry.resource_type}")
+        except Exception as e:
+            logger.error(f"Failed to log to database: {e}")
+            # Fallback to console
+            await self._log_to_console(entry)
+
+    async def _log_to_file(self, entry: AuditLogEntry):
+        """Store audit log in file."""
+        try:
+            import json
+            from pathlib import Path
+
+            if not self.log_file:
+                logger.warning("No log file configured, falling back to console")
+                await self._log_to_console(entry)
+                return
+
+            log_path = Path(self.log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(log_path, "a") as f:
+                f.write(json.dumps(entry.model_dump(), default=str) + "\n")
+
+        except Exception as e:
+            logger.error(f"Failed to log to file: {e}")
+            await self._log_to_console(entry)
+
+    async def _log_to_console(self, entry: AuditLogEntry):
+        """Log audit entry to console."""
+        log_msg = (
+            f"AUDIT: {entry.action} | "
+            f"Resource: {entry.resource_type}:{entry.resource_id} | "
+            f"Actor: {entry.actor} | "
+            f"Tenant: {entry.tenant_id or 'N/A'}"
+        )
+        if entry.details:
+            log_msg += f" | Details: {entry.details}"
+
+        logger.info(log_msg)
+
+    # Convenience methods for common actions
+
+    async def log_provider_created(
+        self,
+        provider_id: UUID,
+        provider_name: str,
+        provider_type: str,
+        actor: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+    ):
+        """Log provider creation."""
+        return await self.log_event(
+            action="provider.created",
+            resource_type="provider",
+            resource_id=str(provider_id),
+            actor=actor,
+            tenant_id=tenant_id,
+            details={
+                "provider_name": provider_name,
+                "provider_type": provider_type,
+            },
+        )
+
+    async def log_provider_updated(
+        self,
+        provider_id: UUID,
+        changes: Dict[str, Any],
+        actor: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+    ):
+        """Log provider update."""
+        return await self.log_event(
+            action="provider.updated",
+            resource_type="provider",
+            resource_id=str(provider_id),
+            actor=actor,
+            tenant_id=tenant_id,
+            details={"changes": changes},
+        )
+
+    async def log_provider_deleted(
+        self,
+        provider_id: UUID,
+        provider_name: str,
+        actor: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+    ):
+        """Log provider deletion."""
+        return await self.log_event(
+            action="provider.deleted",
+            resource_type="provider",
+            resource_id=str(provider_id),
+            actor=actor,
+            tenant_id=tenant_id,
+            details={"provider_name": provider_name},
+        )
+
+    async def log_provider_health_check(
+        self,
+        provider_id: UUID,
+        status: str,
+        response_time_ms: Optional[int] = None,
+        actor: Optional[str] = None,
+    ):
+        """Log provider health check."""
+        return await self.log_event(
+            action="provider.health_check",
+            resource_type="provider",
+            resource_id=str(provider_id),
+            actor=actor or "system",
+            details={
+                "status": status,
+                "response_time_ms": response_time_ms,
+            },
+        )
+
+    async def log_tenant_provider_assigned(
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        priority: int,
+        actor: Optional[str] = None,
+    ):
+        """Log tenant-provider assignment."""
+        return await self.log_event(
+            action="tenant_provider.assigned",
+            resource_type="tenant_provider_mapping",
+            resource_id=f"{tenant_id}:{provider_id}",
+            actor=actor,
+            tenant_id=tenant_id,
+            details={
+                "provider_id": str(provider_id),
+                "priority": priority,
+            },
+        )
+
+    async def log_tenant_provider_unassigned(
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        actor: Optional[str] = None,
+    ):
+        """Log tenant-provider unassignment."""
+        return await self.log_event(
+            action="tenant_provider.unassigned",
+            resource_type="tenant_provider_mapping",
+            resource_id=f"{tenant_id}:{provider_id}",
+            actor=actor,
+            tenant_id=tenant_id,
+            details={"provider_id": str(provider_id)},
+        )
+
+
+# Singleton instance
+_audit_service: Optional[AuditLogService] = None
+
+
+def get_audit_service() -> AuditLogService:
+    """Get or create singleton audit service instance."""
+    global _audit_service
+    if _audit_service is None:
+        # TODO: Read backend from config
+        _audit_service = AuditLogService(backend="console")
+    return _audit_service

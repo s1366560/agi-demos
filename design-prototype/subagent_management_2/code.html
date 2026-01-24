@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tenant Onboarding - Step 2: First Project</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .step-active {
+            @apply text-primary dark:text-blue-400 border-primary dark:border-blue-400;
+        }
+        .step-complete {
+            @apply text-green-600 dark:text-green-400 border-green-600 dark:border-green-400;
+        }
+        .step-pending {
+            @apply text-slate-400 border-slate-200 dark:border-slate-800;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            @apply bg-slate-200 dark:bg-slate-700 rounded-full;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col items-center justify-center p-6">
+<div class="w-full max-w-4xl bg-white dark:bg-slate-900 shadow-2xl rounded-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800">
+<div class="px-8 pt-8 pb-6 border-b border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-3">
+<div class="bg-primary rounded-lg p-1.5 flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-xl">neurology</span>
+</div>
+<span class="font-bold tracking-tight text-slate-900 dark:text-white uppercase text-xs">SubAgent Platform</span>
+</div>
+<div class="text-xs font-semibold text-slate-500 uppercase">
+                    Step 2 of 4: Project &amp; Knowledge
+                </div>
+</div>
+<div class="flex items-center w-full gap-4">
+<div class="flex-1 h-1 bg-green-500 rounded-full"></div>
+<div class="flex-1 h-1 bg-primary rounded-full"></div>
+<div class="flex-1 h-1 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+<div class="flex-1 h-1 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+</div>
+</div>
+<div class="flex-1 p-8 overflow-y-auto custom-scrollbar max-h-[70vh]">
+<div class="mb-10 text-center max-w-2xl mx-auto">
+<h2 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white mb-3">Initialize Your First Project</h2>
+<p class="text-slate-500 dark:text-slate-400">Projects are isolated workspaces where memory schemas and agents live. Choose a template to jumpstart your enterprise memory structure.</p>
+</div>
+<div class="space-y-8">
+<div class="space-y-3">
+<label class="block text-sm font-bold text-slate-700 dark:text-slate-300">Project Name</label>
+<input class="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all" placeholder="e.g., Q3 Market Intelligence" type="text" value="Strategic Operations Alpha"/>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<label class="block text-sm font-bold text-slate-700 dark:text-slate-300">Select Memory Schema Template</label>
+<span class="text-xs text-slate-400">Optional: You can customize these later</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="relative group cursor-pointer border-2 border-primary bg-primary/5 dark:bg-primary/10 p-5 rounded-2xl transition-all">
+<div class="absolute top-4 right-4 text-primary">
+<span class="material-symbols-outlined font-bold">check_circle</span>
+</div>
+<div class="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center mb-4">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<h4 class="font-bold text-slate-900 dark:text-white mb-1">Software Engineering</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Tailored for code review, documentation generation, and bug tracking memory schemas.</p>
+</div>
+<div class="relative group cursor-pointer border border-slate-200 dark:border-slate-800 hover:border-primary/50 bg-white dark:bg-slate-900/50 p-5 rounded-2xl transition-all">
+<div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-4 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<h4 class="font-bold text-slate-900 dark:text-white mb-1">Business Research</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Optimized for market analysis, competitor tracking, and sentiment discovery.</p>
+</div>
+<div class="relative group cursor-pointer border border-slate-200 dark:border-slate-800 hover:border-primary/50 bg-white dark:bg-slate-900/50 p-5 rounded-2xl transition-all">
+<div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-4 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">gavel</span>
+</div>
+<h4 class="font-bold text-slate-900 dark:text-white mb-1">Legal &amp; Compliance</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Strict schema definitions for contract analysis and regulatory tracking.</p>
+</div>
+<div class="relative group cursor-pointer border border-slate-200 dark:border-slate-800 hover:border-primary/50 bg-white dark:bg-slate-900/50 p-5 rounded-2xl transition-all">
+<div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-4 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">database</span>
+</div>
+<h4 class="font-bold text-slate-900 dark:text-white mb-1">Blank Canvas</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">Start with a clean slate and build your own custom memory definitions from scratch.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="px-8 py-6 bg-slate-50 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+<button class="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+<span class="material-symbols-outlined text-lg">arrow_back</span>
+                Back
+            </button>
+<div class="flex items-center gap-4">
+<button class="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                    Skip for now
+                </button>
+<button class="px-8 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
+                    Continue
+                    <span class="material-symbols-outlined text-lg">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<div class="mt-8 flex items-center gap-2 text-slate-400 text-xs">
+<span class="material-symbols-outlined text-sm">help_outline</span>
+        Need help setting up your project? <a class="text-primary hover:underline font-semibold" href="#">View Documentation</a>
+</div>
+
+</body></html>

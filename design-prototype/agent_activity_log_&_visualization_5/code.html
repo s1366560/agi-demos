@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Agent Workspace - Unified View</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "primary-light": "#e8eaf3",
+                        "secondary": "#506095",
+                        "background-light": "#f8f9fb",
+                        "background-dark": "#0a0c14",
+                        "text-main": "#0e111b",
+                        "agent-orchestrator": "#3b82f6",
+                        "agent-researcher": "#8b5cf6",
+                        "agent-analyst": "#10b981"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #334155;
+        }
+        .activity-grid {
+            display: grid;
+            grid-template-columns: 1fr 480px;
+            height: 100%;
+        }
+        @media (max-width: 1440px) {
+            .activity-grid {
+                grid-template-columns: 1fr 400px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main antialiased overflow-hidden">
+<div class="flex h-screen w-full bg-background-light dark:bg-background-dark">
+<div class="hidden md:flex flex-col w-64 bg-white dark:bg-[#111827] border-r border-slate-200 dark:border-slate-800 h-full flex-shrink-0 z-30">
+<div class="flex flex-col h-full p-4 justify-between">
+<div class="flex flex-col gap-6">
+<div class="flex items-center gap-3 px-2">
+<div class="bg-primary/10 rounded-lg p-2 flex items-center justify-center size-9 text-primary">
+<span class="material-symbols-outlined text-2xl">psychology</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-text-main dark:text-white text-sm font-bold leading-tight">NeuroFlow</h1>
+<p class="text-secondary text-[10px] font-medium uppercase tracking-wider">Tenant: Acme Corp</p>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary-light text-primary dark:bg-primary/10 dark:text-blue-400 transition-colors" href="#">
+<span class="material-symbols-outlined text-xl font-variation-settings-fill">smart_toy</span>
+<span class="text-sm font-bold">Workspace</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl">memory</span>
+<span class="text-sm font-medium">Memory</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl">database</span>
+<span class="text-sm font-medium">Knowledge</span>
+</a>
+</div>
+</div>
+<div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3 px-3 py-2">
+<div class="size-8 rounded-full bg-cover bg-center ring-2 ring-white dark:ring-slate-800" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDmOdtFl0z855vM0IUvlMw656uyAoB_fB0EQIunyrZUkhkFyEFjwIpdgV69aHLsruJyZNWxibtuzxf5LFLNhrIYWckp73FOFlK9xN6ZwIaXqkGlxXfJw1fRg8nNtydUgyqqNcKg_NXdrPXPdHJ-sMJzAJkbPtDw-_oLTIuF99T14Ud5V4s3VFdrzFeJHAJQZ8rLLnmYZ_M6sobEFysmxGrSNUnFe69vbIirff_Pzl157OqwOgy_T3UXAIjUskJk7azquIKTG2uPeV0");'></div>
+<div class="flex flex-col overflow-hidden">
+<p class="text-xs font-bold text-text-main dark:text-white truncate">Alex Morgan</p>
+<p class="text-[10px] text-secondary truncate">Lead Engineer</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+<header class="bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between shrink-0 z-20">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-3">
+<h2 class="text-text-main dark:text-white text-lg font-bold tracking-tight">Market Analysis &amp; Pricing</h2>
+<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold border border-green-200 dark:border-green-800 flex items-center gap-1.5 uppercase">
+<span class="block size-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        Active
+                    </span>
+</div>
+<div class="flex items-center gap-4 text-[11px] text-secondary">
+<div class="flex items-center gap-1">
+<span class="font-semibold text-slate-400 uppercase tracking-tighter">Executor:</span>
+<span class="flex items-center gap-1 bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded border border-violet-200 dark:border-violet-800">
+<span class="material-symbols-outlined text-[14px]">robot_2</span>
+                            Researcher
+                        </span>
+</div>
+<div class="flex items-center gap-1">
+<span class="font-semibold text-slate-400 uppercase tracking-tighter">Skill:</span>
+<span class="flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+<span class="material-symbols-outlined text-[14px]">language</span>
+                            Web Scraper
+                        </span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-md transition-colors">
+<span class="material-symbols-outlined">share</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/50 transition-colors text-[11px] font-bold uppercase tracking-wider">
+<span class="material-symbols-outlined text-[18px]">stop_circle</span>
+                    Terminate
+                </button>
+</div>
+</header>
+<main class="flex-1 overflow-hidden relative activity-grid">
+<div class="flex flex-col h-full bg-slate-50/30 dark:bg-background-dark/30 border-r border-slate-200 dark:border-slate-800 overflow-hidden relative">
+<div class="sticky top-0 z-10 w-full bg-white/90 dark:bg-[#111827]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 py-2.5">
+<div class="flex items-center justify-between gap-6">
+<div class="flex items-center gap-4 flex-1">
+<div class="flex flex-col flex-1 gap-1.5">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[16px]">account_tree</span>
+<span class="text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Step 2 of 5: Scrape Competitor Pricing Data</span>
+</div>
+<span class="text-primary font-bold text-[11px]">42%</span>
+</div>
+<div class="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500" style="width: 42%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4 text-[9px] font-bold text-slate-400 uppercase tracking-widest border-l border-slate-200 dark:border-slate-800 pl-6 h-6">
+<span class="flex items-center gap-1.5 opacity-60"><span class="size-1.5 rounded-full bg-green-500"></span>Step 1</span>
+<span class="flex items-center gap-1.5 text-primary"><span class="size-1.5 rounded-full bg-primary animate-pulse"></span>Step 2</span>
+<span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-slate-300 dark:bg-slate-700"></span>Step 3</span>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-8">
+<div class="flex gap-5">
+<div class="flex flex-col items-center">
+<div class="size-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 border-2 border-white dark:border-slate-800 flex items-center justify-center shrink-0 shadow-sm ring-1 ring-blue-500/20" title="Orchestrator">
+<span class="material-symbols-outlined text-blue-600 dark:text-blue-400 text-xl">hub</span>
+</div>
+<div class="w-px flex-1 bg-slate-200 dark:bg-slate-800 my-2"></div>
+</div>
+<div class="flex-1 space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold text-slate-900 dark:text-white">Orchestrator</span>
+<span class="text-[10px] text-slate-400 font-mono">10:42:01</span>
+</div>
+<div class="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-[85%]">
+                                Process initiated. Goal: Collect and compare pricing tiers for 3 primary competitors. Task 1 complete. Initializing <span class="text-primary font-semibold">Researcher Agent</span> for deep-web scraping.
+                            </div>
+</div>
+</div>
+<div class="flex gap-5">
+<div class="flex flex-col items-center">
+<div class="size-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 border-2 border-white dark:border-slate-800 flex items-center justify-center shrink-0 shadow-sm ring-1 ring-violet-500/20" title="Researcher">
+<span class="material-symbols-outlined text-violet-600 dark:text-violet-400 text-xl font-variation-settings-fill">robot_2</span>
+</div>
+<div class="w-px flex-1 bg-slate-200 dark:border-slate-800 my-2"></div>
+</div>
+<div class="flex-1 space-y-2">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold text-slate-900 dark:text-white">Researcher Agent</span>
+<span class="text-[10px] text-slate-400 font-mono">10:42:05</span>
+</div>
+<div class="bg-violet-50/50 dark:bg-violet-900/10 border border-violet-200/50 dark:border-violet-800/50 rounded-2xl p-5 border-l-4 border-l-violet-500 max-w-[90%]">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-violet-600 text-[18px]">psychology</span>
+<span class="text-[11px] font-bold text-violet-600 uppercase tracking-widest">Reasoning Path</span>
+</div>
+<div class="space-y-3 text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed">
+<p>I have identified that "Competitor X" uses dynamic pricing based on user agent and geographic location. To get an accurate Enterprise quote, I will:</p>
+<ul class="space-y-2 ml-1">
+<li class="flex gap-3">
+<span class="text-violet-400 font-bold">•</span>
+<span>Bypass the initial "Contact Sales" modal by inspecting deep links in the site map.</span>
+</li>
+<li class="flex gap-3">
+<span class="text-violet-400 font-bold">•</span>
+<span>Cross-reference historical pricing data from archive.org to identify recent price hikes.</span>
+</li>
+<li class="flex gap-3">
+<span class="text-violet-400 font-bold">•</span>
+<span>Search technical documentation for API credit costs, which usually reflect the base enterprise multiplier.</span>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="flex gap-5">
+<div class="flex flex-col items-center">
+<div class="size-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 border-2 border-white dark:border-slate-800 flex items-center justify-center shrink-0 shadow-sm ring-1 ring-amber-500/20">
+<span class="material-symbols-outlined text-amber-600 dark:text-amber-400 text-xl">language</span>
+</div>
+<div class="w-px flex-1 bg-slate-200 dark:border-slate-800 my-2"></div>
+</div>
+<div class="flex-1 space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold text-slate-900 dark:text-white">Researcher Agent</span>
+<span class="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-[9px] font-black uppercase tracking-widest">Skill in Use</span>
+</div>
+<span class="text-[10px] text-slate-400 font-mono">10:42:10</span>
+</div>
+<div class="bg-white dark:bg-[#1a202c] border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm max-w-full">
+<div class="bg-slate-50 dark:bg-slate-800/80 px-5 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tighter">Tool Call</span>
+<div class="h-3 w-px bg-slate-300 dark:bg-slate-700"></div>
+<span class="text-sm font-bold text-slate-800 dark:text-slate-200">BrowserController.v2</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="size-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] font-bold text-primary uppercase">Executing</span>
+</div>
+</div>
+<div class="p-0">
+<div class="bg-slate-900 dark:bg-[#05070a] p-6 font-mono text-[12px] text-slate-300 grid grid-cols-2 gap-8">
+<div>
+<div class="text-[10px] text-slate-500 mb-3 font-bold uppercase tracking-widest">Input Parameters</div>
+<pre class="text-blue-400 leading-relaxed">{
+  "url": "https://competitor-x.com/pricing",
+  "wait_for": "table.pricing-grid",
+  "headless": false,
+  "proxy": "US-East-1"
+}</pre>
+</div>
+<div class="border-l border-slate-800 pl-8">
+<div class="text-[10px] text-slate-500 mb-3 font-bold uppercase tracking-widest">Runtime State</div>
+<div class="space-y-1">
+<div class="text-emerald-400">Status: Running</div>
+<div class="text-slate-500">DOM Ready: True</div>
+<div class="text-slate-500">Network: Idle</div>
+<div class="text-slate-500">Latency: 142ms</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="p-6 bg-slate-50/50 dark:bg-background-dark/50 border-t border-slate-200 dark:border-slate-800 z-20">
+<div class="max-w-4xl mx-auto bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-700 rounded-2xl p-2 shadow-xl ring-1 ring-slate-900/5">
+<div class="flex items-end gap-2">
+<button class="p-2.5 text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors self-end">
+<span class="material-symbols-outlined text-xl">attach_file</span>
+</button>
+<textarea class="w-full max-h-32 bg-transparent border-0 focus:ring-0 p-2.5 text-text-main dark:text-white placeholder-slate-400 text-sm resize-none custom-scrollbar" placeholder="Give the agent a new directive..." rows="1" style="min-height: 44px;"></textarea>
+<button class="size-10 bg-primary hover:bg-primary/90 text-white rounded-xl transition-colors shadow-sm flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+<p class="text-[9px] text-center text-slate-400 mt-3 uppercase tracking-widest font-medium">NeuroFlow v4.2 • Systems Synchronized • All Logs Encrypted</p>
+</div>
+</div>
+<div class="flex flex-col h-full bg-white dark:bg-[#0a0c14] overflow-hidden">
+<div class="h-12 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between px-4 shrink-0">
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-slate-400">web_asset</span>
+<span class="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Live Browser</span>
+</div>
+<div class="h-3 w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+<div class="flex items-center gap-1.5">
+<div class="size-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+<span class="text-[10px] font-bold text-red-500 uppercase tracking-tighter">Live</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><span class="material-symbols-outlined text-[18px]">open_in_new</span></button>
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><span class="material-symbols-outlined text-[18px]">fullscreen</span></button>
+</div>
+</div>
+<div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2.5 bg-white dark:bg-[#0a0c14] shrink-0">
+<div class="flex items-center gap-1 text-slate-400">
+<span class="material-symbols-outlined text-[16px] cursor-pointer hover:text-primary">arrow_back</span>
+<span class="material-symbols-outlined text-[16px] cursor-pointer hover:text-primary">arrow_forward</span>
+<span class="material-symbols-outlined text-[16px] cursor-pointer hover:text-primary ml-1">refresh</span>
+</div>
+<div class="flex-1 bg-slate-100 dark:bg-slate-900 rounded-lg px-3 py-1.5 flex items-center gap-2 border border-slate-200 dark:border-slate-800">
+<span class="material-symbols-outlined text-[14px] text-emerald-500">lock</span>
+<span class="text-[11px] text-slate-500 dark:text-slate-400 truncate font-medium">https://competitor-x.com/pricing</span>
+</div>
+</div>
+<div class="flex-[3] bg-slate-100 dark:bg-slate-900 relative group overflow-hidden border-b border-slate-200 dark:border-slate-800">
+<div class="absolute inset-0 bg-cover bg-top opacity-100 shadow-inner" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAG-7z8ZbZ4BsbjiugDYf4dSO17nFfoPwLYpQnZ_QO4NxSlhQT6XfZO32iSQETOJ1A_6Ajx06ayGAohX4yTBibNp1Am5kbxokfXAVy-0_wMssEMBLBD1-qTX46VDUmuJHRifQ8garJbVH56DroCHtWPv3IWwPpIr4wzpNWmSSBnOaC4Z1R6kIcRIuYVoVtd_Tofyb-T2zyU9x6tvea9GIO2mpaD09KsAaFngGdcZwYFMwIuJj0PSDYyg-NO4ZqGWrBhWfqfVgxH7Ug");'></div>
+<div class="absolute top-[35%] left-[60%] z-10">
+<div class="relative">
+<div class="absolute size-10 -top-5 -left-5 bg-primary/20 rounded-full animate-ping"></div>
+<div class="absolute size-6 -top-3 -left-3 bg-primary/30 rounded-full border border-primary/50"></div>
+<span class="material-symbols-outlined text-white text-[24px] drop-shadow-lg" style="font-variation-settings: 'FILL' 1">near_me</span>
+</div>
+</div>
+<div class="absolute bottom-3 right-3 bg-black/70 backdrop-blur-md text-white text-[9px] font-mono px-2 py-1 rounded border border-white/20 uppercase tracking-widest">
+                        1440 × 900
+                    </div>
+</div>
+<div class="flex-[2] flex flex-col bg-white dark:bg-[#0f111a] overflow-hidden">
+<div class="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 shrink-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400">terminal</span>
+<span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Browser Action Log</span>
+</div>
+<span class="text-[9px] text-emerald-500 flex items-center gap-1 font-bold">
+<span class="size-1 rounded-full bg-emerald-500"></span>
+                            Streaming
+                        </span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 font-mono text-[11px] custom-scrollbar space-y-3">
+<div class="flex items-start gap-3">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:10</span>
+<span class="text-blue-500 font-bold uppercase shrink-0 w-16">[Navigate]</span>
+<span class="text-slate-600 dark:text-slate-300">Target URL: competitor-x.com/pricing</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:12</span>
+<span class="text-purple-500 font-bold uppercase shrink-0 w-16">[Scroll]</span>
+<span class="text-slate-600 dark:text-slate-300">Scrolling to element "div.pricing-table"</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:15</span>
+<span class="text-amber-500 font-bold uppercase shrink-0 w-16">[Inspect]</span>
+<span class="text-slate-600 dark:text-slate-300">Extracting text from node #price-premium</span>
+</div>
+<div class="flex items-start gap-3 bg-primary/5 dark:bg-primary/10 -mx-4 px-4 py-2 border-l-2 border-primary">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:18</span>
+<span class="text-primary font-bold uppercase shrink-0 w-16">[Typing]</span>
+<span class="text-slate-900 dark:text-white font-bold italic">Simulating mouse hover on feature tooltips...</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:20</span>
+<span class="text-slate-500 font-bold uppercase shrink-0 w-16">[Wait]</span>
+<span class="text-slate-400 italic">Waiting for 500ms for DOM stabilization...</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:21</span>
+<span class="text-emerald-500 font-bold uppercase shrink-0 w-16">[Capture]</span>
+<span class="text-slate-600 dark:text-slate-300">Screenshot captured: snapshot_v1.png</span>
+</div>
+<div class="flex items-start gap-3">
+<span class="text-slate-400 shrink-0 tabular-nums">10:42:22</span>
+<span class="text-blue-500 font-bold uppercase shrink-0 w-16">[Click]</span>
+<span class="text-slate-600 dark:text-slate-300">Clicking "Compare Tiers" button</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+</body></html>

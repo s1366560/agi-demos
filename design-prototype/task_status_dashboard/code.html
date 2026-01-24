@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Task Status Dashboard - Memory Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111521",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569; 
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-[#0e111b] dark:text-white font-display antialiased overflow-hidden">
+<div class="flex h-screen w-full">
+<!-- Side Navigation -->
+<aside class="hidden md:flex flex-col w-[280px] h-full bg-[#f8f9fb] dark:bg-[#161b28] border-r border-[#e5e7eb] dark:border-gray-800 shrink-0">
+<div class="flex flex-col h-full p-4 justify-between">
+<div class="flex flex-col gap-6">
+<!-- Brand -->
+<div class="flex gap-3 items-center px-2">
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-10 shadow-sm" data-alt="Abstract geometric logo representing memory blocks" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCts5OYLOFRGemBZ075UBmXdvu5K7MLkBQaJfl9dpqyWhMJ2e7ih-6pgHTC9aj1NnxbUcbxb9Q4nc_oOqdIb4-CALugCPZkPk5FSeDMkMG1LD4RoDcInsdbiWJCPTk85-2aXIBkZJVNOBtwIAxy0XEwdAkykE7_4keyG63JvM8XFeFKAGME292Gwvbb06W1N0szESiakxupW3PncL34owMXh3lC6Do7w6u9KtYEu_MNoXT1tFFQziweLuh9l8tUqw53qw_DX55fKhU");'></div>
+<div class="flex flex-col">
+<h1 class="text-[#0e111b] dark:text-white text-base font-bold leading-normal">Memory Manager</h1>
+<p class="text-[#506095] dark:text-gray-400 text-xs font-normal leading-normal">Admin Console</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary group transition-colors" href="#">
+<span class="material-symbols-outlined text-primary text-[24px]">dashboard</span>
+<p class="text-sm font-semibold leading-normal">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#506095] dark:text-gray-400 hover:bg-[#e8eaf3] dark:hover:bg-gray-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-current text-[24px]">folder</span>
+<p class="text-[#0e111b] dark:text-gray-200 text-sm font-medium leading-normal">Projects</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#506095] dark:text-gray-400 hover:bg-[#e8eaf3] dark:hover:bg-gray-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-current text-[24px]">database</span>
+<p class="text-[#0e111b] dark:text-gray-200 text-sm font-medium leading-normal">Memory Banks</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#506095] dark:text-gray-400 hover:bg-[#e8eaf3] dark:hover:bg-gray-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-current text-[24px]">group</span>
+<p class="text-[#0e111b] dark:text-gray-200 text-sm font-medium leading-normal">Users</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#506095] dark:text-gray-400 hover:bg-[#e8eaf3] dark:hover:bg-gray-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-current text-[24px]">settings</span>
+<p class="text-[#0e111b] dark:text-gray-200 text-sm font-medium leading-normal">Settings</p>
+</a>
+</div>
+</div>
+<!-- User Profile Snippet (Optional addition for realism) -->
+<div class="flex items-center gap-3 px-3 py-3 mt-auto rounded-lg border border-[#e5e7eb] dark:border-gray-700 bg-white dark:bg-[#1e2330]">
+<div class="size-8 rounded-full bg-gray-200 dark:bg-gray-600 bg-center bg-cover" data-alt="User avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA23z1jDEBAH2RG0P9Xq1f-tDrNY4VSyGSK1V2BSovv9cfLYgu8BcGHdPnPKN_vRXCOJI75FOCTMtxLb-xfBeHq4qskqYA7l5_rjH4EV3gSDKuPX0O4oFc6ro-QtpX7pewEyfnM-Mc_ROjNuiP51-_g9gpLdeqxXhO_CElgwwLbnTVr0MfQzOt98x8X7Yff3qLpaOO_oMTJZfUxA4wsKdonbVqYJuXnSVi1U37vIo47sGeSItP5lzHP9nWGtCCdncHwBAqgPrCh13s");'></div>
+<div class="flex flex-col flex-1 overflow-hidden">
+<p class="text-sm font-medium text-[#0e111b] dark:text-white truncate">Admin User</p>
+<p class="text-xs text-[#506095] dark:text-gray-400 truncate">admin@system.io</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Top Header & Breadcrumbs -->
+<header class="shrink-0 flex items-center justify-between px-6 py-4 bg-background-light dark:bg-background-dark border-b border-transparent">
+<div class="flex flex-wrap gap-2 items-center">
+<a class="text-[#506095] dark:text-gray-400 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Home</a>
+<span class="text-[#506095] dark:text-gray-500 text-sm font-medium leading-normal">/</span>
+<a class="text-[#506095] dark:text-gray-400 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Admin</a>
+<span class="text-[#506095] dark:text-gray-500 text-sm font-medium leading-normal">/</span>
+<span class="text-[#0e111b] dark:text-white text-sm font-medium leading-normal">Task Queue</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 text-[#506095] dark:text-gray-400 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 text-[#506095] dark:text-gray-400 transition-colors md:hidden">
+<span class="material-symbols-outlined">menu</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Dashboard Content -->
+<div class="flex-1 overflow-y-auto px-6 pb-6 scroll-smooth">
+<div class="mx-auto max-w-[1200px] flex flex-col gap-6">
+<!-- Page Heading -->
+<div class="flex flex-wrap justify-between items-end gap-4 py-2">
+<div class="flex flex-col gap-1">
+<h2 class="text-[#0e111b] dark:text-white tracking-tight text-[32px] font-bold leading-tight">Task Status Dashboard</h2>
+<p class="text-[#506095] dark:text-gray-400 text-sm font-normal leading-normal">Real-time overview of system throughput and queue health.</p>
+</div>
+<div class="flex gap-2">
+<button class="bg-white dark:bg-[#1e2330] border border-[#d1d6e6] dark:border-gray-700 text-[#0e111b] dark:text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">refresh</span>
+                                Refresh
+                            </button>
+<button class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-blue-700 flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">add_task</span>
+                                New Task
+                            </button>
+</div>
+</div>
+<!-- KPI Stats Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Total Tasks -->
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1e2330] border border-[#d1d6e6] dark:border-gray-700 shadow-sm">
+<div class="flex justify-between items-start">
+<p class="text-[#506095] dark:text-gray-400 text-sm font-medium">Total Tasks (24h)</p>
+<span class="material-symbols-outlined text-[#506095] dark:text-gray-500 text-[20px]">list_alt</span>
+</div>
+<div class="flex items-end gap-2 mt-2">
+<p class="text-[#0e111b] dark:text-white text-2xl font-bold leading-none">14,205</p>
+<span class="text-[#07883d] bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded text-xs font-semibold">+12%</span>
+</div>
+</div>
+<!-- Throughput -->
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1e2330] border border-[#d1d6e6] dark:border-gray-700 shadow-sm">
+<div class="flex justify-between items-start">
+<p class="text-[#506095] dark:text-gray-400 text-sm font-medium">Throughput</p>
+<span class="material-symbols-outlined text-[#506095] dark:text-gray-500 text-[20px]">speed</span>
+</div>
+<div class="flex items-end gap-2 mt-2">
+<p class="text-[#0e111b] dark:text-white text-2xl font-bold leading-none">120/min</p>
+<span class="text-[#07883d] bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded text-xs font-semibold">+5%</span>
+</div>
+</div>
+<!-- Pending -->
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1e2330] border border-[#d1d6e6] dark:border-gray-700 shadow-sm">
+<div class="flex justify-between items-start">
+<p class="text-[#506095] dark:text-gray-400 text-sm font-medium">Pending</p>
+<span class="material-symbols-outlined text-[#506095] dark:text-gray-500 text-[20px]">hourglass_empty</span>
+</div>
+<div class="flex items-end gap-2 mt-2">
+<p class="text-[#0e111b] dark:text-white text-2xl font-bold leading-none">45</p>
+<span class="text-[#e73c08] bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded text-xs font-semibold">+2</span>
+</div>
+</div>
+<!-- Failed -->
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1e2330] border border-[#d1d6e6] dark:border-gray-700 shadow-sm relative overflow-hidden">
+<div class="absolute right-0 top-0 h-full w-1 bg-[#e73c08]"></div>
+<div class="flex justify-between items-start">
+<p class="text-[#506095] dark:text-gray-400 text-sm font-medium">Failed</p>
+<span class="material-symbols-outlined text-[#e73c08] text-[20px]">error</span>
+</div>
+<div class="flex items-end gap-2 mt-2">
+<p class="text-[#0e111b] dark:text-white text-2xl font-bold leading-none">3</p>
+<span class="text-[#506095] dark:text-gray-400 text-xs font-normal">Last 1 hour</span>
+</div>
+</div>
+</div>
+<!-- Charts Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Queue Depth Chart -->
+<div class="lg:col-span-2 flex flex-col gap-4 rounded-xl border border-[#d1d6e6] dark:border-gray-700 bg-white dark:bg-[#1e2330] p-6 shadow-sm">
+<div class="flex justify-between items-center">
+<div>
+<p class="text-[#0e111b] dark:text-white text-lg font-semibold leading-normal">Queue Depth Over Time</p>
+<p class="text-[#506095] dark:text-gray-400 text-sm font-normal">Tasks waiting for processing • Last 24 Hours</p>
+</div>
+<div class="text-right">
+<p class="text-[#0e111b] dark:text-white text-2xl font-bold">Peak: 500</p>
+</div>
+</div>
+<!-- Chart SVG -->
+<div class="w-full h-[200px] mt-2 relative">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 400 150">
+<defs>
+<lineargradient id="gradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#193db3" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#193db3" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,150 L0,100 C50,100 50,40 100,40 C150,40 150,80 200,80 C250,80 250,20 300,20 C350,20 350,110 400,110 L400,150 Z" fill="url(#gradient)" stroke="none"></path>
+<path d="M0,100 C50,100 50,40 100,40 C150,40 150,80 200,80 C250,80 250,20 300,20 C350,20 350,110 400,110" fill="none" stroke="#193db3" stroke-linecap="round" stroke-width="2"></path>
+</svg>
+<!-- X-Axis Labels -->
+<div class="flex justify-between mt-2 text-xs text-[#506095] dark:text-gray-500 font-medium px-1">
+<span>00:00</span>
+<span>06:00</span>
+<span>12:00</span>
+<span>18:00</span>
+<span>Now</span>
+</div>
+</div>
+</div>
+<!-- Task Breakdown -->
+<div class="flex flex-col gap-4 rounded-xl border border-[#d1d6e6] dark:border-gray-700 bg-white dark:bg-[#1e2330] p-6 shadow-sm">
+<div>
+<p class="text-[#0e111b] dark:text-white text-lg font-semibold leading-normal">Task Status</p>
+<p class="text-[#506095] dark:text-gray-400 text-sm font-normal">Last 24 Hours</p>
+</div>
+<div class="flex flex-col justify-center flex-1 gap-5">
+<div class="space-y-1">
+<div class="flex justify-between text-sm">
+<span class="text-[#506095] dark:text-gray-400 font-medium">Completed</span>
+<span class="text-[#0e111b] dark:text-white font-bold">12,450</span>
+</div>
+<div class="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+<div class="h-full bg-[#07883d] rounded-full" style="width: 88%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-sm">
+<span class="text-[#506095] dark:text-gray-400 font-medium">Processing</span>
+<span class="text-[#0e111b] dark:text-white font-bold">1,707</span>
+</div>
+<div class="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 12%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-sm">
+<span class="text-[#506095] dark:text-gray-400 font-medium">Failed</span>
+<span class="text-[#0e111b] dark:text-white font-bold">48</span>
+</div>
+<div class="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+<div class="h-full bg-[#e73c08] rounded-full" style="width: 3%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Tasks Table Container -->
+<div class="flex flex-col rounded-xl border border-[#d1d6e6] dark:border-gray-700 bg-white dark:bg-[#1e2330] shadow-sm overflow-hidden">
+<!-- Filter Toolbar -->
+<div class="p-4 border-b border-[#d1d6e6] dark:border-gray-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-gray-50/50 dark:bg-[#1e2330]">
+<h3 class="text-[#0e111b] dark:text-white text-base font-bold whitespace-nowrap">Recent Tasks</h3>
+<div class="flex flex-wrap gap-3 w-full sm:w-auto">
+<!-- Search -->
+<div class="relative grow sm:grow-0">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-gray-400 text-[20px]">search</span>
+</div>
+<input class="block w-full sm:w-64 pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm dark:text-white" placeholder="Search Task ID or Worker..." type="text"/>
+</div>
+<!-- Filters -->
+<select class="block w-auto pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-lg bg-white dark:bg-gray-800 dark:text-white">
+<option>All Statuses</option>
+<option>Completed</option>
+<option>Processing</option>
+<option>Failed</option>
+<option>Pending</option>
+</select>
+<select class="block w-auto pl-3 pr-10 py-2 text-base border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-lg bg-white dark:bg-gray-800 dark:text-white">
+<option>All Types</option>
+<option>Vector Indexing</option>
+<option>Garbage Collection</option>
+<option>Context Sync</option>
+</select>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto">
+<table class="min-w-full divide-y divide-[#d1d6e6] dark:divide-gray-700">
+<thead class="bg-gray-50 dark:bg-gray-800/50">
+<tr>
+<th class="px-6 py-3 text-left text-xs font-semibold text-[#506095] dark:text-gray-400 uppercase tracking-wider" scope="col">Status</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-[#506095] dark:text-gray-400 uppercase tracking-wider" scope="col">Task ID</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-[#506095] dark:text-gray-400 uppercase tracking-wider" scope="col">Type</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-[#506095] dark:text-gray-400 uppercase tracking-wider" scope="col">Worker ID</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-[#506095] dark:text-gray-400 uppercase tracking-wider" scope="col">Duration</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-[#506095] dark:text-gray-400 uppercase tracking-wider" scope="col">Timestamp</th>
+<th class="relative px-6 py-3" scope="col">
+<span class="sr-only">Actions</span>
+</th>
+</tr>
+</thead>
+<tbody class="bg-white dark:bg-[#1e2330] divide-y divide-[#e5e7eb] dark:divide-gray-700">
+<!-- Row 1: Processing -->
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">
+<span class="size-1.5 rounded-full bg-blue-600 mr-1.5 animate-pulse"></span>
+                                                Processing
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0e111b] dark:text-white font-mono">
+                                            task_8f29a...
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-300">
+                                            Vector Indexing
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400 font-mono">
+                                            worker-04
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            -
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            Oct 24, 10:42:05
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-[#506095] hover:text-primary dark:text-gray-400 dark:hover:text-white">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Failed -->
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors bg-red-50/30 dark:bg-red-900/10">
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200">
+                                                Failed
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0e111b] dark:text-white font-mono">
+                                            task_b12c9...
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-300">
+                                            SyncUserContext
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400 font-mono">
+                                            worker-02
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            2.4s
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            Oct 24, 10:38:12
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-primary hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-xs mr-2">Retry</button>
+<button class="text-[#506095] hover:text-primary dark:text-gray-400 dark:hover:text-white inline-block align-middle">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Completed -->
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200">
+                                                Completed
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0e111b] dark:text-white font-mono">
+                                            task_a74d2...
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-300">
+                                            PruneOrphanedNodes
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400 font-mono">
+                                            worker-01
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            450ms
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            Oct 24, 10:35:00
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-[#506095] hover:text-primary dark:text-gray-400 dark:hover:text-white">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4: Pending -->
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                                                Pending
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0e111b] dark:text-white font-mono">
+                                            task_d99e1...
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-300">
+                                            MemoryConsolidation
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400 font-mono">
+                                            -
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            -
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            Oct 24, 10:30:15
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-[#506095] hover:text-primary dark:text-gray-400 dark:hover:text-white">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 5: Completed -->
+<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200">
+                                                Completed
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-[#0e111b] dark:text-white font-mono">
+                                            task_c52f2...
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-300">
+                                            CacheInvalidation
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400 font-mono">
+                                            worker-03
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            110ms
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-[#506095] dark:text-gray-400">
+                                            Oct 24, 10:28:44
+                                        </td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-[#506095] hover:text-primary dark:text-gray-400 dark:hover:text-white">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="px-6 py-4 border-t border-[#d1d6e6] dark:border-gray-700 bg-gray-50 dark:bg-[#1e2330] flex items-center justify-between">
+<div class="text-sm text-[#506095] dark:text-gray-400">
+                                Showing <span class="font-medium text-[#0e111b] dark:text-white">1</span> to <span class="font-medium text-[#0e111b] dark:text-white">5</span> of <span class="font-medium text-[#0e111b] dark:text-white">14,205</span> results
+                            </div>
+<div class="flex gap-2">
+<button class="px-3 py-1 border border-[#d1d6e6] dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-[#506095] dark:text-gray-300 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50" disabled="">Previous</button>
+<button class="px-3 py-1 border border-[#d1d6e6] dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-[#506095] dark:text-gray-300 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">Next</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

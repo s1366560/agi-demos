@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Unified Agent Workspace - Idle State</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0a0a0b",
+                        "surface-dark": "#161618",
+                        "border-dark": "#252d46",
+                        "text-muted": "#95a0c6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white antialiased font-display">
+<div class="flex h-screen overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="w-64 flex flex-col bg-background-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark shrink-0">
+<div class="p-6 flex flex-col h-full">
+<!-- Brand/Workspace Header -->
+<div class="flex items-center gap-3 mb-8">
+<div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-sm font-semibold leading-tight">Unified Agent</h1>
+<p class="text-xs text-text-muted">v1.0.4</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="flex-1 space-y-1">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">grid_view</span>
+<p class="text-sm font-medium">Workspaces</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">folder_open</span>
+<p class="text-sm font-medium">Projects</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">psychology</span>
+<p class="text-sm font-medium">Memory</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">bar_chart</span>
+<p class="text-sm font-medium">Analytics</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-sm font-medium">Settings</p>
+</div>
+</nav>
+<!-- Sidebar Footer -->
+<div class="pt-4 border-t border-slate-200 dark:border-border-dark space-y-1">
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">help_outline</span>
+<p class="text-sm font-medium">Support</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg">
+<span class="material-symbols-outlined">notifications</span>
+<p class="text-sm font-medium">Notifications</p>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 mt-2">
+<div class="w-8 h-8 rounded-full bg-slate-300 dark:bg-border-dark bg-cover bg-center" data-alt="User avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBumZEsnxXuI3ZkkfxyEew7to8RLz4VpsOjEKr0JfOFTrUuF-z2uIGbcNftb0DJEJdJoMLYtaNkM6ZjAlWMSVMu2rxW82Osw4TJ5O6snaPC2NtuIjLWMDfCGJBaO-UQnow6C30m3QYb9P_ZfVzHfcVA1UMtbrt-KzMW_yo9Ad9sRm_vXUczmSrgzGawo1ereHaHw2VwLBoAn7p1wnHcUk3oyKVurMfhMtaLn_5fsJU9vwQO2VzqvL5f6DzPpW28dTmT1CzNt2Plx1s");'></div>
+<p class="text-sm font-medium truncate">Alex Rivera</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Workspace Area -->
+<main class="flex-1 flex flex-col relative overflow-y-auto">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between px-8 py-4 bg-background-light dark:bg-background-dark border-b border-slate-200 dark:border-border-dark sticky top-0 z-10">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">layers</span>
+<h2 class="text-sm font-bold tracking-tight">Workspace Alpha</h2>
+</div>
+<div class="h-4 w-px bg-slate-200 dark:bg-border-dark"></div>
+<nav class="flex gap-6">
+<a class="text-sm font-medium text-slate-900 dark:text-white" href="#">Dashboard</a>
+<a class="text-sm font-medium text-slate-500 hover:text-slate-900 dark:text-text-muted dark:hover:text-white transition-colors" href="#">Logs</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">search</span>
+<input class="w-full bg-slate-100 dark:bg-surface-dark border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-text-muted" placeholder="Search memory..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="p-2 bg-slate-100 dark:bg-surface-dark rounded-lg hover:bg-slate-200 dark:hover:bg-border-dark transition-colors text-slate-600 dark:text-white">
+<span class="material-symbols-outlined text-[20px]">cloud_done</span>
+</button>
+<button class="p-2 bg-slate-100 dark:bg-surface-dark rounded-lg hover:bg-slate-200 dark:hover:bg-border-dark transition-colors text-slate-600 dark:text-white">
+<span class="material-symbols-outlined text-[20px]">insights</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Center Content: Greeting & Starters -->
+<div class="flex-1 flex flex-col items-center justify-center px-4 pb-32">
+<div class="max-w-4xl w-full text-center space-y-12">
+<!-- Headline Section -->
+<div class="space-y-4">
+<h1 class="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-white">How can I help you today?</h1>
+<p class="text-lg text-slate-500 dark:text-text-muted max-w-xl mx-auto">Access your intelligent memory workspace. Start a conversation or select a suggested task below.</p>
+</div>
+<!-- Suggested Starter Tiles -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4">
+<!-- Tile 1 -->
+<div class="group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer text-left">
+<div class="mb-4 p-2 rounded-lg bg-blue-50 dark:bg-primary/10 text-primary">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<h3 class="text-sm font-semibold mb-1 group-hover:text-primary transition-colors">Analyze project trends</h3>
+<p class="text-xs text-text-muted">Identify key patterns across multiple data streams</p>
+</div>
+<!-- Tile 2 -->
+<div class="group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer text-left">
+<div class="mb-4 p-2 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-600">
+<span class="material-symbols-outlined">summarize</span>
+</div>
+<h3 class="text-sm font-semibold mb-1 group-hover:text-primary transition-colors">Synthesize Q4 reports</h3>
+<p class="text-xs text-text-muted">Aggregate complex findings into an executive summary</p>
+</div>
+<!-- Tile 3 -->
+<div class="group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer text-left">
+<div class="mb-4 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600">
+<span class="material-symbols-outlined">verified_user</span>
+</div>
+<h3 class="text-sm font-semibold mb-1 group-hover:text-primary transition-colors">Audit memory logs</h3>
+<p class="text-xs text-text-muted">Review system activity and trace data genealogy</p>
+</div>
+<!-- Tile 4 -->
+<div class="group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary/50 hover:shadow-lg transition-all cursor-pointer text-left">
+<div class="mb-4 p-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600">
+<span class="material-symbols-outlined">compare_arrows</span>
+</div>
+<h3 class="text-sm font-semibold mb-1 group-hover:text-primary transition-colors">Cross-project comparison</h3>
+<p class="text-xs text-text-muted">Compare performance metrics between active projects</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Persistent Floating Input Bar -->
+<div class="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-3xl px-6">
+<div class="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-2xl rounded-2xl p-2 flex items-center gap-2">
+<button class="p-2 text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors" title="Attach context">
+<span class="material-symbols-outlined">attach_file</span>
+</button>
+<input class="flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white py-3 px-2 placeholder:text-text-muted text-base" placeholder="Message the Agent or type '/' for commands..." type="text"/>
+<div class="flex items-center gap-1 pr-1">
+<button class="p-2 text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors" title="Voice input">
+<span class="material-symbols-outlined">mic</span>
+</button>
+<button class="bg-primary text-white px-6 py-2 rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 flex items-center gap-2">
+<span>Send</span>
+<span class="material-symbols-outlined text-[18px]">send</span>
+</button>
+</div>
+</div>
+<p class="text-[10px] text-center mt-3 text-text-muted uppercase tracking-widest font-semibold opacity-50">Unified Agent Intelligence Interface</p>
+</div>
+</main>
+</div>
+</body></html>

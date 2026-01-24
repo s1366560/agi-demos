@@ -1,0 +1,114 @@
+# Prometheus ServiceMonitor for MemStack
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: memstack-api
+  namespace: memstack
+  labels:
+    app: memstack
+    component: api
+spec:
+  selector:
+    matchLabels:
+      app: memstack
+      component: api
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: memstack-worker
+  namespace: memstack
+  labels:
+    app: memstack
+    component: worker
+spec:
+  selector:
+    matchLabels:
+      app: memstack
+      component: worker
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+---
+# Prometheus Rule for MemStack Alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: memstack-alerts
+  namespace: memstack
+  labels:
+    app: memstack
+spec:
+  groups:
+  - name: memstack_api
+    interval: 30s
+    rules:
+    - alert: MemStackAPIHighErrorRate
+      expr: rate(http_requests_total{job="memstack-api",status=~"5.."}[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate on MemStack API"
+        description: "API error rate is {{ $value }} errors/sec"
+    - alert: MemStackAPIHighLatency
+      expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job="memstack-api"}[5m])) > 1
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High latency on MemStack API"
+        description: "P99 latency is {{ $value }}s"
+    - alert: MemStackAPINotReady
+      expr: up{job="memstack-api"} == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "MemStack API is down"
+        description: "{{ $labels.instance }} has been down for more than 2 minutes"
+  - name: memstack_worker
+    interval: 30s
+    rules:
+    - alert: MemStackWorkerNotReady
+      expr: up{job="memstack-worker"} == 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "MemStack Worker is down"
+        description: "{{ $labels.instance }} has been down for more than 5 minutes"
+    - alert: MemStackWorkerQueueFull
+      expr: memstack_queue_size{job="memstack-worker"} / memstack_queue_max_size{job="memstack-worker"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Worker queue is nearly full"
+        description: "Queue is at {{ $value }}% capacity"
+  - name: memstack_resources
+    interval: 30s
+    rules:
+    - alert: MemStackHighMemoryUsage
+      expr: container_memory_usage_bytes{namespace="memstack"} / container_spec_memory_limit_bytes{namespace="memstack"} > 0.9
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage"
+        description: "{{ $labels.pod }} is using {{ $value }}% of memory limit"
+    - alert: MemStackHighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{namespace="memstack"}[5m]) > 0.8
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High CPU usage"
+        description: "{{ $labels.pod }} is using {{ $value }}% of CPU"

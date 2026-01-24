@@ -1,0 +1,38 @@
+from abc import ABC, abstractmethod
+from typing import List, Optional
+
+from src.domain.model.task.task_log import TaskLog
+
+
+class TaskRepository(ABC):
+    """Repository interface for TaskLog entity"""
+
+    @abstractmethod
+    async def save(self, task: TaskLog) -> None:
+        """Save a task log (create or update)"""
+        pass
+
+    @abstractmethod
+    async def find_by_id(self, task_id: str) -> Optional[TaskLog]:
+        """Find a task by ID"""
+        pass
+
+    @abstractmethod
+    async def find_by_group(self, group_id: str, limit: int = 50, offset: int = 0) -> List[TaskLog]:
+        """List all tasks in a group"""
+        pass
+
+    @abstractmethod
+    async def list_recent(self, limit: int = 100) -> List[TaskLog]:
+        """List recent tasks across all groups"""
+        pass
+
+    @abstractmethod
+    async def list_by_status(self, status: str, limit: int = 50, offset: int = 0) -> List[TaskLog]:
+        """List tasks by status"""
+        pass
+
+    @abstractmethod
+    async def delete(self, task_id: str) -> None:
+        """Delete a task"""
+        pass

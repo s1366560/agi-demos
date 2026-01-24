@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tenant Onboarding - Agent &amp; Skills Setup</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0a0c14",
+                        "card-dark": "#111521",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            @apply bg-primary;
+        }
+        .toggle-checkbox:checked + .toggle-label .toggle-dot {
+            @apply translate-x-5;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-6xl mx-auto min-h-screen flex flex-col">
+<header class="pt-12 pb-8 px-6">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-3">
+<div class="bg-primary rounded-lg p-2">
+<span class="material-symbols-outlined text-white text-2xl">neurology</span>
+</div>
+<h1 class="text-xl font-black tracking-tight uppercase">SubAgent Platform</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="text-right">
+<p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Step 3 of 4</p>
+<p class="text-sm font-semibold text-primary dark:text-blue-400">Agent &amp; Skills Setup</p>
+</div>
+<div class="flex gap-1">
+<div class="h-1.5 w-8 rounded-full bg-primary"></div>
+<div class="h-1.5 w-8 rounded-full bg-primary"></div>
+<div class="h-1.5 w-8 rounded-full bg-primary"></div>
+<div class="h-1.5 w-8 rounded-full bg-slate-200 dark:bg-slate-800"></div>
+</div>
+</div>
+</div>
+<div class="max-w-2xl">
+<h2 class="text-3xl font-bold text-slate-900 dark:text-white mb-2">Configure Your Intelligence Core</h2>
+<p class="text-slate-500 dark:text-slate-400">Activate your first SubAgents and define the foundational skills for your enterprise tenant.</p>
+</div>
+</header>
+<main class="flex-1 px-6 pb-24">
+<div class="grid grid-cols-12 gap-8">
+<div class="col-span-12 lg:col-span-8 space-y-8">
+<section>
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-sm font-bold uppercase tracking-wider text-slate-400">Available SubAgents</h3>
+<span class="text-xs text-slate-500">2 selected</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="bg-white dark:bg-card-dark border-2 border-primary rounded-xl p-5 relative overflow-hidden group shadow-lg shadow-primary/5">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<div class="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</div>
+</div>
+<h4 class="font-bold text-lg mb-1">Code Architect</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">Expert in refactoring, debugging, and cross-language pattern detection.</p>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] rounded font-medium">Python</span>
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] rounded font-medium">GitOps</span>
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] rounded font-medium">CI/CD</span>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark border-2 border-primary rounded-xl p-5 relative overflow-hidden group shadow-lg shadow-primary/5">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
+<span class="material-symbols-outlined">travel_explore</span>
+</div>
+<div class="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</div>
+</div>
+<h4 class="font-bold text-lg mb-1">Deep Researcher</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">Synthesizes large datasets into structured executive summaries and reports.</p>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] rounded font-medium">Web Search</span>
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] rounded font-medium">PDF Analysis</span>
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[10px] rounded font-medium">NLP</span>
+</div>
+</div>
+<div class="bg-white/50 dark:bg-card-dark/50 border border-slate-200 dark:border-slate-800 rounded-xl p-5 cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-all opacity-60 grayscale hover:grayscale-0 hover:opacity-100">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-lg">
+<span class="material-symbols-outlined">palette</span>
+</div>
+<button class="text-primary text-[10px] font-bold uppercase tracking-tight hover:underline">Activate</button>
+</div>
+<h4 class="font-bold text-lg mb-1">Creative Strategist</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">Generates marketing copy, UI concepts, and brand narratives.</p>
+</div>
+<div class="bg-white/50 dark:bg-card-dark/50 border border-slate-200 dark:border-slate-800 rounded-xl p-5 cursor-pointer hover:border-slate-300 dark:hover:border-slate-700 transition-all opacity-60 grayscale hover:grayscale-0 hover:opacity-100">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-lg">
+<span class="material-symbols-outlined">query_stats</span>
+</div>
+<button class="text-primary text-[10px] font-bold uppercase tracking-tight hover:underline">Activate</button>
+</div>
+<h4 class="font-bold text-lg mb-1">Data Analyst</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">Statistical modeling and anomaly detection from structured SQL sources.</p>
+</div>
+</div>
+</section>
+<section class="space-y-4">
+<h3 class="text-sm font-bold uppercase tracking-wider text-slate-400">Global Engine Configuration</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="bg-white dark:bg-card-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex items-start gap-4">
+<div class="pt-1 flex-shrink-0">
+<label class="inline-flex relative items-center cursor-pointer">
+<input checked="" class="sr-only toggle-checkbox" type="checkbox"/>
+<div class="toggle-label w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full transition-colors">
+<div class="toggle-dot absolute top-[2px] left-[2px] bg-white w-5 h-5 rounded-full transition-transform"></div>
+</div>
+</label>
+</div>
+<div>
+<h4 class="font-bold text-sm">Auto-Learning Experience Engine</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Allow the platform to discover and optimize new workflow patterns from user interactions automatically.</p>
+</div>
+</div>
+<div class="bg-white dark:bg-card-dark border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex items-start gap-4">
+<div class="pt-1 flex-shrink-0">
+<label class="inline-flex relative items-center cursor-pointer">
+<input checked="" class="sr-only toggle-checkbox" type="checkbox"/>
+<div class="toggle-label w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full transition-colors">
+<div class="toggle-dot absolute top-[2px] left-[2px] bg-white w-5 h-5 rounded-full transition-transform"></div>
+</div>
+</label>
+</div>
+<div>
+<h4 class="font-bold text-sm">Universal Browser Access</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Enables agents to navigate the live web for real-time information retrieval and task execution.</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<div class="col-span-12 lg:col-span-4">
+<div class="bg-white dark:bg-card-dark border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden sticky top-6">
+<div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900/50">
+<h3 class="font-bold text-sm uppercase tracking-wide">Standard Skill Registry</h3>
+<span class="material-symbols-outlined text-slate-400">extension</span>
+</div>
+<div class="p-5 space-y-5 custom-scrollbar max-h-[500px] overflow-y-auto">
+<p class="text-xs text-slate-500 dark:text-slate-400">These basic skills will be available to all active SubAgents by default.</p>
+<div class="space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">description</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-semibold">Document Summarizer</p>
+<p class="text-[10px] text-slate-500">Core Logic Module v1.2</p>
+</div>
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">translate</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-semibold">Multi-Lingual Bridge</p>
+<p class="text-[10px] text-slate-500">Language Suite v4.0</p>
+</div>
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">table_view</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-semibold">Excel/CSV Processor</p>
+<p class="text-[10px] text-slate-500">Data Utils v2.1</p>
+</div>
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">mail</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-semibold">Email Synthesizer</p>
+<p class="text-[10px] text-slate-500">Comm Engine v1.0</p>
+</div>
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+</div>
+</div>
+<div class="pt-4 border-t border-slate-100 dark:border-slate-800">
+<button class="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-bold transition-colors">
+                                Add Custom Skills
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<footer class="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 py-4 px-12 z-50">
+<div class="max-w-6xl mx-auto flex items-center justify-between">
+<button class="flex items-center gap-2 px-6 py-3 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+<span class="material-symbols-outlined">arrow_back</span>
+                Back
+            </button>
+<div class="flex items-center gap-4">
+<p class="text-xs text-slate-500 font-medium hidden sm:block">You can modify these settings later in the Admin Panel.</p>
+<button class="px-8 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center gap-2 transition-all">
+                    Complete Setup
+                    <span class="material-symbols-outlined">check_circle</span>
+</button>
+</div>
+</div>
+</footer>
+</div>
+
+</body></html>

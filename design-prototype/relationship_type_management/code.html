@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Relationship Type Management</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111521",
+                        "surface-dark": "#1e2128",
+                        "surface-light": "#ffffff",
+                        "border-dark": "#2d3748",
+                        "text-secondary": "#95a0c6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for better aesthetics in dark mode */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111521; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3748; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a5568; 
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white overflow-hidden h-screen flex">
+<!-- Sidebar -->
+<aside class="w-72 bg-[#121521] border-r border-border-dark flex flex-col h-full flex-shrink-0">
+<div class="flex flex-col gap-4 p-4 h-full">
+<!-- Profile/Brand -->
+<div class="flex gap-3 items-center mb-6">
+<div class="relative bg-center bg-no-repeat bg-cover rounded-full h-10 w-10 flex-shrink-0" data-alt="Abstract blue geometric avatar pattern representing memory nodes" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCSyGYW4XKPBa2tpfG2H1Kl6aiixl2HCM4xJGTMVXB9s87YP0i6NfBME2Srxp6crjMCmDFd6CiQhbCAQ4cLa1vUhPIWEitwJngdxURlFjVkNX-aLTZjQ1b_NilBX8HEXfRGqMsDzg56USNGcA1vT5ApKTvHIp4PlfOXHWuXHgVKNen1thJPD8_vHnDrfSX8OA1pqPWChm8VaeIyjjFjrYORIPS3nEi5SVLfsyO7pMfsq6975Z3yPM4pjUSjasARg0K5biT0rnH_S4o");'>
+</div>
+<div class="flex flex-col overflow-hidden">
+<h1 class="text-white text-base font-medium leading-normal truncate">Memory Platform</h1>
+<p class="text-text-secondary text-sm font-normal leading-normal truncate">Admin Console</p>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex flex-col gap-2 flex-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">dashboard</span>
+<span class="text-sm font-medium leading-normal">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">schema</span>
+<span class="text-sm font-medium leading-normal">Entity Types</span>
+</a>
+<!-- Active State -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/20 text-primary border-l-2 border-primary" href="#">
+<span class="material-symbols-outlined text-[24px] filled">hub</span>
+<span class="text-sm font-bold leading-normal">Relationship Types</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<span class="text-sm font-medium leading-normal">Project Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">group</span>
+<span class="text-sm font-medium leading-normal">User Management</span>
+</a>
+</nav>
+<!-- Bottom Actions -->
+<div class="mt-auto border-t border-border-dark pt-4">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">logout</span>
+<span class="text-sm font-medium leading-normal">Sign Out</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-8">
+<div class="max-w-[1400px] mx-auto flex flex-col gap-6">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap gap-2 items-center">
+<a class="text-text-secondary text-sm font-medium hover:text-white transition-colors" href="#">Settings</a>
+<span class="text-text-secondary text-sm">/</span>
+<a class="text-text-secondary text-sm font-medium hover:text-white transition-colors" href="#">Schema</a>
+<span class="text-text-secondary text-sm">/</span>
+<span class="text-white text-sm font-medium">Relationship Types</span>
+</div>
+<!-- Page Heading -->
+<div class="flex flex-wrap justify-between items-end gap-4">
+<div class="flex flex-col gap-2 max-w-2xl">
+<h1 class="text-white text-3xl font-black leading-tight tracking-tight">Relationship Type Management</h1>
+<p class="text-text-secondary text-base font-normal">Define custom edge schemas and configure the valid connection rules between entity types.</p>
+</div>
+<div class="flex gap-2">
+<span class="px-3 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-medium border border-green-500/20">System Status: Active</span>
+<span class="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/20">v2.4.0</span>
+</div>
+</div>
+<!-- Main Content Card -->
+<div class="flex flex-col bg-surface-dark rounded-xl border border-border-dark overflow-hidden shadow-xl min-h-[600px]">
+<!-- Tabs -->
+<div class="border-b border-border-dark px-6">
+<div class="flex gap-8">
+<button class="flex flex-col items-center justify-center border-b-[3px] border-b-primary text-white pb-3 pt-4 px-2 hover:bg-white/5 transition-colors">
+<span class="text-sm font-bold tracking-wide">Edge Definitions</span>
+</button>
+<button class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-text-secondary pb-3 pt-4 px-2 hover:text-white hover:border-b-white/10 transition-colors">
+<span class="text-sm font-bold tracking-wide">Edge Type Map</span>
+</button>
+</div>
+</div>
+<!-- Toolbar -->
+<div class="flex flex-wrap justify-between items-center gap-4 px-6 py-4 border-b border-border-dark bg-[#181b25]">
+<div class="flex items-center gap-3 flex-1">
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+<span class="material-symbols-outlined text-text-secondary text-[20px]">search</span>
+</div>
+<input class="bg-[#121521] border border-border-dark text-white text-sm rounded-lg focus:ring-primary focus:border-primary block w-64 pl-10 p-2.5 placeholder-gray-500 transition-all focus:w-80" placeholder="Search edge types..." type="text"/>
+</div>
+<div class="h-6 w-px bg-border-dark mx-2"></div>
+<button class="p-2 text-text-secondary hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Filter">
+<span class="material-symbols-outlined text-[20px]">filter_list</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Download Schema">
+<span class="material-symbols-outlined text-[20px]">download</span>
+</button>
+</div>
+<button class="flex items-center justify-center gap-2 bg-primary hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-lg shadow-blue-900/20 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>Create Edge Type</span>
+</button>
+</div>
+<!-- Master-Detail Content Layout -->
+<div class="flex flex-1 overflow-hidden">
+<!-- List Pane (Master) -->
+<div class="w-1/3 border-r border-border-dark overflow-y-auto bg-[#151820]">
+<!-- List Item: Active -->
+<div class="p-4 border-b border-border-dark bg-primary/10 border-l-4 border-l-primary cursor-pointer hover:bg-primary/20 transition-colors">
+<div class="flex justify-between items-start mb-1">
+<h3 class="text-white font-semibold text-sm">Employment</h3>
+<span class="text-[10px] uppercase tracking-wider text-primary font-bold bg-primary/20 px-1.5 py-0.5 rounded">Active</span>
+</div>
+<p class="text-text-secondary text-xs mb-3 line-clamp-2">Connects a Person to a Company, defining role, duration, and compensation details.</p>
+<div class="flex items-center gap-4 text-xs text-text-secondary">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">data_object</span>
+<span>4 Attributes</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">link</span>
+<span>1 Mapping</span>
+</div>
+</div>
+</div>
+<!-- List Item -->
+<div class="p-4 border-b border-border-dark cursor-pointer hover:bg-white/5 transition-colors border-l-4 border-l-transparent">
+<div class="flex justify-between items-start mb-1">
+<h3 class="text-white font-semibold text-sm">Investment</h3>
+<span class="text-[10px] uppercase tracking-wider text-green-400 font-bold bg-green-500/10 px-1.5 py-0.5 rounded">Verified</span>
+</div>
+<p class="text-text-secondary text-xs mb-3 line-clamp-2">Financial relationship representing equity or debt funding between entities.</p>
+<div class="flex items-center gap-4 text-xs text-text-secondary">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">data_object</span>
+<span>6 Attributes</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">link</span>
+<span>3 Mappings</span>
+</div>
+</div>
+</div>
+<!-- List Item -->
+<div class="p-4 border-b border-border-dark cursor-pointer hover:bg-white/5 transition-colors border-l-4 border-l-transparent">
+<div class="flex justify-between items-start mb-1">
+<h3 class="text-white font-semibold text-sm">Authorship</h3>
+</div>
+<p class="text-text-secondary text-xs mb-3 line-clamp-2">Relates a creative work (Document, Article) to its creator (Person).</p>
+<div class="flex items-center gap-4 text-xs text-text-secondary">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">data_object</span>
+<span>2 Attributes</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">link</span>
+<span>1 Mapping</span>
+</div>
+</div>
+</div>
+<!-- List Item -->
+<div class="p-4 border-b border-border-dark cursor-pointer hover:bg-white/5 transition-colors border-l-4 border-l-transparent opacity-60">
+<div class="flex justify-between items-start mb-1">
+<h3 class="text-white font-semibold text-sm">Mentorship</h3>
+<span class="text-[10px] uppercase tracking-wider text-yellow-500 font-bold bg-yellow-500/10 px-1.5 py-0.5 rounded">Draft</span>
+</div>
+<p class="text-text-secondary text-xs mb-3 line-clamp-2">Professional guidance relationship between two Person entities.</p>
+<div class="flex items-center gap-4 text-xs text-text-secondary">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">data_object</span>
+<span>2 Attributes</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">link</span>
+<span>0 Mappings</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Detail Pane (View/Edit) -->
+<div class="flex-1 overflow-y-auto bg-surface-dark p-8">
+<!-- Detail Header -->
+<div class="flex justify-between items-start mb-8 pb-6 border-b border-border-dark">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<h2 class="text-2xl font-bold text-white">Employment</h2>
+<span class="material-symbols-outlined text-text-secondary cursor-help text-[18px]" title="ID: edge_employment_v1">info</span>
+</div>
+<p class="text-text-secondary text-sm max-w-xl">Standard employment relationship. Requires start date and job title. Supports optional salary and equity details.</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 text-sm font-medium text-text-secondary hover:text-white border border-border-dark rounded bg-[#151820] hover:bg-[#252d46] transition-colors">
+                                        View JSON
+                                    </button>
+<button class="px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-blue-700 rounded transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+                                        Edit Schema
+                                    </button>
+</div>
+</div>
+<!-- Attributes Section (Pydantic Model View) -->
+<div class="mb-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-semibold text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">data_object</span>
+                                        Schema Attributes
+                                    </h3>
+<span class="text-xs text-text-secondary font-mono bg-[#121521] px-2 py-1 rounded border border-border-dark">class Employment(Edge)</span>
+</div>
+<div class="border border-border-dark rounded-lg overflow-hidden">
+<table class="w-full text-left text-sm">
+<thead class="bg-[#151820] text-text-secondary border-b border-border-dark">
+<tr>
+<th class="px-4 py-3 font-medium">Attribute Name</th>
+<th class="px-4 py-3 font-medium">Type</th>
+<th class="px-4 py-3 font-medium">Required</th>
+<th class="px-4 py-3 font-medium">Description</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-dark bg-[#121521]/50">
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-4 py-3 text-white font-mono text-xs">title</td>
+<td class="px-4 py-3 text-purple-400 font-mono text-xs">str</td>
+<td class="px-4 py-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-400">Yes</span>
+</td>
+<td class="px-4 py-3 text-text-secondary text-xs">Official job title</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-4 py-3 text-white font-mono text-xs">start_date</td>
+<td class="px-4 py-3 text-purple-400 font-mono text-xs">datetime</td>
+<td class="px-4 py-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-400">Yes</span>
+</td>
+<td class="px-4 py-3 text-text-secondary text-xs">Date of joining</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-4 py-3 text-white font-mono text-xs">end_date</td>
+<td class="px-4 py-3 text-purple-400 font-mono text-xs">Optional[datetime]</td>
+<td class="px-4 py-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-400">No</span>
+</td>
+<td class="px-4 py-3 text-text-secondary text-xs">Termination date, if applicable</td>
+</tr>
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-4 py-3 text-white font-mono text-xs">salary</td>
+<td class="px-4 py-3 text-purple-400 font-mono text-xs">Optional[float]</td>
+<td class="px-4 py-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-400">No</span>
+</td>
+<td class="px-4 py-3 text-text-secondary text-xs">Annual compensation</td>
+</tr>
+</tbody>
+</table>
+<div class="bg-[#151820] px-4 py-2 border-t border-border-dark">
+<button class="text-xs text-primary font-bold flex items-center gap-1 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[16px]">add</span>
+                                            Add Attribute
+                                        </button>
+</div>
+</div>
+</div>
+<!-- Edge Type Map Section -->
+<div>
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-semibold text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">share_reviews</span>
+                                        Edge Type Map
+                                    </h3>
+<button class="text-xs text-primary font-bold hover:underline">Manage Mappings</button>
+</div>
+<div class="grid grid-cols-1 gap-4">
+<!-- Mapping Card -->
+<div class="border border-border-dark rounded-lg p-4 bg-[#121521] flex items-center gap-4 relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<!-- Source -->
+<div class="flex items-center gap-3 min-w-[120px]">
+<div class="w-8 h-8 rounded bg-blue-500/20 flex items-center justify-center text-blue-400">
+<span class="material-symbols-outlined text-[18px]">person</span>
+</div>
+<div>
+<p class="text-xs text-text-secondary uppercase font-bold">Source</p>
+<p class="text-sm font-semibold text-white">Person</p>
+</div>
+</div>
+<!-- Connector -->
+<div class="flex-1 flex flex-col items-center justify-center gap-1 relative px-4">
+<div class="w-full h-px bg-border-dark relative">
+<div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#121521] px-2">
+<span class="text-xs font-mono text-primary font-bold">Employment</span>
+</div>
+</div>
+</div>
+<!-- Target -->
+<div class="flex items-center gap-3 justify-end min-w-[120px]">
+<div class="text-right">
+<p class="text-xs text-text-secondary uppercase font-bold">Target</p>
+<p class="text-sm font-semibold text-white">Company</p>
+</div>
+<div class="w-8 h-8 rounded bg-orange-500/20 flex items-center justify-center text-orange-400">
+<span class="material-symbols-outlined text-[18px]">domain</span>
+</div>
+</div>
+<!-- Actions (Hover) -->
+<div class="absolute right-4 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-2 bg-[#121521] pl-4">
+<button class="p-1.5 hover:bg-white/10 rounded text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1.5 hover:bg-red-500/20 rounded text-text-secondary hover:text-red-400">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Add New Mapping Placeholder -->
+<button class="border border-dashed border-border-dark rounded-lg p-3 flex items-center justify-center gap-2 text-text-secondary hover:text-white hover:border-primary/50 hover:bg-white/5 transition-all group">
+<span class="material-symbols-outlined group-hover:text-primary">add_link</span>
+<span class="text-sm font-medium">Add Valid Entity Pair</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between text-xs text-text-secondary px-2">
+<p>Last schema update: 2 hours ago by admin_user</p>
+<div class="flex gap-4">
+<a class="hover:text-white" href="#">Documentation</a>
+<a class="hover:text-white" href="#">API Reference</a>
+<a class="hover:text-white" href="#">Support</a>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

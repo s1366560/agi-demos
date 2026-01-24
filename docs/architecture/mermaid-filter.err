@@ -1,0 +1,6 @@
+
+TimeoutError: Timed out after 30000 ms while waiting for the WS endpoint URL to appear in stdout!
+    at ChromeLauncher.launch (file:///opt/homebrew/lib/node_modules/mermaid-filter/node_modules/puppeteer-core/lib/esm/puppeteer/node/ProductLauncher.js:119:23)
+    at async run (file:///opt/homebrew/lib/node_modules/mermaid-filter/node_modules/@mermaid-js/mermaid-cli/src/index.js:416:19)
+    at async cli (file:///opt/homebrew/lib/node_modules/mermaid-filter/node_modules/@mermaid-js/mermaid-cli/src/index.js:192:3)
+

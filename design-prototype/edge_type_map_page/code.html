@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Edge Type Map - Memory Graph Console</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;family=Noto+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#121521",
+                        "surface-dark": "#1b2032",
+                        "border-dark": "#252d46",
+                        "text-secondary": "#95a0c6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "body": ["Noto Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for table */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #121521; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #252d46; 
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #364063; 
+        }
+        
+        .material-symbols-outlined {
+            font-size: 24px;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Sticky positioning context fixes */
+        th.sticky-col, td.sticky-col {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+        th.sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        th.sticky-corner {
+            position: sticky;
+            top: 0;
+            left: 0;
+            z-index: 30;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-white font-display overflow-hidden">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Left Sidebar Navigation -->
+<aside class="w-64 flex-shrink-0 flex flex-col border-r border-border-dark bg-background-dark h-full">
+<div class="p-6">
+<div class="flex gap-3 items-center mb-8">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shrink-0 bg-gradient-to-br from-blue-600 to-indigo-900 shadow-lg" data-alt="Abstract blue gradient logo representing memory graph"></div>
+<div class="flex flex-col overflow-hidden">
+<h1 class="text-white text-base font-bold leading-normal truncate">Memory Graph</h1>
+<p class="text-text-secondary text-xs font-normal leading-normal truncate">Admin Console</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">pie_chart</span>
+<p class="text-sm font-medium leading-normal">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">deployed_code</span>
+<p class="text-sm font-medium leading-normal">Entities</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">hub</span>
+<p class="text-sm font-medium leading-normal">Edge Types</p>
+</a>
+<!-- Active State -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-dark text-white shadow-sm border border-border-dark/50" href="#">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">map</span>
+<p class="text-sm font-medium leading-normal">Edge Maps</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">people</span>
+<p class="text-sm font-medium leading-normal">Users</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-text-secondary hover:bg-surface-dark hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white">settings</span>
+<p class="text-sm font-medium leading-normal">Settings</p>
+</a>
+</nav>
+</div>
+<div class="mt-auto p-6 border-t border-border-dark">
+<div class="flex items-center gap-3 px-3 py-2">
+<div class="size-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">JD</div>
+<div class="flex flex-col">
+<p class="text-white text-sm font-medium">Jane Doe</p>
+<p class="text-text-secondary text-xs">Super Admin</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-hidden bg-background-dark relative">
+<!-- Top Scrollable Content -->
+<div class="flex-1 overflow-y-auto custom-scrollbar">
+<div class="max-w-[1600px] mx-auto w-full p-6 flex flex-col gap-6">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap gap-2 px-1">
+<a class="text-text-secondary text-sm font-medium leading-normal hover:text-white transition-colors" href="#">Home</a>
+<span class="text-text-secondary text-sm font-medium leading-normal">/</span>
+<a class="text-text-secondary text-sm font-medium leading-normal hover:text-white transition-colors" href="#">Schema Management</a>
+<span class="text-text-secondary text-sm font-medium leading-normal">/</span>
+<span class="text-white text-sm font-medium leading-normal">Edge Type Map</span>
+</div>
+<!-- Page Heading -->
+<div class="flex flex-wrap justify-between items-end gap-4 px-1">
+<div class="flex flex-col gap-2 max-w-3xl">
+<h1 class="text-white text-3xl font-black leading-tight tracking-[-0.033em]">Edge Type Mapping</h1>
+<p class="text-text-secondary text-base font-normal leading-normal">
+                                Configure the valid relationship types allowed between source and target entity types. Define the "physics" of your knowledge graph.
+                            </p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center justify-center rounded-lg h-10 px-4 bg-surface-dark border border-border-dark text-white text-sm font-bold hover:bg-[#252d46] transition-colors">
+                                Cancel
+                            </button>
+<button class="flex items-center justify-center rounded-lg h-10 px-6 bg-primary text-white text-sm font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-700 transition-colors">
+                                Save Changes
+                            </button>
+</div>
+</div>
+<!-- Toolbar / Actions -->
+<div class="flex flex-col gap-4">
+<div class="flex flex-wrap justify-between gap-4 p-1">
+<!-- Left: Search & Standard Tools -->
+<div class="flex items-center gap-2 bg-surface-dark/50 p-1 rounded-lg border border-border-dark">
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-text-secondary text-[20px]">search</span>
+</div>
+<input class="block w-64 bg-transparent border-none rounded-md py-2 pl-10 pr-3 text-sm text-white placeholder-text-secondary focus:ring-1 focus:ring-primary" placeholder="Search entity types..." type="text"/>
+</div>
+<div class="h-6 w-px bg-border-dark mx-1"></div>
+<button class="p-2 text-text-secondary hover:text-white rounded hover:bg-border-dark transition-colors tooltip" title="Filter">
+<span class="material-symbols-outlined text-[20px]">filter_list</span>
+</button>
+<button class="p-2 text-text-secondary hover:text-white rounded hover:bg-border-dark transition-colors" title="Export Schema">
+<span class="material-symbols-outlined text-[20px]">download</span>
+</button>
+</div>
+<!-- Right: Reset -->
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg text-text-secondary hover:text-white hover:bg-surface-dark transition-colors text-sm font-bold">
+<span class="material-symbols-outlined text-[20px]">restart_alt</span>
+<span>Reset Defaults</span>
+</button>
+</div>
+<!-- Filter Cards (Simplified FeatureSection) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- Source Filter -->
+<div class="flex flex-col gap-2 rounded-lg border border-border-dark bg-surface-dark p-4 hover:border-primary/50 transition-colors cursor-pointer group">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary group-hover:translate-x-1 transition-transform">arrow_forward</span>
+<h2 class="text-sm font-bold">Source Entity</h2>
+</div>
+<span class="bg-primary/20 text-primary text-xs px-2 py-0.5 rounded font-medium">All</span>
+</div>
+<p class="text-text-secondary text-xs">Filter rows (e.g. User, Team)</p>
+</div>
+<!-- Target Filter -->
+<div class="flex flex-col gap-2 rounded-lg border border-border-dark bg-surface-dark p-4 hover:border-primary/50 transition-colors cursor-pointer group">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary group-hover:translate-y-1 transition-transform">arrow_downward</span>
+<h2 class="text-sm font-bold">Target Entity</h2>
+</div>
+<span class="bg-primary/20 text-primary text-xs px-2 py-0.5 rounded font-medium">All</span>
+</div>
+<p class="text-text-secondary text-xs">Filter columns (e.g. Document)</p>
+</div>
+<!-- View Options -->
+<div class="flex flex-col gap-2 rounded-lg border border-border-dark bg-surface-dark p-4 hover:border-primary/50 transition-colors cursor-pointer">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-text-secondary">visibility_off</span>
+<h2 class="text-sm font-bold">Empty Cells</h2>
+</div>
+<div class="w-8 h-4 bg-border-dark rounded-full relative">
+<div class="absolute left-1 top-1 bg-text-secondary size-2 rounded-full"></div>
+</div>
+</div>
+<p class="text-text-secondary text-xs">Hide mappings with no edges</p>
+</div>
+</div>
+</div>
+<!-- Matrix Table Area -->
+<div class="flex flex-col flex-1 min-h-[500px] border border-border-dark rounded-xl bg-background-dark shadow-2xl overflow-hidden relative">
+<!-- Legend / Helper -->
+<div class="bg-surface-dark px-4 py-2 border-b border-border-dark flex items-center justify-between text-xs text-text-secondary">
+<div class="flex gap-4">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-primary"></span> Active Mapping</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-border-dark"></span> Empty</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-amber-500 text-[14px]">warning</span> Conflict</span>
+</div>
+<span>Showing 6x6 Matrix</span>
+</div>
+<!-- Scrollable Table Container -->
+<div class="overflow-auto custom-scrollbar w-full h-full bg-[#121521]">
+<table class="w-full text-left border-collapse whitespace-nowrap">
+<thead>
+<tr>
+<!-- Sticky Corner Header -->
+<th class="sticky-corner bg-surface-dark p-4 border-b border-r border-border-dark min-w-[200px] z-50 shadow-md">
+<div class="flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="text-text-secondary text-xs font-normal">Source \ Target</span>
+</div>
+</div>
+</th>
+<!-- Column Headers (Targets) -->
+<th class="sticky-header bg-surface-dark p-3 border-b border-border-dark min-w-[240px] text-white font-semibold text-sm">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">person</span></div>
+                                                User
+                                            </div>
+</th>
+<th class="sticky-header bg-surface-dark p-3 border-b border-border-dark min-w-[240px] text-white font-semibold text-sm">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">diversity_3</span></div>
+                                                Team
+                                            </div>
+</th>
+<th class="sticky-header bg-surface-dark p-3 border-b border-border-dark min-w-[240px] text-white font-semibold text-sm">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">rocket_launch</span></div>
+                                                Project
+                                            </div>
+</th>
+<th class="sticky-header bg-surface-dark p-3 border-b border-border-dark min-w-[240px] text-white font-semibold text-sm">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-orange-500/20 text-orange-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">description</span></div>
+                                                Document
+                                            </div>
+</th>
+<th class="sticky-header bg-surface-dark p-3 border-b border-border-dark min-w-[240px] text-white font-semibold text-sm">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-pink-500/20 text-pink-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">check_box</span></div>
+                                                Task
+                                            </div>
+</th>
+<th class="sticky-header bg-surface-dark p-3 border-b border-border-dark min-w-[240px] text-white font-semibold text-sm">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-gray-500/20 text-gray-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">chat</span></div>
+                                                Comment
+                                            </div>
+</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-dark">
+<!-- Row: User -->
+<tr class="group">
+<td class="sticky-col bg-surface-dark p-3 border-r border-border-dark font-medium text-white shadow-md z-10 group-hover:bg-[#252d46] transition-colors">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">person</span></div>
+                                                User
+                                            </div>
+</td>
+<!-- User -> User -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top min-h-[80px]">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    manages
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    reports_to
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- User -> Team -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    member_of
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- User -> Project -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top relative">
+<!-- Selection Border Simulation -->
+<div class="absolute inset-0 border-2 border-primary opacity-0 hover:opacity-100 pointer-events-none rounded-sm"></div>
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    created
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    leads
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- User -> Document -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    authored
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    viewed
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- User -> Task -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    assigned_to
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- User -> Comment -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
+<button class="text-text-secondary hover:text-white rounded-full size-8 flex items-center justify-center bg-surface-dark shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span></button>
+</div>
+</td>
+</tr>
+<!-- Row: Team -->
+<tr class="group">
+<td class="sticky-col bg-surface-dark p-3 border-r border-border-dark font-medium text-white shadow-md z-10 group-hover:bg-[#252d46] transition-colors">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">diversity_3</span></div>
+                                                Team
+                                            </div>
+</td>
+<!-- Team -> User -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
+<button class="text-text-secondary hover:text-white rounded-full size-8 flex items-center justify-center bg-surface-dark shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span></button>
+</div>
+</td>
+<!-- Team -> Team -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    parent_of
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- Team -> Project -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    owns
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<!-- Team -> Document -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
+<button class="text-text-secondary hover:text-white rounded-full size-8 flex items-center justify-center bg-surface-dark shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span></button>
+</div>
+</td>
+<!-- Team -> Task -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
+<button class="text-text-secondary hover:text-white rounded-full size-8 flex items-center justify-center bg-surface-dark shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span></button>
+</div>
+</td>
+<!-- Team -> Comment -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex items-center justify-center h-full opacity-0 hover:opacity-100 transition-opacity">
+<button class="text-text-secondary hover:text-white rounded-full size-8 flex items-center justify-center bg-surface-dark shadow-sm"><span class="material-symbols-outlined text-[18px]">add</span></button>
+</div>
+</td>
+</tr>
+<!-- Row: Project -->
+<tr class="group">
+<td class="sticky-col bg-surface-dark p-3 border-r border-border-dark font-medium text-white shadow-md z-10 group-hover:bg-[#252d46] transition-colors">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">rocket_launch</span></div>
+                                                Project
+                                            </div>
+</td>
+<!-- Project Cells -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top"></td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top"></td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500 border border-amber-500/30 cursor-pointer hover:bg-amber-500/20 group/chip">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                                                    depends_on
+                                                </span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    contains
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    has_item
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top"></td>
+</tr>
+<!-- Row: Comment -->
+<tr class="group">
+<td class="sticky-col bg-surface-dark p-3 border-r border-border-dark font-medium text-white shadow-md z-10 group-hover:bg-[#252d46] transition-colors">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded bg-gray-500/20 text-gray-400 flex items-center justify-center"><span class="material-symbols-outlined text-[16px]">chat</span></div>
+                                                Comment
+                                            </div>
+</td>
+<!-- Comment Cells -->
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top"></td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top"></td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    mentions
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    attached_to
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    attached_to
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+<td class="p-3 bg-background-dark hover:bg-surface-dark border-r border-border-dark/30 transition-colors align-top">
+<div class="flex flex-wrap gap-2">
+<span class="inline-flex items-center gap-1 rounded bg-primary/20 px-2 py-1 text-xs font-medium text-blue-200 border border-primary/30 cursor-pointer hover:bg-primary/30 group/chip">
+                                                    reply_to
+                                                    <span class="material-symbols-outlined text-[12px] opacity-0 group-hover/chip:opacity-100">close</span>
+</span>
+<button class="text-text-secondary hover:text-white rounded-full size-6 flex items-center justify-center hover:bg-white/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,1523 @@
+{
+    "common": {
+        "login": "登录",
+        "logout": "登出",
+        "save": "保存",
+        "cancel": "取消",
+        "delete": "删除",
+        "edit": "编辑",
+        "create": "创建",
+        "search": "搜索",
+        "loading": "加载中...",
+        "success": "成功",
+        "error": "错误",
+        "add": "添加",
+        "confirm": "确认",
+        "status": {
+            "active": "活跃",
+            "inactive": "非活跃",
+            "all": "所有状态",
+            "healthy": "健康",
+            "unhealthy": "不健康",
+            "degraded": "降级",
+            "unknown": "未知",
+            "paused": "已暂停",
+            "archived": "已归档",
+            "pending": "待处理",
+            "suspended": "已挂起",
+            "completed": "已完成",
+            "failed": "失败",
+            "processing": "处理中",
+            "enabled": "已启用",
+            "disabled": "已禁用",
+            "available": "可用",
+            "unavailable": "不可用"
+        },
+        "time": {
+            "justNow": "刚刚",
+            "ago": "{{time}}前",
+            "minutes": "分",
+            "hours": "小时",
+            "days": "天",
+            "never": "从不",
+            "updated": "更新于 {{time}}"
+        },
+        "stats": {
+            "storage": "存储",
+            "members": "成员",
+            "nodes": "节点",
+            "memories": "记忆",
+            "usage": "使用量",
+            "resources": "资源",
+            "lastActive": "最后活跃",
+            "owner": "所有者",
+            "total": "总计",
+            "activeUsers": "活跃用户",
+            "pendingInvites": "待处理邀请",
+            "totalProviders": "总提供商",
+            "healthStatus": "健康状态",
+            "defaultProvider": "默认提供商",
+            "totalMemories": "总记忆数",
+            "storageUsed": "已用存储",
+            "activeNodes": "活跃节点",
+            "collaborators": "协作者",
+            "systemStatus": "系统状态",
+            "successRate": "成功率",
+            "success": "成功次数"
+        },
+        "actions": {
+            "viewAll": "查看全部",
+            "showMore": "显示更多",
+            "confirmDelete": "确定要删除吗？",
+            "invite": "邀请",
+            "add": "添加",
+            "retry": "重试",
+            "checkHealth": "检查健康",
+            "deleteMemory": "删除记忆",
+            "deleteMemoryConfirm": "您确定要删除此记忆吗？此操作无法撤消，并将删除所有关联的图谱数据。"
+        },
+        "forms": {
+            "name": "名称",
+            "description": "描述",
+            "status": "状态",
+            "required": "必填",
+            "email": "邮箱",
+            "role": "角色",
+            "type": "类型",
+            "model": "模型",
+            "apiKey": "API 密钥",
+            "title": "标题",
+            "content": "内容",
+            "source": "来源",
+            "tags": "标签"
+        }
+    },
+    "login": {
+        "title": "欢迎回来",
+        "subtitle": "登录您的账户",
+        "email": "邮箱",
+        "password": "密码",
+        "submit": "登录",
+        "loading": "登录中...",
+        "hero": {
+            "title": "构建您的企业级 AI 记忆中枢",
+            "subtitle": "连接每一个知识点，构建可成长的企业知识图谱。让 AI 真正理解您的业务，提供精准、连贯的智能服务。",
+            "features": {
+                "memory": {
+                    "title": "长短期记忆",
+                    "desc": "完整的记忆生命周期管理"
+                },
+                "graph": {
+                    "title": "知识图谱",
+                    "desc": "自动提取实体与关系网络"
+                }
+            }
+        },
+        "footer": {
+            "privacy": "隐私政策",
+            "terms": "服务条款"
+        },
+        "mobile": {
+            "title": "VIP Memory",
+            "subtitle": "企业级 LLM 记忆平台"
+        },
+        "form": {
+            "password_placeholder": "请输入您的密码",
+            "forgot_password": "忘记密码？",
+            "or": "或者",
+            "no_account": "还没有账户？",
+            "register": "立即注册"
+        },
+        "demo": {
+            "title": "演示账户 (点击填充)",
+            "admin": "管理员",
+            "user": "普通用户"
+        }
+    },
+    "nav": {
+        "dashboard": "仪表盘",
+        "projects": "项目列表",
+        "users": "用户管理",
+        "settings": "设置",
+        "memories": "记忆列表",
+        "graph": "图谱视图",
+        "schema": "Schema管理",
+        "overview": "概览",
+        "knowledgeBase": "知识库",
+        "entities": "实体",
+        "communities": "社区",
+        "knowledgeGraph": "知识图谱",
+        "discovery": "发现",
+        "deepSearch": "深度搜索",
+        "configuration": "配置",
+        "maintenance": "维护",
+        "team": "团队",
+        "support": "支持",
+        "newMemory": "新建记忆",
+        "analytics": "分析",
+        "tasks": "任务",
+        "agents": "智能体管理",
+        "subagents": "子智能体",
+        "skills": "技能管理",
+        "providers": "LLM 提供商",
+        "platform": "平台",
+        "administration": "管理",
+        "billing": "账单",
+        "profile": "个人资料",
+        "mcpServers": "MCP 服务器"
+    },
+    "tenant": {
+        "welcome": "欢迎来到 MemStack",
+        "noTenantDescription": "您还没有加入任何租户空间。请联系管理员邀请您加入，或者创建一个新的租户空间。",
+        "create": "创建租户",
+        "overview": {
+            "title": "概览",
+            "subtitle": "欢迎回来，这是您租户今日的动态。",
+            "totalStorage": "总存储",
+            "activeProjects": "活跃项目",
+            "newProjectThisWeek": "本周新增 {{count}} 个项目",
+            "teamMembers": "团队成员",
+            "memoryUsageHistory": "记忆使用历史",
+            "last30Days": "最近30天",
+            "tenantInfo": "租户信息",
+            "orgId": "组织 ID",
+            "currentPlan": "当前计划",
+            "region": "区域",
+            "nextBillingDate": "下一次计费日期",
+            "viewInvoice": "查看发票",
+            "mostActiveProjects": "最活跃项目",
+            "loading": "正在加载租户信息..."
+        },
+        "projects": {
+            "title": "项目管理",
+            "subtitle": "管理租户工作区的记忆资源、权限和环境。",
+            "create": "创建新项目",
+            "searchPlaceholder": "按项目名称、ID或所有者搜索...",
+            "filter": "筛选:",
+            "loading": "正在加载项目...",
+            "newProjectCard": {
+                "title": "创建新项目",
+                "subtitle": "设置新的记忆环境"
+            },
+            "deleteConfirm": "您确定要删除此项目吗？"
+        },
+        "newProject": {
+            "title": "创建新项目",
+            "subtitle": "为您的记忆和知识图谱配置一个新的工作区。",
+            "basicInfo": "基本信息",
+            "memoryRules": "记忆规则",
+            "graphConfig": "图谱配置",
+            "maxEpisodes": "最大剧集数",
+            "retentionDays": "保留期（天）",
+            "refreshInterval": "刷新间隔（小时）",
+            "enableAutoRefresh": "启用自动刷新",
+            "maxNodes": "最大节点数",
+            "maxEdges": "最大边数",
+            "similarityThreshold": "相似度阈值",
+            "enableCommunityDetection": "启用社区检测",
+            "submit": "创建项目"
+        },
+        "users": {
+            "title": "成员管理",
+            "subtitle": "管理用户访问权限、分配角色并控制此租户的权限。",
+            "inviteMember": "邀请成员",
+            "searchPlaceholder": "按姓名、邮箱或角色搜索...",
+            "allRoles": "所有角色",
+            "noMembers": "未找到成员",
+            "showingResults": "显示 {{start}} 到 {{end}} 共 {{total}} 条结果",
+            "load_error": "加载用户失败",
+            "remove_confirm": "确定要移除这个用户吗？",
+            "remove_error": "移除用户失败，请稍后重试",
+            "update_error": "更新用户角色失败，请稍后重试",
+            "no_workspace_title": "请先选择工作空间",
+            "no_workspace_desc": "选择一个工作空间来管理用户",
+            "no_project_title": "请先选择项目",
+            "no_project_desc": "选择一个项目来管理用户",
+            "workspace_users": "工作空间用户",
+            "project_users": "项目用户",
+            "users_count": "({{count}} 人)",
+            "roles": {
+                "all": "所有角色",
+                "owner": "所有者",
+                "admin": "管理员",
+                "member": "成员",
+                "viewer": "查看者",
+                "editor": "编辑者"
+            },
+            "empty": {
+                "title": "暂无用户",
+                "desc_search": "没有找到匹配的用户",
+                "desc_invite": "开始邀请用户加入",
+                "invite": "邀请用户"
+            },
+            "joined_at": "加入于 {{date}}",
+            "last_login": "最后登录: {{date}}",
+            "actions": {
+                "edit": "编辑用户",
+                "remove": "移除用户"
+            },
+            "invite_modal": {
+                "title": "邀请用户",
+                "email": "邮箱地址",
+                "email_placeholder": "输入用户邮箱地址",
+                "role": "角色",
+                "message": "消息（可选）",
+                "message_placeholder": "添加邀请消息...",
+                "cancel": "取消",
+                "submit": "发送邀请"
+            },
+            "owner_role_immutable": "所有者角色不能修改",
+            "joined_at_label": "加入时间",
+            "last_login_label": "最后登录",
+            "saving": "保存中..."
+        },
+        "providers": {
+            "title": "LLM 提供商",
+            "subtitle": "为您的工作区配置和管理 AI 模型提供商。",
+            "addProvider": "添加提供商",
+            "searchPlaceholder": "按名称或模型搜索...",
+            "allTypes": "所有类型",
+            "noProviders": "未配置提供商",
+            "addFirstProvider": "添加您的第一个提供商",
+            "deleteConfirm": "您确定要删除此提供商吗？"
+        },
+        "create_page": {
+            "header_cancel": "取消并返回",
+            "title": "创建新租户",
+            "subtitle": "创建一个新的组织工作区以隔离您的项目和团队。",
+            "org_details": "组织详情",
+            "name": "组织名称",
+            "description": "描述",
+            "plan": "计划",
+            "plan_options": {
+                "free": "免费入门",
+                "basic": "团队基础",
+                "premium": "商业高级",
+                "enterprise": "企业版"
+            },
+            "submit": "创建组织"
+        },
+        "create_modal": {
+            "title": "创建租户",
+            "name": "租户名称",
+            "description": "描述",
+            "cancel": "取消",
+            "create": "创建",
+            "creating": "创建中...",
+            "error": "创建租户失败，请稍后重试",
+            "name_placeholder": "输入租户名称",
+            "desc_placeholder": "输入租户描述（可选）"
+        },
+        "settings": {
+            "title": "组织设置",
+            "subtitle": "管理您的工作区偏好设置和账单详情。",
+            "success": "组织设置更新成功。",
+            "error": "更新设置失败，请重试。",
+            "general": {
+                "title": "基本信息",
+                "name": "组织名称",
+                "description": "描述"
+            },
+            "plan": {
+                "title": "计划与用量",
+                "current": "当前计划",
+                "active_since": "激活于 {{date}}",
+                "change": "更改",
+                "limits": "资源限制",
+                "projects": "项目",
+                "storage": "存储"
+            },
+            "danger": {
+                "title": "危险区域",
+                "delete_title": "删除组织",
+                "delete_desc": "永久删除此组织及其所有数据。此操作无法撤销。",
+                "delete_button": "删除组织"
+            },
+            "save": "保存更改"
+        },
+        "billing": {
+            "title": "账单管理",
+            "subtitle": "管理您的订阅和账单",
+            "current_plan": "当前计划",
+            "storage_usage": "存储使用",
+            "projects": "项目",
+            "memories": "记忆",
+            "users": "用户",
+            "upgrade_options": "升级选项",
+            "per_month": "/月",
+            "recommended": "推荐",
+            "current_plan_button": "当前计划",
+            "downgrade": "降级",
+            "upgrade_to": "升级到 {{plan}}",
+            "upgrading": "升级中...",
+            "contact_sales": "联系销售",
+            "history": {
+                "title": "账单历史",
+                "no_history": "暂无账单历史",
+                "date": "日期",
+                "amount": "金额",
+                "status": "状态",
+                "actions": "操作",
+                "download": "下载",
+                "paid": "已支付",
+                "pending": "待支付",
+                "failed": "失败",
+                "unavailable": "不可用"
+            }
+        },
+        "analytics": {
+            "title": "数据分析",
+            "no_workspace": "请先选择一个工作空间",
+            "storage_usage": "存储使用",
+            "plan": "{{plan}} 计划",
+            "used": "已使用 {{percent}}%",
+            "total_memories": "记忆总数",
+            "growing": "持续增长",
+            "project_count": "项目数量",
+            "active_projects": "活跃项目",
+            "avg_per_project": "平均每个项目",
+            "avg_memories": "平均记忆数",
+            "storage_distribution": "存储分布（按项目）",
+            "project": "项目 {{name}}",
+            "memories_count": "{{count}} 个记忆",
+            "no_data": "暂无数据",
+            "creation_trend": "记忆创建趋势（最近30天）",
+            "workspace_info": "工作空间信息",
+            "name": "名称",
+            "quota": "存储配额",
+            "loading": "加载分析数据..."
+        },
+        "tasks": {
+            "title": "任务状态看板",
+            "subtitle": "系统吞吐量和队列健康状况的实时概览。",
+            "refresh": "刷新",
+            "new_task": "新建任务",
+            "stats": {
+                "total": "总任务数 (累计)",
+                "throughput": "吞吐量",
+                "pending": "待处理",
+                "failed": "失败",
+                "rate": "比率"
+            },
+            "charts": {
+                "queue_depth": "队列深度随时间变化",
+                "queue_desc": "等待处理的任务 • 实时",
+                "current": "当前",
+                "status_dist": "任务状态",
+                "dist_desc": "分布",
+                "pending_tasks": "待处理任务"
+            }
+        },
+        "skills": {
+            "title": "技能管理",
+            "subtitle": "配置和管理智能体技能库",
+            "createNew": "创建技能",
+            "searchPlaceholder": "搜索技能...",
+            "allStatus": "所有状态",
+            "activeOnly": "仅活跃",
+            "disabledOnly": "仅禁用",
+            "deprecatedOnly": "仅已废弃",
+            "allTriggers": "所有触发类型",
+            "triggerKeyword": "关键词",
+            "triggerSemantic": "语义",
+            "triggerHybrid": "混合",
+            "triggerType": "触发类型",
+            "triggerTypes": {
+                "all": "所有触发类型",
+                "keyword": "关键词",
+                "semantic": "语义",
+                "hybrid": "混合"
+            },
+            "tools": "工具",
+            "triggerPatterns": "触发模式",
+            "empty": "暂无技能",
+            "createFirst": "创建您的第一个技能",
+            "noResults": "未找到匹配的技能",
+            "stats": {
+                "total": "总技能数",
+                "active": "活跃",
+                "successRate": "成功率",
+                "totalUsage": "总使用次数"
+            },
+            "card": {
+                "patterns": "触发模式",
+                "tools": "工具",
+                "usage": "使用次数",
+                "morePatterns": "+{{count}} 个模式"
+            },
+            "deleteConfirm": "确定要删除这个技能吗？",
+            "deleteSuccess": "技能删除成功",
+            "enableSuccess": "技能已启用",
+            "disableSuccess": "技能已禁用",
+            "createSuccess": "技能创建成功",
+            "updateSuccess": "技能更新成功",
+            "modal": {
+                "createTitle": "创建新技能",
+                "editTitle": "编辑技能",
+                "basicInfo": "基本信息",
+                "triggerConfig": "触发配置",
+                "tools": "工具配置",
+                "name": "技能名称",
+                "nameRequired": "请输入技能名称",
+                "namePattern": "名称必须以字母开头，只能包含字母、数字、下划线和连字符",
+                "description": "描述",
+                "descriptionRequired": "请输入技能描述",
+                "descriptionPlaceholder": "描述此技能的功能和用途...",
+                "triggerType": "触发类型",
+                "triggerTypeRequired": "请选择触发类型",
+                "promptTemplate": "提示词模板",
+                "promptTemplateTooltip": "可选的提示词模板，用于技能执行时的上下文",
+                "promptTemplatePlaceholder": "输入提示词模板（可选）...",
+                "triggerPatterns": "触发模式",
+                "requirePatterns": "至少需要一个触发模式",
+                "patternText": "模式文本",
+                "addPattern": "输入模式文本...",
+                "patternWeight": "权重",
+                "patternExamples": "示例查询",
+                "addExample": "添加示例...",
+                "addPatternButton": "添加模式",
+                "weight": "权重",
+                "noPatterns": "暂无触发模式，请添加至少一个",
+                "allowedTools": "允许的工具",
+                "requireTools": "至少需要一个工具",
+                "addTool": "输入工具名称...",
+                "noTools": "暂无工具，请添加至少一个",
+                "toolsHint": "指定此技能可以使用的工具列表。这些工具将在技能执行时可用。"
+            }
+        },
+        "mcpServers": {
+            "title": "MCP 服务器",
+            "subtitle": "管理 Model Context Protocol 服务器集成",
+            "createNew": "添加服务器",
+            "searchPlaceholder": "搜索服务器...",
+            "allStatus": "所有状态",
+            "enabledOnly": "仅启用",
+            "disabledOnly": "仅禁用",
+            "allTypes": "所有类型",
+            "empty": "暂无 MCP 服务器",
+            "createFirst": "添加您的第一个 MCP 服务器",
+            "noResults": "未找到匹配的服务器",
+            "createTitle": "添加 MCP 服务器",
+            "editTitle": "编辑 MCP 服务器",
+            "invalidConfig": "配置无效",
+            "jsonMode": "JSON 模式",
+            "simpleMode": "简单模式",
+            "stats": {
+                "total": "总服务器数",
+                "enabled": "已启用",
+                "totalTools": "总工具数",
+                "byType": "按类型"
+            },
+            "tabs": {
+                "basic": "基本信息",
+                "config": "传输配置"
+            },
+            "fields": {
+                "name": "服务器名称",
+                "description": "描述",
+                "serverType": "服务器类型",
+                "enabled": "启用",
+                "command": "命令",
+                "args": "参数",
+                "url": "URL",
+                "transportConfig": "传输配置"
+            },
+            "validation": {
+                "nameRequired": "请输入服务器名称",
+                "nameTooLong": "名称不能超过100个字符",
+                "commandRequired": "请输入命令",
+                "urlRequired": "请输入 URL",
+                "urlInvalid": "请输入有效的 URL"
+            },
+            "placeholders": {
+                "name": "例如: My MCP Server",
+                "description": "描述此服务器的功能..."
+            },
+            "tooltips": {
+                "command": "要执行的命令，例如: python, npx",
+                "args": "命令参数，用逗号分隔",
+                "url": "服务器 URL 地址",
+                "websocketUrl": "WebSocket 服务器地址"
+            },
+            "hints": {
+                "stdioExample": "示例: command=python, args=-m,mcp_server",
+                "sseExample": "示例: https://example.com/sse",
+                "httpExample": "示例: https://example.com/api",
+                "websocketNotImplemented": "WebSocket 传输暂未实现"
+            },
+            "config": "配置",
+            "tools": "工具",
+            "lastSync": "上次同步",
+            "neverSynced": "从未同步",
+            "justNow": "刚刚",
+            "minutesAgo": "{{count}} 分钟前",
+            "hoursAgo": "{{count}} 小时前",
+            "daysAgo": "{{count}} 天前",
+            "card": {
+                "tools": "工具",
+                "lastSync": "上次同步",
+                "never": "从未",
+                "noTools": "暂无工具"
+            },
+            "deleteConfirm": "确定要删除这个 MCP 服务器吗？",
+            "deleteSuccess": "MCP 服务器删除成功",
+            "enabledSuccess": "MCP 服务器已启用",
+            "disabledSuccess": "MCP 服务器已禁用",
+            "createSuccess": "MCP 服务器创建成功",
+            "updateSuccess": "MCP 服务器更新成功",
+            "syncSuccess": "工具同步成功",
+            "syncFailed": "工具同步失败",
+            "testSuccess": "连接测试成功",
+            "testFailed": "连接测试失败",
+            "actions": {
+                "sync": "同步工具",
+                "test": "测试连接",
+                "edit": "编辑",
+                "delete": "删除",
+                "viewTools": "查看工具"
+            },
+            "toolsModal": {
+                "title": "服务器工具",
+                "noTools": "此服务器暂无工具",
+                "syncFirst": "请先同步工具",
+                "name": "工具名称",
+                "description": "描述",
+                "parameters": "参数"
+            }
+        }
+    },
+    "project": {
+        "edit": {
+            "title": "编辑项目",
+            "subtitle": "更新您的记忆和知识图谱的工作区配置。",
+            "basic_info": "基本信息",
+            "name": "项目名称",
+            "status": "状态",
+            "description": "描述",
+            "status_options": {
+                "active": "活跃",
+                "paused": "已暂停",
+                "archived": "已归档"
+            },
+            "memory_rules": {
+                "title": "记忆规则",
+                "max_episodes": "最大 Episodes 数",
+                "retention": "保留期（天）",
+                "refresh_interval": "刷新间隔（小时）",
+                "auto_refresh": "启用自动刷新"
+            },
+            "graph_config": {
+                "title": "图谱配置",
+                "max_nodes": "最大节点数",
+                "max_edges": "最大边数",
+                "similarity": "相似度阈值",
+                "community_detection": "启用社区检测",
+                "loose": "宽松 (0.1)",
+                "strict": "严格 (1.0)"
+            },
+            "actions": {
+                "cancel": "取消",
+                "update": "更新项目"
+            }
+        },
+        "settings": {
+            "title": "项目设置",
+            "no_project": "请先选择一个项目",
+            "basic": {
+                "title": "基本设置",
+                "name": "项目名称",
+                "description": "项目描述",
+                "public": "公开项目（任何人都可以查看）",
+                "save": "保存基本设置",
+                "saving": "保存中..."
+            },
+            "memory": {
+                "title": "记忆规则",
+                "max_episodes": "最大 Episodes 数",
+                "retention": "保留天数",
+                "auto_refresh": "自动刷新",
+                "interval": "刷新间隔（小时）",
+                "save": "保存记忆规则"
+            },
+            "graph": {
+                "title": "图配置",
+                "max_nodes": "最大节点数",
+                "max_edges": "最大边数",
+                "threshold": "相似度阈值: {{value}}",
+                "community": "启用社区检测",
+                "save": "保存图配置"
+            },
+            "advanced": {
+                "title": "高级操作",
+                "export": "导出项目数据",
+                "clear_cache": "清除图缓存",
+                "rebuild": "重建社区",
+                "confirm_clear": "确定要清除图缓存吗？这将重建社区检测。",
+                "confirm_rebuild": "确定要重建社区吗？这可能需要一些时间。"
+            },
+            "danger": {
+                "title": "危险区域",
+                "desc": "删除此项目及其所有数据，包括记忆、图谱和设置。",
+                "warning": "此操作不可恢复！",
+                "delete": "删除项目",
+                "confirm_prompt": "此操作不可恢复！请输入项目名称以确认删除：",
+                "name_mismatch": "项目名称不匹配，取消删除。",
+                "success": "项目已删除",
+                "fail": "删除失败，请稍后再试。"
+            },
+            "messages": {
+                "saved": "设置已保存！",
+                "failed": "保存失败：{{error}}",
+                "export_success": "数据导出成功！",
+                "export_fail": "导出数据失败，请重试。",
+                "cache_cleared": "图缓存清除任务已提交！",
+                "cache_fail": "清除缓存失败，请重试。",
+                "rebuild_submitted": "社区重建任务已提交！",
+                "rebuild_fail": "重建社区失败，请重试。"
+            }
+        },
+        "search": {
+            "options": {
+                "strategies": {
+                    "COMBINED_HYBRID_SEARCH_RRF": "混合搜索 (RRF)",
+                    "EDGE_HYBRID_SEARCH_CROSS_ENCODER": "边缘混合 (交叉编码器)",
+                    "HYBRID_MMR": "混合搜索 (MMR)",
+                    "STANDARD_DENSE": "仅密集向量"
+                },
+                "cross_encoders": {
+                    "openai": "OpenAI (text-embedding-3)",
+                    "gemini": "Google Gemini 1.5",
+                    "bge": "BGE-M3 (本地优化)"
+                }
+            },
+            "modes": {
+                "semantic": "语义搜索",
+                "graph": "图谱遍历",
+                "temporal": "时序搜索",
+                "faceted": "分面搜索",
+                "community": "社区搜索"
+            },
+            "config": {
+                "title": "配置",
+                "advanced": "高级",
+                "params": "参数",
+                "filters": "筛选"
+            },
+            "params": {
+                "retrieval_mode": "检索模式",
+                "hybrid": "混合",
+                "node_distance": "节点距离",
+                "strategy": "策略配方",
+                "strategy_tooltip": {
+                    "title": "搜索策略",
+                    "desc": "结合混合检索、交叉编码器重排序和 MMR 等多种搜索技术以增加多样性。"
+                },
+                "focal_node": "焦点节点 UUID",
+                "focal_tooltip": {
+                    "title": "焦点节点",
+                    "desc": "指定一个节点 UUID 作为节点距离重排序的中心。距离此节点越近的结果排名越高。"
+                },
+                "cross_encoder": "交叉编码器客户端",
+                "max_depth": "最大深度",
+                "relationship_types": "关系类型"
+            },
+            "filters": {
+                "time_range": "时间范围",
+                "reset": "重置",
+                "all_time": "所有时间",
+                "last_30": "最近 30 天",
+                "custom": "自定义范围",
+                "from": "从",
+                "to": "至",
+                "entity_types": "实体类型",
+                "tags": "标签",
+                "add_tag": "添加",
+                "results": "结果",
+                "include_episodes": "包含 Episodes",
+                "community_info": "在搜索框中输入社区 UUID 以查找该社区内的所有实体和 Episodes。"
+            },
+            "input": {
+                "placeholder": {
+                    "default": "通过关键字、概念搜索记忆，或提出问题...",
+                    "graph": "输入起始实体 UUID...",
+                    "community": "输入社区 UUID..."
+                },
+                "listening": "正在聆听...",
+                "voice_search": "语音搜索"
+            },
+            "actions": {
+                "retrieve": "检索",
+                "searching": "搜索中...",
+                "history": "历史",
+                "recent": "最近搜索",
+                "export": "导出",
+                "expand_graph": "展开图谱",
+                "show_results": "显示结果",
+                "show_full_graph": "显示全图",
+                "show_subgraph": "显示结果子图",
+                "view_grid": "网格视图",
+                "view_list": "列表视图"
+            },
+            "results": {
+                "title": "检索结果",
+                "items": "项",
+                "relevance": "相关度",
+                "no_content": "无内容",
+                "untitled": "无标题结果",
+                "unknown_date": "未知日期",
+                "copy_id": "复制节点 ID"
+            },
+            "errors": {
+                "enter_start_uuid": "请输入起始实体 UUID",
+                "enter_community_uuid": "请输入社区 UUID",
+                "enter_query": "请输入搜索查询",
+                "voice_not_supported": "此浏览器不支持语音搜索",
+                "voice_failed": "语音搜索失败，请重试。",
+                "search_failed": "搜索失败，请重试。"
+            }
+        },
+        "graph": {
+            "node_detail": {
+                "relevance": "相关度",
+                "high": "高",
+                "type": "类型",
+                "description": "描述",
+                "members": "成员",
+                "tenant": "租户",
+                "expand": "展开",
+                "edit": "编辑节点",
+                "select_prompt": "选择一个节点"
+            },
+            "communities": {
+                "title": "社区",
+                "subtitle": "自动检测知识图谱中相关实体的群组",
+                "rebuild": "重建社区",
+                "rebuilding": "重建中...",
+                "refresh": "刷新",
+                "confirm_rebuild": "这将从头开始重建所有社区。此操作可能需要几分钟时间。任务将在后台运行，您可以在此处跟踪其进度。是否继续？",
+                "task": {
+                    "cancel": "取消",
+                    "dismiss": "忽略",
+                    "progress": "进度",
+                    "communities_count": "社区",
+                    "connections_count": "连接",
+                    "error": "错误"
+                },
+                "stats": {
+                    "showing": "显示 {{count}} / {{total}} 个社区",
+                    "page": "第 {{current}} / {{total}} 页"
+                },
+                "empty": {
+                    "loading": "加载社区...",
+                    "title": "未找到社区",
+                    "desc": "添加更多 Episodes 以启用社区检测，或重建社区"
+                },
+                "detail": {
+                    "title": "社区详情",
+                    "name": "名称",
+                    "members": "成员",
+                    "summary": "摘要",
+                    "uuid": "UUID",
+                    "created": "创建时间",
+                    "tasks": "任务",
+                    "member_list": "社区成员 ({{count}})",
+                    "no_members": "未加载成员",
+                    "select_prompt": "选择一个社区以查看详情",
+                    "click_prompt": "点击任何社区卡片以查看其成员"
+                },
+                "info": {
+                    "title": "关于社区",
+                    "desc": "社区是使用 Louvain 算法自动检测的相关实体组。它们有助于组织知识并揭示数据中的模式。添加新 Episodes 后，点击“重建社区”以重新运行检测算法。"
+                }
+            },
+            "entities": {
+                "title": "项目实体",
+                "subtitle": "探索和管理知识图谱中的实体",
+                "refresh": "刷新实体",
+                "loading": "正在加载实体...",
+                "error": "加载实体失败",
+                "empty": "未找到实体",
+                "empty_filter": "没有符合筛选条件的实体",
+                "filter": {
+                    "type": "实体类型",
+                    "all_types": "所有类型",
+                    "search_placeholder": "搜索实体...",
+                    "sort_by": "排序",
+                    "sort_latest": "最新创建",
+                    "sort_name": "名称",
+                    "filtered_by": "筛选条件",
+                    "clear": "清除筛选"
+                },
+                "stats": {
+                    "showing": "显示 {{count}} / {{total}} 个实体"
+                },
+                "detail": {
+                    "title": "实体详情",
+                    "name": "名称",
+                    "type": "类型",
+                    "summary": "摘要",
+                    "uuid": "UUID",
+                    "created": "创建于",
+                    "relationships": "关系 ({{count}})",
+                    "related": "关联至",
+                    "no_relationships": "未找到关系",
+                    "select_prompt": "选择一个实体",
+                    "click_prompt": "从列表中点击一个实体以查看其详情和关系"
+                }
+            }
+        },
+        "maintenance": {
+            "title": "图谱维护",
+            "subtitle": "监控、维护和优化知识图谱",
+            "stats": {
+                "title": "图谱统计",
+                "entities": "实体",
+                "episodes": "片段",
+                "communities": "社区",
+                "relationships": "关系"
+            },
+            "ops": {
+                "title": "维护操作",
+                "refresh": {
+                    "title": "增量刷新",
+                    "desc": "重新处理最近的片段并更新图谱，无需完全重建",
+                    "button": "刷新",
+                    "loading": "刷新中..."
+                },
+                "dedup": {
+                    "title": "实体去重",
+                    "desc": "基于名称相似度查找并合并重复实体",
+                    "check": "检查",
+                    "merge": "合并",
+                    "processing": "处理中..."
+                },
+                "clean": {
+                    "title": "清理陈旧边",
+                    "desc": "删除超过30天未更新的关系",
+                    "check": "检查",
+                    "clean": "清理",
+                    "cleaning": "清理中..."
+                },
+                "rebuild": {
+                    "title": "重建社区",
+                    "desc": "使用 Louvain 算法重新检测社区。重大图谱更新后需要。",
+                    "button": "重建",
+                    "rebuilding": "重建中..."
+                },
+                "export": {
+                    "title": "导出数据",
+                    "desc": "以 JSON 格式下载所有图谱数据用于备份或分析",
+                    "button": "导出"
+                }
+            },
+            "messages": {
+                "refreshed": "已刷新 {{count}} 个 Episodes",
+                "duplicates_found": "发现 {{count}} 个潜在重复项",
+                "check_stale": "检查陈旧边",
+                "rebuild_started": "社区重建已开始 (任务 ID: {{taskId}})",
+                "export_success": "数据导出成功"
+            },
+            "recommendations": {
+                "title": "建议",
+                "none": "暂无建议",
+                "high_duplication": {
+                    "title": "检测到高重复率",
+                    "desc": "我们发现了 {{count}} 个潜在的重复实体。建议运行“实体去重”。"
+                }
+            },
+            "warning": {
+                "title": "重要提示",
+                "desc": "某些操作（如合并重复项和清理边）无法撤销。我们建议在执行前先运行“检查”以查看将受影响的内容。"
+            }
+        },
+        "support": {
+            "title": "支持中心",
+            "subtitle": "获取帮助和支持",
+            "messages": {
+                "submit_success": "工单提交成功！",
+                "submit_fail": "提交工单失败",
+                "close_fail": "关闭工单失败"
+            },
+            "docs": {
+                "title": "文档",
+                "desc": "查看完整的产品文档和使用指南",
+                "link": "访问文档"
+            },
+            "api": {
+                "title": "API 参考",
+                "desc": "浏览 API 端点和集成示例",
+                "link": "查看 API"
+            },
+            "faq": {
+                "title": "常见问题",
+                "desc": "查找常见问题的答案",
+                "link": "查看 FAQ"
+            },
+            "create_ticket": "创建新工单",
+            "cancel": "取消",
+            "form": {
+                "subject": "主题",
+                "subject_placeholder": "简要描述您的问题",
+                "priority": "优先级",
+                "priority_options": {
+                    "low": "低 - 一般询问",
+                    "medium": "中 - 需要帮助",
+                    "high": "高 - 影响使用",
+                    "urgent": "紧急 - 无法使用"
+                },
+                "message": "详细描述",
+                "message_placeholder": "请详细描述您遇到的问题...",
+                "submit": "提交工单",
+                "submitting": "提交中..."
+            },
+            "tickets": {
+                "title": "我的工单",
+                "empty": "暂无工单",
+                "empty_desc": "创建工单以获取帮助",
+                "close": "关闭工单",
+                "status": {
+                    "open": "待处理",
+                    "in_progress": "处理中",
+                    "resolved": "已解决",
+                    "closed": "已关闭"
+                },
+                "priority": {
+                    "low": "低",
+                    "medium": "中",
+                    "high": "高",
+                    "urgent": "紧急"
+                },
+                "created_at": "创建于",
+                "resolved_at": "解决于"
+            }
+        },
+        "overview": {
+            "title": "概览",
+            "not_found": "未找到项目",
+            "subtitle": "欢迎回来。这是 {{name}} 的动态。",
+            "storedInDb": "存储在数据库中",
+            "quotaUsage": "已用配额 {{percent}}%",
+            "operational": "所有系统运行正常",
+            "projectMembers": "项目成员",
+            "activeMemories": "活跃记忆",
+            "projectTeam": "项目团队",
+            "collaborating": "在此项目上协作",
+            "autoIndexing": "自动索引已激活",
+            "systemReady": "系统准备处理新记忆。",
+            "status": "状态",
+            "operationalStatus": "运行中"
+        },
+        "memories": {
+            "title": "记忆库",
+            "subtitle": "存储和检索项目知识",
+            "addMemory": "添加记忆",
+            "noMemories": "暂无记忆",
+            "size": "大小",
+            "dataStatus": "数据状态",
+            "processing": "处理状态",
+            "search_placeholder": "搜索记忆...",
+            "searchPlaceholder": "搜索记忆...",
+            "filter": {
+                "all_types": "所有类型",
+                "all_status": "所有状态",
+                "date_range": "日期范围"
+            },
+            "columns": {
+                "title": "标题",
+                "type": "类型",
+                "status": "状态",
+                "created": "创建时间",
+                "actions": "操作"
+            },
+            "status": {
+                "completed": "已完成",
+                "processing": "处理中",
+                "failed": "失败",
+                "pending": "等待中"
+            },
+            "empty": {
+                "title": "未找到记忆",
+                "subtitle": "开始创建您的第一个记忆",
+                "create_button": "创建记忆"
+            },
+            "new": {
+                "title": "新建记忆",
+                "page_title": "新建记忆条目",
+                "page_subtitle": "在 AI 辅助下创建和格式化您的智能记忆。",
+                "save_draft": "保存草稿",
+                "save_memory": "保存记忆",
+                "status": {
+                    "processing": "正在处理记忆...",
+                    "completed": "记忆处理完成！",
+                    "complete": "完成",
+                    "redirecting": "正在跳转至记忆列表..."
+                },
+                "error": {
+                    "processing": "处理错误",
+                    "connection": "无法连接到任务更新。请检查任务是否已完成。",
+                    "create": "创建记忆失败"
+                },
+                "placeholders": {
+                    "title": "例如：第三季度战略会议记录",
+                    "context_option_1": "阿尔法项目",
+                    "context_option_2": "第三季度市场营销",
+                    "context_option_3": "工程研发",
+                    "content_title": "第三季度战略会议记录",
+                    "content_intro": "关于即将到来的季度和资源分配的初步想法。",
+                    "content_heading": "关键目标",
+                    "content_list_1": "将用户留存率提高 15%",
+                    "content_list_2": "在 8 月中旬之前发布 Beta 功能集",
+                    "content_list_3": "优化记忆索引延迟",
+                    "content_quote": "“重点应保持在智能检索上，而不仅仅是存储。”"
+                },
+                "tooltips": {
+                    "bold": "加粗",
+                    "italic": "斜体",
+                    "heading": "标题",
+                    "list": "列表",
+                    "link": "链接",
+                    "code": "代码块"
+                },
+                "form": {
+                    "title": "标题",
+                    "title_placeholder": "例如：第三季度战略会议记录",
+                    "context": "项目上下文",
+                    "tags": "标签",
+                    "add_tag": "+ 添加标签..."
+                },
+                "ai": {
+                    "optimizing": "优化中...",
+                    "assist": "AI 辅助"
+                },
+                "actions": {
+                    "split": "拆分",
+                    "edit": "编辑",
+                    "preview": "预览"
+                },
+                "editor": {
+                    "placeholder": "# 在此处开始输入您的记忆...\n\n\n您可以使用 Markdown 语法格式化文本。\n\n- 使用列表组织思路\n- **加粗** 关键概念\n- 使用链接连接想法",
+                    "markdown_supported": "支持 Markdown"
+                },
+                "footer": {
+                    "last_saved": "上次保存：刚刚",
+                    "online": "在线",
+                    "word_count": "字数：{{count}}",
+                    "char_count": "字符数：{{count}}"
+                }
+            },
+            "delete": {
+                "title": "删除记忆",
+                "confirmation": "您确定要删除此记忆吗？此操作无法撤销，并将删除所有相关的图谱数据。"
+            },
+            "detail": {
+                "edit_memory": "编辑记忆",
+                "type": "类型",
+                "tabs": {
+                    "content": "内容",
+                    "metadata": "元数据",
+                    "raw": "原始数据",
+                    "tasks": "任务",
+                    "history": "历史"
+                },
+                "no_content": "暂无内容。",
+                "metadata": {
+                    "id": "ID (UUID)",
+                    "custom": "自定义元数据"
+                },
+                "sidebar": {
+                    "knowledge_context": "知识上下文",
+                    "tags": "标签",
+                    "no_tags": "无标签"
+                },
+                "loading": "正在加载记忆详情...",
+                "not_found": "未找到记忆",
+                "invalid_params": "无效的 URL 参数",
+                "delete_failed": "删除记忆失败"
+            }
+        },
+        "schema": {
+            "overview": {
+                "title": "Schema 概览",
+                "subtitle": "定义图谱结构的 Pydantic 模型的直观表示。查看实体、关系及其属性定义。",
+                "view_json": "查看 JSON",
+                "export_schema": "导出 Schema",
+                "search_placeholder": "按名称、属性或标签筛选 Schema 类型...",
+                "entity_types": {
+                    "title": "实体类型",
+                    "defined": "已定义 {{count}} 个",
+                    "new": "新建实体",
+                    "no_description": "无描述",
+                    "attributes": "属性",
+                    "more": "+{{count}} 更多",
+                    "empty": "未定义实体类型。"
+                },
+                "relationship_types": {
+                    "title": "关系类型",
+                    "defined": "已定义 {{count}} 个",
+                    "new": "新建关系",
+                    "source_target": "源 → 目标",
+                    "no_active_mappings": "无活跃映射",
+                    "edge_attributes": "边属性",
+                    "no_attributes": "无属性",
+                    "empty": "未定义边类型。"
+                },
+                "auto": "自动"
+            },
+            "entities": {
+                "title": "实体类型管理",
+                "subtitle": "定义知识图谱的数据模型、属性和验证规则。",
+                "create": "创建实体类型",
+                "search_placeholder": "搜索实体类型...",
+                "filter_project": "项目：全部",
+                "table": {
+                    "entity_type": "实体类型",
+                    "internal_id": "内部 ID",
+                    "schema_definition": "Schema 定义",
+                    "status": "状态",
+                    "source": "来源",
+                    "last_modified": "最后修改",
+                    "actions": "操作",
+                    "more_attributes": "+ {{count}} 更多属性",
+                    "no_attributes": "未定义属性",
+                    "empty": "尚未定义实体类型。点击“创建实体类型”添加一个。"
+                },
+                "modal": {
+                    "title_edit": "编辑实体类型：{{name}}",
+                    "title_new": "新建实体类型",
+                    "tab_attributes": "属性与 Schema",
+                    "info_title": "Schema 配置",
+                    "info_desc": "定义此实体类型的属性。这些定义直接映射到 Pydantic 模型以进行数据验证。",
+                    "basic_info": "基本信息",
+                    "name_label": "实体类型名称",
+                    "name_placeholder": "例如：Person",
+                    "desc_label": "描述",
+                    "desc_placeholder": "此实体类型的简要描述",
+                    "defined_attributes": "已定义属性",
+                    "add_attribute": "添加属性",
+                    "attribute_title": "属性 #{{index}}",
+                    "delete_field": "删除字段",
+                    "attr_name_label": "属性名称 (snake_case)",
+                    "attr_name_placeholder": "attribute_name",
+                    "data_type_label": "数据类型",
+                    "required": "必填",
+                    "docstring_label": "描述 (Docstring)",
+                    "docstring_placeholder": "描述属性...",
+                    "last_saved": "上次保存：{{time}}",
+                    "never_saved": "从未",
+                    "discard": "放弃更改",
+                    "save": "保存实体类型"
+                },
+                "delete_confirm": "您确定吗？这将删除实体类型定义。",
+                "save_error": "保存失败。请检查名称是否唯一。"
+            },
+            "edges": {
+                "title": "关系类型管理",
+                "subtitle": "定义自定义边 Schema 并配置实体类型之间的有效连接规则。",
+                "system_active": "系统状态：活跃",
+                "search_placeholder": "搜索边类型...",
+                "create": "创建边类型",
+                "list": {
+                    "active": "活跃",
+                    "no_description": "未提供描述。",
+                    "attributes_count": "{{count}} 个属性",
+                    "empty": "未找到边类型。"
+                },
+                "detail": {
+                    "select_prompt": "选择一个边类型以查看详情",
+                    "no_description": "未提供描述。",
+                    "delete": "删除",
+                    "edit": "编辑 Schema",
+                    "attributes_title": "Schema 属性",
+                    "table": {
+                        "name": "属性名称",
+                        "type": "类型",
+                        "description": "描述",
+                        "empty": "未定义属性"
+                    },
+                    "add_attribute": "添加属性"
+                },
+                "modal": {
+                    "title_edit": "编辑边类型：{{name}}",
+                    "title_new": "新建边类型",
+                    "name_label": "边类型名称",
+                    "name_placeholder": "例如：Employment",
+                    "desc_label": "描述",
+                    "desc_placeholder": "此边类型的简要描述",
+                    "save": "保存边类型"
+                },
+                "delete_confirm": "您确定吗？这将删除边类型定义。",
+                "save_error": "保存失败。请检查名称是否唯一。"
+            },
+            "mappings": {
+                "title": "边类型映射",
+                "subtitle": "配置源和目标实体类型之间允许的有效关系类型。定义知识图谱的“物理规则”。",
+                "cancel": "取消",
+                "save": "保存更改",
+                "search_placeholder": "搜索实体类型...",
+                "reset_defaults": "重置默认",
+                "filter_source": {
+                    "title": "源实体",
+                    "desc": "筛选行（例如：用户、团队）"
+                },
+                "filter_target": {
+                    "title": "目标实体",
+                    "desc": "筛选列（例如：文档）"
+                },
+                "empty_cells": {
+                    "title": "空单元格",
+                    "desc": "隐藏无边的映射"
+                },
+                "legend": {
+                    "manual": "手动映射",
+                    "auto": "自动生成",
+                    "empty": "空",
+                    "conflict": "冲突",
+                    "showing": "显示 {{rows}}x{{cols}} 矩阵"
+                },
+                "modal": {
+                    "title": "添加映射",
+                    "select_edge": "选择边类型",
+                    "cancel": "取消",
+                    "add": "添加映射"
+                },
+                "delete_confirm": "您确定要删除此映射吗？",
+                "create_error": "创建映射失败。它可能已存在。"
+            },
+            "graph": {
+                "node_detail": {
+                    "relevance": "相关度",
+                    "high": "高",
+                    "type": "类型",
+                    "description": "描述",
+                    "members": "成员",
+                    "tenant": "租户",
+                    "expand": "展开",
+                    "edit": "编辑节点",
+                    "select_prompt": "选择一个节点"
+                },
+                "communities": {
+                    "title": "社区",
+                    "subtitle": "自动检测知识图谱中相关实体的群组",
+                    "rebuild": "重建社区",
+                    "rebuilding": "重建中...",
+                    "refresh": "刷新",
+                    "confirm_rebuild": "这将从头开始重建所有社区。此操作可能需要几分钟时间。任务将在后台运行，您可以在此处跟踪其进度。是否继续？",
+                    "task": {
+                        "cancel": "取消",
+                        "dismiss": "忽略",
+                        "progress": "进度",
+                        "communities_count": "社区",
+                        "connections_count": "连接",
+                        "error": "错误"
+                    },
+                    "stats": {
+                        "showing": "显示 {{count}} / {{total}} 个社区",
+                        "page": "第 {{current}} / {{total}} 页"
+                    },
+                    "empty": {
+                        "loading": "正在加载社区...",
+                        "title": "未找到社区",
+                        "desc": "添加更多剧集以启用社区检测，或重建社区"
+                    },
+                    "detail": {
+                        "title": "社区详情",
+                        "name": "名称",
+                        "members": "成员",
+                        "summary": "摘要",
+                        "uuid": "UUID",
+                        "created": "创建时间",
+                        "tasks": "任务",
+                        "member_list": "社区成员 ({{count}})",
+                        "no_members": "未加载成员",
+                        "select_prompt": "选择一个社区以查看详情",
+                        "click_prompt": "点击任何社区卡片以查看其成员"
+                    },
+                    "info": {
+                        "title": "关于社区",
+                        "desc": "社区是使用 Louvain 算法自动检测的相关实体群组。它们有助于组织知识并揭示数据中的模式。添加新剧集后，点击“重建社区”以重新运行检测算法。"
+                    }
+                },
+                "entities": {
+                    "title": "实体",
+                    "subtitle": "浏览和管理从知识图谱中提取的实体",
+                    "refresh": "刷新",
+                    "retry": "重试",
+                    "filter": {
+                        "type": "类型:",
+                        "all_types": "所有类型",
+                        "search_placeholder": "按名称或摘要搜索实体...",
+                        "sort_by": "排序:",
+                        "sort_latest": "最新",
+                        "sort_name": "名称",
+                        "clear": "清除筛选",
+                        "filtered_by": "筛选条件:"
+                    },
+                    "stats": {
+                        "showing": "显示 {{count}} / {{total}} 个实体"
+                    },
+                    "empty": {
+                        "loading": "正在加载实体...",
+                        "no_match": "没有匹配您筛选条件的实体",
+                        "not_found": "未找到实体"
+                    },
+                    "detail": {
+                        "title": "实体详情",
+                        "name": "名称",
+                        "type": "类型",
+                        "summary": "摘要",
+                        "uuid": "UUID",
+                        "created": "创建时间",
+                        "relationships": "关系 ({{count}})",
+                        "related": "相关:",
+                        "no_relationships": "未找到关系",
+                        "select_prompt": "选择一个实体以查看详情",
+                        "click_prompt": "点击任何实体卡片以查看其关系"
+                    }
+                }
+            }
+        }
+    },
+    "dashboard": {
+        "project": {
+            "title_loading": "加载中...",
+            "back_button_title": "返回项目列表",
+            "memories": {
+                "title": "记忆管理"
+            },
+            "graph": {
+                "title": "知识图谱"
+            },
+            "settings": {
+                "development": "项目设置功能开发中..."
+            }
+        }
+    },
+    "space": {
+        "dashboard": {
+            "title_default": "概览",
+            "breadcrumbs": {
+                "home": "首页"
+            },
+            "welcome": {
+                "title": "概览",
+                "subtitle": "欢迎回来，这是您租户今日的动态。"
+            },
+            "stats": {
+                "storage": {
+                    "title": "总存储"
+                },
+                "projects": {
+                    "title": "活跃项目",
+                    "new_this_week": "本周新增 {{count}} 个项目"
+                },
+                "members": {
+                    "title": "团队成员",
+                    "total_badge": "总计 {{count}}"
+                }
+            },
+            "charts": {
+                "memory_usage": {
+                    "title": "记忆使用历史",
+                    "subtitle": "最近 30 天",
+                    "period": {
+                        "30d": "最近 30 天",
+                        "7d": "最近 7 天",
+                        "24h": "最近 24 小时"
+                    }
+                }
+            },
+            "tenant_info": {
+                "title": "租户信息",
+                "org_id": "组织 ID",
+                "plan": "当前计划",
+                "region": "区域",
+                "next_billing": "下一次计费日期",
+                "view_invoice": "查看发票"
+            },
+            "active_projects": {
+                "title": "最活跃项目",
+                "view_all": "查看所有项目",
+                "table": {
+                    "name": "项目名称",
+                    "owner": "所有者",
+                    "memory": "记忆消耗",
+                    "status": "状态",
+                    "actions": "操作"
+                }
+            },
+            "projects_tab": {
+                "title": "项目",
+                "subtitle": "管理此空间中的所有项目",
+                "new_project": "新建项目",
+                "no_description": "无描述",
+                "member_count": "{{count}} 个成员"
+            },
+            "coming_soon": {
+                "title": "即将推出",
+                "desc": "{{module}} 模块目前正在开发中。"
+            }
+        },
+        "list": {
+            "title": "我的空间",
+            "welcome": {
+                "title": "欢迎回来",
+                "subtitle": "选择一个工作空间开始管理您的项目和记忆。"
+            },
+            "create_button": "创建新空间",
+            "card": {
+                "no_description": "暂无描述",
+                "max_projects": "项目上限",
+                "max_users": "成员上限"
+            },
+            "empty": {
+                "title": "创建第一个空间",
+                "subtitle": "开始您的 VIP Memory 之旅"
+            }
+        }
+    },
+    "user_profile": {
+        "title": "个人资料",
+        "subtitle": "管理您的账户设置和偏好。",
+        "account_active": "账户活跃",
+        "no_job_title": "无职位",
+        "no_department": "无部门",
+        "no_location": "无地点",
+        "member_since": "注册时间 {{date}}",
+        "profile_completion": "资料完善度",
+        "tabs": {
+            "basic": "基本信息",
+            "contact": "联系方式",
+            "preferences": "偏好设置",
+            "security": "安全"
+        },
+        "basic": {
+            "title": "基本信息",
+            "email": "邮箱",
+            "full_name": "全名",
+            "job_title": "职位",
+            "department": "部门",
+            "about": "关于",
+            "about_hint": "个人简介。最多 200 个字符。"
+        },
+        "contact": {
+            "title": "联系信息",
+            "phone": "电话号码",
+            "location": "办公地点",
+            "location_placeholder": "城市，国家"
+        },
+        "preferences": {
+            "title": "系统偏好",
+            "language": "语言",
+            "timezone": "时区"
+        },
+        "buttons": {
+            "cancel": "取消",
+            "save": "保存更改",
+            "saving": "保存中..."
+        },
+        "toast": {
+            "success_title": "保存成功！",
+            "success_desc": "您的个人资料已更新。"
+        }
+    }
+}

@@ -1,0 +1,1265 @@
+"""
+Self-developed ReAct Agent - Replaces LangGraph implementation.
+
+This module provides a ReAct (Reasoning + Acting) agent implementation
+using the self-developed SessionProcessor, replacing the LangGraph dependency.
+
+Features:
+- Multi-level thinking (Work Plan -> Steps -> Task execution)
+- Real-time SSE streaming events
+- Doom loop detection
+- Intelligent retry with backoff
+- Real-time cost tracking
+- Permission control
+- Skill System (L2 layer) - declarative tool compositions
+- SubAgent System (L3 layer) - specialized agent routing
+
+Reference: OpenCode SessionProcessor architecture
+"""
+
+import logging
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any, AsyncIterator, Dict, List, Optional
+
+from src.domain.model.agent.skill import Skill
+from src.domain.model.agent.subagent import SubAgent
+
+from ..context import ContextWindowConfig, ContextWindowManager
+from ..permission import PermissionManager
+from ..prompts import PromptContext, PromptMode, SystemPromptManager
+from .events import SSEEvent, SSEEventType
+from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
+from .skill_executor import SkillExecutor
+from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
+
+logger = logging.getLogger(__name__)
+
+
+class ReActAgent:
+    """
+    Self-developed ReAct Agent implementation.
+
+    Replaces the LangGraph-based ReActAgentGraph with a pure Python
+    implementation using SessionProcessor.
+
+    Features:
+    - Multi-level thinking (work plan -> steps -> execution)
+    - Streaming SSE events for real-time UI updates
+    - Tool execution with permission control
+    - Doom loop detection
+    - Intelligent retry strategy
+    - Cost tracking
+    - Skill matching and execution (L2 layer)
+    - SubAgent routing and delegation (L3 layer)
+
+    Usage:
+        agent = ReActAgent(
+            model="gpt-4",
+            tools=[...],
+            api_key="...",
+            skills=[...],       # Optional: available skills
+            subagents=[...],    # Optional: available subagents
+        )
+
+        async for event in agent.stream(
+            conversation_id="...",
+            user_message="...",
+            conversation_context=[...],
+        ):
+            yield event
+    """
+
+    def __init__(
+        self,
+        model: str,
+        tools: Dict[str, Any],  # Tool name -> Tool instance
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+        max_steps: int = 20,
+        permission_manager: Optional[PermissionManager] = None,
+        skills: Optional[List[Skill]] = None,
+        subagents: Optional[List[SubAgent]] = None,
+        # Skill matching thresholds - increased to let LLM make autonomous decisions
+        # LLM sees skill_loader tool with available skills list and decides when to load
+        # Rule-based matching is now a fallback for very high confidence matches only
+        skill_match_threshold: float = 0.9,  # Was 0.5, increased to reduce rule matching
+        skill_direct_execute_threshold: float = 0.95,  # Was 0.8, increased to favor LLM decision
+        skill_fallback_on_error: bool = True,
+        skill_execution_timeout: int = 300,  # Increased from 60 to 300 (5 minutes)
+        subagent_match_threshold: float = 0.5,
+        # Context window management
+        context_window_config: Optional[ContextWindowConfig] = None,
+        max_context_tokens: int = 128000,
+        # Agent mode for skill filtering
+        agent_mode: str = "default",
+        # Project root for custom rules loading
+        project_root: Optional[Path] = None,
+        # ====================================================================
+        # Agent Session Pool: Pre-cached components for performance optimization
+        # These are internal parameters set by execute_react_agent_activity
+        # when using the Agent Session Pool for component reuse.
+        # ====================================================================
+        _cached_tool_definitions: Optional[List[Any]] = None,
+        _cached_system_prompt_manager: Optional[Any] = None,
+        _cached_subagent_router: Optional[Any] = None,
+    ):
+        """
+        Initialize ReAct Agent.
+
+        Args:
+            model: LLM model name (e.g., "gpt-4", "claude-3-opus")
+            tools: Dictionary of tool name -> tool instance
+            api_key: Optional API key for LLM
+            base_url: Optional base URL for LLM provider
+            temperature: LLM temperature (default: 0.0)
+            max_tokens: Maximum output tokens (default: 4096)
+            max_steps: Maximum execution steps (default: 20)
+            permission_manager: Optional permission manager
+            skills: Optional list of available skills (L2 layer)
+            subagents: Optional list of available subagents (L3 layer)
+            skill_match_threshold: Threshold for skill prompt injection (default: 0.9)
+                High threshold means LLM decides via skill_loader tool instead of auto-matching
+            skill_direct_execute_threshold: Threshold for skill direct execution (default: 0.95)
+                High threshold means skill_loader tool is preferred over direct execution
+            skill_fallback_on_error: Whether to fallback to LLM on skill error (default: True)
+            skill_execution_timeout: Timeout for skill execution in seconds (default: 300)
+            subagent_match_threshold: Threshold for subagent routing (default: 0.5)
+            context_window_config: Optional context window configuration
+            max_context_tokens: Maximum context tokens (default: 128000)
+            agent_mode: Agent mode for skill filtering (default: "default")
+            project_root: Optional project root path for custom rules loading
+            _cached_tool_definitions: Pre-cached tool definitions from Session Pool
+            _cached_system_prompt_manager: Pre-cached SystemPromptManager singleton
+            _cached_subagent_router: Pre-cached SubAgentRouter with built index
+        """
+        self.model = model
+        self.raw_tools = tools
+        self.api_key = api_key
+        self.base_url = base_url
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.max_steps = max_steps
+        self.permission_manager = permission_manager or PermissionManager()
+        self.agent_mode = agent_mode  # Store agent mode for skill filtering
+        self.project_root = project_root or Path.cwd()
+
+        # System Prompt Manager - use cached singleton if provided
+        if _cached_system_prompt_manager is not None:
+            self.prompt_manager = _cached_system_prompt_manager
+            logger.debug("ReActAgent: Using cached SystemPromptManager")
+        else:
+            self.prompt_manager = SystemPromptManager(project_root=self.project_root)
+
+        # Context Window Management
+        if context_window_config:
+            self.context_manager = ContextWindowManager(context_window_config)
+        else:
+            self.context_manager = ContextWindowManager(
+                ContextWindowConfig(
+                    max_context_tokens=max_context_tokens,
+                    max_output_tokens=max_tokens,
+                )
+            )
+
+        # Skill System (L2)
+        self.skills = skills or []
+        self.skill_match_threshold = skill_match_threshold
+        self.skill_direct_execute_threshold = skill_direct_execute_threshold
+        self.skill_fallback_on_error = skill_fallback_on_error
+        self.skill_execution_timeout = skill_execution_timeout
+        self.skill_executor = SkillExecutor(tools) if skills else None
+
+        # SubAgent System (L3) - use cached router if provided
+        self.subagents = subagents or []
+        self.subagent_match_threshold = subagent_match_threshold
+        if _cached_subagent_router is not None:
+            self.subagent_router = _cached_subagent_router
+            logger.debug("ReActAgent: Using cached SubAgentRouter")
+        elif subagents:
+            self.subagent_router = SubAgentRouter(
+                subagents=subagents or [],
+                default_confidence_threshold=subagent_match_threshold,
+            )
+        else:
+            self.subagent_router = None
+
+        # Convert tools to ToolDefinition - use cached definitions if provided
+        if _cached_tool_definitions is not None:
+            self.tool_definitions = _cached_tool_definitions
+            logger.debug(
+                f"ReActAgent: Using {len(_cached_tool_definitions)} cached tool definitions"
+            )
+        else:
+            self.tool_definitions = self._convert_tools(tools)
+
+        # Create processor config
+        self.config = ProcessorConfig(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_steps=max_steps,
+        )
+
+    def _convert_tools(self, tools: Dict[str, Any]) -> List[ToolDefinition]:
+        """
+        Convert tool instances to ToolDefinition format.
+
+        Args:
+            tools: Dictionary of tool name -> tool instance
+
+        Returns:
+            List of ToolDefinition objects
+        """
+        definitions = []
+
+        for name, tool in tools.items():
+            # Extract tool metadata
+            description = getattr(tool, "description", f"Tool: {name}")
+
+            # Get parameters schema - prefer get_parameters_schema() method
+            parameters = {"type": "object", "properties": {}, "required": []}
+            if hasattr(tool, "get_parameters_schema"):
+                parameters = tool.get_parameters_schema()
+            elif hasattr(tool, "args_schema"):
+                schema = tool.args_schema
+                if hasattr(schema, "model_json_schema"):
+                    parameters = schema.model_json_schema()
+
+            # Create execute wrapper with captured variables
+            def make_execute_wrapper(tool_instance, tool_name):
+                async def execute_wrapper(**kwargs):
+                    """Wrapper to execute tool."""
+                    try:
+                        # Try different execute method names
+                        if hasattr(tool_instance, "execute"):
+                            result = tool_instance.execute(**kwargs)
+                            # Handle both sync and async execute
+                            if hasattr(result, "__await__"):
+                                return await result
+                            return result
+                        elif hasattr(tool_instance, "ainvoke"):
+                            return await tool_instance.ainvoke(kwargs)
+                        elif hasattr(tool_instance, "_arun"):
+                            return await tool_instance._arun(**kwargs)
+                        elif hasattr(tool_instance, "_run"):
+                            return tool_instance._run(**kwargs)
+                        elif hasattr(tool_instance, "run"):
+                            return tool_instance.run(**kwargs)
+                        else:
+                            raise ValueError(f"Tool {tool_name} has no execute method")
+                    except Exception as e:
+                        return f"Error executing tool {tool_name}: {str(e)}"
+
+                return execute_wrapper
+
+            definitions.append(
+                ToolDefinition(
+                    name=name,
+                    description=description,
+                    parameters=parameters,
+                    execute=make_execute_wrapper(tool, name),
+                )
+            )
+
+        return definitions
+
+    def _match_skill(self, query: str) -> tuple[Optional[Skill], float]:
+        """
+        Match query against available skills, filtered by agent_mode.
+
+        Args:
+            query: User query
+
+        Returns:
+            Tuple of (best matching skill or None, match score)
+        """
+        logger.info(f"[ReActAgent] _match_skill called with query: {query}")
+        logger.info(
+            f"[ReActAgent] Number of skills available: {len(self.skills) if self.skills else 0}"
+        )
+        logger.info(f"[ReActAgent] Agent mode: {self.agent_mode}")
+
+        if not self.skills:
+            logger.info("[ReActAgent] No skills available for matching")
+            return None, 0.0
+
+        best_skill = None
+        best_score = 0.0
+
+        for skill in self.skills:
+            logger.debug(f"[ReActAgent] Checking skill: {skill.name}, status: {skill.status.value}")
+
+            # Check agent mode accessibility
+            if not skill.is_accessible_by_agent(self.agent_mode):
+                logger.debug(
+                    f"[ReActAgent] Skill {skill.name} not accessible by agent_mode={self.agent_mode}"
+                )
+                continue
+
+            if skill.status.value != "active":
+                continue
+
+            # Use skill's matches_query method
+            score = skill.matches_query(query)
+            logger.debug(f"[ReActAgent] Skill {skill.name} match score: {score}")
+
+            if score > best_score:
+                best_score = score
+                best_skill = skill
+
+        if best_skill:
+            logger.info(f"Matched skill: {best_skill.name} with score {best_score:.2f}")
+        else:
+            logger.info("[ReActAgent] No skill matched for query")
+
+        return best_skill, best_score
+
+    def _match_subagent(self, query: str) -> SubAgentMatch:
+        """
+        Match query against available subagents.
+
+        Args:
+            query: User query
+
+        Returns:
+            SubAgentMatch result
+        """
+        if not self.subagent_router:
+            return SubAgentMatch(subagent=None, confidence=0.0, match_reason="No router")
+
+        match = self.subagent_router.match(query, self.subagent_match_threshold)
+
+        if match.subagent:
+            logger.info(
+                f"Matched subagent: {match.subagent.name} "
+                f"with confidence {match.confidence:.2f} ({match.match_reason})"
+            )
+
+        return match
+
+    async def _build_system_prompt(
+        self,
+        user_query: str,
+        conversation_context: List[Dict[str, str]],
+        matched_skill: Optional[Skill] = None,
+        subagent: Optional[SubAgent] = None,
+        mode: str = "build",
+        current_step: int = 1,
+        project_id: str = "",
+        tenant_id: str = "",
+    ) -> str:
+        """
+        Build system prompt for the agent using SystemPromptManager.
+
+        Args:
+            user_query: User's query
+            conversation_context: Conversation history
+            matched_skill: Optional matched skill to highlight
+            subagent: Optional SubAgent (uses its system prompt if provided)
+            mode: Agent mode ("build" or "plan")
+            current_step: Current execution step number
+            project_id: Project ID for context
+            tenant_id: Tenant ID for context
+
+        Returns:
+            System prompt string
+        """
+        # Detect model provider from model name
+        model_provider = SystemPromptManager.detect_model_provider(self.model)
+
+        # Convert skills to dict format for PromptContext
+        skills_data = None
+        if self.skills:
+            skills_data = [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "tools": s.tools,
+                    "status": s.status.value,
+                    "prompt_template": s.prompt_template,
+                }
+                for s in self.skills
+            ]
+
+        # Convert matched skill to dict format
+        matched_skill_data = None
+        if matched_skill:
+            matched_skill_data = {
+                "name": matched_skill.name,
+                "description": matched_skill.description,
+                "tools": matched_skill.tools,
+                "prompt_template": matched_skill.prompt_template,
+            }
+
+        # Convert tool definitions to dict format
+        tool_defs = [{"name": t.name, "description": t.description} for t in self.tool_definitions]
+
+        # Build prompt context
+        context = PromptContext(
+            model_provider=model_provider,
+            mode=PromptMode(mode),
+            tool_definitions=tool_defs,
+            skills=skills_data,
+            matched_skill=matched_skill_data,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            working_directory=str(self.project_root),
+            conversation_history_length=len(conversation_context),
+            user_query=user_query,
+            current_step=current_step,
+            max_steps=self.max_steps,
+        )
+
+        # Use SystemPromptManager to build the prompt
+        return await self.prompt_manager.build_system_prompt(
+            context=context,
+            subagent=subagent,
+        )
+
+    async def stream(
+        self,
+        conversation_id: str,
+        user_message: str,
+        project_id: str,
+        user_id: str,
+        tenant_id: str,
+        conversation_context: Optional[List[Dict[str, str]]] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Stream agent response with ReAct loop.
+
+        This is the main entry point for agent execution. It:
+        1. Checks for SubAgent routing (L3)
+        2. Checks for Skill matching (L2)
+        3. Builds messages from context
+        4. Creates SessionProcessor
+        5. Streams events back to caller
+
+        Args:
+            conversation_id: Conversation ID
+            user_message: User's message
+            project_id: Project ID
+            user_id: User ID
+            tenant_id: Tenant ID
+            conversation_context: Optional conversation history
+
+        Yields:
+            Event dictionaries compatible with existing SSE format:
+            - {"type": "thought", "data": {...}}
+            - {"type": "act", "data": {...}}
+            - {"type": "observe", "data": {...}}
+            - {"type": "complete", "data": {...}}
+            - {"type": "error", "data": {...}}
+        """
+        conversation_context = conversation_context or []
+        start_time = time.time()
+
+        logger.info(
+            f"[ReActAgent] Starting stream for conversation {conversation_id}, "
+            f"user: {user_id}, message: {user_message[:50]}..."
+        )
+
+        # Check for SubAgent routing (L3)
+        subagent_match = self._match_subagent(user_message)
+        active_subagent = subagent_match.subagent
+
+        if active_subagent:
+            yield {
+                "type": "subagent_routed",
+                "data": {
+                    "subagent_id": active_subagent.id,
+                    "subagent_name": active_subagent.display_name,
+                    "confidence": subagent_match.confidence,
+                    "reason": subagent_match.match_reason,
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        # Check for Skill matching (L2)
+        matched_skill, skill_score = self._match_skill(user_message)
+
+        # Determine execution mode based on match score
+        should_direct_execute = (
+            matched_skill is not None
+            and skill_score >= self.skill_direct_execute_threshold
+            and self.skill_executor is not None
+        )
+
+        should_inject_prompt = (
+            matched_skill is not None
+            and skill_score >= self.skill_match_threshold
+            and not should_direct_execute
+        )
+
+        # If score is too low, don't use skill at all
+        if matched_skill and skill_score < self.skill_match_threshold:
+            matched_skill = None
+            skill_score = 0.0
+
+        # Emit skill_matched event with execution mode
+        if matched_skill:
+            execution_mode = "direct" if should_direct_execute else "prompt"
+            yield {
+                "type": "skill_matched",
+                "data": {
+                    "skill_id": matched_skill.id,
+                    "skill_name": matched_skill.name,
+                    "tools": list(matched_skill.tools),
+                    "match_score": skill_score,
+                    "execution_mode": execution_mode,
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        # Path A: Direct skill execution via SkillExecutor
+        if should_direct_execute:
+            skill_success = False
+            skill_execution_result = None
+
+            try:
+                async for skill_event in self._execute_skill_directly(
+                    matched_skill,
+                    user_message,
+                    project_id,
+                    user_id,
+                    tenant_id,
+                ):
+                    yield skill_event
+
+                    # Capture final result
+                    if skill_event.get("type") == "skill_execution_complete":
+                        skill_execution_result = skill_event.get("data", {})
+                        skill_success = skill_execution_result.get("success", False)
+
+                # Record skill usage
+                matched_skill.record_usage(skill_success)
+
+                if skill_success:
+                    # Success: return skill result directly
+                    yield {
+                        "type": "complete",
+                        "data": {
+                            "content": skill_execution_result.get("summary", ""),
+                            "skill_used": matched_skill.name,
+                            "execution_mode": "direct",
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    return  # Early exit, skip LLM flow
+
+                elif not self.skill_fallback_on_error:
+                    # Failed and no fallback allowed
+                    yield {
+                        "type": "error",
+                        "data": {
+                            "message": f"Skill execution failed: "
+                            f"{skill_execution_result.get('error', 'Unknown error')}",
+                            "code": "SKILL_EXECUTION_FAILED",
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    return
+
+                else:
+                    # Failed but fallback allowed - continue to LLM flow
+                    logger.warning(
+                        f"Skill {matched_skill.name} execution failed, falling back to LLM"
+                    )
+                    yield {
+                        "type": "skill_fallback",
+                        "data": {
+                            "skill_name": matched_skill.name,
+                            "reason": "execution_failed",
+                            "error": (
+                                skill_execution_result.get("error")
+                                if skill_execution_result
+                                else None
+                            ),
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    # Inject partial results into context
+                    if skill_execution_result and skill_execution_result.get("tool_results"):
+                        conversation_context.append(
+                            {
+                                "role": "system",
+                                "content": f"Skill '{matched_skill.name}' attempted but failed. "
+                                f"Partial results: {skill_execution_result.get('tool_results', [])}",
+                            }
+                        )
+                    # Reset matched_skill for prompt injection since we're falling back
+                    should_inject_prompt = True
+
+            except Exception as e:
+                logger.error(f"Skill direct execution error: {e}", exc_info=True)
+                matched_skill.record_usage(False)
+
+                if not self.skill_fallback_on_error:
+                    yield {
+                        "type": "error",
+                        "data": {
+                            "message": str(e),
+                            "code": "SKILL_EXECUTION_ERROR",
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                    return
+
+                # Fallback to LLM
+                yield {
+                    "type": "skill_fallback",
+                    "data": {
+                        "skill_name": matched_skill.name,
+                        "reason": "execution_error",
+                        "error": str(e),
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                should_inject_prompt = True
+
+        # Path B: Prompt injection mode (existing logic) or fallback from direct execution
+
+        # Build system prompt (uses SubAgent prompt if routed)
+        # Only inject skill into prompt if should_inject_prompt is True
+        system_prompt = await self._build_system_prompt(
+            user_message,
+            conversation_context,
+            matched_skill=matched_skill if should_inject_prompt else None,
+            subagent=active_subagent,
+            mode=self.agent_mode if self.agent_mode in ["build", "plan"] else "build",
+            current_step=1,  # Initial step
+            project_id=project_id,
+            tenant_id=tenant_id,
+        )
+
+        # Convert conversation context to OpenAI format
+        context_messages = []
+        for msg in conversation_context:
+            context_messages.append(
+                {
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", ""),
+                }
+            )
+
+        # Add current user message
+        context_messages.append(
+            {
+                "role": "user",
+                "content": user_message,
+            }
+        )
+
+        # Use ContextWindowManager for dynamic context sizing
+        context_result = await self.context_manager.build_context_window(
+            system_prompt=system_prompt,
+            messages=context_messages,
+            llm_client=None,  # TODO: Pass LLM client for summary generation
+        )
+
+        messages = context_result.messages
+
+        # Emit context_compressed event if compression occurred
+        if context_result.was_compressed:
+            yield {
+                "type": "context_compressed",
+                "data": context_result.to_event_data(),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            logger.info(
+                f"Context compressed: {context_result.original_message_count} -> "
+                f"{context_result.final_message_count} messages, "
+                f"strategy: {context_result.compression_strategy.value}"
+            )
+
+        # Determine tools to use
+        tools_to_use = self.tool_definitions
+
+        if active_subagent and self.subagent_router:
+            # Filter tools based on SubAgent permissions
+            filtered_tools = self.subagent_router.filter_tools(
+                active_subagent,
+                self.raw_tools,
+            )
+            tools_to_use = self._convert_tools(filtered_tools)
+
+        # Determine config (may be overridden by SubAgent)
+        config = self.config
+
+        if active_subagent:
+            executor = SubAgentExecutor(
+                subagent=active_subagent,
+                base_model=self.model,
+                base_api_key=self.api_key,
+                base_url=self.base_url,
+            )
+            subagent_config = executor.get_config()
+
+            config = ProcessorConfig(
+                model=subagent_config.get("model") or self.model,
+                api_key=self.api_key,
+                base_url=self.base_url,
+                temperature=subagent_config.get("temperature", self.temperature),
+                max_tokens=subagent_config.get("max_tokens", self.max_tokens),
+                max_steps=subagent_config.get("max_iterations", self.max_steps),
+            )
+
+        # Create processor
+        processor = SessionProcessor(
+            config=config,
+            tools=tools_to_use,
+            permission_manager=self.permission_manager,
+        )
+
+        # Track final content
+        final_content = ""
+        success = True
+
+        try:
+            # Process and convert SSE events to legacy format
+            async for sse_event in processor.process(
+                session_id=conversation_id,
+                messages=messages,
+            ):
+                # Convert SSEEvent to legacy event format
+                event = self._convert_sse_event(sse_event)
+                if event:
+                    # Track complete content
+                    if event.get("type") == "text_delta":
+                        final_content += event.get("data", {}).get("delta", "")
+
+                    yield event
+
+            # Yield final complete event
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": final_content,
+                    "subagent_used": active_subagent.name if active_subagent else None,
+                    "skill_used": matched_skill.name if matched_skill else None,
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except Exception as e:
+            logger.error(f"[ReActAgent] Error in stream: {e}", exc_info=True)
+            success = False
+            yield {
+                "type": "error",
+                "data": {
+                    "message": str(e),
+                    "code": type(e).__name__,
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        finally:
+            # Record execution statistics
+            end_time = time.time()
+            execution_time_ms = int((end_time - start_time) * 1000)
+
+            if active_subagent:
+                active_subagent.record_execution(execution_time_ms, success)
+                logger.info(
+                    f"[ReActAgent] SubAgent {active_subagent.name} execution: "
+                    f"{execution_time_ms}ms, success={success}"
+                )
+
+            if matched_skill:
+                matched_skill.record_usage(success)
+                logger.info(
+                    f"[ReActAgent] Skill {matched_skill.name} usage recorded: success={success}"
+                )
+
+    async def _execute_skill_directly(
+        self,
+        skill: Skill,
+        query: str,
+        project_id: str,
+        user_id: str,
+        tenant_id: str,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Execute skill directly via SkillExecutor.
+
+        This method handles the direct execution path where we bypass the LLM
+        and execute the skill's tool chain directly.
+
+        Args:
+            skill: Matched skill to execute
+            query: User query
+            project_id: Project ID for context
+            user_id: User ID for context
+            tenant_id: Tenant ID for context
+
+        Yields:
+            Event dictionaries for skill execution progress
+        """
+        if not self.skill_executor:
+            raise ValueError("SkillExecutor not initialized")
+
+        logger.info(f"[ReActAgent] Direct executing skill: {skill.name}")
+
+        # Build execution context
+        context = {
+            "project_id": project_id,
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+        }
+
+        # Emit skill execution start event
+        yield {
+            "type": "skill_execution_start",
+            "data": {
+                "skill_id": skill.id,
+                "skill_name": skill.name,
+                "tools": list(skill.tools),
+                "total_steps": len(skill.tools),
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+        tool_results = []
+        current_step = 0
+
+        # Execute skill and convert events
+        async for sse_event in self.skill_executor.execute(skill, query, context):
+            # Convert SkillExecutor SSE events to our format
+            converted_event = self._convert_skill_sse_event(sse_event, skill, current_step)
+
+            if converted_event:
+                yield converted_event
+
+            # Track tool results from observe events (outside if block)
+            if sse_event.type == SSEEventType.OBSERVE:
+                tool_results.append(sse_event.data)
+                current_step += 1
+
+            # Handle completion event (outside if block since converted_event is None for COMPLETE)
+            if sse_event.type == SSEEventType.COMPLETE:
+                completion_data = sse_event.data
+                success = completion_data.get("success", False)
+                error = completion_data.get("error")
+
+                # Generate summary from tool results
+                summary = self._summarize_skill_results(skill, tool_results, success, error)
+
+                # Emit skill execution complete event
+                yield {
+                    "type": "skill_execution_complete",
+                    "data": {
+                        "skill_id": skill.id,
+                        "skill_name": skill.name,
+                        "success": success,
+                        "summary": summary,
+                        "tool_results": tool_results,
+                        "execution_time_ms": completion_data.get("execution_time_ms", 0),
+                        "error": error,
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+    def _convert_skill_sse_event(
+        self,
+        sse_event: SSEEvent,
+        skill: Skill,
+        current_step: int,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Convert SkillExecutor SSE event to ReActAgent event format.
+
+        Args:
+            sse_event: SSE event from SkillExecutor
+            skill: The skill being executed
+            current_step: Current step index in the skill execution
+
+        Returns:
+            Converted event dict or None to skip
+        """
+        event_type = sse_event.type
+        data = sse_event.data
+        timestamp = datetime.utcnow().isoformat()
+
+        if event_type == SSEEventType.THOUGHT:
+            thought_level = data.get("thought_level", "skill")
+
+            # Map skill thoughts to appropriate event types
+            if thought_level == "skill":
+                return {
+                    "type": "thought",
+                    "data": {
+                        "thought": data.get("content", ""),
+                        "thought_level": "skill",
+                        "skill_id": skill.id,
+                    },
+                    "timestamp": timestamp,
+                }
+            elif thought_level == "skill_complete":
+                # Skill completion thought - handled separately
+                return None
+
+            return {
+                "type": "thought",
+                "data": {
+                    "thought": data.get("content", ""),
+                    "thought_level": thought_level,
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.ACT:
+            return {
+                "type": "skill_tool_start",
+                "data": {
+                    "skill_id": skill.id,
+                    "skill_name": skill.name,
+                    "tool_name": data.get("tool_name", ""),
+                    "tool_input": data.get("tool_input", {}),
+                    "step_index": current_step,
+                    "total_steps": len(skill.tools),
+                    "status": "running",
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.OBSERVE:
+            status = data.get("status", "completed")
+            return {
+                "type": "skill_tool_result",
+                "data": {
+                    "skill_id": skill.id,
+                    "skill_name": skill.name,
+                    "tool_name": data.get("tool_name", ""),
+                    "result": data.get("result"),
+                    "error": data.get("error"),
+                    "duration_ms": data.get("duration_ms", 0),
+                    "step_index": current_step,
+                    "total_steps": len(skill.tools),
+                    "status": status,
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.COMPLETE:
+            # Completion handled in _execute_skill_directly
+            return None
+
+        # Skip other event types
+        return None
+
+    def _summarize_skill_results(
+        self,
+        skill: Skill,
+        tool_results: List[Dict[str, Any]],
+        success: bool,
+        error: Optional[str] = None,
+    ) -> str:
+        """
+        Generate a summary from skill execution results.
+
+        Args:
+            skill: Executed skill
+            tool_results: List of tool execution results
+            success: Whether execution was successful
+            error: Optional error message
+
+        Returns:
+            Human-readable summary string
+        """
+        if not success:
+            failed_tool = None
+            for result in tool_results:
+                if result.get("status") == "error" or result.get("error"):
+                    failed_tool = result.get("tool_name", "unknown")
+                    break
+
+            if error:
+                return f"Skill '{skill.name}' failed: {error}"
+            elif failed_tool:
+                return f"Skill '{skill.name}' failed at tool '{failed_tool}'"
+            else:
+                return f"Skill '{skill.name}' execution failed"
+
+        # Build summary from successful results
+        summary_parts = [f"Completed skill '{skill.name}':"]
+
+        for result in tool_results:
+            tool_name = result.get("tool_name", "unknown")
+            tool_result = result.get("result")
+
+            if tool_result:
+                # Truncate long results
+                result_str = str(tool_result)
+                if len(result_str) > 200:
+                    result_str = result_str[:200] + "..."
+                summary_parts.append(f"- {tool_name}: {result_str}")
+
+        if len(summary_parts) == 1:
+            return f"Skill '{skill.name}' completed successfully"
+
+        return "\n".join(summary_parts)
+
+    def _convert_sse_event(self, sse_event: SSEEvent) -> Optional[Dict[str, Any]]:
+        """
+        Convert SSEEvent to legacy event format.
+
+        Maps new SSEEventType to existing event types expected by frontend.
+
+        Args:
+            sse_event: SSEEvent from processor
+
+        Returns:
+            Legacy event dict or None to skip
+        """
+        event_type = sse_event.type
+        data = sse_event.data
+        timestamp = datetime.utcnow().isoformat()
+
+        # Debug log to track event conversion
+        logger.info(
+            f"[ReActAgent] Converting SSE event: type={event_type}, data_keys={list(data.keys()) if data else []}"
+        )
+
+        # Map SSEEventType to legacy types
+        if event_type == SSEEventType.START:
+            return {
+                "type": "start",
+                "data": {},
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.THOUGHT:
+            return {
+                "type": "thought",
+                "data": {
+                    "thought": data.get("content", ""),
+                    "thought_level": data.get("thought_level", "task"),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.THOUGHT_DELTA:
+            return {
+                "type": "thought_delta",
+                "data": {
+                    "delta": data.get("delta", ""),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.TEXT_START:
+            return {
+                "type": "text_start",
+                "data": {},
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.TEXT_DELTA:
+            return {
+                "type": "text_delta",
+                "data": {
+                    "delta": data.get("delta", ""),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.TEXT_END:
+            return {
+                "type": "text_end",
+                "data": {
+                    "full_text": data.get("full_text", ""),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.ACT:
+            return {
+                "type": "act",
+                "data": {
+                    "tool_name": data.get("tool_name", ""),
+                    "tool_input": data.get("tool_input", {}),
+                    "call_id": data.get("call_id", ""),
+                    "status": data.get("status", "running"),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.OBSERVE:
+            return {
+                "type": "observe",
+                "data": {
+                    "tool_name": data.get("tool_name", ""),
+                    "call_id": data.get("call_id", ""),
+                    "result": data.get("result"),
+                    "error": data.get("error"),
+                    "observation": data.get("result", data.get("error", "")),
+                    "duration_ms": data.get("duration_ms"),
+                    "status": data.get("status", "completed"),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.WORK_PLAN:
+            # Pass work_plan event to agent_service for persistence
+            return {
+                "type": "work_plan",
+                "data": data,  # Contains plan_id, steps, etc.
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.STEP_START:
+            return {
+                "type": "step_start",
+                "data": {
+                    "step_number": data.get("step_index", 0),
+                    "description": data.get("description", ""),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.STEP_END:
+            return {
+                "type": "step_end",
+                "data": {
+                    "step_number": data.get("step_index", 0),
+                    "success": data.get("status") == "completed",
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.COST_UPDATE:
+            return {
+                "type": "cost_update",
+                "data": {
+                    "cost": data.get("cost", 0),
+                    "tokens": data.get("tokens", {}),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.ERROR:
+            return {
+                "type": "error",
+                "data": {
+                    "message": data.get("message", "Unknown error"),
+                    "code": data.get("code", "UNKNOWN"),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.COMPLETE:
+            # Complete is handled separately
+            return None
+
+        elif event_type == SSEEventType.RETRY:
+            return {
+                "type": "retry",
+                "data": {
+                    "attempt": data.get("attempt", 0),
+                    "delay_ms": data.get("delay_ms", 0),
+                    "message": data.get("message", ""),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.DOOM_LOOP_DETECTED:
+            return {
+                "type": "doom_loop",
+                "data": {
+                    "tool": data.get("tool", ""),
+                    "input": data.get("input", {}),
+                },
+                "timestamp": timestamp,
+            }
+
+        elif event_type == SSEEventType.PERMISSION_ASKED:
+            return {
+                "type": "permission_asked",
+                "data": {
+                    "request_id": data.get("request_id", ""),
+                    "permission": data.get("permission", ""),
+                    "patterns": data.get("patterns", []),
+                },
+                "timestamp": timestamp,
+            }
+
+        # Skip other event types
+        return None
+
+    async def astream_multi_level(
+        self,
+        conversation_id: str,
+        project_id: str,
+        user_id: str,
+        tenant_id: str,
+        user_query: str,
+        conversation_context: Optional[List[Dict[str, str]]] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Stream with multi-level thinking (compatibility method).
+
+        This method provides compatibility with the existing AgentService
+        interface that expects astream_multi_level.
+
+        Args:
+            conversation_id: Conversation ID
+            project_id: Project ID
+            user_id: User ID
+            tenant_id: Tenant ID
+            user_query: User's query
+            conversation_context: Conversation history
+
+        Yields:
+            Event dictionaries
+        """
+        # Delegate to stream method
+        async for event in self.stream(
+            conversation_id=conversation_id,
+            user_message=user_query,
+            project_id=project_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            conversation_context=conversation_context,
+        ):
+            yield event
+
+
+def create_react_agent(
+    model: str,
+    tools: Dict[str, Any],
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    skills: Optional[List[Skill]] = None,
+    subagents: Optional[List[SubAgent]] = None,
+    **kwargs,
+) -> ReActAgent:
+    """
+    Factory function to create ReAct Agent.
+
+    Args:
+        model: LLM model name
+        tools: Dictionary of tools
+        api_key: Optional API key
+        base_url: Optional base URL
+        skills: Optional list of Skills (L2 layer)
+        subagents: Optional list of SubAgents (L3 layer)
+        **kwargs: Additional configuration
+
+    Returns:
+        Configured ReActAgent instance
+    """
+    return ReActAgent(
+        model=model,
+        tools=tools,
+        api_key=api_key,
+        base_url=base_url,
+        skills=skills,
+        subagents=subagents,
+        **kwargs,
+    )

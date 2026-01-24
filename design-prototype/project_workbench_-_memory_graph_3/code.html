@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Knowledge Hub - Unified View</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2563eb",
+                        "primary-hover": "#1d4ed8",
+                        "background-dark": "#0f172a",
+                        "surface-dark": "#1e293b",
+                        "surface-border": "#334155",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"],
+                        "body": ["Inter", "Noto Sans SC", "sans-serif"],
+                    },
+                    backgroundImage: {
+                        'grid-pattern': "radial-gradient(#334155 0.5px, transparent 0.5px)",
+                    }
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        :root {
+            --entity-blue: #3b82f6;
+            --entity-emerald: #10b981;
+            --entity-amber: #f59e0b;
+            --entity-purple: #a855f7;
+            --entity-rose: #f43f5e;
+        }
+        body { font-family: 'Inter', 'Noto Sans SC', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .graph-node { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .graph-node:hover { transform: scale(1.1); filter: brightness(1.1); }
+        .edge-label { 
+            font-size: 10px; 
+            font-weight: 600; 
+            letter-spacing: 0.05em;
+            fill: #94a3b8;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="bg-background-dark text-slate-200 h-screen overflow-hidden flex flex-col">
+<div class="flex h-full w-full overflow-hidden">
+<aside class="w-64 flex-shrink-0 border-r border-surface-border bg-slate-950 flex flex-col z-30">
+<div class="h-16 flex items-center px-6 border-b border-surface-border">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-lg bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-xl">psychology</span>
+</div>
+<span class="text-lg font-bold tracking-tight text-white">MemStack<span class="text-primary">.ai</span></span>
+</div>
+</div>
+<nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto scrollbar-hide">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-all group" href="#">
+<span class="material-symbols-outlined text-[22px]">dashboard</span>
+<span class="text-sm font-medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-all group" href="#">
+<span class="material-symbols-outlined text-[22px]">memory</span>
+<span class="text-sm font-medium">Memories</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20 group" href="#">
+<span class="material-symbols-outlined text-[22px] font-variation-settings-'FILL'1">hub</span>
+<span class="text-sm font-medium">Knowledge Hub</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-all group" href="#">
+<span class="material-symbols-outlined text-[22px]">search</span>
+<span class="text-sm font-medium">Advanced Search</span>
+</a>
+<div class="pt-4 pb-2">
+<span class="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Management</span>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-all group" href="#">
+<span class="material-symbols-outlined text-[22px]">database</span>
+<span class="text-sm font-medium">Entities</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-all group" href="#">
+<span class="material-symbols-outlined text-[22px]">groups</span>
+<span class="text-sm font-medium">Communities</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-surface-dark transition-all group" href="#">
+<span class="material-symbols-outlined text-[22px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-surface-border">
+<div class="flex items-center gap-3 px-2">
+<div class="size-9 rounded-full border-2 border-primary/30 p-0.5">
+<div class="w-full h-full rounded-full bg-cover bg-center" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCuj5a2KNEIaVfJuNz6BQiR5PzAXDPcQjtlvZ2WX4pJqmct2GPAOefWPLxkbozkmAIjtrsmsdDLGVVG_cRbIQJWSEFOwpl9OYGKwi6w0T5PZD66MZY26SQLF_VDG4D8iC49agFiJ00XU8xGceGuaG5cs8Ys5kqAEP2B4s1ZdrcOj7CCEfmscLN50Fn-v6n__wd-FOYbhlTPkD-qM5GzYC-ITxithO8CIXSu2MglcPPEUb7XGse6jyQri95mREEhyurS-7omHZ0smBI')"></div>
+</div>
+<div class="flex flex-col overflow-hidden">
+<span class="text-sm font-semibold text-white truncate">Alex Rivers</span>
+<span class="text-[10px] text-slate-500 truncate">admin@memstack.ai</span>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col min-w-0 bg-slate-900">
+<header class="h-16 flex items-center justify-between px-6 border-b border-surface-border bg-slate-900/50 backdrop-blur-md z-20">
+<div class="flex items-center gap-4 flex-1">
+<div class="max-w-2xl w-full">
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-slate-400 text-xl group-focus-within:text-primary transition-colors">search</span>
+</div>
+<input class="block w-full rounded-xl border border-surface-border bg-slate-800/50 py-2.5 pl-11 pr-12 text-sm text-white placeholder:text-slate-500 focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all" placeholder="Search knowledge graph, entities, or memories..." type="text"/>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center">
+<kbd class="inline-flex items-center rounded border border-slate-600 px-1.5 font-sans text-[10px] text-slate-500">⌘K</kbd>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-slate-800 border border-surface-border rounded-lg px-2 py-1">
+<button class="p-1.5 text-slate-400 hover:text-white transition-colors"><span class="material-symbols-outlined text-lg">light_mode</span></button>
+<button class="p-1.5 text-primary bg-primary/10 rounded-md transition-colors"><span class="material-symbols-outlined text-lg">dark_mode</span></button>
+</div>
+<button class="p-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2.5 right-2.5 size-2 bg-rose-500 rounded-full border-2 border-slate-900"></span>
+</button>
+<button class="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-primary/25 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-xl">add_circle</span>
+<span>New Memory</span>
+</button>
+</div>
+</header>
+<div class="flex-1 flex overflow-hidden">
+<aside class="w-72 border-r border-surface-border bg-slate-900/30 flex flex-col z-10 overflow-hidden">
+<div class="p-5 border-b border-surface-border">
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Schema Explorer</h3>
+<div class="space-y-3">
+<div>
+<div class="text-[10px] font-bold text-slate-500 uppercase mb-2">Entity Types</div>
+<div class="space-y-1">
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800 cursor-pointer group transition-colors">
+<div class="flex items-center gap-3">
+<div class="size-2.5 rounded-full bg-[var(--entity-blue)] shadow-[0_0_8px_var(--entity-blue)]"></div>
+<span class="text-xs font-medium text-slate-300 group-hover:text-white">Research Project</span>
+</div>
+<span class="text-[10px] text-slate-500">24</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800 cursor-pointer group transition-colors">
+<div class="flex items-center gap-3">
+<div class="size-2.5 rounded-full bg-[var(--entity-emerald)] shadow-[0_0_8px_var(--entity-emerald)]"></div>
+<span class="text-xs font-medium text-slate-300 group-hover:text-white">Document</span>
+</div>
+<span class="text-[10px] text-slate-500">142</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800 cursor-pointer group transition-colors">
+<div class="flex items-center gap-3">
+<div class="size-2.5 rounded-full bg-[var(--entity-rose)] shadow-[0_0_8px_var(--entity-rose)]"></div>
+<span class="text-xs font-medium text-slate-300 group-hover:text-white">Person</span>
+</div>
+<span class="text-[10px] text-slate-500">38</span>
+</div>
+<div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800 cursor-pointer group transition-colors">
+<div class="flex items-center gap-3">
+<div class="size-2.5 rounded-full bg-[var(--entity-amber)] shadow-[0_0_8px_var(--entity-amber)]"></div>
+<span class="text-xs font-medium text-slate-300 group-hover:text-white">Knowledge Node</span>
+</div>
+<span class="text-[10px] text-slate-500">512</span>
+</div>
+</div>
+</div>
+<div class="pt-2">
+<div class="text-[10px] font-bold text-slate-500 uppercase mb-2">Edge Types</div>
+<div class="space-y-1">
+<div class="flex items-center gap-3 p-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-sm">trending_flat</span>
+<span>MENTIONS</span>
+</div>
+<div class="flex items-center gap-3 p-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-sm">trending_flat</span>
+<span>AUTHORED_BY</span>
+</div>
+<div class="flex items-center gap-3 p-2 text-xs text-slate-400">
+<span class="material-symbols-outlined text-sm">trending_flat</span>
+<span>BELONGS_TO</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-5 scrollbar-hide">
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Filters</h3>
+<div class="space-y-4">
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] text-slate-400">
+<span>Relevance Score</span>
+<span>&gt; 65%</span>
+</div>
+<div class="h-1 bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/3"></div>
+</div>
+</div>
+<label class="flex items-center gap-3 cursor-pointer">
+<input checked="" class="rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary/20" type="checkbox"/>
+<span class="text-xs text-slate-300">Show Indirect Links</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer">
+<input class="rounded border-slate-700 bg-slate-800 text-primary focus:ring-primary/20" type="checkbox"/>
+<span class="text-xs text-slate-300">Auto-cluster Communities</span>
+</label>
+</div>
+</div>
+</aside>
+<div class="flex-1 flex flex-col relative min-w-0">
+<div class="flex-1 relative bg-slate-950 overflow-hidden cursor-grab active:cursor-grabbing">
+<div class="absolute inset-0 bg-[size:50px_50px] bg-grid-pattern opacity-10"></div>
+<div class="absolute top-6 left-6 flex flex-col gap-2 z-20">
+<div class="bg-slate-900/80 backdrop-blur border border-surface-border rounded-xl p-1.5 shadow-2xl flex flex-col gap-1">
+<button class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all" title="Zoom In"><span class="material-symbols-outlined">add</span></button>
+<button class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all" title="Zoom Out"><span class="material-symbols-outlined">remove</span></button>
+<div class="h-px bg-surface-border mx-1 my-0.5"></div>
+<button class="p-2 text-primary bg-primary/10 rounded-lg transition-all" title="Reset View"><span class="material-symbols-outlined">center_focus_strong</span></button>
+</div>
+</div>
+<svg class="absolute inset-0 w-full h-full pointer-events-none">
+<defs>
+<marker id="arrow" markerHeight="7" markerWidth="10" orient="auto" refX="25" refY="3.5">
+<polygon fill="#475569" points="0 0, 10 3.5, 0 7"></polygon>
+</marker>
+</defs>
+<path d="M 50% 50% L 35% 30%" marker-end="url(#arrow)" stroke="#334155" stroke-width="2"></path>
+<text class="edge-label" text-anchor="middle" x="42.5%" y="40%">MENTIONS</text>
+<path d="M 50% 50% L 65% 30%" marker-end="url(#arrow)" stroke="#334155" stroke-width="2"></path>
+<text class="edge-label" text-anchor="middle" x="57.5%" y="40%">AUTHORED_BY</text>
+<path d="M 50% 50% L 75% 55%" marker-end="url(#arrow)" stroke="#334155" stroke-width="2"></path>
+<text class="edge-label" text-anchor="middle" x="62.5%" y="52.5%">RELATED</text>
+<path d="M 50% 50% L 55% 75%" marker-end="url(#arrow)" stroke="#334155" stroke-width="2"></path>
+<text class="edge-label" text-anchor="middle" x="52.5%" y="62.5%">REFERENCES</text>
+<path d="M 50% 50% L 25% 65%" stroke="#334155" stroke-dasharray="4,4" stroke-width="2"></path>
+<text class="edge-label" text-anchor="middle" x="37.5%" y="57.5%">INDIRECT</text>
+</svg>
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/node cursor-pointer z-10">
+<div class="relative">
+<div class="absolute inset-0 rounded-full bg-emerald-500 blur-2xl opacity-20 group-hover/node:opacity-40 transition-opacity"></div>
+<div class="size-20 rounded-full bg-emerald-500/20 border-4 border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/20 graph-node ring-4 ring-emerald-500/10">
+<span class="material-symbols-outlined text-4xl">science</span>
+</div>
+</div>
+<div class="mt-3 text-center">
+<div class="text-white font-bold text-sm bg-slate-900/80 px-3 py-1 rounded-full border border-surface-border">4.7T MRI Scan Project</div>
+<div class="text-[10px] text-emerald-500 font-bold uppercase tracking-wider mt-1">Research Project</div>
+</div>
+</div>
+<div class="absolute top-[30%] left-[35%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/node cursor-pointer">
+<div class="size-14 rounded-full bg-blue-500/20 border-2 border-blue-500/40 flex items-center justify-center text-blue-400 graph-node">
+<span class="material-symbols-outlined text-2xl">description</span>
+</div>
+<div class="mt-2 text-center">
+<div class="text-slate-200 font-semibold text-xs">Dataset_V2</div>
+<div class="text-[9px] text-blue-400 font-bold uppercase">Document</div>
+</div>
+</div>
+<div class="absolute top-[30%] left-[65%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/node cursor-pointer">
+<div class="size-14 rounded-full bg-rose-500/20 border-2 border-rose-500/40 flex items-center justify-center text-rose-400 graph-node">
+<span class="material-symbols-outlined text-2xl">person</span>
+</div>
+<div class="mt-2 text-center">
+<div class="text-slate-200 font-semibold text-xs">Dr. Elena Wu</div>
+<div class="text-[9px] text-rose-400 font-bold uppercase">Lead Author</div>
+</div>
+</div>
+<div class="absolute top-[55%] left-[75%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/node cursor-pointer">
+<div class="size-12 rounded-full bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 graph-node">
+<span class="material-symbols-outlined text-xl">database</span>
+</div>
+<div class="mt-2 text-center">
+<div class="text-slate-200 font-semibold text-xs">Neuro_KB</div>
+<div class="text-[9px] text-amber-400 font-bold uppercase">Knowledge Node</div>
+</div>
+</div>
+<div class="absolute top-[75%] left-[55%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/node cursor-pointer">
+<div class="size-12 rounded-full bg-purple-500/20 border-2 border-purple-500/40 flex items-center justify-center text-purple-400 graph-node">
+<span class="material-symbols-outlined text-xl">groups</span>
+</div>
+<div class="mt-2 text-center">
+<div class="text-slate-200 font-semibold text-xs">Radiology Team</div>
+<div class="text-[9px] text-purple-400 font-bold uppercase">Community</div>
+</div>
+</div>
+</div>
+<div class="h-1/3 bg-slate-900 border-t border-surface-border flex flex-col overflow-hidden">
+<div class="px-6 py-4 border-b border-surface-border flex items-center justify-between">
+<div class="flex items-center gap-3">
+<h3 class="text-sm font-bold text-white uppercase tracking-wider">Recent Memories</h3>
+<span class="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 font-medium">Last 24 hours</span>
+</div>
+<button class="text-xs text-primary font-bold hover:underline">View History</button>
+</div>
+<div class="flex-1 overflow-x-auto p-6 flex gap-4 scrollbar-hide">
+<div class="min-w-[320px] bg-slate-800/50 border border-surface-border rounded-xl p-4 flex flex-col hover:border-primary/50 transition-all cursor-pointer group">
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="size-7 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+<span class="material-symbols-outlined text-lg">description</span>
+</div>
+<span class="text-[10px] font-bold text-emerald-500 uppercase">Document</span>
+</div>
+<span class="text-[10px] text-slate-500">2m ago</span>
+</div>
+<h4 class="text-sm font-bold text-white mb-2 line-clamp-1 group-hover:text-primary transition-colors">Neuro-imaging Results Analysis</h4>
+<p class="text-xs text-slate-400 line-clamp-2 leading-relaxed mb-4">Initial findings from the 4.7T MRI scans show high specificity in cerebellar regions...</p>
+<div class="mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="size-5 rounded-full border border-slate-900 bg-slate-700"></div>
+<div class="size-5 rounded-full border border-slate-900 bg-slate-600"></div>
+</div>
+<div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+<span class="material-symbols-outlined text-sm">link</span>
+<span>3 Connections</span>
+</div>
+</div>
+</div>
+<div class="min-w-[320px] bg-slate-800/50 border border-surface-border rounded-xl p-4 flex flex-col hover:border-primary/50 transition-all cursor-pointer group">
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="size-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500">
+<span class="material-symbols-outlined text-lg">database</span>
+</div>
+<span class="text-[10px] font-bold text-amber-500 uppercase">Schema Update</span>
+</div>
+<span class="text-[10px] text-slate-500">1h ago</span>
+</div>
+<h4 class="text-sm font-bold text-white mb-2 line-clamp-1 group-hover:text-primary transition-colors">Entity Mapping Extension</h4>
+<p class="text-xs text-slate-400 line-clamp-2 leading-relaxed mb-4">Added 12 new cross-references between the Radiology and Oncology departments...</p>
+<div class="mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="size-5 rounded-full border border-slate-900 bg-slate-700"></div>
+</div>
+<div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+<span class="material-symbols-outlined text-sm">link</span>
+<span>12 Connections</span>
+</div>
+</div>
+</div>
+<div class="min-w-[320px] bg-slate-800/50 border border-surface-border rounded-xl p-4 flex flex-col hover:border-primary/50 transition-all cursor-pointer group">
+<div class="flex items-center justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="size-7 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500">
+<span class="material-symbols-outlined text-lg">person</span>
+</div>
+<span class="text-[10px] font-bold text-rose-500 uppercase">Interaction</span>
+</div>
+<span class="text-[10px] text-slate-500">3h ago</span>
+</div>
+<h4 class="text-sm font-bold text-white mb-2 line-clamp-1 group-hover:text-primary transition-colors">Team Meeting Sync</h4>
+<p class="text-xs text-slate-400 line-clamp-2 leading-relaxed mb-4">Review of Q4 roadmap with Dr. Elena Wu and the neuro-science core group...</p>
+<div class="mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="size-5 rounded-full border border-slate-900 bg-slate-700"></div>
+<div class="size-5 rounded-full border border-slate-900 bg-slate-600"></div>
+<div class="size-5 rounded-full border border-slate-900 bg-slate-500"></div>
+</div>
+<div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+<span class="material-symbols-outlined text-sm">link</span>
+<span>5 Connections</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<aside class="w-80 border-l border-surface-border bg-slate-900/50 z-20 flex flex-col overflow-hidden">
+<div class="p-6 border-b border-surface-border bg-gradient-to-b from-emerald-500/5 to-transparent">
+<div class="flex items-center justify-between mb-4">
+<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/20">Research Project</span>
+<button class="p-1 text-slate-500 hover:text-white transition-colors"><span class="material-symbols-outlined text-lg">close</span></button>
+</div>
+<h2 class="text-xl font-bold text-white leading-tight">4.7T MRI Scan Project</h2>
+<div class="flex items-center gap-2 mt-3 text-[11px] text-slate-400 font-medium">
+<span class="material-symbols-outlined text-sm">event</span>
+<span>Created Dec 12, 2023</span>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+<div>
+<div class="flex justify-between items-end mb-2">
+<label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Connectivity Score</label>
+<span class="text-emerald-500 font-bold text-sm">88%</span>
+</div>
+<div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style="width: 88%"></div>
+</div>
+</div>
+<div>
+<label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">Summary</label>
+<p class="text-xs text-slate-300 leading-relaxed bg-slate-800/50 p-3 rounded-lg border border-surface-border">
+                                Core research initiative focusing on high-resolution MRI scanning of brain tissues. This entity links 14 independent documents and 5 primary contributors within the Radiology department.
+                            </p>
+</div>
+<div>
+<label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-4">Key Relationships</label>
+<div class="space-y-2">
+<div class="p-2.5 rounded-lg border border-surface-border bg-slate-900/80 hover:bg-slate-800 transition-colors cursor-pointer group">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500">
+<span class="material-symbols-outlined text-lg">person</span>
+</div>
+<div>
+<div class="text-xs font-bold text-slate-200">Dr. Elena Wu</div>
+<div class="text-[9px] text-slate-500">Lead Author • 12 Mentions</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-600 text-sm group-hover:text-primary">arrow_forward_ios</span>
+</div>
+</div>
+<div class="p-2.5 rounded-lg border border-surface-border bg-slate-900/80 hover:bg-slate-800 transition-colors cursor-pointer group">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+<span class="material-symbols-outlined text-lg">description</span>
+</div>
+<div>
+<div class="text-xs font-bold text-slate-200">Scan_Parameters_V4</div>
+<div class="text-[9px] text-slate-500">Technical Doc • 4 Connections</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-600 text-sm group-hover:text-primary">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="p-4 bg-slate-900 border-t border-surface-border flex gap-3">
+<button class="flex-1 py-2.5 rounded-xl border border-surface-border bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 hover:text-white transition-all">
+                            View Details
+                        </button>
+<button class="flex-1 py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all">
+                            Explore Graph
+                        </button>
+</div>
+</aside>
+</div>
+</main>
+</div>
+
+</body></html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Entity Type Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;family=Source+Han+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "primary-hover": "#254bcc",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111521",
+                        "surface-dark": "#1e2433",
+                        "surface-highlight": "#252d46",
+                        "text-secondary": "#95a0c6",
+                        "border-dark": "#2a324a"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Source Han Sans", "sans-serif"],
+                        "body": ["Inter", "Source Han Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen font-display text-slate-900 dark:text-white overflow-x-hidden">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Side Navigation -->
+<aside class="flex w-64 flex-col bg-[#121521] border-r border-[#2a324a] shrink-0 z-20">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-6">
+<!-- Brand -->
+<div class="flex gap-3 px-2 items-center">
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-10 bg-gradient-to-tr from-primary to-purple-500 shadow-lg shadow-primary/20" data-alt="Abstract gradient logo representing memory platform"></div>
+<div class="flex flex-col">
+<h1 class="text-white text-base font-semibold leading-tight tracking-wide">Memory Platform</h1>
+<p class="text-text-secondary text-xs font-normal">Admin Console</p>
+</div>
+</div>
+<!-- Nav Items -->
+<div class="flex flex-col gap-2 mt-4">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white text-text-secondary">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white text-text-secondary">view_kanban</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/20 text-white shadow-sm border border-primary/20" href="#">
+<span class="material-symbols-outlined text-[20px] text-blue-400 fill-1">hub</span>
+<span class="text-sm font-medium">Entity Types</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white text-text-secondary">group</span>
+<span class="text-sm font-medium">Users</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white text-text-secondary">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</div>
+<!-- Bottom User Profile -->
+<div class="border-t border-[#2a324a] pt-4 mt-4">
+<div class="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-[#252d46] rounded-lg transition-colors">
+<div class="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-400 to-cyan-300" data-alt="User profile avatar gradient"></div>
+<div class="flex flex-col">
+<p class="text-white text-sm font-medium">Admin User</p>
+<p class="text-text-secondary text-xs">admin@memory.ai</p>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Header Area -->
+<div class="w-full flex-none pt-8 pb-4 px-8 border-b border-[#2a324a]/50 bg-[#121521]">
+<div class="max-w-7xl mx-auto flex flex-col gap-4">
+<!-- Breadcrumbs -->
+<div class="flex flex-wrap gap-2 items-center">
+<a class="text-text-secondary text-sm font-medium hover:text-white transition-colors" href="#">Home</a>
+<span class="text-text-secondary text-sm font-medium">/</span>
+<a class="text-text-secondary text-sm font-medium hover:text-white transition-colors" href="#">Schema</a>
+<span class="text-text-secondary text-sm font-medium">/</span>
+<span class="text-white text-sm font-medium">Entity Types</span>
+</div>
+<!-- Page Heading & Primary Action -->
+<div class="flex flex-wrap justify-between items-center gap-4">
+<div>
+<h2 class="text-white text-3xl font-bold tracking-tight">Entity Type Management</h2>
+<p class="text-text-secondary text-sm mt-1">Define and manage the structure of your knowledge graph.</p>
+</div>
+<button class="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>Create Entity Type</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Scrollable Content Area -->
+<div class="flex-1 overflow-y-auto bg-[#111521] p-8">
+<div class="max-w-7xl mx-auto flex flex-col gap-6">
+<!-- Toolbar (Search & Filter) -->
+<div class="flex flex-wrap items-center justify-between gap-4 bg-[#1e2433] p-4 rounded-xl border border-[#2a324a]">
+<div class="flex flex-1 max-w-md">
+<label class="flex w-full items-center h-10 rounded-lg bg-[#252d46] border border-transparent focus-within:border-primary/50 transition-colors">
+<div class="text-text-secondary flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="w-full bg-transparent border-none text-white placeholder:text-text-secondary focus:ring-0 text-sm px-3" placeholder="Search entity types..."/>
+</label>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex h-9 items-center gap-2 rounded-lg bg-[#252d46] hover:bg-[#2f3956] border border-[#2a324a] px-3 transition-colors">
+<span class="text-white text-sm font-medium">Project: All</span>
+<span class="material-symbols-outlined text-[18px] text-text-secondary">expand_more</span>
+</button>
+<button class="flex h-9 items-center gap-2 rounded-lg bg-[#252d46] hover:bg-[#2f3956] border border-[#2a324a] px-3 transition-colors">
+<span class="text-white text-sm font-medium">Category: All</span>
+<span class="material-symbols-outlined text-[18px] text-text-secondary">expand_more</span>
+</button>
+<div class="h-6 w-px bg-[#2a324a] mx-1"></div>
+<button class="flex items-center justify-center h-9 w-9 rounded-lg bg-[#252d46] text-white hover:text-primary transition-colors" title="List View">
+<span class="material-symbols-outlined text-[20px]">view_list</span>
+</button>
+<button class="flex items-center justify-center h-9 w-9 rounded-lg bg-transparent text-text-secondary hover:text-white transition-colors" title="Grid View">
+<span class="material-symbols-outlined text-[20px]">grid_view</span>
+</button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="flex flex-col rounded-xl border border-[#2a324a] bg-[#1e2433] overflow-hidden shadow-xl">
+<!-- Table Header -->
+<div class="grid grid-cols-12 gap-4 border-b border-[#2a324a] bg-[#252d46]/50 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+<div class="col-span-4 flex items-center">Entity Type Name</div>
+<div class="col-span-2 flex items-center">Internal ID</div>
+<div class="col-span-2 flex items-center">Attributes</div>
+<div class="col-span-2 flex items-center">Last Modified</div>
+<div class="col-span-2 flex items-center justify-end">Actions</div>
+</div>
+<!-- Table Rows -->
+<div class="divide-y divide-[#2a324a]">
+<!-- Row 1 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-[#252d46] transition-colors group items-center">
+<div class="col-span-4 flex items-center gap-4">
+<div class="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+<span class="material-symbols-outlined">person</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Person</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="h-2 w-2 rounded-full bg-blue-500"></span>
+<span class="text-xs text-text-secondary">Core Entity</span>
+</div>
+</div>
+</div>
+<div class="col-span-2 flex items-center">
+<code class="text-xs bg-[#121521] px-2 py-1 rounded text-text-secondary border border-[#2a324a]">ent_person_01</code>
+</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#252d46] text-blue-300 border border-blue-500/20">
+                                        12 Attributes
+                                    </span>
+</div>
+<div class="col-span-2 flex flex-col justify-center">
+<span class="text-sm text-white">Oct 24, 2023</span>
+<span class="text-xs text-text-secondary">by Admin</span>
+</div>
+<div class="col-span-2 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-2 rounded-lg hover:bg-[#343e5c] text-text-secondary hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-2 rounded-lg hover:bg-red-500/10 text-text-secondary hover:text-red-400 transition-colors" title="Delete">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-[#252d46] transition-colors group items-center">
+<div class="col-span-4 flex items-center gap-4">
+<div class="flex items-center justify-center h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+<span class="material-symbols-outlined">apartment</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Company</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+<span class="text-xs text-text-secondary">Business</span>
+</div>
+</div>
+</div>
+<div class="col-span-2 flex items-center">
+<code class="text-xs bg-[#121521] px-2 py-1 rounded text-text-secondary border border-[#2a324a]">ent_comp_02</code>
+</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#252d46] text-emerald-300 border border-emerald-500/20">
+                                        8 Attributes
+                                    </span>
+</div>
+<div class="col-span-2 flex flex-col justify-center">
+<span class="text-sm text-white">Oct 22, 2023</span>
+<span class="text-xs text-text-secondary">by System</span>
+</div>
+<div class="col-span-2 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-2 rounded-lg hover:bg-[#343e5c] text-text-secondary hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-2 rounded-lg hover:bg-red-500/10 text-text-secondary hover:text-red-400 transition-colors" title="Delete">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-[#252d46] transition-colors group items-center">
+<div class="col-span-4 flex items-center gap-4">
+<div class="flex items-center justify-center h-10 w-10 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+<span class="material-symbols-outlined">location_on</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Location</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="h-2 w-2 rounded-full bg-purple-500"></span>
+<span class="text-xs text-text-secondary">Geo</span>
+</div>
+</div>
+</div>
+<div class="col-span-2 flex items-center">
+<code class="text-xs bg-[#121521] px-2 py-1 rounded text-text-secondary border border-[#2a324a]">ent_loc_05</code>
+</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#252d46] text-purple-300 border border-purple-500/20">
+                                        5 Attributes
+                                    </span>
+</div>
+<div class="col-span-2 flex flex-col justify-center">
+<span class="text-sm text-white">Sep 15, 2023</span>
+<span class="text-xs text-text-secondary">by Admin</span>
+</div>
+<div class="col-span-2 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-2 rounded-lg hover:bg-[#343e5c] text-text-secondary hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-2 rounded-lg hover:bg-red-500/10 text-text-secondary hover:text-red-400 transition-colors" title="Delete">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Row 4 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-[#252d46] transition-colors group items-center">
+<div class="col-span-4 flex items-center gap-4">
+<div class="flex items-center justify-center h-10 w-10 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div class="flex flex-col">
+<span class="text-white font-medium text-sm">Document</span>
+<div class="flex items-center gap-2 mt-0.5">
+<span class="h-2 w-2 rounded-full bg-orange-500"></span>
+<span class="text-xs text-text-secondary">Resource</span>
+</div>
+</div>
+</div>
+<div class="col-span-2 flex items-center">
+<code class="text-xs bg-[#121521] px-2 py-1 rounded text-text-secondary border border-[#2a324a]">ent_doc_09</code>
+</div>
+<div class="col-span-2 flex items-center">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#252d46] text-orange-300 border border-orange-500/20">
+                                        18 Attributes
+                                    </span>
+</div>
+<div class="col-span-2 flex flex-col justify-center">
+<span class="text-sm text-white">Aug 30, 2023</span>
+<span class="text-xs text-text-secondary">by User_12</span>
+</div>
+<div class="col-span-2 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+<button class="p-2 rounded-lg hover:bg-[#343e5c] text-text-secondary hover:text-white transition-colors" title="Edit">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-2 rounded-lg hover:bg-red-500/10 text-text-secondary hover:text-red-400 transition-colors" title="Delete">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Table Footer / Pagination -->
+<div class="flex items-center justify-between border-t border-[#2a324a] bg-[#1e2433] px-6 py-3">
+<p class="text-xs text-text-secondary">Showing <span class="text-white font-medium">1-4</span> of <span class="text-white font-medium">12</span> entity types</p>
+<div class="flex items-center gap-2">
+<button class="flex items-center justify-center h-8 w-8 rounded-lg border border-[#2a324a] text-text-secondary opacity-50 cursor-not-allowed">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="flex items-center justify-center h-8 w-8 rounded-lg bg-[#252d46] text-white font-medium text-xs">1</button>
+<button class="flex items-center justify-center h-8 w-8 rounded-lg border border-[#2a324a] text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors text-xs">2</button>
+<button class="flex items-center justify-center h-8 w-8 rounded-lg border border-[#2a324a] text-text-secondary hover:bg-[#252d46] hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

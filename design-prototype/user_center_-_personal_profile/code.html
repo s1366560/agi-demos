@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>User Center - Personal Profile</title>
+<!-- Google Fonts & Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1e3fae",
+                        "primary-dark": "#162f85",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#121520",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1e2230",
+                        "text-main": "#0f111a",
+                        "text-main-dark": "#e2e8f0",
+                        "text-sub": "#536293",
+                        "text-sub-dark": "#94a3b8",
+                        "border-light": "#e2e8f0",
+                        "border-dark": "#334155",
+                    },
+                    fontFamily: {
+                        "display": ['Inter', 'Noto Sans SC', 'sans-serif'],
+                        "body": ['Inter', 'Noto Sans SC', 'sans-serif'],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main dark:text-text-main-dark transition-colors duration-200">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Side Navigation -->
+<aside class="flex w-64 flex-col border-r border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark transition-colors duration-200 hidden md:flex shrink-0 z-20">
+<div class="flex h-16 items-center px-6 border-b border-border-light dark:border-border-dark">
+<div class="flex items-center gap-2">
+<div class="flex h-8 w-8 items-center justify-center rounded bg-primary text-white">
+<span class="material-symbols-outlined text-xl">memory</span>
+</div>
+<span class="text-lg font-bold text-text-main dark:text-text-main-dark">Intellimem</span>
+</div>
+</div>
+<div class="flex flex-1 flex-col justify-between overflow-y-auto p-4">
+<nav class="flex flex-col gap-1">
+<div class="px-2 py-3">
+<p class="text-xs font-semibold uppercase tracking-wider text-text-sub dark:text-text-sub-dark">Main Menu</p>
+</div>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-text-sub dark:text-text-sub-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-text-sub dark:text-text-sub-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">folder</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-text-sub dark:text-text-sub-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">memory_alt</span>
+<span class="text-sm font-medium">Memory Pools</span>
+</a>
+<div class="mt-4 px-2 py-3">
+<p class="text-xs font-semibold uppercase tracking-wider text-text-sub dark:text-text-sub-dark">Settings</p>
+</div>
+<a class="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2 text-primary dark:text-white dark:bg-primary/20" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-sm font-medium">User Center</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-text-sub dark:text-text-sub-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium">Platform Settings</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-text-sub dark:text-text-sub-dark hover:bg-background-light dark:hover:bg-background-dark hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">security</span>
+<span class="text-sm font-medium">Security</span>
+</a>
+</nav>
+<div class="flex flex-col gap-2 border-t border-border-light dark:border-border-dark pt-4">
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-text-sub dark:text-text-sub-dark hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="text-sm font-medium">Log Out</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex h-full flex-1 flex-col overflow-y-auto bg-background-light dark:bg-background-dark">
+<!-- Top Bar / Breadcrumbs -->
+<header class="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border-light dark:border-border-dark bg-surface-light/80 dark:bg-surface-dark/80 px-6 backdrop-blur-md">
+<div class="flex items-center gap-2 text-sm">
+<a class="font-medium text-text-sub dark:text-text-sub-dark hover:text-primary" href="#">Home</a>
+<span class="text-text-sub dark:text-text-sub-dark">/</span>
+<a class="font-medium text-text-sub dark:text-text-sub-dark hover:text-primary" href="#">User Center</a>
+<span class="text-text-sub dark:text-text-sub-dark">/</span>
+<span class="font-semibold text-primary dark:text-white">Profile</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex h-8 w-8 items-center justify-center rounded-full text-text-sub hover:bg-gray-100 dark:text-text-sub-dark dark:hover:bg-gray-800">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex h-8 w-8 items-center justify-center rounded-full text-text-sub hover:bg-gray-100 dark:text-text-sub-dark dark:hover:bg-gray-800">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="h-8 w-8 overflow-hidden rounded-full border border-gray-200 dark:border-gray-700 bg-gray-100" data-alt="Small user avatar top right">
+<img alt="User" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6qjHhFeEj1hB4wDXAXDaoOHwK30J5TmLxd10_-mtAIesige0lczvgkmINf7N3y5KsWq0gsA9sd1N4ZnTKXJnXKaFbHjG25fExx230Sv7LM4HF9rTrEsR6SjarN4nsAjOBXZalxs6X2gXcc5LVf0eYmJSlsyzJ7_AT0uEsp-BLw6SMfcNJa_zldWSAUwG6ZDwlJu6Dux72XmNR-dRTw8CPZhomocD8TakSs2HGbWfjRjIR0wFJvUIc_vD-38HSR1Jx_2nC4-y_wYE"/>
+</div>
+</div>
+</header>
+<!-- Page Content Container -->
+<div class="mx-auto w-full max-w-7xl p-6 lg:p-8">
+<!-- Page Heading -->
+<div class="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+<div>
+<h1 class="text-3xl font-bold tracking-tight text-text-main dark:text-white">Personal Profile</h1>
+<p class="mt-2 text-text-sub dark:text-text-sub-dark">Manage your account settings and preferences.</p>
+</div>
+<div class="hidden sm:block">
+<span class="inline-flex items-center rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20 dark:bg-green-900/30 dark:text-green-400">
+<span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-green-600"></span>
+                            Account Active
+                        </span>
+</div>
+</div>
+<!-- Content Grid -->
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-3 xl:gap-8">
+<!-- Left Column: Summary Card -->
+<div class="lg:col-span-1">
+<div class="sticky top-24 overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-sm dark:border-border-dark dark:bg-surface-dark">
+<div class="relative h-32 bg-gradient-to-r from-primary/80 to-blue-600/80">
+<!-- Background decoration -->
+<div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+</div>
+<div class="relative flex flex-col items-center px-6 pb-8">
+<div class="relative -mt-16 mb-4">
+<div class="h-32 w-32 overflow-hidden rounded-full border-4 border-surface-light bg-surface-light shadow-md dark:border-surface-dark" data-alt="User avatar large profile">
+<img alt="Alex Chen" class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDiE9KnO7YivFUBAHF7zV9ou8c17cYOB4vgfbmVAPioNMah_QgW7HodHtbU4kjXuiGGq2FnWvTBFJs0QtDO68UvZeYGgFA4UxdHTp5B1rAD8fP3Q-NRXbWcNldmXmUUSvxfIXYuVNMjk-EyIXTspOGakfbYWLU761USubWPq0DiTrNOGoEWRujUun4JfLNqwc2HAUUM94pls4EvtrjNTdcc-fK_S2_qEBMlLHoivBvogrGr6oI8FFfokO5K95JClsicGLzieU55Xs"/>
+</div>
+<button class="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-lg transition-transform hover:scale-110 hover:bg-primary-dark">
+<span class="material-symbols-outlined text-sm">photo_camera</span>
+</button>
+</div>
+<h2 class="text-xl font-bold text-text-main dark:text-white">Alex Chen</h2>
+<p class="text-sm font-medium text-text-sub dark:text-text-sub-dark">Senior Data Architect</p>
+<div class="mt-4 flex w-full flex-col gap-2 border-t border-border-light py-4 dark:border-border-dark">
+<div class="flex items-center gap-3 text-sm text-text-sub dark:text-text-sub-dark">
+<span class="material-symbols-outlined text-lg">business</span>
+<span>Acme Corp - Engineering</span>
+</div>
+<div class="flex items-center gap-3 text-sm text-text-sub dark:text-text-sub-dark">
+<span class="material-symbols-outlined text-lg">location_on</span>
+<span>San Francisco, CA</span>
+</div>
+<div class="flex items-center gap-3 text-sm text-text-sub dark:text-text-sub-dark">
+<span class="material-symbols-outlined text-lg">calendar_month</span>
+<span>Member since Sep 2023</span>
+</div>
+</div>
+<div class="mt-2 w-full">
+<div class="mb-2 flex items-center justify-between text-xs">
+<span class="text-text-sub dark:text-text-sub-dark">Profile Completion</span>
+<span class="font-medium text-primary dark:text-blue-400">85%</span>
+</div>
+<div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+<div class="h-full w-[85%] rounded-full bg-primary"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Settings Form -->
+<div class="lg:col-span-2">
+<div class="rounded-xl border border-border-light bg-surface-light shadow-sm dark:border-border-dark dark:bg-surface-dark">
+<!-- Tabs -->
+<div class="border-b border-border-light px-6 dark:border-border-dark">
+<nav aria-label="Tabs" class="-mb-px flex space-x-8">
+<button aria-current="page" class="border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary dark:text-white">Basic Info</button>
+<button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-text-sub hover:border-gray-300 hover:text-text-main dark:text-text-sub-dark dark:hover:border-gray-600 dark:hover:text-white">Contact Details</button>
+<button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-text-sub hover:border-gray-300 hover:text-text-main dark:text-text-sub-dark dark:hover:border-gray-600 dark:hover:text-white">Preferences</button>
+<button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-text-sub hover:border-gray-300 hover:text-text-main dark:text-text-sub-dark dark:hover:border-gray-600 dark:hover:text-white">Security</button>
+</nav>
+</div>
+<div class="p-6">
+<form action="#" method="POST" onsubmit="event.preventDefault();">
+<!-- Basic Information Section -->
+<div class="mb-8">
+<h3 class="mb-4 text-base font-semibold text-text-main dark:text-white">Basic Information</h3>
+<div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="username">Username</label>
+<div class="mt-2">
+<input class="block w-full rounded-md border-0 py-1.5 text-text-sub shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 bg-gray-50 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-gray-800 dark:ring-gray-700 dark:text-gray-400 sm:text-sm sm:leading-6 cursor-not-allowed" disabled="" id="username" name="username" type="text" value="alex.chen"/>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="full-name">Full Name</label>
+<div class="mt-2">
+<input class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="full-name" name="full-name" type="text" value="Alex Chen"/>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="job-title">Job Title</label>
+<div class="mt-2">
+<input class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="job-title" name="job-title" type="text" value="Senior Data Architect"/>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="department">Department</label>
+<div class="mt-2">
+<select class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="department" name="department">
+<option>Engineering</option>
+<option>Product</option>
+<option>Design</option>
+<option>Marketing</option>
+</select>
+</div>
+</div>
+<div class="col-span-full">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="bio">About</label>
+<div class="mt-2">
+<textarea class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="bio" name="bio" rows="3">Specializing in distributed memory systems and large-scale data architecture optimization.</textarea>
+</div>
+<p class="mt-2 text-xs text-text-sub dark:text-text-sub-dark">Brief description for your profile. Max 200 characters.</p>
+</div>
+</div>
+</div>
+<hr class="border-border-light dark:border-border-dark my-8"/>
+<!-- Contact Information Section -->
+<div class="mb-8">
+<h3 class="mb-4 text-base font-semibold text-text-main dark:text-white">Contact Information</h3>
+<div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="email">Email Address</label>
+<div class="mt-2">
+<input class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="email" name="email" type="email" value="alex.chen@acmecorp.com"/>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="phone">Phone Number</label>
+<div class="mt-2">
+<input class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="phone" name="phone" type="tel" value="+1 (555) 000-0000"/>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="location">Office Location</label>
+<div class="mt-2">
+<div class="relative rounded-md shadow-sm">
+<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+<span class="material-symbols-outlined text-gray-400 text-lg">location_on</span>
+</div>
+<input class="block w-full rounded-md border-0 py-1.5 pl-10 text-text-main ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="location" name="location" placeholder="City, Country" type="text" value="San Francisco, CA"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<hr class="border-border-light dark:border-border-dark my-8"/>
+<!-- Preferences Section -->
+<div class="mb-8">
+<h3 class="mb-4 text-base font-semibold text-text-main dark:text-white">System Preferences</h3>
+<div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="language">Language</label>
+<div class="mt-2">
+<select class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="language" name="language">
+<option>English (US)</option>
+<option>Chinese (Simplified)</option>
+<option>Japanese</option>
+</select>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-text-main dark:text-text-main-dark" for="timezone">Timezone</label>
+<div class="mt-2">
+<select class="block w-full rounded-md border-0 py-1.5 text-text-main shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary dark:bg-background-dark dark:ring-gray-700 dark:text-white sm:text-sm sm:leading-6" id="timezone" name="timezone">
+<option>Pacific Time (US &amp; Canada)</option>
+<option>Eastern Time (US &amp; Canada)</option>
+<option>London (UTC)</option>
+</select>
+</div>
+</div>
+</div>
+</div>
+<!-- Upload Avatar Zone -->
+<div class="mb-8">
+<h3 class="mb-4 text-base font-semibold text-text-main dark:text-white">Profile Avatar</h3>
+<div class="mt-2 flex justify-center rounded-lg border border-dashed border-gray-300 px-6 py-10 dark:border-gray-600 dark:bg-background-dark/50">
+<div class="text-center">
+<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/20">
+<span class="material-symbols-outlined text-primary dark:text-blue-400">image</span>
+</div>
+<div class="mt-4 flex text-sm leading-6 text-text-sub dark:text-text-sub-dark justify-center">
+<label class="relative cursor-pointer rounded-md bg-transparent font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-primary-dark" for="file-upload">
+<span>Upload a file</span>
+<input class="sr-only" id="file-upload" name="file-upload" type="file"/>
+</label>
+<p class="pl-1">or drag and drop</p>
+</div>
+<p class="text-xs leading-5 text-text-sub dark:text-text-sub-dark">PNG, JPG, GIF up to 5MB</p>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center justify-end gap-x-4 border-t border-border-light pt-6 dark:border-border-dark">
+<button class="rounded-md px-3 py-2 text-sm font-semibold text-text-main shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:ring-gray-600 dark:text-white dark:hover:bg-gray-800" type="button">Cancel</button>
+<button class="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" type="submit">Save Changes</button>
+</div>
+</form>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Toast Notification (Static Example) -->
+<div class="pointer-events-none fixed inset-0 flex items-end px-4 py-6 sm:items-start sm:p-6 z-50">
+<div class="flex w-full flex-col items-center space-y-4 sm:items-end">
+<!-- Notification panel -->
+<div class="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-surface-light shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-surface-dark dark:ring-white dark:ring-opacity-10 opacity-0 transition-opacity duration-300 transform translate-y-2">
+<div class="p-4">
+<div class="flex items-start">
+<div class="flex-shrink-0">
+<span class="material-symbols-outlined text-green-400">check_circle</span>
+</div>
+<div class="ml-3 w-0 flex-1 pt-0.5">
+<p class="text-sm font-medium text-text-main dark:text-white">Successfully saved!</p>
+<p class="mt-1 text-sm text-text-sub dark:text-text-sub-dark">Your profile information has been updated.</p>
+</div>
+<div class="ml-4 flex flex-shrink-0">
+<button class="inline-flex rounded-md bg-surface-light text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:bg-surface-dark dark:hover:text-gray-300" type="button">
+<span class="sr-only">Close</span>
+<span class="material-symbols-outlined text-sm">close</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

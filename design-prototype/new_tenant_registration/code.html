@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>New Tenant Registration - MemoryFlow</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111521",
+                        "surface-dark": "#1b2032",
+                        "surface-light": "#ffffff",
+                        "border-dark": "#252d46",
+                        "border-light": "#e2e8f0",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased min-h-screen flex flex-col">
+<!-- Top Navigation -->
+<header class="w-full border-b border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark sticky top-0 z-50">
+<div class="max-w-[1280px] mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="size-8 text-primary flex items-center justify-center bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined text-2xl">memory</span>
+</div>
+<h2 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">MemoryFlow</h2>
+</div>
+<div class="flex items-center gap-4">
+<p class="hidden sm:block text-sm text-slate-500 dark:text-slate-400">Already have an account?</p>
+<button class="flex items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-transparent border border-slate-200 dark:border-border-dark text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-sm font-semibold">
+                    Sign In
+                </button>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+<!-- Abstract Background Pattern -->
+<div class="absolute inset-0 z-0 opacity-40 dark:opacity-20 pointer-events-none">
+<div class="absolute top-0 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl transform -translate-y-1/2"></div>
+<div class="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl transform translate-y-1/3"></div>
+</div>
+<div class="layout-content-container w-full max-w-[540px] z-10">
+<!-- Registration Card -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-2xl shadow-xl dark:shadow-2xl border border-slate-200 dark:border-border-dark overflow-hidden">
+<!-- Card Header -->
+<div class="p-8 pb-4">
+<div class="flex flex-col gap-2">
+<h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Register New Tenant</h1>
+<p class="text-slate-500 dark:text-slate-400 text-base">Create an organization workspace to manage your intelligent memory projects and users.</p>
+</div>
+</div>
+<!-- Form -->
+<div class="p-8 pt-2 flex flex-col gap-6">
+<!-- Organization Section -->
+<div class="space-y-4">
+<h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Organization Details</h3>
+<label class="flex flex-col w-full">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Company Name</span>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[20px]">domain</span>
+</div>
+<input class="form-input w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-[#151a29] text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 transition-all" placeholder="Enter your organization name" type="text"/>
+</div>
+</label>
+</div>
+<!-- Administrator Section -->
+<div class="space-y-4">
+<h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mt-2">Administrator Credentials</h3>
+<label class="flex flex-col w-full">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Admin Email</span>
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[20px]">mail</span>
+</div>
+<input class="form-input w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-[#151a29] text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 transition-all" placeholder="admin@company.com" type="email"/>
+</div>
+</label>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<label class="flex flex-col w-full">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Password</span>
+<div class="relative flex w-full">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+</div>
+<input class="form-input w-full rounded-l-lg rounded-r-none border-slate-300 dark:border-border-dark bg-white dark:bg-[#151a29] text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 border-r-0 z-0 transition-all" placeholder="Create password" type="password"/>
+<button class="px-3 flex items-center justify-center bg-white dark:bg-[#151a29] border border-l-0 border-slate-300 dark:border-border-dark rounded-r-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility_off</span>
+</button>
+</div>
+</label>
+<label class="flex flex-col w-full">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">Confirm Password</span>
+<div class="relative flex w-full">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[20px]">lock_reset</span>
+</div>
+<input class="form-input w-full rounded-lg border-slate-300 dark:border-border-dark bg-white dark:bg-[#151a29] text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary pl-10 h-12 text-sm placeholder:text-slate-400 dark:placeholder:text-slate-600 transition-all" placeholder="Confirm password" type="password"/>
+</div>
+</label>
+</div>
+<!-- Password Strength Meter -->
+<div class="flex gap-1 h-1 w-full mt-1">
+<div class="bg-red-500 h-full w-1/4 rounded-full"></div>
+<div class="bg-slate-200 dark:bg-slate-700 h-full w-1/4 rounded-full"></div>
+<div class="bg-slate-200 dark:bg-slate-700 h-full w-1/4 rounded-full"></div>
+<div class="bg-slate-200 dark:bg-slate-700 h-full w-1/4 rounded-full"></div>
+</div>
+<p class="text-xs text-slate-500 dark:text-slate-400">Password strength: <span class="text-red-500 font-medium">Weak</span></p>
+</div>
+<!-- Terms Checkbox -->
+<div class="flex items-start gap-3 mt-2">
+<div class="flex items-center h-5">
+<input class="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-primary focus:ring-primary bg-white dark:bg-slate-800" id="terms" type="checkbox"/>
+</div>
+<label class="text-sm text-slate-600 dark:text-slate-300 leading-tight pt-0.5" for="terms">
+                            I agree to the <a class="text-primary hover:underline font-medium" href="#">Terms of Service</a> and <a class="text-primary hover:underline font-medium" href="#">Privacy Policy</a>.
+                        </label>
+</div>
+<!-- Actions -->
+<div class="pt-2">
+<button class="w-full flex items-center justify-center h-12 px-6 rounded-lg bg-primary hover:bg-blue-700 text-white font-bold text-sm tracking-wide shadow-lg shadow-primary/25 transition-all transform active:scale-[0.98]">
+                            Create Organization
+                            <span class="material-symbols-outlined ml-2 text-lg">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Footer Links -->
+<div class="mt-8 text-center">
+<p class="text-sm text-slate-500 dark:text-slate-400">
+                    Need help? <a class="text-primary hover:text-blue-400 font-medium transition-colors" href="#">Contact Support</a>
+</p>
+</div>
+</div>
+</main>
+<!-- Simple Toast Notification (Visual Mockup) -->
+<div class="fixed bottom-6 right-6 z-50 animate-bounce">
+<div class="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-border-dark shadow-xl rounded-lg p-4 flex items-center gap-3 max-w-sm">
+<div class="bg-green-500/10 text-green-500 p-2 rounded-full">
+<span class="material-symbols-outlined text-xl">shield</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-slate-900 dark:text-white">Secure Connection</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Your data is encrypted end-to-end.</p>
+</div>
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 ml-2">
+<span class="material-symbols-outlined text-lg">close</span>
+</button>
+</div>
+</div>
+</body></html>

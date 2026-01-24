@@ -1,0 +1,572 @@
+"""
+LLM Provider SQLAlchemy Repository Implementation
+
+Implements the ProviderRepository interface using SQLAlchemy.
+Provides all CRUD operations, tenant resolution, and usage tracking.
+"""
+
+from datetime import datetime
+from typing import List, Optional
+from uuid import UUID, uuid4
+
+from sqlalchemy import and_, desc, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.llm_providers.models import (
+    LLMUsageLog,
+    LLMUsageLogCreate,
+    NoActiveProviderError,
+    ProviderConfig,
+    ProviderConfigCreate,
+    ProviderConfigUpdate,
+    ProviderHealth,
+    ProviderHealthCreate,
+    ResolvedProvider,
+    TenantProviderMapping,
+    UsageStatistics,
+)
+from src.domain.llm_providers.repositories import ProviderRepository
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.persistence.llm_providers_models import (
+    LLMProvider as LLMProviderORM,
+)
+from src.infrastructure.persistence.llm_providers_models import (
+    LLMUsageLog as LLMUsageLogORM,
+)
+from src.infrastructure.persistence.llm_providers_models import (
+    ProviderHealth as ProviderHealthORM,
+)
+from src.infrastructure.persistence.llm_providers_models import (
+    TenantProviderMapping as TenantProviderMappingORM,
+)
+from src.infrastructure.security.encryption_service import get_encryption_service
+
+
+class SQLAlchemyProviderRepository(ProviderRepository):
+    """
+    SQLAlchemy implementation of ProviderRepository.
+
+    Handles all database operations for LLM provider configuration
+    with proper encryption/decryption of API keys.
+    """
+
+    def __init__(self, session: Optional[AsyncSession] = None):
+        """
+        Initialize repository with database session.
+
+        Args:
+            session: Async database session. If None, creates new session.
+        """
+        self.session = session
+        self.encryption_service = get_encryption_service()
+
+    async def _get_session(self) -> AsyncSession:
+        """Get database session."""
+        if self.session is None:
+            raise RuntimeError(
+                "Database session not provided. "
+                "SQLAlchemyProviderRepository must be initialized with a session."
+            )
+        return self.session
+
+    async def _run_with_session(self, operation):
+        """Run operation with existing session or create a new ephemeral one."""
+        if self.session:
+            return await operation(self.session)
+
+        async with async_session_factory() as session:
+            return await operation(session)
+
+    def _orm_to_config(self, orm: LLMProviderORM) -> ProviderConfig:
+        """Convert ORM model to domain model."""
+        return ProviderConfig(
+            id=orm.id,
+            name=orm.name,
+            provider_type=orm.provider_type,
+            api_key_encrypted=orm.api_key_encrypted,
+            base_url=orm.base_url,
+            llm_model=orm.llm_model,
+            llm_small_model=orm.llm_small_model,
+            embedding_model=orm.embedding_model,
+            reranker_model=orm.reranker_model,
+            config=orm.config,
+            is_active=orm.is_active,
+            is_default=orm.is_default,
+            created_at=orm.created_at,
+            updated_at=orm.updated_at,
+        )
+
+    async def create(self, config: ProviderConfigCreate) -> ProviderConfig:
+        """Create a new provider configuration with idempotent upsert on name conflict."""
+
+        async def op(session: AsyncSession) -> ProviderConfig:
+            # Encrypt API key before storing
+            api_key_encrypted = self.encryption_service.encrypt(config.api_key)
+
+            # Build values dict for insert
+            values = {
+                "id": uuid4(),
+                "name": config.name,
+                "provider_type": config.provider_type.value,
+                "api_key_encrypted": api_key_encrypted,
+                "base_url": config.base_url,
+                "llm_model": config.llm_model,
+                "llm_small_model": config.llm_small_model,
+                "embedding_model": config.embedding_model,
+                "reranker_model": config.reranker_model,
+                "config": config.config or {},
+                "is_active": config.is_active,
+                "is_default": config.is_default,
+            }
+
+            # Use PostgreSQL ON CONFLICT DO NOTHING for atomic upsert
+            # This allows multiple processes to safely attempt creation simultaneously
+            stmt = pg_insert(LLMProviderORM).values(values)
+            stmt = stmt.on_conflict_do_nothing(constraint="llm_providers_name_key")
+
+            await session.execute(stmt)
+            await session.commit()
+
+            # Fetch the created (or existing) provider
+            result = await session.execute(
+                select(LLMProviderORM).where(LLMProviderORM.name == config.name)
+            )
+            orm = result.scalar_one()
+
+            return self._orm_to_config(orm)
+
+        return await self._run_with_session(op)
+
+    async def get_by_id(self, provider_id: UUID) -> Optional[ProviderConfig]:
+        """Get provider by ID."""
+
+        async def op(session):
+            from uuid import UUID as _UUID
+
+            pid = _UUID(str(provider_id))
+            result = await session.execute(select(LLMProviderORM).where(LLMProviderORM.id == pid))
+            orm = result.scalar_one_or_none()
+            return self._orm_to_config(orm) if orm else None
+
+        return await self._run_with_session(op)
+
+    async def get_by_name(self, name: str) -> Optional[ProviderConfig]:
+        """Get provider by name."""
+
+        async def op(session):
+            result = await session.execute(
+                select(LLMProviderORM).where(LLMProviderORM.name == name)
+            )
+            orm = result.scalar_one_or_none()
+            return self._orm_to_config(orm) if orm else None
+
+        return await self._run_with_session(op)
+
+    async def list_all(self, include_inactive: bool = False) -> List[ProviderConfig]:
+        """List all providers."""
+
+        async def op(session):
+            query = select(LLMProviderORM)
+            if not include_inactive:
+                query = query.where(LLMProviderORM.is_active)
+
+            result = await session.execute(query.order_by(LLMProviderORM.created_at))
+            orms = result.scalars().all()
+            return [self._orm_to_config(orm) for orm in orms]
+
+        return await self._run_with_session(op)
+
+    async def list_active(self) -> List[ProviderConfig]:
+        """List all active providers."""
+        return await self.list_all(include_inactive=False)
+
+    async def update(
+        self, provider_id: UUID, config: ProviderConfigUpdate
+    ) -> Optional[ProviderConfig]:
+        """Update provider configuration."""
+        session = await self._get_session()
+
+        # Get existing provider
+        from uuid import UUID as _UUID
+
+        pid = _UUID(str(provider_id))
+        result = await session.execute(select(LLMProviderORM).where(LLMProviderORM.id == pid))
+        orm = result.scalar_one_or_none()
+
+        if not orm:
+            return None
+
+        # Update fields
+        if config.name is not None:
+            orm.name = config.name
+        if config.provider_type is not None:
+            orm.provider_type = config.provider_type.value
+        if config.api_key is not None:
+            orm.api_key_encrypted = self.encryption_service.encrypt(config.api_key)
+        if config.base_url is not None:
+            orm.base_url = config.base_url
+        if config.llm_model is not None:
+            orm.llm_model = config.llm_model
+        if config.llm_small_model is not None:
+            orm.llm_small_model = config.llm_small_model
+        if config.embedding_model is not None:
+            orm.embedding_model = config.embedding_model
+        if config.reranker_model is not None:
+            orm.reranker_model = config.reranker_model
+        if config.config is not None:
+            orm.config = config.config
+        if config.is_active is not None:
+            orm.is_active = config.is_active
+        if config.is_default is not None:
+            orm.is_default = config.is_default
+
+        await session.flush()
+        await session.commit()
+        await session.refresh(orm)
+
+        return self._orm_to_config(orm)
+
+    async def delete(self, provider_id: UUID, hard_delete: bool = False) -> bool:
+        """Delete provider.
+
+        Args:
+            provider_id: Provider ID to delete
+            hard_delete: If True, permanently delete from database. If False, soft delete (set is_active=False).
+        """
+
+        async def op(session: AsyncSession) -> bool:
+            from uuid import UUID as _UUID
+
+            pid = _UUID(str(provider_id))
+            result = await session.execute(select(LLMProviderORM).where(LLMProviderORM.id == pid))
+            orm = result.scalar_one_or_none()
+
+            if not orm:
+                return False
+
+            if hard_delete:
+                # Hard delete - remove from database
+                await session.delete(orm)
+            else:
+                # Soft delete
+                orm.is_active = False
+
+            await session.flush()
+            await session.commit()
+
+            return True
+
+        return await self._run_with_session(op)
+
+    async def find_default_provider(self) -> Optional[ProviderConfig]:
+        """Find the default provider."""
+
+        async def op(session):
+            result = await session.execute(
+                select(LLMProviderORM)
+                .where(LLMProviderORM.is_default)
+                .where(LLMProviderORM.is_active)
+            )
+            orm = result.scalar_one_or_none()
+            return self._orm_to_config(orm) if orm else None
+
+        return await self._run_with_session(op)
+
+    async def find_first_active_provider(self) -> Optional[ProviderConfig]:
+        """Find the first active provider as fallback."""
+
+        async def op(session):
+            result = await session.execute(
+                select(LLMProviderORM)
+                .where(LLMProviderORM.is_active)
+                .order_by(LLMProviderORM.created_at)
+                .limit(1)
+            )
+            orm = result.scalar_one_or_none()
+            return self._orm_to_config(orm) if orm else None
+
+        return await self._run_with_session(op)
+
+    async def find_tenant_provider(self, tenant_id: str) -> Optional[ProviderConfig]:
+        """Find provider assigned to specific tenant."""
+
+        async def op(session):
+            result = await session.execute(
+                select(LLMProviderORM)
+                .join(TenantProviderMappingORM)
+                .where(TenantProviderMappingORM.tenant_id == tenant_id)
+                .where(LLMProviderORM.is_active)
+                .order_by(TenantProviderMappingORM.priority)
+                .limit(1)
+            )
+            orm = result.scalar_one_or_none()
+            return self._orm_to_config(orm) if orm else None
+
+        return await self._run_with_session(op)
+
+    async def resolve_provider(self, tenant_id: Optional[str] = None) -> ResolvedProvider:
+        """
+        Resolve appropriate provider for tenant.
+
+        Resolution hierarchy:
+        1. Tenant-specific provider (if configured)
+        2. Default provider (if set)
+        3. First active provider (fallback)
+
+        Raises:
+            NoActiveProviderError: If no active provider found
+        """
+        provider = None
+        resolution_source = ""
+
+        if tenant_id:
+            # Try tenant-specific provider
+            provider = await self.find_tenant_provider(tenant_id)
+            if provider:
+                resolution_source = "tenant"
+
+        if not provider:
+            # Try default provider
+            provider = await self.find_default_provider()
+            if provider:
+                resolution_source = "default"
+
+        if not provider:
+            # Fallback to first active provider
+            provider = await self.find_first_active_provider()
+            if provider:
+                resolution_source = "fallback"
+
+        if not provider:
+            raise NoActiveProviderError("No active LLM provider configured")
+
+        return ResolvedProvider(
+            provider=provider,
+            resolution_source=resolution_source,
+        )
+
+    async def create_health_check(self, health: ProviderHealthCreate) -> ProviderHealth:
+        """Create a health check entry."""
+        session = await self._get_session()
+
+        orm = ProviderHealthORM(
+            provider_id=health.provider_id,
+            status=health.status.value,
+            error_message=health.error_message,
+            response_time_ms=health.response_time_ms,
+            # last_check will be set automatically by database default
+        )
+
+        session.add(orm)
+        await session.flush()
+        await session.commit()
+        # Don't use refresh with composite keys, access the value directly after flush
+        # The last_check will be set by database default during flush
+
+        return ProviderHealth(
+            provider_id=orm.provider_id,
+            status=orm.status,
+            last_check=orm.last_check,
+            error_message=orm.error_message,
+            response_time_ms=orm.response_time_ms,
+        )
+
+    async def get_latest_health(self, provider_id: UUID) -> Optional[ProviderHealth]:
+        """Get latest health check for provider."""
+        session = await self._get_session()
+
+        result = await session.execute(
+            select(ProviderHealthORM)
+            .where(ProviderHealthORM.provider_id == provider_id)
+            .order_by(desc(ProviderHealthORM.last_check))
+            .limit(1)
+        )
+        orm = result.scalar_one_or_none()
+
+        if not orm:
+            return None
+
+        return ProviderHealth(
+            provider_id=orm.provider_id,
+            status=orm.status,
+            last_check=orm.last_check,
+            error_message=orm.error_message,
+            response_time_ms=orm.response_time_ms,
+        )
+
+    async def create_usage_log(self, usage_log: LLMUsageLogCreate) -> LLMUsageLog:
+        """Create a usage log entry."""
+        session = await self._get_session()
+
+        orm = LLMUsageLogORM(
+            id=uuid4(),
+            provider_id=usage_log.provider_id,
+            tenant_id=usage_log.tenant_id,
+            operation_type=usage_log.operation_type.value,
+            model_name=usage_log.model_name,
+            prompt_tokens=usage_log.prompt_tokens,
+            completion_tokens=usage_log.completion_tokens,
+            cost_usd=usage_log.cost_usd,
+        )
+
+        session.add(orm)
+        await session.flush()
+        await session.commit()
+        await session.refresh(orm)
+
+        return LLMUsageLog(
+            id=orm.id,
+            provider_id=orm.provider_id,
+            tenant_id=orm.tenant_id,
+            operation_type=orm.operation_type,
+            model_name=orm.model_name,
+            prompt_tokens=orm.prompt_tokens,
+            completion_tokens=orm.completion_tokens,
+            total_tokens=orm.total_tokens,
+            cost_usd=orm.cost_usd,
+            created_at=orm.created_at,
+        )
+
+    async def get_usage_statistics(
+        self,
+        provider_id: Optional[UUID] = None,
+        tenant_id: Optional[str] = None,
+        operation_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> List[UsageStatistics]:
+        """Get aggregated usage statistics."""
+        session = await self._get_session()
+
+        # Build query - simplified without health check join to avoid correlation issues
+        query = (
+            select(
+                LLMUsageLogORM.provider_id,
+                LLMUsageLogORM.tenant_id,
+                LLMUsageLogORM.operation_type,
+                func.count(LLMUsageLogORM.id).label("total_requests"),
+                func.sum(LLMUsageLogORM.prompt_tokens).label("total_prompt_tokens"),
+                func.sum(LLMUsageLogORM.completion_tokens).label("total_completion_tokens"),
+                func.sum(LLMUsageLogORM.prompt_tokens + LLMUsageLogORM.completion_tokens).label(
+                    "total_tokens"
+                ),
+                func.sum(LLMUsageLogORM.cost_usd).label("total_cost_usd"),
+                func.min(LLMUsageLogORM.created_at).label("first_request_at"),
+                func.max(LLMUsageLogORM.created_at).label("last_request_at"),
+            )
+            .select_from(LLMUsageLogORM)
+            .group_by(
+                LLMUsageLogORM.provider_id,
+                LLMUsageLogORM.tenant_id,
+                LLMUsageLogORM.operation_type,
+            )
+        )
+
+        # Apply filters
+        if provider_id is not None:
+            query = query.where(LLMUsageLogORM.provider_id == provider_id)
+        if tenant_id is not None:
+            query = query.where(LLMUsageLogORM.tenant_id == tenant_id)
+        if operation_type is not None:
+            query = query.where(LLMUsageLogORM.operation_type == operation_type)
+        if start_date is not None:
+            query = query.where(LLMUsageLogORM.created_at >= start_date)
+        if end_date is not None:
+            query = query.where(LLMUsageLogORM.created_at <= end_date)
+
+        result = await session.execute(query)
+        rows = result.all()
+
+        statistics = []
+        for row in rows:
+            stats = UsageStatistics(
+                provider_id=row.provider_id,
+                tenant_id=row.tenant_id,
+                operation_type=row.operation_type,
+                total_requests=row.total_requests,
+                total_prompt_tokens=row.total_prompt_tokens or 0,
+                total_completion_tokens=row.total_completion_tokens or 0,
+                total_tokens=row.total_tokens or 0,
+                total_cost_usd=row.total_cost_usd,
+                avg_response_time_ms=None,  # Simplified query without health check join
+                first_request_at=row.first_request_at,
+                last_request_at=row.last_request_at,
+            )
+            statistics.append(stats)
+
+        return statistics
+
+    async def assign_provider_to_tenant(
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        priority: int = 0,
+    ) -> TenantProviderMapping:
+        """Assign provider to tenant."""
+        session = await self._get_session()
+
+        orm = TenantProviderMappingORM(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            provider_id=provider_id,
+            priority=priority,
+        )
+
+        session.add(orm)
+        await session.flush()
+        await session.commit()
+        await session.refresh(orm)
+
+        return TenantProviderMapping(
+            id=orm.id,
+            tenant_id=orm.tenant_id,
+            provider_id=orm.provider_id,
+            priority=orm.priority,
+            created_at=orm.created_at,
+        )
+
+    async def unassign_provider_from_tenant(self, tenant_id: str, provider_id: UUID) -> bool:
+        """Unassign provider from tenant."""
+        session = await self._get_session()
+
+        result = await session.execute(
+            select(TenantProviderMappingORM).where(
+                and_(
+                    TenantProviderMappingORM.tenant_id == tenant_id,
+                    TenantProviderMappingORM.provider_id == provider_id,
+                )
+            )
+        )
+        orm = result.scalar_one_or_none()
+
+        if not orm:
+            return False
+
+        await session.delete(orm)
+        await session.flush()
+        await session.commit()
+
+        return True
+
+    async def get_tenant_providers(self, tenant_id: str) -> List[TenantProviderMapping]:
+        """Get all providers assigned to tenant."""
+        session = await self._get_session()
+
+        result = await session.execute(
+            select(TenantProviderMappingORM)
+            .where(TenantProviderMappingORM.tenant_id == tenant_id)
+            .order_by(TenantProviderMappingORM.priority)
+        )
+        orms = result.scalars().all()
+
+        return [
+            TenantProviderMapping(
+                id=orm.id,
+                tenant_id=orm.tenant_id,
+                provider_id=orm.provider_id,
+                priority=orm.priority,
+                created_at=orm.created_at,
+            )
+            for orm in orms
+        ]

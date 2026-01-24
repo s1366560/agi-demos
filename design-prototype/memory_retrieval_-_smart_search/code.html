@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Memory Retrieval - Advanced Smart Search</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1e3fae",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#121520",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1e212b",
+                        "border-light": "#e8eaf2",
+                        "border-dark": "#2d3142",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+        }
+        .animate-float {
+            animation: float 4s ease-in-out infinite;
+        }
+        .animate-float-delayed {
+            animation: float 5s ease-in-out infinite 1s;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display h-screen flex overflow-hidden">
+<nav class="w-64 bg-surface-light dark:bg-surface-dark border-r border-border-light dark:border-border-dark flex flex-col justify-between shrink-0 transition-colors duration-200 z-20">
+<div class="flex flex-col gap-6 p-4">
+<div class="flex items-center gap-3">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg h-10 w-10 bg-primary flex items-center justify-center text-white" data-alt="Abstract memory logo showing connected nodes">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-slate-900 dark:text-white text-base font-bold leading-tight">Memory Platform</h1>
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium">Acme Corp</p>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary dark:text-blue-400" href="#">
+<span class="material-symbols-outlined font-variation-settings-filled">search</span>
+<span class="text-sm font-medium">Smart Search</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">folder</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">smart_toy</span>
+<span class="text-sm font-medium">Agents</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</div>
+<div class="p-4 border-t border-border-light dark:border-border-dark">
+<div class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors">
+<div class="h-9 w-9 rounded-full bg-slate-200 dark:bg-slate-700 bg-center bg-cover" data-alt="User profile avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuC5olsYHIttugi7rPy63IUHPV98vs2LtnqxjlGPDEeR47cv-FGjf9FM4_xbiJU-MTJ8J6mWCDC2a784V4t7HeBlVe_g2UfP1paUdBa4QZnWveoABQKtUHMBr5Kw7qV8EqMuSqJAC7SfEMJlG0tm8C4Qy3U2nZWCRhYjoHQ9Wm2fgpncBIh37dDMB2NKt3I_t4-pvLXkOK6hGOkCjE9F33HRR4fZyIiMiOAJx34MJSiz8t7Pjqq9MfAEl3Da_gs99iV3DdySRzjb5Mg");'></div>
+<div class="flex flex-col overflow-hidden">
+<p class="text-sm font-medium text-slate-900 dark:text-white truncate">Alex Chen</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">Engineering Lead</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 ml-auto text-lg">expand_more</span>
+</div>
+</div>
+</nav>
+<main class="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark">
+<header class="flex flex-col gap-4 px-6 pt-6 pb-2 shrink-0">
+<div class="flex items-center gap-2 text-sm">
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors font-medium" href="#">Acme Corp</a>
+<span class="text-slate-300 dark:text-slate-600">/</span>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors font-medium" href="#">Engineering</a>
+<span class="text-slate-300 dark:text-slate-600">/</span>
+<span class="text-slate-900 dark:text-white font-semibold">Memory Graph</span>
+</div>
+<div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+<div class="flex-1 w-full flex gap-3">
+<label class="flex-1 relative group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-slate-400 group-focus-within:text-primary transition-colors">search</span>
+</div>
+<input class="block w-full pl-10 pr-12 py-3 bg-white dark:bg-surface-dark border border-transparent focus:border-primary/50 ring-0 focus:ring-4 focus:ring-primary/10 rounded-xl text-sm placeholder-slate-400 text-slate-900 dark:text-white shadow-sm transition-all" placeholder="Search memories by keyword, concept, or ask a question..." type="text" value="Project Alpha architecture decisions"/>
+<div class="absolute inset-y-0 right-0 pr-2 flex items-center">
+<button class="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Voice Search">
+<span class="material-symbols-outlined text-xl">mic</span>
+</button>
+</div>
+</label>
+<button class="h-[46px] px-6 bg-primary hover:bg-primary/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 shrink-0">
+<span>Retrieve</span>
+<span class="material-symbols-outlined text-lg">arrow_forward</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex-1 flex overflow-hidden p-6 gap-6 pt-2">
+<aside class="w-80 flex flex-col gap-6 shrink-0 h-full">
+<div class="flex-1 flex flex-col gap-5 p-5 bg-white dark:bg-surface-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm overflow-y-auto custom-scrollbar">
+<div class="flex items-center justify-between pb-2 border-b border-border-light dark:border-border-dark">
+<h2 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl">tune</span>
+                            Config
+                        </h2>
+<span class="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded font-medium">Advanced</span>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Retrieval Mode</label>
+<div class="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex">
+<button class="flex-1 py-2 px-2 rounded-md bg-white dark:bg-surface-dark shadow-sm text-xs font-semibold text-primary dark:text-white transition-all ring-1 ring-black/5 dark:ring-white/10">Hybrid</button>
+<button class="flex-1 py-2 px-2 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-xs font-medium transition-all">Node Distance</button>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Strategy Recipe</label>
+<span class="material-symbols-outlined text-[16px] text-slate-400 cursor-help" title="Select the retrieval and reranking strategy pipeline">info</span>
+</div>
+<div class="relative">
+<select class="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
+<option selected="" value="COMBINED_HYBRID_SEARCH_RRF">Combined Hybrid (RRF)</option>
+<option value="EDGE_HYBRID_SEARCH_CROSS_ENCODER">Edge Hybrid (Cross-Encoder)</option>
+<option value="HYBRID_MMR">Hybrid Search (MMR)</option>
+<option value="STANDARD_DENSE">Standard Dense Only</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Focal Node UUID</label>
+<span class="material-symbols-outlined text-[16px] text-slate-400 cursor-help" title="Required for Node Distance Reranking strategies">help</span>
+</div>
+<div class="relative group">
+<input class="w-full text-xs py-2.5 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-shadow" placeholder="e.g. node-1234-uuid..." type="text"/>
+<span class="material-symbols-outlined absolute left-2.5 top-2.5 text-slate-400 text-sm group-focus-within:text-primary transition-colors">hub</span>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cross-Encoder Client</label>
+<div class="relative">
+<select class="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
+<option value="openai">OpenAI (text-embedding-3)</option>
+<option value="gemini">Google Gemini 1.5</option>
+<option selected="" value="bge">BGE-M3 (Local Optimized)</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</div>
+</div>
+</div>
+<div class="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+<div class="flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Time Range</h3>
+<button class="text-xs text-primary hover:underline font-medium">Reset</button>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
+<input class="text-primary focus:ring-primary bg-white dark:bg-surface-dark border-slate-300 dark:border-slate-600 w-3.5 h-3.5" name="time" type="radio"/>
+<span class="text-xs text-slate-700 dark:text-slate-300">All Time</span>
+</label>
+<label class="flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5 border border-primary/10 cursor-pointer group">
+<input checked="" class="text-primary focus:ring-primary bg-white dark:bg-surface-dark border-slate-300 dark:border-slate-600 w-3.5 h-3.5" name="time" type="radio"/>
+<span class="text-xs font-medium text-primary dark:text-blue-400">Last 30 Days</span>
+</label>
+<label class="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer group transition-colors">
+<input class="text-primary focus:ring-primary bg-white dark:bg-surface-dark border-slate-300 dark:border-slate-600 w-3.5 h-3.5" name="time" type="radio"/>
+<span class="text-xs text-slate-700 dark:text-slate-300">Custom Range</span>
+</label>
+</div>
+</div>
+<div class="flex flex-col gap-3">
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Tags</h3>
+<div class="flex flex-wrap gap-1.5">
+<button class="px-2 py-1 rounded-md bg-primary/10 text-primary border border-primary/10 text-[10px] font-semibold transition-colors">#architecture</button>
+<button class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent text-[10px] font-medium transition-colors">#meeting</button>
+<button class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent text-[10px] font-medium transition-colors">#decisions</button>
+<button class="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent text-[10px] font-medium transition-colors">#Q3</button>
+<button class="px-2 py-1 rounded-md bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-dashed border-slate-300 dark:border-slate-600 hover:border-primary/50 hover:text-primary text-[10px] font-medium transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">add</span> Add
+                            </button>
+</div>
+</div>
+</div>
+</aside>
+<div class="flex-1 flex flex-col gap-4 min-w-0 overflow-hidden">
+<section class="flex-[3] bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark relative overflow-hidden group min-h-[350px]">
+<div class="absolute top-4 left-4 z-10 flex gap-2">
+<div class="bg-white/90 dark:bg-slate-800/90 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-1 flex gap-1">
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors"><span class="material-symbols-outlined text-lg">add</span></button>
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors"><span class="material-symbols-outlined text-lg">remove</span></button>
+<div class="w-px bg-slate-200 dark:bg-slate-700 my-1"></div>
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors" title="Focus"><span class="material-symbols-outlined text-lg">center_focus_strong</span></button>
+<button class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors" title="Expand"><span class="material-symbols-outlined text-lg">fullscreen</span></button>
+</div>
+</div>
+<div class="absolute bottom-4 left-4 z-10">
+<div class="px-3 py-2 bg-white/90 dark:bg-slate-800/90 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm flex items-center gap-3">
+<span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                24 nodes found (Cross-Encoder reranked)
+                            </span>
+</div>
+</div>
+<div class="w-full h-full relative cursor-grab active:cursor-grabbing bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px]">
+<svg class="absolute inset-0 w-full h-full pointer-events-none stroke-slate-300 dark:stroke-slate-600" style="z-index: 0;">
+<line stroke-width="2" x1="50%" x2="70%" y1="50%" y2="30%"></line>
+<line stroke-width="2" x1="50%" x2="30%" y1="50%" y2="35%"></line>
+<line stroke-dasharray="4" stroke-width="1" x1="50%" x2="55%" y1="50%" y2="75%"></line>
+<line stroke-width="1" x1="70%" x2="80%" y1="30%" y2="40%"></line>
+</svg>
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 animate-float" style="z-index: 1;">
+<div class="w-16 h-16 rounded-full bg-primary shadow-lg shadow-primary/30 flex items-center justify-center border-4 border-white dark:border-surface-dark ring-2 ring-primary/20">
+<span class="material-symbols-outlined text-white text-3xl">hub</span>
+</div>
+<div class="bg-white dark:bg-slate-800 px-3 py-1 rounded-full shadow-md border border-slate-100 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white">
+                                Project Alpha
+                            </div>
+</div>
+<div class="absolute top-[30%] left-[70%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 animate-float-delayed" style="z-index: 1;">
+<div class="w-12 h-12 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30 flex items-center justify-center border-4 border-white dark:border-surface-dark transition-transform hover:scale-110 cursor-pointer">
+<span class="material-symbols-outlined text-white">description</span>
+</div>
+<div class="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                                Specs.pdf
+                            </div>
+</div>
+<div class="absolute top-[35%] left-[30%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2" style="z-index: 1;">
+<div class="w-12 h-12 rounded-full bg-amber-500 shadow-lg shadow-amber-500/30 flex items-center justify-center border-4 border-white dark:border-surface-dark transition-transform hover:scale-110 cursor-pointer">
+<span class="material-symbols-outlined text-white">folder</span>
+</div>
+<div class="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                                Assets
+                            </div>
+</div>
+<div class="absolute top-[75%] left-[55%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 animate-float" style="z-index: 1;">
+<div class="w-10 h-10 rounded-full bg-slate-400 dark:bg-slate-600 shadow-lg shadow-slate-500/30 flex items-center justify-center border-4 border-white dark:border-surface-dark transition-transform hover:scale-110 cursor-pointer opacity-80 hover:opacity-100">
+<span class="material-symbols-outlined text-white text-sm">link</span>
+</div>
+<div class="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                                External Ref
+                            </div>
+</div>
+<div class="absolute top-[40%] left-[80%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 animate-float-delayed" style="z-index: 1;">
+<div class="w-10 h-10 rounded-full bg-violet-500 shadow-lg shadow-violet-500/30 flex items-center justify-center border-4 border-white dark:border-surface-dark transition-transform hover:scale-110 cursor-pointer">
+<span class="material-symbols-outlined text-white text-sm">person</span>
+</div>
+<div class="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                                Sarah J.
+                            </div>
+</div>
+</div>
+</section>
+<section class="flex-[2] flex flex-col gap-3 min-h-0">
+<div class="flex items-center justify-between shrink-0 px-1">
+<div class="flex items-center gap-3">
+<h2 class="text-base font-bold text-slate-900 dark:text-white">Retrieval Results</h2>
+<span class="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300">24 items</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center bg-white dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-lg p-0.5">
+<button class="p-1.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"><span class="material-symbols-outlined text-lg">grid_view</span></button>
+<button class="p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"><span class="material-symbols-outlined text-lg">view_list</span></button>
+</div>
+<div class="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
+<div class="flex items-center gap-1 text-slate-500 cursor-pointer hover:text-primary transition-colors group">
+<span class="material-symbols-outlined text-lg text-slate-400 group-hover:text-primary">sort</span>
+<span class="text-xs font-medium">Relevance</span>
+</div>
+</div>
+</div>
+<div class="overflow-y-auto custom-scrollbar pr-2 flex-1 -mr-2">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-4">
+<div class="p-4 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark hover:border-primary/40 dark:hover:border-primary/40 cursor-pointer transition-all group flex flex-col h-full hover:shadow-md hover:shadow-primary/5">
+<div class="flex items-start justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+<span class="material-symbols-outlined text-xl">description</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Document</span>
+<span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">PDF</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-sm font-bold text-primary">98%</span>
+<span class="text-[10px] text-slate-400">Relevance</span>
+</div>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-primary transition-colors line-clamp-1">Architecture Specs v2.pdf</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 line-clamp-3">
+                                    ...final decision regarding the <mark class="bg-yellow-100 dark:bg-yellow-900/30 text-slate-900 dark:text-white px-0.5 rounded">architecture</mark> of Project Alpha was to utilize microservices for better scalability...
+                                </p>
+<div class="mt-auto pt-3 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
+<div class="flex gap-2">
+<span class="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">#specs</span>
+<span class="text-[10px] px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300 rounded-full font-medium">Top-1</span>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">Oct 12, 2023</span>
+</div>
+</div>
+<div class="p-4 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark hover:border-primary/40 dark:hover:border-primary/40 cursor-pointer transition-all group flex flex-col h-full hover:shadow-md hover:shadow-primary/5">
+<div class="flex items-start justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="p-2 rounded-lg bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400">
+<span class="material-symbols-outlined text-xl">forum</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Thread</span>
+<span class="text-xs font-bold text-violet-600 dark:text-violet-400">Slack</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-sm font-bold text-slate-500 dark:text-slate-400">85%</span>
+<span class="text-[10px] text-slate-400">Relevance</span>
+</div>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-primary transition-colors line-clamp-1">#engineering-general</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 line-clamp-3">
+                                    Alex: I think we should reconsider the database choice for the <mark class="bg-yellow-100 dark:bg-yellow-900/30 text-slate-900 dark:text-white px-0.5 rounded">Alpha</mark> project timeline due to latency concerns...
+                                </p>
+<div class="mt-auto pt-3 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
+<div class="flex gap-2">
+<span class="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">#discussion</span>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">Oct 10, 2023</span>
+</div>
+</div>
+<div class="p-4 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark hover:border-primary/40 dark:hover:border-primary/40 cursor-pointer transition-all group flex flex-col h-full hover:shadow-md hover:shadow-primary/5">
+<div class="flex items-start justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="p-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+<span class="material-symbols-outlined text-xl">image</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Asset</span>
+<span class="text-xs font-bold text-amber-600 dark:text-amber-400">IMG</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-sm font-bold text-slate-500 dark:text-slate-400">72%</span>
+<span class="text-[10px] text-slate-400">Relevance</span>
+</div>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-primary transition-colors line-clamp-1">Whiteboard_Session_3.png</h3>
+<div class="h-24 w-full bg-slate-100 dark:bg-slate-700 rounded-lg mb-4 bg-cover bg-center border border-slate-200 dark:border-slate-600" data-alt="Thumbnail of a whiteboard diagram showing system architecture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB-RX6Gt_XSK8ZtZMp8JupJqMpaZjnOk0Zp0GiUApPNy6cRkExfTUSTLqLO76xZaFotchYIdbNhd31AvYraHNpvCVOYrEPWRZ7dFNao5A0E841U7iMfiVOA_2kGSRuNCLr7t2ieVHCaQdIkO84JKkwSh7-u0pWYlRkIKJHdfR7YGGvs7lbz20-b-Bp_P0fRBnJNtwWBXFO_m5pJcKMthyDWgsaQKj7IhkhWBUegCqPuQ510RI_BbrxoEUOS-oTXXAPikTNegsRzTBM");'></div>
+<div class="mt-auto pt-3 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
+<div class="flex gap-2">
+<span class="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">#diagram</span>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">Sep 28, 2023</span>
+</div>
+</div>
+<div class="p-4 bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-border-light dark:border-border-dark hover:border-primary/40 dark:hover:border-primary/40 cursor-pointer transition-all group flex flex-col h-full hover:shadow-md hover:shadow-primary/5 opacity-80 hover:opacity-100">
+<div class="flex items-start justify-between mb-3">
+<div class="flex items-center gap-2">
+<div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined text-xl">link</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Reference</span>
+<span class="text-xs font-bold text-slate-600 dark:text-slate-300">WEB</span>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-sm font-bold text-slate-500 dark:text-slate-400">65%</span>
+<span class="text-[10px] text-slate-400">Relevance</span>
+</div>
+</div>
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-primary transition-colors line-clamp-1">JIRA Ticket: ALPHA-420</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 line-clamp-3">
+                                    Link to the external requirement document detailing the user flow for the login screen...
+                                </p>
+<div class="mt-auto pt-3 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
+<div class="flex gap-2">
+<span class="text-[10px] text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">#jira</span>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">Sep 15, 2023</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+
+</body></html>

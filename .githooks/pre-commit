@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO_ROOT"
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+PY_FILES=()
+WEB_FILES=()
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
+  if [[ "$f" == *.py ]]; then
+    PY_FILES+=("$f")
+  elif [[ "$f" =~ ^web/.*\.(ts|tsx|js|jsx)$ ]]; then
+    WEB_FILES+=("${f#web/}")
+  fi
+done <<< "$STAGED_FILES"
+
+if [[ ${#PY_FILES[@]} -gt 0 ]]; then
+  uv run ruff check --force-exclude --quiet "${PY_FILES[@]}"
+fi
+
+if [[ ${#WEB_FILES[@]} -gt 0 ]]; then
+  pushd web >/dev/null
+  pnpm exec eslint --max-warnings 0 "${WEB_FILES[@]}"
+  popd >/dev/null
+fi
+
+echo "✅ pre-commit: lightweight checks passed"

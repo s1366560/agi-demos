@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Agent Activity Log &amp; Visualization</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "primary-light": "#e8eaf3",
+                        "secondary": "#506095",
+                        "background-light": "#f8f9fb",
+                        "background-dark": "#111521",
+                        "text-main": "#0e111b",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>.custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-text-main antialiased overflow-hidden">
+<div class="flex h-screen w-full bg-background-light dark:bg-background-dark">
+<div class="hidden md:flex flex-col w-72 bg-white dark:bg-[#1a202c] border-r border-slate-200 dark:border-slate-800 h-full flex-shrink-0">
+<div class="flex flex-col h-full p-4 justify-between">
+<div class="flex flex-col gap-6">
+<div class="flex items-center gap-3 px-2">
+<div class="bg-primary/10 rounded-xl p-2 flex items-center justify-center size-10 text-primary">
+<span class="material-symbols-outlined text-3xl">psychology</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-text-main dark:text-white text-base font-bold leading-tight">NeuroFlow</h1>
+<p class="text-secondary text-xs font-medium">Tenant: Acme Corp</p>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-main hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary-light text-primary dark:bg-primary/20 dark:text-blue-300 transition-colors" href="#">
+<span class="material-symbols-outlined font-variation-settings-fill">smart_toy</span>
+<span class="text-sm font-bold">Active Agent</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-main hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary">memory</span>
+<span class="text-sm font-medium">Agent Memory</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-main hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors group" href="#">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary">database</span>
+<span class="text-sm font-medium">Knowledge Base</span>
+</a>
+</div>
+</div>
+<div class="flex flex-col gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-main hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-secondary">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+<div class="flex items-center gap-3 px-3 py-2 mt-2">
+<div class="size-8 rounded-full bg-cover bg-center ring-2 ring-white dark:ring-slate-700" data-alt="User profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDLnLdMwP-fckI8vaLlgWtRVRxO5BrHT7KjzJEe893S1t7TQhS1iIl8E0N1bgB2S2cBJGT_yCJCSFs_e3p6RNzLmM9O_aQCbTLddxTgSkiY9okOTFcH9dCpPuK6gWUKOOqGUzgVXo0fe6gGVPVKAbh8QFrBG-n8MGbcQYSTk-IsOOnwPt9Qn3-iGBaLaw1SNoOCIVd9KcjP1lFrpfl5jhsjM1nuPHKrqOoLdnR7iHFd4H2EGhalg0xxHoL7FOFJg646wV7F6dxBadA");'></div>
+<div class="flex flex-col">
+<p class="text-sm font-medium text-text-main dark:text-white">Alex Morgan</p>
+<p class="text-xs text-secondary">Lead Engineer</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+<header class="bg-white dark:bg-[#1a202c] border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between shrink-0 z-20">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-3">
+<h2 class="text-text-main dark:text-white text-xl font-bold tracking-tight">Session #8942: Market Analysis</h2>
+<span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold border border-green-200 dark:border-green-800 flex items-center gap-1">
+<span class="block size-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        RUNNING
+                    </span>
+</div>
+<p class="text-secondary text-sm flex items-center gap-2">
+<span>Workflow: 'Competitor Landscape Analysis'</span>
+<span class="text-slate-300">•</span>
+<span>Started 2m ago</span>
+</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/50 transition-colors text-sm font-semibold">
+<span class="material-symbols-outlined text-[18px]">stop_circle</span>
+                    Stop Agent
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-text-main hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:hover:bg-slate-700 transition-colors text-sm font-semibold shadow-sm">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Export Log
+                </button>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark scroll-smooth relative">
+<div class="max-w-[1000px] mx-auto px-6 py-8 flex flex-col gap-6 pb-24">
+<div class="bg-white dark:bg-[#1a202c] rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+<div class="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">account_tree</span>
+<h3 class="text-base font-bold text-text-main dark:text-white">Current Work Plan: Strategic Overview</h3>
+</div>
+<button class="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1">
+                            View Full Context
+                            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+</div>
+<div class="p-5 flex flex-col gap-5">
+<p class="text-sm text-secondary dark:text-slate-400">
+<strong>Goal:</strong> Identify gaps in competitor pricing models for the Q3 SaaS product launch.
+                        </p>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between text-xs font-medium text-secondary uppercase tracking-wider">
+<span>Progress: Step 3 of 5</span>
+<span>60% Complete</span>
+</div>
+<div class="h-2 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500 ease-out" style="width: 60%"></div>
+</div>
+</div>
+<div class="flex gap-2 pt-1 overflow-x-auto pb-2 custom-scrollbar">
+<div class="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 border border-green-100 rounded text-xs font-medium dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+                                1. Search DB
+                            </div>
+<div class="w-4 h-px bg-slate-300 dark:bg-slate-600 self-center"></div>
+<div class="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 border border-green-100 rounded text-xs font-medium dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+                                2. Scrape Pricing
+                            </div>
+<div class="w-4 h-px bg-slate-300 dark:bg-slate-600 self-center"></div>
+<div class="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-primary text-white shadow-md shadow-primary/20 rounded text-xs font-bold">
+<span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
+                                3. Compare Models
+                            </div>
+<div class="w-4 h-px border-t border-dashed border-slate-300 dark:border-slate-600 self-center"></div>
+<div class="flex-shrink-0 px-3 py-1.5 bg-white text-secondary border border-slate-200 rounded text-xs font-medium opacity-60 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
+                                4. Draft Report
+                            </div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4 my-2">
+<div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+<span class="text-xs font-semibold text-secondary uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">Step 1 History</span>
+<div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+</div>
+<div class="flex gap-4 group">
+<div class="flex flex-col items-center">
+<div class="size-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-secondary text-[18px]">psychology</span>
+</div>
+<div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 -my-2 group-last:hidden"></div>
+</div>
+<div class="flex-1 pb-6 min-w-0">
+<details class="group/thought bg-white dark:bg-[#1a202c] border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden" open="">
+<summary class="list-none flex justify-between items-center p-3 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors border-b border-slate-100 dark:border-slate-800/50">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary group-open/thought:rotate-180 transition-transform">expand_more</span>
+<h4 class="text-sm font-bold text-text-main dark:text-white">Reasoning</h4>
+</div>
+<span class="text-xs text-secondary font-mono">10:02:15 AM</span>
+</summary>
+<div class="p-4 bg-gradient-to-br from-white to-slate-50 dark:from-[#1a202c] dark:to-slate-900/50">
+<p class="text-sm text-text-main dark:text-slate-300 leading-7 font-medium">
+                                    I need to establish a baseline of current competitors. I'll start by querying the internal knowledge base for <span class="text-primary font-semibold">"Project Alpha"</span> competitors, then I will use a search tool to find their latest pricing pages.
+                                </p>
+</div>
+</details>
+</div>
+</div>
+<div class="flex gap-4 group">
+<div class="flex flex-col items-center">
+<div class="size-8 rounded-full bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-green-600 dark:text-green-400 text-[18px]">terminal</span>
+</div>
+<div class="w-0.5 h-full bg-slate-200 dark:bg-slate-800 -my-2 group-last:hidden"></div>
+</div>
+<div class="flex-1 pb-6 min-w-0">
+<div class="bg-white dark:bg-[#1a202c] border border-slate-200 dark:border-slate-700 border-l-4 border-l-green-500 rounded-r-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-center justify-between px-4 py-3 bg-white dark:bg-[#1a202c] border-b border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="bg-slate-100 dark:bg-slate-800 rounded px-2 py-1">
+<span class="text-xs font-mono font-bold text-secondary uppercase">TOOL</span>
+</div>
+<span class="text-sm font-bold text-text-main dark:text-white">VectorSearch</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="flex items-center gap-1 text-xs text-secondary font-medium font-mono">
+<span class="material-symbols-outlined text-[14px]">timer</span> 1.2s
+                                    </span>
+<span class="flex items-center gap-1 text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded border border-green-100 dark:border-green-900/50">
+                                        SUCCESS
+                                    </span>
+</div>
+</div>
+<div class="p-4 grid gap-4 bg-slate-50/30 dark:bg-transparent">
+<div class="grid gap-2">
+<p class="text-[11px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">input</span> Input
+                                    </p>
+<div class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md p-3">
+<code class="text-xs font-mono text-text-main dark:text-slate-300">query: "top SaaS competitors pricing 2024"</code>
+</div>
+</div>
+<div class="grid gap-2">
+<p class="text-[11px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">output</span> Output
+                                    </p>
+<div class="bg-slate-900 dark:bg-black border border-slate-800 rounded-md p-3 max-h-40 overflow-y-auto custom-scrollbar shadow-inner">
+<pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">{
+  "results": [
+    { 
+      "name": "<span class="text-green-400">TechGiant</span>", 
+      "pricing_url": "techgiant.com/pricing", 
+      "score": <span class="text-blue-400">0.95</span> 
+    },
+    { 
+      "name": "<span class="text-green-400">CloudNine</span>", 
+      "pricing_url": "cloudnine.io/plans", 
+      "score": <span class="text-blue-400">0.88</span> 
+    }
+  ]
+}</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4 my-2">
+<div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+<span class="text-xs font-semibold text-primary uppercase tracking-widest bg-primary/5 dark:bg-primary/20 px-3 py-1 rounded-full text-primary border border-primary/20">Step 3: Comparative Analysis</span>
+<div class="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+</div>
+<div class="flex gap-4 group">
+<div class="flex flex-col items-center">
+<div class="size-8 rounded-full bg-white dark:bg-slate-800 border-2 border-primary flex items-center justify-center shrink-0 z-10 shadow-[0_0_0_4px_rgba(25,61,179,0.1)]">
+<span class="material-symbols-outlined text-primary text-[18px]">psychology_alt</span>
+</div>
+<div class="w-0.5 h-full bg-dashed bg-gradient-to-b from-primary to-transparent -my-2 group-last:hidden"></div>
+</div>
+<div class="flex-1 pb-6 min-w-0">
+<details class="group/thought bg-white dark:bg-[#1a202c] border-2 border-primary/20 border-l-4 border-l-primary rounded-r-lg shadow-md overflow-hidden relative" open="">
+<summary class="list-none flex justify-between items-center p-3 bg-primary/[0.03] dark:bg-primary/10 hover:bg-primary/[0.05] cursor-pointer transition-colors border-b border-primary/10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary group-open/thought:rotate-180 transition-transform">expand_more</span>
+<h4 class="text-sm font-bold text-text-main dark:text-white flex items-center gap-2">
+                                        Synthesizing Data
+                                        <span class="flex h-2 w-2 relative ml-1">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+</h4>
+</div>
+<span class="text-xs text-primary font-bold font-mono bg-primary/10 px-2 py-0.5 rounded">Current</span>
+</summary>
+<div class="p-5 bg-gradient-to-br from-white to-primary/[0.02] dark:from-[#1a202c] dark:to-primary/10">
+<p class="text-sm text-text-main dark:text-slate-200 leading-7">
+                                    I have retrieved pricing data for <span class="font-semibold text-slate-900 dark:text-white">TechGiant</span> and <span class="font-semibold text-slate-900 dark:text-white">CloudNine</span>. I will now perform a side-by-side feature comparison to identify the "Enterprise" tier gaps.
+                                </p>
+</div>
+</details>
+</div>
+</div>
+<div class="flex gap-4 group">
+<div class="flex flex-col items-center">
+<div class="size-8 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 z-10">
+<span class="material-symbols-outlined text-secondary animate-spin text-[18px]">settings</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="bg-white dark:bg-[#1a202c] border border-slate-200 dark:border-slate-700 border-l-4 border-l-blue-500 rounded-r-lg overflow-hidden shadow-lg ring-1 ring-primary/10">
+<div class="flex items-center justify-between px-4 py-3 bg-white dark:bg-[#1a202c] border-b border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="bg-slate-100 dark:bg-slate-800 rounded px-2 py-1">
+<span class="text-xs font-mono font-bold text-secondary uppercase">TOOL</span>
+</div>
+<span class="text-sm font-bold text-text-main dark:text-white">CompareModels</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-800">
+<span class="block size-2 rounded-full border-2 border-current border-t-transparent animate-spin"></span>
+                                        RUNNING...
+                                    </span>
+<button class="text-xs font-bold text-red-500 hover:text-red-700 uppercase ml-2 px-2 py-1 hover:bg-red-50 rounded transition-colors">Cancel</button>
+</div>
+</div>
+<div class="p-4 grid gap-4 opacity-100">
+<div class="grid gap-2">
+<p class="text-[11px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">input</span> Arguments
+                                    </p>
+<div class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md p-3">
+<code class="text-xs font-mono text-text-main dark:text-slate-300 break-all leading-5">data_sources: ["TechGiant_pricing.json", "CloudNine_pricing.json"], <br/>metrics: ["price_per_seat", "sso_enabled"]</code>
+</div>
+</div>
+<div class="grid gap-2 animate-pulse">
+<p class="text-[11px] font-bold text-secondary uppercase tracking-wider opacity-50">Generating Output...</p>
+<div class="h-20 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700"></div>
+</div>
+</div>
+<div class="h-1 w-full bg-slate-100 overflow-hidden">
+<div class="h-full bg-blue-500 w-1/3 animate-[loading_1s_ease-in-out_infinite]"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="h-10"></div>
+</div>
+<div class="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-none">
+<div class="bg-text-main dark:bg-white text-white dark:text-text-main text-xs font-bold px-4 py-2 rounded-full shadow-lg opacity-0 transition-opacity flex items-center gap-2">
+                    New events received...
+                    <span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+</div>
+</div>
+</main>
+</div>
+</div>
+<style>
+    @keyframes loading {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(400%); }
+    }
+</style>
+<script>
+    // Simple script to toggle dark mode for demonstration
+    // In a real app, this would be handled by a theme provider
+    // document.documentElement.classList.add('dark');
+</script>
+
+</body></html>

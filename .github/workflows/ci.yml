@@ -1,0 +1,236 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Backend & Web Tests
+    runs-on: ubuntu-latest
+    env:
+      UV_DEFAULT_INDEX: https://mirrors.aliyun.com/pypi/simple
+    
+    services:
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+          NEO4J_PLUGINS: '["apoc"]'
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p testpassword 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: memstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+      
+      - name: Install dependencies
+        run: |
+          uv sync --extra dev --extra neo4j
+      
+      - name: Run linters
+        run: |
+          uv run ruff check src/ sdk/
+          uv run mypy src/ --ignore-missing-imports
+      
+      - name: Run tests
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: testpassword
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: memstack
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          LLM_PROVIDER: gemini
+        run: |
+          uv run pytest src/tests/unit \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=50
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Docker build and deployment jobs require secrets to be configured
+  # Uncomment when DOCKER_USERNAME and DOCKER_PASSWORD secrets are set
+  # build-docker:
+  #   name: Build Docker Images
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     
+  #     - name: Log in to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     
+  #     - name: Build and push API image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: .
+  #         push: true
+  #         tags: |
+  #           ${{ secrets.DOCKER_USERNAME }}/memstack-api:latest
+  #           ${{ secrets.DOCKER_USERNAME }}/memstack-api:${{ github.sha }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+  #     
+  #     - name: Build and push Web image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./web
+  #         push: true
+  #         tags: |
+  #           ${{ secrets.DOCKER_USERNAME }}/memstack-web:latest
+  #           ${{ secrets.DOCKER_USERNAME }}/memstack-web:${{ github.sha }}
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+
+  # Deployment jobs - uncomment when deployment secrets are configured
+  # deploy-staging:
+  #   name: Deploy to Staging
+  #   runs-on: ubuntu-latest
+  #   needs: build-docker
+  #   if: github.ref == 'refs/heads/develop'
+  #   environment: staging
+  #   
+  #   steps:
+  #     - name: Deploy to staging server
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.STAGING_HOST }}
+  #         username: ${{ secrets.STAGING_USER }}
+  #         key: ${{ secrets.STAGING_SSH_KEY }}
+  #         script: |
+  #           cd /opt/memstack
+  #           docker-compose pull
+  #           docker-compose up -d
+  #           sleep 10
+  #           curl -f http://localhost:8000/health || exit 1
+
+  # deploy-production:
+  #   name: Deploy to Production
+  #   runs-on: ubuntu-latest
+  #   needs: build-docker
+  #   if: github.ref == 'refs/heads/main'
+  #   environment: production
+  #   
+  #   steps:
+  #     - name: Deploy to production server
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.PROD_HOST }}
+  #         username: ${{ secrets.PROD_USER }}
+  #         key: ${{ secrets.PROD_SSH_KEY }}
+  #         script: |
+  #           cd /opt/memstack
+  #           docker-compose pull
+  #           docker-compose up -d --no-deps api
+  #           sleep 10
+  #           curl -f http://localhost:8000/health || exit 1
+  #         
+  #     - name: Notify deployment
+  #       if: success()
+  #       uses: 8398a7/action-slack@v3
+  #       with:
+  #         status: custom
+  #         custom_payload: |
+  #           {
+  #             text: "MemStack deployed to production successfully! :rocket:",
+  #             attachments: [{
+  #               color: 'good',
+  #               text: `Commit: ${process.env.AS_COMMIT}\nAuthor: ${process.env.AS_AUTHOR}`
+  #             }]
+  #           }
+  #       env:
+  #         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # SDK publishing - uncomment when PYPI_TOKEN secret is configured
+  # sdk-publish:
+  #   name: Publish Python SDK
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.12'
+  #     
+  #     - name: Install build tools
+  #       run: |
+  #         pip install build twine
+  #     
+  #     - name: Build package
+  #       working-directory: sdk/python
+  #       run: |
+  #         python -m build
+  #     
+  #     - name: Publish to PyPI
+  #       working-directory: sdk/python
+  #       env:
+  #         TWINE_USERNAME: __token__
+  #         TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+  #       run: |
+  #         twine upload dist/*

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  sandbox-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8765:8765"
+    volumes:
+      - sandbox-workspace:/workspace
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8765
+      - MCP_WORKSPACE=/workspace
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  sandbox-workspace:

@@ -1,0 +1,8 @@
+# MemStack Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: memstack
+  labels:
+    name: memstack
+    app: memstack

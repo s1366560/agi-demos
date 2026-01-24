@@ -1,0 +1,82 @@
+# Memory System Context
+
+MemStack's Memory System is the core knowledge management capability. Understanding its components helps you provide better assistance.
+
+## Architecture Overview
+
+```
+User Interaction
+       ↓
+   Episodes (raw records)
+       ↓
+Entity Extraction (LLM)
+       ↓
+Knowledge Graph (Neo4j)
+   ├── Entities (nodes)
+   ├── Relationships (edges)
+   └── Communities (clusters)
+       ↓
+   Memories (semantic)
+```
+
+## Components
+
+### Episodes
+- **Definition**: Discrete interaction records containing content and metadata
+- **Processing**: Asynchronously processed to extract entities and relationships
+- **Status**: pending → processing → synced
+- **Use Case**: Capturing raw interactions for later analysis
+
+### Entities
+- **Definition**: Real-world objects with attributes (people, organizations, concepts)
+- **Storage**: Neo4j nodes with embeddings for similarity search
+- **Relationships**: Connected through typed edges with semantic meaning
+- **Deduplication**: Vector similarity matching to merge duplicates
+
+### Relationships
+- **Definition**: Typed connections between entities
+- **Attributes**: Type, weight, timestamps, metadata
+- **Discovery**: LLM-driven extraction from episode content
+- **Queries**: Traversable via Cypher queries
+
+### Memories
+- **Definition**: Semantic knowledge derived from episodes
+- **Search**: Hybrid retrieval (vector + keyword + RRF fusion)
+- **Context**: Include temporal and source information
+- **Creation**: Manual via MemoryCreate or automatic from episodes
+
+### Communities
+- **Definition**: Clustered groups of related entities
+- **Detection**: Louvain algorithm for graph clustering
+- **Summaries**: LLM-generated descriptions of community themes
+
+## Query Patterns
+
+### Finding Information
+```cypher
+// Find entities by name
+MATCH (e:Entity) WHERE e.name CONTAINS 'search_term' RETURN e
+
+// Find relationships between entities
+MATCH (a:Entity)-[r]->(b:Entity) 
+WHERE a.name = 'Alice' 
+RETURN a, r, b
+
+// Find community members
+MATCH (e:Entity)-[:BELONGS_TO]->(c:Community)
+WHERE c.name = 'Engineering'
+RETURN e
+```
+
+### Creating Knowledge
+- Use `MemoryCreate` for explicit facts
+- Let episode processing handle automatic extraction
+- Verify important information was captured correctly
+
+## Best Practices
+
+1. **Search Before Creating**: Check if information already exists
+2. **Use Appropriate Granularity**: Store atomic facts, not paragraphs
+3. **Include Context**: Add timestamps and source references
+4. **Verify Extractions**: Check that automatic entity extraction is accurate
+5. **Maintain Quality**: Update or correct inaccurate memories

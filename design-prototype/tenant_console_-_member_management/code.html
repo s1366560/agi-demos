@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tenant Console - Member Management</title>
+<!-- Fonts: Inter for English, Source Han Sans (Noto Sans SC) for Chinese fallback -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#196bb3",
+                        "primary-dark": "#145a96",
+                        "background-light": "#f3f4f6", // Updated based on plan
+                        "background-dark": "#111a21",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1e2832",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"],
+                        "sans": ["Inter", "Noto Sans SC", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.375rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-100 min-h-screen flex flex-col">
+<div class="flex h-screen overflow-hidden">
+<!-- Left Sidebar -->
+<aside class="w-64 bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-slate-700 flex flex-col z-10 shrink-0 transition-all duration-300">
+<!-- Logo Area -->
+<div class="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white font-bold text-lg">M</div>
+<div class="flex flex-col">
+<span class="text-sm font-bold leading-none text-slate-900 dark:text-white">MemoryPlatform</span>
+<span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mt-1">Tenant Console</span>
+</div>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary dark:text-blue-400 font-medium" href="#">
+<span class="material-symbols-outlined text-[20px] fill-current">group</span>
+<span class="text-sm">Members</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary">shield_person</span>
+<span class="text-sm font-medium">Roles &amp; Permissions</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary">folder_open</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary">receipt_long</span>
+<span class="text-sm font-medium">Audit Logs</span>
+</a>
+<div class="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+<p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">System</p>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</nav>
+<!-- User Profile -->
+<div class="p-4 border-t border-slate-200 dark:border-slate-700">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shrink-0">
+<img alt="Profile" class="w-full h-full object-cover" data-alt="User profile picture of a man" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIgSfWNqsTr655VgXqYSpHoN2dwxqAMqSQ_u7jI0KJm1DLMYMltG6omDD918S--pmBHLMlA1O7vy44fYIF7SY_wpXKWAeNocxqytnTS2GD6WwSuWv3V9BWn6dNiFQMZeYLiqhoMmV0ib9gksrfQwU9QvXV7HXD0jxIddjlOFT937uov0wXkG4C9_nl1XCyg8MdMD_VTQ7c6iXmFW0fCSK8IU01IeSTyqZ7xGlAVyHMljeTcjFngN9IkwOJUjgAZHIHWY1n6weLIfA"/>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-sm font-medium text-slate-900 dark:text-white truncate">Tom Cook</p>
+<p class="text-xs text-slate-500 truncate">tom@example.com</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Top Header / Breadcrumbs -->
+<header class="h-16 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-8 shrink-0">
+<nav aria-label="Breadcrumb" class="flex">
+<ol class="flex items-center space-x-2">
+<li>
+<a class="text-slate-400 hover:text-slate-500" href="#">
+<span class="material-symbols-outlined text-[20px]">home</span>
+</a>
+</li>
+<li><span class="text-slate-300">/</span></li>
+<li>
+<a class="text-sm font-medium text-slate-500 hover:text-slate-700" href="#">Settings</a>
+</li>
+<li><span class="text-slate-300">/</span></li>
+<li>
+<span aria-current="page" class="text-sm font-medium text-primary dark:text-blue-400">Member Management</span>
+</li>
+</ol>
+</nav>
+<div class="flex items-center gap-4">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-surface-dark transform translate-x-1/4 -translate-y-1/4"></span>
+</button>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-8">
+<div class="max-w-7xl mx-auto space-y-6">
+<!-- Page Title & Actions -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Member Management</h1>
+<p class="text-sm text-slate-500 mt-1">Manage user access, assign roles, and control permissions for this tenant.</p>
+</div>
+<button class="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                        Invite Member
+                    </button>
+</div>
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
+<div>
+<p class="text-sm font-medium text-slate-500 mb-1">Total Seats</p>
+<div class="flex items-baseline gap-2">
+<h3 class="text-3xl font-bold text-slate-900 dark:text-white">15<span class="text-lg text-slate-400 font-normal">/20</span></h3>
+</div>
+<div class="mt-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-1.5 rounded-full" style="width: 75%"></div>
+</div>
+</div>
+<div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary">
+<span class="material-symbols-outlined">badge</span>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
+<div>
+<p class="text-sm font-medium text-slate-500 mb-1">Active Users</p>
+<h3 class="text-3xl font-bold text-slate-900 dark:text-white">12</h3>
+<p class="text-xs text-green-600 font-medium mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+                                +2 this month
+                            </p>
+</div>
+<div class="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600">
+<span class="material-symbols-outlined">verified_user</span>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
+<div>
+<p class="text-sm font-medium text-slate-500 mb-1">Pending Invites</p>
+<h3 class="text-3xl font-bold text-slate-900 dark:text-white">3</h3>
+<p class="text-xs text-slate-400 mt-1">Awaiting acceptance</p>
+</div>
+<div class="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-500">
+<span class="material-symbols-outlined">mail</span>
+</div>
+</div>
+</div>
+<!-- Main Content Card -->
+<div class="bg-surface-light dark:bg-surface-dark rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+<!-- Filters Toolbar -->
+<div class="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
+<div class="relative w-full sm:w-96">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-slate-400 text-[20px]">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg leading-5 bg-white dark:bg-surface-dark text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm" placeholder="Search by name, email, or role..." type="text"/>
+</div>
+<div class="flex items-center gap-3 w-full sm:w-auto">
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-surface-dark border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer">
+<option>All Roles</option>
+<option>Admin</option>
+<option>Editor</option>
+<option>Viewer</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</div>
+</div>
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-surface-dark border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2 pl-3 pr-8 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer">
+<option>All Status</option>
+<option>Active</option>
+<option>Pending</option>
+<option>Suspended</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</div>
+</div>
+<button class="p-2 text-slate-400 hover:text-slate-600 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-surface-dark">
+<span class="material-symbols-outlined text-[20px]">filter_list</span>
+</button>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto">
+<table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+<thead class="bg-slate-50 dark:bg-slate-800">
+<tr>
+<th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3" scope="col">User</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Role</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Projects</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Last Login</th>
+<th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Status</th>
+<th class="relative px-6 py-3" scope="col">
+<span class="sr-only">Actions</span>
+</th>
+</tr>
+</thead>
+<tbody class="bg-surface-light dark:bg-surface-dark divide-y divide-slate-200 dark:divide-slate-700">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center">
+<div class="flex-shrink-0 h-10 w-10">
+<img alt="Jane Cooper" class="h-10 w-10 rounded-full object-cover" data-alt="Portrait of a smiling woman" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBN7cMzJ3EtKglKrApN_rXA53i8ExQSiJthbqvMCwsFZlVkp94YoRpKQ7bFgjOiHNkkdXbPDWa76oqfICZoXLfT4sau2YJ1FBZ4HRTg4AsuPLMKSeyokYcLgmZmdYB8I3lDpodAXtbuWygQsiO40t3Qv2-8-f7gZhqpF2YlD7eJ_X3Jh0MCQkiQOeYCgt8K-JjRSzXb9UYFboQXlaKyadztUH13M-UaaHA3we6of1RjIk4duHHdCNJVsVEX8PkHDMX6gqO0ZWmbemo"/>
+</div>
+<div class="ml-4">
+<div class="text-sm font-medium text-slate-900 dark:text-white">Jane Cooper</div>
+<div class="text-sm text-slate-500">jane.cooper@example.com</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                            Tenant Admin
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        All Projects
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        Just now
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span> Active
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center">
+<div class="flex-shrink-0 h-10 w-10">
+<img alt="Cody Fisher" class="h-10 w-10 rounded-full object-cover" data-alt="Portrait of a man looking left" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5-I4N4AtJaCdFPAVywmxnmAzExKqP5BGFuhNxK5AVK13rsGZdg07mxALW7TwjlWQ_dFu06tl0lGH58Kf9Tu8_wsn74kIxg6ozZJ5OB1oLzHBbunYbJozO7SM0xpEqtgiGqcOtnYdakHrQs-RGmo8I18vivL7fgcJ7lG8P_6XDKSIJsd9KsuUH7GBh6Gbu-Z-Q-zleIZYK2lDYcEfp-kRebWoj5r2pjJmAVwfYSN93BryKQ2JSB17gWQic0vnUVNrmrDaXKCRCoVw"/>
+</div>
+<div class="ml-4">
+<div class="text-sm font-medium text-slate-900 dark:text-white">Cody Fisher</div>
+<div class="text-sm text-slate-500">cody.fisher@example.com</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
+                                            Editor
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        3 Projects
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        2 hours ago
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span> Active
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center">
+<div class="flex-shrink-0 h-10 w-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-300 font-bold text-sm">
+                                                EW
+                                            </div>
+<div class="ml-4">
+<div class="text-sm font-medium text-slate-900 dark:text-white">Esther Howard</div>
+<div class="text-sm text-slate-500">esther.howard@example.com</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
+                                            Viewer
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        1 Project
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        Yesterday
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span> Active
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 (Pending) -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center">
+<div class="flex-shrink-0 h-10 w-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined text-[20px]">person</span>
+</div>
+<div class="ml-4">
+<div class="text-sm font-medium text-slate-500 italic">Pending User...</div>
+<div class="text-sm text-slate-500">alex.turner@example.com</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
+                                            Editor
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        -
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        -
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span> Pending
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<div class="flex items-center justify-end gap-2">
+<button class="text-xs text-primary hover:text-primary-dark font-medium">Resend</button>
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 5 (Chinese Name) -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center">
+<div class="flex-shrink-0 h-10 w-10">
+<img alt="Li Wei" class="h-10 w-10 rounded-full object-cover" data-alt="Portrait of a young asian man" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVvzNN0eNrkdqJUjkENwnERMMtUTmbcxnhzunIczO23iETjdKtwivi_YZN8TR7j1C72uxXbItESCVnz0dwvjeaZXyOF8As7YjePdnOTRDcgOQn2G-KpxzciOE6AZejMk3M2QPNMr9hn_16mAm6tH4AdP0cuNJRlA7iNoFpkg-XsG-1UGvXnzalOOG0hL1lbiVeNR7Z36rfMVENLh8jLQTv3er1v2YqqpGZAtj22W7T6wqJA_q1OkeokNzFIgPklJ5KK-Fd_VagH0g"/>
+</div>
+<div class="ml-4">
+<div class="text-sm font-medium text-slate-900 dark:text-white font-sans">李伟 (Li Wei)</div>
+<div class="text-sm text-slate-500">li.wei@example.com</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
+                                            Viewer
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        2 Projects
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                        3 days ago
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span> Active
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between sm:px-6">
+<div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+<div>
+<p class="text-sm text-slate-700 dark:text-slate-400">
+                                    Showing <span class="font-medium">1</span> to <span class="font-medium">5</span> of <span class="font-medium">15</span> results
+                                </p>
+</div>
+<div>
+<nav aria-label="Pagination" class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+<a class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-dark text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700" href="#">
+<span class="sr-only">Previous</span>
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</a>
+<a aria-current="page" class="z-10 bg-primary/10 border-primary text-primary relative inline-flex items-center px-4 py-2 border text-sm font-medium" href="#">1</a>
+<a class="bg-white dark:bg-surface-dark border-slate-300 dark:border-slate-600 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 relative inline-flex items-center px-4 py-2 border text-sm font-medium" href="#">2</a>
+<a class="bg-white dark:bg-surface-dark border-slate-300 dark:border-slate-600 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 relative inline-flex items-center px-4 py-2 border text-sm font-medium" href="#">3</a>
+<a class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-dark text-sm font-medium text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700" href="#">
+<span class="sr-only">Next</span>
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

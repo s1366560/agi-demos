@@ -1,0 +1,103 @@
+# Docker Compose configuration for CUA (Computer Use Agent) integration
+# This file sets up a containerized desktop environment for CUA operations
+
+version: '3.8'
+
+services:
+  # CUA Desktop Container
+  # Provides an isolated Linux desktop environment for computer automation
+  cua-desktop:
+    image: trycua/cua-ubuntu:latest
+    container_name: memstack-cua-desktop
+    environment:
+      # Display configuration
+      - DISPLAY_WIDTH=1920
+      - DISPLAY_HEIGHT=1080
+      - DISPLAY_DEPTH=24
+      # VNC configuration
+      - VNC_PASSWORD=${CUA_VNC_PASSWORD:-memstack}
+      # Timezone
+      - TZ=${TZ:-Asia/Shanghai}
+    ports:
+      # VNC port for remote desktop access
+      - "${CUA_VNC_PORT:-5900}:5900"
+      # noVNC web interface (access via browser)
+      - "${CUA_NOVNC_PORT:-6080}:6080"
+      # Computer server API port
+      - "${CUA_API_PORT:-8765}:8765"
+    volumes:
+      # Persistent data storage
+      - cua-data:/home/user/data
+      # Downloads folder (optional)
+      - cua-downloads:/home/user/Downloads
+    networks:
+      - memstack-network
+    restart: unless-stopped
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${CUA_CPU_LIMIT:-2}'
+          memory: ${CUA_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: '1'
+          memory: 2G
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: CUA Computer Server (if using separate server)
+  # Uncomment if you need the computer server as a separate service
+  # cua-server:
+  #   image: ghcr.io/trycua/cua-computer-server:latest
+  #   container_name: memstack-cua-server
+  #   environment:
+  #     - DISPLAY=:0
+  #   volumes:
+  #     - /tmp/.X11-unix:/tmp/.X11-unix
+  #   networks:
+  #     - memstack-network
+  #   depends_on:
+  #     - cua-desktop
+
+volumes:
+  # Persistent data volume
+  cua-data:
+    driver: local
+    name: memstack-cua-data
+  # Downloads volume
+  cua-downloads:
+    driver: local
+    name: memstack-cua-downloads
+
+networks:
+  # Use existing memstack network
+  memstack-network:
+    external: true
+    name: memstack-network
+
+# Usage:
+# 1. Start the CUA desktop:
+#    docker-compose -f docker-compose.cua.yml up -d
+#
+# 2. Access via VNC:
+#    - VNC client: vnc://localhost:5900
+#    - Web browser: http://localhost:6080
+#
+# 3. Stop the CUA desktop:
+#    docker-compose -f docker-compose.cua.yml down
+#
+# 4. View logs:
+#    docker-compose -f docker-compose.cua.yml logs -f
+#
+# Environment variables:
+#   CUA_VNC_PORT: VNC port (default: 5900)
+#   CUA_NOVNC_PORT: noVNC web port (default: 6080)
+#   CUA_API_PORT: API port (default: 8765)
+#   CUA_VNC_PASSWORD: VNC password (default: memstack)
+#   CUA_CPU_LIMIT: CPU limit (default: 2)
+#   CUA_MEMORY_LIMIT: Memory limit (default: 4G)

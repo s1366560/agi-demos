@@ -1,0 +1,653 @@
+"""
+Hybrid search combining vector search and keyword search.
+
+This module provides:
+- Vector similarity search using Neo4j vector indices
+- Fulltext keyword search using Neo4j fulltext indices
+- RRF (Reciprocal Rank Fusion) for combining results
+"""
+
+import asyncio
+import logging
+from typing import Any, Dict, List, Optional
+
+from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+from src.infrastructure.graph.neo4j_client import Neo4jClient
+from src.infrastructure.graph.schemas import HybridSearchResult, SearchResultItem
+
+logger = logging.getLogger(__name__)
+
+# Default RRF constant (higher = more weight to later ranks)
+DEFAULT_RRF_K = 60
+
+# Default weights for combining search types
+DEFAULT_VECTOR_WEIGHT = 0.6
+DEFAULT_KEYWORD_WEIGHT = 0.4
+
+
+class HybridSearch:
+    """
+    Hybrid search engine combining vector and keyword search.
+
+    Uses RRF (Reciprocal Rank Fusion) to combine results from:
+    - Vector search: Semantic similarity using embeddings
+    - Keyword search: Fulltext search using Neo4j indices
+
+    Example:
+        search = HybridSearch(neo4j_client, embedding_service)
+        results = await search.search("machine learning applications", project_id="proj1")
+    """
+
+    def __init__(
+        self,
+        neo4j_client: Neo4jClient,
+        embedding_service: EmbeddingService,
+        vector_index_name: str = "entity_name_vector",
+        fulltext_index_entities: str = "entity_name_summary",
+        fulltext_index_episodes: str = "episodic_content",
+        rrf_k: int = DEFAULT_RRF_K,
+        vector_weight: float = DEFAULT_VECTOR_WEIGHT,
+        keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
+    ):
+        """
+        Initialize hybrid search.
+
+        Args:
+            neo4j_client: Neo4j client for queries
+            embedding_service: Service for generating query embeddings
+            vector_index_name: Name of the vector index for entities
+            fulltext_index_entities: Name of the fulltext index for entities
+            fulltext_index_episodes: Name of the fulltext index for episodes
+            rrf_k: RRF constant (default: 60)
+            vector_weight: Weight for vector search results
+            keyword_weight: Weight for keyword search results
+        """
+        self._neo4j_client = neo4j_client
+        self._embedding_service = embedding_service
+        self._vector_index_name = vector_index_name
+        self._fulltext_index_entities = fulltext_index_entities
+        self._fulltext_index_episodes = fulltext_index_episodes
+        self._rrf_k = rrf_k
+        self._vector_weight = vector_weight
+        self._keyword_weight = keyword_weight
+
+    async def search(
+        self,
+        query: str,
+        project_id: Optional[str] = None,
+        limit: int = 10,
+        include_episodes: bool = True,
+        include_entities: bool = True,
+    ) -> HybridSearchResult:
+        """
+        Perform hybrid search combining vector and keyword search.
+
+        Args:
+            query: Search query string
+            project_id: Optional project ID to filter results
+            limit: Maximum number of results
+            include_episodes: Whether to search episodes
+            include_entities: Whether to search entities
+
+        Returns:
+            HybridSearchResult with combined results
+        """
+        if not query or not query.strip():
+            return HybridSearchResult(items=[], total_results=0)
+
+        # Run searches in parallel
+        tasks = []
+
+        if include_entities:
+            tasks.append(self._vector_search_entities(query, project_id, limit * 2))
+            tasks.append(self._keyword_search_entities(query, project_id, limit * 2))
+
+        if include_episodes:
+            tasks.append(self._keyword_search_episodes(query, project_id, limit * 2))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Collect results, handling any errors
+        vector_entity_results = []
+        keyword_entity_results = []
+        episode_results = []
+
+        idx = 0
+        if include_entities:
+            if not isinstance(results[idx], Exception):
+                vector_entity_results = results[idx]
+            else:
+                logger.warning(f"Vector search failed: {results[idx]}")
+            idx += 1
+
+            if not isinstance(results[idx], Exception):
+                keyword_entity_results = results[idx]
+            else:
+                logger.warning(f"Entity keyword search failed: {results[idx]}")
+            idx += 1
+
+        if include_episodes:
+            if not isinstance(results[idx], Exception):
+                episode_results = results[idx]
+            else:
+                logger.warning(f"Episode keyword search failed: {results[idx]}")
+
+        # Combine entity results using RRF
+        combined_entities = self._rrf_fusion(
+            vector_entity_results,
+            keyword_entity_results,
+            vector_weight=self._vector_weight,
+            keyword_weight=self._keyword_weight,
+        )
+
+        # Combine all results
+        all_results = combined_entities + episode_results
+
+        # Sort by score and limit
+        all_results.sort(key=lambda x: x.score, reverse=True)
+        limited_results = all_results[:limit]
+
+        return HybridSearchResult(
+            items=limited_results,
+            total_results=len(all_results),
+            vector_results_count=len(vector_entity_results),
+            keyword_results_count=len(keyword_entity_results) + len(episode_results),
+        )
+
+    async def vector_search(
+        self,
+        query: str,
+        project_id: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[SearchResultItem]:
+        """
+        Perform vector-only search on entities.
+
+        Args:
+            query: Search query
+            project_id: Optional project filter
+            limit: Maximum results
+
+        Returns:
+            List of SearchResultItem
+        """
+        return await self._vector_search_entities(query, project_id, limit)
+
+    async def keyword_search(
+        self,
+        query: str,
+        project_id: Optional[str] = None,
+        limit: int = 10,
+        include_episodes: bool = True,
+        include_entities: bool = True,
+    ) -> List[SearchResultItem]:
+        """
+        Perform keyword-only search.
+
+        Args:
+            query: Search query
+            project_id: Optional project filter
+            limit: Maximum results
+            include_episodes: Search episodes
+            include_entities: Search entities
+
+        Returns:
+            List of SearchResultItem
+        """
+        tasks = []
+
+        if include_entities:
+            tasks.append(self._keyword_search_entities(query, project_id, limit))
+
+        if include_episodes:
+            tasks.append(self._keyword_search_episodes(query, project_id, limit))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        all_results = []
+        for result in results:
+            if not isinstance(result, Exception):
+                all_results.extend(result)
+
+        all_results.sort(key=lambda x: x.score, reverse=True)
+        return all_results[:limit]
+
+    async def _vector_search_entities(
+        self,
+        query: str,
+        project_id: Optional[str],
+        limit: int,
+    ) -> List[SearchResultItem]:
+        """
+        Vector search on entity nodes.
+
+        Args:
+            query: Search query
+            project_id: Project filter
+            limit: Maximum results
+
+        Returns:
+            List of SearchResultItem
+        """
+        # Generate query embedding
+        try:
+            query_embedding = await self._embedding_service.embed_text(query)
+        except Exception as e:
+            logger.error(f"Failed to generate query embedding: {e}")
+            return []
+
+        # Validate embedding dimension
+        expected_dim = getattr(self._embedding_service, "embedding_dim", None)
+        if expected_dim and len(query_embedding) != expected_dim:
+            logger.warning(
+                f"Embedding dimension mismatch: got {len(query_embedding)}, expected {expected_dim}"
+            )
+            return []
+
+        # Build query - request more results when filtering by project_id to account for filtering
+        query_limit = limit * 2 if project_id else limit
+        project_filter = ""
+        params = {
+            "limit": query_limit,
+            "query_embedding": query_embedding,
+        }
+
+        if project_id:
+            project_filter = "WHERE node.project_id = $project_id"
+            params["project_id"] = project_id
+
+        cypher_query = f"""
+            CALL db.index.vector.queryNodes(
+                $index_name,
+                $limit,
+                $query_embedding
+            )
+            YIELD node, score
+            {project_filter}
+            RETURN node.uuid AS uuid,
+                   node.name AS name,
+                   node.summary AS summary,
+                   node.entity_type AS entity_type,
+                   score
+            ORDER BY score DESC
+            LIMIT $result_limit
+        """
+        params["index_name"] = self._vector_index_name
+        params["result_limit"] = limit
+
+        try:
+            result = await self._neo4j_client.execute_query(cypher_query, **params)
+
+            items = []
+            for record in result.records:
+                item = SearchResultItem(
+                    type="entity",
+                    uuid=record.get("uuid", ""),
+                    name=record.get("name"),
+                    summary=record.get("summary"),
+                    score=float(record.get("score", 0)),
+                    metadata={
+                        "entity_type": record.get("entity_type"),
+                        "search_type": "vector",
+                    },
+                )
+                items.append(item)
+
+            return items
+
+        except Exception as e:
+            logger.error(f"Vector search query failed: {e}")
+            return []
+
+    async def _keyword_search_entities(
+        self,
+        query: str,
+        project_id: Optional[str],
+        limit: int,
+    ) -> List[SearchResultItem]:
+        """
+        Keyword search on entity nodes using fulltext index.
+
+        Args:
+            query: Search query
+            project_id: Project filter
+            limit: Maximum results
+
+        Returns:
+            List of SearchResultItem
+        """
+        # Escape special characters for fulltext search
+        escaped_query = self._escape_fulltext_query(query)
+
+        project_filter = ""
+        params = {
+            "search_query": escaped_query,
+            "limit": limit,
+        }
+
+        if project_id:
+            project_filter = "WHERE node.project_id = $project_id"
+            params["project_id"] = project_id
+
+        cypher_query = f"""
+            CALL db.index.fulltext.queryNodes($index_name, $search_query)
+            YIELD node, score
+            {project_filter}
+            RETURN node.uuid AS uuid,
+                   node.name AS name,
+                   node.summary AS summary,
+                   node.entity_type AS entity_type,
+                   score
+            ORDER BY score DESC
+            LIMIT $limit
+        """
+        params["index_name"] = self._fulltext_index_entities
+
+        try:
+            result = await self._neo4j_client.execute_query(cypher_query, **params)
+
+            items = []
+            for record in result.records:
+                item = SearchResultItem(
+                    type="entity",
+                    uuid=record.get("uuid", ""),
+                    name=record.get("name"),
+                    summary=record.get("summary"),
+                    score=float(record.get("score", 0)),
+                    metadata={
+                        "entity_type": record.get("entity_type"),
+                        "search_type": "keyword",
+                    },
+                )
+                items.append(item)
+
+            return items
+
+        except Exception as e:
+            logger.error(f"Entity keyword search failed: {e}")
+            return []
+
+    async def _keyword_search_episodes(
+        self,
+        query: str,
+        project_id: Optional[str],
+        limit: int,
+    ) -> List[SearchResultItem]:
+        """
+        Keyword search on episode nodes using fulltext index.
+
+        Args:
+            query: Search query
+            project_id: Project filter
+            limit: Maximum results
+
+        Returns:
+            List of SearchResultItem
+        """
+        escaped_query = self._escape_fulltext_query(query)
+
+        project_filter = ""
+        params = {
+            "search_query": escaped_query,
+            "limit": limit,
+        }
+
+        if project_id:
+            project_filter = "WHERE node.project_id = $project_id"
+            params["project_id"] = project_id
+
+        cypher_query = f"""
+            CALL db.index.fulltext.queryNodes($index_name, $search_query)
+            YIELD node, score
+            {project_filter}
+            RETURN node.uuid AS uuid,
+                   node.name AS name,
+                   node.content AS content,
+                   score
+            ORDER BY score DESC
+            LIMIT $limit
+        """
+        params["index_name"] = self._fulltext_index_episodes
+
+        try:
+            result = await self._neo4j_client.execute_query(cypher_query, **params)
+
+            items = []
+            for record in result.records:
+                item = SearchResultItem(
+                    type="episode",
+                    uuid=record.get("uuid", ""),
+                    name=record.get("name"),
+                    content=record.get("content"),
+                    score=float(record.get("score", 0)),
+                    metadata={"search_type": "keyword"},
+                )
+                items.append(item)
+
+            return items
+
+        except Exception as e:
+            logger.error(f"Episode keyword search failed: {e}")
+            return []
+
+    def _rrf_fusion(
+        self,
+        vector_results: List[SearchResultItem],
+        keyword_results: List[SearchResultItem],
+        vector_weight: float = DEFAULT_VECTOR_WEIGHT,
+        keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
+    ) -> List[SearchResultItem]:
+        """
+        Combine results using Reciprocal Rank Fusion (RRF).
+
+        RRF formula: score = sum(1 / (k + rank))
+
+        Args:
+            vector_results: Results from vector search
+            keyword_results: Results from keyword search
+            vector_weight: Weight for vector results
+            keyword_weight: Weight for keyword results
+
+        Returns:
+            Combined and re-ranked results
+        """
+        # Build score maps
+        scores: Dict[str, float] = {}
+        items_map: Dict[str, SearchResultItem] = {}
+
+        # Process vector results
+        for rank, item in enumerate(vector_results, start=1):
+            uuid = item.uuid
+            rrf_score = vector_weight * (1.0 / (self._rrf_k + rank))
+            scores[uuid] = scores.get(uuid, 0) + rrf_score
+            if uuid not in items_map:
+                items_map[uuid] = item
+
+        # Process keyword results
+        for rank, item in enumerate(keyword_results, start=1):
+            uuid = item.uuid
+            rrf_score = keyword_weight * (1.0 / (self._rrf_k + rank))
+            scores[uuid] = scores.get(uuid, 0) + rrf_score
+            if uuid not in items_map:
+                items_map[uuid] = item
+
+        # Create combined results with new scores
+        combined = []
+        for uuid, score in scores.items():
+            item = items_map[uuid]
+            # Create new item with RRF score
+            combined_item = SearchResultItem(
+                type=item.type,
+                uuid=item.uuid,
+                name=item.name,
+                content=item.content,
+                summary=item.summary,
+                score=score,
+                metadata={**item.metadata, "rrf_score": score},
+            )
+            combined.append(combined_item)
+
+        # Sort by RRF score
+        combined.sort(key=lambda x: x.score, reverse=True)
+
+        return combined
+
+    def _escape_fulltext_query(self, query: str) -> str:
+        """
+        Escape special characters for Neo4j fulltext search.
+
+        Args:
+            query: Raw query string
+
+        Returns:
+            Escaped query string
+        """
+        # Escape backslash first to avoid double-escaping other characters
+        escaped = query.replace("\\", "\\\\")
+
+        # Characters that need escaping in Lucene fulltext queries
+        special_chars = [
+            "+",
+            "-",
+            "&&",
+            "||",
+            "!",
+            "(",
+            ")",
+            "{",
+            "}",
+            "[",
+            "]",
+            "^",
+            '"',
+            "~",
+            "*",
+            "?",
+            ":",
+            "/",
+        ]
+
+        for char in special_chars:
+            escaped = escaped.replace(char, f"\\{char}")
+
+        return escaped
+
+
+class EpisodeRetriever:
+    """
+    Retriever for episodes with various filtering options.
+    """
+
+    def __init__(self, neo4j_client: Neo4jClient):
+        """
+        Initialize episode retriever.
+
+        Args:
+            neo4j_client: Neo4j client
+        """
+        self._neo4j_client = neo4j_client
+
+    async def retrieve_by_uuid(
+        self,
+        uuid: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a single episode by UUID.
+
+        Args:
+            uuid: Episode UUID
+
+        Returns:
+            Episode dict or None
+        """
+        query = """
+            MATCH (e:Episodic {uuid: $uuid})
+            RETURN e
+        """
+
+        result = await self._neo4j_client.execute_query(query, uuid=uuid)
+
+        if result.records and len(result.records) > 0:
+            return dict(result.records[0]["e"])
+        return None
+
+    async def retrieve_recent(
+        self,
+        project_id: str,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve recent episodes for a project.
+
+        Args:
+            project_id: Project ID
+            limit: Maximum number of episodes
+
+        Returns:
+            List of episode dicts
+        """
+        query = """
+            MATCH (e:Episodic {project_id: $project_id})
+            RETURN e
+            ORDER BY e.created_at DESC
+            LIMIT $limit
+        """
+
+        result = await self._neo4j_client.execute_query(query, project_id=project_id, limit=limit)
+
+        return [dict(record["e"]) for record in result.records]
+
+    async def retrieve_by_memory_id(
+        self,
+        memory_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve episode by memory ID.
+
+        Args:
+            memory_id: Memory ID
+
+        Returns:
+            Episode dict or None
+        """
+        query = """
+            MATCH (e:Episodic {memory_id: $memory_id})
+            RETURN e
+        """
+
+        result = await self._neo4j_client.execute_query(query, memory_id=memory_id)
+
+        if result.records and len(result.records) > 0:
+            return dict(result.records[0]["e"])
+        return None
+
+    async def retrieve_with_entities(
+        self,
+        uuid: str,
+    ) -> Dict[str, Any]:
+        """
+        Retrieve episode with its mentioned entities.
+
+        Args:
+            uuid: Episode UUID
+
+        Returns:
+            Dict with 'episode' and 'entities' keys
+        """
+        query = """
+            MATCH (e:Episodic {uuid: $uuid})
+            OPTIONAL MATCH (e)-[:MENTIONS]->(entity:Entity)
+            RETURN e,
+                   collect(entity) AS entities
+        """
+
+        result = await self._neo4j_client.execute_query(query, uuid=uuid)
+
+        if not result.records or len(result.records) == 0:
+            return {"episode": None, "entities": []}
+
+        record = result.records[0]
+        episode = dict(record["e"]) if record["e"] else None
+        entities = [dict(e) for e in record["entities"]] if record["entities"] else []
+
+        return {"episode": episode, "entities": entities}

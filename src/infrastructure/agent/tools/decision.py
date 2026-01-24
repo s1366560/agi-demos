@@ -1,0 +1,409 @@
+"""
+Decision Tool for Human-in-the-Loop Interaction.
+
+This tool allows the agent to request user decisions at critical execution points
+when multiple approaches exist or confirmation is needed for risky operations.
+"""
+
+import asyncio
+import logging
+import uuid
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from src.infrastructure.agent.tools.base import AgentTool
+
+logger = logging.getLogger(__name__)
+
+
+class DecisionType(str, Enum):
+    """Type of decision needed."""
+
+    BRANCH = "branch"  # Choose execution branch
+    METHOD = "method"  # Choose implementation method
+    CONFIRMATION = "confirmation"  # Confirm a risky operation
+    RISK = "risk"  # Acknowledge and proceed with risk
+    CUSTOM = "custom"  # Custom decision point
+
+
+class DecisionOption:
+    """
+    A decision option the user can choose.
+
+    Attributes:
+        id: Unique identifier for this option
+        label: Short label (e.g., "Proceed with deletion")
+        description: Detailed explanation
+        recommended: Whether this is the recommended option
+        estimated_time: Optional estimated time for this option
+        estimated_cost: Optional estimated cost/resources
+        risks: Optional list of risks associated with this option
+    """
+
+    def __init__(
+        self,
+        id: str,
+        label: str,
+        description: Optional[str] = None,
+        recommended: bool = False,
+        estimated_time: Optional[str] = None,
+        estimated_cost: Optional[str] = None,
+        risks: Optional[List[str]] = None,
+    ):
+        self.id = id
+        self.label = label
+        self.description = description
+        self.recommended = recommended
+        self.estimated_time = estimated_time
+        self.estimated_cost = estimated_cost
+        self.risks = risks or []
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "id": self.id,
+            "label": self.label,
+            "description": self.description,
+            "recommended": self.recommended,
+            "estimated_time": self.estimated_time,
+            "estimated_cost": self.estimated_cost,
+            "risks": self.risks,
+        }
+
+
+class DecisionRequest:
+    """
+    A pending decision request.
+
+    Attributes:
+        request_id: Unique ID for this decision
+        question: The decision question
+        decision_type: Type of decision
+        options: List of decision options
+        allow_custom: Whether user can provide custom response
+        context: Additional context for the decision
+        default_option: Default option if user doesn't respond
+        future: Future that resolves when user decides
+    """
+
+    def __init__(
+        self,
+        request_id: str,
+        question: str,
+        decision_type: DecisionType,
+        options: List[DecisionOption],
+        allow_custom: bool = False,
+        context: Optional[Dict[str, Any]] = None,
+        default_option: Optional[str] = None,
+    ):
+        self.request_id = request_id
+        self.question = question
+        self.decision_type = decision_type
+        self.options = options
+        self.allow_custom = allow_custom
+        self.context = context or {}
+        self.default_option = default_option
+        self.future: asyncio.Future = asyncio.Future()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for SSE event."""
+        return {
+            "request_id": self.request_id,
+            "question": self.question,
+            "decision_type": self.decision_type.value,
+            "options": [opt.to_dict() for opt in self.options],
+            "allow_custom": self.allow_custom,
+            "context": self.context,
+            "default_option": self.default_option,
+        }
+
+    def resolve(self, decision: str):
+        """Resolve the future with user's decision."""
+        if not self.future.done():
+            self.future.set_result(decision)
+
+    def cancel(self):
+        """Cancel the decision request."""
+        if not self.future.done():
+            self.future.cancel()
+
+
+class DecisionManager:
+    """
+    Manager for pending decision requests.
+
+    Thread-safe manager for handling multiple decision requests.
+    """
+
+    def __init__(self):
+        self._pending_requests: Dict[str, DecisionRequest] = {}
+        self._lock = asyncio.Lock()
+
+    async def create_request(
+        self,
+        question: str,
+        decision_type: DecisionType,
+        options: List[DecisionOption],
+        allow_custom: bool = False,
+        context: Optional[Dict[str, Any]] = None,
+        default_option: Optional[str] = None,
+        timeout: float = 300.0,  # 5 minutes default
+    ) -> str:
+        """
+        Create a new decision request and wait for user response.
+
+        Args:
+            question: The decision question
+            decision_type: Type of decision
+            options: List of decision options
+            allow_custom: Whether user can provide custom response
+            context: Additional context
+            default_option: Default option if timeout (option ID)
+            timeout: Maximum time to wait for response (seconds)
+
+        Returns:
+            User's decision (option ID or custom text)
+
+        Raises:
+            asyncio.TimeoutError: If user doesn't respond within timeout and no default
+            asyncio.CancelledError: If request is cancelled
+        """
+        request_id = str(uuid.uuid4())
+
+        async with self._lock:
+            request = DecisionRequest(
+                request_id=request_id,
+                question=question,
+                decision_type=decision_type,
+                options=options,
+                allow_custom=allow_custom,
+                context=context,
+                default_option=default_option,
+            )
+            self._pending_requests[request_id] = request
+
+        logger.info(f"Created decision request {request_id}: {question}")
+
+        try:
+            # Wait for user response with timeout
+            decision = await asyncio.wait_for(request.future, timeout=timeout)
+            logger.info(f"Received decision for {request_id}: {decision}")
+            return decision
+        except asyncio.TimeoutError:
+            # Use default if provided
+            if default_option:
+                logger.warning(
+                    f"Decision request {request_id} timed out, using default: {default_option}"
+                )
+                return default_option
+            else:
+                logger.warning(f"Decision request {request_id} timed out with no default")
+                raise
+        except asyncio.CancelledError:
+            logger.warning(f"Decision request {request_id} was cancelled")
+            raise
+        finally:
+            # Clean up
+            async with self._lock:
+                self._pending_requests.pop(request_id, None)
+
+    async def respond(self, request_id: str, decision: str) -> bool:
+        """
+        Respond to a decision request.
+
+        Args:
+            request_id: ID of the decision request
+            decision: User's decision
+
+        Returns:
+            True if request was found and resolved, False otherwise
+        """
+        async with self._lock:
+            request = self._pending_requests.get(request_id)
+            if request:
+                request.resolve(decision)
+                logger.info(f"Responded to decision {request_id}")
+                return True
+            else:
+                logger.warning(f"Decision request {request_id} not found")
+                return False
+
+    async def cancel_request(self, request_id: str) -> bool:
+        """
+        Cancel a decision request.
+
+        Args:
+            request_id: ID of the decision request
+
+        Returns:
+            True if request was found and cancelled, False otherwise
+        """
+        async with self._lock:
+            request = self._pending_requests.get(request_id)
+            if request:
+                request.cancel()
+                self._pending_requests.pop(request_id, None)
+                logger.info(f"Cancelled decision {request_id}")
+                return True
+            else:
+                logger.warning(f"Decision request {request_id} not found")
+                return False
+
+    def get_request(self, request_id: str) -> Optional[DecisionRequest]:
+        """Get a decision request by ID."""
+        return self._pending_requests.get(request_id)
+
+    def get_pending_requests(self) -> List[DecisionRequest]:
+        """Get all pending decision requests."""
+        return list(self._pending_requests.values())
+
+
+# Global decision manager instance
+_decision_manager = DecisionManager()
+
+
+def get_decision_manager() -> DecisionManager:
+    """Get the global decision manager instance."""
+    return _decision_manager
+
+
+class DecisionTool(AgentTool):
+    """
+    Tool for requesting user decisions at critical execution points.
+
+    This tool triggers a human-in-the-loop interaction where the agent
+    asks the user to make a decision at a critical point, such as choosing
+    an execution branch, confirming a risky operation, or selecting a method.
+
+    Usage:
+        decision = DecisionTool()
+        choice = await decision.execute(
+            question="Delete all user data?",
+            decision_type="confirmation",
+            options=[
+                {
+                    "id": "proceed",
+                    "label": "Proceed with deletion",
+                    "risks": ["Data loss is irreversible"]
+                },
+                {
+                    "id": "cancel",
+                    "label": "Cancel operation",
+                    "recommended": True
+                }
+            ]
+        )
+    """
+
+    def __init__(self, manager: Optional[DecisionManager] = None):
+        """
+        Initialize the decision tool.
+
+        Args:
+            manager: Decision manager to use (defaults to global instance)
+        """
+        super().__init__(
+            name="request_decision",
+            description=(
+                "Request a decision from the user at a critical execution point. "
+                "Use when multiple approaches exist, confirmation is needed for risky "
+                "operations, or a choice must be made between execution branches."
+            ),
+        )
+        self.manager = manager or get_decision_manager()
+
+    def validate_args(self, **kwargs: Any) -> bool:
+        """Validate decision arguments."""
+        if "question" not in kwargs:
+            logger.error("Missing required argument: question")
+            return False
+
+        if "decision_type" not in kwargs:
+            logger.error("Missing required argument: decision_type")
+            return False
+
+        if "options" not in kwargs:
+            logger.error("Missing required argument: options")
+            return False
+
+        # Validate decision type
+        try:
+            DecisionType(kwargs["decision_type"])
+        except ValueError:
+            logger.error(f"Invalid decision_type: {kwargs['decision_type']}")
+            return False
+
+        # Validate options
+        options = kwargs["options"]
+        if not isinstance(options, list) or len(options) == 0:
+            logger.error("options must be a non-empty list")
+            return False
+
+        return True
+
+    async def execute(
+        self,
+        question: str,
+        decision_type: str,
+        options: List[Dict[str, Any]],
+        allow_custom: bool = False,
+        context: Optional[Dict[str, Any]] = None,
+        default_option: Optional[str] = None,
+        timeout: float = 300.0,
+    ) -> str:
+        """
+        Execute decision request.
+
+        Args:
+            question: The decision question to ask
+            decision_type: Type of decision (branch/method/confirmation/risk/custom)
+            options: List of option dicts with id, label, description, recommended,
+                    estimated_time, estimated_cost, risks
+            allow_custom: Whether to allow custom user input
+            context: Additional context information
+            default_option: Default option ID if user doesn't respond
+            timeout: Maximum wait time in seconds
+
+        Returns:
+            User's decision (option ID or custom text)
+
+        Raises:
+            ValueError: If arguments are invalid
+            asyncio.TimeoutError: If user doesn't respond within timeout and no default
+        """
+        # Validate
+        if not self.validate_args(question=question, decision_type=decision_type, options=options):
+            raise ValueError("Invalid decision arguments")
+
+        # Convert options to DecisionOption objects
+        decision_options = [
+            DecisionOption(
+                id=opt["id"],
+                label=opt["label"],
+                description=opt.get("description"),
+                recommended=opt.get("recommended", False),
+                estimated_time=opt.get("estimated_time"),
+                estimated_cost=opt.get("estimated_cost"),
+                risks=opt.get("risks", []),
+            )
+            for opt in options
+        ]
+
+        # Create request
+        dec_type = DecisionType(decision_type)
+        decision = await self.manager.create_request(
+            question=question,
+            decision_type=dec_type,
+            options=decision_options,
+            allow_custom=allow_custom,
+            context=context or {},
+            default_option=default_option,
+            timeout=timeout,
+        )
+
+        logger.info(f"Decision made: {decision}")
+        return decision
+
+    def get_output_schema(self) -> Dict[str, Any]:
+        """Get output schema for tool composition."""
+        return {"type": "string", "description": "User's decision (option ID or custom text)"}

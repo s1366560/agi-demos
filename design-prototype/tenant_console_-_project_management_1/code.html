@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tenant Console - Project Management</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "primary-dark": "#132d88",
+                        "background-light": "#f8f9fb",
+                        "background-dark": "#111521",
+                        "text-main": "#0e111b",
+                        "text-muted": "#506095",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d1d6e6; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #aab2c8; 
+        }
+    </style>
+</head>
+<body class="bg-background-light font-display text-text-main h-screen overflow-hidden flex">
+<!-- Sidebar -->
+<aside class="w-64 h-full bg-primary text-white flex flex-col flex-shrink-0 transition-all duration-300 shadow-xl z-20">
+<!-- Logo Area -->
+<div class="h-20 flex items-center px-6 border-b border-white/10">
+<div class="flex items-center gap-3">
+<div class="bg-white/10 p-2 rounded-lg">
+<span class="material-symbols-outlined text-white">memory</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-base font-bold leading-none tracking-wide">MemoryScale</h1>
+<p class="text-white/60 text-xs mt-1 font-medium">Tenant Console</p>
+</div>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex-1 overflow-y-auto py-6 px-3 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">dashboard</span>
+<span class="text-sm font-medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/20 text-white shadow-inner transition-colors" href="#">
+<span class="material-symbols-outlined text-xl fill-1">folder_open</span>
+<span class="text-sm font-bold">Project Management</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">group</span>
+<span class="text-sm font-medium">User Access</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">credit_card</span>
+<span class="text-sm font-medium">Billing</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">description</span>
+<span class="text-sm font-medium">System Logs</span>
+</a>
+</nav>
+<!-- Bottom Actions -->
+<div class="p-4 border-t border-white/10 flex flex-col gap-2">
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+<div class="flex items-center gap-3 px-4 py-3 mt-2 rounded-lg bg-white/5 border border-white/10">
+<div class="h-8 w-8 rounded-full bg-cover bg-center" data-alt="User profile avatar gradient" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCFDMtORzax4R1G5fjedQXbm50-7RsDtR76O01ysTo-EKRVUBJmfEQ3gdhbf4YrIumnfhlts6svVie5JYy7Z6yG2NmZK0IJp8vQonkuMH1OOkWWNci98DrxKz5tve0ZsGSoupzOw1P-ENt3YCXLN-1aC82u1HTNAUyKJ_vZZybrjZlsJu2cr-TBAQRifeL8NeK2KnJ0Mzdx2JQEjUP6YccdGBdnYyD-oE0E88TevLm0ZeYY1K3aQTAf8Lqb9wKVvU7EwkkNkXIYOuE');"></div>
+<div class="flex flex-col overflow-hidden">
+<p class="text-sm font-medium truncate">Admin User</p>
+<p class="text-xs text-white/50 truncate">admin@tenant.com</p>
+</div>
+<button class="ml-auto text-white/50 hover:text-white">
+<span class="material-symbols-outlined text-lg">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col h-full overflow-hidden bg-[#f8f9fb] relative">
+<!-- Top Header Area -->
+<header class="bg-white/50 backdrop-blur-md border-b border-[#d1d6e6] px-8 py-5 flex-shrink-0 z-10 sticky top-0">
+<div class="max-w-[1400px] mx-auto w-full">
+<!-- Breadcrumbs -->
+<div class="flex items-center gap-2 text-xs font-medium text-text-muted mb-2">
+<span class="hover:text-primary cursor-pointer">Home</span>
+<span class="material-symbols-outlined text-[10px]">chevron_right</span>
+<span class="text-text-main">Projects</span>
+</div>
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex flex-col gap-1">
+<h1 class="text-2xl font-bold text-text-main tracking-tight">Project Management</h1>
+<p class="text-sm text-text-muted">Manage memory resources, permissions, and environments for your tenant workspace.</p>
+</div>
+<button class="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-all active:scale-95">
+<span class="material-symbols-outlined text-lg">add</span>
+                        Create New Project
+                    </button>
+</div>
+</div>
+</header>
+<!-- Scrollable Content Area -->
+<div class="flex-1 overflow-y-auto p-8">
+<div class="max-w-[1400px] mx-auto w-full flex flex-col gap-8">
+<!-- Toolbar: Search & Filters -->
+<div class="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-2 rounded-xl border border-[#d1d6e6] shadow-sm">
+<!-- Search -->
+<div class="relative w-full md:max-w-md">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-text-muted">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-gray-50 text-sm text-text-main placeholder-text-muted focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all" placeholder="Search by project name, ID, or owner..." type="text"/>
+</div>
+<!-- Filters -->
+<div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 px-2 md:px-0">
+<span class="text-xs font-semibold text-text-muted uppercase tracking-wider mr-1">Filter:</span>
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 text-sm font-medium whitespace-nowrap transition-colors">
+                            All Status
+                            <span class="material-symbols-outlined text-lg">arrow_drop_down</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-[#d1d6e6] text-text-main hover:bg-gray-50 text-sm font-medium whitespace-nowrap transition-colors">
+                            Owner
+                            <span class="material-symbols-outlined text-lg">arrow_drop_down</span>
+</button>
+<div class="w-px h-6 bg-gray-200 mx-1"></div>
+<div class="flex bg-gray-100 p-1 rounded-lg">
+<button class="p-1.5 rounded bg-white text-primary shadow-sm">
+<span class="material-symbols-outlined text-lg block">grid_view</span>
+</button>
+<button class="p-1.5 rounded text-text-muted hover:text-text-main">
+<span class="material-symbols-outlined text-lg block">view_list</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Projects Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+<!-- Card 1: Active -->
+<div class="bg-white rounded-xl border border-[#d1d6e6] p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">psychology</span>
+</div>
+<div>
+<h3 class="text-base font-bold text-text-main group-hover:text-primary transition-colors">AI Model Training Alpha</h3>
+<p class="text-xs text-text-muted font-mono mt-0.5">ID: P-2024-001</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                                Active
+                            </span>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-end text-sm">
+<span class="text-text-muted">Memory Usage</span>
+<span class="font-bold text-text-main">25% <span class="text-text-muted font-normal text-xs ml-1">(32GB / 128GB)</span></span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-2 rounded-full" style="width: 25%"></div>
+</div>
+<div class="flex gap-4 pt-1">
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">database</span>
+                                    1.2 TB Storage
+                                </div>
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">dns</span>
+                                    4 Nodes
+                                </div>
+</div>
+</div>
+<div class="border-t border-gray-100 pt-4 mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-200 bg-cover bg-center" data-alt="User avatar 1" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAHKfavHsM6zyemFw3OaaQhhDamttlauBxdNDYEjR7K_Uc78VLU1ZG4Y06e9_RPpxxQDAw7OPqEyEObBQgsFQp7n66Ssvq_1w2oPpJuSMeB8zHn2_1rAZGSBsmeNNfrbxSjAWzVLlIYkztR6HDfQPCeiJ9h3px8XnVhjGt1NAV5Q7wJubHHSeH30bCAxpozEGMZG1jJGetCcKGTeyJU_6njhsLpXx-Qfskp6Ka0Cc1hijJF8boVHI0xhYDnq8IImG01lqmU71a-2ro');"></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-300 bg-cover bg-center" data-alt="User avatar 2" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDXBSnReXsgH7As0mrac3a9GCQRB9kPndejionB4zxKV3f2SwYk1MLCOVKQ9m_pUSAg23IeeIri_QGApycF7SqPq87aSLH1-L4o4-656NXJ6I0Lgb1XwZApOiXNBw4kIWYhm3xZ9nnWRPNvbwcCOdUNBDbNadPZa8ZS2SsNYxXO8c3M39UEZCryzN9rqUt4zJyGC6gYNJqx_DkcWEkQUnRj0e43DX09AXi2GA4OqIA80PDXw8SHDyBN8xjQzP2g04Hh9VNHh6xnOXQ');"></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-xs font-medium text-text-muted">+2</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-text-muted">2h ago</span>
+<button class="p-1 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-main transition-colors">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 2: High Usage -->
+<div class="bg-white rounded-xl border border-[#d1d6e6] p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<div>
+<h3 class="text-base font-bold text-text-main group-hover:text-primary transition-colors">Data Processing Beta</h3>
+<p class="text-xs text-text-muted font-mono mt-0.5">ID: P-2024-042</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                                Active
+                            </span>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-end text-sm">
+<span class="text-text-muted">Memory Usage</span>
+<span class="font-bold text-text-main">68% <span class="text-text-muted font-normal text-xs ml-1">(43GB / 64GB)</span></span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-2 rounded-full" style="width: 68%"></div>
+</div>
+<div class="flex gap-4 pt-1">
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">database</span>
+                                    500 GB Storage
+                                </div>
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">dns</span>
+                                    2 Nodes
+                                </div>
+</div>
+</div>
+<div class="border-t border-gray-100 pt-4 mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-200 bg-cover bg-center" data-alt="User avatar 3" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB4cifDlqRfrbugy5vQ3HOk2KnOK3h6MVrMmBn5GfZ5HyLqbgimoZR2O0JerKdGX4FaC3aYLFTatGzZHMO9aiEYYxxaMwtteCOiIgGqMM_3ydP1trb0IdPZr-nZV5etv8kKx2w89yagedE1ezKWSXLJSZ49srNnQL43AdlclvV1uE6mHOE2jq5QP8-6YMgVccpdNCO68FBxRa8LMGdeoThinzpUQVGgFSumhKjZUi2gdxK6-dc-uJ30Tw7KWCxOJeY4sXWbh91s0gs');"></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-300 bg-cover bg-center" data-alt="User avatar 4" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC0QrE_g8xJHtocfcFhZ1BS-uVSvxdC89UP8YwHnxs3eBcIuNCwLuVbDq9a2Y1onzLv2Ong-3kSME2NyauFYvMYZlSdq-w0DkCxFDphlhnTa69fhpOK06uUWpHBxvLdaXczX-tK8yBxWMmslyYUWWOTAlkzq3Ob8cDaOAga0IOsip9YzryynFhJ8L9-TIAvG31mdTk2YnIbNqhJPpMl_ptfoNco8vfv4dU0ruvqercDCZWkEFjM75n3zr4BI5_e-WrSoC_QOV3pmL0');"></div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-text-muted">5h ago</span>
+<button class="p-1 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-main transition-colors">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 3: Critical -->
+<div class="bg-white rounded-xl border border-[#d1d6e6] p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<div>
+<h3 class="text-base font-bold text-text-main group-hover:text-primary transition-colors">Neural Net Opt.</h3>
+<p class="text-xs text-text-muted font-mono mt-0.5">ID: P-2024-089</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 animate-pulse">
+                                Critical
+                            </span>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-end text-sm">
+<span class="text-text-muted">Memory Usage</span>
+<span class="font-bold text-red-600">92% <span class="text-text-muted font-normal text-xs ml-1">(235GB / 256GB)</span></span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+<div class="bg-red-500 h-2 rounded-full" style="width: 92%"></div>
+</div>
+<div class="flex gap-4 pt-1">
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">database</span>
+                                    800 GB Storage
+                                </div>
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">dns</span>
+                                    12 Nodes
+                                </div>
+</div>
+</div>
+<div class="border-t border-gray-100 pt-4 mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-200 bg-cover bg-center" data-alt="User avatar 5" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCmC39aTfUmiAoiqKpFLWMHtf3Q8pudJ7KkoCJLI3QQt2VOhTWcSiGBtAlku_fwcLgPHbIy6cPV6PqfyloCpUx4FQMlni7wZagN-lOXMbJbUPZ-iAkMa5K8zJhuAsd7zfV6zQfsyz6RsdCXfezs4iS3BQdae_zI9M0eC2u0YmZ_yv_LLF7_0ab2Z6reIUBZ--3CptWxYUTsK6uIrXm4l9qSywUvUX7pXRLXUDAipooCsUu2QTUGGLASVciSIPbqlL3c8ojBFOYlCSw');"></div>
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-xs font-medium text-text-muted">+5</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-text-muted">30m ago</span>
+<button class="p-1 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-main transition-colors">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 4: Low Usage -->
+<div class="bg-white rounded-xl border border-[#d1d6e6] p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col gap-4">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600">
+<span class="material-symbols-outlined">science</span>
+</div>
+<div>
+<h3 class="text-base font-bold text-text-main group-hover:text-primary transition-colors">Client Sandbox 04</h3>
+<p class="text-xs text-text-muted font-mono mt-0.5">ID: P-2024-012</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                                Active
+                            </span>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-end text-sm">
+<span class="text-text-muted">Memory Usage</span>
+<span class="font-bold text-text-main">12% <span class="text-text-muted font-normal text-xs ml-1">(2GB / 16GB)</span></span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-2 rounded-full" style="width: 12%"></div>
+</div>
+<div class="flex gap-4 pt-1">
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">database</span>
+                                    100 GB Storage
+                                </div>
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">dns</span>
+                                    1 Node
+                                </div>
+</div>
+</div>
+<div class="border-t border-gray-100 pt-4 mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-200 bg-cover bg-center" data-alt="User avatar 6" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCcQu-ktC69n_Ug6QKpLRTaG3YH7iZAkDK4jTBbdF7vxIpusuSSi0nFlR7JEKdo8EQWK0S00AgW3eFkSnnLbiWWMIzXwwZjeeb1bbiArUqmtOx6XLqgBuVyBvh_WyyMx3yyeqnwikSm3ShhcU7dXvfGS45MRSOYpBpT4K_qcJtpwg8sB2z0axxfsfmALdJ4n1ag-Lh0JYBQ5xOKKE1RVVnzOu0Y8vG8vllU1tnY7pz3sc_8_wdLw45yWs7CTvZbZk95Tj-6c6ZNwHM');"></div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-text-muted">3d ago</span>
+<button class="p-1 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-main transition-colors">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 5: Archived -->
+<div class="bg-white rounded-xl border border-[#d1d6e6] p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all group flex flex-col gap-4 opacity-75 grayscale-[0.3] hover:grayscale-0 hover:opacity-100">
+<div class="flex justify-between items-start">
+<div class="flex gap-3">
+<div class="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
+<span class="material-symbols-outlined">archive</span>
+</div>
+<div>
+<h3 class="text-base font-bold text-text-main group-hover:text-primary transition-colors">Legacy Archive 2023</h3>
+<p class="text-xs text-text-muted font-mono mt-0.5">ID: P-2023-999</p>
+</div>
+</div>
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                                Archived
+                            </span>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-end text-sm">
+<span class="text-text-muted">Memory Usage</span>
+<span class="font-bold text-text-main">0% <span class="text-text-muted font-normal text-xs ml-1">(0GB / 0GB)</span></span>
+</div>
+<div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+<div class="bg-gray-400 h-2 rounded-full" style="width: 0%"></div>
+</div>
+<div class="flex gap-4 pt-1">
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">database</span>
+                                    20 TB Storage
+                                </div>
+<div class="flex items-center gap-1.5 text-xs text-text-muted">
+<span class="material-symbols-outlined text-base">cloud_off</span>
+                                    Offline
+                                </div>
+</div>
+</div>
+<div class="border-t border-gray-100 pt-4 mt-auto flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white bg-gray-200 bg-cover bg-center" data-alt="User avatar 7" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBct-_qF3zC9bgzeI89juxQIDt96vsajcQK56_C4XGdbo13v2NRvsIHHHBFIfcDGv4rP3I_v3o_yEov9cMimwnj7adTshd--eFKVgB-HAuJnjH1iIU2ZJZs4eqqwWk3w-IDevkbz4qsp25iy2CyN5aO3_fHhqUD8pVgvdg2hWnOvNxTSJWKglWHUAsvh8QjAbjFH2LuV9598_HAzdj9MJjkcb0RhNvE-Yva-n7UwcktEaubjClSPYeCiL3zYllj3TAIM_1eVGFPD8M');"></div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-text-muted">1d ago</span>
+<button class="p-1 rounded-md hover:bg-gray-100 text-text-muted hover:text-text-main transition-colors">
+<span class="material-symbols-outlined text-lg">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- New Project Placeholder (Optional, for easy access) -->
+<button class="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-all group min-h-[200px]">
+<div class="h-12 w-12 rounded-full bg-white shadow-sm flex items-center justify-center text-text-muted group-hover:text-primary group-hover:scale-110 transition-all">
+<span class="material-symbols-outlined text-2xl">add</span>
+</div>
+<div class="text-center">
+<h3 class="text-sm font-bold text-text-main group-hover:text-primary">Create New Project</h3>
+<p class="text-xs text-text-muted mt-1">Setup a new memory environment</p>
+</div>
+</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>System Overview Dashboard | MemStack.ai</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1e3fae",
+                        "primary-dark": "#152d7e",
+                        "background-light": "#f8f9fc",
+                        "background-dark": "#0f172a",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1e293b",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"],
+                        "sans": ["Inter", "Noto Sans SC", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.375rem", "md": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 20px;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e2e8f0; 
+            border-radius: 10px;
+        }
+        .dark ::webkit-scrollbar-thumb {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display transition-colors duration-200">
+<div class="flex h-screen w-full overflow-hidden">
+<aside class="flex w-64 flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-slate-800 flex-none z-20">
+<div class="flex items-center gap-3 px-6 py-5">
+<div class="bg-primary p-1.5 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-[20px]">memory</span>
+</div>
+<h1 class="text-slate-900 dark:text-white text-lg font-bold leading-none tracking-tight">MemStack<span class="text-primary">.ai</span></h1>
+</div>
+<nav class="flex flex-col gap-1 px-4 py-4 overflow-y-auto flex-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary group" href="#">
+<span class="material-symbols-outlined icon-filled">dashboard</span>
+<span class="text-sm font-semibold">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined">database</span>
+<span class="text-sm font-medium">Knowledge</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="text-sm font-medium">Agent</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-sm font-medium">Discovery</span>
+</a>
+<div class="my-4 border-t border-slate-100 dark:border-slate-800"></div>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors group" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4">
+<div class="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+<div class="size-8 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-white">
+                        TA
+                    </div>
+<div class="flex flex-col overflow-hidden">
+<p class="text-[13px] font-semibold text-slate-900 dark:text-white truncate">Tenant Admin</p>
+<p class="text-[11px] text-slate-500 truncate">admin@tenant.co</p>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex flex-col flex-1 h-full overflow-hidden">
+<header class="flex items-center justify-between px-8 py-4 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-2 text-sm text-slate-500">
+<span class="font-medium text-slate-900 dark:text-white">System Overview</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+<input class="pl-10 pr-4 py-2 w-64 bg-slate-100 dark:bg-slate-800 border-none rounded-full text-sm focus:ring-1 focus:ring-primary/40 text-slate-900 dark:text-white placeholder-slate-500" placeholder="Search resources..." type="text"/>
+</div>
+<button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2.5 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="h-4 w-px bg-slate-200 dark:bg-slate-800"></div>
+<div class="flex items-center gap-2">
+<div class="size-8 rounded-full bg-slate-200 bg-cover bg-center" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBgOuigtcgms6qU4__74wP_mgNgb4YC_3rkY4MyLncuAupy0499W_QzXawOG6rQSd2Bf5PVZ_FlnfOPRiS8bohk0nbJ838Rht2FoCLu-2oyfL62wTb9XDhUQ3uqbPcZlOrAhZIxapQXvkVktN8y4nAnrRPNoEtngB5gigBOuT1t4W8oN5Yu8mq38u9q48E7v-ujVZUy5hP4d60koS0IUOfqN4UySAN6mv7uCtV-nNKYTLWeKAOLRQQFzqOqmjvJJ2Ur_yfFUVX9IlQ')"></div>
+</div>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-900/20">
+<div class="max-w-7xl mx-auto flex flex-col gap-8">
+<div class="flex flex-col">
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h2>
+<p class="text-sm text-slate-500">Global system health and resource orchestration.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-40">
+<div class="flex items-start justify-between">
+<div class="bg-blue-50 dark:bg-blue-900/20 p-2.5 rounded-lg text-primary">
+<span class="material-symbols-outlined">domain</span>
+</div>
+<span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tenant Info</span>
+</div>
+<div>
+<h3 class="text-xl font-bold text-slate-900 dark:text-white">Enterprise Pro</h3>
+<p class="text-sm text-slate-500">ID: #TEN-88219-X</p>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-40">
+<div class="flex items-start justify-between">
+<div class="bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-lg text-emerald-600">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">AI Performance</span>
+</div>
+<div>
+<h3 class="text-xl font-bold text-slate-900 dark:text-white">99.98%</h3>
+<p class="text-sm text-emerald-600 font-medium">System operational</p>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-40">
+<div class="flex items-start justify-between">
+<div class="bg-indigo-50 dark:bg-indigo-900/20 p-2.5 rounded-lg text-indigo-600">
+<span class="material-symbols-outlined">inventory_2</span>
+</div>
+<span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Storage</span>
+</div>
+<div>
+<div class="flex items-baseline gap-2">
+<h3 class="text-xl font-bold text-slate-900 dark:text-white">12.5 TB</h3>
+<span class="text-sm text-slate-400">/ 50 TB</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2">
+<div class="bg-primary h-1.5 rounded-full" style="width: 25%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<div class="flex justify-between items-center mb-8">
+<div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">Activity Pulse</h3>
+<p class="text-sm text-slate-500">Real-time memory processing throughput</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-xs font-semibold bg-primary/10 text-primary rounded-md">Live</button>
+<button class="px-3 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md">24h</button>
+</div>
+</div>
+<div class="h-64 relative">
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none">
+<div class="border-t border-slate-100 dark:border-slate-800 w-full h-0"></div>
+<div class="border-t border-slate-100 dark:border-slate-800 w-full h-0"></div>
+<div class="border-t border-slate-100 dark:border-slate-800 w-full h-0"></div>
+<div class="border-t border-slate-100 dark:border-slate-800 w-full h-0"></div>
+<div class="border-t border-slate-100 dark:border-slate-800 w-full h-0"></div>
+</div>
+<svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 200">
+<defs>
+<linearGradient id="pulseGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#1e3fae" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#1e3fae" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<path d="M0,180 Q100,160 200,170 T400,120 T600,140 T800,80 T1000,100 V200 H0 Z" fill="url(#pulseGradient)"></path>
+<path d="M0,180 Q100,160 200,170 T400,120 T600,140 T800,80 T1000,100" fill="none" stroke="#1e3fae" stroke-width="2"></path>
+<circle class="animate-pulse" cx="800" cy="80" fill="#1e3fae" r="4"></circle>
+</svg>
+<div class="flex justify-between mt-4 text-[11px] font-medium text-slate-400 uppercase tracking-widest">
+<span>08:00 AM</span>
+<span>12:00 PM</span>
+<span>04:00 PM</span>
+<span>08:00 PM</span>
+<span>Current</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+<div class="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">Most Active Projects</h3>
+<button class="text-sm font-semibold text-primary hover:text-primary-dark">View Portfolio</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-slate-50/50 dark:bg-slate-800/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+<th class="px-6 py-4">Project Entity</th>
+<th class="px-6 py-4">Lead Architect</th>
+<th class="px-6 py-4">Resource Delta</th>
+<th class="px-6 py-4 text-right">Status</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">neurology</span>
+</div>
+<div>
+<div class="text-sm font-semibold text-slate-900 dark:text-white">AI Inference Engine</div>
+<div class="text-xs text-slate-500">ID: PROJ-ALPHA-1</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<img alt="" class="size-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAEj_tZNY-46mLwXwcUFqcxGHPLG0YcXfMnM2-fx4rqkWjPTMUgijz6QTjXM8YH9FnyX9p5qKvft25t4e90ppG1rhtRf4fOPAxK8uhBrf3GN0Df4LzjlY6FJofRv8UKMsjzypm7KJPZ3wydHiaqe87kIGYIky3zXcjjhfJ7uDPgnh3dDal44QpTfOKBxFbVMNgaZhc3gC0VOxhEhqrOjqtRNNNZID-ohRL6r445mcAVOAP4puii-tuoN6ZFJQcVuTVd7xZYxCKr5u8"/>
+<span class="text-sm text-slate-700 dark:text-slate-300">David Li</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-[11px] font-medium">
+<span class="text-slate-700 dark:text-slate-300">4.2 TB</span>
+<span class="text-primary">+1.2%</span>
+</div>
+<div class="w-32 bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full" style="width: 75%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">OPERATIONAL</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600">
+<span class="material-symbols-outlined text-[18px]">cloud_sync</span>
+</div>
+<div>
+<div class="text-sm font-semibold text-slate-900 dark:text-white">Data Lake Migration</div>
+<div class="text-xs text-slate-500">ID: PROJ-META-45</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<img alt="" class="size-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBlkW74OCgSzCJ5nM5nscSY6CyBVXuoUKoKTySh3q8MKIdVN0xrR6PpEel_a0lpp0crlDwJFuldfZ55cFzhlte-hjnM3dvyA-TawTg0tH121EVcCH6o6jBiiugnRyrmvKaebnDfeJNLvlGLGfoTcNij8P4ql6irZJDdJRIxy2byguZtpYXkrs2nycoXj8l0LWzgsRadVR2EPAtPe6On06jnVPpaL4oGWS_7cbj4j06uYwJfPU1G9hn3XjzJjJYm8E0pJ78EiFp4_A0"/>
+<span class="text-sm text-slate-700 dark:text-slate-300">Sarah Jenkins</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-[11px] font-medium">
+<span class="text-slate-700 dark:text-slate-300">2.1 TB</span>
+<span class="text-indigo-600">+0.8%</span>
+</div>
+<div class="w-32 bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+<div class="bg-indigo-500 h-full" style="width: 45%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">OPERATIONAL</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600">
+<span class="material-symbols-outlined text-[18px]">biotech</span>
+</div>
+<div>
+<div class="text-sm font-semibold text-slate-900 dark:text-white">Legacy Archive</div>
+<div class="text-xs text-slate-500">ID: PROJ-LEGACY-X</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<img alt="" class="size-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAus_-ArmjHMDneDVMvjNk1cADZ9PU7lbqSvTmRS7UcCZmg82ZAOSdD346OMVwzd3hMtkmwzEczwUiy2ii-ql7m6HYS1pb5Ti2sKdwJ7Uhh44kNZ8zSUOB01FJCHLNMuYqAWsPWbSWlNErl9G96cNgCqi4hUhXKIYoZ514UEJT0I5zfLsHIX91ijHrc7Ny25iorilVpWQ20qtCIrh4WJ6oS8A-8HEMcdzUTcptlZNtSJhVqNnZM_OUPJcEXZbfmvQl_ZQG5xsfx-iU"/>
+<span class="text-sm text-slate-700 dark:text-slate-300">Mike Kowalski</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1.5">
+<div class="flex justify-between text-[11px] font-medium">
+<span class="text-slate-700 dark:text-slate-300">0.8 TB</span>
+<span class="text-slate-400">0.0%</span>
+</div>
+<div class="w-32 bg-slate-100 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+<div class="bg-slate-400 h-full" style="width: 15%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">STANDBY</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>

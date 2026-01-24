@@ -1,0 +1,416 @@
+"""MCP WebSocket Client for WebSocket transport.
+
+This module provides a WebSocket-based MCP client for remote MCP servers
+that communicate via WebSocket protocol with JSON-RPC messages.
+
+This client is used by MCP Activities in the Temporal Worker to manage
+WebSocket MCP server connections independently from the API service.
+
+Features:
+- Bidirectional communication (server can push messages)
+- Persistent connection (no repeated handshakes)
+- Cross-network support (can connect to remote servers)
+- Automatic heartbeat/ping-pong for connection health
+"""
+
+import asyncio
+import json
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+
+from src.infrastructure.adapters.secondary.temporal.mcp.subprocess_client import (
+    MCPToolResult,
+    MCPToolSchema,
+)
+
+logger = logging.getLogger(__name__)
+
+# Default timeout in seconds
+DEFAULT_TIMEOUT = 30
+
+
+@dataclass
+class MCPWebSocketClientConfig:
+    """Configuration for MCP WebSocket Client."""
+
+    url: str
+    headers: Dict[str, str] = field(default_factory=dict)
+    timeout: float = DEFAULT_TIMEOUT
+    heartbeat_interval: float = 30.0
+    reconnect_attempts: int = 3
+
+
+class MCPWebSocketClient:
+    """
+    WebSocket-based MCP client for remote MCP servers.
+
+    Uses WebSocket for bidirectional JSON-RPC communication.
+    Designed to run within Temporal Worker activities.
+
+    Features:
+    - Bidirectional communication (server can push messages)
+    - Persistent connection (no repeated handshakes)
+    - Cross-network support (can connect to remote sandbox servers)
+    - Automatic heartbeat/ping-pong for connection health
+
+    Usage:
+        client = MCPWebSocketClient(
+            url="ws://sandbox:8765",
+            headers={"Authorization": "Bearer xxx"},
+        )
+        await client.connect()
+        tools = await client.list_tools()
+        result = await client.call_tool("read_file", {"path": "/etc/hosts"})
+        await client.disconnect()
+    """
+
+    def __init__(
+        self,
+        url: str,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        heartbeat_interval: float = 30.0,
+        reconnect_attempts: int = 3,
+    ):
+        """
+        Initialize the WebSocket client.
+
+        Args:
+            url: WebSocket URL of the MCP server (ws:// or wss://)
+            headers: HTTP headers for connection upgrade
+            timeout: Default timeout for operations in seconds
+            heartbeat_interval: Ping interval in seconds for connection health
+            reconnect_attempts: Max reconnection attempts on connection loss
+        """
+        if not url:
+            raise ValueError("WebSocket URL is required")
+
+        self.url = url
+        self.headers = headers or {}
+        self.timeout = timeout
+        self.heartbeat_interval = heartbeat_interval
+        self.reconnect_attempts = reconnect_attempts
+
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
+        self._request_id = 0
+        self._lock = asyncio.Lock()
+        self._pending_requests: Dict[int, asyncio.Future] = {}
+        self._receive_task: Optional[asyncio.Task] = None
+
+        self.server_info: Optional[Dict[str, Any]] = None
+        self._tools: List[MCPToolSchema] = []
+        self._connected = False
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if the client is connected."""
+        return self._connected and self._ws is not None and not self._ws.closed
+
+    async def connect(self, timeout: Optional[float] = None) -> bool:
+        """
+        Connect to the remote MCP server via WebSocket.
+
+        Args:
+            timeout: Connection timeout in seconds (uses default if None)
+
+        Returns:
+            True if connection successful, False otherwise
+        """
+        timeout = timeout or self.timeout
+
+        if self.is_connected:
+            logger.debug("WebSocket already connected")
+            return True
+
+        logger.info(f"Connecting to MCP server via WebSocket: {self.url}")
+
+        try:
+            # Create aiohttp session
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout))
+
+            # Connect WebSocket
+            self._ws = await self._session.ws_connect(
+                self.url,
+                headers=self.headers,
+                heartbeat=self.heartbeat_interval,
+            )
+
+            # Start background task to receive messages
+            self._receive_task = asyncio.create_task(self._receive_loop())
+
+            # Send initialize request
+            init_result = await self._send_request(
+                "initialize",
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"roots": {"listChanged": True}, "sampling": {}},
+                    "clientInfo": {"name": "memstack-mcp-worker", "version": "1.0.0"},
+                },
+                timeout=timeout,
+            )
+
+            if init_result:
+                self.server_info = init_result.get("serverInfo", {})
+
+                # Send initialized notification
+                await self._send_notification("notifications/initialized", {})
+
+                # Pre-fetch tools list
+                tools = await self.list_tools(timeout=timeout)
+                self._tools = tools
+
+                self._connected = True
+                logger.info(
+                    f"MCP WebSocket connected: {self.server_info} with {len(self._tools)} tools"
+                )
+                return True
+
+            logger.error("MCP initialize request failed")
+            await self.disconnect()
+            return False
+
+        except asyncio.TimeoutError:
+            logger.error(f"MCP WebSocket connection timeout after {timeout}s")
+            await self.disconnect()
+            return False
+        except aiohttp.WSServerHandshakeError as e:
+            logger.error(f"WebSocket handshake failed: {e}")
+            await self.disconnect()
+            return False
+        except Exception as e:
+            logger.exception(f"Error connecting to MCP WebSocket: {e}")
+            await self.disconnect()
+            return False
+
+    async def disconnect(self) -> None:
+        """Close the WebSocket connection."""
+        logger.info("Disconnecting MCP WebSocket client")
+        self._connected = False
+
+        # Cancel receive task
+        if self._receive_task and not self._receive_task.done():
+            self._receive_task.cancel()
+            try:
+                await self._receive_task
+            except asyncio.CancelledError:
+                pass
+            self._receive_task = None
+
+        # Close WebSocket
+        if self._ws and not self._ws.closed:
+            await self._ws.close()
+        self._ws = None
+
+        # Close session
+        if self._session and not self._session.closed:
+            await self._session.close()
+        self._session = None
+
+        # Fail pending requests
+        for request_id, future in list(self._pending_requests.items()):
+            if not future.done():
+                future.set_exception(RuntimeError("WebSocket connection closed"))
+        self._pending_requests.clear()
+
+        self._tools = []
+        self.server_info = None
+
+    async def _receive_loop(self) -> None:
+        """Background task to receive and dispatch WebSocket messages."""
+        try:
+            async for msg in self._ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        await self._handle_message(data)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Invalid JSON from WebSocket: {e}")
+
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    logger.error(f"WebSocket error: {self._ws.exception()}")
+                    break
+
+                elif msg.type == aiohttp.WSMsgType.CLOSED:
+                    logger.info("WebSocket connection closed by server")
+                    break
+
+                elif msg.type == aiohttp.WSMsgType.CLOSE:
+                    logger.info(f"WebSocket close frame received: {msg.data}")
+                    break
+
+        except asyncio.CancelledError:
+            logger.debug("WebSocket receive loop cancelled")
+        except Exception as e:
+            logger.error(f"Error in WebSocket receive loop: {e}", exc_info=True)
+        finally:
+            self._connected = False
+            # Fail all pending requests
+            for request_id, future in list(self._pending_requests.items()):
+                if not future.done():
+                    future.set_exception(RuntimeError("WebSocket connection closed"))
+            self._pending_requests.clear()
+
+    async def _handle_message(self, data: dict) -> None:
+        """Handle incoming JSON-RPC message."""
+        request_id = data.get("id")
+
+        if request_id is not None and request_id in self._pending_requests:
+            future = self._pending_requests.pop(request_id)
+
+            if "error" in data:
+                error = data["error"]
+                error_msg = (
+                    error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                )
+                future.set_exception(RuntimeError(f"MCP server error: {error_msg}"))
+            else:
+                future.set_result(data.get("result", {}))
+
+        elif "method" in data and "id" not in data:
+            # This is a notification from server (no response expected)
+            method = data.get("method")
+            logger.debug(f"Received server notification: {method}")
+            # Handle server-initiated notifications if needed
+
+        else:
+            logger.warning(f"Received unexpected message: {data}")
+
+    async def list_tools(self, timeout: Optional[float] = None) -> List[MCPToolSchema]:
+        """
+        List available tools.
+
+        Args:
+            timeout: Operation timeout in seconds
+
+        Returns:
+            List of tool schemas
+        """
+        timeout = timeout or self.timeout
+        result = await self._send_request("tools/list", {}, timeout=timeout)
+
+        if result:
+            tools_data = result.get("tools", [])
+            return [
+                MCPToolSchema(
+                    name=tool.get("name", ""),
+                    description=tool.get("description"),
+                    inputSchema=tool.get("inputSchema", {}),
+                )
+                for tool in tools_data
+            ]
+        return []
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: Dict[str, Any],
+        timeout: Optional[float] = None,
+    ) -> MCPToolResult:
+        """
+        Call a tool on the MCP server.
+
+        Args:
+            name: Tool name
+            arguments: Tool arguments
+            timeout: Operation timeout in seconds
+
+        Returns:
+            Tool execution result
+        """
+        timeout = timeout or self.timeout
+        logger.info(f"Calling MCP tool: {name}")
+        logger.debug(f"Tool arguments: {arguments}")
+
+        try:
+            result = await self._send_request(
+                "tools/call",
+                {"name": name, "arguments": arguments},
+                timeout=timeout,
+            )
+
+            if result:
+                return MCPToolResult(
+                    content=result.get("content", []),
+                    isError=result.get("isError", False),
+                )
+
+        except Exception as e:
+            logger.error(f"Tool call error: {e}")
+            return MCPToolResult(
+                content=[{"type": "text", "text": f"Error: {str(e)}"}],
+                isError=True,
+            )
+
+        return MCPToolResult(
+            content=[{"type": "text", "text": "Unknown error"}],
+            isError=True,
+        )
+
+    def get_cached_tools(self) -> List[MCPToolSchema]:
+        """Get cached tools list (from connection time)."""
+        return self._tools
+
+    async def _send_request(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> Optional[Dict[str, Any]]:
+        """Send a JSON-RPC request and wait for response."""
+        if not self._ws or self._ws.closed:
+            logger.error("WebSocket not connected")
+            return None
+
+        async with self._lock:
+            self._request_id += 1
+            request_id = self._request_id
+            request = {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+                "id": request_id,
+            }
+
+            # Create future for response
+            future: asyncio.Future = asyncio.get_event_loop().create_future()
+            self._pending_requests[request_id] = future
+
+        try:
+            logger.debug(f"Sending WebSocket request: {method} (id={request_id})")
+            await self._ws.send_json(request)
+
+            # Wait for response with timeout
+            result = await asyncio.wait_for(future, timeout=timeout)
+            return result
+
+        except asyncio.TimeoutError:
+            async with self._lock:
+                self._pending_requests.pop(request_id, None)
+            logger.error(f"MCP request '{method}' timed out after {timeout}s")
+            return None
+        except Exception as e:
+            async with self._lock:
+                self._pending_requests.pop(request_id, None)
+            logger.error(f"MCP request error: {e}")
+            return None
+
+    async def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
+        """Send a JSON-RPC notification (no response expected)."""
+        if not self._ws or self._ws.closed:
+            return
+
+        notification = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }
+
+        try:
+            logger.debug(f"Sending notification: {method}")
+            await self._ws.send_json(notification)
+        except Exception as e:
+            logger.error(f"Notification error: {e}")

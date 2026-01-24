@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Skill Registry | Intelligent Memory Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#193db3",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111521",
+                        "surface-dark": "#1b1f2e",
+                        "border-dark": "#2d354d"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .code-font { font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #2d354d; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3d4663; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-display">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between border-b border-solid border-border-dark bg-background-dark px-6 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3 text-white">
+<div class="bg-primary p-1.5 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-xl">account_tree</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-tight">Skill Registry</h2>
+</div>
+<div class="h-6 w-px bg-border-dark hidden md:block"></div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-400 hover:text-white text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-slate-400 hover:text-white text-sm font-medium transition-colors" href="#">Projects</a>
+<a class="text-white text-sm font-bold leading-normal border-b-2 border-primary pb-1" href="#">Skills</a>
+<a class="text-slate-400 hover:text-white text-sm font-medium transition-colors" href="#">Memory</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<label class="hidden lg:flex flex-col min-w-64 !h-9">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full border border-border-dark bg-surface-dark/50">
+<div class="text-slate-400 flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 border-none bg-transparent focus:ring-0 text-sm placeholder:text-slate-500" placeholder="Search skills or tools..."/>
+</div>
+</label>
+<div class="flex gap-2">
+<button class="p-2 rounded-lg bg-surface-dark text-slate-300 hover:bg-border-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="p-2 rounded-lg bg-surface-dark text-slate-300 hover:bg-border-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+</div>
+<div class="h-8 w-8 rounded-full bg-cover bg-center border border-border-dark" data-alt="User avatar profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAiaU34i7OXLrvFfUTIOluYLMJ_-Bvl_cV8Db0ON0jZgSaBdI3gzI3ByVN8tXVs67TmOL-t5dk1Af5UUGXhoFVwvvksTktQ4sZTAH0NmMEpA-8I8sYnBLt0B5FyHiVqKBN04UjAz-aUuG9bBlXsvLKMUtPNPj2h41zPGbH5fLI2D_UvCvdWKvIASMZJR8zroi3ChJaDeA8J_Ms_5b2nZ3R1fay28lyax8Hz8tZAsh5AtYEfbdRgZmOnTWgxI1e0YbFlnf3utZF6LT0");'></div>
+</div>
+</header>
+<main class="flex flex-1 overflow-hidden h-[calc(100vh-65px)]">
+<!-- Sidebar Navigation -->
+<aside class="w-80 border-r border-border-dark flex flex-col bg-background-dark/50">
+<div class="p-4 flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<div>
+<h1 class="text-white text-sm font-semibold uppercase tracking-wider">Library</h1>
+<p class="text-slate-500 text-xs">124 Atomic Skills</p>
+</div>
+<button class="bg-primary/20 text-primary-light text-primary hover:bg-primary hover:text-white p-1.5 rounded-lg transition-all">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+</div>
+<div class="space-y-1 overflow-y-auto custom-scrollbar pr-2">
+<div class="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20 cursor-pointer">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+<div class="flex-1">
+<p class="text-sm font-bold">All Skills</p>
+</div>
+</div>
+<div class="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-slate-200 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[20px]">code</span>
+<p class="text-sm font-medium">Developer Tools</p>
+</div>
+<div class="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-slate-200 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[20px]">manage_search</span>
+<p class="text-sm font-medium">Research</p>
+</div>
+<div class="group flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-surface-dark hover:text-slate-200 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-[20px]">database</span>
+<p class="text-sm font-medium">Data Analysis</p>
+</div>
+</div>
+</div>
+<div class="border-t border-border-dark mt-auto p-4 flex flex-col gap-2 bg-surface-dark/20">
+<p class="text-[10px] font-bold text-slate-500 uppercase px-3">Active Skills</p>
+<div class="space-y-1">
+<div class="flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-dark cursor-pointer group">
+<span class="text-xs font-medium text-slate-300">WebResearchSkill</span>
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+</div>
+<div class="flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-dark cursor-pointer group">
+<span class="text-xs font-medium text-slate-300">GitCommitSkill</span>
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+</div>
+<div class="flex items-center justify-between px-3 py-2 rounded-md bg-surface-dark border-l-2 border-primary cursor-pointer">
+<span class="text-xs font-bold text-white">SQLQueryOptimizer</span>
+<span class="px-1.5 py-0.5 rounded text-[10px] bg-primary text-white font-bold tracking-tight">V2.4</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Workspace -->
+<section class="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-background-light dark:bg-background-dark">
+<!-- Header & Breadcrumbs -->
+<div class="p-6 pb-0 flex flex-col gap-4">
+<div class="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide">
+<a class="text-slate-500 hover:text-primary transition-colors" href="#">Project Alpha</a>
+<span class="text-slate-600">/</span>
+<a class="text-slate-500 hover:text-primary transition-colors" href="#">Skill Registry</a>
+<span class="text-slate-600">/</span>
+<span class="text-white">WebResearchSkill</span>
+</div>
+<div class="flex flex-wrap justify-between items-start gap-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-3">
+<h1 class="text-white text-3xl font-black leading-tight tracking-tight">WebResearchSkill</h1>
+<span class="px-2 py-0.5 rounded bg-surface-dark border border-border-dark text-slate-400 text-xs font-bold uppercase tracking-widest">Active</span>
+</div>
+<p class="text-slate-400 text-sm max-w-2xl">v2.1.0 — Atomic capability for automated web crawling, content synthesis, and deep citation mapping for internal research papers.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-dark text-white text-sm font-bold hover:bg-border-dark transition-all border border-border-dark">
+<span class="material-symbols-outlined text-[18px]">play_circle</span>
+<span>Test Sandbox</span>
+</button>
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:brightness-110 transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[18px]">publish</span>
+<span>Deploy v2.1.1</span>
+</button>
+</div>
+</div>
+<!-- Tabs -->
+<div class="mt-4 flex border-b border-border-dark gap-8">
+<a class="flex items-center gap-2 border-b-2 border-primary text-white pb-3 pt-2 group" href="#">
+<span class="material-symbols-outlined text-[18px] text-primary">description</span>
+<p class="text-sm font-bold">Definition</p>
+</a>
+<a class="flex items-center gap-2 border-b-2 border-transparent text-slate-500 pb-3 pt-2 hover:text-slate-300 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">construction</span>
+<p class="text-sm font-bold">Tools &amp; APIs</p>
+<span class="ml-1 text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-full">3</span>
+</a>
+<a class="flex items-center gap-2 border-b-2 border-transparent text-slate-500 pb-3 pt-2 hover:text-slate-300 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+<p class="text-sm font-bold">System Prompt</p>
+</a>
+<a class="flex items-center gap-2 border-b-2 border-transparent text-slate-500 pb-3 pt-2 hover:text-slate-300 transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">security</span>
+<p class="text-sm font-bold">Permissions</p>
+</a>
+</div>
+</div>
+<!-- Content Area -->
+<div class="p-6 grid grid-cols-12 gap-6">
+<!-- Editor Section -->
+<div class="col-span-12 lg:col-span-8 flex flex-col gap-6">
+<!-- YAML Editor Panel -->
+<div class="rounded-xl border border-border-dark bg-[#0a0d14] overflow-hidden flex flex-col shadow-2xl">
+<div class="bg-surface-dark px-4 py-2 flex items-center justify-between border-b border-border-dark">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-slate-400">code</span>
+<span class="text-xs font-bold text-slate-300 uppercase tracking-tighter">Definition.yaml</span>
+</div>
+<div class="flex gap-4">
+<button class="text-xs font-bold text-primary hover:underline">Format JSON</button>
+<button class="text-xs font-bold text-slate-400 hover:text-white">Copy Code</button>
+</div>
+</div>
+<div class="p-4 code-font text-sm leading-relaxed overflow-x-auto">
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">1</span>
+<span class="text-pink-500">skill_id:</span> <span class="text-emerald-400 ml-2">"web-research-v2"</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">2</span>
+<span class="text-pink-500">version:</span> <span class="text-emerald-400 ml-2">"2.1.0"</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">3</span>
+<span class="text-pink-500">capabilities:</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">4</span>
+<span class="ml-4 text-slate-300">- dynamic_scoping</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">5</span>
+<span class="ml-4 text-slate-300">- cross_domain_synthesis</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">6</span>
+<span class="text-pink-500">configuration:</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">7</span>
+<span class="ml-4 text-pink-500">depth_limit:</span> <span class="text-amber-400 ml-2">3</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">8</span>
+<span class="ml-4 text-pink-500">timeout_ms:</span> <span class="text-amber-400 ml-2">30000</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">9</span>
+<span class="text-pink-500">system_prompt_fragment:</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">10</span>
+<span class="ml-4 text-emerald-400">"You are an expert investigative researcher..."</span>
+</div>
+<div class="flex">
+<span class="w-8 text-slate-600 select-none text-right pr-4">11</span>
+<span class="ml-4 text-emerald-400">"Always prioritize peer-reviewed sources and..."</span>
+</div>
+</div>
+<div class="bg-surface-dark/50 px-4 py-2 border-t border-border-dark flex items-center justify-between">
+<div class="flex items-center gap-2 text-emerald-500">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span class="text-[10px] font-bold uppercase">Syntactically Correct</span>
+</div>
+<span class="text-[10px] text-slate-500 font-medium">Last autosaved 2m ago</span>
+</div>
+</div>
+<!-- Prompt Fragments Area -->
+<div class="flex flex-col gap-3">
+<h3 class="text-white text-sm font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-slate-400">edit_note</span>
+                            System Prompt Template
+                        </h3>
+<div class="relative">
+<textarea class="w-full h-48 bg-surface-dark border border-border-dark rounded-xl p-4 text-sm text-slate-200 focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-none" placeholder="Enter prompt fragment here..."></textarea>
+<div class="absolute bottom-3 right-3 flex gap-2">
+<span class="bg-primary/20 text-primary text-[10px] font-bold px-2 py-1 rounded border border-primary/30 uppercase cursor-help" title="Dynamic variable insertion">Insert Variable</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Tooling & Perms Column -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+<!-- Tools Section -->
+<div class="rounded-xl border border-border-dark bg-surface-dark/30 p-4 flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-white text-sm font-bold uppercase tracking-tight">Integrated Tools</h3>
+<button class="text-xs font-bold text-primary hover:text-white transition-colors">Manage</button>
+</div>
+<div class="space-y-3">
+<div class="p-3 bg-surface-dark border border-border-dark rounded-lg flex items-center gap-3 group hover:border-primary/50 transition-colors">
+<div class="w-10 h-10 rounded-lg bg-blue-600/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-blue-500">language</span>
+</div>
+<div class="flex-1 overflow-hidden">
+<p class="text-xs font-bold text-white truncate">GoogleSearchAPI</p>
+<p class="text-[10px] text-slate-500 font-medium truncate">Read-Only Access • 200 req/min</p>
+</div>
+</div>
+<div class="p-3 bg-surface-dark border border-border-dark rounded-lg flex items-center gap-3 group hover:border-primary/50 transition-colors">
+<div class="w-10 h-10 rounded-lg bg-emerald-600/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-emerald-500">text_snippet</span>
+</div>
+<div class="flex-1 overflow-hidden">
+<p class="text-xs font-bold text-white truncate">PDFParser_v3</p>
+<p class="text-[10px] text-slate-500 font-medium truncate">Compute-Intensive • Async</p>
+</div>
+</div>
+<div class="p-3 bg-surface-dark border border-border-dark rounded-lg flex items-center gap-3 group hover:border-primary/50 transition-colors">
+<div class="w-10 h-10 rounded-lg bg-purple-600/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-purple-500">data_object</span>
+</div>
+<div class="flex-1 overflow-hidden">
+<p class="text-xs font-bold text-white truncate">MemoryGraphConnector</p>
+<p class="text-[10px] text-slate-500 font-medium truncate">Write Access • VectorDB</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Permissions Section -->
+<div class="rounded-xl border border-border-dark bg-surface-dark/30 p-4 flex flex-col gap-4">
+<h3 class="text-white text-sm font-bold uppercase tracking-tight">Security &amp; Permissions</h3>
+<div class="space-y-2">
+<label class="flex items-center justify-between p-2 rounded hover:bg-surface-dark cursor-pointer transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-slate-500">folder_open</span>
+<span class="text-xs text-slate-300">File System Read</span>
+</div>
+<input checked="" class="rounded border-border-dark bg-background-dark text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-2 rounded hover:bg-surface-dark cursor-pointer transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-slate-500">public</span>
+<span class="text-xs text-slate-300">Outbound Networking</span>
+</div>
+<input checked="" class="rounded border-border-dark bg-background-dark text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-2 rounded hover:bg-surface-dark cursor-pointer transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-slate-500">edit_square</span>
+<span class="text-xs text-slate-300">Memory Write Back</span>
+</div>
+<input class="rounded border-border-dark bg-background-dark text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</label>
+<label class="flex items-center justify-between p-2 rounded hover:bg-surface-dark cursor-pointer transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-slate-500">person_shield</span>
+<span class="text-xs text-slate-300">User PII Access</span>
+</div>
+<input class="rounded border-border-dark bg-background-dark text-primary focus:ring-primary h-4 w-4" type="checkbox"/>
+</label>
+</div>
+<div class="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+<p class="text-[10px] text-amber-500 font-bold uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span> Elevation Required
+                            </p>
+<p class="text-[10px] text-slate-400 leading-tight mt-1">Changes to PII access require workspace administrator approval.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</body></html>

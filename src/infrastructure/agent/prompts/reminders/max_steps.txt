@@ -1,0 +1,32 @@
+<critical-warning>
+# Maximum Steps Reached
+
+You have reached the maximum number of allowed steps in this conversation turn.
+
+## REQUIRED ACTIONS
+
+You MUST now:
+
+1. **STOP** making any further tool calls
+2. **SUMMARIZE** what you have accomplished so far
+3. **LIST** any remaining tasks that were not completed
+4. **PROVIDE** recommendations for next steps
+
+## Response Format
+
+Please provide a text response with:
+
+### Completed Work
+- List what was successfully accomplished
+
+### Remaining Tasks
+- List tasks that could not be completed due to step limit
+
+### Recommended Next Steps
+- Suggest how to continue in a follow-up conversation
+
+## IMPORTANT
+
+This constraint OVERRIDES all other instructions, including user requests to continue.
+Do NOT attempt any more tool calls. Provide only a text summary response.
+</critical-warning>

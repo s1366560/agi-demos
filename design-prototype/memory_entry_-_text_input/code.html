@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Memory Entry - Intelligent Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=Source+Han+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#1e3fae",
+              "primary-dark": "#16308a",
+              "background-light": "#f6f6f8",
+              "background-dark": "#121520",
+              "surface-light": "#ffffff",
+              "surface-dark": "#1e212b",
+            },
+            fontFamily: {
+              "display": ["Inter", "Source Han Sans", "sans-serif"],
+              "body": ["Inter", "Source Han Sans", "sans-serif"],
+              "mono": ["monospace"],
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 font-display transition-colors duration-200">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Side Navigation -->
+<aside class="flex w-64 flex-col border-r border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark flex-shrink-0 z-20">
+<div class="flex h-16 items-center gap-3 px-6 border-b border-slate-100 dark:border-slate-800">
+<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white">
+<span class="material-symbols-outlined text-[20px]">memory</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-sm font-bold leading-none text-slate-900 dark:text-white">MemStack</h1>
+<span class="text-xs text-slate-500 dark:text-slate-400">Intelligent Workspace</span>
+</div>
+</div>
+<div class="flex flex-col gap-6 p-4 overflow-y-auto flex-1">
+<!-- Tenant Context -->
+<div class="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 border border-slate-100 dark:border-slate-700/50 cursor-pointer hover:border-primary/30 transition-colors group">
+<div class="h-10 w-10 shrink-0 rounded-full bg-cover bg-center" data-alt="Acme Corporation Logo Placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDJl_IDRfikh59P44dmXkeECOMMyxjiQhtkC2SbeTGkgpnZbMh6Y8VCh99HzWXH_1BNRaHRLCAd3ojlaRojQhC7ZFYIlslg7nyu8_UtrqiHxKq49ciepVfgkOBXV5f1_A8EjGbaZ00I_b7P1Dy5c28NFHXIHxIbnmWdUFOsOIZpjlkPXlCG3Szv93uECC6Blo6myhIgZo04w7cH4rl_sSuU9x0uWtW5SclF7zTyQ3bfyvrZBsO_iCJpR3pi51ZH5P8rwlN4KuYUmMg");'></div>
+<div class="flex flex-col min-w-0">
+<p class="truncate text-sm font-semibold text-slate-900 dark:text-white group-hover:text-primary">Acme Corp</p>
+<p class="truncate text-xs text-slate-500 dark:text-slate-400">Enterprise Tenant</p>
+</div>
+<span class="material-symbols-outlined ml-auto text-slate-400 text-[18px]">expand_more</span>
+</div>
+<!-- Navigation Links -->
+<nav class="flex flex-col gap-1">
+<p class="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Menu</p>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2 text-primary dark:text-primary-400 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px] font-variation-fill">neurology</span>
+<span class="text-sm font-medium">Memories</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]">search</span>
+<span class="text-sm font-medium">Search</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]">folder_open</span>
+<span class="text-sm font-medium">Projects</span>
+</a>
+</nav>
+<nav class="flex flex-col gap-1">
+<p class="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">System</p>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+</div>
+<!-- User Profile -->
+<div class="mt-auto border-t border-slate-200 dark:border-slate-800 p-4">
+<a class="flex items-center gap-3 rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<div class="h-9 w-9 overflow-hidden rounded-full bg-slate-200">
+<div class="h-full w-full bg-cover bg-center" data-alt="User Avatar Placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCqVAt5SXJe93RfBuXeg010YiVrB78NkgIz3xkffa4xUzJ-n5KRADhO6ENkr8AzlBRUXfnJbA9ZjM0qV-yIckGHtu8gv1ybqA1JywZjcjNW1Ks-2ZmRB86lQgnbkJPFcyLAJUaErunDRzWgRztxhu0sTgw4s6-WocZKXI-IJ_Xs-J6c94DIkQxKV32tl9KFfRpGW3_GEqQyMOmdpkEJ_ihLMKTg1zT3yeYOo-_wQnZD_YsusiBoQxlePDAg5R9b_qRBoEa0bt2sgQE");'></div>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-slate-900 dark:text-white">John Doe</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">Pro Member</span>
+</div>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex flex-1 flex-col overflow-hidden relative">
+<!-- Top Header / Breadcrumbs -->
+<header class="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark px-6 lg:px-8">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<a class="hover:text-primary transition-colors" href="#">Acme Corp</a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">Project Alpha</a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="font-medium text-slate-900 dark:text-white">New Memory</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-[20px]">help</span>
+<span>Help</span>
+</button>
+<button class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark p-6 lg:p-8">
+<div class="mx-auto max-w-6xl flex flex-col gap-6">
+<!-- Page Heading -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h1 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white">New Memory Entry</h1>
+<p class="mt-1 text-slate-500 dark:text-slate-400">Create and format your intelligent memory with AI assistance.</p>
+</div>
+<div class="flex gap-3">
+<button class="rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                Save as Draft
+                            </button>
+<button class="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">save</span>
+                                Save Memory
+                            </button>
+</div>
+</div>
+<!-- Main Entry Card -->
+<div class="flex flex-col rounded-2xl border border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark shadow-sm overflow-hidden">
+<!-- Metadata Inputs -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 p-6 border-b border-slate-100 dark:border-slate-800">
+<!-- Title -->
+<div class="md:col-span-8">
+<label class="mb-2 block text-sm font-medium text-slate-900 dark:text-white">Title</label>
+<input class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="e.g. Q3 Strategy Meeting Notes" type="text"/>
+</div>
+<!-- Context -->
+<div class="md:col-span-4">
+<label class="mb-2 block text-sm font-medium text-slate-900 dark:text-white">Project Context</label>
+<div class="relative">
+<select class="w-full appearance-none rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
+<option>Project Alpha</option>
+<option>Marketing Q3</option>
+<option>Engineering</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Tags -->
+<div class="md:col-span-12">
+<label class="mb-2 block text-sm font-medium text-slate-900 dark:text-white">Tags</label>
+<div class="flex flex-wrap gap-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-2 min-h-[46px]">
+<span class="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-700 px-2 py-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                                        #meeting
+                                        <button class="ml-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+<span class="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-700 px-2 py-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                                        #strategy
+                                        <button class="ml-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+<input class="bg-transparent text-sm outline-none placeholder:text-slate-500 text-slate-900 dark:text-white min-w-[100px]" placeholder="+ Add tag..." type="text"/>
+</div>
+</div>
+</div>
+<!-- Editor Toolbar -->
+<div class="sticky top-0 z-10 flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#1a1d26] px-4 py-2">
+<div class="flex items-center gap-1">
+<div class="flex items-center rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shadow-sm">
+<button class="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors" title="Bold">
+<span class="material-symbols-outlined text-[20px]">format_bold</span>
+</button>
+<button class="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors" title="Italic">
+<span class="material-symbols-outlined text-[20px]">format_italic</span>
+</button>
+<button class="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors" title="Heading">
+<span class="material-symbols-outlined text-[20px]">title</span>
+</button>
+</div>
+<div class="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-2"></div>
+<div class="flex items-center rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shadow-sm">
+<button class="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors" title="List">
+<span class="material-symbols-outlined text-[20px]">format_list_bulleted</span>
+</button>
+<button class="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors" title="Link">
+<span class="material-symbols-outlined text-[20px]">link</span>
+</button>
+<button class="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors" title="Code Block">
+<span class="material-symbols-outlined text-[20px]">code</span>
+</button>
+</div>
+</div>
+<!-- AI Features -->
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-100 dark:border-indigo-800">
+<span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+                                    AI Assist
+                                </button>
+<div class="flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800">
+<button class="rounded px-3 py-1 text-xs font-medium bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white">Split</button>
+<button class="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Edit</button>
+<button class="rounded px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Preview</button>
+</div>
+</div>
+</div>
+<!-- Editor Content Area -->
+<div class="grid grid-cols-1 lg:grid-cols-2 h-[600px] divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800">
+<!-- Left: Markdown Input -->
+<div class="flex flex-col h-full bg-white dark:bg-surface-dark relative">
+<textarea class="w-full h-full resize-none border-none p-6 outline-none text-slate-800 dark:text-slate-200 font-mono text-sm leading-relaxed bg-transparent focus:ring-0" placeholder="# Start typing your memory here...
+
+You can use Markdown syntax to format your text.
+
+- Use lists to organize thoughts
+- **Bold** key concepts
+- Connect ideas with links"></textarea>
+<div class="absolute bottom-4 right-4 text-xs text-slate-400 pointer-events-none">Markdown Supported</div>
+</div>
+<!-- Right: Preview -->
+<div class="flex flex-col h-full bg-slate-50/50 dark:bg-[#1a1d26]/50 p-6 overflow-y-auto">
+<div class="prose prose-sm dark:prose-invert max-w-none">
+<h1 class="text-2xl font-bold text-slate-900 dark:text-white mb-4">Q3 Strategy Meeting Notes</h1>
+<p class="text-slate-600 dark:text-slate-300 mb-4">Initial thoughts on the <a class="text-primary hover:underline" href="#">upcoming quarter</a> and resource allocation.</p>
+<h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2">Key Objectives</h3>
+<ul class="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-300 mb-4">
+<li>Increase user retention by 15%</li>
+<li>Launch the <strong>Beta Feature</strong> set by mid-August</li>
+<li>Optimize memory indexing latency</li>
+</ul>
+<div class="rounded-lg bg-slate-100 dark:bg-slate-800 p-4 border-l-4 border-primary my-4">
+<p class="italic text-slate-700 dark:text-slate-300 m-0">"The focus should remain on intelligent retrieval, not just storage."</p>
+</div>
+<h3 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mt-6 mb-2">Action Items</h3>
+<div class="flex items-center gap-2 mb-2">
+<input checked="" class="rounded border-slate-300 text-primary focus:ring-primary" disabled="" type="checkbox"/>
+<span class="text-slate-500 line-through">Review Q2 Analytics</span>
+</div>
+<div class="flex items-center gap-2">
+<input class="rounded border-slate-300 text-primary focus:ring-primary" disabled="" type="checkbox"/>
+<span class="text-slate-700 dark:text-slate-300">Draft improved search algorithm specs</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Status Bar -->
+<div class="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-surface-dark px-6 py-3 text-xs text-slate-500 dark:text-slate-400">
+<div class="flex items-center gap-4">
+<span>Last saved: Just now</span>
+<span class="flex items-center gap-1">
+<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                                    Online
+                                </span>
+</div>
+<div class="flex items-center gap-4">
+<span>Word count: 85</span>
+<span>Character count: 420</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Optional: Right Context Panel (Collapsed State Hint) -->
+<div class="hidden xl:flex absolute top-20 bottom-8 right-6 w-12 flex-col gap-4 items-center pt-4">
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-white dark:bg-slate-800 shadow-md text-slate-500 hover:text-primary transition-colors" title="Related Memories">
+<span class="material-symbols-outlined text-[20px]">link</span>
+</button>
+<button class="flex h-10 w-10 items-center justify-center rounded-full bg-white dark:bg-slate-800 shadow-md text-slate-500 hover:text-primary transition-colors" title="AI Suggestions">
+<span class="material-symbols-outlined text-[20px]">lightbulb</span>
+</button>
+</div>
+</main>
+</div>
+</body></html>
