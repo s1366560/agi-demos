@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, Dict
 
 from src.domain.shared_kernel import Entity
+from src.domain.events.agent_events import AgentDomainEvent
 
 
 class AgentEventType(str, Enum):
@@ -102,3 +103,21 @@ class AgentExecutionEvent(Entity):
             "data": self.event_data,
             "timestamp": self.created_at.isoformat() if self.created_at else None,
         }
+
+    @classmethod
+    def from_domain_event(
+        cls, 
+        event: AgentDomainEvent, 
+        conversation_id: str, 
+        message_id: str,
+        sequence_number: int = 0
+    ) -> "AgentExecutionEvent":
+        """Create from domain event."""
+        return cls(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            event_type=event.event_type.value,
+            event_data=event.model_dump(exclude={"event_type", "timestamp"}),
+            sequence_number=sequence_number,
+            created_at=datetime.fromtimestamp(event.timestamp)
+        )

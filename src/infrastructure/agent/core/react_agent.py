@@ -25,6 +25,15 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.events.agent_events import (
+    AgentDomainEvent, AgentEventType,
+    AgentThoughtEvent, AgentActEvent, AgentObserveEvent,
+    AgentTextStartEvent, AgentTextDeltaEvent, AgentTextEndEvent,
+    AgentStepStartEvent, AgentStepEndEvent, AgentStepFinishEvent,
+    AgentWorkPlanEvent, AgentCostUpdateEvent, AgentErrorEvent,
+    AgentRetryEvent, AgentDoomLoopDetectedEvent, AgentPermissionAskedEvent,
+    AgentSkillExecutionCompleteEvent,
+)
 
 from ..context import ContextWindowConfig, ContextWindowManager
 from ..permission import PermissionManager
@@ -722,13 +731,13 @@ class ReActAgent:
         success = True
 
         try:
-            # Process and convert SSE events to legacy format
-            async for sse_event in processor.process(
+            # Process and convert Domain events to legacy format
+            async for domain_event in processor.process(
                 session_id=conversation_id,
                 messages=messages,
             ):
-                # Convert SSEEvent to legacy event format
-                event = self._convert_sse_event(sse_event)
+                # Convert AgentDomainEvent to legacy event format
+                event = self._convert_domain_event(domain_event)
                 if event:
                     # Track complete content
                     if event.get("type") == "text_delta":
@@ -829,124 +838,134 @@ class ReActAgent:
         current_step = 0
 
         # Execute skill and convert events
-        async for sse_event in self.skill_executor.execute(skill, query, context):
-            # Convert SkillExecutor SSE events to our format
-            converted_event = self._convert_skill_sse_event(sse_event, skill, current_step)
+        async for domain_event in self.skill_executor.execute(skill, query, context):
+            # Convert SkillExecutor Domain events to our format
+            converted_event = self._convert_skill_domain_event(domain_event, skill, current_step)
 
             if converted_event:
                 yield converted_event
 
             # Track tool results from observe events (outside if block)
-            if sse_event.type == SSEEventType.OBSERVE:
-                tool_results.append(sse_event.data)
+            if domain_event.event_type == AgentEventType.OBSERVE:
+                tool_results.append({
+                    "tool_name": domain_event.tool_name,
+                    "result": domain_event.result,
+                    "error": domain_event.error,
+                    "duration_ms": domain_event.duration_ms,
+                    "status": domain_event.status,
+                })
                 current_step += 1
 
             # Handle completion event (outside if block since converted_event is None for COMPLETE)
-            if sse_event.type == SSEEventType.COMPLETE:
-                completion_data = sse_event.data
-                success = completion_data.get("success", False)
-                error = completion_data.get("error")
+            if domain_event.event_type == AgentEventType.SKILL_EXECUTION_COMPLETE:
+                # Type check for safety
+                if isinstance(domain_event, AgentSkillExecutionCompleteEvent):
+                    success = domain_event.success
+                    error = domain_event.error
+                    execution_time_ms = domain_event.execution_time_ms
 
-                # Generate summary from tool results
-                summary = self._summarize_skill_results(skill, tool_results, success, error)
+                    # Generate summary from tool results
+                    summary = self._summarize_skill_results(skill, tool_results, success, error)
 
-                # Emit skill execution complete event
-                yield {
-                    "type": "skill_execution_complete",
-                    "data": {
-                        "skill_id": skill.id,
-                        "skill_name": skill.name,
-                        "success": success,
-                        "summary": summary,
-                        "tool_results": tool_results,
-                        "execution_time_ms": completion_data.get("execution_time_ms", 0),
-                        "error": error,
-                    },
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
+                    # Emit skill execution complete event
+                    yield {
+                        "type": "skill_execution_complete",
+                        "data": {
+                            "skill_id": skill.id,
+                            "skill_name": skill.name,
+                            "success": success,
+                            "summary": summary,
+                            "tool_results": tool_results,
+                            "execution_time_ms": execution_time_ms,
+                            "error": error,
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
 
-    def _convert_skill_sse_event(
+    def _convert_skill_domain_event(
         self,
-        sse_event: SSEEvent,
+        domain_event: AgentDomainEvent,
         skill: Skill,
         current_step: int,
     ) -> Optional[Dict[str, Any]]:
         """
-        Convert SkillExecutor SSE event to ReActAgent event format.
+        Convert SkillExecutor Domain event to ReActAgent event format.
 
         Args:
-            sse_event: SSE event from SkillExecutor
+            domain_event: Domain event from SkillExecutor
             skill: The skill being executed
             current_step: Current step index in the skill execution
 
         Returns:
             Converted event dict or None to skip
         """
-        event_type = sse_event.type
-        data = sse_event.data
-        timestamp = datetime.utcnow().isoformat()
+        event_type = domain_event.event_type
+        timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
 
-        if event_type == SSEEventType.THOUGHT:
-            thought_level = data.get("thought_level", "skill")
+        if event_type == AgentEventType.THOUGHT:
+            # Assuming AgentThoughtEvent
+            if isinstance(domain_event, AgentThoughtEvent):
+                thought_level = domain_event.thought_level
 
-            # Map skill thoughts to appropriate event types
-            if thought_level == "skill":
+                # Map skill thoughts to appropriate event types
+                if thought_level == "skill":
+                    return {
+                        "type": "thought",
+                        "data": {
+                            "thought": domain_event.content,
+                            "thought_level": "skill",
+                            "skill_id": skill.id,
+                        },
+                        "timestamp": timestamp,
+                    }
+                elif thought_level == "skill_complete":
+                    # Skill completion thought - handled separately
+                    return None
+
                 return {
                     "type": "thought",
                     "data": {
-                        "thought": data.get("content", ""),
-                        "thought_level": "skill",
-                        "skill_id": skill.id,
+                        "thought": domain_event.content,
+                        "thought_level": thought_level,
                     },
                     "timestamp": timestamp,
                 }
-            elif thought_level == "skill_complete":
-                # Skill completion thought - handled separately
-                return None
 
-            return {
-                "type": "thought",
-                "data": {
-                    "thought": data.get("content", ""),
-                    "thought_level": thought_level,
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.ACT:
+            if isinstance(domain_event, AgentActEvent):
+                return {
+                    "type": "skill_tool_start",
+                    "data": {
+                        "skill_id": skill.id,
+                        "skill_name": skill.name,
+                        "tool_name": domain_event.tool_name,
+                        "tool_input": domain_event.tool_input or {},
+                        "step_index": current_step,
+                        "total_steps": len(skill.tools),
+                        "status": domain_event.status,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.ACT:
-            return {
-                "type": "skill_tool_start",
-                "data": {
-                    "skill_id": skill.id,
-                    "skill_name": skill.name,
-                    "tool_name": data.get("tool_name", ""),
-                    "tool_input": data.get("tool_input", {}),
-                    "step_index": current_step,
-                    "total_steps": len(skill.tools),
-                    "status": "running",
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.OBSERVE:
+            if isinstance(domain_event, AgentObserveEvent):
+                return {
+                    "type": "skill_tool_result",
+                    "data": {
+                        "skill_id": skill.id,
+                        "skill_name": skill.name,
+                        "tool_name": domain_event.tool_name,
+                        "result": domain_event.result,
+                        "error": domain_event.error,
+                        "duration_ms": domain_event.duration_ms or 0,
+                        "step_index": current_step,
+                        "total_steps": len(skill.tools),
+                        "status": domain_event.status,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.OBSERVE:
-            status = data.get("status", "completed")
-            return {
-                "type": "skill_tool_result",
-                "data": {
-                    "skill_id": skill.id,
-                    "skill_name": skill.name,
-                    "tool_name": data.get("tool_name", ""),
-                    "result": data.get("result"),
-                    "error": data.get("error"),
-                    "duration_ms": data.get("duration_ms", 0),
-                    "step_index": current_step,
-                    "total_steps": len(skill.tools),
-                    "status": status,
-                },
-                "timestamp": timestamp,
-            }
-
-        elif event_type == SSEEventType.COMPLETE:
+        elif event_type == AgentEventType.SKILL_EXECUTION_COMPLETE:
             # Completion handled in _execute_skill_directly
             return None
 
@@ -1005,189 +1024,204 @@ class ReActAgent:
 
         return "\n".join(summary_parts)
 
-    def _convert_sse_event(self, sse_event: SSEEvent) -> Optional[Dict[str, Any]]:
+    def _convert_domain_event(self, domain_event: AgentDomainEvent) -> Optional[Dict[str, Any]]:
         """
-        Convert SSEEvent to legacy event format.
+        Convert AgentDomainEvent to legacy event format.
 
-        Maps new SSEEventType to existing event types expected by frontend.
+        Maps new AgentEventType to existing event types expected by frontend.
 
         Args:
-            sse_event: SSEEvent from processor
+            domain_event: AgentDomainEvent from processor
 
         Returns:
             Legacy event dict or None to skip
         """
-        event_type = sse_event.type
-        data = sse_event.data
-        timestamp = datetime.utcnow().isoformat()
+        event_type = domain_event.event_type
+        timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
 
         # Debug log to track event conversion
         logger.info(
-            f"[ReActAgent] Converting SSE event: type={event_type}, data_keys={list(data.keys()) if data else []}"
+            f"[ReActAgent] Converting Domain event: type={event_type}"
         )
 
-        # Map SSEEventType to legacy types
-        if event_type == SSEEventType.START:
+        # Map AgentEventType to legacy types
+        if event_type == AgentEventType.START:
             return {
                 "type": "start",
                 "data": {},
                 "timestamp": timestamp,
             }
 
-        elif event_type == SSEEventType.THOUGHT:
-            return {
-                "type": "thought",
-                "data": {
-                    "thought": data.get("content", ""),
-                    "thought_level": data.get("thought_level", "task"),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.THOUGHT:
+            if isinstance(domain_event, AgentThoughtEvent):
+                return {
+                    "type": "thought",
+                    "data": {
+                        "thought": domain_event.content,
+                        "thought_level": domain_event.thought_level,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.THOUGHT_DELTA:
-            return {
-                "type": "thought_delta",
-                "data": {
-                    "delta": data.get("delta", ""),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.THOUGHT_DELTA:
+            if isinstance(domain_event, AgentThoughtDeltaEvent):
+                return {
+                    "type": "thought_delta",
+                    "data": {
+                        "delta": domain_event.delta,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.TEXT_START:
+        elif event_type == AgentEventType.TEXT_START:
             return {
                 "type": "text_start",
                 "data": {},
                 "timestamp": timestamp,
             }
 
-        elif event_type == SSEEventType.TEXT_DELTA:
-            return {
-                "type": "text_delta",
-                "data": {
-                    "delta": data.get("delta", ""),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.TEXT_DELTA:
+            if isinstance(domain_event, AgentTextDeltaEvent):
+                return {
+                    "type": "text_delta",
+                    "data": {
+                        "delta": domain_event.delta,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.TEXT_END:
-            return {
-                "type": "text_end",
-                "data": {
-                    "full_text": data.get("full_text", ""),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.TEXT_END:
+            if isinstance(domain_event, AgentTextEndEvent):
+                return {
+                    "type": "text_end",
+                    "data": {
+                        "full_text": domain_event.full_text or "",
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.ACT:
-            return {
-                "type": "act",
-                "data": {
-                    "tool_name": data.get("tool_name", ""),
-                    "tool_input": data.get("tool_input", {}),
-                    "call_id": data.get("call_id", ""),
-                    "status": data.get("status", "running"),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.ACT:
+            if isinstance(domain_event, AgentActEvent):
+                return {
+                    "type": "act",
+                    "data": {
+                        "tool_name": domain_event.tool_name,
+                        "tool_input": domain_event.tool_input or {},
+                        "call_id": domain_event.call_id or "",
+                        "status": domain_event.status,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.OBSERVE:
-            return {
-                "type": "observe",
-                "data": {
-                    "tool_name": data.get("tool_name", ""),
-                    "call_id": data.get("call_id", ""),
-                    "result": data.get("result"),
-                    "error": data.get("error"),
-                    "observation": data.get("result", data.get("error", "")),
-                    "duration_ms": data.get("duration_ms"),
-                    "status": data.get("status", "completed"),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.OBSERVE:
+            if isinstance(domain_event, AgentObserveEvent):
+                # observation field is redundant but kept for legacy compat
+                observation = domain_event.result if domain_event.result is not None else (domain_event.error or "")
+                return {
+                    "type": "observe",
+                    "data": {
+                        "tool_name": domain_event.tool_name,
+                        "call_id": domain_event.call_id or "",
+                        "result": domain_event.result,
+                        "error": domain_event.error,
+                        "observation": observation,
+                        "duration_ms": domain_event.duration_ms,
+                        "status": domain_event.status,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.WORK_PLAN:
-            # Pass work_plan event to agent_service for persistence
-            return {
-                "type": "work_plan",
-                "data": data,  # Contains plan_id, steps, etc.
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.WORK_PLAN:
+            if isinstance(domain_event, AgentWorkPlanEvent):
+                # Pass work_plan event to agent_service for persistence
+                return {
+                    "type": "work_plan",
+                    "data": domain_event.plan,  # Contains plan_id, steps, etc.
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.STEP_START:
-            return {
-                "type": "step_start",
-                "data": {
-                    "step_number": data.get("step_index", 0),
-                    "description": data.get("description", ""),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.STEP_START:
+            if isinstance(domain_event, AgentStepStartEvent):
+                return {
+                    "type": "step_start",
+                    "data": {
+                        "step_number": domain_event.step_index,
+                        "description": domain_event.description,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.STEP_END:
-            return {
-                "type": "step_end",
-                "data": {
-                    "step_number": data.get("step_index", 0),
-                    "success": data.get("status") == "completed",
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.STEP_END:
+            if isinstance(domain_event, AgentStepEndEvent):
+                return {
+                    "type": "step_end",
+                    "data": {
+                        "step_number": domain_event.step_index,
+                        "success": domain_event.status == "completed",
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.COST_UPDATE:
-            return {
-                "type": "cost_update",
-                "data": {
-                    "cost": data.get("cost", 0),
-                    "tokens": data.get("tokens", {}),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.COST_UPDATE:
+            if isinstance(domain_event, AgentCostUpdateEvent):
+                return {
+                    "type": "cost_update",
+                    "data": {
+                        "cost": domain_event.cost,
+                        "tokens": domain_event.tokens,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.ERROR:
-            return {
-                "type": "error",
-                "data": {
-                    "message": data.get("message", "Unknown error"),
-                    "code": data.get("code", "UNKNOWN"),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.ERROR:
+            if isinstance(domain_event, AgentErrorEvent):
+                return {
+                    "type": "error",
+                    "data": {
+                        "message": domain_event.message,
+                        "code": domain_event.code or "UNKNOWN",
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.COMPLETE:
+        elif event_type == AgentEventType.COMPLETE:
             # Complete is handled separately
             return None
 
-        elif event_type == SSEEventType.RETRY:
-            return {
-                "type": "retry",
-                "data": {
-                    "attempt": data.get("attempt", 0),
-                    "delay_ms": data.get("delay_ms", 0),
-                    "message": data.get("message", ""),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.RETRY:
+            if isinstance(domain_event, AgentRetryEvent):
+                return {
+                    "type": "retry",
+                    "data": {
+                        "attempt": domain_event.attempt,
+                        "delay_ms": domain_event.delay_ms,
+                        "message": domain_event.message,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.DOOM_LOOP_DETECTED:
-            return {
-                "type": "doom_loop",
-                "data": {
-                    "tool": data.get("tool", ""),
-                    "input": data.get("input", {}),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.DOOM_LOOP_DETECTED:
+            if isinstance(domain_event, AgentDoomLoopDetectedEvent):
+                return {
+                    "type": "doom_loop",
+                    "data": {
+                        "tool": domain_event.tool,
+                        "input": domain_event.input,
+                    },
+                    "timestamp": timestamp,
+                }
 
-        elif event_type == SSEEventType.PERMISSION_ASKED:
-            return {
-                "type": "permission_asked",
-                "data": {
-                    "request_id": data.get("request_id", ""),
-                    "permission": data.get("permission", ""),
-                    "patterns": data.get("patterns", []),
-                },
-                "timestamp": timestamp,
-            }
+        elif event_type == AgentEventType.PERMISSION_ASKED:
+            if isinstance(domain_event, AgentPermissionAskedEvent):
+                return {
+                    "type": "permission_asked",
+                    "data": {
+                        "request_id": domain_event.request_id,
+                        "permission": domain_event.permission,
+                        "patterns": domain_event.patterns,
+                    },
+                    "timestamp": timestamp,
+                }
 
         # Skip other event types
         return None

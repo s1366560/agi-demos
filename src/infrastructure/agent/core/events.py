@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict
 
+from src.domain.events.agent_events import AgentDomainEvent
+
 
 class SSEEventType(str, Enum):
     """SSE event types for agent communication."""
@@ -814,4 +816,19 @@ class SSEEvent:
                 "old_status": old_status,
                 "new_status": new_status,
             },
+        )
+
+    @staticmethod
+    def from_domain_event(event: AgentDomainEvent) -> "SSEEvent":
+        """Convert a domain event to an SSE event."""
+        # Extract data by dumping the model, excluding type and timestamp
+        data = event.model_dump(exclude={"event_type", "timestamp"})
+        
+        # Handle special cases where domain model fields might differ slightly from SSE expectations
+        # For now, we assume they are compatible as we designed them to be
+        
+        return SSEEvent(
+            type=SSEEventType(event.event_type.value),
+            data=data,
+            timestamp=event.timestamp,
         )

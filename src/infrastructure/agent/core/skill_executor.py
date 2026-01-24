@@ -12,7 +12,14 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.model.agent.skill import Skill
 
-from .events import SSEEvent, SSEEventType
+from src.domain.events.agent_events import (
+    AgentDomainEvent,
+    AgentEventType,
+    AgentThoughtEvent,
+    AgentActEvent,
+    AgentObserveEvent,
+    AgentSkillExecutionCompleteEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +62,7 @@ class SkillExecutor:
         skill: Skill,
         query: str,
         context: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[SSEEvent]:
+    ) -> AsyncIterator[AgentDomainEvent]:
         """
         Execute a skill by running its tool composition.
 
@@ -65,20 +72,16 @@ class SkillExecutor:
             context: Optional execution context
 
         Yields:
-            SSEEvent objects for real-time updates
+            AgentDomainEvent objects for real-time updates
         """
         start_time = time.time()
         context = context or {}
         tool_results = []
 
         # Emit skill start event
-        yield SSEEvent(
-            type=SSEEventType.THOUGHT,
-            data={
-                "content": f"Executing skill: {skill.name}",
-                "thought_level": "skill",
-                "skill_id": skill.id,
-            },
+        yield AgentThoughtEvent(
+            content=f"Executing skill: {skill.name}",
+            thought_level="skill",
         )
 
         # Execute each tool in the skill's tool list
@@ -94,14 +97,10 @@ class SkillExecutor:
             tool = self.tools[tool_name]
 
             # Emit tool start
-            yield SSEEvent(
-                type=SSEEventType.ACT,
-                data={
-                    "tool_name": tool_name,
-                    "tool_input": accumulated_context,
-                    "skill_id": skill.id,
-                    "status": "running",
-                },
+            yield AgentActEvent(
+                tool_name=tool_name,
+                tool_input=accumulated_context,
+                status="running",
             )
 
             try:
@@ -137,14 +136,11 @@ class SkillExecutor:
                 accumulated_context[f"{tool_name}_result"] = result
 
                 # Emit tool result
-                yield SSEEvent(
-                    type=SSEEventType.OBSERVE,
-                    data={
-                        "tool_name": tool_name,
-                        "result": result,
-                        "duration_ms": duration_ms,
-                        "status": "completed",
-                    },
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    result=result,
+                    duration_ms=duration_ms,
+                    status="completed",
                 )
 
             except Exception as e:
@@ -158,13 +154,10 @@ class SkillExecutor:
                     }
                 )
 
-                yield SSEEvent(
-                    type=SSEEventType.OBSERVE,
-                    data={
-                        "tool_name": tool_name,
-                        "error": str(e),
-                        "status": "error",
-                    },
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=str(e),
+                    status="error",
                 )
 
                 success = False
@@ -175,32 +168,19 @@ class SkillExecutor:
         execution_time_ms = int((end_time - start_time) * 1000)
 
         # Emit skill completion
-        yield SSEEvent(
-            type=SSEEventType.THOUGHT,
-            data={
-                "content": f"Skill {skill.name} {'completed' if success else 'failed'}",
-                "thought_level": "skill_complete",
-                "skill_id": skill.id,
-                "success": success,
-                "execution_time_ms": execution_time_ms,
-            },
+        yield AgentThoughtEvent(
+            content=f"Skill {skill.name} {'completed' if success else 'failed'}",
+            thought_level="skill_complete",
         )
 
         # Final result event with all tool outputs
-        final_result = {
-            "skill_id": skill.id,
-            "skill_name": skill.name,
-            "success": success,
-            "tool_results": tool_results,
-            "execution_time_ms": execution_time_ms,
-        }
-
-        if error_msg:
-            final_result["error"] = error_msg
-
-        yield SSEEvent(
-            type=SSEEventType.COMPLETE,
-            data=final_result,
+        yield AgentSkillExecutionCompleteEvent(
+            skill_id=skill.id,
+            skill_name=skill.name,
+            success=success,
+            tool_results=tool_results,
+            execution_time_ms=execution_time_ms,
+            error=error_msg,
         )
 
     def get_skill_tools_description(self, skill: Skill) -> str:

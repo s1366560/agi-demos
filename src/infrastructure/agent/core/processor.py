@@ -32,6 +32,20 @@ from ..doom_loop import DoomLoopDetector
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
 from .events import SSEEvent, SSEEventType
+from src.domain.events.agent_events import (
+    AgentDomainEvent, AgentEventType, AgentStartEvent, AgentErrorEvent,
+    AgentWorkPlanEvent, AgentStatusEvent, AgentCompleteEvent,
+    AgentStepStartEvent, AgentStepEndEvent, AgentStepFinishEvent,
+    AgentTextStartEvent, AgentTextDeltaEvent, AgentTextEndEvent,
+    AgentThoughtEvent, AgentThoughtDeltaEvent,
+    AgentActEvent, AgentObserveEvent,
+    AgentCostUpdateEvent, AgentRetryEvent,
+    AgentCompactNeededEvent,
+    AgentDoomLoopDetectedEvent, AgentDoomLoopIntervenedEvent,
+    AgentPermissionAskedEvent, AgentPermissionRepliedEvent,
+    AgentClarificationAskedEvent, AgentClarificationAnsweredEvent,
+    AgentDecisionAskedEvent, AgentDecisionAnsweredEvent
+)
 from .llm_stream import LLMStream, StreamConfig, StreamEventType
 from .message import Message, MessageRole, ToolPart, ToolState
 
@@ -183,7 +197,7 @@ class SessionProcessor:
         messages: List[Dict[str, Any]],
         abort_signal: Optional[asyncio.Event] = None,
         langfuse_context: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[SSEEvent]:
+    ) -> AsyncIterator[AgentDomainEvent]:
         """
         Process a conversation turn.
 
@@ -205,7 +219,7 @@ class SessionProcessor:
                 - extra: Additional metadata dict
 
         Yields:
-            SSEEvent objects for real-time streaming
+            AgentDomainEvent objects for real-time streaming
         """
         self._abort_event = abort_signal or asyncio.Event()
         self._step_count = 0
@@ -218,7 +232,7 @@ class SessionProcessor:
         self._tool_to_step_mapping = {}
 
         # Emit start event
-        yield SSEEvent.start()
+        yield AgentStartEvent()
         self._state = ProcessorState.THINKING
 
         # Generate and emit work plan based on available tools and user query
@@ -226,7 +240,7 @@ class SessionProcessor:
         if user_query and self.tools:
             work_plan_data = await self._generate_work_plan(user_query, messages)
             if work_plan_data:
-                yield SSEEvent.work_plan(work_plan_data)
+                yield AgentWorkPlanEvent(plan=work_plan_data)
 
         try:
             result = ProcessorResult.CONTINUE
@@ -234,15 +248,15 @@ class SessionProcessor:
             while result == ProcessorResult.CONTINUE:
                 # Check abort
                 if self._abort_event.is_set():
-                    yield SSEEvent.error("Processing aborted", code="ABORTED")
+                    yield AgentErrorEvent(message="Processing aborted", code="ABORTED")
                     self._state = ProcessorState.ERROR
                     return
 
                 # Check step limit
                 self._step_count += 1
                 if self._step_count > self.config.max_steps:
-                    yield SSEEvent.error(
-                        f"Maximum steps ({self.config.max_steps}) exceeded",
+                    yield AgentErrorEvent(
+                        message=f"Maximum steps ({self.config.max_steps}) exceeded",
                         code="MAX_STEPS_EXCEEDED",
                     )
                     self._state = ProcessorState.ERROR
@@ -253,19 +267,19 @@ class SessionProcessor:
                     yield event
 
                     # Check for stop conditions in events
-                    if event.type == SSEEventType.ERROR:
+                    if event.event_type == AgentEventType.ERROR:
                         result = ProcessorResult.STOP
                         break
-                    elif event.type == SSEEventType.STEP_FINISH:
+                    elif event.event_type == AgentEventType.STEP_FINISH:
                         # Check finish reason
-                        finish_reason = event.data.get("finish_reason", "")
+                        finish_reason = event.finish_reason
                         if finish_reason == "stop":
                             result = ProcessorResult.COMPLETE
                         elif finish_reason == "tool_calls":
                             result = ProcessorResult.CONTINUE
                         else:
                             result = ProcessorResult.COMPLETE
-                    elif event.type == SSEEventType.COMPACT_NEEDED:
+                    elif event.event_type == AgentEventType.COMPACT_NEEDED:
                         result = ProcessorResult.COMPACT
                         break
 
@@ -304,14 +318,14 @@ class SessionProcessor:
                     if settings.langfuse_enabled and settings.langfuse_host:
                         trace_id = self._langfuse_context.get("conversation_id", session_id)
                         trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
-                yield SSEEvent.complete(trace_url=trace_url)
+                yield AgentCompleteEvent(trace_url=trace_url)
                 self._state = ProcessorState.COMPLETED
             elif result == ProcessorResult.COMPACT:
-                yield SSEEvent.status("compact_needed")
+                yield AgentStatusEvent(status="compact_needed")
 
         except Exception as e:
             logger.error(f"Processor error: {e}", exc_info=True)
-            yield SSEEvent.error(str(e), code=type(e).__name__)
+            yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR
 
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
@@ -565,7 +579,7 @@ class SessionProcessor:
         self,
         session_id: str,
         messages: List[Dict[str, Any]],
-    ) -> AsyncIterator[SSEEvent]:
+    ) -> AsyncIterator[AgentDomainEvent]:
         """
         Process a single step in the ReAct loop.
 
@@ -574,7 +588,7 @@ class SessionProcessor:
             messages: Current messages
 
         Yields:
-            SSEEvent objects
+            AgentDomainEvent objects
         """
         # DEBUG: Force logging at start of _process_step
         print(
@@ -592,7 +606,7 @@ class SessionProcessor:
             step_description = step_info.get("description", step_description)
 
         # Emit step start with meaningful description
-        yield SSEEvent.step_start(self._step_count, step_description)
+        yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
 
         # Create new assistant message
         self._current_message = Message(
@@ -658,7 +672,7 @@ class SessionProcessor:
                     # Process stream events
                     if event.type == StreamEventType.TEXT_START:
                         logger.info("[Processor] Yielding TEXT_START")
-                        yield SSEEvent.text_start()
+                        yield AgentTextStartEvent()
 
                     elif event.type == StreamEventType.TEXT_DELTA:
                         delta = event.data.get("delta", "")
@@ -668,25 +682,25 @@ class SessionProcessor:
                             if len(delta) > 30
                             else f"[Processor] Yielding TEXT_DELTA: {delta}"
                         )
-                        yield SSEEvent.text_delta(delta)
+                        yield AgentTextDeltaEvent(delta=delta)
 
                     elif event.type == StreamEventType.TEXT_END:
                         full_text = event.data.get("full_text", text_buffer)
                         self._current_message.add_text(full_text)
-                        yield SSEEvent.text_end(full_text)
+                        yield AgentTextEndEvent(full_text=full_text)
 
                     elif event.type == StreamEventType.REASONING_START:
-                        yield SSEEvent.thought("", thought_level="reasoning")
+                        yield AgentThoughtEvent(content="", thought_level="reasoning")
 
                     elif event.type == StreamEventType.REASONING_DELTA:
                         delta = event.data.get("delta", "")
                         reasoning_buffer += delta
-                        yield SSEEvent.thought_delta(delta)
+                        yield AgentThoughtDeltaEvent(delta=delta)
 
                     elif event.type == StreamEventType.REASONING_END:
                         full_reasoning = event.data.get("full_text", reasoning_buffer)
                         self._current_message.add_reasoning(full_reasoning)
-                        yield SSEEvent.thought(full_reasoning, thought_level="reasoning")
+                        yield AgentThoughtEvent(content=full_reasoning, thought_level="reasoning")
 
                     elif event.type == StreamEventType.TOOL_CALL_START:
                         call_id = event.data.get("call_id", "")
@@ -721,7 +735,7 @@ class SessionProcessor:
                                 self._work_plan_steps[step_number]["status"] = "running"
                                 self._current_plan_step = step_number
 
-                            yield SSEEvent.act(
+                            yield AgentActEvent(
                                 tool_name=tool_name,
                                 tool_input=arguments,
                                 call_id=call_id,
@@ -730,15 +744,11 @@ class SessionProcessor:
                             # Add step_number to the event data for frontend
                             if step_number is not None:
                                 # Re-emit with step_number in data
-                                yield SSEEvent(
-                                    type=SSEEventType.STEP_START,
-                                    data={
-                                        "step_number": step_number,
-                                        "description": self._work_plan_steps[step_number].get(
-                                            "description", ""
-                                        ),
-                                        "tool_name": tool_name,
-                                    },
+                                yield AgentStepStartEvent(
+                                    step_index=step_number,
+                                    description=self._work_plan_steps[step_number].get(
+                                        "description", ""
+                                    ),
                                 )
 
                             # Execute tool
@@ -772,7 +782,7 @@ class SessionProcessor:
                         )
                         step_cost = float(cost_result.cost)
 
-                        yield SSEEvent.cost_update(
+                        yield AgentCostUpdateEvent(
                             cost=step_cost,
                             tokens={
                                 "input": step_tokens.input,
@@ -783,7 +793,7 @@ class SessionProcessor:
 
                         # Check for compaction need
                         if self.cost_tracker.needs_compaction(step_tokens):
-                            yield SSEEvent.compact_needed()
+                            yield AgentCompactNeededEvent()
 
                     elif event.type == StreamEventType.FINISH:
                         finish_reason = event.data.get("reason", "stop")
@@ -802,7 +812,7 @@ class SessionProcessor:
                     delay_ms = self.retry_policy.calculate_delay(attempt, e)
 
                     self._state = ProcessorState.RETRYING
-                    yield SSEEvent.retry(
+                    yield AgentRetryEvent(
                         attempt=attempt,
                         delay_ms=delay_ms,
                         message=str(e),
@@ -836,7 +846,7 @@ class SessionProcessor:
                 trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
 
         # Emit step finish
-        yield SSEEvent.step_finish(
+        yield AgentStepFinishEvent(
             tokens=self._current_message.tokens,
             cost=step_cost,
             finish_reason=finish_reason,
@@ -844,7 +854,8 @@ class SessionProcessor:
         )
 
         # Emit step end
-        yield SSEEvent.step_end(self._step_count, status="completed")
+        yield AgentStepEndEvent(step_index=self._step_count, status="completed")
+
 
     async def _execute_tool(
         self,
@@ -852,7 +863,7 @@ class SessionProcessor:
         call_id: str,
         tool_name: str,
         arguments: Dict[str, Any],
-    ) -> AsyncIterator[SSEEvent]:
+    ) -> AsyncIterator[AgentDomainEvent]:
         """
         Execute a tool call with permission checking and doom loop detection.
 
@@ -863,11 +874,11 @@ class SessionProcessor:
             arguments: Tool arguments
 
         Yields:
-            SSEEvent objects for tool execution
+            AgentDomainEvent objects for tool execution
         """
         tool_part = self._pending_tool_calls.get(call_id)
         if not tool_part:
-            yield SSEEvent.observe(
+            yield AgentObserveEvent(
                 tool_name=tool_name,
                 error="Tool call not found",
                 call_id=call_id,
@@ -881,7 +892,7 @@ class SessionProcessor:
             tool_part.error = f"Unknown tool: {tool_name}"
             tool_part.end_time = time.time()
 
-            yield SSEEvent.observe(
+            yield AgentObserveEvent(
                 tool_name=tool_name,
                 error=f"Unknown tool: {tool_name}",
                 call_id=call_id,
@@ -891,7 +902,7 @@ class SessionProcessor:
         # Check doom loop
         if self.doom_loop_detector.should_intervene(tool_name, arguments):
             # Emit doom loop detected
-            yield SSEEvent.doom_loop_detected(tool_name, arguments)
+            yield AgentDoomLoopDetectedEvent(tool=tool_name, input=arguments)
 
             # Ask for permission to continue
             self._state = ProcessorState.WAITING_PERMISSION
@@ -915,7 +926,7 @@ class SessionProcessor:
                     tool_part.error = "Doom loop detected and rejected by user"
                     tool_part.end_time = time.time()
 
-                    yield SSEEvent.observe(
+                    yield AgentObserveEvent(
                         tool_name=tool_name,
                         error="Doom loop detected and rejected",
                         call_id=call_id,
@@ -927,7 +938,7 @@ class SessionProcessor:
                 tool_part.error = "Permission request timed out"
                 tool_part.end_time = time.time()
 
-                yield SSEEvent.observe(
+                yield AgentObserveEvent(
                     tool_name=tool_name,
                     error="Permission request timed out",
                     call_id=call_id,
@@ -967,7 +978,7 @@ class SessionProcessor:
                 tool_part.error = f"Permission denied: {tool_def.permission}"
                 tool_part.end_time = time.time()
 
-                yield SSEEvent.observe(
+                yield AgentObserveEvent(
                     tool_name=tool_name,
                     error=f"Permission denied: {tool_def.permission}",
                     call_id=call_id,
@@ -978,7 +989,7 @@ class SessionProcessor:
                 # Request permission
                 self._state = ProcessorState.WAITING_PERMISSION
 
-                yield SSEEvent.permission_asked(
+                yield AgentPermissionAskedEvent(
                     request_id=f"perm_{uuid.uuid4().hex[:8]}",
                     permission=tool_def.permission,
                     patterns=[tool_name],
@@ -1001,7 +1012,7 @@ class SessionProcessor:
                         tool_part.error = "Permission rejected by user"
                         tool_part.end_time = time.time()
 
-                        yield SSEEvent.observe(
+                        yield AgentObserveEvent(
                             tool_name=tool_name,
                             error="Permission rejected by user",
                             call_id=call_id,
@@ -1013,7 +1024,7 @@ class SessionProcessor:
                     tool_part.error = "Permission request timed out"
                     tool_part.end_time = time.time()
 
-                    yield SSEEvent.observe(
+                    yield AgentObserveEvent(
                         tool_name=tool_name,
                         error="Permission request timed out",
                         call_id=call_id,
@@ -1053,9 +1064,9 @@ class SessionProcessor:
             if step_number is not None and step_number < len(self._work_plan_steps):
                 self._work_plan_steps[step_number]["status"] = "completed"
                 # Emit step_end event
-                yield SSEEvent.step_end(step_number, status="completed")
+                yield AgentStepEndEvent(step_index=step_number, status="completed")
 
-            yield SSEEvent.observe(
+            yield AgentObserveEvent(
                 tool_name=tool_name,
                 result=sse_result,
                 duration_ms=int((end_time - start_time) * 1000),
@@ -1074,9 +1085,9 @@ class SessionProcessor:
             if step_number is not None and step_number < len(self._work_plan_steps):
                 self._work_plan_steps[step_number]["status"] = "failed"
                 # Emit step_end event with failed status
-                yield SSEEvent.step_end(step_number, status="failed")
+                yield AgentStepEndEvent(step_index=step_number, status="failed")
 
-            yield SSEEvent.observe(
+            yield AgentObserveEvent(
                 tool_name=tool_name,
                 error=str(e),
                 duration_ms=int((time.time() - tool_part.start_time) * 1000)
@@ -1094,7 +1105,7 @@ class SessionProcessor:
         tool_name: str,
         arguments: Dict[str, Any],
         tool_part: ToolPart,
-    ) -> AsyncIterator[SSEEvent]:
+    ) -> AsyncIterator[AgentDomainEvent]:
         """
         Handle clarification tool with SSE event emission.
 
@@ -1109,7 +1120,7 @@ class SessionProcessor:
             tool_part: Tool part for tracking state
 
         Yields:
-            SSEEvent objects for clarification flow
+            AgentDomainEvent objects for clarification flow
         """
         from ..tools.clarification import (
             ClarificationOption,
@@ -1175,7 +1186,7 @@ class SessionProcessor:
                 manager._pending_requests[request_id] = request
 
             # Emit clarification_asked event BEFORE blocking
-            yield SSEEvent.clarification_asked(
+            yield AgentClarificationAskedEvent(
                 request_id=request_id,
                 question=question,
                 clarification_type=clarification_type,
@@ -1191,7 +1202,7 @@ class SessionProcessor:
                 end_time = time.time()
 
                 # Emit answered event
-                yield SSEEvent.clarification_answered(
+                yield AgentClarificationAnsweredEvent(
                     request_id=request_id,
                     answer=answer,
                 )
@@ -1201,7 +1212,7 @@ class SessionProcessor:
                 tool_part.output = answer
                 tool_part.end_time = end_time
 
-                yield SSEEvent.observe(
+                yield AgentObserveEvent(
                     tool_name=tool_name,
                     result=answer,
                     duration_ms=int((end_time - start_time) * 1000),
@@ -1213,7 +1224,7 @@ class SessionProcessor:
                 tool_part.error = "Clarification request timed out"
                 tool_part.end_time = time.time()
 
-                yield SSEEvent.observe(
+                yield AgentObserveEvent(
                     tool_name=tool_name,
                     error="Clarification request timed out",
                     call_id=call_id,
@@ -1229,7 +1240,7 @@ class SessionProcessor:
             tool_part.error = str(e)
             tool_part.end_time = time.time()
 
-            yield SSEEvent.observe(
+            yield AgentObserveEvent(
                 tool_name=tool_name,
                 error=str(e),
                 call_id=call_id,
@@ -1244,7 +1255,7 @@ class SessionProcessor:
         tool_name: str,
         arguments: Dict[str, Any],
         tool_part: ToolPart,
-    ) -> AsyncIterator[SSEEvent]:
+    ) -> AsyncIterator[AgentDomainEvent]:
         """
         Handle decision tool with SSE event emission.
 
@@ -1259,7 +1270,7 @@ class SessionProcessor:
             tool_part: Tool part for tracking state
 
         Yields:
-            SSEEvent objects for decision flow
+            AgentDomainEvent objects for decision flow
         """
         from ..tools.decision import (
             DecisionOption,
@@ -1333,7 +1344,7 @@ class SessionProcessor:
                 manager._pending_requests[request_id] = request
 
             # Emit decision_asked event BEFORE blocking
-            yield SSEEvent.decision_asked(
+            yield AgentDecisionAskedEvent(
                 request_id=request_id,
                 question=question,
                 decision_type=decision_type,
@@ -1350,7 +1361,7 @@ class SessionProcessor:
                 end_time = time.time()
 
                 # Emit answered event
-                yield SSEEvent.decision_answered(
+                yield AgentDecisionAnsweredEvent(
                     request_id=request_id,
                     decision=decision,
                 )
@@ -1360,7 +1371,7 @@ class SessionProcessor:
                 tool_part.output = decision
                 tool_part.end_time = end_time
 
-                yield SSEEvent.observe(
+                yield AgentObserveEvent(
                     tool_name=tool_name,
                     result=decision,
                     duration_ms=int((end_time - start_time) * 1000),
@@ -1372,7 +1383,7 @@ class SessionProcessor:
                 if default_option:
                     end_time = time.time()
 
-                    yield SSEEvent.decision_answered(
+                    yield AgentDecisionAnsweredEvent(
                         request_id=request_id,
                         decision=default_option,
                     )
@@ -1381,7 +1392,7 @@ class SessionProcessor:
                     tool_part.output = f"Timeout - used default: {default_option}"
                     tool_part.end_time = end_time
 
-                    yield SSEEvent.observe(
+                    yield AgentObserveEvent(
                         tool_name=tool_name,
                         result=f"Timeout - used default: {default_option}",
                         duration_ms=int((end_time - start_time) * 1000),
@@ -1392,7 +1403,7 @@ class SessionProcessor:
                     tool_part.error = "Decision request timed out"
                     tool_part.end_time = time.time()
 
-                    yield SSEEvent.observe(
+                    yield AgentObserveEvent(
                         tool_name=tool_name,
                         error="Decision request timed out",
                         call_id=call_id,
@@ -1408,7 +1419,7 @@ class SessionProcessor:
             tool_part.error = str(e)
             tool_part.end_time = time.time()
 
-            yield SSEEvent.observe(
+            yield AgentObserveEvent(
                 tool_name=tool_name,
                 error=str(e),
                 call_id=call_id,
