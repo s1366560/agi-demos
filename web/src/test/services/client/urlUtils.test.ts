@@ -43,8 +43,6 @@ describe('createApiUrl', () => {
 });
 
 describe('createWebSocketUrl', () => {
-  const originalLocation = window.location;
-
   beforeEach(() => {
     // Clear VITE_API_URL cache
     delete (import.meta.env as any).VITE_API_URL;

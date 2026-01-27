@@ -14,16 +14,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { requestCache } from '../../../services/client/requestCache';
 
-// Mock axios for testing the cache integration
-const mockAxios = {
-  get: vi.fn(),
-  post: vi.fn(),
-  put: vi.fn(),
-  patch: vi.fn(),
-  delete: vi.fn(),
-  request: vi.fn(),
-};
-
 describe('requestCache', () => {
   beforeEach(() => {
     vi.clearAllMocks();

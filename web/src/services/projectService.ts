@@ -2,6 +2,8 @@
  * Project Service - API calls for project management
  */
 
+import { apiFetch } from './client/urlUtils';
+
 interface User {
   id: string;
   email: string;
@@ -30,18 +32,16 @@ export const projectService = {
    */
   listMembers: async (projectId: string): Promise<{ users: User[] }> => {
     try {
-      const response = await fetch(`/api/v1/projects/${projectId}/members`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await apiFetch.get(`/projects/${projectId}/members`);
+
       if (!response.ok) {
         throw new Error(`Failed to list project members: ${response.statusText}`);
       }
+
       return response.json();
-    } catch (err: any) {
-      throw new Error(`Failed to list project members: ${err?.message || String(err)}`);
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      throw new Error(`Failed to list project members: ${error?.message || String(err)}`);
     }
   },
 
@@ -49,13 +49,7 @@ export const projectService = {
    * Add a member to a project
    */
   addMember: async (projectId: string, userId: string, role: string): Promise<void> => {
-    const response = await fetch(`/api/v1/projects/${projectId}/members`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ user_id: userId, role }),
-    });
+    const response = await apiFetch.post(`/projects/${projectId}/members`, { user_id: userId, role });
 
     if (!response.ok) {
       throw new Error(`Failed to add project member: ${response.statusText}`);
@@ -66,12 +60,7 @@ export const projectService = {
    * Remove a member from a project
    */
   removeMember: async (projectId: string, userId: string): Promise<void> => {
-    const response = await fetch(`/api/v1/projects/${projectId}/members/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.delete(`/projects/${projectId}/members/${userId}`);
 
     if (!response.ok) {
       throw new Error(`Failed to remove project member: ${response.statusText}`);
@@ -82,13 +71,7 @@ export const projectService = {
    * Update a member's role in a project
    */
   updateMemberRole: async (projectId: string, userId: string, role: string): Promise<void> => {
-    const response = await fetch(`/api/v1/projects/${projectId}/members/${userId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role }),
-    });
+    const response = await apiFetch.patch(`/projects/${projectId}/members/${userId}`, { role });
 
     if (!response.ok) {
       throw new Error(`Failed to update member role: ${response.statusText}`);
@@ -99,12 +82,7 @@ export const projectService = {
    * Get project details
    */
   getProject: async (projectId: string): Promise<Project> => {
-    const response = await fetch(`/api/v1/projects/${projectId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.get(`/projects/${projectId}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get project: ${response.statusText}`);
@@ -117,13 +95,7 @@ export const projectService = {
    * Update project details
    */
   updateProject: async (projectId: string, updates: Partial<Project>): Promise<Project> => {
-    const response = await fetch(`/api/v1/projects/${projectId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
+    const response = await apiFetch.patch(`/projects/${projectId}`, updates);
 
     if (!response.ok) {
       throw new Error(`Failed to update project: ${response.statusText}`);
@@ -136,12 +108,7 @@ export const projectService = {
    * Delete a project
    */
   deleteProject: async (projectId: string): Promise<void> => {
-    const response = await fetch(`/api/v1/projects/${projectId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.delete(`/projects/${projectId}`);
 
     if (!response.ok) {
       throw new Error(`Failed to delete project: ${response.statusText}`);
@@ -152,12 +119,7 @@ export const projectService = {
    * List projects in a tenant
    */
   listProjects: async (tenantId: string): Promise<Project[]> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}/projects`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.get(`/tenants/${tenantId}/projects`);
 
     if (!response.ok) {
       throw new Error(`Failed to list projects: ${response.statusText}`);

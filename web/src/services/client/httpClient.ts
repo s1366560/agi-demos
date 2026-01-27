@@ -12,7 +12,7 @@
  * All services should use this client instead of creating their own axios instances.
  */
 
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { requestCache } from './requestCache';
 import { requestDeduplicator } from './requestDeduplicator';
 

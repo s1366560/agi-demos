@@ -2,6 +2,8 @@
  * Memory Service - API calls for memory management
  */
 
+import { apiFetch } from './client/urlUtils';
+
 interface MemoryUpdate {
   title?: string;
   content?: string;
@@ -35,13 +37,7 @@ export const memoryService = {
    * Update an existing memory
    */
   updateMemory: async (memoryId: string, updates: MemoryUpdate): Promise<Response> => {
-    const response = await fetch(`/api/v1/memories/${memoryId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
+    const response = await apiFetch.patch(`/memories/${memoryId}`, updates);
 
     if (!response.ok) {
       const error = await response.json();
@@ -55,13 +51,7 @@ export const memoryService = {
    * Share a memory with a user or project
    */
   shareMemory: async (memoryId: string, shareData: MemoryShareCreate): Promise<MemoryShareResponse> => {
-    const response = await fetch(`/api/v1/memories/${memoryId}/shares`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(shareData),
-    });
+    const response = await apiFetch.post(`/memories/${memoryId}/shares`, shareData);
 
     if (!response.ok) {
       const error = await response.json();
@@ -75,12 +65,7 @@ export const memoryService = {
    * Delete a memory share
    */
   deleteMemoryShare: async (memoryId: string, shareId: string): Promise<void> => {
-    const response = await fetch(`/api/v1/memories/${memoryId}/shares/${shareId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.delete(`/memories/${memoryId}/shares/${shareId}`);
 
     if (!response.ok) {
       const error = await response.json();

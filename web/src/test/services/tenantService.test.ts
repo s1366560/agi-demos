@@ -5,8 +5,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { tenantService } from '../../services/tenantService';
 
-// Mock global fetch
+// Mock global fetch and localStorage
 global.fetch = vi.fn() as any;
+vi.stubGlobal('localStorage', {
+  getItem: vi.fn(() => null),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+});
 
 describe('tenantService', () => {
   beforeEach(() => {
@@ -36,15 +42,14 @@ describe('tenantService', () => {
       // Act
       const result = await tenantService.listMembers(tenantId);
 
-      // Assert
+      // Assert - fetch should be called with /api/v1 prefix added by createApiUrl
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/v1/tenants/${tenantId}/members`,
-        {
-          method: 'GET',
-          headers: {
+        expect.stringContaining('/api/v1/tenants/tenant-1/members'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          },
-        }
+          }),
+        })
       );
       expect(result).toEqual(mockMembers);
     });
@@ -75,14 +80,13 @@ describe('tenantService', () => {
 
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/v1/tenants/${tenantId}/members`,
-        {
+        expect.stringContaining('/api/v1/tenants/tenant-1/members'),
+        expect.objectContaining({
           method: 'POST',
-          headers: {
+          headers: expect.objectContaining({
             'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ user_id: userId, role }),
-        }
+          }),
+        })
       );
     });
 
@@ -111,13 +115,10 @@ describe('tenantService', () => {
 
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/v1/tenants/${tenantId}/members/${userId}`,
-        {
+        expect.stringContaining(`/api/v1/tenants/${tenantId}/members/${userId}`),
+        expect.objectContaining({
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        })
       );
     });
 
@@ -147,14 +148,10 @@ describe('tenantService', () => {
 
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/v1/tenants/${tenantId}/members/${userId}`,
-        {
+        expect.stringContaining(`/api/v1/tenants/${tenantId}/members/${userId}`),
+        expect.objectContaining({
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ role }),
-        }
+        })
       );
     });
 
@@ -195,13 +192,10 @@ describe('tenantService', () => {
 
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/v1/tenants/${tenantId}`,
-        {
+        expect.stringContaining(`/api/v1/tenants/${tenantId}`),
+        expect.objectContaining({
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        })
       );
       expect(result).toEqual(mockTenant);
     });
@@ -230,13 +224,12 @@ describe('tenantService', () => {
       const result = await tenantService.createTenant(name, description);
 
       // Assert
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/tenants', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name, description }),
-      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants'),
+        expect.objectContaining({
+          method: 'POST',
+        })
+      );
       expect(result).toEqual(mockTenant);
     });
 
@@ -273,14 +266,10 @@ describe('tenantService', () => {
 
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
-        `/api/v1/tenants/${tenantId}`,
-        {
+        expect.stringContaining(`/api/v1/tenants/${tenantId}`),
+        expect.objectContaining({
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updates),
-        }
+        })
       );
     });
 

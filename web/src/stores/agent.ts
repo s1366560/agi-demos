@@ -337,10 +337,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         limit
       );
       set({ conversations, conversationsLoading: false });
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || "Failed to list conversations",
+          err?.response?.data?.detail || "Failed to list conversations",
         conversationsLoading: false,
       });
       throw error;
@@ -363,10 +364,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         isNewConversationPending: true, // Mark as pending to prevent URL sync effect race condition
       });
       return conversation;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || "Failed to create conversation",
+          err?.response?.data?.detail || "Failed to create conversation",
         conversationsLoading: false,
       });
       throw error;
@@ -382,10 +384,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       );
       set({ currentConversation: conversation, conversationsLoading: false });
       return conversation;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || "Failed to get conversation",
+          err?.response?.data?.detail || "Failed to get conversation",
         conversationsLoading: false,
       });
       return null;
@@ -407,10 +410,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       });
       // Also clean up saved conversation state
       deleteConversationState(conversationId);
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || "Failed to delete conversation",
+          err?.response?.data?.detail || "Failed to delete conversation",
         conversationsLoading: false,
       });
       throw error;
@@ -556,10 +560,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         latestLoadedSequence: lastSequence,
         hasEarlierMessages: response.has_more ?? false,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       console.error("[Agent] getTimeline error:", error);
       set({
-        timelineError: error.response?.data?.detail || "Failed to get timeline",
+        timelineError: err?.response?.data?.detail || "Failed to get timeline",
         timelineLoading: false,
       });
       throw error;
@@ -634,10 +639,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         earliestLoadedSequence: response.timeline[0]?.sequenceNumber ?? null,
         hasEarlierMessages: response.has_more ?? false,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       console.error("[Agent] Failed to load earlier messages:", error);
       set({
-        timelineError: error.response?.data?.detail || "Failed to load earlier messages",
+        timelineError: err?.response?.data?.detail || "Failed to load earlier messages",
         timelineLoading: false,
       });
       throw error;
@@ -1486,13 +1492,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         { conversation_id: conversationId, message: messageText, project_id: _projectId },
         handler
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       releaseLock();
       // Rollback: remove the temporary user message event on error
       const { timeline } = get();
       set({
         timeline: timeline.filter((e) => e.id !== tempId),
-        timelineError: error.response?.data?.detail || "Failed to send message",
+        timelineError: err?.response?.data?.detail || "Failed to send message",
         isStreaming: false,
         isNewConversationPending: false, // Clear pending flag on catch error
       });
@@ -1556,8 +1563,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         "[Agent] Generated conversation title:",
         updatedConversation.title
       );
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || "Failed to generate title";
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      const errorMsg = err?.response?.data?.detail || "Failed to generate title";
       console.error("[Agent] Failed to generate conversation title:", error);
       set({ titleGenerationError: errorMsg });
     } finally {
@@ -1581,7 +1589,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         executionHistory: response.executions,
         executionHistoryLoading: false,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to get execution history:", error);
       set({ executionHistoryLoading: false });
       throw error;
@@ -1593,7 +1601,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     try {
       const response = await agentService.listTools();
       set({ tools: response.tools, toolsLoading: false });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to list tools:", error);
       set({ toolsLoading: false });
     }
@@ -1635,19 +1643,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   // Human interaction response handlers
   respondToClarification: async (requestId: string, answer: string) => {
     // Send clarification response to backend via POST
-    const token = localStorage.getItem("token");
-    const baseUrl = import.meta.env.VITE_API_URL || "";
+    const { apiFetch } = await import("../services/client/urlUtils");
 
-    await fetch(`${baseUrl}/api/v1/agent/clarification/respond`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        request_id: requestId,
-        answer: answer,
-      }),
+    await apiFetch.post("/agent/clarification/respond", {
+      request_id: requestId,
+      answer: answer,
     });
 
     // Clear pending clarification
@@ -1656,19 +1656,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   respondToDecision: async (requestId: string, decision: string) => {
     // Send decision response to backend via POST
-    const token = localStorage.getItem("token");
-    const baseUrl = import.meta.env.VITE_API_URL || "";
+    const { apiFetch } = await import("../services/client/urlUtils");
 
-    await fetch(`${baseUrl}/api/v1/agent/decision/respond`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        request_id: requestId,
-        decision: decision,
-      }),
+    await apiFetch.post("/agent/decision/respond", {
+      request_id: requestId,
+      decision: decision,
     });
 
     // Clear pending decision
@@ -1677,19 +1669,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   respondToDoomLoop: async (requestId: string, action: string) => {
     // Send doom loop intervention response to backend via POST
-    const token = localStorage.getItem("token");
-    const baseUrl = import.meta.env.VITE_API_URL || "";
+    const { apiFetch } = await import("../services/client/urlUtils");
 
-    await fetch(`${baseUrl}/api/v1/agent/doom-loop/respond`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        request_id: requestId,
-        action: action,
-      }),
+    await apiFetch.post("/agent/doom-loop/respond", {
+      request_id: requestId,
+      action: action,
     });
 
     // Clear pending doom loop intervention
@@ -1729,9 +1713,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         planLoading: false,
       });
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || "Failed to enter Plan Mode",
+        planError: err?.response?.data?.detail || "Failed to enter Plan Mode",
         planLoading: false,
       });
       throw error;
@@ -1764,9 +1749,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         planLoading: false,
       });
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || "Failed to exit Plan Mode",
+        planError: err?.response?.data?.detail || "Failed to exit Plan Mode",
         planLoading: false,
       });
       throw error;
@@ -1779,9 +1765,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const plan = await planService.getPlan(planId);
       set({ currentPlan: plan, planLoading: false });
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || "Failed to get plan",
+        planError: err?.response?.data?.detail || "Failed to get plan",
         planLoading: false,
       });
       throw error;
@@ -1794,9 +1781,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const plan = await planService.updatePlan(planId, request);
       set({ currentPlan: plan, planLoading: false });
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || "Failed to update plan",
+        planError: err?.response?.data?.detail || "Failed to update plan",
         planLoading: false,
       });
       throw error;
@@ -1813,10 +1801,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         planLoading: false,
       });
       return status;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         planError:
-          error.response?.data?.detail || "Failed to get Plan Mode status",
+          err?.response?.data?.detail || "Failed to get Plan Mode status",
         planLoading: false,
       });
       throw error;

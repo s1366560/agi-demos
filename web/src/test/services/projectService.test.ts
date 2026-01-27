@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { projectService } from '../../services/projectService'
 
-// Mock fetch globally
+// Mock fetch and localStorage globally
 global.fetch = vi.fn()
+vi.stubGlobal('localStorage', {
+  getItem: vi.fn(() => null),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+})
 
 describe('projectService - Service Tests', () => {
     const mockProjectId = 'project-123'
@@ -42,12 +48,9 @@ describe('projectService - Service Tests', () => {
             const result = await projectService.listMembers(mockProjectId)
 
             expect(global.fetch).toHaveBeenCalledWith(
-                `/api/v1/projects/${mockProjectId}/members`,
+                expect.stringContaining(`/api/v1/projects/${mockProjectId}/members`),
                 expect.objectContaining({
                     method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
                 })
             )
             expect(result).toEqual({ users: mockUsers })

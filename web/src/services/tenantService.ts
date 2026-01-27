@@ -2,6 +2,8 @@
  * Tenant Service - API calls for tenant management
  */
 
+import { apiFetch } from './client/urlUtils';
+
 interface User {
   id: string;
   email: string;
@@ -26,12 +28,7 @@ export const tenantService = {
    * List all members of a tenant
    */
   listMembers: async (tenantId: string): Promise<{ users: User[] }> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}/members`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.get(`/tenants/${tenantId}/members`);
 
     if (!response.ok) {
       throw new Error(`Failed to list tenant members: ${response.statusText}`);
@@ -44,13 +41,7 @@ export const tenantService = {
    * Add a member to a tenant
    */
   addMember: async (tenantId: string, userId: string, role: string): Promise<void> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}/members`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ user_id: userId, role }),
-    });
+    const response = await apiFetch.post(`/tenants/${tenantId}/members`, { user_id: userId, role });
 
     if (!response.ok) {
       throw new Error(`Failed to add tenant member: ${response.statusText}`);
@@ -61,12 +52,7 @@ export const tenantService = {
    * Remove a member from a tenant
    */
   removeMember: async (tenantId: string, userId: string): Promise<void> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}/members/${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.delete(`/tenants/${tenantId}/members/${userId}`);
 
     if (!response.ok) {
       throw new Error(`Failed to remove tenant member: ${response.statusText}`);
@@ -77,13 +63,7 @@ export const tenantService = {
    * Update a member's role in a tenant
    */
   updateMemberRole: async (tenantId: string, userId: string, role: string): Promise<void> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}/members/${userId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ role }),
-    });
+    const response = await apiFetch.patch(`/tenants/${tenantId}/members/${userId}`, { role });
 
     if (!response.ok) {
       throw new Error(`Failed to update member role: ${response.statusText}`);
@@ -94,12 +74,7 @@ export const tenantService = {
    * Get tenant details
    */
   getTenant: async (tenantId: string): Promise<Tenant> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await apiFetch.get(`/tenants/${tenantId}`);
 
     if (!response.ok) {
       throw new Error(`Failed to get tenant: ${response.statusText}`);
@@ -112,13 +87,7 @@ export const tenantService = {
    * Create a new tenant
    */
   createTenant: async (name: string, description?: string): Promise<Tenant> => {
-    const response = await fetch('/api/v1/tenants', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name, description }),
-    });
+    const response = await apiFetch.post('/tenants', { name, description });
 
     if (!response.ok) {
       throw new Error(`Failed to create tenant: ${response.statusText}`);
@@ -131,13 +100,7 @@ export const tenantService = {
    * Update tenant details
    */
   updateTenant: async (tenantId: string, updates: Partial<Tenant>): Promise<Tenant> => {
-    const response = await fetch(`/api/v1/tenants/${tenantId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
+    const response = await apiFetch.patch(`/tenants/${tenantId}`, updates);
 
     if (!response.ok) {
       throw new Error(`Failed to update tenant: ${response.statusText}`);

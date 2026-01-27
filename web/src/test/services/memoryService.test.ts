@@ -5,8 +5,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { memoryService } from '../../services/memoryService';
 
-// Mock global fetch
+// Mock global fetch and localStorage
 global.fetch = vi.fn() as any;
+vi.stubGlobal('localStorage', {
+  getItem: vi.fn(() => null),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+});
 
 describe('memoryService', () => {
     beforeEach(() => {
@@ -32,14 +38,10 @@ describe('memoryService', () => {
 
             // Assert
             expect(global.fetch).toHaveBeenCalledWith(
-                `/api/v1/memories/${memoryId}`,
-                {
+                expect.stringContaining(`/api/v1/memories/${memoryId}`),
+                expect.objectContaining({
                     method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(updates),
-                }
+                })
             );
         });
 

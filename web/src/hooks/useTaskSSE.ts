@@ -1,4 +1,5 @@
 import { useCallback, useRef, useEffect } from 'react';
+import { createApiUrl } from '../services/client/urlUtils';
 
 export interface TaskStatus {
     task_id: string;
@@ -87,8 +88,7 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
 
         console.log(`📡 Connecting to SSE stream for task: ${taskId}`);
 
-        const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
-        const streamUrl = `${apiBaseUrl}/tasks/${taskId}/stream`;
+        const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
         console.log(`📡 SSE URL: ${streamUrl}`);
 
         const eventSource = new EventSource(streamUrl);
@@ -192,8 +192,7 @@ export function subscribeToTask(
     taskId: string,
     callbacks: UseTaskSSEOptions
 ): () => void {
-    const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
-    const streamUrl = `${apiBaseUrl}/tasks/${taskId}/stream`;
+    const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
 
     const eventSource = new EventSource(streamUrl);
 
