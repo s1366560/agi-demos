@@ -15,3 +15,10 @@ namespace.cache.initialSize:
 worker.workflowCacheCacheInitialSize:
   - value: 1000
     constraints: { }
+
+# Enable Workflow Update (required for agent_session workflow)
+# This is a namespace-level setting - must specify namespace constraint
+frontend.enableUpdateWorkflowExecution:
+  - value: true
+    constraints:
+      namespace: "default"
