@@ -70,9 +70,10 @@ export const ProjectSettings: React.FC = () => {
             setTimeout(() => {
                 window.location.reload();
             }, 1000);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to save settings:', error);
-            setMessage({ type: 'error', text: t('project.settings.messages.failed', { error: error.response?.data?.detail || error.message }) });
+            const err = error as { response?: { data?: { detail?: string } }; message?: string };
+            setMessage({ type: 'error', text: t('project.settings.messages.failed', { error: err.response?.data?.detail || err.message }) });
         } finally {
             setIsSaving(false);
         }
@@ -99,8 +100,9 @@ export const ProjectSettings: React.FC = () => {
             );
 
             setMessage({ type: 'success', text: t('project.settings.messages.saved') });
-        } catch (error: any) {
-            console.error('Failed to save memory rules:', error);
+        } catch (err: unknown) {
+            console.error('Failed to save memory rules:', err);
+            const error = err as { response?: { data?: { detail?: string } }; message?: string };
             setMessage({ type: 'error', text: t('project.settings.messages.failed', { error: error.response?.data?.detail || error.message }) });
         } finally {
             setIsSaving(false);
@@ -128,8 +130,9 @@ export const ProjectSettings: React.FC = () => {
             );
 
             setMessage({ type: 'success', text: t('project.settings.messages.saved') });
-        } catch (error: any) {
-            console.error('Failed to save graph config:', error);
+        } catch (err: unknown) {
+            console.error('Failed to save graph config:', err);
+            const error = err as { response?: { data?: { detail?: string } }; message?: string };
             setMessage({ type: 'error', text: t('project.settings.messages.failed', { error: error.response?.data?.detail || error.message }) });
         } finally {
             setIsSaving(false);
@@ -146,7 +149,8 @@ export const ProjectSettings: React.FC = () => {
         setMessage(null);
         try {
             // Use incremental refresh which can rebuild communities
-            await api.post('/api/v1/maintenance/refresh/incremental', {
+            // Note: httpClient already has baseURL='/api/v1', so we don't prefix it here
+            await api.post('/maintenance/refresh/incremental', {
                 rebuild_communities: true
             });
             setMessage({ type: 'success', text: t('project.settings.messages.cache_cleared') });
@@ -165,7 +169,7 @@ export const ProjectSettings: React.FC = () => {
 
         setMessage(null);
         try {
-            await api.post('/api/v1/communities/rebuild');
+            await api.post('/communities/rebuild');
             setMessage({ type: 'success', text: t('project.settings.messages.rebuild_submitted') });
         } catch (error) {
             console.error('Failed to rebuild communities:', error);
@@ -178,7 +182,7 @@ export const ProjectSettings: React.FC = () => {
 
         setMessage(null);
         try {
-            const response = await api.post('/api/v1/export', {
+            const response = await api.post('/export', {
                 tenant_id: currentProject.tenant_id,
                 include_episodes: true,
                 include_entities: true,
@@ -187,7 +191,8 @@ export const ProjectSettings: React.FC = () => {
             });
 
             // Create download link for JSON data
-            const jsonString = JSON.stringify(response.data, null, 2);
+            const data = response as { data: unknown };
+            const jsonString = JSON.stringify(data.data, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');

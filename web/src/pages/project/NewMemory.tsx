@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { graphService } from '../../services/graphService'
 import { memoryAPI } from '../../services/api'
+import { createApiUrl } from '../../services/client/urlUtils'
 
 interface TaskStatus {
     task_id: string
@@ -29,12 +30,8 @@ export const NewMemory: React.FC = () => {
     const streamTaskStatus = useCallback((taskId: string) => {
         console.log(`📡 Connecting to SSE stream for task: ${taskId}`)
 
-        // Use relative URL for API calls - works in both dev and production
-        // In development: Vite proxy (vite.config.ts) forwards /api to backend (default: localhost:8000)
-        // In production: relative URL works when frontend and backend are on same domain
-        // To change backend URL in dev: set VITE_API_URL env var (e.g., export VITE_API_URL=http://localhost:9000)
-        const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1'
-        const streamUrl = `${apiBaseUrl}/tasks/${taskId}/stream`
+        // Use centralized URL utility for consistent API URL construction
+        const streamUrl = createApiUrl(`/tasks/${taskId}/stream`)
         console.log(`📡 SSE URL: ${streamUrl}`)
 
         const eventSource = new EventSource(streamUrl)

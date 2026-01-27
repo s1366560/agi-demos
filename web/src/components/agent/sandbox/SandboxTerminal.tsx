@@ -15,6 +15,7 @@ import {
   ExpandOutlined,
   CompressOutlined,
 } from "@ant-design/icons";
+import { createWebSocketUrl } from "../../../services/client/urlUtils";
 
 import "@xterm/xterm/css/xterm.css";
 
@@ -71,15 +72,9 @@ export function SandboxTerminal({
   // Ref to hold connect function for use in onclose callback
   const connectRef = useRef<() => void>(() => {});
 
-  // Get WebSocket URL
+  // Get WebSocket URL using centralized utility
   const getWsUrl = useCallback(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    let url = `${protocol}//${host}/api/v1/terminal/${sandboxId}/ws`;
-    if (sessionId) {
-      url += `?session_id=${sessionId}`;
-    }
-    return url;
+    return createWebSocketUrl(`/terminal/${sandboxId}/ws`, sessionId ? { session_id: sessionId } : undefined);
   }, [sandboxId, sessionId]);
 
   // Initialize terminal

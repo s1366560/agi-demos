@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { graphService } from '../../services/graphService'
 import { TaskList } from '../../components/tasks/TaskList'
+import { createApiUrl } from '../../services/client/urlUtils'
 
 interface Community {
     uuid: string
@@ -96,10 +97,8 @@ export const CommunitiesList: React.FC = () => {
     const streamTaskStatus = useCallback((taskId: string) => {
         console.log(`📡 Connecting to SSE stream for task: ${taskId}`)
 
-        // Create EventSource connection to SSE endpoint
-        // Note: EventSource doesn't support custom headers, so URL must be absolute
-        const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
-        const streamUrl = `${apiBaseUrl}/tasks/${taskId}/stream`
+        // Use centralized URL utility for SSE endpoint
+        const streamUrl = createApiUrl(`/tasks/${taskId}/stream`)
         console.log(`📡 Connecting to SSE: ${streamUrl}`)
 
         const eventSource = new EventSource(streamUrl)
