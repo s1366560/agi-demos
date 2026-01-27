@@ -308,6 +308,10 @@ class AgentSessionWorkflow:
 
             # 2. Wait for stop signal or idle timeout (long-running)
             # The workflow stays alive here, handling chat updates via @workflow.update
+            workflow.logger.info(
+                f"Agent Session waiting for requests: tenant={config.tenant_id}, "
+                f"project={config.project_id}, idle_timeout={config.idle_timeout_seconds}s"
+            )
             await workflow.wait_condition(
                 lambda: self._stop_requested,
                 timeout=timedelta(seconds=config.idle_timeout_seconds),
@@ -325,8 +329,13 @@ class AgentSessionWorkflow:
                 )
 
         except Exception as e:
+            import traceback
+
             self._error = str(e)
-            workflow.logger.error(f"Agent Session Workflow error: {e}")
+            workflow.logger.error(
+                f"Agent Session Workflow error: {type(e).__name__}: {e}\n"
+                f"Traceback: {traceback.format_exc()}"
+            )
 
         finally:
             # 3. Cleanup: Release session resources

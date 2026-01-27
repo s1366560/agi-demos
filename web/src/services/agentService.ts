@@ -10,6 +10,7 @@
 import axios from "axios";
 import { httpClient } from "./client/httpClient";
 import type {
+  AgentEvent,
   AgentEventType,
   AgentService,
   AgentStreamHandler,
@@ -54,7 +55,7 @@ export type WebSocketStatus =
 interface ServerMessage {
   type: string;
   conversation_id?: string;
-  data?: any;
+  data?: unknown;
   seq?: number;
   timestamp?: string;
   action?: string;
@@ -127,7 +128,8 @@ class AgentServiceImpl implements AgentService {
         ? new URL(import.meta.env.VITE_API_URL).host
         : window.location.host;
       // Include session_id in WebSocket URL for multi-tab support
-      const wsUrl = `${protocol}//${host}/agent/ws?token=${token}&session_id=${this.sessionId}`;
+      // Use /api/v1/agent/ws to match backend endpoint
+      const wsUrl = `${protocol}//${host}/api/v1/agent/ws?token=${token}&session_id=${this.sessionId}`;
 
       try {
         this.ws = new WebSocket(wsUrl);
@@ -230,7 +232,7 @@ class AgentServiceImpl implements AgentService {
   /**
    * Send a message through WebSocket
    */
-  private send(message: any): boolean {
+  private send(message: Record<string, unknown>): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
       return true;
@@ -242,7 +244,7 @@ class AgentServiceImpl implements AgentService {
    * Handle incoming WebSocket message
    */
   private handleMessage(message: ServerMessage): void {
-    const { type, conversation_id, data, seq } = message as any;
+    const { type, conversation_id, data, seq } = message;
 
     // Performance tracking: Record event receive timestamp
     const receiveTime = performance.now();
@@ -250,7 +252,7 @@ class AgentServiceImpl implements AgentService {
 
     // Enhanced logging for debugging TEXT_DELTA issues
     if (type === "text_delta") {
-      const delta = (data as any)?.delta || "";
+      const delta = (data as { delta?: string } | undefined)?.delta || "";
       console.log(
         `[AgentWS] TEXT_DELTA: seq=${seq}, len=${delta.length}, preview="${delta.substring(0, 30)}..."`
       );
@@ -293,7 +295,7 @@ class AgentServiceImpl implements AgentService {
    */
   private routeToHandler(
     eventType: AgentEventType,
-    data: any,
+    data: unknown,
     handler: AgentStreamHandler
   ): void {
     console.log("[AgentWS] routeToHandler:", { eventType, hasData: !!data });
@@ -301,83 +303,83 @@ class AgentServiceImpl implements AgentService {
 
     switch (eventType) {
       case "message":
-        handler.onMessage?.(event as any);
+        handler.onMessage?.(event as AgentEvent<unknown>);
         break;
       case "thought":
-        handler.onThought?.(event as any);
+        handler.onThought?.(event as AgentEvent<unknown>);
         break;
       case "work_plan":
-        handler.onWorkPlan?.(event as any);
+        handler.onWorkPlan?.(event as AgentEvent<unknown>);
         break;
       case "pattern_match":
-        handler.onPatternMatch?.(event as any);
+        handler.onPatternMatch?.(event as AgentEvent<unknown>);
         break;
       case "step_start":
-        handler.onStepStart?.(event as any);
+        handler.onStepStart?.(event as AgentEvent<unknown>);
         break;
       case "step_end":
-        handler.onStepEnd?.(event as any);
+        handler.onStepEnd?.(event as AgentEvent<unknown>);
         break;
       case "act":
-        handler.onAct?.(event as any);
+        handler.onAct?.(event as AgentEvent<unknown>);
         break;
       case "observe":
-        handler.onObserve?.(event as any);
+        handler.onObserve?.(event as AgentEvent<unknown>);
         break;
       case "text_start":
         handler.onTextStart?.();
         break;
       case "text_delta":
-        handler.onTextDelta?.(event as any);
+        handler.onTextDelta?.(event as AgentEvent<unknown>);
         break;
       case "text_end":
-        handler.onTextEnd?.(event as any);
+        handler.onTextEnd?.(event as AgentEvent<unknown>);
         break;
       case "clarification_asked":
-        handler.onClarificationAsked?.(event as any);
+        handler.onClarificationAsked?.(event as AgentEvent<unknown>);
         break;
       case "clarification_answered":
-        handler.onClarificationAnswered?.(event as any);
+        handler.onClarificationAnswered?.(event as AgentEvent<unknown>);
         break;
       case "decision_asked":
-        handler.onDecisionAsked?.(event as any);
+        handler.onDecisionAsked?.(event as AgentEvent<unknown>);
         break;
       case "decision_answered":
-        handler.onDecisionAnswered?.(event as any);
+        handler.onDecisionAnswered?.(event as AgentEvent<unknown>);
         break;
       case "complete":
-        handler.onComplete?.(event as any);
+        handler.onComplete?.(event as AgentEvent<unknown>);
         // Clean up handler after completion
         // Note: Don't remove immediately, some events might still come
         break;
       case "title_generated":
-        handler.onTitleGenerated?.(event as any);
+        handler.onTitleGenerated?.(event as AgentEvent<unknown>);
         break;
       case "error":
-        handler.onError?.(event as any);
+        handler.onError?.(event as AgentEvent<unknown>);
         break;
       // Skill execution events (L2 layer)
       case "skill_matched":
-        handler.onSkillMatched?.(event as any);
+        handler.onSkillMatched?.(event as AgentEvent<unknown>);
         break;
       case "skill_execution_start":
-        handler.onSkillExecutionStart?.(event as any);
+        handler.onSkillExecutionStart?.(event as AgentEvent<unknown>);
         break;
       case "skill_tool_start":
-        handler.onSkillToolStart?.(event as any);
+        handler.onSkillToolStart?.(event as AgentEvent<unknown>);
         break;
       case "skill_tool_result":
-        handler.onSkillToolResult?.(event as any);
+        handler.onSkillToolResult?.(event as AgentEvent<unknown>);
         break;
       case "skill_execution_complete":
-        handler.onSkillExecutionComplete?.(event as any);
+        handler.onSkillExecutionComplete?.(event as AgentEvent<unknown>);
         break;
       case "skill_fallback":
-        handler.onSkillFallback?.(event as any);
+        handler.onSkillFallback?.(event as AgentEvent<unknown>);
         break;
       // Context management events
       case "context_compressed":
-        handler.onContextCompressed?.(event as any);
+        handler.onContextCompressed?.(event as AgentEvent<unknown>);
         break;
     }
   }
@@ -753,11 +755,11 @@ class AgentServiceImpl implements AgentService {
     fromSequence = 0,
     limit = 1000
   ): Promise<{
-    events: Array<{ type: string; data: any; timestamp: string | null }>;
+    events: Array<{ type: string; data: unknown; timestamp: string | null }>;
     has_more: boolean;
   }> {
     const response = await api.get<{
-      events: Array<{ type: string; data: any; timestamp: string | null }>;
+      events: Array<{ type: string; data: unknown; timestamp: string | null }>;
       has_more: boolean;
     }>(`/agent/conversations/${conversationId}/events`, {
       params: {
