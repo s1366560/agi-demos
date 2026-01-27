@@ -214,6 +214,7 @@ export type AgentEventType =
   | "retry" // Retry attempt
   | "compact_needed" // Context compaction needed
   | "complete" // Final assistant response
+  | "title_generated" // Conversation title generated
   | "error"; // Error messages
 
 /**
@@ -322,6 +323,17 @@ export interface ErrorEventData {
   message: string;
   isReconnectable?: boolean;
   code?: string;
+}
+
+/**
+ * Title generated event data
+ */
+export interface TitleGeneratedEventData {
+  conversation_id: string;
+  title: string;
+  generated_at: string;
+  message_id?: string;
+  generated_by?: string;
 }
 
 /**
@@ -614,6 +626,8 @@ export interface AgentStreamHandler {
   onSkillFallback?: (event: AgentEvent<SkillFallbackEventData>) => void;
   // Context management handlers
   onContextCompressed?: (event: AgentEvent<ContextCompressedEventData>) => void;
+  // Title generation handlers
+  onTitleGenerated?: (event: AgentEvent<TitleGeneratedEventData>) => void;
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;
   onClose?: () => void;

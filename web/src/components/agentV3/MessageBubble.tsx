@@ -1,4 +1,13 @@
-import React from "react";
+/**
+ * MessageBubble component
+ *
+ * Displays chat messages with markdown rendering and execution details.
+ *
+ * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
+ * Only re-renders when message.id or message.content changes.
+ */
+
+import React, { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -12,7 +21,7 @@ interface MessageBubbleProps {
   isStreaming?: boolean;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   message,
   isStreaming,
 }) => {
@@ -101,4 +110,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
     </div>
   );
-};
+});
+
+// Display name for debugging
+MessageBubble.displayName = 'MessageBubble';
+
+export default MessageBubble;

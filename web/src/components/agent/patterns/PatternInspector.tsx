@@ -86,6 +86,8 @@ export function PatternInspector({
             Deprecated
           </span>
         );
+      default:
+        return null;
     }
   };
 

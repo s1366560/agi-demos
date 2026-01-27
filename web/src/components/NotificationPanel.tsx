@@ -29,6 +29,7 @@ export const NotificationPanel: React.FC = () => {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
+    return undefined;
   }, [isOpen]);
 
   const handleNotificationClick = async (notification: any) => {

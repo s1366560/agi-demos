@@ -377,6 +377,9 @@ class AgentServiceImpl implements AgentService {
         // Clean up handler after completion
         // Note: Don't remove immediately, some events might still come
         break;
+      case "title_generated":
+        handler.onTitleGenerated?.(event as any);
+        break;
       case "error":
         handler.onError?.(event as any);
         break;

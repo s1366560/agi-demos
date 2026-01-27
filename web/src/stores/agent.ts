@@ -18,6 +18,13 @@
 import { create } from "zustand";
 import { agentService } from "../services/agentService";
 import { planService } from "../services/planService";
+import {
+  
+  isConversationLocked,
+  setConversationLock,
+  type ConversationLocks,
+  type ConversationState,
+} from "./agent/conversationState";
 import type {
   AgentExecutionWithDetails,
   AgentStreamHandler,
@@ -52,8 +59,8 @@ import type {
   WorkPlan,
 } from "../types/agent";
 
-// Global lock to prevent simultaneous message sends
-let sendMessageLock = false;
+// Per-conversation locks to prevent simultaneous message sends per conversation
+let conversationLocks: ConversationLocks = new Map();
 
 interface AgentState {
   // Conversations
@@ -74,6 +81,7 @@ interface AgentState {
 
   // Agent execution state
   isStreaming: boolean;
+  streamStatus: 'idle' | 'connecting' | 'streaming' | 'error';
   currentThought: string | null;
   currentThoughtLevel: ThoughtLevel | null;
   currentToolCall: {
@@ -146,6 +154,9 @@ interface AgentState {
   // Title generation state
   isGeneratingTitle: boolean;
   titleGenerationError: string | null;
+
+  // Per-conversation state map (for concurrent conversation switching)
+  conversationStates: Map<string, ConversationState>;
 
   // Actions
   listConversations: (
@@ -244,6 +255,14 @@ interface AgentState {
   // State management
   clearErrors: () => void;
   reset: () => void;
+
+  // Per-conversation state actions (for concurrent conversation switching)
+  getConversationState: (conversationId: string) => ConversationState | undefined;
+  saveConversationState: (conversationId: string) => void;
+  restoreConversationState: (conversationId: string) => void;
+  deleteConversationState: (conversationId: string) => void;
+  isConversationStreaming: (conversationId: string) => boolean;
+  getStreamingStatuses: () => Map<string, boolean>;
 }
 
 const initialState = {
@@ -259,6 +278,7 @@ const initialState = {
   latestLoadedSequence: null,
   hasEarlierMessages: false,
   isStreaming: false,
+  streamStatus: 'idle' as const,
   currentThought: null,
   currentThoughtLevel: null,
   currentToolCall: null,
@@ -296,6 +316,9 @@ const initialState = {
   // Title generation state
   isGeneratingTitle: false,
   titleGenerationError: null,
+
+  // Per-conversation state map
+  conversationStates: new Map<string, ConversationState>(),
 };
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -373,7 +396,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set({ conversationsLoading: true, conversationsError: null });
     try {
       await agentService.deleteConversation(conversationId, projectId);
-      const { conversations, currentConversation } = get();
+      const { conversations, currentConversation, deleteConversationState } = get();
       set({
         conversations: conversations.filter((c) => c.id !== conversationId),
         currentConversation:
@@ -382,6 +405,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             : currentConversation,
         conversationsLoading: false,
       });
+      // Also clean up saved conversation state
+      deleteConversationState(conversationId);
     } catch (error: any) {
       set({
         conversationsError:
@@ -403,7 +428,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       skipLoadMessages
     );
 
-    const { currentConversation: current, isNewConversationPending } = get();
+    const { currentConversation: current, isNewConversationPending, saveConversationState, restoreConversationState } = get();
+
+    // Save current conversation state before switching (for concurrent conversation support)
+    if (current?.id && current.id !== conversation?.id) {
+      console.log("[Agent] Saving state for conversation:", current.id);
+      saveConversationState(current.id);
+    }
 
     // Defensive check: Skip if same conversation and not a new conversation scenario
     // This prevents URL sync effect from triggering unnecessary state resets
@@ -419,51 +450,78 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       return;
     }
 
-    // Always clear execution state and timeline when switching conversations
-    // This prevents stale data from showing for different conversations
-    set({
-      currentConversation: conversation,
-      // Clear timeline to prevent stale data from showing during load
-      timeline: [],
-      timelineLoading: true,
-      // Clear pagination state
-      earliestLoadedSequence: null,
-      latestLoadedSequence: null,
-      hasEarlierMessages: false,
-      // Clear all execution-related state
-      executionTimeline: [],
-      currentToolExecution: null,
-      toolExecutionHistory: [],
-      currentWorkPlan: null,
-      currentStepNumber: null,
-      currentStepStatus: null,
-      matchedPattern: null,
-      currentThought: null,
-      currentThoughtLevel: null,
-      currentToolCall: null,
-      currentObservation: null,
-      assistantDraftContent: "",
-      isTextStreaming: false,
-      // Clear skill execution state
-      currentSkillExecution: null,
-    });
+    // Set the new conversation first
+    set({ currentConversation: conversation });
 
     if (conversation) {
-      // Auto-load timeline for this conversation (unless skipLoadMessages is true)
-      if (!skipLoadMessages) {
-        console.log(
-          "[Agent] Calling getTimeline for conversation:",
-          conversation.id,
-          "project:",
-          conversation.project_id
-        );
-        get().getTimeline(conversation.id, conversation.project_id);
+      // Try to restore saved state for this conversation (concurrent conversation support)
+      const savedState = get().conversationStates.get(conversation.id);
+      if (savedState) {
+        console.log("[Agent] Restoring saved state for conversation:", conversation.id);
+        restoreConversationState(conversation.id);
+        set({ timelineLoading: false }); // Already have data
       } else {
-        // skipLoadMessages is true (e.g., new conversation) - timeline already cleared above
-        set({ timelineLoading: false });
+        // No saved state - clear and load fresh
+        set({
+          // Clear timeline to prevent stale data from showing during load
+          timeline: [],
+          timelineLoading: true,
+          // Clear pagination state
+          earliestLoadedSequence: null,
+          latestLoadedSequence: null,
+          hasEarlierMessages: false,
+          // Clear all execution-related state
+          executionTimeline: [],
+          currentToolExecution: null,
+          toolExecutionHistory: [],
+          currentWorkPlan: null,
+          currentStepNumber: null,
+          currentStepStatus: null,
+          matchedPattern: null,
+          currentThought: null,
+          currentThoughtLevel: null,
+          currentToolCall: null,
+          currentObservation: null,
+          assistantDraftContent: "",
+          isTextStreaming: false,
+          // Clear skill execution state
+          currentSkillExecution: null,
+        });
+
+        // Auto-load timeline for this conversation (unless skipLoadMessages is true)
+        if (!skipLoadMessages) {
+          console.log(
+            "[Agent] Calling getTimeline for conversation:",
+            conversation.id,
+            "project:",
+            conversation.project_id
+          );
+          get().getTimeline(conversation.id, conversation.project_id);
+        } else {
+          // skipLoadMessages is true (e.g., new conversation) - timeline already cleared above
+          set({ timelineLoading: false });
+        }
       }
     } else {
-      set({ timelineLoading: false });
+      // No conversation selected - clear state
+      set({
+        timeline: [],
+        timelineLoading: false,
+        executionTimeline: [],
+        currentToolExecution: null,
+        toolExecutionHistory: [],
+        currentWorkPlan: null,
+        currentStepNumber: null,
+        currentStepStatus: null,
+        matchedPattern: null,
+        currentThought: null,
+        currentThoughtLevel: null,
+        currentToolCall: null,
+        currentObservation: null,
+        assistantDraftContent: "",
+        isTextStreaming: false,
+        currentSkillExecution: null,
+      });
     }
   },
 
@@ -591,26 +649,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     messageText: string,
     _projectId: string
   ) => {
-    // Prevent sending multiple messages simultaneously using a lock
-    if (sendMessageLock) {
+    // Prevent sending multiple messages simultaneously for the SAME conversation using per-conversation locks
+    // This allows concurrent conversations to stream independently
+    if (isConversationLocked(conversationLocks, conversationId)) {
       console.warn(
-        "[Agent] Message send already in progress, ignoring duplicate request"
+        `[Agent] Message send already in progress for conversation ${conversationId}, ignoring duplicate request`
       );
       return;
     }
 
-    const { isStreaming } = get();
-    if (isStreaming) {
-      console.warn(
-        "[Agent] Already streaming, ignoring duplicate send request"
-      );
-      return;
-    }
+    // Set the lock for this conversation
+    conversationLocks = setConversationLock(conversationLocks, conversationId, true);
 
-    sendMessageLock = true;
+    // Note: We don't check global isStreaming anymore - each conversation has its own lock
+    // This allows multiple conversations to stream concurrently
+
     // Clear previous execution state before starting new message
     set({
       isStreaming: true,
+      streamStatus: 'connecting',
       timelineError: null,
       // Clear execution timeline for new message
       executionTimeline: [],
@@ -623,6 +680,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // Clear skill execution state
       currentSkillExecution: null,
     });
+
+    // Helper function to release the lock
+    const releaseLock = () => {
+      conversationLocks = setConversationLock(conversationLocks, conversationId, false);
+    };
 
     // Generate temporary ID for rollback on error
     const tempId = `temp-${Date.now()}-${Math.random()
@@ -1285,6 +1347,36 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         });
       },
 
+      onTitleGenerated: (event: any) => {
+        // Handle title_generated event from backend
+        const data = event.data as {
+          conversation_id: string;
+          title: string;
+          generated_at: string;
+          message_id?: string;
+          generated_by?: string;
+        };
+        console.log("[Agent] Title generated event:", data);
+
+        const { currentConversation, conversations } = get();
+
+        // Update current conversation if it matches
+        if (currentConversation?.id === data.conversation_id) {
+          set({
+            currentConversation: {
+              ...currentConversation,
+              title: data.title,
+            },
+          });
+        }
+
+        // Update in conversations list
+        const updatedList = conversations.map((c) =>
+          c.id === data.conversation_id ? { ...c, title: data.title } : c
+        );
+        set({ conversations: updatedList });
+      },
+
       onComplete: async (event: any) => {
         receivedServerEvent = true;
         // Flush any remaining buffered text
@@ -1319,54 +1411,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           get().addTimelineEvent(assistantEvent);
         }
 
-        // Generate friendly title if conversation still has default title
-        const { currentConversation, timeline, isGeneratingTitle } = get();
-
-        // Only count message events (user_message and assistant_message), not all timeline events
-        // This prevents the condition from being too restrictive when there are many thought/act/observe events
-        const messageCount = timeline.filter(
-          (e) => e.type === "user_message" || e.type === "assistant_message"
-        ).length;
-
-        // Debug logging to diagnose title generation issues
-        console.log("[Agent] Title generation check:", {
-          conversationId,
-          currentConversationId: currentConversation?.id,
-          title: currentConversation?.title,
-          messageCount,
-          timelineLength: timeline.length,
-          isGeneratingTitle,
-          shouldTrigger:
-            currentConversation?.title === "New Conversation" &&
-            messageCount <= 4 &&
-            !isGeneratingTitle,
-        });
-
-        if (
-          currentConversation?.title === "New Conversation" &&
-          messageCount <= 4 &&  // Only trigger when there are few messages (not events)
-          !isGeneratingTitle  // Prevent concurrent generation
-        ) {
-          // Only generate title for the first few messages to avoid unnecessary API calls
-          const projectId = currentConversation?.project_id;
-          const targetConversationId = currentConversation?.id || conversationId;
-
-          if (projectId && targetConversationId) {
-            console.log(
-              "[Agent] Triggering title generation for conversation:",
-              targetConversationId,
-              `messageCount=${messageCount}`
-            );
-            get().generateConversationTitle(targetConversationId, projectId);
-          } else {
-            console.warn(
-              "[Agent] Skipping title generation - missing data:",
-              { projectId, targetConversationId, currentConversation }
-            );
-          }
-        }
-
-        sendMessageLock = false;
+        releaseLock();
         set({
           isStreaming: false,
           isNewConversationPending: false, // Clear pending flag after SSE completes
@@ -1391,7 +1436,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         }
         textDeltaBuffer = "";
 
-        sendMessageLock = false;
+        releaseLock();
         set({
           timelineError: event.data.message as string,
           isStreaming: false,
@@ -1415,7 +1460,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         }
         textDeltaBuffer = "";
 
-        sendMessageLock = false;
+        releaseLock();
         // If we never received any server event before close, remove the temp message event
         if (!receivedServerEvent) {
           const { timeline } = get();
@@ -1442,7 +1487,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         handler
       );
     } catch (error: any) {
-      sendMessageLock = false;
+      releaseLock();
       // Rollback: remove the temporary user message event on error
       const { timeline } = get();
       set({
@@ -1457,6 +1502,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   stopChat: (conversationId: string) => {
     agentService.stopChat(conversationId);
+    // Release the lock for this conversation
+    conversationLocks = setConversationLock(conversationLocks, conversationId, false);
     set({
       isStreaming: false,
       isNewConversationPending: false, // Clear pending flag on stop
@@ -1793,6 +1840,134 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     });
   },
 
+  // Per-conversation state methods (for concurrent conversation switching)
+  getConversationState: (conversationId: string) => {
+    const { conversationStates } = get();
+    return conversationStates.get(conversationId);
+  },
+
+  saveConversationState: (conversationId: string) => {
+    const state = get();
+    const { conversationStates } = state;
+
+    // Create a snapshot of the current conversation's state
+    const convState: ConversationState = {
+      id: conversationId,
+      streaming: {
+        isStreaming: state.isStreaming,
+        streamStatus: state.streamStatus as 'idle' | 'connecting' | 'streaming' | 'error',
+      },
+      execution: {
+        currentThought: state.currentThought,
+        currentThoughtLevel: state.currentThoughtLevel,
+        currentToolCall: state.currentToolCall,
+        currentObservation: state.currentObservation,
+        currentToolExecution: state.currentToolExecution,
+        toolExecutionHistory: state.toolExecutionHistory,
+        executionTimeline: state.executionTimeline as Array<{
+          stepNumber: number;
+          description: string;
+          status: 'pending' | 'running' | 'completed' | 'failed';
+          thoughts: string[];
+          toolExecutions: ToolExecution[];
+          startTime?: string;
+          endTime?: string;
+          duration?: number;
+        }>,
+        currentSkillExecution: state.currentSkillExecution,
+      },
+      workPlan: state.currentWorkPlan,
+      currentStepNumber: state.currentStepNumber,
+      currentStepStatus: state.currentStepStatus,
+      timeline: state.timeline,
+      earliestLoadedSequence: state.earliestLoadedSequence,
+      latestLoadedSequence: state.latestLoadedSequence,
+      hasEarlierMessages: state.hasEarlierMessages,
+      assistantDraftContent: state.assistantDraftContent,
+      isTextStreaming: state.isTextStreaming,
+      lastAccessedAt: Date.now(),
+    };
+
+    const newStates = new Map(conversationStates);
+    newStates.set(conversationId, convState);
+    set({ conversationStates: newStates });
+  },
+
+  restoreConversationState: (conversationId: string) => {
+    const { conversationStates } = get();
+    const savedState = conversationStates.get(conversationId);
+
+    if (savedState) {
+      // Restore the saved conversation's state
+      set({
+        // Streaming state
+        isStreaming: savedState.streaming.isStreaming,
+        streamStatus: savedState.streaming.streamStatus,
+        // Execution state
+        currentThought: savedState.execution.currentThought,
+        currentThoughtLevel: savedState.execution.currentThoughtLevel,
+        currentToolCall: savedState.execution.currentToolCall,
+        currentObservation: savedState.execution.currentObservation,
+        currentToolExecution: savedState.execution.currentToolExecution,
+        toolExecutionHistory: savedState.execution.toolExecutionHistory,
+        executionTimeline: savedState.execution.executionTimeline,
+        currentSkillExecution: savedState.execution.currentSkillExecution,
+        // Work plan state
+        currentWorkPlan: savedState.workPlan,
+        currentStepNumber: savedState.currentStepNumber,
+        currentStepStatus: savedState.currentStepStatus,
+        // Timeline state
+        timeline: savedState.timeline,
+        earliestLoadedSequence: savedState.earliestLoadedSequence,
+        latestLoadedSequence: savedState.latestLoadedSequence,
+        hasEarlierMessages: savedState.hasEarlierMessages,
+        // Typewriter state
+        assistantDraftContent: savedState.assistantDraftContent,
+        isTextStreaming: savedState.isTextStreaming,
+      });
+
+      // Update last accessed time
+      const newStates = new Map(conversationStates);
+      const updated = { ...savedState, lastAccessedAt: Date.now() };
+      newStates.set(conversationId, updated);
+      set({ conversationStates: newStates });
+    }
+  },
+
+  deleteConversationState: (conversationId: string) => {
+    const { conversationStates } = get();
+    const newStates = new Map(conversationStates);
+    newStates.delete(conversationId);
+    set({ conversationStates: newStates });
+  },
+
+  isConversationStreaming: (conversationId: string) => {
+    const { conversationStates, isStreaming, currentConversation } = get();
+    // If this is the current conversation, use the live state
+    if (currentConversation?.id === conversationId) {
+      return isStreaming;
+    }
+    // Otherwise check the saved state
+    return conversationStates.get(conversationId)?.streaming.isStreaming ?? false;
+  },
+
+  getStreamingStatuses: () => {
+    const { conversationStates, isStreaming, currentConversation } = get();
+    const statuses = new Map<string, boolean>();
+
+    // Add all saved conversation states
+    for (const [id, state] of conversationStates.entries()) {
+      statuses.set(id, state.streaming.isStreaming);
+    }
+
+    // Override current conversation with live state
+    if (currentConversation) {
+      statuses.set(currentConversation.id, isStreaming);
+    }
+
+    return statuses;
+  },
+
   reset: () => {
     set(initialState);
   },
@@ -1939,6 +2114,16 @@ export const useLatestLoadedSequence = () =>
   useAgentStore((state) => state.latestLoadedSequence);
 export const useHasEarlierMessages = () =>
   useAgentStore((state) => state.hasEarlierMessages);
+
+// Per-conversation state selectors (for concurrent conversation switching)
+export const useConversationStates = () =>
+  useAgentStore((state) => state.conversationStates);
+export const useIsConversationStreaming = (conversationId: string) =>
+  useAgentStore((state) => state.isConversationStreaming(conversationId));
+export const useStreamingStatuses = () =>
+  useAgentStore((state) => state.getStreamingStatuses());
+export const useConversationState = (conversationId: string) =>
+  useAgentStore((state) => state.getConversationState(conversationId));
 
 // Action selectors (for components that need to call actions)
 export const useAgentActions = () =>

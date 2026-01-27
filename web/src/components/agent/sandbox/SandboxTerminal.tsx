@@ -292,6 +292,7 @@ export function SandboxTerminal({
       });
       return () => cancelAnimationFrame(rafId);
     }
+    return undefined;
   }, [connect, status]);
 
   // Heartbeat

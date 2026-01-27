@@ -440,7 +440,7 @@ async def update_conversation_title(
         )
 
 
-@router.post("/conversations/{conversation_id}/generate-title", response_model=ConversationResponse)
+@router.post("/conversations/{conversation_id}/generate-title", response_model=ConversationResponse, deprecated=True)
 async def generate_conversation_title(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
@@ -451,6 +451,12 @@ async def generate_conversation_title(
 ) -> ConversationResponse:
     """
     Generate and update a friendly conversation title based on the first user message.
+
+    .. deprecated::
+        This endpoint is deprecated. Title generation is now handled automatically
+        by the backend after the first agent response completes. The title is delivered
+        via the `title_generated` SSE event. This endpoint is kept for backward compatibility
+        but may be removed in a future version.
 
     Args:
         conversation_id: Conversation ID to generate title for

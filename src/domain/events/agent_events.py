@@ -81,6 +81,9 @@ class AgentEventType(str, Enum):
     PLAN_UPDATED = "plan_updated"
     PLAN_STATUS_CHANGED = "plan_status_changed"
 
+    # Title generation events
+    TITLE_GENERATED = "title_generated"
+
 
 class AgentDomainEvent(BaseModel):
     """Base class for all agent domain events."""
@@ -417,6 +420,22 @@ class AgentPlanStatusChangedEvent(AgentDomainEvent):
     new_status: str
 
 
+# === Title Generation Events ===
+
+
+class AgentTitleGeneratedEvent(AgentDomainEvent):
+    """Event emitted when a conversation title is generated.
+
+    This event is published after the chat completes and a title
+    is generated for the conversation (either by LLM or fallback).
+    """
+    event_type: AgentEventType = AgentEventType.TITLE_GENERATED
+    conversation_id: str
+    title: str
+    message_id: Optional[str] = None
+    generated_by: str = "llm"  # "llm" or "fallback"
+
+
 # =========================================================================
 # Event Type Utilities
 # =========================================================================
@@ -485,6 +504,7 @@ def get_event_type_docstring() -> str:
         AgentPlanCreatedEvent,
         AgentPlanUpdatedEvent,
         AgentPlanStatusChangedEvent,
+        AgentTitleGeneratedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
 
