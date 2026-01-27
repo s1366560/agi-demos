@@ -6,6 +6,7 @@
  */
 
 import { ReactNode } from "react";
+import { MarkdownContent } from "./MarkdownContent";
 
 export interface MessageStreamProps {
   /** Messages to display */
@@ -316,10 +317,12 @@ export function ToolExecutionCardDisplay({
                   </span>
                   Output
                 </label>
-                <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto max-h-48 overflow-y-auto">
-                  <pre className="whitespace-pre-wrap break-words">
-                    {formattedResult}
-                  </pre>
+                <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-x-auto max-h-48 overflow-y-auto">
+                  <MarkdownContent
+                    content={formattedResult}
+                    className="prose-p:my-0 prose-headings:my-1 prose-ul:my-0 prose-ol:my-0"
+                    prose={true}
+                  />
                 </div>
               </div>
             )}

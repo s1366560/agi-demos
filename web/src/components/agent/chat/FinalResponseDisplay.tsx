@@ -3,9 +3,12 @@
  *
  * Matches the design from docs/statics/project workbench/agent/finished/
  * Features prose-styled content with export actions sidebar.
+ * Now uses ReactMarkdown with GFM support for proper rendering.
  */
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export interface FinalResponseDisplayProps {
   /** Report content (markdown) */
@@ -65,90 +68,10 @@ export function FinalResponseDisplay({
     console.log("Share");
   };
 
-  // Simple markdown rendering
-  const renderContent = (text: string) => {
-    if (!text) return null;
-    const lines = text.split("\n");
-
-    return lines.map((line, index) => {
-      // Headers
-      if (line.startsWith("### ")) {
-        return (
-          <h3
-            key={index}
-            className="text-lg font-bold mt-6 mb-3 text-slate-900 dark:text-white"
-          >
-            {line.replace("### ", "")}
-          </h3>
-        );
-      }
-      if (line.startsWith("## ")) {
-        return (
-          <h3
-            key={index}
-            className="text-xl font-bold mt-6 mb-3 text-slate-900 dark:text-white"
-          >
-            {line.replace("## ", "")}
-          </h3>
-        );
-      }
-
-      // Bullet points
-      if (line.trim().startsWith("- ")) {
-        return (
-          <li
-            key={index}
-            className="text-sm mb-1 text-slate-700 dark:text-slate-300 ml-4"
-          >
-            {line.trim().replace(/- |\*\*/g, "")}
-          </li>
-        );
-      }
-
-      // Bold text
-      if (line.includes("**")) {
-        const parts = line.split("**");
-        return (
-          <p
-            key={index}
-            className="text-sm mb-3 text-slate-700 dark:text-slate-300"
-          >
-            {parts.map((part, i) =>
-              i % 2 === 1 ? (
-                <strong
-                  key={i}
-                  className="font-semibold text-slate-900 dark:text-white"
-                >
-                  {part}
-                </strong>
-              ) : (
-                part
-              )
-            )}
-          </p>
-        );
-      }
-
-      // Regular paragraph
-      if (line.trim()) {
-        return (
-          <p
-            key={index}
-            className="text-sm mb-3 text-slate-700 dark:text-slate-300"
-          >
-            {line}
-          </p>
-        );
-      }
-
-      return <br key={index} />;
-    });
-  };
-
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-6 pb-12">
       {/* Main Content */}
-      <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200">
+      <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 border-b border-slate-100 dark:border-border-dark pb-4 -mt-4">
           <h2 className="m-0 text-2xl">Final Synthesis Report</h2>
@@ -159,8 +82,10 @@ export function FinalResponseDisplay({
           )}
         </div>
 
-        {/* Content */}
-        {renderContent(content)}
+        {/* Content with ReactMarkdown */}
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {content}
+        </ReactMarkdown>
       </div>
 
       {/* Action Sidebar */}

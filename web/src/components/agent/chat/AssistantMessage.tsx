@@ -9,6 +9,7 @@
  */
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
 
 export interface AssistantMessageProps {
@@ -46,7 +47,7 @@ export function AssistantMessage({
     );
   }
 
-  // Normal response: Simple bubble with ReactMarkdown
+  // Normal response: Simple bubble with ReactMarkdown + GFM support
   return (
     <div className="flex items-start gap-3">
       {/* Robot avatar */}
@@ -57,8 +58,12 @@ export function AssistantMessage({
       </div>
 
       {/* Message content bubble */}
-      <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none">
-        <ReactMarkdown>{content}</ReactMarkdown>
+      <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+        >
+          {content}
+        </ReactMarkdown>
       </div>
     </div>
   );
