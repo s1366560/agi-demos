@@ -85,28 +85,57 @@ class SqlAlchemyAgentExecutionEventRepository(AgentExecutionEventRepository):
         from_sequence: int = 0,
         limit: int = 1000,
         event_types: Optional[Set[str]] = None,
+        before_sequence: Optional[int] = None,
     ) -> List[AgentExecutionEvent]:
-        """Get events for a conversation starting from a sequence number.
+        """Get events for a conversation with bidirectional pagination support.
 
         Args:
             conversation_id: The conversation ID
-            from_sequence: Starting sequence number (inclusive)
+            from_sequence: Starting sequence number (inclusive), used for forward pagination
             limit: Maximum number of events to return
-            event_types: Optional set of event types to filter by. If None, returns all types.
+            event_types: Optional set of event types to filter by
+            before_sequence: For backward pagination, get events before this sequence number (exclusive)
+
+        Returns:
+            List of events in sequence order (oldest first)
+
+        Pagination behavior:
+            - If before_sequence is None: returns events from from_sequence onwards (forward)
+            - If before_sequence is set: returns events before before_sequence, up to limit (backward)
         """
+        # Base query - always filter by conversation_id
         query = select(DBAgentExecutionEvent).where(
             DBAgentExecutionEvent.conversation_id == conversation_id,
-            DBAgentExecutionEvent.sequence_number >= from_sequence,
         )
 
-        # Add event_types filter if specified
-        if event_types:
-            query = query.where(DBAgentExecutionEvent.event_type.in_(event_types))
+        if before_sequence is not None:
+            # Backward pagination: get events before the specified sequence
+            # Use descending order to get the most recent events first, then reverse
+            query = query.where(
+                DBAgentExecutionEvent.sequence_number < before_sequence
+            ).order_by(DBAgentExecutionEvent.sequence_number.desc()).limit(limit)
 
-        query = query.order_by(DBAgentExecutionEvent.sequence_number.asc()).limit(limit)
+            # Add event_types filter if specified
+            if event_types:
+                query = query.where(DBAgentExecutionEvent.event_type.in_(event_types))
 
-        result = await self._session.execute(query)
-        db_events = result.scalars().all()
+            result = await self._session.execute(query)
+            db_events = list(reversed(result.scalars().all()))  # Reverse to chronological order
+        else:
+            # Forward pagination: get events from from_sequence onwards
+            query = query.where(
+                DBAgentExecutionEvent.sequence_number >= from_sequence
+            )
+
+            # Add event_types filter if specified
+            if event_types:
+                query = query.where(DBAgentExecutionEvent.event_type.in_(event_types))
+
+            query = query.order_by(DBAgentExecutionEvent.sequence_number.asc()).limit(limit)
+
+            result = await self._session.execute(query)
+            db_events = result.scalars().all()
+
         return [self._to_domain(e) for e in db_events]
 
     async def get_last_sequence(self, conversation_id: str) -> int:

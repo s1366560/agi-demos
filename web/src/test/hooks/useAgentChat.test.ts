@@ -5,6 +5,12 @@ import { useAgentChat } from '../../hooks/useAgentChat';
 import { useProjectStore } from '../../stores/project';
 import { useAgentStore } from '../../stores/agent';
 import { useParams, useNavigate } from 'react-router-dom';
+import { agentService } from '../../services/agentService';
+
+// Mock selector functions
+const mockUseMessages = vi.fn();
+const mockUseMessagesLoading = vi.fn();
+const mockUseHasEarlierMessages = vi.fn();
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -18,6 +24,27 @@ vi.mock('../../stores/project', () => ({
 
 vi.mock('../../stores/agent', () => ({
   useAgentStore: vi.fn(),
+  useMessages: () => mockUseMessages(),
+  useMessagesLoading: () => mockUseMessagesLoading(),
+  useHasEarlierMessages: () => mockUseHasEarlierMessages(),
+}));
+
+// Also mock the store directly for getState() calls
+const mockAgentStoreInstance = {
+  getState: vi.fn(() => ({
+    currentConversation: null,
+    isStreaming: false,
+  })),
+};
+
+(useAgentStore as any).getState = mockAgentStoreInstance.getState.bind(mockAgentStoreInstance);
+
+vi.mock('../../services/agentService', () => ({
+  agentService: {
+    connect: vi.fn(() => Promise.resolve()),
+    isConnected: vi.fn(() => false),
+    stopChat: vi.fn(),
+  },
 }));
 
 // Mock Antd Form
@@ -41,6 +68,13 @@ describe('useAgentChat', () => {
   const mockSendMessage = vi.fn();
   const mockStopChat = vi.fn();
   const mockGetPlanModeStatus = vi.fn();
+  const mockLoadEarlierMessages = vi.fn();
+
+  const mockStoreState = {
+    conversations: [],
+    currentConversation: null,
+    isStreaming: false,
+  };
 
   beforeEach(() => {
     (useNavigate as any).mockReturnValue(mockNavigate);
@@ -52,7 +86,12 @@ describe('useAgentChat', () => {
       setCurrentProject: mockSetCurrentProject,
     });
 
-    (useAgentStore as any).mockReturnValue({
+    // Mock selector functions
+    mockUseMessages.mockReturnValue([]);
+    mockUseMessagesLoading.mockReturnValue(false);
+    mockUseHasEarlierMessages.mockReturnValue(false);
+
+    const mockAgentStore = {
       conversations: [],
       currentConversation: null,
       listConversations: mockListConversations,
@@ -61,9 +100,8 @@ describe('useAgentChat', () => {
       sendMessage: mockSendMessage,
       stopChat: mockStopChat,
       isStreaming: false,
-      messages: [],
-      messagesLoading: false,
       getPlanModeStatus: mockGetPlanModeStatus,
+      loadEarlierMessages: mockLoadEarlierMessages,
       // Add other required store properties
       currentWorkPlan: null,
       currentStepNumber: null,
@@ -78,20 +116,27 @@ describe('useAgentChat', () => {
       enterPlanMode: vi.fn(),
       exitPlanMode: vi.fn(),
       updatePlan: vi.fn(),
-    });
+      assistantDraftContent: null,
+      isTextStreaming: false,
+      isNewConversationPending: false,
+      getState: () => mockStoreState,
+    };
+
+    (useAgentStore as any).mockReturnValue(mockAgentStore);
   });
 
   it('initializes correctly', () => {
     const { result } = renderHook(() => useAgentChat());
     expect(result.current.projectId).toBe('p1');
     expect(mockListConversations).toHaveBeenCalledWith('p1');
+    expect(typeof result.current.handleLoadEarlier).toBe('function');
   });
 
   it('handles sending a message', async () => {
     const { result } = renderHook(() => useAgentChat());
-    
+
     mockCreateConversation.mockResolvedValue({ id: 'c1', project_id: 'p1' });
-    
+
     await act(async () => {
       await result.current.handleSend('Hello');
     });

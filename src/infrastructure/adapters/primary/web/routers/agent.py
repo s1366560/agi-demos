@@ -539,14 +539,16 @@ async def generate_conversation_title(
 async def get_conversation_messages(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
-    limit: int = Query(1000, ge=1, le=2000, description="Maximum events to return"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum events to return"),
+    from_sequence: int = Query(0, description="Starting sequence number (inclusive) for forward pagination"),
+    before_sequence: Optional[int] = Query(None, description="For backward pagination, get events before this sequence"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ) -> dict:
     """
-    Get conversation timeline from unified event stream.
+    Get conversation timeline from unified event stream with bidirectional pagination.
 
     This endpoint returns a timeline of all events in the conversation,
     ordered by sequence number. Events include:
@@ -559,13 +561,20 @@ async def get_conversation_messages(
     Args:
         conversation_id: Conversation ID
         project_id: Project ID for authorization
-        limit: Maximum number of events to return
+        limit: Maximum number of events to return (default: 100, max: 500)
+        from_sequence: Starting sequence number (inclusive) for forward pagination
+        before_sequence: For backward pagination, get events before this sequence (exclusive)
         current_user: Authenticated user
         tenant_id: User's tenant ID
         db: Database session
 
     Returns:
-        Dictionary with timeline list
+        Dictionary with timeline list and pagination metadata:
+        - timeline: List of events in chronological order
+        - total: Number of events returned
+        - has_more: Whether more events exist before this page
+        - first_sequence: Sequence number of the first event in this page
+        - last_sequence: Sequence number of the last event in this page
     """
     try:
         container = get_container_with_db(request, db)
@@ -601,9 +610,10 @@ async def get_conversation_messages(
 
         events = await event_repo.get_events(
             conversation_id=conversation_id,
-            from_sequence=0,
+            from_sequence=from_sequence,
             limit=limit,
             event_types=DISPLAYABLE_EVENTS,
+            before_sequence=before_sequence,
         )
 
         # Get tool executions for duration info
@@ -674,10 +684,38 @@ async def get_conversation_messages(
 
             timeline.append(item)
 
+        # Calculate pagination metadata
+        first_sequence = None
+        last_sequence = None
+        if timeline:
+            first_sequence = timeline[0]["sequenceNumber"]
+            last_sequence = timeline[-1]["sequenceNumber"]
+
+        # Determine if there are more events before this page
+        has_more = False
+        if first_sequence is not None and before_sequence is None:
+            # Forward pagination: check if there might be earlier events
+            if first_sequence > 0:
+                has_more = True
+        elif first_sequence is not None and before_sequence is not None:
+            # Backward pagination: check if there are events before first_sequence
+            # Query once more to check if any events exist before first_sequence
+            check_events = await event_repo.get_events(
+                conversation_id=conversation_id,
+                from_sequence=0,
+                limit=1,
+                event_types=DISPLAYABLE_EVENTS,
+                before_sequence=first_sequence,
+            )
+            has_more = len(check_events) > 0
+
         return {
             "conversationId": conversation_id,
             "timeline": timeline,
             "total": len(timeline),
+            "has_more": has_more,
+            "first_sequence": first_sequence,
+            "last_sequence": last_sequence,
         }
 
     except HTTPException:

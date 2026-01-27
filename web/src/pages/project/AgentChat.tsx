@@ -47,6 +47,8 @@ const AgentChatInternal: React.FC = () => {
     // Typewriter streaming state
     assistantDraftContent,
     isTextStreaming,
+    // Pagination state
+    hasEarlierMessages,
 
     messagesEndRef,
     scrollContainerRef,
@@ -61,6 +63,7 @@ const AgentChatInternal: React.FC = () => {
     handleUpdatePlan,
     handleEnterPlanMode,
     handleEnterPlanSubmit,
+    handleLoadEarlier,
   } = useAgentChat();
 
   // Transform conversations for sidebar
@@ -170,6 +173,8 @@ const AgentChatInternal: React.FC = () => {
           onTileClick={handleTileClick}
           assistantDraftContent={assistantDraftContent}
           isTextStreaming={isTextStreaming}
+          hasEarlierMessages={hasEarlierMessages}
+          onLoadEarlier={handleLoadEarlier}
         />
 
         {/* Input Area */}

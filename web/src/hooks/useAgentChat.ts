@@ -6,6 +6,7 @@ import {
   useAgentStore,
   useMessages,
   useMessagesLoading,
+  useHasEarlierMessages,
 } from "../stores/agent";
 import { agentService } from "../services/agentService";
 import type { StarterTile } from "../components/agent/chat/IdleState";
@@ -42,6 +43,7 @@ export function useAgentChat() {
   // Use selectors for messages (derived from timeline)
   const messages = useMessages();
   const messagesLoading = useMessagesLoading();
+  const hasEarlierMessages = useHasEarlierMessages();
 
   const {
     conversations,
@@ -66,6 +68,7 @@ export function useAgentChat() {
     exitPlanMode,
     updatePlan,
     getPlanModeStatus,
+    loadEarlierMessages,
     // Typewriter streaming state
     assistantDraftContent,
     isTextStreaming,
@@ -340,6 +343,16 @@ export function useAgentChat() {
     }
   }, [currentConversation?.id, enterPlanMode, planForm]);
 
+  // Load earlier messages (backward pagination)
+  const handleLoadEarlier = useCallback(async () => {
+    if (!currentConversation?.id || !projectId) {
+      console.log("[useAgentChat] Cannot load earlier: no conversation or project");
+      return;
+    }
+    console.log("[useAgentChat] Loading earlier messages for", currentConversation.id);
+    await loadEarlierMessages(currentConversation.id, projectId, 50);
+  }, [currentConversation?.id, projectId, loadEarlierMessages]);
+
   return {
     // State
     projectId,
@@ -374,6 +387,8 @@ export function useAgentChat() {
     // Typewriter streaming state
     assistantDraftContent,
     isTextStreaming,
+    // Pagination state
+    hasEarlierMessages,
 
     // Refs
     messagesEndRef,
@@ -390,5 +405,6 @@ export function useAgentChat() {
     handleUpdatePlan,
     handleEnterPlanMode,
     handleEnterPlanSubmit,
+    handleLoadEarlier,
   };
 }

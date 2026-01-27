@@ -657,13 +657,32 @@ class AgentServiceImpl implements AgentService {
   async getConversationMessages(
     conversationId: string,
     projectId: string,
-    limit = 100
-  ): Promise<ConversationMessagesResponse> {
-    const response = await api.get<ConversationMessagesResponse>(
+    limit = 100,
+    fromSequence?: number,
+    beforeSequence?: number
+  ): Promise<ConversationMessagesResponse & {
+    has_more: boolean;
+    first_sequence: number | null;
+    last_sequence: number | null;
+  }> {
+    const params: Record<string, string | number> = {
+      project_id: projectId,
+      limit,
+    };
+    if (fromSequence !== undefined) {
+      params.from_sequence = fromSequence;
+    }
+    if (beforeSequence !== undefined) {
+      params.before_sequence = beforeSequence;
+    }
+
+    const response = await api.get<{
+      has_more?: boolean;
+      first_sequence?: number | null;
+      last_sequence?: number | null;
+    } & ConversationMessagesResponse>(
       `/api/v1/agent/conversations/${conversationId}/messages`,
-      {
-        params: { project_id: projectId, limit },
-      }
+      { params }
     );
     return response.data;
   }

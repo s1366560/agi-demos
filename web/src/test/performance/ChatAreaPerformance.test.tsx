@@ -5,18 +5,17 @@
  * minimizes unnecessary re-renders during streaming.
  */
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render } from '@testing-library/react';
 import React from 'react';
 
-// Import ChatArea with proper path resolution
-let ChatAreaModule: any;
-beforeAll(async () => {
-  ChatAreaModule = await import('../../components/agent/chat/ChatArea');
-});
+// Mock antd Spin component
+vi.mock('antd', () => ({
+  Spin: ({ size }: any) => <div data-testid={`spin-${size}`}>Loading...</div>,
+}));
 
-// Mock dependencies
-vi.mock('@/components/agent/chat/IdleState', () => ({
+// Mock dependencies - use relative paths to match the actual imports
+vi.mock('../../components/agent/chat/IdleState', () => ({
   IdleState: ({ onTileClick }: any) => (
     <div data-testid="idle-state">
       <button onClick={() => onTileClick({ id: 'test', title: 'Test' })}>
@@ -26,7 +25,7 @@ vi.mock('@/components/agent/chat/IdleState', () => ({
   ),
 }));
 
-vi.mock('@/components/agent/chat/MessageStream', () => ({
+vi.mock('../../components/agent/chat/MessageStream', () => ({
   MessageStream: ({ children }: any) => <div data-testid="message-stream">{children}</div>,
   UserMessage: ({ content }: any) => <div data-testid="user-message">{content}</div>,
   AgentSection: ({ children }: any) => <div data-testid="agent-section">{children}</div>,
@@ -38,7 +37,7 @@ vi.mock('@/components/agent/chat/MessageStream', () => ({
   ),
 }));
 
-vi.mock('@/components/agent/chat/AssistantMessage', () => ({
+vi.mock('../../components/agent/chat/AssistantMessage', () => ({
   AssistantMessage: ({ content, isReport }: any) => (
     <div data-testid="assistant-message" data-report={isReport}>
       {content}
@@ -46,11 +45,11 @@ vi.mock('@/components/agent/chat/AssistantMessage', () => ({
   ),
 }));
 
-vi.mock('@/components/agent/execution/ExecutionTimeline', () => ({
+vi.mock('../../components/agent/execution/ExecutionTimeline', () => ({
   ExecutionTimeline: () => <div data-testid="execution-timeline" />,
 }));
 
-vi.mock('@/components/agent/execution/FollowUpPills', () => ({
+vi.mock('../../components/agent/execution/FollowUpPills', () => ({
   FollowUpPills: ({ onSuggestionClick }: any) => (
     <div data-testid="follow-up-pills">
       <button onClick={() => onSuggestionClick('suggestion')}>Suggestion</button>
@@ -58,24 +57,25 @@ vi.mock('@/components/agent/execution/FollowUpPills', () => ({
   ),
 }));
 
-vi.mock('@/components/agent/PlanModeIndicator', () => ({
+vi.mock('../../components/agent/PlanModeIndicator', () => ({
   PlanModeIndicator: () => <div data-testid="plan-mode-indicator" />,
 }));
 
-vi.mock('@/components/agent/PlanEditor', () => ({
+vi.mock('../../components/agent/PlanEditor', () => ({
   PlanEditor: () => <div data-testid="plan-editor" />,
 }));
+
+// Import ChatArea after mocks are set up
+import { ChatArea } from '../../components/agent/chat/ChatArea';
 
 describe('ChatArea Performance', () => {
   describe('Component Memoization', () => {
     it('should be wrapped with React.memo', () => {
       // Check if component is memoized
-      expect(ChatAreaModule.ChatArea.displayName).toBe('ChatArea');
+      expect(ChatArea.displayName).toBe('ChatArea');
     });
 
     it('should have consistent props to enable effective memoization', () => {
-      const { ChatArea } = ChatAreaModule;
-
       const messages = [
         { id: '1', role: 'user', content: 'Hello', created_at: '2024-01-01T00:00:00Z' },
       ];
@@ -105,14 +105,12 @@ describe('ChatArea Performance', () => {
           onUpdatePlan={vi.fn()}
           onSend={vi.fn()}
           onTileClick={vi.fn()}
+          hasEarlierMessages={false}
+          onLoadEarlier={vi.fn()}
         />
       );
 
       // Re-render with same props - memoized component should not re-render
-      const renderSpy = vi.fn();
-      const originalChatArea = ChatArea;
-      // We can't directly spy on the component's render, but we can check
-      // that the DOM doesn't change unnecessarily
       rerender(
         <ChatArea
           messages={messages}
@@ -137,6 +135,8 @@ describe('ChatArea Performance', () => {
           onUpdatePlan={vi.fn()}
           onSend={vi.fn()}
           onTileClick={vi.fn()}
+          hasEarlierMessages={false}
+          onLoadEarlier={vi.fn()}
         />
       );
     });
@@ -173,8 +173,6 @@ describe('ChatArea Performance', () => {
   describe('Streaming State Updates', () => {
     it('should handle streaming state efficiently', () => {
       // Test that rapid streaming updates don't cause excessive re-renders
-      const { ChatArea } = ChatAreaModule;
-
       const messages = [
         { id: '1', role: 'user', content: 'Hello', created_at: '2024-01-01T00:00:00Z' },
       ];
@@ -205,6 +203,8 @@ describe('ChatArea Performance', () => {
           onTileClick={vi.fn()}
           assistantDraftContent="streaming content..."
           isTextStreaming={true}
+          hasEarlierMessages={false}
+          onLoadEarlier={vi.fn()}
         />
       );
 
@@ -238,6 +238,8 @@ describe('ChatArea Performance', () => {
               onTileClick={vi.fn()}
               assistantDraftContent={`streaming content... ${i}`}
               isTextStreaming={true}
+              hasEarlierMessages={false}
+              onLoadEarlier={vi.fn()}
             />
           );
         }

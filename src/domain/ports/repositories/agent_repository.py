@@ -446,17 +446,25 @@ class AgentExecutionEventRepository(ABC):
         conversation_id: str,
         from_sequence: int = 0,
         limit: int = 1000,
+        event_types: Optional[set[str]] = None,
+        before_sequence: Optional[int] = None,
     ) -> List[AgentExecutionEvent]:
         """
-        Get events for a conversation starting from a sequence number.
+        Get events for a conversation with bidirectional pagination support.
 
         Args:
             conversation_id: The conversation ID
-            from_sequence: Starting sequence number (inclusive)
+            from_sequence: Starting sequence number (inclusive), used for forward pagination
             limit: Maximum number of events to return
+            event_types: Optional set of event types to filter by
+            before_sequence: For backward pagination, get events before this sequence number (exclusive)
 
         Returns:
-            List of events in sequence order
+            List of events in sequence order (oldest first)
+
+        Pagination behavior:
+            - If before_sequence is None: returns events from from_sequence onwards (forward)
+            - If before_sequence is set: returns events before before_sequence, up to limit (backward)
         """
         pass
 

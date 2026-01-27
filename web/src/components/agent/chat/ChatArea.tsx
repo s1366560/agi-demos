@@ -1,5 +1,6 @@
 
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo, useRef, useEffect, useCallback } from "react";
+import { Spin } from "antd";
 import {
   IdleState,
   type StarterTile,
@@ -100,6 +101,9 @@ interface ChatAreaProps {
   // Typewriter streaming state
   assistantDraftContent?: string;
   isTextStreaming?: boolean;
+  // Pagination state
+  hasEarlierMessages?: boolean;
+  onLoadEarlier?: () => void;
 }
 
 /**
@@ -179,12 +183,66 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
     [messages]
   );
 
+  // Scroll handling for backward pagination
+  const isLoadingEarlierRef = useRef(false);
+  const previousScrollHeightRef = useRef(0);
+
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLDivElement;
+      const { scrollTop, scrollHeight, clientHeight } = target;
+
+      // When scrolling to near the top, trigger load more
+      const SCROLL_THRESHOLD = 50;
+
+      if (
+        scrollTop < SCROLL_THRESHOLD &&
+        !isLoadingEarlierRef.current &&
+        !messagesLoading &&
+        currentConversation &&
+        hasEarlierMessages &&
+        onLoadEarlier
+      ) {
+        isLoadingEarlierRef.current = true;
+        previousScrollHeightRef.current = scrollHeight;
+
+        onLoadEarlier();
+
+        // Reset loading flag after a short delay
+        setTimeout(() => {
+          isLoadingEarlierRef.current = false;
+        }, 500);
+      }
+    },
+    [messagesLoading, currentConversation, hasEarlierMessages, onLoadEarlier]
+  );
+
+  // Restore scroll position after loading earlier messages
+  useEffect(() => {
+    if (!messagesLoading && previousScrollHeightRef.current > 0 && scrollContainerRef.current) {
+      const scrollContainer = scrollContainerRef.current;
+      const newScrollHeight = scrollContainer.scrollHeight;
+      const scrollOffset = newScrollHeight - previousScrollHeightRef.current;
+
+      scrollContainer.scrollTop = scrollOffset;
+      previousScrollHeightRef.current = 0;
+    }
+  }, [messagesLoading]);
+
   return (
     <div
       ref={scrollContainerRef}
       className="flex-1 overflow-y-auto px-4 pt-6 scroll-smooth"
+      onScroll={handleScroll}
     >
       <div className="max-w-4xl mx-auto">
+        {/* Loading indicator for earlier messages */}
+        {messagesLoading && hasEarlierMessages && (
+          <div className="flex justify-center py-2">
+            <Spin size="small" />
+            <span className="ml-2 text-sm text-slate-500">加载历史消息...</span>
+          </div>
+        )}
         {/* Plan Mode Indicator */}
         {planModeStatus && (
           <PlanModeIndicator

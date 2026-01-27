@@ -67,6 +67,11 @@ interface AgentState {
   timelineLoading: boolean;
   timelineError: string | null;
 
+  // Pagination state for backward loading
+  earliestLoadedSequence: number | null;
+  latestLoadedSequence: number | null;
+  hasEarlierMessages: boolean;
+
   // Agent execution state
   isStreaming: boolean;
   currentThought: string | null;
@@ -138,6 +143,10 @@ interface AgentState {
   // New conversation pending state (to prevent race condition)
   isNewConversationPending: boolean;
 
+  // Title generation state
+  isGeneratingTitle: boolean;
+  titleGenerationError: string | null;
+
   // Actions
   listConversations: (
     projectId: string,
@@ -169,6 +178,14 @@ interface AgentState {
   ) => Promise<void>;
   addTimelineEvent: (event: TimelineEvent) => void;
   clearTimeline: () => void;
+  prependTimelineEvents: (events: TimelineEvent[]) => void;
+
+  // Pagination
+  loadEarlierMessages: (
+    conversationId: string,
+    projectId: string,
+    limit?: number
+  ) => Promise<void>;
 
   // Chat
   sendMessage: (
@@ -237,6 +254,10 @@ const initialState = {
   timeline: [] as TimelineEvent[],
   timelineLoading: false,
   timelineError: null,
+  // Pagination state for backward loading
+  earliestLoadedSequence: null,
+  latestLoadedSequence: null,
+  hasEarlierMessages: false,
   isStreaming: false,
   currentThought: null,
   currentThoughtLevel: null,
@@ -272,6 +293,9 @@ const initialState = {
   planError: null,
   // New conversation pending state
   isNewConversationPending: false,
+  // Title generation state
+  isGeneratingTitle: false,
+  titleGenerationError: null,
 };
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -402,6 +426,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // Clear timeline to prevent stale data from showing during load
       timeline: [],
       timelineLoading: true,
+      // Clear pagination state
+      earliestLoadedSequence: null,
+      latestLoadedSequence: null,
+      hasEarlierMessages: false,
       // Clear all execution-related state
       executionTimeline: [],
       currentToolExecution: null,
@@ -442,7 +470,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   getTimeline: async (
     conversationId: string,
     projectId: string,
-    limit = 1000
+    limit = 100
   ) => {
     console.log("[Agent] getTimeline called:", conversationId, projectId);
     set({ timelineLoading: true, timelineError: null });
@@ -451,21 +479,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         conversationId,
         projectId,
         limit
-      );
+      ) as any;  // Type cast to access pagination metadata
+
       console.log(
         "[Agent] getTimeline response:",
         response.timeline.length,
         "events"
       );
-      // Log event details for debugging
-      response.timeline.forEach((event, idx) => {
-        console.log(`[Agent] Event ${idx + 1}:`, {
-          id: event.id,
-          type: event.type,
-          sequenceNumber: event.sequenceNumber,
-        });
+
+      // Extract pagination metadata from response
+      const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
+      const lastSequence = response.timeline[response.timeline.length - 1]?.sequenceNumber ?? null;
+
+      set({
+        timeline: response.timeline,
+        timelineLoading: false,
+        earliestLoadedSequence: firstSequence,
+        latestLoadedSequence: lastSequence,
+        hasEarlierMessages: response.has_more ?? false,
       });
-      set({ timeline: response.timeline, timelineLoading: false });
     } catch (error: any) {
       console.error("[Agent] getTimeline error:", error);
       set({
@@ -502,6 +534,57 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   clearTimeline: () => set({ timeline: [] }),
+
+  prependTimelineEvents: (events: TimelineEvent[]) => {
+    const { timeline } = get();
+    // Add new events at the beginning of the timeline
+    set({ timeline: [...events, ...timeline] });
+  },
+
+  loadEarlierMessages: async (
+    conversationId: string,
+    projectId: string,
+    limit = 50
+  ) => {
+    const { earliestLoadedSequence, timelineLoading } = get();
+
+    // Guard: Don't load if already loading or no pagination point exists
+    if (!earliestLoadedSequence || timelineLoading) {
+      console.log("[Agent] Cannot load earlier messages: no pagination point or already loading");
+      return;
+    }
+
+    console.log("[Agent] Loading earlier messages before sequence:", earliestLoadedSequence);
+    set({ timelineLoading: true, timelineError: null });
+
+    try {
+      const response = await agentService.getConversationMessages(
+        conversationId,
+        projectId,
+        limit,
+        undefined,  // from_sequence
+        earliestLoadedSequence  // before_sequence
+      ) as any;
+
+      // Prepend new events to existing timeline
+      const { timeline } = get();
+      const newTimeline = [...response.timeline, ...timeline];
+
+      set({
+        timeline: newTimeline,
+        timelineLoading: false,
+        earliestLoadedSequence: response.timeline[0]?.sequenceNumber ?? null,
+        hasEarlierMessages: response.has_more ?? false,
+      });
+    } catch (error: any) {
+      console.error("[Agent] Failed to load earlier messages:", error);
+      set({
+        timelineError: error.response?.data?.detail || "Failed to load earlier messages",
+        timelineLoading: false,
+      });
+      throw error;
+    }
+  },
 
   sendMessage: async (
     conversationId: string,
@@ -1237,17 +1320,26 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         }
 
         // Generate friendly title if conversation still has default title
-        const { currentConversation, timeline } = get();
+        const { currentConversation, timeline, isGeneratingTitle } = get();
+
+        // Only count message events (user_message and assistant_message), not all timeline events
+        // This prevents the condition from being too restrictive when there are many thought/act/observe events
+        const messageCount = timeline.filter(
+          (e) => e.type === "user_message" || e.type === "assistant_message"
+        ).length;
+
         if (
           currentConversation?.title === "New Conversation" &&
-          timeline.length <= 8
+          messageCount <= 4 &&  // Only trigger when there are few messages (not events)
+          !isGeneratingTitle  // Prevent concurrent generation
         ) {
-          // Only generate title for the first few events to avoid unnecessary API calls
+          // Only generate title for the first few messages to avoid unnecessary API calls
           const projectId = currentConversation?.project_id;
           if (projectId) {
             console.log(
               "[Agent] Triggering title generation for conversation:",
-              conversationId
+              conversationId,
+              `messageCount=${messageCount}`
             );
             get().generateConversationTitle(conversationId, projectId);
           }
@@ -1368,6 +1460,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     conversationId: string,
     projectId: string
   ) => {
+    // Prevent concurrent title generation
+    const { isGeneratingTitle } = get();
+    if (isGeneratingTitle) {
+      console.log("[Agent] Title generation already in progress, skipping");
+      return;
+    }
+
+    set({ isGeneratingTitle: true, titleGenerationError: null });
+
     try {
       const updatedConversation = await agentService.generateConversationTitle(
         conversationId,
@@ -1388,7 +1489,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         updatedConversation.title
       );
     } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || "Failed to generate title";
       console.error("[Agent] Failed to generate conversation title:", error);
+      set({ titleGenerationError: errorMsg });
+    } finally {
+      set({ isGeneratingTitle: false });
     }
   },
 
@@ -1800,6 +1905,20 @@ export const useIsInPlanMode = () =>
 export const useIsNewConversationPending = () =>
   useAgentStore((state) => state.isNewConversationPending);
 
+// Title generation state selectors
+export const useIsGeneratingTitle = () =>
+  useAgentStore((state) => state.isGeneratingTitle);
+export const useTitleGenerationError = () =>
+  useAgentStore((state) => state.titleGenerationError);
+
+// Pagination state selectors
+export const useEarliestLoadedSequence = () =>
+  useAgentStore((state) => state.earliestLoadedSequence);
+export const useLatestLoadedSequence = () =>
+  useAgentStore((state) => state.latestLoadedSequence);
+export const useHasEarlierMessages = () =>
+  useAgentStore((state) => state.hasEarlierMessages);
+
 // Action selectors (for components that need to call actions)
 export const useAgentActions = () =>
   useAgentStore((state) => ({
@@ -1811,6 +1930,8 @@ export const useAgentActions = () =>
     getTimeline: state.getTimeline,
     addTimelineEvent: state.addTimelineEvent,
     clearTimeline: state.clearTimeline,
+    prependTimelineEvents: state.prependTimelineEvents,
+    loadEarlierMessages: state.loadEarlierMessages,
     sendMessage: state.sendMessage,
     stopChat: state.stopChat,
     generateConversationTitle: state.generateConversationTitle,
