@@ -26,19 +26,30 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.events.agent_events import (
-    AgentDomainEvent, AgentEventType,
-    AgentThoughtEvent, AgentActEvent, AgentObserveEvent,
-    AgentTextStartEvent, AgentTextDeltaEvent, AgentTextEndEvent,
-    AgentStepStartEvent, AgentStepEndEvent, AgentStepFinishEvent,
-    AgentWorkPlanEvent, AgentCostUpdateEvent, AgentErrorEvent,
-    AgentRetryEvent, AgentDoomLoopDetectedEvent, AgentPermissionAskedEvent,
+    AgentDomainEvent,
+    AgentEventType,
+    AgentThoughtEvent,
+    AgentThoughtDeltaEvent,
+    AgentActEvent,
+    AgentObserveEvent,
+    AgentTextStartEvent,
+    AgentTextDeltaEvent,
+    AgentTextEndEvent,
+    AgentStepStartEvent,
+    AgentStepEndEvent,
+    AgentStepFinishEvent,
+    AgentWorkPlanEvent,
+    AgentCostUpdateEvent,
+    AgentErrorEvent,
+    AgentRetryEvent,
+    AgentDoomLoopDetectedEvent,
+    AgentPermissionAskedEvent,
     AgentSkillExecutionCompleteEvent,
 )
 
 from ..context import ContextWindowConfig, ContextWindowManager
 from ..permission import PermissionManager
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
-from .events import SSEEvent, SSEEventType
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
@@ -847,13 +858,15 @@ class ReActAgent:
 
             # Track tool results from observe events (outside if block)
             if domain_event.event_type == AgentEventType.OBSERVE:
-                tool_results.append({
-                    "tool_name": domain_event.tool_name,
-                    "result": domain_event.result,
-                    "error": domain_event.error,
-                    "duration_ms": domain_event.duration_ms,
-                    "status": domain_event.status,
-                })
+                tool_results.append(
+                    {
+                        "tool_name": domain_event.tool_name,
+                        "result": domain_event.result,
+                        "error": domain_event.error,
+                        "duration_ms": domain_event.duration_ms,
+                        "status": domain_event.status,
+                    }
+                )
                 current_step += 1
 
             # Handle completion event (outside if block since converted_event is None for COMPLETE)
@@ -1040,9 +1053,7 @@ class ReActAgent:
         timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
 
         # Debug log to track event conversion
-        logger.info(
-            f"[ReActAgent] Converting Domain event: type={event_type}"
-        )
+        logger.info(f"[ReActAgent] Converting Domain event: type={event_type}")
 
         # Map AgentEventType to legacy types
         if event_type == AgentEventType.START:
@@ -1116,7 +1127,11 @@ class ReActAgent:
         elif event_type == AgentEventType.OBSERVE:
             if isinstance(domain_event, AgentObserveEvent):
                 # observation field is redundant but kept for legacy compat
-                observation = domain_event.result if domain_event.result is not None else (domain_event.error or "")
+                observation = (
+                    domain_event.result
+                    if domain_event.result is not None
+                    else (domain_event.error or "")
+                )
                 return {
                     "type": "observe",
                     "data": {

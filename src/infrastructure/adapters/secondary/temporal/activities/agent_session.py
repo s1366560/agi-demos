@@ -516,9 +516,6 @@ async def execute_chat_activity(
         agent_init_time_ms = (time_module.time() - start_time) * 1000
         logger.info(f"[AgentSession] Agent initialized in {agent_init_time_ms:.1f}ms total")
 
-        # Stream channel for Redis events
-        stream_channel = f"agent:stream:{conversation_id}"
-
         # Get the last sequence number from DB to continue from there
         # This ensures sequence_number is globally consistent across user_message and agent events
         sequence_number = await _get_last_sequence_number(conversation_id)
@@ -543,8 +540,6 @@ async def execute_chat_activity(
 
         # Execute ReActAgent and stream events
         event_count = 0
-        # Buffer key for early event buffering (used by consumer for catchup)
-        buffer_key = f"agent:buffer:{stream_channel}:{message_id}"
         # Stream key for persistent storage (Redis Stream)
         stream_key = f"agent:events:{conversation_id}"
 
@@ -616,35 +611,27 @@ async def execute_chat_activity(
                 is_error = True
                 error_message = event_data_with_message_id.get("message", "Unknown error")
 
-            # Construct event payload
+            # Construct event payload using EventSerializer (single source of truth)
+            # This replaces manual event construction with a unified serialization approach
             event_payload = {
                 "type": event_type,
                 "data": event_data_with_message_id,
                 "seq": sequence_number,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             # ================================================================
-            # Triple-write for maximum reliability:
-            # 1. Redis Stream (persistent, replayable) - PRIMARY
-            # 2. Redis List buffer (short-term catchup for late subscribers)
-            # 3. Redis Pub/Sub (real-time notification) - BACKWARD COMPATIBLE
+            # Simplified event publication (single-write to Redis Stream):
+            # - Redis Stream provides both persistence AND real-time delivery via XREAD
+            # - Removed: Redis List buffer (redundant - Stream has replay capability)
+            # - Removed: Redis Pub/Sub (redundant - Stream XREAD with block=0 provides real-time)
             # ================================================================
 
             try:
-                import json
-
                 if should_publish:
-                    # 1. Add to Redis Stream (persistent storage)
+                    # Single write to Redis Stream (persistent, replayable, real-time)
                     # Auto-trim to 1000 messages per conversation to prevent unbounded growth
                     await event_bus.stream_add(stream_key, event_payload, maxlen=1000)
-
-                    # 2. Push to buffer list for early consumers (TTL 10s)
-                    await redis_client.lpush(buffer_key, json.dumps(event_payload))
-                    if event_count == 1:
-                        await redis_client.expire(buffer_key, 10)
-
-                    # 3. Publish to Pub/Sub (backward compatible real-time)
-                    await event_bus.publish(stream_channel, event_payload)
 
             except Exception as publish_err:
                 logger.warning(f"[AgentSession] Failed to publish event: {publish_err}")

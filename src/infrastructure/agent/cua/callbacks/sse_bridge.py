@@ -128,7 +128,7 @@ class SSEBridge:
                     result=data,
                     status="completed",
                 )
-            
+
             return AgentObserveEvent(
                 tool_name=data.get("tool_name", "unknown"),
                 result=data.get("result"),
@@ -147,24 +147,15 @@ class SSEBridge:
                 content = "Starting CUA execution..."
             elif not content and event_type == "cua_execution_complete":
                 content = "CUA execution completed."
-                
-            return AgentThoughtEvent(
-                content=content,
-                thought_level="task"
-            )
+
+            return AgentThoughtEvent(content=content, thought_level="task")
 
         elif mapped_type == AgentEventType.COST_UPDATE:
-            return AgentCostUpdateEvent(
-                cost=data.get("cost", 0.0),
-                tokens=data.get("tokens", {})
-            )
+            return AgentCostUpdateEvent(cost=data.get("cost", 0.0), tokens=data.get("tokens", {}))
 
         # Default fallback for unknown types
         logger.debug(f"Unknown CUA event type: {event_type}, mapping to Thought")
-        return AgentThoughtEvent(
-            content=f"CUA event: {event_type} - {data}",
-            thought_level="debug"
-        )
+        return AgentThoughtEvent(content=f"CUA event: {event_type} - {data}", thought_level="debug")
 
     def convert_to_dict(self, cua_event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -183,16 +174,15 @@ class SSEBridge:
         if domain_event is None:
             return None
 
-        # Convert domain event to SSE-compatible dict using our new adapter method
-        # But here we need to return a dict, not SSEEvent object, as the stream method expects dicts
-        # We can implement a local helper or import the adapter
-        
+        # Convert domain event to dict format
+        # The stream method expects dicts, not domain event objects
+
         # Simple manual conversion for now to match legacy behavior
         event_type = domain_event.event_type.value
         timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
-        
+
         data = domain_event.model_dump(exclude={"event_type", "timestamp"})
-        
+
         return {
             "type": event_type,
             "data": data,

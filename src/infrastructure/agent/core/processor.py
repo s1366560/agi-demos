@@ -31,20 +31,35 @@ from ..cost import CostTracker, TokenUsage
 from ..doom_loop import DoomLoopDetector
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
-from .events import SSEEvent, SSEEventType
 from src.domain.events.agent_events import (
-    AgentDomainEvent, AgentEventType, AgentStartEvent, AgentErrorEvent,
-    AgentWorkPlanEvent, AgentStatusEvent, AgentCompleteEvent,
-    AgentStepStartEvent, AgentStepEndEvent, AgentStepFinishEvent,
-    AgentTextStartEvent, AgentTextDeltaEvent, AgentTextEndEvent,
-    AgentThoughtEvent, AgentThoughtDeltaEvent,
-    AgentActEvent, AgentObserveEvent,
-    AgentCostUpdateEvent, AgentRetryEvent,
+    AgentDomainEvent,
+    AgentEventType,
+    AgentStartEvent,
+    AgentErrorEvent,
+    AgentWorkPlanEvent,
+    AgentStatusEvent,
+    AgentCompleteEvent,
+    AgentStepStartEvent,
+    AgentStepEndEvent,
+    AgentStepFinishEvent,
+    AgentTextStartEvent,
+    AgentTextDeltaEvent,
+    AgentTextEndEvent,
+    AgentThoughtEvent,
+    AgentThoughtDeltaEvent,
+    AgentActEvent,
+    AgentObserveEvent,
+    AgentCostUpdateEvent,
+    AgentRetryEvent,
     AgentCompactNeededEvent,
-    AgentDoomLoopDetectedEvent, AgentDoomLoopIntervenedEvent,
-    AgentPermissionAskedEvent, AgentPermissionRepliedEvent,
-    AgentClarificationAskedEvent, AgentClarificationAnsweredEvent,
-    AgentDecisionAskedEvent, AgentDecisionAnsweredEvent
+    AgentDoomLoopDetectedEvent,
+    AgentDoomLoopIntervenedEvent,
+    AgentPermissionAskedEvent,
+    AgentPermissionRepliedEvent,
+    AgentClarificationAskedEvent,
+    AgentClarificationAnsweredEvent,
+    AgentDecisionAskedEvent,
+    AgentDecisionAnsweredEvent,
 )
 from .llm_stream import LLMStream, StreamConfig, StreamEventType
 from .message import Message, MessageRole, ToolPart, ToolState
@@ -855,7 +870,6 @@ class SessionProcessor:
 
         # Emit step end
         yield AgentStepEndEvent(step_index=self._step_count, status="completed")
-
 
     async def _execute_tool(
         self,

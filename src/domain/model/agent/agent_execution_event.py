@@ -6,57 +6,20 @@ enabling event replay for reconnection and conversation switching scenarios.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any, Dict
 
 from src.domain.shared_kernel import Entity
-from src.domain.events.agent_events import AgentDomainEvent
+from src.domain.events.agent_events import (
+    AgentDomainEvent,
+    AgentEventType,  # Unified event type from domain events
+)
 
+# Additional event types for persistence layer (timeline-specific)
+USER_MESSAGE = "user_message"
+ASSISTANT_MESSAGE = "assistant_message"
 
-class AgentEventType(str, Enum):
-    """Types of SSE events emitted during agent execution."""
-
-    # Message events (for unified timeline)
-    USER_MESSAGE = "user_message"
-    ASSISTANT_MESSAGE = "assistant_message"
-
-    # Basic message events
-    MESSAGE = "message"
-    THOUGHT = "thought"
-    ACT = "act"
-    OBSERVE = "observe"
-
-    # Text streaming events
-    TEXT_START = "text_start"
-    TEXT_DELTA = "text_delta"
-    TEXT_END = "text_end"
-
-    # Work plan events
-    WORK_PLAN = "work_plan"
-    STEP_START = "step_start"
-    STEP_END = "step_end"
-    PATTERN_MATCH = "pattern_match"
-
-    # Decision events
-    DECISION_ASKED = "decision_asked"
-    DECISION_ANSWERED = "decision_answered"
-    CLARIFICATION_ASKED = "clarification_asked"
-    CLARIFICATION_ANSWERED = "clarification_answered"
-
-    # Skill execution events (L2 layer)
-    SKILL_MATCHED = "skill_matched"
-    SKILL_EXECUTION_START = "skill_execution_start"
-    SKILL_TOOL_START = "skill_tool_start"
-    SKILL_TOOL_RESULT = "skill_tool_result"
-    SKILL_EXECUTION_COMPLETE = "skill_execution_complete"
-    SKILL_FALLBACK = "skill_fallback"
-
-    # Terminal events
-    COMPLETE = "complete"
-    ERROR = "error"
-
-    # Doom loop detection
-    DOOM_LOOP_DETECTED = "doom_loop_detected"
+# Re-export for backward compatibility
+__all__ = ["AgentExecutionEvent", "AgentEventType", "USER_MESSAGE", "ASSISTANT_MESSAGE"]
 
 
 @dataclass(kw_only=True)
@@ -106,11 +69,11 @@ class AgentExecutionEvent(Entity):
 
     @classmethod
     def from_domain_event(
-        cls, 
-        event: AgentDomainEvent, 
-        conversation_id: str, 
+        cls,
+        event: AgentDomainEvent,
+        conversation_id: str,
         message_id: str,
-        sequence_number: int = 0
+        sequence_number: int = 0,
     ) -> "AgentExecutionEvent":
         """Create from domain event."""
         return cls(
@@ -119,5 +82,5 @@ class AgentExecutionEvent(Entity):
             event_type=event.event_type.value,
             event_data=event.model_dump(exclude={"event_type", "timestamp"}),
             sequence_number=sequence_number,
-            created_at=datetime.fromtimestamp(event.timestamp)
+            created_at=datetime.fromtimestamp(event.timestamp),
         )

@@ -104,6 +104,10 @@ class AgentServiceImpl implements AgentService {
   // Unique session ID for this browser tab (generated once per page load)
   private sessionId: string = generateSessionId();
 
+  // Heartbeat interval to keep WebSocket connection alive
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
+
   // Handler maps by conversation_id
   private handlers: Map<string, AgentStreamHandler> = new Map();
 
@@ -157,6 +161,9 @@ class AgentServiceImpl implements AgentService {
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
 
+          // Start heartbeat to keep connection alive
+          this.startHeartbeat();
+
           // Resubscribe to previous conversations
           this.resubscribe();
           resolve();
@@ -186,6 +193,7 @@ class AgentServiceImpl implements AgentService {
         this.ws.onerror = (error) => {
           console.error("[AgentWS] Error:", error);
           this.setStatus("error");
+          this.stopHeartbeat();
           reject(error);
         };
       } catch (err) {
@@ -202,6 +210,9 @@ class AgentServiceImpl implements AgentService {
    */
   disconnect(): void {
     this.isManualClose = true;
+
+    // Stop heartbeat
+    this.stopHeartbeat();
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -425,6 +436,27 @@ class AgentServiceImpl implements AgentService {
         conversation_id: conversationId,
       });
     });
+  }
+
+  private startHeartbeat(): void {
+    // Clear any existing heartbeat
+    this.stopHeartbeat();
+
+    // Send heartbeat every 30 seconds to keep connection alive
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isConnected()) {
+        this.send({ type: "heartbeat" });
+      }
+    }, this.HEARTBEAT_INTERVAL_MS);
+
+    console.log("[AgentWS] Heartbeat started");
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
   }
 
   /**

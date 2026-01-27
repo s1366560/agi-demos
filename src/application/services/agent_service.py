@@ -204,31 +204,31 @@ class AgentService(AgentServicePort):
 
             # Create user message event (unified event timeline - no messages table)
             user_msg_id = str(uuid.uuid4())
-            
+
             # Use Domain Event
             user_domain_event = AgentMessageEvent(
                 role="user",
                 content=user_message,
             )
-            
+
             # Get next sequence number
             next_seq = await self._agent_execution_event_repo.get_last_sequence(conversation_id) + 1
-            
+
             # Convert to persistent entity
             user_msg_event = AgentExecutionEvent.from_domain_event(
                 event=user_domain_event,
                 conversation_id=conversation_id,
                 message_id=user_msg_id,
-                sequence_number=next_seq
+                sequence_number=next_seq,
             )
-            
+
             # Ensure ID is set (from_domain_event might not set it or might set None)
             if not user_msg_event.id:
                 user_msg_event.id = str(uuid.uuid4())
-                
+
             # Additional data fixup if needed for compatibility
             if not user_msg_event.event_data.get("message_id"):
-                 user_msg_event.event_data["message_id"] = user_msg_id
+                user_msg_event.event_data["message_id"] = user_msg_id
 
             await self._agent_execution_event_repo.save_and_commit(user_msg_event)
 
@@ -261,27 +261,8 @@ class AgentService(AgentServicePort):
                 if event.id != user_msg_event.id  # Exclude current user message
             ]
 
-            # CRITICAL: Subscribe to Redis BEFORE starting workflow to avoid race condition
-            # This ensures we don't miss any early TEXT_DELTA events
-            import asyncio
-            import time
-
-            subscribe_start = time.time()
-
-            # Start Redis subscription task first (but don't consume yet)
-            # The subscription will buffer events while we start the workflow
-            stream_channel = f"agent:stream:{conversation_id}"
-
-            # Enable event buffering for this channel before workflow starts
-            # This uses a Redis List as a short-term buffer (5 second TTL)
-            await self._enable_event_buffering(stream_channel, user_msg_id)
-
-            logger.info(
-                f"[AgentService] Event buffering enabled for {conversation_id}, "
-                f"elapsed={int((time.time() - subscribe_start) * 1000)}ms"
-            )
-
-            # Now start Temporal Workflow
+            # Start Temporal Workflow
+            # Events will be published to Redis Stream by the Activity
             workflow_id = await self._start_chat_workflow(
                 conversation=conversation,
                 message_id=user_msg_id,
@@ -289,19 +270,13 @@ class AgentService(AgentServicePort):
                 conversation_context=conversation_context,
             )
             logger.info(
-                f"[AgentService] Started workflow {workflow_id} for conversation {conversation_id}, "
-                f"total_elapsed={int((time.time() - subscribe_start) * 1000)}ms"
+                f"[AgentService] Started workflow {workflow_id} for conversation {conversation_id}"
             )
 
-            # Small delay to allow workflow task to be scheduled
-            # The buffering mechanism ensures we don't lose events during this time
-            await asyncio.sleep(0.1)  # 100ms delay
-
-            # Connect to stream with message_id filtering and consume buffered events
+            # Connect to stream with message_id filtering
             async for event in self.connect_chat_stream(
                 conversation_id,
                 message_id=user_msg_id,
-                buffer_channel=stream_channel,
             ):
                 yield event
 
@@ -615,79 +590,6 @@ class AgentService(AgentServicePort):
             return settings.zai_model
         return "qwen-plus"  # Default fallback
 
-    async def _enable_event_buffering(
-        self, channel: str, message_id: str, ttl_seconds: int = 10
-    ) -> None:
-        """
-        Enable event buffering for a channel using Redis List.
-
-        This creates a subscriber that pushes events to a Redis List,
-        ensuring no events are lost before the main consumer connects.
-
-        Args:
-            channel: Redis channel to buffer
-            message_id: Message ID for filtering
-            ttl_seconds: How long to keep the buffer (default 10s)
-        """
-        if not self._redis_client:
-            logger.warning("[AgentService] No Redis client, skipping event buffering")
-            return
-
-        buffer_key = f"agent:buffer:{channel}:{message_id}"
-
-        # Set buffer TTL to auto-expire
-        await self._redis_client.delete(buffer_key)
-        # Create an empty list that will be populated by the buffering subscriber
-        await self._redis_client.lpush(buffer_key, "__BUFFER_START__")
-        await self._redis_client.expire(buffer_key, ttl_seconds)
-
-        logger.info(f"[AgentService] Event buffer enabled: {buffer_key}, TTL={ttl_seconds}s")
-
-    async def _get_buffered_events(self, channel: str, message_id: str) -> list[Dict[str, Any]]:
-        """
-        Retrieve buffered events from Redis List.
-
-        Args:
-            channel: Redis channel
-            message_id: Message ID
-
-        Returns:
-            List of buffered events
-        """
-        if not self._redis_client:
-            return []
-
-        import json
-
-        buffer_key = f"agent:buffer:{channel}:{message_id}"
-        events = []
-
-        try:
-            # Get all buffered events
-            raw_events = await self._redis_client.lrange(buffer_key, 0, -1)
-
-            for raw in reversed(raw_events):  # LPUSH stores in reverse order
-                if raw == b"__BUFFER_START__" or raw == "__BUFFER_START__":
-                    continue
-                try:
-                    event = json.loads(raw)
-                    events.append(event)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-
-            # Clean up buffer
-            await self._redis_client.delete(buffer_key)
-
-            if events:
-                logger.info(
-                    f"[AgentService] Retrieved {len(events)} buffered events from {buffer_key}"
-                )
-
-        except Exception as e:
-            logger.warning(f"[AgentService] Failed to get buffered events: {e}")
-
-        return events
-
     async def _get_stream_events(
         self, conversation_id: str, message_id: str, last_seq: int
     ) -> list[Dict[str, Any]]:
@@ -739,26 +641,20 @@ class AgentService(AgentServicePort):
         self,
         conversation_id: str,
         message_id: Optional[str] = None,
-        buffer_channel: Optional[str] = None,
-        use_stream: bool = True,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Connect to a chat stream, handling replay and real-time events.
 
-        Event source priority:
-        1. Database (persisted events, except text_delta)
-        2. Redis Stream (all events including text_delta, persistent)
-        3. Redis List buffer (short-term catchup)
-        4. Redis Pub/Sub (real-time, may miss events)
+        Simplified event flow:
+        1. Database - for persisted events (except text_delta)
+        2. Redis Stream - for all events including text_delta (persistent, replayable)
 
         Args:
             conversation_id: Conversation ID to connect to
             message_id: Optional message ID to filter events for a specific message
-            buffer_channel: Optional channel name for retrieving buffered events
-            use_stream: Whether to use Redis Stream (default True)
 
         Yields:
-            SSE events
+            SSE event dictionaries with keys: type, data, seq, timestamp
         """
 
         if not self._agent_execution_event_repo or not self._event_bus:
@@ -767,7 +663,7 @@ class AgentService(AgentServicePort):
 
         logger.warning(
             f"[AgentService] connect_chat_stream start: conversation_id={conversation_id}, "
-            f"message_id={message_id}, use_stream={use_stream}"
+            f"message_id={message_id}"
         )
 
         # 1. Replay from DB
@@ -810,7 +706,7 @@ class AgentService(AgentServicePort):
             logger.warning(f"[AgentService] Failed to replay events: {e}")
 
         # If completion already happened, replay text_delta from Redis Stream once
-        if use_stream and message_id and saw_complete:
+        if message_id and saw_complete:
             stream_events = await self._get_stream_events(
                 conversation_id, message_id, last_sequence_id
             )
@@ -825,20 +721,21 @@ class AgentService(AgentServicePort):
                 }
             return
 
-        # Track stream-only sequence numbers to avoid duplicates
-        last_text_seq = 0
-
-        # 3. Skip buffered events to avoid blocking; rely on Pub/Sub for real-time
-
         # 4. Stream live events from Redis Stream (reliable real-time)
-        if use_stream and message_id:
+        # IMPORTANT: Use last_id="0" to read ALL messages from Redis Stream
+        # This is necessary because events are published to Redis Stream BEFORE
+        # being saved to DB. If we used "$", we might miss events published during DB replay.
+        # We use last_sequence_id filtering to skip duplicates from DB replay.
+        if message_id:
             stream_key = f"agent:events:{conversation_id}"
             logger.warning(
                 f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
-                f"message_id={message_id}"
+                f"message_id={message_id}, last_seq={last_sequence_id}"
             )
             live_event_count = 0
             try:
+                # Use "0" to read all messages (catch any missed during DB replay)
+                # Filter by last_sequence_id to avoid duplicates
                 async for message in self._event_bus.stream_read(
                     stream_key, last_id="0", count=1000, block_ms=1000
                 ):
@@ -854,11 +751,13 @@ class AgentService(AgentServicePort):
                             f"type={event_type}, seq={seq}, message_id={event_data.get('message_id')}"
                         )
 
-                    # Filter by message_id
+                    # Filter by message_id (only events for this specific message)
                     if event_data.get("message_id") != message_id:
                         continue
 
-                    if seq <= last_text_seq:
+                    # CRITICAL: Use last_sequence_id (from DB replay) for filtering
+                    # This prevents re-yielding events that were already replayed from DB
+                    if seq <= last_sequence_id:
                         continue
 
                     yield {
@@ -868,7 +767,6 @@ class AgentService(AgentServicePort):
                         "id": seq,
                     }
                     last_sequence_id = max(last_sequence_id, seq)
-                    last_text_seq = max(last_text_seq, seq)
 
                     # Stop when completion is seen
                     if event_type in ("complete", "error"):
@@ -880,74 +778,6 @@ class AgentService(AgentServicePort):
                 logger.error(
                     f"[AgentService] Error streaming from Redis Stream: {e}", exc_info=True
                 )
-
-        # 5. Subscribe to Redis Pub/Sub for real-time events (legacy fallback)
-
-        # 5. Subscribe to Redis Pub/Sub for real-time events (fallback)
-        # This is used when Stream doesn't have all events yet
-        channel = f"agent:stream:{conversation_id}"
-        logger.warning(
-            f"[AgentService] Subscribing to Redis Pub/Sub: {channel}, "
-            f"message_id={message_id}, last_seq={last_sequence_id}"
-        )
-
-        try:
-            event_count = 0
-            async for message in self._event_bus.subscribe(channel):
-                seq = message.get("seq", 0)
-                event_type = message.get("type", "unknown")
-
-                if seq <= last_sequence_id:
-                    # Skip duplicate/already replayed events
-                    logger.debug(
-                        f"[AgentService] Skipping duplicate event: type={event_type}, seq={seq}, "
-                        f"last_seq={last_sequence_id}"
-                    )
-                    continue
-
-                # Filter by message_id if specified
-                if message_id:
-                    event_data = message.get("data", {})
-                    if event_data.get("message_id") != message_id:
-                        continue
-
-                event_count += 1
-
-                # Log every event for debugging TEXT_DELTA issues
-                if event_type == "text_delta":
-                    delta = message.get("data", {}).get("delta", "")[:30]
-                    logger.info(
-                        f"[AgentService] TEXT_DELTA #{event_count}: seq={seq}, delta='{delta}...'"
-                    )
-                elif event_type in ("text_start", "text_end", "complete", "error"):
-                    logger.info(
-                        f"[AgentService] Event #{event_count}: type={event_type}, seq={seq}"
-                    )
-
-                yield {
-                    "type": event_type,
-                    "data": message.get("data"),
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "id": seq,
-                }
-
-                last_sequence_id = max(last_sequence_id, seq)
-
-                # Check for completion
-                if event_type in ("complete", "error"):
-                    logger.info(
-                        f"[AgentService] Stream completed: type={event_type}, "
-                        f"total_events={event_count}"
-                    )
-                    break
-
-        except Exception as e:
-            logger.error(f"[AgentService] Error in Redis subscription: {e}", exc_info=True)
-            yield {
-                "type": "error",
-                "data": {"message": "Stream connection lost"},
-                "timestamp": datetime.utcnow().isoformat(),
-            }
 
     async def create_conversation(
         self,

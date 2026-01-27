@@ -1,6 +1,5 @@
 """Core agent module - Self-developed ReAct agent replacing LangGraph."""
 
-from .events import SSEEvent, SSEEventType
 from .llm_stream import (
     LLMStream,
     StreamConfig,
@@ -43,9 +42,6 @@ __all__ = [
     "StepStartPart",
     "StepFinishPart",
     "ToolState",
-    # Events
-    "SSEEvent",
-    "SSEEventType",
     # LLM Stream
     "LLMStream",
     "StreamEvent",

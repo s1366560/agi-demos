@@ -1,10 +1,1 @@
-{
-  "enabledPlugins": {
-    "ralph-wiggum@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
-    "superpowers@superpowers-marketplace": true,
-    "ralph-loop@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true
-  }
-}
+{}

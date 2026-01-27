@@ -84,7 +84,7 @@ class AgentEventType(str, Enum):
 
 class AgentDomainEvent(BaseModel):
     """Base class for all agent domain events."""
-    
+
     event_type: AgentEventType
     timestamp: float = Field(default_factory=time.time)
 
@@ -94,17 +94,21 @@ class AgentDomainEvent(BaseModel):
 
 # === Status Events ===
 
+
 class AgentStatusEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.STATUS
     status: str
 
+
 class AgentStartEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.START
+
 
 class AgentCompleteEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COMPLETE
     result: Optional[Any] = None
     trace_url: Optional[str] = None
+
 
 class AgentErrorEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.ERROR
@@ -114,11 +118,13 @@ class AgentErrorEvent(AgentDomainEvent):
 
 # === Thinking Events ===
 
+
 class AgentThoughtEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.THOUGHT
     content: str
     thought_level: str = "task"
     step_index: Optional[int] = None
+
 
 class AgentThoughtDeltaEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.THOUGHT_DELTA
@@ -127,19 +133,23 @@ class AgentThoughtDeltaEvent(AgentDomainEvent):
 
 # === Work Plan Events ===
 
+
 class AgentWorkPlanEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.WORK_PLAN
     plan: Dict[str, Any]  # Using Dict for now as Plan is complex
+
 
 class AgentStepStartEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.STEP_START
     step_index: int
     description: str
 
+
 class AgentStepEndEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.STEP_END
     step_index: int
     status: str = "completed"
+
 
 class AgentStepFinishEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.STEP_FINISH
@@ -151,12 +161,14 @@ class AgentStepFinishEvent(AgentDomainEvent):
 
 # === Tool Events ===
 
+
 class AgentActEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.ACT
     tool_name: str
     tool_input: Optional[Dict[str, Any]] = None
     call_id: Optional[str] = None
     status: str = "running"
+
 
 class AgentObserveEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.OBSERVE
@@ -170,12 +182,15 @@ class AgentObserveEvent(AgentDomainEvent):
 
 # === Text Events ===
 
+
 class AgentTextStartEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TEXT_START
+
 
 class AgentTextDeltaEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TEXT_DELTA
     delta: str
+
 
 class AgentTextEndEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TEXT_END
@@ -183,6 +198,7 @@ class AgentTextEndEvent(AgentDomainEvent):
 
 
 # === Message Events ===
+
 
 class AgentMessageEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.MESSAGE
@@ -192,6 +208,7 @@ class AgentMessageEvent(AgentDomainEvent):
 
 # === Permission Events ===
 
+
 class AgentPermissionAskedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PERMISSION_ASKED
     request_id: str
@@ -199,19 +216,21 @@ class AgentPermissionAskedEvent(AgentDomainEvent):
     patterns: List[str]
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+
 class AgentPermissionRepliedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PERMISSION_REPLIED
-    # Note: Structure not fully defined in SSEEvent, inferring common usage
     request_id: str
     granted: bool
 
 
 # === Doom Loop Events ===
 
+
 class AgentDoomLoopDetectedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DOOM_LOOP_DETECTED
     tool: str
     input: Dict[str, Any]
+
 
 class AgentDoomLoopIntervenedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DOOM_LOOP_INTERVENED
@@ -220,6 +239,7 @@ class AgentDoomLoopIntervenedEvent(AgentDomainEvent):
 
 
 # === Human Interaction Events ===
+
 
 class AgentClarificationAskedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.CLARIFICATION_ASKED
@@ -230,10 +250,12 @@ class AgentClarificationAskedEvent(AgentDomainEvent):
     allow_custom: bool = True
     context: Dict[str, Any] = Field(default_factory=dict)
 
+
 class AgentClarificationAnsweredEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.CLARIFICATION_ANSWERED
     request_id: str
     answer: str
+
 
 class AgentDecisionAskedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DECISION_ASKED
@@ -245,6 +267,7 @@ class AgentDecisionAskedEvent(AgentDomainEvent):
     default_option: Optional[str] = None
     context: Dict[str, Any] = Field(default_factory=dict)
 
+
 class AgentDecisionAnsweredEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DECISION_ANSWERED
     request_id: str
@@ -253,6 +276,7 @@ class AgentDecisionAnsweredEvent(AgentDomainEvent):
 
 # === Cost Events ===
 
+
 class AgentCostUpdateEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COST_UPDATE
     cost: float
@@ -260,6 +284,7 @@ class AgentCostUpdateEvent(AgentDomainEvent):
 
 
 # === Retry Events ===
+
 
 class AgentRetryEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.RETRY
@@ -270,8 +295,10 @@ class AgentRetryEvent(AgentDomainEvent):
 
 # === Context Events ===
 
+
 class AgentCompactNeededEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COMPACT_NEEDED
+
 
 class AgentContextCompressedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.CONTEXT_COMPRESSED
@@ -287,6 +314,7 @@ class AgentContextCompressedEvent(AgentDomainEvent):
 
 # === Pattern Events ===
 
+
 class AgentPatternMatchEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PATTERN_MATCH
     pattern_id: str
@@ -296,6 +324,7 @@ class AgentPatternMatchEvent(AgentDomainEvent):
 
 # === Skill Events ===
 
+
 class AgentSkillMatchedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_MATCHED
     skill_id: str
@@ -304,12 +333,14 @@ class AgentSkillMatchedEvent(AgentDomainEvent):
     match_score: float
     execution_mode: str
 
+
 class AgentSkillExecutionStartEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_EXECUTION_START
     skill_id: str
     skill_name: str
     tools: List[str]
     query: str
+
 
 class AgentSkillExecutionCompleteEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_EXECUTION_COMPLETE
@@ -321,6 +352,7 @@ class AgentSkillExecutionCompleteEvent(AgentDomainEvent):
     summary: Optional[str] = None
     error: Optional[str] = None
 
+
 class AgentSkillFallbackEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_FALLBACK
     skill_name: str
@@ -330,11 +362,13 @@ class AgentSkillFallbackEvent(AgentDomainEvent):
 
 # === Plan Mode Events ===
 
+
 class AgentPlanModeEnterEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PLAN_MODE_ENTER
     conversation_id: str
     plan_id: str
     plan_title: str
+
 
 class AgentPlanModeExitEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PLAN_MODE_EXIT
@@ -343,11 +377,13 @@ class AgentPlanModeExitEvent(AgentDomainEvent):
     plan_status: str
     approved: bool
 
+
 class AgentPlanCreatedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PLAN_CREATED
     plan_id: str
     title: str
     conversation_id: str
+
 
 class AgentPlanUpdatedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PLAN_UPDATED
@@ -355,8 +391,83 @@ class AgentPlanUpdatedEvent(AgentDomainEvent):
     content: str
     version: int
 
+
 class AgentPlanStatusChangedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PLAN_STATUS_CHANGED
     plan_id: str
     old_status: str
     new_status: str
+
+
+# =========================================================================
+# Event Type Utilities
+# =========================================================================
+
+
+def get_frontend_event_types() -> List[str]:
+    """Get all event type values for frontend TypeScript generation.
+
+    This function is used to generate the TypeScript AgentEventType type
+    to ensure Python and TypeScript are always in sync.
+
+    Returns:
+        List of event type strings that should be exposed to frontend
+
+    Example:
+        >>> get_frontend_event_types()
+        ['status', 'start', 'complete', 'error', 'thought', ...]
+    """
+    # Internal events that should not be exposed to frontend
+    internal_events = {
+        AgentEventType.COMPACT_NEEDED,  # Internal compression signal
+    }
+
+    return [et.value for et in AgentEventType if et not in internal_events]
+
+
+def get_event_type_docstring() -> str:
+    """Get documentation for all event types for code generation.
+
+    Returns:
+        Multiline string documenting each event type
+    """
+    docs = []
+    for event_class in [
+        AgentStatusEvent,
+        AgentStartEvent,
+        AgentCompleteEvent,
+        AgentErrorEvent,
+        AgentThoughtEvent,
+        AgentThoughtDeltaEvent,
+        AgentWorkPlanEvent,
+        AgentStepStartEvent,
+        AgentStepEndEvent,
+        AgentStepFinishEvent,
+        AgentActEvent,
+        AgentObserveEvent,
+        AgentTextStartEvent,
+        AgentTextDeltaEvent,
+        AgentTextEndEvent,
+        AgentMessageEvent,
+        AgentPermissionAskedEvent,
+        AgentPermissionRepliedEvent,
+        AgentClarificationAskedEvent,
+        AgentClarificationAnsweredEvent,
+        AgentDecisionAskedEvent,
+        AgentDecisionAnsweredEvent,
+        AgentCostUpdateEvent,
+        AgentContextCompressedEvent,
+        AgentPatternMatchEvent,
+        AgentSkillMatchedEvent,
+        AgentSkillExecutionStartEvent,
+        AgentSkillExecutionCompleteEvent,
+        AgentSkillFallbackEvent,
+        AgentPlanModeEnterEvent,
+        AgentPlanModeExitEvent,
+        AgentPlanCreatedEvent,
+        AgentPlanUpdatedEvent,
+        AgentPlanStatusChangedEvent,
+    ]:
+        docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
+
+    return "\n".join(docs)
