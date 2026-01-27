@@ -5,7 +5,7 @@
  * responsive streaming with minimal perceived latency.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 describe('Text Delta Performance', () => {
   describe('Buffer Configuration', () => {
@@ -110,7 +110,6 @@ describe('Text Delta Performance', () => {
       const flushFn = vi.fn((content: string) => deltas.push(content));
 
       const BUFFER_SIZE = 50;
-      const FLUSH_INTERVAL = 16;
       let buffer = '';
 
       // Simulate 100 small deltas

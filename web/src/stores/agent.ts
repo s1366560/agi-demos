@@ -1328,6 +1328,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           (e) => e.type === "user_message" || e.type === "assistant_message"
         ).length;
 
+        // Debug logging to diagnose title generation issues
+        console.log("[Agent] Title generation check:", {
+          conversationId,
+          currentConversationId: currentConversation?.id,
+          title: currentConversation?.title,
+          messageCount,
+          timelineLength: timeline.length,
+          isGeneratingTitle,
+          shouldTrigger:
+            currentConversation?.title === "New Conversation" &&
+            messageCount <= 4 &&
+            !isGeneratingTitle,
+        });
+
         if (
           currentConversation?.title === "New Conversation" &&
           messageCount <= 4 &&  // Only trigger when there are few messages (not events)
@@ -1335,13 +1349,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ) {
           // Only generate title for the first few messages to avoid unnecessary API calls
           const projectId = currentConversation?.project_id;
-          if (projectId) {
+          const targetConversationId = currentConversation?.id || conversationId;
+
+          if (projectId && targetConversationId) {
             console.log(
               "[Agent] Triggering title generation for conversation:",
-              conversationId,
+              targetConversationId,
               `messageCount=${messageCount}`
             );
-            get().generateConversationTitle(conversationId, projectId);
+            get().generateConversationTitle(targetConversationId, projectId);
+          } else {
+            console.warn(
+              "[Agent] Skipping title generation - missing data:",
+              { projectId, targetConversationId, currentConversation }
+            );
           }
         }
 
@@ -1417,7 +1438,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     try {
       await agentService.chat(
-        { conversation_id: conversationId, message: messageText },
+        { conversation_id: conversationId, message: messageText, project_id: _projectId },
         handler
       );
     } catch (error: any) {

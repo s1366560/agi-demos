@@ -61,7 +61,6 @@ const NAV_GROUPS = {
       exact: true,
     },
     { id: "agent", icon: "smart_toy", label: "Agent V3", path: "/agent" },
-    { id: "agent-v2", icon: "psychology", label: "Agent V2", path: "/agent-v2" },
   ],
   knowledge: [
     {

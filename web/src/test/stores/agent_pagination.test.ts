@@ -4,9 +4,10 @@
  * TDD: Tests written first (RED phase) for backward pagination support.
  */
 
-import { renderHook, act } from '@testing-library/react';
+import { act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAgentStore } from '../../stores/agent';
+import type { TimelineEvent } from '../../types/agent';
 
 // Mock agent service
 vi.mock('../../services/agentService', () => ({
@@ -31,13 +32,14 @@ describe('Agent Store Pagination', () => {
   describe('getTimeline - initial load', () => {
     it('should set pagination metadata on initial load', async () => {
       // Arrange
+      const mockTimeline: TimelineEvent[] = [
+        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Hello', role: 'user' },
+        { id: '2', type: 'assistant_message', sequenceNumber: 2, timestamp: 2000, content: 'Hi', role: 'assistant' },
+        { id: '3', type: 'user_message', sequenceNumber: 3, timestamp: 3000, content: 'How are you?', role: 'user' },
+      ];
       const mockResponse = {
         conversationId: 'conv-1',
-        timeline: [
-          { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Hello', role: 'user' },
-          { id: '2', type: 'assistant_message', sequenceNumber: 2, timestamp: 2000, content: 'Hi', role: 'assistant' },
-          { id: '3', type: 'user_message', sequenceNumber: 3, timestamp: 3000, content: 'How are you?', role: 'user' },
-        ],
+        timeline: mockTimeline,
         total: 3,
         has_more: true,
         first_sequence: 1,
@@ -95,7 +97,7 @@ describe('Agent Store Pagination', () => {
       useAgentStore.setState({
         earliestLoadedSequence: 11,
         latestLoadedSequence: 20,
-        timeline: Array.from({ length: 10 }, (_, i) => ({
+        timeline: Array.from({ length: 10 }, (_, i): TimelineEvent => ({
           id: `msg-${i + 11}`,
           type: 'user_message',
           sequenceNumber: i + 11,
@@ -106,13 +108,14 @@ describe('Agent Store Pagination', () => {
         hasEarlierMessages: true,
       });
 
+      const mockEarlierTimeline: TimelineEvent[] = [
+        { id: 'msg-1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        { id: 'msg-2', type: 'assistant_message', sequenceNumber: 2, timestamp: 2000, content: 'Msg 2', role: 'assistant' },
+        { id: 'msg-3', type: 'user_message', sequenceNumber: 3, timestamp: 3000, content: 'Msg 3', role: 'user' },
+      ];
       const mockEarlierResponse = {
         conversationId: 'conv-1',
-        timeline: [
-          { id: 'msg-1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
-          { id: 'msg-2', type: 'assistant_message', sequenceNumber: 2, timestamp: 2000, content: 'Msg 2', role: 'assistant' },
-          { id: 'msg-3', type: 'user_message', sequenceNumber: 3, timestamp: 3000, content: 'Msg 3', role: 'user' },
-        ],
+        timeline: mockEarlierTimeline,
         total: 3,
         has_more: false,
         first_sequence: 1,
@@ -186,12 +189,12 @@ describe('Agent Store Pagination', () => {
   describe('prependTimelineEvents', () => {
     it('should add events to the beginning of timeline', () => {
       // Arrange
-      const existingTimeline = [
+      const existingTimeline: TimelineEvent[] = [
         { id: 'msg-10', type: 'user_message', sequenceNumber: 10, timestamp: 10000, content: 'Msg 10', role: 'user' },
       ];
       useAgentStore.setState({ timeline: existingTimeline });
 
-      const newEvents = [
+      const newEvents: TimelineEvent[] = [
         { id: 'msg-1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
         { id: 'msg-2', type: 'assistant_message', sequenceNumber: 2, timestamp: 2000, content: 'Msg 2', role: 'assistant' },
       ];
@@ -222,11 +225,12 @@ describe('Agent Store Pagination', () => {
         timeline: [{ id: 'msg-1', type: 'user_message', sequenceNumber: 10, timestamp: 10000, content: 'Msg', role: 'user' }],
       });
 
+      const mockTimeline: TimelineEvent[] = [
+        { id: 'msg-2', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'New', role: 'user' },
+      ];
       const mockResponse = {
         conversationId: 'conv-2',
-        timeline: [
-          { id: 'msg-2', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'New', role: 'user' },
-        ],
+        timeline: mockTimeline,
         total: 1,
         has_more: false,
         first_sequence: 1,

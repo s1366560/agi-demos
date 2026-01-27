@@ -172,6 +172,8 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   onTileClick,
   assistantDraftContent,
   isTextStreaming,
+  hasEarlierMessages,
+  onLoadEarlier,
 }) => {
   // Memoize sorted messages to avoid re-sorting on every render
   const sortedMessages = useMemo(
@@ -190,7 +192,7 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.target as HTMLDivElement;
-      const { scrollTop, scrollHeight, clientHeight } = target;
+      const { scrollTop, scrollHeight } = target;
 
       // When scrolling to near the top, trigger load more
       const SCROLL_THRESHOLD = 50;

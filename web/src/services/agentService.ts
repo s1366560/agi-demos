@@ -684,7 +684,13 @@ class AgentServiceImpl implements AgentService {
       `/api/v1/agent/conversations/${conversationId}/messages`,
       { params }
     );
-    return response.data;
+    // Normalize optional fields to required fields with defaults
+    return {
+      ...response.data,
+      has_more: response.data.has_more ?? false,
+      first_sequence: response.data.first_sequence ?? null,
+      last_sequence: response.data.last_sequence ?? null,
+    };
   }
 
   /**

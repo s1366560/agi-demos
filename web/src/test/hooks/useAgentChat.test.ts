@@ -5,7 +5,6 @@ import { useAgentChat } from '../../hooks/useAgentChat';
 import { useProjectStore } from '../../stores/project';
 import { useAgentStore } from '../../stores/agent';
 import { useParams, useNavigate } from 'react-router-dom';
-import { agentService } from '../../services/agentService';
 
 // Mock selector functions
 const mockUseMessages = vi.fn();
