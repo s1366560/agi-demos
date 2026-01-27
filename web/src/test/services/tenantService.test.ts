@@ -1,31 +1,27 @@
 /**
- * Tests for tenantService
+ * Tests for tenantService using apiFetch
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { tenantService } from '../../services/tenantService';
 
-// Mock global fetch and localStorage
-global.fetch = vi.fn() as any;
-vi.stubGlobal('localStorage', {
-  getItem: vi.fn(() => null),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-});
+// Mock apiFetch
+vi.mock('../../services/client/urlUtils', () => ({
+  apiFetch: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
 
 describe('tenantService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    });
   });
 
   describe('listMembers', () => {
     it('should fetch members for a tenant', async () => {
-      // Arrange
       const tenantId = 'tenant-1';
       const mockMembers = {
         users: [
@@ -34,34 +30,31 @@ describe('tenantService', () => {
         ],
       };
 
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.get).mockResolvedValueOnce({
         ok: true,
+        status: 200,
+        statusText: 'OK',
         json: async () => mockMembers,
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act
       const result = await tenantService.listMembers(tenantId);
 
-      // Assert - fetch should be called with /api/v1 prefix added by createApiUrl
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants/tenant-1/members'),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        })
-      );
+      expect(apiFetch.get).toHaveBeenCalledWith(`/tenants/${tenantId}/members`);
       expect(result).toEqual(mockMembers);
     });
 
     it('should throw error on failed response', async () => {
-      // Arrange
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.get).mockResolvedValueOnce({
         ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
         json: async () => ({ detail: 'Failed to list members' }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act & Assert
       await expect(
         tenantService.listMembers('tenant-1')
       ).rejects.toThrow('Failed to list tenant members');
@@ -70,34 +63,33 @@ describe('tenantService', () => {
 
   describe('addMember', () => {
     it('should add member to tenant', async () => {
-      // Arrange
-      const tenantId = 'tenant-1';
-      const userId = 'user-2';
-      const role = 'member';
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.post).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({}),
+        headers: new Headers(),
+      } as Response);
 
-      // Act
-      await tenantService.addMember(tenantId, userId, role);
+      await tenantService.addMember('tenant-1', 'user-2', 'member');
 
-      // Assert
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants/tenant-1/members'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        })
+      expect(apiFetch.post).toHaveBeenCalledWith(
+        `/tenants/tenant-1/members`,
+        { user_id: 'user-2', role: 'member' }
       );
     });
 
     it('should throw error on failed add', async () => {
-      // Arrange
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.post).mockResolvedValueOnce({
         ok: false,
+        status: 400,
+        statusText: 'Bad Request',
         json: async () => ({ detail: 'Failed to add member' }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act & Assert
       await expect(
         tenantService.addMember('tenant-1', 'user-2', 'member')
       ).rejects.toThrow('Failed to add tenant member');
@@ -106,30 +98,32 @@ describe('tenantService', () => {
 
   describe('removeMember', () => {
     it('should remove member from tenant', async () => {
-      // Arrange
-      const tenantId = 'tenant-1';
-      const userId = 'user-2';
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({}),
+        headers: new Headers(),
+      } as Response);
 
-      // Act
-      await tenantService.removeMember(tenantId, userId);
+      await tenantService.removeMember('tenant-1', 'user-2');
 
-      // Assert
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(`/api/v1/tenants/${tenantId}/members/${userId}`),
-        expect.objectContaining({
-          method: 'DELETE',
-        })
+      expect(apiFetch.delete).toHaveBeenCalledWith(
+        `/tenants/tenant-1/members/user-2`
       );
     });
 
     it('should throw error on failed removal', async () => {
-      // Arrange
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
         ok: false,
+        status: 404,
+        statusText: 'Not Found',
         json: async () => ({ detail: 'Failed to remove member' }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act & Assert
       await expect(
         tenantService.removeMember('tenant-1', 'user-2')
       ).rejects.toThrow('Failed to remove tenant member');
@@ -138,31 +132,33 @@ describe('tenantService', () => {
 
   describe('updateMemberRole', () => {
     it('should update member role', async () => {
-      // Arrange
-      const tenantId = 'tenant-1';
-      const userId = 'user-2';
-      const role = 'admin';
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({}),
+        headers: new Headers(),
+      } as Response);
 
-      // Act
-      await tenantService.updateMemberRole(tenantId, userId, role);
+      await tenantService.updateMemberRole('tenant-1', 'user-2', 'admin');
 
-      // Assert
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(`/api/v1/tenants/${tenantId}/members/${userId}`),
-        expect.objectContaining({
-          method: 'PATCH',
-        })
+      expect(apiFetch.patch).toHaveBeenCalledWith(
+        `/tenants/tenant-1/members/user-2`,
+        { role: 'admin' }
       );
     });
 
     it('should throw error on failed update', async () => {
-      // Arrange
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
         ok: false,
+        status: 403,
+        statusText: 'Forbidden',
         json: async () => ({ detail: 'Failed to update role' }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act & Assert
       await expect(
         tenantService.updateMemberRole('tenant-1', 'user-2', 'admin')
       ).rejects.toThrow('Failed to update member role');
@@ -171,7 +167,6 @@ describe('tenantService', () => {
 
   describe('getTenant', () => {
     it('should fetch tenant details', async () => {
-      // Arrange
       const tenantId = 'tenant-1';
       const mockTenant = {
         id: tenantId,
@@ -182,28 +177,24 @@ describe('tenantService', () => {
         created_at: '2024-01-01T00:00:00Z',
       };
 
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.get).mockResolvedValueOnce({
         ok: true,
+        status: 200,
+        statusText: 'OK',
         json: async () => mockTenant,
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act
       const result = await tenantService.getTenant(tenantId);
 
-      // Assert
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(`/api/v1/tenants/${tenantId}`),
-        expect.objectContaining({
-          method: 'GET',
-        })
-      );
+      expect(apiFetch.get).toHaveBeenCalledWith(`/tenants/${tenantId}`);
       expect(result).toEqual(mockTenant);
     });
   });
 
   describe('createTenant', () => {
     it('should create new tenant', async () => {
-      // Arrange
       const name = 'New Tenant';
       const description = 'New Description';
       const mockTenant = {
@@ -215,32 +206,34 @@ describe('tenantService', () => {
         created_at: '2024-01-01T00:00:00Z',
       };
 
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.post).mockResolvedValueOnce({
         ok: true,
+        status: 201,
+        statusText: 'Created',
         json: async () => mockTenant,
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act
       const result = await tenantService.createTenant(name, description);
 
-      // Assert
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants'),
-        expect.objectContaining({
-          method: 'POST',
-        })
-      );
+      expect(apiFetch.post).toHaveBeenCalledWith('/tenants', {
+        name,
+        description,
+      });
       expect(result).toEqual(mockTenant);
     });
 
     it('should throw error on failed creation', async () => {
-      // Arrange
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.post).mockResolvedValueOnce({
         ok: false,
+        status: 400,
+        statusText: 'Bad Request',
         json: async () => ({ detail: 'Failed to create tenant' }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act & Assert
       await expect(
         tenantService.createTenant('Test', 'Description')
       ).rejects.toThrow('Failed to create tenant');
@@ -249,38 +242,36 @@ describe('tenantService', () => {
 
   describe('updateTenant', () => {
     it('should update tenant details', async () => {
-      // Arrange
       const tenantId = 'tenant-1';
       const updates = {
         name: 'Updated Tenant',
         description: 'Updated Description',
       };
 
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
         ok: true,
+        status: 200,
+        statusText: 'OK',
         json: async () => ({ id: tenantId, ...updates }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act
       await tenantService.updateTenant(tenantId, updates);
 
-      // Assert
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(`/api/v1/tenants/${tenantId}`),
-        expect.objectContaining({
-          method: 'PATCH',
-        })
-      );
+      expect(apiFetch.patch).toHaveBeenCalledWith(`/tenants/${tenantId}`, updates);
     });
 
     it('should throw error on failed update', async () => {
-      // Arrange
-      (global.fetch as any).mockResolvedValue({
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
         ok: false,
+        status: 400,
+        statusText: 'Bad Request',
         json: async () => ({ detail: 'Failed to update tenant' }),
-      });
+        headers: new Headers(),
+      } as Response);
 
-      // Act & Assert
       await expect(
         tenantService.updateTenant('tenant-1', { name: 'Test' })
       ).rejects.toThrow('Failed to update tenant');
