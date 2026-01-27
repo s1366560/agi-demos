@@ -120,9 +120,11 @@ class DockerSandboxAdapter(SandboxPort):
                 container_config["network_mode"] = "none"
 
             # Volume mounts
+            # Mount project to /workspace (not /workspace/project) for consistency
+            # with MCPSandboxAdapter and to simplify path resolution
             if project_path and project_path != "/tmp/sandbox_workspace":
                 container_config["volumes"] = {
-                    project_path: {"bind": "/workspace/project", "mode": "ro"}
+                    project_path: {"bind": "/workspace", "mode": "rw"}
                 }
 
             # Run in thread pool to avoid blocking
