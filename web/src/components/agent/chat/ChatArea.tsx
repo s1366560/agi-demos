@@ -102,6 +102,47 @@ interface ChatAreaProps {
   isTextStreaming?: boolean;
 }
 
+/**
+ * Custom comparison function for ChatArea memo
+ * Prevents unnecessary re-renders by only checking props that actually affect rendering
+ */
+function areChatAreaPropsEqual(
+  prevProps: ChatAreaProps,
+  nextProps: ChatAreaProps
+): boolean {
+  // Props that always trigger re-render
+  const criticalPropsChanged =
+    prevProps.messages !== nextProps.messages ||
+    prevProps.currentConversation?.id !== nextProps.currentConversation?.id ||
+    prevProps.isStreaming !== nextProps.isStreaming ||
+    prevProps.messagesLoading !== nextProps.messagesLoading ||
+    prevProps.assistantDraftContent !== nextProps.assistantDraftContent ||
+    prevProps.isTextStreaming !== nextProps.isTextStreaming;
+
+  if (criticalPropsChanged) {
+    return false;
+  }
+
+  // Props that can trigger re-render but less frequently
+  const secondaryPropsChanged =
+    prevProps.planModeStatus?.is_in_plan_mode !== nextProps.planModeStatus?.is_in_plan_mode ||
+    prevProps.showPlanEditor !== nextProps.showPlanEditor ||
+    prevProps.currentPlan?.id !== nextProps.currentPlan?.id;
+
+  if (secondaryPropsChanged) {
+    return false;
+  }
+
+  // For the remaining props, use shallow comparison
+  return (
+    prevProps.currentStepNumber === nextProps.currentStepNumber &&
+    prevProps.currentThought === nextProps.currentThought &&
+    prevProps.currentWorkPlan?.current_step_index === nextProps.currentWorkPlan?.current_step_index &&
+    prevProps.executionTimeline.length === nextProps.executionTimeline.length &&
+    prevProps.toolExecutionHistory.length === nextProps.toolExecutionHistory.length
+  );
+}
+
 export const ChatArea: React.FC<ChatAreaProps> = memo(({
   messages,
   currentConversation,
@@ -439,6 +480,6 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
       <div ref={messagesEndRef} className="h-4" />
     </div>
   );
-});
+}, areChatAreaPropsEqual);
 
 ChatArea.displayName = "ChatArea";

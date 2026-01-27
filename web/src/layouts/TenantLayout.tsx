@@ -41,6 +41,12 @@ import {
   Menu,
 } from "lucide-react";
 
+// HTTP status codes for error handling
+const HTTP_STATUS = {
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+} as const;
+
 // Navigation item interface
 interface NavItem {
   id: string;
@@ -133,10 +139,45 @@ export const TenantLayout: React.FC = () => {
     }
   };
 
+  /**
+   * Handle 403/404 errors when accessing unauthorized tenant
+   * Falls back to first accessible tenant
+   */
+  const handleTenantAccessError = async (error: unknown, requestedTenantId: string) => {
+    const status = (error as any)?.response?.status;
+
+    if (status === HTTP_STATUS.FORBIDDEN || status === HTTP_STATUS.NOT_FOUND) {
+      console.warn(`Access denied to tenant ${requestedTenantId}, falling back to accessible tenant`);
+
+      // List accessible tenants and redirect to first available
+      try {
+        await listTenants();
+        const tenants = useTenantStore.getState().tenants;
+
+        if (tenants.length > 0) {
+          const firstAccessibleTenant = tenants[0];
+          setCurrentTenant(firstAccessibleTenant);
+
+          // Redirect to first accessible tenant
+          navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
+        } else {
+          // No accessible tenants, show create tenant screen
+          setNoTenants(true);
+        }
+      } catch (listError) {
+        console.error("Failed to list accessible tenants:", listError);
+        setNoTenants(true);
+      }
+    }
+  };
+
   // Sync tenant ID from URL with store
   useEffect(() => {
     if (tenantId && (!currentTenant || currentTenant.id !== tenantId)) {
-      getTenant(tenantId);
+      // Wrap getTenant in error handler for 403/404
+      getTenant(tenantId).catch((error) => {
+        handleTenantAccessError(error, tenantId);
+      });
     } else if (!tenantId && !currentTenant) {
       const tenants = useTenantStore.getState().tenants;
       if (tenants.length > 0) {
@@ -176,7 +217,7 @@ export const TenantLayout: React.FC = () => {
           .catch(() => {});
       }
     }
-  }, [tenantId, currentTenant, getTenant, setCurrentTenant, user]);
+  }, [tenantId, currentTenant, getTenant, setCurrentTenant, user, navigate]);
 
   // Sync project ID from URL with store
   useEffect(() => {

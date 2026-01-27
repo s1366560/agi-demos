@@ -138,6 +138,21 @@ export function ReasoningLogCard({
 }
 
 /**
+ * Format tool result to string for display
+ * Handles objects, arrays, and primitives
+ */
+export function formatToolResult(result: unknown): string {
+  if (result === null || result === undefined) {
+    return '';
+  }
+  if (typeof result === 'string') {
+    return result;
+  }
+  // Convert objects, arrays, numbers, booleans to JSON string
+  return JSON.stringify(result, null, 2);
+}
+
+/**
  * ToolExecutionCardDisplay - Tool execution with live status
  */
 export interface ToolExecutionCardDisplayProps {
@@ -151,8 +166,8 @@ export interface ToolExecutionCardDisplayProps {
   executionMode?: string;
   /** Execution duration in milliseconds */
   duration?: number;
-  /** Execution result */
-  result?: string;
+  /** Execution result - can be string or object */
+  result?: string | unknown;
   /** Error message */
   error?: string;
   /** Whether to show details expanded by default */
@@ -180,6 +195,9 @@ export function ToolExecutionCardDisplay({
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${(ms / 60000).toFixed(1)}m`;
   };
+
+  // Format result to ensure it's always a string
+  const formattedResult = formatToolResult(result);
 
   const getStatusBadge = () => {
     switch (status) {
@@ -219,7 +237,7 @@ export function ToolExecutionCardDisplay({
     }
   };
 
-  const hasDetails = parameters || executionMode || result || error;
+  const hasDetails = parameters || executionMode || formattedResult || error;
 
   return (
     <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm overflow-hidden">
@@ -290,7 +308,7 @@ export function ToolExecutionCardDisplay({
             )}
 
             {/* Success Result */}
-            {status === "success" && result && (
+            {status === "success" && formattedResult && (
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-emerald-600 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[12px]">
@@ -300,7 +318,7 @@ export function ToolExecutionCardDisplay({
                 </label>
                 <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs font-mono text-slate-700 dark:text-slate-300 overflow-x-auto max-h-48 overflow-y-auto">
                   <pre className="whitespace-pre-wrap break-words">
-                    {result}
+                    {formattedResult}
                   </pre>
                 </div>
               </div>

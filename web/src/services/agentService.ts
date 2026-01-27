@@ -117,6 +117,10 @@ class AgentServiceImpl implements AgentService {
   // Pending subscriptions (to restore after reconnect)
   private subscriptions: Set<string> = new Set();
 
+  // Performance tracking: Track event receive times for diagnostics
+  private performanceMetrics: Map<string, number[]> = new Map();
+  private readonly MAX_METRICS_SAMPLES = 100;
+
   /**
    * Get the session ID for this instance
    */
@@ -266,6 +270,10 @@ class AgentServiceImpl implements AgentService {
    */
   private handleMessage(message: ServerMessage): void {
     const { type, conversation_id, data, seq } = message as any;
+
+    // Performance tracking: Record event receive timestamp
+    const receiveTime = performance.now();
+    this.recordEventMetric(type, receiveTime);
 
     // Enhanced logging for debugging TEXT_DELTA issues
     if (type === "text_delta") {
@@ -778,6 +786,45 @@ class AgentServiceImpl implements AgentService {
       conversation_id: string;
     }>(`/api/v1/agent/conversations/${conversationId}/execution-status`);
     return response.data;
+  }
+
+  /**
+   * Record performance metric for an event type
+   * @private
+   */
+  private recordEventMetric(eventType: string, timestamp: number): void {
+    if (!this.performanceMetrics.has(eventType)) {
+      this.performanceMetrics.set(eventType, []);
+    }
+    const metrics = this.performanceMetrics.get(eventType)!;
+    metrics.push(timestamp);
+
+    // Keep only the most recent samples
+    if (metrics.length > this.MAX_METRICS_SAMPLES) {
+      metrics.shift();
+    }
+  }
+
+  /**
+   * Get performance metrics for diagnostics
+   * Returns event timing statistics for monitoring WebSocket event latency
+   */
+  getPerformanceMetrics(): Record<string, { count: number; lastSeen: number }> {
+    const result: Record<string, { count: number; lastSeen: number }> = {};
+    for (const [eventType, timestamps] of this.performanceMetrics.entries()) {
+      result[eventType] = {
+        count: timestamps.length,
+        lastSeen: timestamps[timestamps.length - 1] || 0,
+      };
+    }
+    return result;
+  }
+
+  /**
+   * Clear performance metrics
+   */
+  clearPerformanceMetrics(): void {
+    this.performanceMetrics.clear();
   }
 }
 

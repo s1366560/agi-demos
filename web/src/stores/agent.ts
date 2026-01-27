@@ -565,8 +565,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Instead of updating state on every character, we batch updates
     let textDeltaBuffer = "";
     let textDeltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
-    const TEXT_DELTA_FLUSH_INTERVAL = 50; // ms - flush every 50ms for smooth updates
-    const TEXT_DELTA_BUFFER_SIZE = 100; // chars - flush if buffer exceeds this size
+    // Performance optimization: Reduced buffering for faster perceived responsiveness
+    // 16ms = 1 frame at 60fps (imperceptible delay)
+    // 50 chars = balance between update frequency and render performance
+    const TEXT_DELTA_FLUSH_INTERVAL = 16; // ms - flush every 16ms for 60fps updates
+    const TEXT_DELTA_BUFFER_SIZE = 50; // chars - flush if buffer exceeds this size
 
     const flushTextDeltaBuffer = () => {
       if (textDeltaBuffer) {
