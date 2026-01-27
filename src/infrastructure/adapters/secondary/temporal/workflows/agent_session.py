@@ -50,7 +50,7 @@ class AgentSessionConfig:
     base_url: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 4096
-    max_steps: int = 20
+    max_steps: int = 5000  # Default, overridden by AGENT_MAX_STEPS setting
 
     # Session configuration
     idle_timeout_seconds: int = 1800  # 30 minutes idle timeout

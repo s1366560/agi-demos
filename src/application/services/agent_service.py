@@ -417,7 +417,7 @@ class AgentService(AgentServicePort):
                 base_url=self._get_base_url(settings),
                 temperature=0.7,
                 max_tokens=4096,
-                max_steps=20,
+                max_steps=settings.agent_max_steps,
                 idle_timeout_seconds=1800,  # 30 minutes
                 mcp_tools_ttl_seconds=300,  # 5 minutes
             )

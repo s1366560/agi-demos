@@ -202,6 +202,11 @@ class Settings(BaseSettings):
         default=4, alias="AGENT_SESSION_PREWARM_CONCURRENCY"
     )
 
+    # Agent Execution Limits
+    agent_max_steps: int = Field(
+        default=5000, alias="AGENT_MAX_STEPS"
+    )  # Maximum steps for ReActAgent execution
+
     # Monitoring
     enable_metrics: bool = Field(default=True, alias="ENABLE_METRICS")
     metrics_port: int = Field(default=9090, alias="METRICS_PORT")
