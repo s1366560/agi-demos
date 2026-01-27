@@ -785,6 +785,24 @@ export const useAgentV3Store = create<AgentV3State>()(
         onDoomLoopDetected: (event) => {
           set({ doomLoopDetected: event.data });
         },
+        onTitleGenerated: (event) => {
+          const data = event.data as {
+            conversation_id: string;
+            title: string;
+            generated_at: string;
+            message_id?: string;
+            generated_by?: string;
+          };
+          console.log("[AgentV3] Title generated event:", data);
+
+          set((state) => {
+            // Update in conversations list
+            const updatedList = state.conversations.map((c) =>
+              c.id === data.conversation_id ? { ...c, title: data.title } : c
+            );
+            return { conversations: updatedList };
+          });
+        },
         onComplete: (event) => {
           set((state) => {
             // 更新助手消息内容（如果 complete 事件包含内容）和 trace URL

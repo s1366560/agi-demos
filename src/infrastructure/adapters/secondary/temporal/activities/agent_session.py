@@ -668,6 +668,21 @@ async def execute_chat_activity(
                 sequence_number=sequence_number,
             )
 
+            # Auto-generate title for first message in conversation
+            # Check if this is the first exchange (user + assistant = 2 messages)
+            # Only generate for conversations with default title
+            message_count = await _get_conversation_message_count(conversation_id)
+            if message_count <= 2:  # First user + assistant pair
+                await _maybe_generate_and_publish_title(
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    tenant_id=session_config.get("tenant_id", ""),
+                    project_id=session_config.get("project_id", ""),
+                    sequence_number=sequence_number + 1,
+                    stream_key=stream_key,
+                    event_bus=event_bus,
+                )
+
         total_time_ms = (time_module.time() - start_time) * 1000
         logger.info(
             f"[AgentSession] Chat completed in {total_time_ms:.1f}ms: "
@@ -1020,6 +1035,386 @@ async def _save_assistant_message_event(
         logger.error(f"Failed to save assistant_message event to DB: {e}")
         return assistant_msg_id
         raise
+
+
+@activity.defn
+async def generate_conversation_title_activity(
+    input: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Generate a title for a conversation after the first message.
+
+    This activity:
+    1. Checks if conversation still has default title
+    2. Fetches the first user message
+    3. Generates a title using LLM or falls back to truncation
+    4. Publishes a TITLE_GENERATED event
+    5. Updates the conversation in the database
+
+    This is called after execute_chat_activity completes to provide
+    a user-friendly title for new conversations.
+
+    Args:
+        input: Dict containing:
+            - conversation_id: Conversation ID
+            - user_id: User ID for authorization
+            - project_id: Project ID for authorization
+
+    Returns:
+        Dict with status, title, and metadata
+    """
+    from src.application.services.agent_service import AgentService
+    from src.domain.events.agent_events import AgentTitleGeneratedEvent
+    from src.domain.model.agent.agent_execution_event import USER_MESSAGE
+    from src.infrastructure.adapters.secondary.event.redis_event_bus import (
+        RedisEventBusAdapter,
+    )
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentExecutionEvent,
+        Conversation,
+    )
+    from sqlalchemy import select
+
+    conversation_id = input.get("conversation_id", "")
+    user_id = input.get("user_id", "")
+    project_id = input.get("project_id", "")
+
+    try:
+        # 1. Fetch conversation
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(Conversation).where(
+                    Conversation.id == conversation_id,
+                    Conversation.project_id == project_id,
+                    Conversation.user_id == user_id,
+                )
+            )
+            conversation = result.scalar_one_or_none()
+
+        if not conversation:
+            logger.warning(
+                f"[TitleGen] Conversation not found: {conversation_id}"
+            )
+            return {
+                "status": "error",
+                "error": "Conversation not found",
+            }
+
+        # 2. Check if title generation is needed (only for default title)
+        if conversation.title != "New Conversation":
+            logger.info(
+                f"[TitleGen] Skipping title generation for {conversation_id}: "
+                f"custom title '{conversation.title}' already set"
+            )
+            return {
+                "status": "skipped",
+                "reason": "custom_title_exists",
+                "current_title": conversation.title,
+            }
+
+        # 3. Fetch first user message for context
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(AgentExecutionEvent)
+                .where(
+                    AgentExecutionEvent.conversation_id == conversation_id,
+                    AgentExecutionEvent.event_type == USER_MESSAGE,
+                )
+                .order_by(AgentExecutionEvent.sequence_number.asc())
+                .limit(1)
+            )
+            first_message_event = result.scalar_one_or_none()
+
+        first_message = ""
+        message_id = None
+        if first_message_event:
+            first_message = first_message_event.event_data.get("content", "")
+            message_id = first_message_event.message_id
+
+        # If no message found, use conversation ID as fallback
+        if not first_message:
+            first_message = conversation.id
+
+        # 4. Generate title using AgentService logic
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_or_create_llm_client,
+            get_or_create_provider_config,
+            get_redis_client,
+        )
+
+        provider_config = await get_or_create_provider_config()
+        llm_client = await get_or_create_llm_client(provider_config)
+
+        # Reuse the title generation logic from AgentService
+        title = await _generate_title_for_message(first_message, llm_client)
+        generated_by = "llm" if title else "fallback"
+
+        # Fallback to truncated message
+        if not title:
+            title = _truncate_for_title(first_message)
+            generated_by = "fallback"
+
+        # 5. Update conversation in database
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(Conversation).where(Conversation.id == conversation_id)
+            )
+            conv = result.scalar_one_or_none()
+            if conv:
+                conv.title = title
+                await session.commit()
+
+        # 6. Publish TITLE_GENERATED event
+        redis_client = await get_redis_client()
+        if redis_client:
+            event_bus = RedisEventBusAdapter(redis_client)
+            title_event = AgentTitleGeneratedEvent(
+                conversation_id=conversation_id,
+                title=title,
+                message_id=message_id,
+                generated_by=generated_by,
+            )
+            event_payload = {
+                "type": "title_generated",
+                "data": title_event.model_dump(exclude={"timestamp", "event_type"}),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            stream_key = f"agent:events:{conversation_id}"
+            try:
+                await event_bus.stream_add(stream_key, event_payload, maxlen=1000)
+            except Exception as e:
+                logger.warning(f"[TitleGen] Failed to publish event: {e}")
+
+        logger.info(
+            f"[TitleGen] Generated title '{title}' for conversation {conversation_id} "
+            f"(method={generated_by})"
+        )
+
+        return {
+            "status": "success",
+            "conversation_id": conversation_id,
+            "title": title,
+            "generated_by": generated_by,
+            "message_id": message_id,
+        }
+
     except Exception as e:
-        logger.error(f"Failed to save assistant_message event to DB: {e}")
-        return assistant_msg_id
+        logger.error(f"[TitleGen] Failed to generate title: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+async def _generate_title_for_message(
+    first_message: str, llm_client
+) -> str | None:
+    """Generate a title using LLM with retry logic.
+
+    Args:
+        first_message: The first user message content
+        llm_client: LLM client for generation
+
+    Returns:
+        Generated title or None if generation fails
+    """
+    from src.domain.llm_providers.llm_types import Message as LLMMessage
+    import asyncio
+
+    prompt = f"""Generate a short, friendly title (max 50 characters) for a conversation that starts with this message:
+
+"{first_message[:200]}"
+
+Guidelines:
+- Be concise and descriptive
+- Use the user's language (English, Chinese, etc.)
+- Focus on the main topic or question
+- Maximum 50 characters
+- Return ONLY the title, no explanation
+
+Title:"""
+
+    max_retries = 2
+    base_delay = 0.5  # seconds
+
+    for attempt in range(max_retries):
+        try:
+            response = await llm_client.ainvoke(
+                [
+                    LLMMessage.system(
+                        "You are a helpful assistant that generates concise conversation titles."
+                    ),
+                    LLMMessage.user(prompt),
+                ]
+            )
+
+            title = response.content.strip().strip('"').strip("'")
+
+            # Limit length
+            if len(title) > 50:
+                title = title[:47] + "..."
+
+            if title:
+                return title
+
+        except Exception as e:
+            logger.warning(
+                f"[TitleGen] LLM attempt {attempt + 1}/{max_retries} failed: {e}"
+            )
+
+            # If not the last attempt, wait with exponential backoff
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)
+                await asyncio.sleep(delay)
+
+    return None
+
+
+def _truncate_for_title(message: str) -> str:
+    """Generate a fallback title from the first message.
+
+    Args:
+        message: The message content
+
+    Returns:
+        Truncated title (max 50 characters)
+    """
+    content = message.strip()
+
+    # Take first 40 characters + "..." to stay under 50
+    if len(content) > 40:
+        # Try to break at word boundary
+        truncated = content[:40]
+        last_space = truncated.rfind(" ")
+        if last_space > 20:  # Only if we get a reasonable segment
+            truncated = truncated[:last_space]
+        content = truncated + "..."
+
+    return content or "New Conversation"
+
+
+async def _get_conversation_message_count(conversation_id: str) -> int:
+    """Get the number of message events in a conversation.
+
+    Args:
+        conversation_id: Conversation ID
+
+    Returns:
+        Number of message events (user_message + assistant_message)
+    """
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import sessionmaker
+
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
+
+    try:
+        async with async_session_factory() as session:
+            async with session.begin():
+                result = await session.execute(
+                    select(func.count())
+                    .select_from(AgentExecutionEvent)
+                    .where(
+                        AgentExecutionEvent.conversation_id == conversation_id,
+                        AgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                    )
+                )
+                return result.scalar() or 0
+    except Exception as e:
+        logger.error(f"[TitleGen] Failed to get message count: {e}")
+        return 0  # Assume not first message if error
+
+
+async def _maybe_generate_and_publish_title(
+    conversation_id: str,
+    user_message: str,
+    tenant_id: str,
+    project_id: str,
+    sequence_number: int,
+    stream_key: str,
+    event_bus: Any,
+) -> None:
+    """Maybe generate and publish a title for the conversation.
+
+    This function checks if the conversation has a default title,
+    generates a new title if needed, and publishes a title_generated event.
+
+    Args:
+        conversation_id: Conversation ID
+        user_message: First user message content
+        tenant_id: Tenant ID
+        project_id: Project ID
+        sequence_number: Next sequence number for the title event
+        stream_key: Redis Stream key
+        event_bus: Event bus instance
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import Conversation
+    from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+        get_or_create_llm_client,
+        get_or_create_provider_config,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            async with session.begin():
+                # Check conversation title
+                result = await session.execute(
+                    select(Conversation).where(Conversation.id == conversation_id)
+                )
+                conversation = result.scalar_one_or_none()
+
+                if not conversation:
+                    logger.warning(f"[TitleGen] Conversation {conversation_id} not found")
+                    return
+
+                # Skip if title is already customized (not default)
+                if conversation.title and conversation.title != "New Conversation":
+                    logger.info(
+                        f"[TitleGen] Skipping - conversation already has custom title: '{conversation.title}'"
+                    )
+                    return
+
+                # Generate title
+                provider_config = await get_or_create_provider_config()
+                llm_client = await get_or_create_llm_client(provider_config)
+                title = await _generate_title_for_message(user_message, llm_client)
+
+                if not title:
+                    title = _truncate_for_title(user_message)
+
+                # Update conversation in database
+                conversation.title = title
+                session.add(conversation)
+
+                logger.info(
+                    f"[TitleGen] Generated title '{title}' for conversation {conversation_id}"
+                )
+
+                # Publish title_generated event to Redis Stream
+                await event_bus.stream_add(
+                    stream_key,
+                    {
+                        "type": "title_generated",
+                        "data": {
+                            "conversation_id": conversation_id,
+                            "title": title,
+                            "generated_at": datetime.now(timezone.utc).isoformat(),
+                            "generated_by": "llm",
+                        },
+                        "seq": sequence_number,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                    maxlen=1000,
+                )
+
+                logger.info(f"[TitleGen] Published title_generated event for {conversation_id}")
+
+    except Exception as e:
+        logger.error(f"[TitleGen] Failed to generate/publish title: {e}", exc_info=True)
