@@ -656,9 +656,11 @@ async def get_or_create_agent_session(
         subagents_hash=subagents_hash,
     )
 
-    # Store in pool
+    # Store in pool and mark as used
     async with _agent_session_pool_lock:
         _agent_session_pool[session_key] = session
+        # Mark session as used (use_count starts at 0, touch() increments to 1)
+        session.touch()
 
     elapsed_ms = (time.time() - start_time) * 1000
     logger.info(f"Agent Session Pool: Session created for {session_key} in {elapsed_ms:.1f}ms")
@@ -779,28 +781,194 @@ async def clear_session_cache(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
+    grace_period_seconds: int = 300,
 ) -> bool:
-    """Clear cache for a specific session.
+    """Clear cache for a specific session with optional grace period.
 
     This function is called when a Workflow session stops to free memory.
+    With the grace period, the session is marked for deletion but can be
+    recovered if a new request arrives within the grace period.
 
     Args:
         tenant_id: Tenant identifier
         project_id: Project identifier
         agent_mode: Agent mode
+        grace_period_seconds: Grace period in seconds before actual deletion (default 5 minutes)
 
     Returns:
-        True if cache was cleared, False if not found
+        True if cache was cleared (or marked for deletion), False if not found
     """
     session_key = generate_session_key(tenant_id, project_id, agent_mode)
 
     async with _agent_session_pool_lock:
         if session_key in _agent_session_pool:
-            del _agent_session_pool[session_key]
-            logger.info(f"Agent Session Pool: Session cache cleared for {session_key}")
-            return True
+            session = _agent_session_pool[session_key]
+
+            # Check if session is being actively used
+            # If use_count is high, keep it alive longer
+            if grace_period_seconds > 0 and session.use_count > 1:
+                # Soft delete: mark with deletion timestamp but keep in pool
+                session._marked_for_deletion_at = time.time() + grace_period_seconds
+                logger.info(
+                    f"Agent Session Pool: Session {session_key} marked for deletion "
+                    f"in {grace_period_seconds}s (use_count={session.use_count})"
+                )
+                return True
+            else:
+                # Hard delete: remove immediately
+                del _agent_session_pool[session_key]
+                logger.info(f"Agent Session Pool: Session cache cleared for {session_key}")
+                return True
 
     return False
+
+
+async def cleanup_marked_sessions() -> int:
+    """Clean up sessions that have passed their grace period.
+
+    This should be called periodically (e.g., every minute) to remove
+    sessions that were marked for deletion but haven't been reused.
+
+    Returns:
+        Number of sessions cleaned up
+    """
+    global _agent_session_pool
+
+    async with _agent_session_pool_lock:
+        now = time.time()
+        keys_to_remove = []
+
+        for key, session in _agent_session_pool.items():
+            # Check if session is marked for deletion and grace period has passed
+            if hasattr(session, "_marked_for_deletion_at"):
+                if now >= session._marked_for_deletion_at:
+                    keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            del _agent_session_pool[key]
+
+        if keys_to_remove:
+            logger.info(
+                f"Agent Session Pool: Cleaned up {len(keys_to_remove)} "
+                "marked sessions after grace period"
+            )
+
+        return len(keys_to_remove)
+
+
+async def get_or_create_agent_session(
+    tenant_id: str,
+    project_id: str,
+    agent_mode: str,
+    tools: Dict[str, Any],
+    skills: Optional[List[Any]] = None,
+    subagents: Optional[List[Any]] = None,
+    processor_config: Optional[Any] = None,
+    subagent_match_threshold: float = 0.5,
+) -> AgentSessionContext:
+    """Get or create an agent session context with cached components.
+
+    This is the main entry point for the Agent Session Pool. It manages
+    the lifecycle of expensive-to-create components and enables efficient
+    reuse across multiple agent executions.
+
+    Args:
+        tenant_id: Tenant identifier
+        project_id: Project identifier
+        agent_mode: Agent mode (e.g., "default", "plan")
+        tools: Dictionary of tool name -> tool instance
+        skills: Optional list of Skill domain entities
+        subagents: Optional list of SubAgent domain entities
+        processor_config: Optional ProcessorConfig
+        subagent_match_threshold: Threshold for SubAgentRouter
+
+    Returns:
+        AgentSessionContext with cached components
+    """
+    skills = skills or []
+    subagents = subagents or []
+
+    session_key = generate_session_key(tenant_id, project_id, agent_mode)
+    tools_hash = compute_tools_hash(tools)
+    skills_hash = compute_skills_hash(skills)
+    subagents_hash = compute_subagents_hash(subagents)
+
+    async with _agent_session_pool_lock:
+        # Check for existing valid session
+        existing = _agent_session_pool.get(session_key)
+
+        if existing and existing.is_valid_for(tools_hash, skills_hash, subagents_hash):
+            # If session was marked for deletion, unmark it (it's being reused)
+            if hasattr(existing, "_marked_for_deletion_at"):
+                delattr(existing, "_marked_for_deletion_at")
+                logger.info(
+                    f"Agent Session Pool: Session {session_key} recovered from deletion queue"
+                )
+
+            existing.touch()
+            logger.debug(
+                f"Agent Session Pool: Cache hit for {session_key} (use_count={existing.use_count})"
+            )
+            return existing
+
+        # Cache miss or invalid - create new session
+        logger.info(
+            f"Agent Session Pool: Creating session for {session_key} "
+            f"(tools={len(tools)}, skills={len(skills)}, subagents={len(subagents)})"
+        )
+        start_time = time.time()
+
+    # Release lock during expensive operations
+
+    # Get or create tool definitions (cached separately)
+    tool_definitions = await get_or_create_tool_definitions(tools, tools_hash)
+
+    # Get or create SubAgentRouter (cached separately)
+    subagent_router = await get_or_create_subagent_router(
+        tenant_id=tenant_id,
+        subagents=subagents,
+        subagents_hash=subagents_hash,
+        match_threshold=subagent_match_threshold,
+    )
+
+    # Create SkillExecutor (lightweight, doesn't need separate cache)
+    skill_executor = None
+    if skills:
+        from src.infrastructure.agent.core.skill_executor import SkillExecutor
+
+        skill_executor = SkillExecutor(tools)
+
+    # Get SystemPromptManager singleton
+    system_prompt_manager = await get_system_prompt_manager()
+
+    # Create session context
+    session = AgentSessionContext(
+        session_key=session_key,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        agent_mode=agent_mode,
+        tool_definitions=tool_definitions,
+        raw_tools=tools,
+        subagent_router=subagent_router,
+        skill_executor=skill_executor,
+        skills=skills,
+        system_prompt_manager=system_prompt_manager,
+        processor_config=processor_config,
+        tools_hash=tools_hash,
+        skills_hash=skills_hash,
+        subagents_hash=subagents_hash,
+    )
+
+    # Store in pool and mark as used
+    async with _agent_session_pool_lock:
+        _agent_session_pool[session_key] = session
+        # Mark session as used (use_count starts at 0, touch() increments to 1)
+        session.touch()
+
+    elapsed_ms = (time.time() - start_time) * 1000
+    logger.info(f"Agent Session Pool: Session created for {session_key} in {elapsed_ms:.1f}ms")
+
+    return session
 
 
 def clear_all_caches() -> Dict[str, int]:

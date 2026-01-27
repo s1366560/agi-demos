@@ -13,6 +13,7 @@ MCP (Model Context Protocol) Support:
 - Automatic tool namespace management
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -970,6 +971,11 @@ class AgentService(AgentServicePort):
         """
         Generate a friendly, concise title for a conversation based on the first user message.
 
+        This method implements:
+        - Retry mechanism (up to 3 attempts with exponential backoff)
+        - Fallback to truncated first message on failure
+        - Graceful degradation
+
         Args:
             first_message: The first user message content
             llm: The LLM to use for generation
@@ -990,30 +996,75 @@ Guidelines:
 
 Title:"""
 
-        try:
-            response = await llm.ainvoke(
-                [
-                    LLMMessage.system(
-                        "You are a helpful assistant that generates concise conversation titles."
-                    ),
-                    LLMMessage.user(prompt),
-                ]
-            )
+        max_retries = 3
+        base_delay = 1.0  # seconds
 
-            title = response.content.strip().strip('"').strip("'")
+        for attempt in range(max_retries):
+            try:
+                response = await llm.ainvoke(
+                    [
+                        LLMMessage.system(
+                            "You are a helpful assistant that generates concise conversation titles."
+                        ),
+                        LLMMessage.user(prompt),
+                    ]
+                )
 
-            # Limit length and add default if empty
-            if len(title) > 50:
-                title = title[:47] + "..."
-            if not title:
-                title = "New Conversation"
+                title = response.content.strip().strip('"').strip("'")
 
-            logger.info(f"Generated conversation title: {title}")
-            return title
+                # Limit length and add default if empty
+                if len(title) > 50:
+                    title = title[:47] + "..."
+                if not title:
+                    title = "New Conversation"
 
-        except Exception as e:
-            logger.error(f"Error generating conversation title: {e}")
-            return "New Conversation"
+                logger.info(f"Generated conversation title: {title}")
+                return title
+
+            except Exception as e:
+                logger.warning(
+                    f"[generate_conversation_title] Attempt {attempt + 1}/{max_retries} failed: {e}"
+                )
+
+                # If not the last attempt, wait with exponential backoff
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.info(f"Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                else:
+                    # All retries exhausted - use fallback
+                    logger.error(f"All {max_retries} retries exhausted for title generation")
+                    return self._generate_fallback_title(first_message)
+
+        # Should not reach here, but return default as safety net
+        return "New Conversation"
+
+    def _generate_fallback_title(self, first_message: str) -> str:
+        """
+        Generate a fallback title from the first message when LLM fails.
+
+        This ensures users always get a meaningful title even when LLM is unavailable.
+
+        Args:
+            first_message: The first user message content
+
+        Returns:
+            Fallback title (max 50 characters)
+        """
+        # Strip whitespace and get first line/segment
+        content = first_message.strip()
+
+        # Take first 40 characters + "..." to stay under 50
+        if len(content) > 40:
+            # Try to break at word boundary
+            truncated = content[:40]
+            last_space = truncated.rfind(" ")
+            if last_space > 20:  # Only if we get a reasonable segment
+                truncated = truncated[:last_space]
+            content = truncated + "..."
+
+        logger.info(f"Using fallback title: '{content}'")
+        return content or "New Conversation"
 
     async def get_conversation_messages(
         self,

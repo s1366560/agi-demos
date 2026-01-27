@@ -899,18 +899,6 @@ export const useAgentV2Store = create<AgentV2Store>()(
             onRetry: get().handleRetry,
           }
         );
-
-        // Generate title if needed
-        const { currentConversation, messages } = get();
-        if (
-          currentConversation?.title === "New Conversation" &&
-          messages.length <= 4
-        ) {
-          get().generateConversationTitle(
-            conversationId,
-            currentConversation.project_id
-          );
-        }
       },
 
       stopGeneration: (conversationId) => {
@@ -939,6 +927,18 @@ export const useAgentV2Store = create<AgentV2Store>()(
           get().addMessage(assistantMessage);
         }
         set({ isStreaming: false, streamingPhase: "idle" });
+
+        // Generate title if needed - moved here from sendMessage to ensure all messages are counted
+        const { currentConversation, messages } = get();
+        if (
+          currentConversation?.title === "New Conversation" &&
+          messages.length <= 4  // Only trigger when there are few messages
+        ) {
+          get().generateConversationTitle(
+            currentConversation.id,
+            currentConversation.project_id
+          );
+        }
       },
 
       handleError: (data) => {

@@ -161,6 +161,92 @@ class AgentSessionWorkflow:
         self._tool_count = 0
         self._session_data: Dict[str, Any] = {}
 
+        # Recovery tracking
+        self._recovery_attempts: int = 0
+        self._max_recovery_attempts: int = 3
+
+    def _should_attempt_recovery(self, error_message: str) -> bool:
+        """Check if automatic recovery should be attempted based on error.
+
+        Args:
+            error_message: The error message to evaluate
+
+        Returns:
+            True if recovery should be attempted
+        """
+        # Don't attempt recovery if we've exceeded max attempts
+        if self._recovery_attempts >= self._max_recovery_attempts:
+            workflow.logger.warning(
+                f"Max recovery attempts ({self._max_recovery_attempts}) exceeded"
+            )
+            return False
+
+        # Error patterns that indicate session cache issues
+        recoverable_patterns = [
+            "session",
+            "cache",
+            "not found",
+            "expired",
+            "invalid",
+        ]
+
+        error_lower = error_message.lower()
+        return any(pattern in error_lower for pattern in recoverable_patterns)
+
+    async def _refresh_session_internal(self) -> Dict[str, Any]:
+        """Internal method to refresh session without exposing as update.
+
+        Returns:
+            Refresh result with status
+        """
+        if not self._config:
+            return {"status": "error", "error": "No config available"}
+
+        self._recovery_attempts += 1
+
+        try:
+            # Re-initialize session (force refresh caches)
+            refresh_config = AgentSessionConfig(
+                tenant_id=self._config.tenant_id,
+                project_id=self._config.project_id,
+                agent_mode=self._config.agent_mode,
+                model=self._config.model,
+                api_key=self._config.api_key,
+                base_url=self._config.base_url,
+                temperature=self._config.temperature,
+                max_tokens=self._config.max_tokens,
+                max_steps=self._config.max_steps,
+                mcp_tools_ttl_seconds=0,  # Force refresh
+            )
+
+            init_result = await workflow.execute_activity(
+                initialize_agent_session_activity,
+                refresh_config,
+                start_to_close_timeout=timedelta(seconds=120),
+            )
+
+            if init_result.get("status") == "initialized":
+                self._tool_count = init_result.get("tool_count", 0)
+                self._session_data = init_result.get("session_data", {})
+                # Reset recovery attempts on success
+                self._recovery_attempts = 0
+                return {
+                    "status": "refreshed",
+                    "tool_count": self._tool_count,
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": init_result.get("error", "Refresh failed"),
+                }
+
+        except Exception as e:
+            workflow.logger.error(f"Internal session refresh failed: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+            }
+
     @workflow.run
     async def run(self, config: AgentSessionConfig) -> Dict[str, Any]:
         """
@@ -359,6 +445,47 @@ class AgentSessionWorkflow:
 
         except Exception as e:
             workflow.logger.error(f"Chat execution failed: {e}")
+
+            # Attempt automatic recovery on session-related errors
+            error_msg = str(e)
+            if self._should_attempt_recovery(error_msg):
+                workflow.logger.warning(
+                    f"Attempting automatic session recovery after error: {error_msg}"
+                )
+                try:
+                    refresh_result = await self._refresh_session_internal()
+                    if refresh_result.get("status") == "refreshed":
+                        workflow.logger.info("Session recovered successfully, retrying chat")
+
+                        # Retry the chat request after recovery
+                        result = await workflow.execute_activity(
+                            execute_chat_activity,
+                            {
+                                "conversation_id": request.conversation_id,
+                                "message_id": request.message_id,
+                                "user_message": request.user_message,
+                                "user_id": request.user_id,
+                                "conversation_context": request.conversation_context,
+                                "session_config": effective_config,
+                                "session_data": self._session_data,
+                            },
+                            start_to_close_timeout=timedelta(minutes=10),
+                            retry_policy=retry_policy,
+                        )
+
+                        self._total_chats += 1
+
+                        return AgentChatResult(
+                            conversation_id=request.conversation_id,
+                            message_id=request.message_id,
+                            content=result.get("content", ""),
+                            sequence_number=result.get("sequence_number", 0),
+                            is_error=result.get("is_error", False),
+                            error_message=result.get("error_message"),
+                        )
+                except Exception as recovery_error:
+                    workflow.logger.error(f"Session recovery failed: {recovery_error}")
+
             return AgentChatResult(
                 conversation_id=request.conversation_id,
                 message_id=request.message_id,
