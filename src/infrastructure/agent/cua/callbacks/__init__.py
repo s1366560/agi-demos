@@ -5,9 +5,11 @@ Provides callback adapters for bridging CUA events to MemStack SSE events.
 """
 
 from .memstack_callback import MemStackCallbackAdapter
-from .sse_bridge import SSEBridge
+
+# SSEBridge is deprecated and unused - commented out for future removal
+# from .sse_bridge import SSEBridge
 
 __all__ = [
     "MemStackCallbackAdapter",
-    "SSEBridge",
+    # "SSEBridge",  # Deprecated: unused event bridge
 ]

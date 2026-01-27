@@ -113,14 +113,18 @@ class TestAgentExecutionEventImport:
             sequence_number=2,
         )
 
-        # Verify types match
-        assert thought_persist.event_type == DomainEventType.THOUGHT.value
-        assert act_persist.event_type == DomainEventType.ACT.value
+        # Verify types match - use AgentEventType directly since it's imported
+        from src.domain.events.agent_events import AgentEventType
+        assert thought_persist.event_type == AgentEventType.THOUGHT.value
+        assert act_persist.event_type == AgentEventType.ACT.value
 
     def test_to_sse_format_consistency(self):
         """to_sse_format should produce consistent output."""
         from datetime import datetime
-        from src.domain.events.agent_events import AgentThoughtEvent
+        from src.domain.events.agent_events import (
+            AgentThoughtEvent,
+            AgentEventType,
+        )
         from src.domain.model.agent.agent_execution_event import AgentExecutionEvent
 
         domain_event = AgentThoughtEvent(content="Test", thought_level="task")
@@ -135,4 +139,4 @@ class TestAgentExecutionEventImport:
         assert "type" in sse_format
         assert "data" in sse_format
         assert "timestamp" in sse_format
-        assert sse_format["type"] == DomainEventType.THOUGHT.value
+        assert sse_format["type"] == AgentEventType.THOUGHT.value

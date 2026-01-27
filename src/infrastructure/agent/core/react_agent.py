@@ -1039,207 +1039,83 @@ class ReActAgent:
 
     def _convert_domain_event(self, domain_event: AgentDomainEvent) -> Optional[Dict[str, Any]]:
         """
-        Convert AgentDomainEvent to legacy event format.
+        Convert AgentDomainEvent to event dictionary format.
 
-        Maps new AgentEventType to existing event types expected by frontend.
+        Uses the unified to_event_dict() method with minimal customization
+        for backward compatibility.
 
         Args:
             domain_event: AgentDomainEvent from processor
 
         Returns:
-            Legacy event dict or None to skip
+            Event dict or None to skip
         """
         event_type = domain_event.event_type
-        timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
 
         # Debug log to track event conversion
         logger.info(f"[ReActAgent] Converting Domain event: type={event_type}")
 
-        # Map AgentEventType to legacy types
-        if event_type == AgentEventType.START:
-            return {
-                "type": "start",
-                "data": {},
-                "timestamp": timestamp,
-            }
+        # Use unified serialization for most events
+        event_dict = domain_event.to_event_dict()
 
-        elif event_type == AgentEventType.THOUGHT:
-            if isinstance(domain_event, AgentThoughtEvent):
-                return {
-                    "type": "thought",
-                    "data": {
-                        "thought": domain_event.content,
-                        "thought_level": domain_event.thought_level,
-                    },
-                    "timestamp": timestamp,
-                }
+        # Special handling for specific events to maintain backward compatibility
 
-        elif event_type == AgentEventType.THOUGHT_DELTA:
-            if isinstance(domain_event, AgentThoughtDeltaEvent):
-                return {
-                    "type": "thought_delta",
-                    "data": {
-                        "delta": domain_event.delta,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.TEXT_START:
-            return {
-                "type": "text_start",
-                "data": {},
-                "timestamp": timestamp,
-            }
-
-        elif event_type == AgentEventType.TEXT_DELTA:
-            if isinstance(domain_event, AgentTextDeltaEvent):
-                return {
-                    "type": "text_delta",
-                    "data": {
-                        "delta": domain_event.delta,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.TEXT_END:
-            if isinstance(domain_event, AgentTextEndEvent):
-                return {
-                    "type": "text_end",
-                    "data": {
-                        "full_text": domain_event.full_text or "",
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.ACT:
-            if isinstance(domain_event, AgentActEvent):
-                return {
-                    "type": "act",
-                    "data": {
-                        "tool_name": domain_event.tool_name,
-                        "tool_input": domain_event.tool_input or {},
-                        "call_id": domain_event.call_id or "",
-                        "status": domain_event.status,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.OBSERVE:
-            if isinstance(domain_event, AgentObserveEvent):
-                # observation field is redundant but kept for legacy compat
-                observation = (
-                    domain_event.result
-                    if domain_event.result is not None
-                    else (domain_event.error or "")
-                )
-                return {
-                    "type": "observe",
-                    "data": {
-                        "tool_name": domain_event.tool_name,
-                        "call_id": domain_event.call_id or "",
-                        "result": domain_event.result,
-                        "error": domain_event.error,
-                        "observation": observation,
-                        "duration_ms": domain_event.duration_ms,
-                        "status": domain_event.status,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.WORK_PLAN:
-            if isinstance(domain_event, AgentWorkPlanEvent):
-                # Pass work_plan event to agent_service for persistence
-                return {
-                    "type": "work_plan",
-                    "data": domain_event.plan,  # Contains plan_id, steps, etc.
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.STEP_START:
-            if isinstance(domain_event, AgentStepStartEvent):
-                return {
-                    "type": "step_start",
-                    "data": {
-                        "step_number": domain_event.step_index,
-                        "description": domain_event.description,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.STEP_END:
-            if isinstance(domain_event, AgentStepEndEvent):
-                return {
-                    "type": "step_end",
-                    "data": {
-                        "step_number": domain_event.step_index,
-                        "success": domain_event.status == "completed",
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.COST_UPDATE:
-            if isinstance(domain_event, AgentCostUpdateEvent):
-                return {
-                    "type": "cost_update",
-                    "data": {
-                        "cost": domain_event.cost,
-                        "tokens": domain_event.tokens,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.ERROR:
-            if isinstance(domain_event, AgentErrorEvent):
-                return {
-                    "type": "error",
-                    "data": {
-                        "message": domain_event.message,
-                        "code": domain_event.code or "UNKNOWN",
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.COMPLETE:
-            # Complete is handled separately
+        # COMPLETE event is handled separately in stream()
+        if event_type == AgentEventType.COMPLETE:
             return None
 
-        elif event_type == AgentEventType.RETRY:
-            if isinstance(domain_event, AgentRetryEvent):
-                return {
-                    "type": "retry",
-                    "data": {
-                        "attempt": domain_event.attempt,
-                        "delay_ms": domain_event.delay_ms,
-                        "message": domain_event.message,
-                    },
-                    "timestamp": timestamp,
-                }
+        # OBSERVE event: add redundant 'observation' field for legacy compat
+        if event_type == AgentEventType.OBSERVE and isinstance(domain_event, AgentObserveEvent):
+            observation = (
+                domain_event.result
+                if domain_event.result is not None
+                else (domain_event.error or "")
+            )
+            event_dict["data"]["observation"] = observation
 
-        elif event_type == AgentEventType.DOOM_LOOP_DETECTED:
-            if isinstance(domain_event, AgentDoomLoopDetectedEvent):
-                return {
-                    "type": "doom_loop",
-                    "data": {
-                        "tool": domain_event.tool,
-                        "input": domain_event.input,
-                    },
-                    "timestamp": timestamp,
-                }
+        # DOOM_LOOP_DETECTED: rename to 'doom_loop' for frontend compatibility
+        if event_type == AgentEventType.DOOM_LOOP_DETECTED:
+            event_dict["type"] = "doom_loop"
 
-        elif event_type == AgentEventType.PERMISSION_ASKED:
-            if isinstance(domain_event, AgentPermissionAskedEvent):
-                return {
-                    "type": "permission_asked",
-                    "data": {
-                        "request_id": domain_event.request_id,
-                        "permission": domain_event.permission,
-                        "patterns": domain_event.patterns,
-                    },
-                    "timestamp": timestamp,
-                }
+        # WORK_PLAN: data should be the plan directly
+        if event_type == AgentEventType.WORK_PLAN and isinstance(domain_event, AgentWorkPlanEvent):
+            event_dict["data"] = domain_event.plan
 
-        # Skip other event types
-        return None
+        # STEP_START: rename step_index to step_number
+        if event_type == AgentEventType.STEP_START and isinstance(domain_event, AgentStepStartEvent):
+            event_dict["data"] = {
+                "step_number": domain_event.step_index,
+                "description": domain_event.description,
+            }
+
+        # STEP_END: rename step_index to step_number, add success flag
+        if event_type == AgentEventType.STEP_END and isinstance(domain_event, AgentStepEndEvent):
+            event_dict["data"] = {
+                "step_number": domain_event.step_index,
+                "success": domain_event.status == "completed",
+            }
+
+        # THOUGHT: rename content to thought
+        if event_type == AgentEventType.THOUGHT and isinstance(domain_event, AgentThoughtEvent):
+            event_dict["data"] = {
+                "thought": domain_event.content,
+                "thought_level": domain_event.thought_level,
+            }
+
+        # ACT: normalize call_id and tool_input
+        if event_type == AgentEventType.ACT and isinstance(domain_event, AgentActEvent):
+            event_dict["data"] = {
+                "tool_name": domain_event.tool_name,
+                "tool_input": domain_event.tool_input or {},
+                "call_id": domain_event.call_id or "",
+                "status": domain_event.status,
+            }
+
+        # ERROR: provide default code
+        if event_type == AgentEventType.ERROR and isinstance(domain_event, AgentErrorEvent):
+            event_dict["data"]["code"] = domain_event.code or "UNKNOWN"
+
+        return event_dict
 
     async def astream_multi_level(
         self,

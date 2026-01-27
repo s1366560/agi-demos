@@ -18,7 +18,9 @@ This module contains domain entities for:
 """
 
 from src.domain.model.agent.agent_execution import AgentExecution, ExecutionStatus
-from src.domain.model.agent.agent_execution_event import AgentEventType, AgentExecutionEvent
+# AgentEventType is imported from domain.events.agent_events (unified event types)
+from src.domain.model.agent.agent_execution_event import AgentExecutionEvent
+from src.domain.events.agent_events import AgentEventType
 from src.domain.model.agent.agent_mode import AgentMode
 from src.domain.model.agent.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.execution_checkpoint import CheckpointType, ExecutionCheckpoint

@@ -91,6 +91,24 @@ class AgentDomainEvent(BaseModel):
     class Config:
         frozen = True  # Immutable events
 
+    def to_event_dict(self) -> Dict[str, Any]:
+        """
+        Convert to SSE/event dictionary format for streaming.
+
+        This provides a unified serialization method for all domain events,
+        producing the format expected by WebSocket/SSE clients.
+
+        Returns:
+            Dictionary with keys: type, data, timestamp
+        """
+        from datetime import datetime
+
+        return {
+            "type": self.event_type.value,
+            "data": self.model_dump(exclude={"event_type", "timestamp"}),
+            "timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
+        }
+
 
 # === Status Events ===
 

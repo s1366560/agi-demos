@@ -7,7 +7,11 @@ import pytest
 
 from src.application.services.agent_service import AgentService
 from src.domain.model.agent import Conversation, ConversationStatus
-from src.domain.model.agent.agent_execution_event import AgentEventType, AgentExecutionEvent
+from src.domain.model.agent.agent_execution_event import (
+    AgentExecutionEvent,
+    USER_MESSAGE,  # Timeline-specific event type values
+)
+from src.domain.events.agent_events import AgentEventType
 
 
 class MockAgentService(AgentService):
@@ -215,7 +219,7 @@ class TestAgentServiceAuthorization:
                 id="event-1",
                 conversation_id="conv-1",
                 message_id="",
-                event_type=AgentEventType.USER_MESSAGE,
+                event_type=USER_MESSAGE,  # Timeline-specific event type
                 event_data={"role": "user", "content": "Hello"},
                 sequence_number=1,
                 created_at=datetime.now(),
