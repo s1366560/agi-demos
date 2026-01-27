@@ -5,49 +5,22 @@
  * within a tenant but isolated between tenants.
  *
  * API Endpoints:
- * - GET /api/v1/agent/workflows/patterns - List patterns for tenant
- * - GET /api/v1/agent/workflows/patterns/{id} - Get pattern by ID
- * - DELETE /api/v1/agent/workflows/patterns/{id} - Delete pattern
- * - POST /api/v1/agent/workflows/patterns/reset - Reset all patterns
+ * - GET /agent/workflows/patterns - List patterns for tenant
+ * - GET /agent/workflows/patterns/{id} - Get pattern by ID
+ * - DELETE /agent/workflows/patterns/{id} - Delete pattern
+ * - POST /agent/workflows/patterns/reset - Reset all patterns
  */
 
 import axios from 'axios';
+import { httpClient } from './client/httpClient';
 import type {
   WorkflowPattern,
   PatternsListResponse,
   ResetPatternsResponse,
 } from '../types/agent';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Handle auth errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// Use centralized HTTP client
+const api = httpClient;
 
 /**
  * Options for listing patterns
@@ -107,7 +80,7 @@ class PatternServiceImpl implements PatternService {
 
     try {
       const response = await api.get<PatternsListResponse>(
-        '/api/v1/agent/workflows/patterns',
+        '/agent/workflows/patterns',
         { params }
       );
       return response.data;
@@ -135,7 +108,7 @@ class PatternServiceImpl implements PatternService {
   async getPattern(patternId: string, tenantId: string): Promise<WorkflowPattern> {
     try {
       const response = await api.get<WorkflowPattern>(
-        `/api/v1/agent/workflows/patterns/${patternId}`,
+        `/agent/workflows/patterns/${patternId}`,
         { params: { tenant_id: tenantId } }
       );
       return response.data;
@@ -162,7 +135,7 @@ class PatternServiceImpl implements PatternService {
    */
   async deletePattern(patternId: string, tenantId: string): Promise<void> {
     try {
-      await api.delete(`/api/v1/agent/workflows/patterns/${patternId}`, {
+      await api.delete(`/agent/workflows/patterns/${patternId}`, {
         params: { tenant_id: tenantId },
       });
     } catch (error) {
@@ -191,7 +164,7 @@ class PatternServiceImpl implements PatternService {
   async resetPatterns(tenantId: string): Promise<ResetPatternsResponse> {
     try {
       const response = await api.post<ResetPatternsResponse>(
-        '/api/v1/agent/workflows/patterns/reset',
+        '/agent/workflows/patterns/reset',
         null,
         { params: { tenant_id: tenantId } }
       );

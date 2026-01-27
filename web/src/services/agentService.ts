@@ -3,11 +3,12 @@
  *
  * This service provides methods for managing conversations and
  * streaming agent responses using WebSocket (replacing SSE).
- * 
+ *
  * Supports multiple browser tabs per user via unique session_id.
  */
 
 import axios from "axios";
+import { httpClient } from "./client/httpClient";
 import type {
   AgentEventType,
   AgentService,
@@ -23,36 +24,8 @@ import type {
   ToolsListResponse,
 } from "../types/agent";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Handle auth errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// Use centralized HTTP client for REST API calls
+const api = httpClient;
 
 /**
  * Generate a unique session ID for this browser tab.
@@ -154,7 +127,7 @@ class AgentServiceImpl implements AgentService {
         ? new URL(import.meta.env.VITE_API_URL).host
         : window.location.host;
       // Include session_id in WebSocket URL for multi-tab support
-      const wsUrl = `${protocol}//${host}/api/v1/agent/ws?token=${token}&session_id=${this.sessionId}`;
+      const wsUrl = `${protocol}//${host}/agent/ws?token=${token}&session_id=${this.sessionId}`;
 
       try {
         this.ws = new WebSocket(wsUrl);
@@ -477,10 +450,10 @@ class AgentServiceImpl implements AgentService {
     request: CreateConversationRequest
   ): Promise<CreateConversationResponse> {
     const response = await api.post<CreateConversationResponse>(
-      "/api/v1/agent/conversations",
+      "/agent/conversations",
       request
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -499,10 +472,10 @@ class AgentServiceImpl implements AgentService {
       params.status = status;
     }
     const response = await api.get<Conversation[]>(
-      "/api/v1/agent/conversations",
+      "/agent/conversations",
       { params }
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -514,12 +487,12 @@ class AgentServiceImpl implements AgentService {
   ): Promise<Conversation | null> {
     try {
       const response = await api.get<Conversation>(
-        `/api/v1/agent/conversations/${conversationId}`,
+        `/agent/conversations/${conversationId}`,
         {
           params: { project_id: projectId },
         }
       );
-      return response.data;
+      return response;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         return null;
@@ -632,7 +605,7 @@ class AgentServiceImpl implements AgentService {
     conversationId: string,
     projectId: string
   ): Promise<void> {
-    await api.delete(`/api/v1/agent/conversations/${conversationId}`, {
+    await api.delete(`/agent/conversations/${conversationId}`, {
       params: { project_id: projectId },
     });
   }
@@ -645,13 +618,13 @@ class AgentServiceImpl implements AgentService {
     projectId: string
   ): Promise<Conversation> {
     const response = await api.post<Conversation>(
-      `/api/v1/agent/conversations/${conversationId}/generate-title`,
+      `/agent/conversations/${conversationId}/generate-title`,
       {},
       {
         params: { project_id: projectId },
       }
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -684,15 +657,15 @@ class AgentServiceImpl implements AgentService {
       first_sequence?: number | null;
       last_sequence?: number | null;
     } & ConversationMessagesResponse>(
-      `/api/v1/agent/conversations/${conversationId}/messages`,
+      `/agent/conversations/${conversationId}/messages`,
       { params }
     );
     // Normalize optional fields to required fields with defaults
     return {
-      ...response.data,
-      has_more: response.data.has_more ?? false,
-      first_sequence: response.data.first_sequence ?? null,
-      last_sequence: response.data.last_sequence ?? null,
+      ...response,
+      has_more: response.has_more ?? false,
+      first_sequence: response.first_sequence ?? null,
+      last_sequence: response.last_sequence ?? null,
     };
   }
 
@@ -700,8 +673,8 @@ class AgentServiceImpl implements AgentService {
    * List available tools
    */
   async listTools(): Promise<ToolsListResponse> {
-    const response = await api.get<ToolsListResponse>("/api/v1/agent/tools");
-    return response.data;
+    const response = await api.get<ToolsListResponse>("/agent/tools");
+    return response;
   }
 
   /**
@@ -715,7 +688,7 @@ class AgentServiceImpl implements AgentService {
     toolFilter?: string
   ): Promise<ExecutionHistoryResponse> {
     const response = await api.get<ExecutionHistoryResponse>(
-      `/api/v1/agent/conversations/${conversationId}/execution`,
+      `/agent/conversations/${conversationId}/execution`,
       {
         params: {
           project_id: projectId,
@@ -725,7 +698,7 @@ class AgentServiceImpl implements AgentService {
         },
       }
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -736,12 +709,12 @@ class AgentServiceImpl implements AgentService {
     projectId: string
   ): Promise<ExecutionStatsResponse> {
     const response = await api.get<ExecutionStatsResponse>(
-      `/api/v1/agent/conversations/${conversationId}/execution/stats`,
+      `/agent/conversations/${conversationId}/execution/stats`,
       {
         params: { project_id: projectId },
       }
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -761,10 +734,10 @@ class AgentServiceImpl implements AgentService {
       params.message_id = messageId;
     }
     const response = await api.get<ToolExecutionsResponse>(
-      `/api/v1/agent/conversations/${conversationId}/tool-executions`,
+      `/agent/conversations/${conversationId}/tool-executions`,
       { params }
     );
-    return response.data;
+    return response;
   }
 
   /**
@@ -786,13 +759,13 @@ class AgentServiceImpl implements AgentService {
     const response = await api.get<{
       events: Array<{ type: string; data: any; timestamp: string | null }>;
       has_more: boolean;
-    }>(`/api/v1/agent/conversations/${conversationId}/events`, {
+    }>(`/agent/conversations/${conversationId}/events`, {
       params: {
         from_sequence: fromSequence,
         limit,
       },
     });
-    return response.data;
+    return response;
   }
 
   /**
@@ -812,8 +785,8 @@ class AgentServiceImpl implements AgentService {
       last_sequence: number;
       current_message_id: string | null;
       conversation_id: string;
-    }>(`/api/v1/agent/conversations/${conversationId}/execution-status`);
-    return response.data;
+    }>(`/agent/conversations/${conversationId}/execution-status`);
+    return response;
   }
 
   /**

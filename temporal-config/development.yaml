@@ -1,0 +1,17 @@
+# Temporal Dynamic Configuration for Development
+# See: https://docs.temporal.io/references/server-options#dynamic-configuration
+
+# Global limits
+frontend.rps:
+  - value: 10000
+    constraints: { }
+
+# Namespace limits
+namespace.cache.initialSize:
+  - value: 1000
+    constraints: { }
+
+# Worker options
+worker.workflowCacheCacheInitialSize:
+  - value: 1000
+    constraints: { }

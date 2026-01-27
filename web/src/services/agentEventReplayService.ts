@@ -7,24 +7,11 @@
  * - Loading historical conversation state
  */
 
-import axios from "axios";
+import { httpClient } from "./client/httpClient";
 import type { AgentEventType, AgentStreamHandler } from "../types/agent";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Use centralized HTTP client
+const api = httpClient;
 
 /**
  * Replay event response from backend
@@ -79,7 +66,7 @@ export class AgentEventReplayService {
     try {
       while (hasMore) {
         const response = await api.get<ReplayResponse>(
-          `/api/v1/agent/conversations/${conversationId}/events`,
+          `/agent/conversations/${conversationId}/events`,
           {
             params: {
               from_sequence: currentSequence,
@@ -88,7 +75,7 @@ export class AgentEventReplayService {
           }
         );
 
-        const { events, has_more: hasMoreEvents } = response.data;
+        const { events, has_more: hasMoreEvents } = response;
 
         // Apply each event to the handler
         for (const event of events) {
@@ -122,9 +109,9 @@ export class AgentEventReplayService {
     conversationId: string
   ): Promise<ExecutionStatusResponse> {
     const response = await api.get<ExecutionStatusResponse>(
-      `/api/v1/agent/conversations/${conversationId}/execution-status`
+      `/agent/conversations/${conversationId}/execution-status`
     );
-    return response.data;
+    return response;
   }
 
   /**

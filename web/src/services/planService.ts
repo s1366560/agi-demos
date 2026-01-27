@@ -5,7 +5,7 @@
  * managing plan documents during the planning phase.
  */
 
-import axios from "axios";
+import { httpClient } from "./client/httpClient";
 import type {
   EnterPlanModeRequest,
   ExitPlanModeRequest,
@@ -14,36 +14,8 @@ import type {
   UpdatePlanRequest,
 } from "../types/agent";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Handle auth errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// Use centralized HTTP client
+const api = httpClient;
 
 /**
  * Plan service interface
@@ -66,7 +38,7 @@ class PlanServiceImpl implements PlanService {
    */
   async enterPlanMode(request: EnterPlanModeRequest): Promise<PlanDocument> {
     const response = await api.post<PlanDocument>(
-      "/api/v1/agent/plan/enter",
+      "/agent/plan/enter",
       request
     );
     return response.data;
@@ -77,7 +49,7 @@ class PlanServiceImpl implements PlanService {
    */
   async exitPlanMode(request: ExitPlanModeRequest): Promise<PlanDocument> {
     const response = await api.post<PlanDocument>(
-      "/api/v1/agent/plan/exit",
+      "/agent/plan/exit",
       request
     );
     return response.data;
@@ -88,7 +60,7 @@ class PlanServiceImpl implements PlanService {
    */
   async getPlan(planId: string): Promise<PlanDocument> {
     const response = await api.get<PlanDocument>(
-      `/api/v1/agent/plan/${planId}`
+      `/agent/plan/${planId}`
     );
     return response.data;
   }
@@ -98,7 +70,7 @@ class PlanServiceImpl implements PlanService {
    */
   async getConversationPlans(conversationId: string): Promise<PlanDocument[]> {
     const response = await api.get<PlanDocument[]>(
-      `/api/v1/agent/conversations/${conversationId}/plans`
+      `/agent/conversations/${conversationId}/plans`
     );
     return response.data;
   }
@@ -111,7 +83,7 @@ class PlanServiceImpl implements PlanService {
     request: UpdatePlanRequest
   ): Promise<PlanDocument> {
     const response = await api.put<PlanDocument>(
-      `/api/v1/agent/plan/${planId}`,
+      `/agent/plan/${planId}`,
       request
     );
     return response.data;
@@ -122,7 +94,7 @@ class PlanServiceImpl implements PlanService {
    */
   async getPlanModeStatus(conversationId: string): Promise<PlanModeStatus> {
     const response = await api.get<PlanModeStatus>(
-      `/api/v1/agent/conversations/${conversationId}/plan-mode`
+      `/agent/conversations/${conversationId}/plan-mode`
     );
     return response.data;
   }
