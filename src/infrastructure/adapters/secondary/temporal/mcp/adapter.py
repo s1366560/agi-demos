@@ -356,12 +356,23 @@ class MCPTemporalAdapter:
             )
 
         except Exception as e:
-            logger.exception(f"Error getting MCP server status: {e}")
+            # Check if this is a "workflow not ready" error vs actual error
+            error_str = str(e)
+            if "no poller seen" in error_str or "workflow not found" in error_str.lower():
+                # Workflow not started yet - expected during startup, log at debug level
+                logger.debug(
+                    f"MCP server '{server_name}' workflow not ready yet: {e}"
+                )
+            else:
+                # Actual error - log at warning level
+                logger.warning(
+                    f"Error querying MCP server '{server_name}' status: {e}"
+                )
             return MCPServerStatus(
                 server_name=server_name,
                 tenant_id=tenant_id,
                 connected=False,
-                error=str(e),
+                error=None,  # Don't expose "not ready" as an error to callers
                 workflow_id=workflow_id,
             )
 

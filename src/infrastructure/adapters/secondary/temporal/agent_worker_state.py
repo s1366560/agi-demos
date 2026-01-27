@@ -290,6 +290,7 @@ async def get_or_create_tools(
     agent_mode: str = "default",
     mcp_tools_ttl_seconds: int = 300,  # New: MCP tools TTL (5 minutes)
     force_mcp_refresh: bool = False,  # New: Force MCP tools refresh
+    mcp_retry_on_empty: bool = True,  # New: Retry when MCP tools are empty
 ) -> Dict[str, Any]:
     """Get or create a cached tool set for a project, including MCP tools and skill_loader.
 
@@ -306,6 +307,7 @@ async def get_or_create_tools(
         agent_mode: Agent mode for skill filtering (e.g., "default", "plan")
         mcp_tools_ttl_seconds: TTL for MCP tools cache (default 5 minutes)
         force_mcp_refresh: Force refresh MCP tools (bypass cache)
+        mcp_retry_on_empty: Retry loading when MCP tools are empty (default True)
 
     Returns:
         Dictionary of tool name -> tool instance (built-in + MCP + skill_loader)
@@ -332,7 +334,7 @@ async def get_or_create_tools(
     # 2. Copy built-in tools (avoid mutating cache)
     tools = dict(_tools_cache[project_id])
 
-    # 3. Load MCP tools with TTL cache (optimized: avoids frequent Temporal calls)
+    # 3. Load MCP tools with TTL cache and retry logic
     if _mcp_temporal_adapter is not None:
         try:
             # Try to get from cache first (unless force refresh)
@@ -344,27 +346,49 @@ async def get_or_create_tools(
                 )
 
             if mcp_tools is None:
-                # Cache miss or forced refresh - load from Temporal
-                start_time = time.time()
+                # Cache miss or forced refresh - load from Temporal with retry logic
+                # This handles the case where MCP servers haven't started yet
                 from src.infrastructure.mcp.temporal_tool_loader import MCPTemporalToolLoader
 
                 loader = MCPTemporalToolLoader(
                     mcp_temporal_adapter=_mcp_temporal_adapter,
                     tenant_id=tenant_id,
                 )
-                # Load fresh tools
-                mcp_tools = await loader.load_all_tools(refresh=True)
 
-                # Update cache
+                # Retry logic: if no MCP tools loaded and retry is enabled, retry with backoff
+                # This handles the startup race condition where Agent Worker starts
+                # before MCP servers are fully initialized
+                max_retries = 3 if mcp_retry_on_empty else 1
+                base_delay = 2.0  # Start with 2 second delay
+                mcp_tools = {}
+
+                for attempt in range(max_retries):
+                    start_time = time.time()
+                    mcp_tools = await loader.load_all_tools(refresh=True)
+                    elapsed_ms = (time.time() - start_time) * 1000
+
+                    # If we got tools or this is the last attempt, we're done
+                    if len(mcp_tools) > 0 or attempt == max_retries - 1:
+                        logger.info(
+                            f"Agent Worker: Loaded {len(mcp_tools)} MCP tools for tenant {tenant_id} "
+                            f"in {elapsed_ms:.1f}ms (cache updated)"
+                        )
+                        break
+
+                    # No tools loaded - MCP servers might not be ready yet
+                    # Wait with exponential backoff before retry
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(
+                        f"Agent Worker: No MCP tools loaded for tenant {tenant_id} "
+                        f"(attempt {attempt + 1}/{max_retries}). "
+                        f"MCP servers may not be ready yet. Retrying in {delay:.1f}s..."
+                    )
+                    await asyncio.sleep(delay)
+
+                # Update cache with whatever tools we got (may be empty)
                 await update_mcp_tools_cache(
                     tenant_id=tenant_id,
                     tools=mcp_tools,
-                )
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                logger.info(
-                    f"Agent Worker: Loaded {len(mcp_tools)} MCP tools for tenant {tenant_id} "
-                    f"in {elapsed_ms:.1f}ms (cache updated)"
                 )
             else:
                 logger.debug(
