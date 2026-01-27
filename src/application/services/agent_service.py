@@ -15,6 +15,7 @@ MCP (Model Context Protocol) Support:
 
 import asyncio
 import logging
+import time as time_module
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
@@ -88,7 +89,6 @@ class AgentService(AgentServicePort):
         tool_execution_record_repository: "ToolExecutionRecordRepository | None" = None,
         agent_execution_event_repository: "AgentExecutionEventRepository | None" = None,
         execution_checkpoint_repository: "ExecutionCheckpointRepository | None" = None,
-        sandbox_service=None,
         storage_service=None,
         mcp_temporal_adapter: "Optional[Any]" = None,
         db_session=None,
@@ -114,7 +114,6 @@ class AgentService(AgentServicePort):
             tool_execution_record_repository: Optional repository for tool execution history
             agent_execution_event_repository: Optional repository for SSE event persistence
             execution_checkpoint_repository: Optional repository for execution checkpoints
-            sandbox_service: Optional SandboxPort for code execution (used by CodeExecutorTool)
             storage_service: Optional StorageServicePort for file storage (used by CodeExecutorTool)
             mcp_temporal_adapter: Optional MCPTemporalAdapter for Temporal MCP integration
             db_session: Optional database session (reserved for future use)
@@ -136,7 +135,6 @@ class AgentService(AgentServicePort):
         self._tool_execution_record_repo = tool_execution_record_repository
         self._agent_execution_event_repo = agent_execution_event_repository
         self._execution_checkpoint_repo = execution_checkpoint_repository
-        self._sandbox_service = sandbox_service
         self._storage_service = storage_service
         self._mcp_temporal_adapter = mcp_temporal_adapter
         self._db_session = db_session
@@ -769,11 +767,65 @@ class AgentService(AgentServicePort):
                     }
                     last_sequence_id = max(last_sequence_id, seq)
 
-                    # Stop when completion is seen
+                    # Stop when completion is seen, but continue briefly for delayed events
+                    # (e.g., title_generated which is published after complete)
                     if event_type in ("complete", "error"):
                         logger.info(
-                            f"[AgentService] Stream completed from Redis Stream: type={event_type}"
+                            f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
+                            f"reading delayed events for 2 seconds"
                         )
+                        # Continue reading for a short time to catch delayed events like title_generated
+                        # These events are published AFTER the complete event by the backend
+                        delayed_start = time_module.time()
+                        max_delay = 2.0  # Read for up to 2 more seconds
+                        try:
+                            async for delayed_message in self._event_bus.stream_read(
+                                stream_key, last_id="0", count=100, block_ms=200
+                            ):
+                                delayed_event = delayed_message.get("data", {})
+                                delayed_type = delayed_event.get("type", "unknown")
+                                delayed_seq = delayed_event.get("seq", 0)
+                                delayed_data = delayed_event.get("data", {})
+
+                                # Skip already seen events
+                                if delayed_seq <= last_sequence_id:
+                                    continue
+
+                                # For conversation-level events (like title_generated), check conversation_id
+                                # For message-level events, check message_id
+                                event_message_id = delayed_data.get("message_id")
+                                event_conversation_id = delayed_data.get("conversation_id")
+
+                                # Skip events for different conversations
+                                if event_conversation_id and event_conversation_id != conversation_id:
+                                    continue
+
+                                # Skip message events for different messages
+                                if event_message_id and event_message_id != message_id:
+                                    continue
+
+                                # Only process specific delayed events (conversation-level events)
+                                # These events don't have message_id but are valid for this conversation
+                                if delayed_type in ("title_generated",):
+                                    logger.info(
+                                        f"[AgentService] Yielding delayed event: type={delayed_type}, "
+                                        f"conversation_id={event_conversation_id}"
+                                    )
+                                    yield {
+                                        "type": delayed_type,
+                                        "data": delayed_data,
+                                        "timestamp": datetime.utcnow().isoformat(),
+                                        "id": delayed_seq,
+                                    }
+                                    last_sequence_id = max(last_sequence_id, delayed_seq)
+
+                                # Timeout check
+                                if time_module.time() - delayed_start > max_delay:
+                                    break
+                        except Exception as delay_err:
+                            logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
+
+                        logger.info("[AgentService] Stream ended (after delayed event window)")
                         return
             except Exception as e:
                 logger.error(

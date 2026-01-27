@@ -323,24 +323,6 @@ class DIContainer:
             endpoint_url=self._settings.s3_endpoint_url,
         )
 
-    def sandbox_service(self):
-        """Get SandboxPort for code execution in isolated containers.
-
-        Returns:
-            DockerSandboxAdapter configured with settings from environment.
-        """
-        from src.infrastructure.adapters.secondary.sandbox.docker_sandbox_adapter import (
-            DockerSandboxAdapter,
-        )
-
-        return DockerSandboxAdapter(
-            default_image=self._settings.sandbox_default_image,
-            default_timeout=self._settings.sandbox_timeout_seconds,
-            default_memory_limit=self._settings.sandbox_memory_limit,
-            default_cpu_limit=self._settings.sandbox_cpu_limit,
-            network_isolated=self._settings.sandbox_network_isolated,
-        )
-
     # === Application Services ===
 
     def project_service(self) -> ProjectService:
@@ -423,7 +405,6 @@ class DIContainer:
             tool_execution_record_repository=self.tool_execution_record_repository(),
             agent_execution_event_repository=self.agent_execution_event_repository(),
             execution_checkpoint_repository=self.execution_checkpoint_repository(),
-            sandbox_service=self.sandbox_service(),
             storage_service=self.storage_service(),
             mcp_temporal_adapter=self.get_mcp_temporal_adapter_sync(),
             db_session=self._db,
