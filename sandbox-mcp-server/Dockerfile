@@ -142,7 +142,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     -o /usr/local/bin/ttyd && \
     chmod +x /usr/local/bin/ttyd
 
-# Install desktop environment (GNOME) for remote desktop
+# Install desktop environment (XFCE) for remote desktop
 ENV DESKTOP_ENABLED=true
 ENV DESKTOP_RESOLUTION=1280x720
 ENV DESKTOP_PORT=6080
@@ -150,34 +150,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # X11 server and virtual framebuffer
     xorg \
     xvfb \
-    # GNOME desktop (minimal install)
-    gnome-session \
-    gnome-shell \
-    gnome-terminal \
-    nautilus \
-    gnome-control-center \
-    gnome-system-monitor \
+    # XFCE desktop (lightweight, modular)
+    xfce4 \
+    xfce4-goodies \
+    xfce4-terminal \
+    xfce4-taskmanager \
+    thunar \
     # Themes and icons
-    yaru-theme-icon \
-    humanity-icon-theme \
-    # Additional utilities for GNOME
+    gtk2-engines-murrine \
+    gtk2-engines-pixbuf \
+    xfce4-indicator-plugin \
+    xfce4-places-plugin \
+    # Additional utilities for XFCE
     dbus-x11 \
     dconf-cli \
     dconf-gsettings-backend \
     gsettings-desktop-schemas \
+    # VNC server
+    x11vnc \
     # Fonts for better rendering
     fonts-freefont-ttf \
     fonts-noto-cjk \
     fonts-noto-color-emoji \
-    # GNOME core dependencies for container use
-    gnome-shell-extensions \
-    gnome-settings-daemon \
+    # XFCE settings daemon for container use
+    xfce4-settings \
+    xfconf \
     # systemd user session replacement (for container)
     libglib2.0-bin \
+    # TigerVNC server (replaces x11vnc for better performance)
+    tigervnc-standalone-server \
+    tigervnc-tools \
     && rm -rf /var/lib/apt/lists/*
-
-# Install x11vnc separately (needed for VNC server)
-RUN apt-get update && apt-get install -y x11vnc && rm -rf /var/lib/apt/lists/*
 
 # Install noVNC for web-based VNC client
 ENV NOVNC_VERSION=1.6.0
@@ -222,6 +225,16 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Set workspace ownership
 RUN chown -R sandbox:sandbox /workspace
 
+# Copy XFCE configuration files (optimized for VNC)
+COPY docker/xfce-configs/ /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
+COPY docker/xfce-configs/whiskermenu-1.rc /etc/xdg/xfce4/panel/
+COPY docker/xfce-configs/autostart/ /etc/xdg/autostart/
+
+# Copy TigerVNC configuration files
+COPY docker/vnc-configs/vncserver-config /etc/vnc/config
+COPY docker/vnc-configs/xstartup /etc/vnc/xstartup.template
+RUN chmod +x /etc/vnc/xstartup.template
+
 # Copy and setup entrypoint script (runs as root, uses sudo for user switching)
 COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
@@ -232,8 +245,8 @@ RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 # Set working directory
 WORKDIR /workspace
 
-# Health check (GNOME needs more startup time)
-HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
+# Health check (XFCE starts faster than GNOME)
+HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
 
 # Expose ports: MCP WebSocket (8765), Web Terminal (7681), noVNC (6080)

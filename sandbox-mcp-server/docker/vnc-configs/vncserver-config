@@ -1,0 +1,39 @@
+# TigerVNC Server Configuration
+# This file controls the default settings for VNC server sessions
+
+# VNC geometry (screen resolution)
+# Can be overridden by command-line: vncserver -geometry 1920x1080 :1
+$geometry = "1280x720";
+
+# Color depth (24 = true color)
+$depth = 24;
+
+# VNC encoding - prefer Tight for web VNC via noVNC
+# Options: Tight, ZRLE, H264, RGB, etc.
+$encoding = "Tight";
+
+# Compression level (0-9, higher = more compression, more CPU)
+# Level 5 provides good balance between compression and CPU usage
+$compressionLevel = 5;
+
+# JPEG quality for images (0-9, higher = better quality, more bandwidth)
+# Level 8 provides good visual quality with reasonable bandwidth
+$jpegQuality = 8;
+
+# Security settings for container use
+# Disable authentication for local container use
+$securityTypes = "None";
+
+# Allow connections from any host (required for noVNC websockify)
+$localhost = "no";
+
+# Log file location
+# $vncUserDir = "/home/sandbox/.vnc";
+
+# Additional performance settings
+# Handle keyboard events properly
+$sendPrimary = "true";
+# Handle cut-and-paste
+$sendClipboard = "true";
+# Handle X keyboard events
+$geometry = "1280x720";

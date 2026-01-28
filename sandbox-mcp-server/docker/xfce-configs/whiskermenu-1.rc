@@ -1,0 +1,62 @@
+# Whisker Menu Configuration for VNC/Remote Desktop
+#
+# Optimized for:
+# - Category navigation enabled (better usability)
+# - Lightweight 16px icons (VNC performance)
+# - Recent applications tracking
+# - Fast search functionality
+# - No hover delay (reduces VNC latency)
+#
+# Source: docker/xfce-configs/whiskermenu-1.rc
+
+[Menu]
+# Button appearance
+button-icon=xfce4-whiskermenu-plugin
+button-title=Applications
+button-single-row=false
+show-title=true
+show-tooltips=true
+
+# Menu behavior
+show-category-names=true
+show-application-icons=true
+show-category-icons=true
+profile-cleanup=true
+rememberfavorites=true
+
+# Recent items
+recent-items-max=10
+favorites-in-recent=true
+
+# Search functionality
+search-actions=2
+show-command-line=true
+command-line-format=terminal
+
+# CRITICAL: Small 16px icons for VNC performance
+icon-size=16
+icon-size-category=16
+icon-size-default=16
+
+# Appearance (compact for VNC)
+item-height=22
+category-icon-size=16
+
+# Favorites (common development tools)
+favorites=xfce4-terminal.desktop,thunar.desktop,mousepad.desktop
+
+# Categories (all shown for completeness)
+category-display=1
+
+# Launcher settings
+launcher-show-name=false
+launcher-show-description=false
+launcher-show-icon=true
+
+# Hover switch: DISABLED (reduces VNC latency)
+hover-switch-category=false
+hover-delay=0
+
+# Position
+position=left
+

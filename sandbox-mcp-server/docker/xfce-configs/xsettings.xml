@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+XFCE XSettings Configuration for VNC/Remote Desktop
+
+Optimized for:
+- Lightweight Adwaita theme
+- System icons
+- Sans 10pt font (readable)
+- Minimal rendering options
+
+Source: docker/xfce-configs/xsettings.xml
+-->
+<channel name="xsettings" version="1.0">
+  <!-- Theme Settings -->
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Adwaita"/>
+    <property name="IconThemeName" type="string" value="Adwaita"/>
+    <property name="FallbackIconThemeName" type="string" value="hicolor"/>
+  </property>
+
+  <!-- Font Settings -->
+  <property name="Gtk" type="empty">
+    <!-- Default Font -->
+    <property name="FontName" type="string" value="Sans 10"/>
+
+    <!-- Monospace Font -->
+    <property name="MonospaceFontName" type="string" value="Monospace 10"/>
+
+    <!-- Toolbar Style -->
+    <property name="ToolbarStyle" type="string" value="icons"/>
+
+    <!-- Toolbar Icon Size -->
+    <property name="ToolbarIconSize" type="int" value="3"/>
+
+    <!-- Menu Images -->
+    <property name="MenuImages" type="bool" value="true"/>
+
+    <!-- Button Images -->
+    <property name="ButtonImages" type="bool" value="true"/>
+
+    <!-- Menubar Images -->
+    <property name="MenubarImages" type="bool" value="false"/>
+
+    <!-- Cursor Theme -->
+    <property name="CursorThemeName" type="string" value="Adwaita"/>
+    <property name="CursorSize" type="int" value="18"/>
+
+    <!-- Font Anti-Aliasing -->
+    <property name="Antialias" type="int" value="1"/>
+
+    <!-- Font Hinting -->
+    <property name="Hinting" type="int" value="1"/>
+
+    <!-- Font Hint Style -->
+    <property name="HintStyle" type="string" value="hintslight"/>
+
+    <!-- Font RGBA -->
+    <property name="Rgba" type="string" value="rgb"/>
+
+    <!-- Show Input Method Menu -->
+    <property name="ShowInputMethodMenu" type="bool" value="false"/>
+
+    <!-- Show Unicode Menu -->
+    <property name="ShowUnicodeMenu" type="bool" value="false"/>
+
+    <!-- Timeout Style -->
+    <property name="TimeoutStyle" type="string" value="none"/>
+
+    <!-- Timeout -->
+    <property name="Timeout" type="int" value="0"/>
+  </property>
+
+  <!-- Mouse Settings -->
+  <property name="Mouse" type="empty">
+    <property name="AccelFactor" type="double" value="0.0"/>
+    <property name="AccelProfile" type="string" value="default"/>
+    <property name="CursorSize" type="int" value="18"/>
+    <property name="ThemeName" type="string" value="Adwaita"/>
+  </property>
+
+  <!-- XFT Settings -->
+  <property name="Xft" type="empty">
+    <property name="Antialias" type="int" value="1"/>
+    <property name="DPI" type="int" value="-1"/>
+    <property name="Hinting" type="int" value="1"/>
+    <property name="HintStyle" type="string" value="hintslight"/>
+    <property name="Rgba" type="string" value="rgb"/>
+  </property>
+
+  <!-- Color Scheme -->
+  <property name="ColorScheme" type="empty">
+    <property name="gtk-color-scheme" type="string" value="normal"/>
+  </property>
+
+  <!-- Window Manager Integration -->
+  <property name="Gtk" type="empty">
+    <!-- Enable Event Sounds -->
+    <property name="EnableEventSounds" type="bool" value="false"/>
+
+    <!-- Enable Input Feedback Sounds -->
+    <property name="EnableInputFeedbackSounds" type="bool" value="false"/>
+
+    <!-- Enable Tooltips -->
+    <property name="EnableTooltips" type="bool" value="true"/>
+
+    <!-- Shell Shows App Menu -->
+    <property name="ShellShowsAppMenu" type="bool" value="false"/>
+
+    <!-- Shell Shows Menubar -->
+    <property name="ShellShowsMenubar" type="bool" value="false"/>
+
+    <!-- Dialogs Use Header -->
+    <property name="DialogsUseHeader" type="bool" value="false"/>
+
+    <!-- Application Prefer Dark Theme -->
+    <property name="ApplicationPreferDarkTheme" type="bool" value="false"/>
+
+    <!-- Decoration Layout -->
+    <property name="DecorationLayout" type="string" value=":menu,close"/>
+
+    <!-- Font Name -->
+    <property name="FontName" type="string" value="Sans 10"/>
+
+    <!-- Monospace Font Name -->
+    <property name="MonospaceFontName" type="string" value="Monospace 10"/>
+
+    <!-- Toolbar Style -->
+    <property name="ToolbarStyle" type="string" value="icons"/>
+  </property>
+</channel>

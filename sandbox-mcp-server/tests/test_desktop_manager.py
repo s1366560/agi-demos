@@ -142,22 +142,30 @@ class TestDesktopManager:
     @pytest.mark.asyncio
     async def test_restart_stops_and_starts(self, manager):
         """Test restart stops and starts the desktop."""
+        # First batch of processes
         mock_xvfb = create_mock_process(pid=1001)
-        mock_lxde = create_mock_process(pid=1002)
+        mock_xfce = create_mock_process(pid=1002)
         mock_xvnc = create_mock_process(pid=1003)
         mock_novnc = create_mock_process(pid=1004)
+        mock_vncserver_kill = create_mock_process(pid=1005)  # vncserver -kill during stop
+
+        # Second batch of processes (for restart)
+        mock_xvfb2 = create_mock_process(pid=2001)
+        mock_xfce2 = create_mock_process(pid=2002)
+        mock_xvnc2 = create_mock_process(pid=2003)
+        mock_novnc2 = create_mock_process(pid=2004)
+        mock_vncserver_kill2 = create_mock_process(pid=2005)  # vncserver -kill during stop
+
+        # Create an iterator that yields all processes in sequence
+        process_iterator = iter([
+            mock_xvfb, mock_xfce, mock_xvnc, mock_novnc,  # First start
+            mock_vncserver_kill,  # vncserver -kill during stop
+            mock_xvfb2, mock_xfce2, mock_xvnc2, mock_novnc2,  # Restart
+        ])
 
         with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.side_effect = [mock_xvfb, mock_lxde, mock_xvnc, mock_novnc]
+            mock_exec.side_effect = lambda *args, **kwargs: next(process_iterator)
             await manager.start()
-
-            # Set up for second start
-            mock_xvfb2 = create_mock_process(pid=2001)
-            mock_lxde2 = create_mock_process(pid=2002)
-            mock_xvnc2 = create_mock_process(pid=2003)
-            mock_novnc2 = create_mock_process(pid=2004)
-
-            mock_exec.side_effect = [mock_xvfb2, mock_lxde2, mock_xvnc2, mock_novnc2]
             await manager.restart()
 
             # Verify processes are new

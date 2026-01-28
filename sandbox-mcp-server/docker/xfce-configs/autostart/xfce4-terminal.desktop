@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=XFCE Terminal
+Name[en_US]=XFCE Terminal
+Comment=Terminal Emulator
+Comment[en_US]=Terminal Emulator
+Exec=xfce4-terminal
+Icon=xfce4-terminal
+Terminal=false
+Categories=System;TerminalEmulator;X-XFCE;
+X-XFCE-Source=file:///usr/share/applications/xfce4-terminal.desktop

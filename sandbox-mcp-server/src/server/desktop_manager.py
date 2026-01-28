@@ -1,6 +1,7 @@
-"""Desktop Manager for remote desktop (LXDE + noVNC).
+"""Desktop Manager for remote desktop (XFCE + TigerVNC + noVNC).
 
-Manages Xvfb, LXDE, x11vnc, and noVNC for browser-based remote desktop.
+Manages Xvfb, XFCE, TigerVNC, and noVNC for browser-based remote desktop.
+TigerVNC provides better encoding and performance compared to x11vnc.
 """
 
 import asyncio
@@ -14,7 +15,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DesktopStatus:
-    """Status of the remote desktop."""
+    """Status of the remote desktop.
+
+    Attributes:
+        running: Whether desktop is currently running
+        display: X11 display number (e.g., ":1")
+        resolution: Screen resolution (e.g., "1280x720")
+        port: noVNC web server port
+        xvfb_pid: Process ID of Xvfb (None if not running)
+        xvnc_pid: Process ID of TigerVNC (None if not running)
+    """
 
     running: bool
     display: str
@@ -30,8 +40,8 @@ class DesktopManager:
 
     Provides browser-based remote desktop using:
     - Xvfb: Virtual X11 display
-    - LXDE: Lightweight desktop environment
-    - x11vnc: VNC server
+    - XFCE: Lightweight desktop environment
+    - TigerVNC: VNC server (better performance than x11vnc)
     - noVNC: Web-based VNC client
 
     Usage:
@@ -87,7 +97,7 @@ class DesktopManager:
         """
         Start the remote desktop environment.
 
-        Starts Xvfb, LXDE, x11vnc, and noVNC in sequence.
+        Starts Xvfb, XFCE, TigerVNC, and noVNC in sequence.
 
         Raises:
             RuntimeError: If desktop is already running
@@ -105,11 +115,11 @@ class DesktopManager:
             # Step 1: Start Xvfb (virtual display)
             await self._start_xvfb()
 
-            # Step 2: Start LXDE desktop environment
-            await self._start_lxde()
+            # Step 2: Start XFCE desktop environment
+            await self._start_xfce()
 
-            # Step 3: Start x11vnc (VNC server)
-            await self._start_xvnc()
+            # Step 3: Start TigerVNC (VNC server)
+            await self._start_tigervnc()
 
             # Step 4: Start noVNC (websockify proxy)
             await self._start_novnc()
@@ -121,7 +131,7 @@ class DesktopManager:
         except FileNotFoundError:
             raise RuntimeError(
                 "Desktop components not installed. "
-                "Install with: apt-get install xorg lxde x11vnc"
+                "Install with: apt-get install xorg xfce4 tigervnc-standalone-server"
             )
 
     async def _start_xvfb(self) -> None:
@@ -144,37 +154,72 @@ class DesktopManager:
             raise RuntimeError("Xvfb exited immediately")
         logger.debug(f"Xvfb started with PID {self.xvfb_process.pid}")
 
-    async def _start_lxde(self) -> None:
-        """Start LXDE desktop environment."""
-        logger.debug("Starting LXDE")
+    async def _start_xfce(self) -> None:
+        """Start XFCE desktop environment."""
+        logger.debug("Starting XFCE")
         env = os.environ.copy()
         env["DISPLAY"] = self.display
 
+        # Start XFCE session using xfce4-session
         process = await asyncio.create_subprocess_exec(
-            "startlxde",
+            "xfce4-session",
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        # LXDE runs in background, we don't track it closely
-        logger.debug(f"LXDE started with PID {process.pid}")
+        # XFCE runs in background, we don't track it closely
+        logger.debug(f"XFCE started with PID {process.pid}")
 
-    async def _start_xvnc(self) -> None:
-        """Start x11vnc VNC server."""
-        logger.debug("Starting x11vnc")
+    async def _start_tigervnc(self) -> None:
+        """Start TigerVNC server with optimal settings."""
+        logger.debug("Starting TigerVNC")
+
+        # Prepare VNC user directory
+        vnc_dir = os.path.expanduser("~/.vnc")
+        os.makedirs(vnc_dir, exist_ok=True)
+
+        # Create xstartup file if it doesn't exist
+        xstartup_path = os.path.join(vnc_dir, "xstartup")
+        if not os.path.exists(xstartup_path):
+            # Copy template or create default
+            template_path = "/etc/vnc/xstartup.template"
+            if os.path.exists(template_path):
+                import shutil
+                shutil.copy(template_path, xstartup_path)
+            else:
+                # Create minimal xstartup
+                with open(xstartup_path, "w") as f:
+                    f.write("#!/bin/bash\n")
+                    f.write(f"export DISPLAY={self.display}\n")
+                    f.write("xfce4-session &\n")
+                    f.write("wait\n")
+            os.chmod(xstartup_path, 0o755)
+
+        # Extract width and height from resolution
+        width, height = self.resolution.split("x")
+        depth = 24
+
+        # Start TigerVNC with optimal settings
+        # TigerVNC uses vncserver command which wraps Xvfb
         self.xvnc_process = await asyncio.create_subprocess_exec(
-            "x11vnc",
-            "-display",
+            "vncserver",
             self.display,
-            "-forever",  # Keep running after disconnect
-            "-nopw",  # No password
-            "-shared",  # Allow multiple connections
-            "-xkb",  # Handle X keyboard events
+            "-geometry", self.resolution,
+            "-depth", str(depth),
+            "-encoding", "Tight",  # Best for web VNC
+            "-compression", "5",    # Balance CPU/bandwidth
+            "-quality", "8",        # Good image quality
+            "-noxstartup",          # Don't use default xstartup
+            "-rfbport", str(self._vnc_port),
+            "-localhost", "no",     # Allow connections from any host
+            "-securitytypes", "None",  # No authentication for container
+            env=os.environ.copy(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await asyncio.sleep(1)  # Wait for x11vnc to initialize
-        logger.debug(f"x11vnc started with PID {self.xvnc_process.pid}")
+
+        await asyncio.sleep(2)  # Wait for TigerVNC to initialize
+        logger.debug(f"TigerVNC started with PID {self.xvnc_process.pid}")
 
     async def _start_novnc(self) -> None:
         """Start noVNC websockify proxy."""
@@ -218,18 +263,32 @@ class DesktopManager:
                 logger.error(f"Error stopping noVNC: {e}")
             self.novnc_process = None
 
-        # Stop x11vnc
+        # Stop TigerVNC
         if self.xvnc_process:
             try:
+                # Try graceful shutdown first
                 self.xvnc_process.terminate()
                 try:
                     await asyncio.wait_for(self.xvnc_process.wait(), timeout=5.0)
                 except asyncio.TimeoutError:
+                    # Force kill if graceful shutdown fails
                     self.xvnc_process.kill()
                     await self.xvnc_process.wait()
             except Exception as e:
-                logger.error(f"Error stopping x11vnc: {e}")
+                logger.error(f"Error stopping TigerVNC: {e}")
             self.xvnc_process = None
+
+        # Also try to kill any remaining vncserver processes
+        try:
+            await asyncio.create_subprocess_exec(
+                "vncserver",
+                "-kill",
+                self.display,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except Exception as e:
+            logger.debug(f"vncserver -kill command failed: {e}")
 
         # Stop Xvfb
         if self.xvfb_process:

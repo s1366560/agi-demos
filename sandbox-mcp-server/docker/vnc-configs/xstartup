@@ -1,0 +1,34 @@
+#!/bin/bash
+# TigerVNC session startup script
+# This script is executed when a VNC session is started
+
+# Get the VNC display number
+DISPLAY=${DISPLAY:-:1}
+
+# Set up the X11 display
+export DISPLAY
+
+# Start XFCE desktop environment
+# Using xfce4-session for the full desktop experience
+if [ -x /usr/bin/xfce4-session ]; then
+    # Start XFCE session with proper DBus session
+    dbus-launch --exit-with-session xfce4-session &
+else
+    # Fallback to startxfce4 if xfce4-session is not available
+    if [ -x /usr/bin/startxfce4 ]; then
+        startxfce4 &
+    else
+        # Ultimate fallback - just start a terminal
+        xfce4-terminal &
+    fi
+fi
+
+# Optional: Start additional applications
+# Examples:
+# - xfce4-terminal: Terminal emulator
+# - thunar: File manager
+# - xfce4-taskmanager: Task manager
+
+# Keep the script running
+# If this script exits, the VNC session will terminate
+wait

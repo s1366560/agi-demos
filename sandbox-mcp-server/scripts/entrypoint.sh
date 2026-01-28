@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sandbox MCP Server Entrypoint
-# Starts all services: MCP server, noVNC (remote desktop), ttyd (web terminal)
+# Starts all services: MCP server, TigerVNC (remote desktop), ttyd (web terminal)
 # This script runs as root and uses sudo to run services as appropriate users
 
 set -e
@@ -40,6 +40,7 @@ SANDBOX_USER="${SANDBOX_USER:-sandbox}"
 # PID tracking
 PIDS=()
 XVFB_PID=""
+VNC_PID=""
 
 # Cleanup function
 cleanup() {
@@ -55,8 +56,13 @@ cleanup() {
         kill "$XVFB_PID" 2>/dev/null || true
     fi
 
-    # Stop x11vnc
-    killall x11vnc 2>/dev/null || true
+    # Stop TigerVNC
+    if [ -n "$VNC_PID" ] && kill -0 "$VNC_PID" 2>/dev/null; then
+        kill "$VNC_PID" 2>/dev/null || true
+    fi
+
+    # Kill any remaining VNC processes
+    killall vncserver Xvnc 2>/dev/null || true
 
     # Stop noVNC/websockify
     killall websockify 2>/dev/null || true
@@ -93,16 +99,27 @@ start_xvfb() {
     log_success "Xvfb started (PID: $XVFB_PID, DISPLAY: $DISPLAY)"
 }
 
-# Start Desktop Environment (GNOME) as sandbox user
+# Start Desktop Environment (XFCE) as sandbox user
 start_desktop() {
-    log_info "Starting GNOME desktop environment..."
+    log_info "Starting XFCE desktop environment..."
 
     # Set up runtime directory for sandbox user
     mkdir -p /run/user/1001
     chown sandbox:sandbox /run/user/1001
     chmod 700 /run/user/1001
 
-    # Run gnome components as sandbox user with proper environment
+    # Create VNC directory for session persistence
+    mkdir -p /home/sandbox/.vnc
+    chown sandbox:sandbox /home/sandbox/.vnc
+
+    # Create xstartup from template if it doesn't exist
+    if [ ! -f /home/sandbox/.vnc/xstartup ]; then
+        cp /etc/vnc/xstartup.template /home/sandbox/.vnc/xstartup
+        chmod +x /home/sandbox/.vnc/xstartup
+        chown sandbox:sandbox /home/sandbox/.vnc/xstartup
+    fi
+
+    # Run XFCE components as sandbox user with proper environment
     sudo -u "$SANDBOX_USER" sh -c "
         export DISPLAY=:99
         export XDG_RUNTIME_DIR=/run/user/1001
@@ -110,28 +127,19 @@ start_desktop() {
         export XDG_CONFIG_HOME=/home/sandbox/.config
         export XDG_CACHE_HOME=/home/sandbox/.cache
         export XDG_STATE_HOME=/home/sandbox/.local/state
-        export GDK_BACKEND=x11
-        export CLUTTER_BACKEND=x11
-        export GNOME_SHELL_SESSION_MODE=gnome-classic
-        export NO_AT_BRIDGE=1
 
         # Create necessary directories
         mkdir -p \$XDG_DATA_HOME
         mkdir -p \$XDG_CONFIG_HOME
         mkdir -p \$XDG_CACHE_HOME
+        mkdir -p /home/sandbox/.vnc
 
         # Start D-Bus session
         dbus-daemon --session --address=unix:path=/run/user/1001/bus --nofork --syslog &
         sleep 1
 
-        # Load dconf settings for GNOME
-        dconf load /etc/dconf/profile/gnome &
-
-        # Configure some basic GNOME settings
-        gsettings set org.gnome.desktop.interface show-application-menu true 2>/dev/null || true
-
-        # Start gnome-session in classic mode (non-systemd)
-        dbus-launch --exit-with-session gnome-session --session=gnome-classic &
+        # Start XFCE desktop environment
+        dbus-launch --exit-with-session startxfce4 &
     " &
 
     sleep 5
@@ -139,21 +147,44 @@ start_desktop() {
     log_success "Desktop environment started (may take additional 20-30s to fully load)"
 }
 
+# Start VNC Server (x11vnc - fallback for TigerVNC network issues)
+start_vnc() {
+    log_info "Starting VNC server (x11vnc)..."
+
+    export DISPLAY=:99
+
+    # Wait for XFCE to start initializing
+    sleep 2
+
+    # Start x11vnc with optimized settings
+    x11vnc -display "$DISPLAY" \
+        -rfbport 5901 \
+        -shared \
+        -forever \
+        -nopw \
+        -xkb \
+        -bg \
+        -o /tmp/x11vnc.log 2>/dev/null &
+
+    VNC_PID=$!
+    sleep 3
+
+    # Check if VNC is listening
+    if netstat -tln 2>/dev/null | grep -q ":5901 "; then
+        log_success "VNC server started on port 5901"
+    else
+        log_warn "VNC server may not be running properly on port 5901"
+    fi
+}
+
 # Start noVNC (Remote Desktop)
 start_novnc() {
     log_info "Starting noVNC (Remote Desktop) on port $DESKTOP_PORT..."
 
-    export DISPLAY=:99
-
-    # Wait a bit for GNOME to start initializing
-    sleep 2
-
-    # Start x11vnc (VNC server) - requires root for X11 access
-    x11vnc -display "$DISPLAY" -rfbport 5900 -shared -forever -nopw -xkb -bg -o /tmp/x11vnc.log 2>/dev/null || true
-
     # Start noVNC with websockify
+    # Connects to TigerVNC on port 5901
     cd /opt/noVNC
-    python3 -m websockify --web=/opt/noVNC --heartbeat 30 "$DESKTOP_PORT" localhost:5900 &
+    python3 -m websockify --web=/opt/noVNC --heartbeat 30 "$DESKTOP_PORT" localhost:5901 &
     PIDS+=($!)
 
     sleep 2
@@ -214,6 +245,7 @@ main() {
     if [ "$DESKTOP_ENABLED" = "true" ]; then
         start_xvfb
         start_desktop
+        start_vnc
         start_novnc
     fi
 
@@ -226,13 +258,13 @@ main() {
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
     log_info "Service Endpoints:"
-    echo "  • MCP Server:    http://localhost:$MCP_PORT"
-    echo "  • Health Check:  http://localhost:$MCP_PORT/health"
+    echo "  • MCP Server:     http://localhost:$MCP_PORT"
+    echo "  • Health Check:   http://localhost:$MCP_PORT/health"
     if [ "$DESKTOP_ENABLED" = "true" ]; then
         echo "  • Remote Desktop: http://localhost:$DESKTOP_PORT/vnc.html"
         echo ""
-        log_info "Note: GNOME may take 30-60 seconds to fully load."
-        log_info "If screen stays black, try pressing Ctrl+Alt+F1 or waiting longer."
+        log_info "Note: XFCE may take 20-30 seconds to fully load."
+        log_info "The desktop is available via VNC."
     fi
     echo "  • Web Terminal:  ws://localhost:$TERMINAL_PORT"
     echo ""

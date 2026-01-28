@@ -157,37 +157,44 @@ class TestSessionManager:
     @pytest.mark.asyncio
     async def test_restart_all_sessions(self, manager):
         """Test restarting all sessions."""
+        # First start processes
         mock_terminal = create_mock_process(pid=1001)
         mock_xvfb = create_mock_process(pid=2001)
-        mock_lxde = create_mock_process(pid=2002)
+        mock_xfce = create_mock_process(pid=2002)
         mock_xvnc = create_mock_process(pid=2003)
         mock_novnc = create_mock_process(pid=2004)
 
+        # Stop processes (vncserver -kill during desktop stop)
+        mock_vncserver_kill1 = create_mock_process(pid=2005)
+
+        # Restart processes
+        mock_terminal2 = create_mock_process(pid=1002)
+        mock_xvfb2 = create_mock_process(pid=2006)
+        mock_xfce2 = create_mock_process(pid=2007)
+        mock_xvnc2 = create_mock_process(pid=2008)
+        mock_novnc2 = create_mock_process(pid=2009)
+
+        # Create iterator for all subprocess calls in order
+        process_iterator = iter([
+            # First start
+            mock_terminal,  # Terminal start
+            mock_xvfb, mock_xfce, mock_xvnc, mock_novnc,  # Desktop start
+            # Stop (called by restart_all before second start)
+            mock_vncserver_kill1,  # vncserver -kill
+            # Second start (restart)
+            mock_terminal2,  # Terminal start
+            mock_xvfb2, mock_xfce2, mock_xvnc2, mock_novnc2,  # Desktop start
+        ])
+
         with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.side_effect = [
-                mock_terminal,
-                mock_xvfb, mock_lxde, mock_xvnc, mock_novnc,
-            ]
+            mock_exec.side_effect = lambda *args, **kwargs: next(process_iterator)
 
             await manager.start_all()
-
-            # Set up for restart
-            mock_terminal2 = create_mock_process(pid=1002)
-            mock_xvfb2 = create_mock_process(pid=2005)
-            mock_lxde2 = create_mock_process(pid=2006)
-            mock_xvnc2 = create_mock_process(pid=2007)
-            mock_novnc2 = create_mock_process(pid=2008)
-
-            mock_exec.side_effect = [
-                mock_terminal2,
-                mock_xvfb2, mock_lxde2, mock_xvnc2, mock_novnc2,
-            ]
-
             await manager.restart_all()
 
             # Verify processes are new
             assert manager.terminal_manager.process.pid == 1002
-            assert manager.desktop_manager.xvfb_process.pid == 2005
+            assert manager.desktop_manager.xvfb_process.pid == 2006
 
     def test_get_status_when_not_running(self, manager):
         """Test status when sessions are not running."""

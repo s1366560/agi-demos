@@ -1,0 +1,81 @@
+<?xml version="1.8" encoding="UTF-8"?>
+<!--
+XFCE Session Configuration for VNC/Remote Desktop
+
+Optimized for:
+- Screensaver DISABLED (interferes with VNC)
+- Lock screen DISABLED
+- Auto-save session enabled
+- No power management (container environment)
+
+Source: docker/xfce-configs/xfce4-session.xml
+-->
+<channel name="xfce4-session" version="1.0">
+  <!-- General Session Settings -->
+  <property name="splash" type="bool" value="false"/>
+  <property name="splash-theme" type="string" value="Default"/>
+  <property name="compat" type="bool" value="true"/>
+
+  <!-- Session Saving -->
+  <property name="auto_save" type="bool" value="true"/>
+  <property name="sessions" type="empty">
+    <property name="Failsafe" type="empty">
+      <property name="client0_priority" type="int" value="5"/>
+      <property name="client0_per_screen" type="bool" value="false"/>
+      <property name="client0_command" type="string" value="xfce4-terminal"/>
+      <property name="client1_priority" type="int" value="25"/>
+      <property name="client1_per_screen" type="bool" value="false"/>
+      <property name="client1_command" type="string" value="xfce4-panel"/>
+      <property name="client2_priority" type="int" value="25"/>
+      <property name="client2_per_screen" type="bool" value="false"/>
+      <property name="client2_command" type="string" value="Thunar"/>
+      <property name="client3_priority" type="int" value="30"/>
+      <property name="client3_per_screen" type="bool" value="false"/>
+      <property name="client3_command" type="string" value="xfdesktop"/>
+    </property>
+  </property>
+
+  <!-- Screensaver: DISABLED for VNC -->
+  <property name="screensaver" type="empty">
+    <property name="enabled" type="bool" value="false"/>
+    <property name="lock_enabled" type="bool" value="false"/>
+    <property name="saver" type="string" value="xscreensaver"/>
+    <property name="mode" type="string" value="blank"/>
+    <property name="activate_delay" type="int" value="10"/>
+    <property name="lock_delay" type="int" value="5"/>
+  </property>
+
+  <!-- Lock Screen: DISABLED for VNC -->
+  <property name="lock" type="bool" value="false"/>
+
+  <!-- Power Management: DISABLED (container environment) -->
+  <property name="power-management" type="empty">
+    <property name="enabled" type="bool" value="false"/>
+    <property name="blank-on-ac" type="int" value="0"/>
+    <property name="dpms-on-ac" type="int" value="0"/>
+    <property name="blank-on-battery" type="int" value="0"/>
+    <property name="dpms-on-battery" type="int" value="0"/>
+    <property name="lock-on-suspend" type="bool" value="false"/>
+  </property>
+
+  <!-- Logout Settings -->
+  <property name="general" type="empty">
+    <property name="Failsafe" type="empty">
+      <property name="IsEmpty" type="bool" value="false"/>
+    </property>
+  </property>
+
+  <!-- Session Startup -->
+  <property name="sessions" type="empty">
+    <property name="default" type="empty">
+      <property name="client0_command" type="string" value="xfce4-panel"/>
+      <property name="client0_priority" type="int" value="25"/>
+      <property name="client1_command" type="string" value="xfce4-terminal"/>
+      <property name="client1_priority" type="int" value="40"/>
+      <property name="client2_command" type="string" value="Thunar"/>
+      <property name="client2_priority" type="int" value="30"/>
+      <property name="client3_command" type="string" value="xfdesktop"/>
+      <property name="client3_priority" type="int" value="30"/>
+    </property>
+  </property>
+</channel>
