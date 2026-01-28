@@ -83,8 +83,16 @@ async def execute_bash(
         else:
             cwd = _workspace_dir
 
-        # Ensure working directory exists
-        os.makedirs(cwd, exist_ok=True)
+        # Ensure working directory exists, or use a fallback
+        try:
+            os.makedirs(cwd, exist_ok=True)
+        except (OSError, PermissionError):
+            # If we can't create the workspace, check if it exists
+            if not os.path.exists(cwd):
+                # Fallback to current directory if workspace is unavailable
+                cwd = os.getcwd()
+                logger.warning(f"Workspace {_workspace_dir} unavailable, using {cwd}")
+            # If it exists but we can't create it, we'll try to use it anyway
 
         logger.info(f"Executing: {command[:100]}... (timeout={timeout}s, cwd={cwd})")
 
@@ -98,6 +106,8 @@ async def execute_bash(
                 **os.environ,
                 "HOME": _workspace_dir,
                 "TERM": "xterm-256color",
+                # Preserve DEBIAN_FRONTEND for non-interactive apt commands
+                "DEBIAN_FRONTEND": os.environ.get("DEBIAN_FRONTEND", "noninteractive"),
             },
         )
 
