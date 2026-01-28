@@ -12,7 +12,7 @@
  * Only re-renders when message, isStreaming, or defaultView change.
  */
 
-import React, { useMemo, useState, memo } from "react";
+import React, { useMemo, useState, memo, useCallback } from "react";
 import { Segmented } from "antd";
 import {
   BulbOutlined,
@@ -229,6 +229,11 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     [availableViews, compact]
   );
 
+  // Handle view change with useCallback for optimization
+  const handleViewChange = useCallback((value: string | number) => {
+    setCurrentView(value as ViewType);
+  }, []);
+
   return (
     <div className="w-full space-y-3">
       {/* View selector */}
@@ -236,7 +241,7 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
         <Segmented
           size="small"
           value={effectiveView}
-          onChange={(value) => setCurrentView(value as ViewType)}
+          onChange={handleViewChange}
           options={segmentedOptions}
           className="bg-slate-100 dark:bg-slate-800"
         />

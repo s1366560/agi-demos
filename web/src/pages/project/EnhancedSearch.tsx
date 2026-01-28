@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { graphService } from '../../services/graphService'
@@ -112,21 +112,21 @@ export const EnhancedSearch: React.FC = () => {
     // Help Tooltip State
     const [showTooltip, setShowTooltip] = useState<string | null>(null)
 
-    const handleCopyId = (id: string, e: React.MouseEvent) => {
+    const handleCopyId = useCallback((id: string, e: React.MouseEvent) => {
         e.stopPropagation()
         navigator.clipboard.writeText(id)
         setCopiedId(id)
         setTimeout(() => setCopiedId(null), 2000)
-    }
+    }, [])
 
-    const handleResultClick = (result: SearchResult) => {
+    const handleResultClick = useCallback((result: SearchResult) => {
         if (result.metadata.uuid) {
             setSelectedSubgraphIds([result.metadata.uuid])
             setIsSubgraphMode(true)
         }
-    }
+    }, [])
 
-    const handleSearch = async () => {
+    const handleSearch = useCallback(async () => {
         // Validate based on search mode
         if (searchMode === 'graphTraversal' && !startEntityUuid) {
             setError(t('project.search.errors.enter_start_uuid'))
@@ -249,7 +249,7 @@ export const EnhancedSearch: React.FC = () => {
         } finally {
             setLoading(false)
         }
-    }
+    }, [searchMode, startEntityUuid, communityUuid, query, timeRange, customTimeRange, strategy, projectId, retrievalMode, focalNode, crossEncoder, maxDepth, relationshipTypes, selectedEntityTypes, selectedTags, includeEpisodes, t])
 
     // Extract node IDs for graph highlighting
     const highlightNodeIds = useMemo(() => {
@@ -263,7 +263,7 @@ export const EnhancedSearch: React.FC = () => {
     }, [results])
 
     // Voice Search Handler
-    const handleVoiceSearch = () => {
+    const handleVoiceSearch = useCallback(() => {
         if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
             setError(t('project.search.errors.voice_not_supported'))
             return
@@ -292,10 +292,10 @@ export const EnhancedSearch: React.FC = () => {
         }
 
         recognition.start()
-    }
+    }, [t])
 
     // Export Results Handler
-    const handleExportResults = () => {
+    const handleExportResults = useCallback(() => {
         const exportData = {
             search_mode: searchMode,
             query: query || startEntityUuid || communityUuid,
@@ -320,25 +320,25 @@ export const EnhancedSearch: React.FC = () => {
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
-    }
+    }, [searchMode, query, startEntityUuid, communityUuid, results])
 
     // Toggle Tag Selection
-    const handleToggleTag = (tag: string) => {
+    const handleToggleTag = useCallback((tag: string) => {
         setSelectedTags(prev =>
             prev.includes(tag)
                 ? prev.filter(t => t !== tag)
                 : [...prev, tag]
         )
-    }
+    }, [])
 
     // Toggle Entity Type Selection
-    const handleToggleEntityType = (type: string) => {
+    const handleToggleEntityType = useCallback((type: string) => {
         setSelectedEntityTypes(prev =>
             prev.includes(type)
                 ? prev.filter(t => t !== type)
                 : [...prev, type]
         )
-    }
+    }, [])
 
     // Reset subgraph mode when no results
     React.useEffect(() => {
@@ -347,14 +347,14 @@ export const EnhancedSearch: React.FC = () => {
         }
     }, [highlightNodeIds])
 
-    const getScoreColor = (score: number) => {
+    const getScoreColor = useCallback((score: number) => {
         if (score >= 0.8) return 'text-emerald-500'
         if (score >= 0.6) return 'text-violet-500'
         if (score >= 0.4) return 'text-amber-500'
         return 'text-slate-400'
-    }
+    }, [])
 
-    const getIconForType = (type: string) => {
+    const getIconForType = useCallback((type: string) => {
         switch (type?.toLowerCase()) {
             case 'document':
             case 'pdf':
@@ -396,7 +396,7 @@ export const EnhancedSearch: React.FC = () => {
                 // Fallback for unknown entity types - use a generic entity icon
                 return <Network className="w-5 h-5 text-slate-400" />
         }
-    }
+    }, [FileText, MessageSquare, ImageIcon, LinkIcon, Network, Target, Folder])
 
     return (
         <div className="bg-slate-50 dark:bg-[#121520] text-slate-900 dark:text-white font-sans h-full flex overflow-hidden">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Settings as SettingsIcon, Save, Trash2, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/project';
@@ -51,7 +51,7 @@ export const ProjectSettings: React.FC = () => {
         }
     }, [currentProject]);
 
-    const handleSaveBasicSettings = async () => {
+    const handleSaveBasicSettings = useCallback(async () => {
         if (!currentProject) return;
 
         setIsSaving(true);
@@ -77,9 +77,9 @@ export const ProjectSettings: React.FC = () => {
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [currentProject, name, description, isPublic, t]);
 
-    const handleSaveMemoryRules = async () => {
+    const handleSaveMemoryRules = useCallback(async () => {
         if (!currentProject) return;
 
         setIsSaving(true);
@@ -107,9 +107,9 @@ export const ProjectSettings: React.FC = () => {
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [currentProject, maxEpisodes, retentionDays, autoRefresh, refreshInterval, t]);
 
-    const handleSaveGraphConfig = async () => {
+    const handleSaveGraphConfig = useCallback(async () => {
         if (!currentProject) return;
 
         setIsSaving(true);
@@ -137,9 +137,9 @@ export const ProjectSettings: React.FC = () => {
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [currentProject, maxNodes, maxEdges, similarityThreshold, communityDetection, t]);
 
-    const handleClearCache = async () => {
+    const handleClearCache = useCallback(async () => {
         if (!currentProject) return;
 
         if (!window.confirm(t('project.settings.advanced.confirm_clear'))) {
@@ -158,9 +158,9 @@ export const ProjectSettings: React.FC = () => {
             console.error('Failed to clear cache:', error);
             setMessage({ type: 'error', text: t('project.settings.messages.cache_fail') });
         }
-    };
+    }, [currentProject, t]);
 
-    const handleRebuildCommunities = async () => {
+    const handleRebuildCommunities = useCallback(async () => {
         if (!currentProject) return;
 
         if (!window.confirm(t('project.settings.advanced.confirm_rebuild'))) {
@@ -175,9 +175,9 @@ export const ProjectSettings: React.FC = () => {
             console.error('Failed to rebuild communities:', error);
             setMessage({ type: 'error', text: t('project.settings.messages.rebuild_fail') });
         }
-    };
+    }, [currentProject, t]);
 
-    const handleExportData = async () => {
+    const handleExportData = useCallback(async () => {
         if (!currentProject) return;
 
         setMessage(null);
@@ -208,9 +208,9 @@ export const ProjectSettings: React.FC = () => {
             console.error('Failed to export data:', error);
             setMessage({ type: 'error', text: t('project.settings.messages.export_fail') });
         }
-    };
+    }, [currentProject, t]);
 
-    const handleDeleteProject = async () => {
+    const handleDeleteProject = useCallback(async () => {
         if (!currentProject) return;
 
         const confirmText = prompt(t('project.settings.danger.confirm_prompt'));
@@ -227,7 +227,7 @@ export const ProjectSettings: React.FC = () => {
             console.error('Failed to delete project:', error);
             alert(t('project.settings.danger.fail'));
         }
-    };
+    }, [currentProject, t]);
 
     if (!currentProject) {
         return (
