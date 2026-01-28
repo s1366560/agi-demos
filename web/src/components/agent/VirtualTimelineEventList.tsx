@@ -166,15 +166,20 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
 
-  // Empty state
+  // Empty state with improved styling
   if (timeline.length === 0) {
     return (
-      <div className={`flex-1 overflow-y-auto p-4 custom-scrollbar ${className}`}>
-        <MessageStream className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center text-slate-500 dark:text-slate-400">
-              <span className="material-symbols-outlined text-4xl mb-2">chat</span>
-              <p>No messages yet. Start a conversation!</p>
+      <div className={`flex-1 overflow-y-auto p-6 ${className}`}>
+        <MessageStream className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                <span className="material-symbols-outlined text-3xl text-primary">chat_bubble</span>
+              </div>
+              <h3 className="text-slate-700 font-medium mb-2">Start a conversation</h3>
+              <p className="text-slate-400 text-sm max-w-xs mx-auto">
+                Send a message to begin chatting with the AI agent.
+              </p>
             </div>
           </div>
         </MessageStream>
@@ -183,12 +188,12 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   }
 
   return (
-    <div className={`flex-1 overflow-y-auto p-4 custom-scrollbar ${className}`}>
-      <MessageStream className="max-w-4xl mx-auto">
+    <div className={`flex-1 overflow-y-auto p-6 ${className}`}>
+      <MessageStream className="max-w-3xl mx-auto">
         <div
           ref={scrollContainerRef}
           data-testid="virtual-scroll-container"
-          className="overflow-auto"
+          className="overflow-auto pr-2"
           style={{ height: `${containerHeight}px` }}
         >
           <div

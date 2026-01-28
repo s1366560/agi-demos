@@ -83,7 +83,7 @@ describe('VirtualTimelineEventList', () => {
         />
       );
 
-      expect(screen.getByText(/No messages yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/Start a conversation/i)).toBeInTheDocument();
     });
   });
 

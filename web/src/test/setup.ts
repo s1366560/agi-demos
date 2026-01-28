@@ -8,12 +8,13 @@ vi.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key: string, options?: any) => {
             const keys = key.split('.')
-            let value: any = (enUS as any).default || enUS
+            let value: any = enUS  // Direct import, no .default wrapper
             for (const k of keys) {
                 value = value?.[k]
             }
-            if (!value) return key
-            
+            // Return key if translation not found
+            if (value === undefined || value === null) return key
+
             // Simple interpolation handling
             if (options && typeof value === 'string') {
                 Object.keys(options).forEach(optKey => {

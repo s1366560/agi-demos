@@ -80,7 +80,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = memo(({
   }, [showHistorySidebar]);
 
   return (
-    <Layout className="h-full bg-white">
+    <Layout className="h-full bg-slate-50">
       {/* Left Sidebar (History) */}
       <Sider
         width={280}
@@ -88,21 +88,24 @@ export const ChatLayout: React.FC<ChatLayoutProps> = memo(({
         collapsedWidth={0}
         collapsed={!showHistorySidebar}
         trigger={null}
-        className="border-r border-slate-200"
+        className="border-r border-slate-200 bg-white shadow-sm z-20"
+        style={{ overflow: 'hidden' }}
       >
         <div className="flex flex-col h-full">{sidebar}</div>
       </Sider>
 
       {/* Main Content */}
-      <Layout className="bg-white">
-        <Content className="flex flex-col h-full relative">
-          {/* Header / Toolbar Overlay (Absolute or Flex) */}
-          <div className="absolute top-4 left-4 z-10">
+      <Layout className="bg-transparent">
+        <Content className="flex flex-col h-full relative bg-gradient-to-br from-slate-50 to-white">
+          {/* Header / Toolbar Overlay with improved spacing */}
+          <div className="absolute top-4 left-4 z-30">
             <Button
               icon={sidebarIcon}
               onClick={handleToggleSidebar}
               type="text"
-              className="bg-white/80 backdrop-blur shadow-sm border border-slate-200"
+              size="large"
+              className="bg-white/90 backdrop-blur-md shadow-md border border-slate-200/60 hover:shadow-lg hover:border-primary/30 transition-all duration-200 rounded-xl"
+              aria-label={showHistorySidebar ? "Hide conversation history" : "Show conversation history"}
             />
           </div>
 
@@ -117,7 +120,8 @@ export const ChatLayout: React.FC<ChatLayoutProps> = memo(({
         collapsedWidth={0}
         collapsed={!showPlanPanel}
         trigger={null}
-        className="border-l border-slate-200"
+        className="border-l border-slate-200 bg-white shadow-sm z-20"
+        style={{ overflow: 'auto' }}
       >
         {panelContent}
       </Sider>
