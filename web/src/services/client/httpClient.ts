@@ -4,7 +4,7 @@
  * Provides a single axios instance with:
  * - Consistent configuration
  * - Auth token injection
- * - 401 error handling
+ * - ApiError-based error handling
  * - Request/response interceptors
  * - Request caching for GET requests
  * - Request deduplication for concurrent requests
@@ -15,6 +15,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { requestCache } from './requestCache';
 import { requestDeduplicator } from './requestDeduplicator';
+import { parseAxiosError, ApiError, ApiErrorType } from './ApiError';
 
 /**
  * HTTP request configuration interface
@@ -46,12 +47,19 @@ client.interceptors.request.use((config) => {
 });
 
 /**
- * Response interceptor to handle authentication errors
+ * Response interceptor to handle errors using ApiError
+ *
+ * Converts all axios errors to ApiError for consistent error handling.
+ * Handles 401 authentication errors with redirect to login.
  */
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Convert to ApiError for consistent error handling
+    const apiError = parseAxiosError(error);
+
+    // Handle authentication errors
+    if (apiError.isAuthError()) {
       // Clear token and user data
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -60,7 +68,9 @@ client.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    return Promise.reject(error);
+
+    // Reject with ApiError
+    return Promise.reject(apiError);
   }
 );
 
@@ -148,6 +158,7 @@ export const httpClient = {
 export default client;
 
 /**
- * Re-export URL utilities for convenience
+ * Re-export URL utilities and ApiError for convenience
  */
 export * from './urlUtils';
+export { ApiError, ApiErrorType } from './ApiError';

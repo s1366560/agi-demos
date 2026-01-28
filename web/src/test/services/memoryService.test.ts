@@ -1,191 +1,158 @@
 /**
  * Tests for memoryService
+ *
+ * apiFetch automatically throws ApiError for non-success responses,
+ * so services can be simplified without manual error handling.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { memoryService } from '../../services/memoryService';
+import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 
-// Mock global fetch and localStorage
-global.fetch = vi.fn() as any;
-vi.stubGlobal('localStorage', {
-  getItem: vi.fn(() => null),
-  setItem: vi.fn(),
-  removeItem: vi.fn(),
-  clear: vi.fn(),
-});
+// Mock apiFetch
+vi.mock('../../services/client/urlUtils', () => ({
+  apiFetch: {
+    patch: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
+  },
+}));
 
 describe('memoryService', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        (global.fetch as any).mockResolvedValue({
-            ok: true,
-            json: async () => ({}),
-        });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('updateMemory', () => {
+    it('should call PATCH endpoint with correct data', async () => {
+      const memoryId = 'memory-1';
+      const updates = {
+        title: 'Updated Title',
+        content: 'Updated Content',
+        version: 1,
+      };
+
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: memoryId, ...updates }),
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+      } as Response);
+
+      const result = await memoryService.updateMemory(memoryId, updates);
+
+      expect(apiFetch.patch).toHaveBeenCalledWith(
+        `/memories/${memoryId}`,
+        updates
+      );
+      expect(result).toEqual({ id: memoryId, ...updates });
     });
 
-    describe('updateMemory', () => {
-        it('should call PATCH endpoint with correct data', async () => {
-            // Arrange
-            const memoryId = 'memory-1';
-            const updates = {
-                title: 'Updated Title',
-                content: 'Updated Content',
-                version: 1,
-            };
+    it('should propagate ApiError on failed response', async () => {
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      const mockError = new ApiError(
+        ApiErrorType.CONFLICT,
+        'VERSION_CONFLICT',
+        'Version conflict',
+        409
+      );
+      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
-            // Act
-            await memoryService.updateMemory(memoryId, updates);
+      await expect(
+        memoryService.updateMemory('memory-1', { title: 'Test', version: 1 })
+      ).rejects.toThrow(ApiError);
+    });
+  });
 
-            // Assert
-            expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining(`/api/v1/memories/${memoryId}`),
-                expect.objectContaining({
-                    method: 'PATCH',
-                })
-            );
-        });
+  describe('shareMemory', () => {
+    it('should call POST endpoint with share data', async () => {
+      const memoryId = 'memory-1';
+      const shareData = {
+        target_type: 'user' as const,
+        target_id: 'user-2',
+        permission_level: 'view' as const,
+      };
 
-        it('should throw error on failed response', async () => {
-            // Arrange
-            (global.fetch as any).mockResolvedValue({
-                ok: false,
-                json: async () => ({ detail: 'Update failed' }),
-            });
+      const mockResponse = {
+        id: 'share-1',
+        memory_id: memoryId,
+        permission_level: 'view',
+      };
 
-            // Act & Assert
-            await expect(
-                memoryService.updateMemory('memory-1', { title: 'Test', version: 1 })
-            ).rejects.toThrow('Update failed');
-        });
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.post).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+      } as Response);
 
-        it('should handle 409 conflict error', async () => {
-            // Arrange
-            (global.fetch as any).mockResolvedValue({
-                ok: false,
-                status: 409,
-                json: async () => ({ detail: 'Version conflict' }),
-            });
+      const result = await memoryService.shareMemory(memoryId, shareData);
 
-            // Act & Assert
-            await expect(
-                memoryService.updateMemory('memory-1', { title: 'Test', version: 1 })
-            ).rejects.toThrow('Version conflict');
-        });
+      expect(apiFetch.post).toHaveBeenCalledWith(
+        `/memories/${memoryId}/shares`,
+        shareData
+      );
+      expect(result).toEqual(mockResponse);
     });
 
-    describe('shareMemory', () => {
-        it('should call POST endpoint with share data', async () => {
-            // Arrange
-            const memoryId = 'memory-1';
-            const shareData = {
-                target_type: 'user' as const,
-                target_id: 'user-2',
-                permission_level: 'view' as const,
-            };
+    it('should propagate ApiError on failed share', async () => {
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      const mockError = new ApiError(
+        ApiErrorType.VALIDATION,
+        'INVALID_INPUT',
+        'Invalid share data',
+        400
+      );
+      vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
-            // Act
-            await memoryService.shareMemory(memoryId, shareData);
+      await expect(
+        memoryService.shareMemory('memory-1', {
+          target_type: 'user',
+          target_id: 'user-2',
+          permission_level: 'view',
+        })
+      ).rejects.toThrow(ApiError);
+    });
+  });
 
-            // Assert
-            expect(global.fetch).toHaveBeenCalledWith(
-                `/api/v1/memories/${memoryId}/shares`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(shareData),
-                }
-            );
-        });
+  describe('deleteMemoryShare', () => {
+    it('should call DELETE endpoint with correct IDs', async () => {
+      const memoryId = 'memory-1';
+      const shareId = 'share-1';
 
-        it('should return share response on success', async () => {
-            // Arrange
-            const mockResponse = {
-                id: 'share-1',
-                memory_id: 'memory-1',
-                permission_level: 'view',
-            };
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        json: async () => ({}),
+        headers: new Headers(),
+      } as Response);
 
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: async () => mockResponse,
-            });
+      await memoryService.deleteMemoryShare(memoryId, shareId);
 
-            // Act
-            const result = await memoryService.shareMemory('memory-1', {
-                target_type: 'user',
-                target_id: 'user-2',
-                permission_level: 'view',
-            });
-
-            // Assert
-            expect(result).toEqual(mockResponse);
-        });
-
-        it('should throw error on failed share', async () => {
-            // Arrange
-            (global.fetch as any).mockResolvedValue({
-                ok: false,
-                json: async () => ({ detail: 'Share failed' }),
-            });
-
-            // Act & Assert
-            await expect(
-                memoryService.shareMemory('memory-1', {
-                    target_type: 'user',
-                    target_id: 'user-2',
-                    permission_level: 'view',
-                })
-            ).rejects.toThrow('Share failed');
-        });
+      expect(apiFetch.delete).toHaveBeenCalledWith(
+        `/memories/${memoryId}/shares/${shareId}`
+      );
     });
 
-    describe('deleteMemoryShare', () => {
-        it('should call DELETE endpoint with correct IDs', async () => {
-            // Arrange
-            const memoryId = 'memory-1';
-            const shareId = 'share-1';
+    it('should propagate ApiError on failed deletion', async () => {
+      const { apiFetch } = await import('../../services/client/urlUtils');
+      const mockError = new ApiError(
+        ApiErrorType.NOT_FOUND,
+        'NOT_FOUND',
+        'Share not found',
+        404
+      );
+      vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
 
-            // Act
-            await memoryService.deleteMemoryShare(memoryId, shareId);
-
-            // Assert
-            expect(global.fetch).toHaveBeenCalledWith(
-                `/api/v1/memories/${memoryId}/shares/${shareId}`,
-                {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                }
-            );
-        });
-
-        it('should handle successful deletion', async () => {
-            // Arrange
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                status: 204,
-            });
-
-            // Act & Assert - should not throw
-            await expect(
-                memoryService.deleteMemoryShare('memory-1', 'share-1')
-            ).resolves.toBeUndefined();
-        });
-
-        it('should throw error on failed deletion', async () => {
-            // Arrange
-            (global.fetch as any).mockResolvedValue({
-                ok: false,
-                json: async () => ({ detail: 'Delete failed' }),
-            });
-
-            // Act & Assert
-            await expect(
-                memoryService.deleteMemoryShare('memory-1', 'share-1')
-            ).rejects.toThrow('Delete failed');
-        });
+      await expect(
+        memoryService.deleteMemoryShare('memory-1', 'share-1')
+      ).rejects.toThrow(ApiError);
     });
+  });
 });

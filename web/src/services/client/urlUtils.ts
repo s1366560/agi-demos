@@ -11,6 +11,8 @@
  * 4. Use apiFetch for fetch-based requests (SSE, etc.)
  */
 
+import { parseResponseError, ApiError, ApiErrorType } from './ApiError';
+
 /**
  * Get the base API URL from environment or use relative path
  *
@@ -125,71 +127,89 @@ export function createWebSocketUrl(
  *
  * Use this for fetch-based requests (SSE, file uploads, etc.) where
  * httpClient cannot be used.
+ *
+ * Throws ApiError on any error for consistent error handling.
  */
 
-function handleResponse(response: Response): Response {
+async function handleResponse(response: Response): Promise<Response> {
   if (response.status === 401) {
     handleUnauthorized();
+  }
+  // Throw ApiError for non-success responses
+  if (!response.ok) {
+    throw await parseResponseError(response);
   }
   return response;
 }
 
 export const apiFetch = {
-  get: (url: string, options: RequestInit = {}): Promise<Response> => {
+  get: async (url: string, options: RequestInit = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     // Merge headers, with options.headers taking precedence
     const mergedHeaders = { ...headers, ...options.headers };
 
-    return fetch(createApiUrl(url), {
+    const response = await fetch(createApiUrl(url), {
       ...options,
       headers: mergedHeaders,
-    }).then(handleResponse);
+    });
+    return handleResponse(response);
   },
 
-  post: (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
+  post: async (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    return fetch(createApiUrl(url), {
+    const response = await fetch(createApiUrl(url), {
       ...options,
       method: 'POST',
       headers: mergedHeaders,
       body: data !== undefined ? JSON.stringify(data) : undefined,
-    }).then(handleResponse);
+    });
+    return handleResponse(response);
   },
 
-  put: (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
+  put: async (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    return fetch(createApiUrl(url), {
+    const response = await fetch(createApiUrl(url), {
       ...options,
       method: 'PUT',
       headers: mergedHeaders,
       body: data !== undefined ? JSON.stringify(data) : undefined,
-    }).then(handleResponse);
+    });
+    return handleResponse(response);
   },
 
-  patch: (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
+  patch: async (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    return fetch(createApiUrl(url), {
+    const response = await fetch(createApiUrl(url), {
       ...options,
       method: 'PATCH',
       headers: mergedHeaders,
       body: data !== undefined ? JSON.stringify(data) : undefined,
-    }).then(handleResponse);
+    });
+    return handleResponse(response);
   },
 
-  delete: (url: string, options: RequestInit = {}): Promise<Response> => {
+  delete: async (url: string, options: RequestInit = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    return fetch(createApiUrl(url), {
+    const response = await fetch(createApiUrl(url), {
       ...options,
       method: 'DELETE',
       headers: mergedHeaders,
-    }).then(handleResponse);
+    });
+    return handleResponse(response);
   },
 };
+
+/**
+ * Re-export ApiError for convenience
+ *
+ * Services can import ApiError from either urlUtils or ApiError.
+ */
+export { ApiError, ApiErrorType } from './ApiError';

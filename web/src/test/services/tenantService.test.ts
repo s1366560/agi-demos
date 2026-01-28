@@ -1,9 +1,13 @@
 /**
  * Tests for tenantService using apiFetch
+ *
+ * apiFetch automatically throws ApiError for non-success responses,
+ * so services can be simplified without manual error handling.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { tenantService } from '../../services/tenantService';
+import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 
 // Mock apiFetch
 vi.mock('../../services/client/urlUtils', () => ({
@@ -45,19 +49,19 @@ describe('tenantService', () => {
       expect(result).toEqual(mockMembers);
     });
 
-    it('should throw error on failed response', async () => {
+    it('should propagate ApiError on failed response', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        json: async () => ({ detail: 'Failed to list members' }),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.SERVER,
+        'INTERNAL_ERROR',
+        'Failed to list members',
+        500
+      );
+      vi.mocked(apiFetch.get).mockRejectedValueOnce(mockError);
 
       await expect(
         tenantService.listMembers('tenant-1')
-      ).rejects.toThrow('Failed to list tenant members');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -80,19 +84,19 @@ describe('tenantService', () => {
       );
     });
 
-    it('should throw error on failed add', async () => {
+    it('should propagate ApiError on failed add', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({ detail: 'Failed to add member' }),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.VALIDATION,
+        'BAD_REQUEST',
+        'Failed to add member',
+        400
+      );
+      vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
       await expect(
         tenantService.addMember('tenant-1', 'user-2', 'member')
-      ).rejects.toThrow('Failed to add tenant member');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -114,19 +118,19 @@ describe('tenantService', () => {
       );
     });
 
-    it('should throw error on failed removal', async () => {
+    it('should propagate ApiError on failed removal', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({ detail: 'Failed to remove member' }),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.NOT_FOUND,
+        'NOT_FOUND',
+        'Failed to remove member',
+        404
+      );
+      vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
 
       await expect(
         tenantService.removeMember('tenant-1', 'user-2')
-      ).rejects.toThrow('Failed to remove tenant member');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -149,19 +153,19 @@ describe('tenantService', () => {
       );
     });
 
-    it('should throw error on failed update', async () => {
+    it('should propagate ApiError on failed update', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-        statusText: 'Forbidden',
-        json: async () => ({ detail: 'Failed to update role' }),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.AUTHORIZATION,
+        'FORBIDDEN',
+        'Failed to update role',
+        403
+      );
+      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
       await expect(
         tenantService.updateMemberRole('tenant-1', 'user-2', 'admin')
-      ).rejects.toThrow('Failed to update member role');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -224,19 +228,19 @@ describe('tenantService', () => {
       expect(result).toEqual(mockTenant);
     });
 
-    it('should throw error on failed creation', async () => {
+    it('should propagate ApiError on failed creation', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({ detail: 'Failed to create tenant' }),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.VALIDATION,
+        'BAD_REQUEST',
+        'Failed to create tenant',
+        400
+      );
+      vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
       await expect(
         tenantService.createTenant('Test', 'Description')
-      ).rejects.toThrow('Failed to create tenant');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -262,19 +266,19 @@ describe('tenantService', () => {
       expect(apiFetch.patch).toHaveBeenCalledWith(`/tenants/${tenantId}`, updates);
     });
 
-    it('should throw error on failed update', async () => {
+    it('should propagate ApiError on failed update', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({ detail: 'Failed to update tenant' }),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.VALIDATION,
+        'BAD_REQUEST',
+        'Failed to update tenant',
+        400
+      );
+      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
       await expect(
         tenantService.updateTenant('tenant-1', { name: 'Test' })
-      ).rejects.toThrow('Failed to update tenant');
+      ).rejects.toThrow(ApiError);
     });
   });
 });

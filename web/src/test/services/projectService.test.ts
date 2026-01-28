@@ -1,9 +1,13 @@
 /**
  * Tests for projectService using apiFetch
+ *
+ * apiFetch automatically throws ApiError for non-success responses,
+ * so services can be simplified without manual error handling.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { projectService } from '../../services/projectService';
+import { ApiError, ApiErrorType } from '../../services/client/ApiError';
 
 // Mock apiFetch
 vi.mock('../../services/client/urlUtils', () => ({
@@ -62,28 +66,17 @@ describe('projectService - Service Tests', () => {
       expect(result).toEqual({ users: mockUsers });
     });
 
-    it('should throw error when API call fails', async () => {
+    it('should propagate ApiError when API call fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
-
-      await expect(projectService.listMembers(mockProjectId)).rejects.toThrow(
-        'Failed to list project members: Not Found'
+      const mockError = new ApiError(
+        ApiErrorType.NOT_FOUND,
+        'NOT_FOUND',
+        'Project not found',
+        404
       );
-    });
+      vi.mocked(apiFetch.get).mockRejectedValueOnce(mockError);
 
-    it('should throw error when network fails', async () => {
-      const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(projectService.listMembers(mockProjectId)).rejects.toThrow(
-        'Failed to list project members: Network error'
-      );
+      await expect(projectService.listMembers(mockProjectId)).rejects.toThrow(ApiError);
     });
   });
 
@@ -106,19 +99,19 @@ describe('projectService - Service Tests', () => {
       );
     });
 
-    it('should throw error when add member fails', async () => {
+    it('should propagate ApiError when add member fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.VALIDATION,
+        'BAD_REQUEST',
+        'Invalid input',
+        400
+      );
+      vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
       await expect(
         projectService.addMember(mockProjectId, mockUserId, mockRole)
-      ).rejects.toThrow('Failed to add project member: Bad Request');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -140,19 +133,19 @@ describe('projectService - Service Tests', () => {
       );
     });
 
-    it('should throw error when remove member fails', async () => {
+    it('should propagate ApiError when remove member fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.NOT_FOUND,
+        'NOT_FOUND',
+        'Member not found',
+        404
+      );
+      vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
 
       await expect(
         projectService.removeMember(mockProjectId, mockUserId)
-      ).rejects.toThrow('Failed to remove project member: Not Found');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -176,19 +169,19 @@ describe('projectService - Service Tests', () => {
       );
     });
 
-    it('should throw error when update role fails', async () => {
+    it('should propagate ApiError when update role fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-        statusText: 'Forbidden',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.AUTHORIZATION,
+        'FORBIDDEN',
+        'Insufficient permissions',
+        403
+      );
+      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
       await expect(
         projectService.updateMemberRole(mockProjectId, mockUserId, mockRole)
-      ).rejects.toThrow('Failed to update member role: Forbidden');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -228,19 +221,19 @@ describe('projectService - Service Tests', () => {
       expect(result).toEqual(updatedProject);
     });
 
-    it('should throw error when update project fails', async () => {
+    it('should propagate ApiError when update project fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      const mockError = new ApiError(
+        ApiErrorType.VALIDATION,
+        'BAD_REQUEST',
+        'Invalid input',
+        400
+      );
+      vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
       await expect(
         projectService.updateProject(mockProjectId, { name: 'New Name' })
-      ).rejects.toThrow('Failed to update project: Bad Request');
+      ).rejects.toThrow(ApiError);
     });
   });
 
@@ -260,19 +253,17 @@ describe('projectService - Service Tests', () => {
       expect(apiFetch.delete).toHaveBeenCalledWith(`/projects/${mockProjectId}`);
     });
 
-    it('should throw error when delete project fails', async () => {
+    it('should propagate ApiError when delete project fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: false,
-        status: 403,
-        statusText: 'Forbidden',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
-
-      await expect(projectService.deleteProject(mockProjectId)).rejects.toThrow(
-        'Failed to delete project: Forbidden'
+      const mockError = new ApiError(
+        ApiErrorType.AUTHORIZATION,
+        'FORBIDDEN',
+        'Cannot delete project',
+        403
       );
+      vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
+
+      await expect(projectService.deleteProject(mockProjectId)).rejects.toThrow(ApiError);
     });
   });
 });

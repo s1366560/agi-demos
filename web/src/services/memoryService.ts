@@ -1,5 +1,8 @@
 /**
  * Memory Service - API calls for memory management
+ *
+ * Uses apiFetch which automatically throws ApiError for non-success responses.
+ * No manual error handling needed - errors propagate to callers.
  */
 
 import { apiFetch } from './client/urlUtils';
@@ -36,14 +39,8 @@ export const memoryService = {
   /**
    * Update an existing memory
    */
-  updateMemory: async (memoryId: string, updates: MemoryUpdate): Promise<Response> => {
+  updateMemory: async (memoryId: string, updates: MemoryUpdate): Promise<unknown> => {
     const response = await apiFetch.patch(`/memories/${memoryId}`, updates);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to update memory');
-    }
-
     return response.json();
   },
 
@@ -52,12 +49,6 @@ export const memoryService = {
    */
   shareMemory: async (memoryId: string, shareData: MemoryShareCreate): Promise<MemoryShareResponse> => {
     const response = await apiFetch.post(`/memories/${memoryId}/shares`, shareData);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to share memory');
-    }
-
     return response.json();
   },
 
@@ -65,11 +56,6 @@ export const memoryService = {
    * Delete a memory share
    */
   deleteMemoryShare: async (memoryId: string, shareId: string): Promise<void> => {
-    const response = await apiFetch.delete(`/memories/${memoryId}/shares/${shareId}`);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to delete share');
-    }
+    await apiFetch.delete(`/memories/${memoryId}/shares/${shareId}`);
   },
 };
