@@ -207,6 +207,14 @@ export type AgentEventType =
   // Permission events
   | "permission_asked" // Permission asked
   | "permission_replied" // Permission replied
+  // Sandbox events (desktop and terminal)
+  | "desktop_started" // Remote desktop started
+  | "desktop_stopped" // Remote desktop stopped
+  | "desktop_status" // Remote desktop status update
+  | "terminal_started" // Web terminal started
+  | "terminal_stopped" // Web terminal stopped
+  | "terminal_status" // Web terminal status update
+  | "screenshot_update" // Desktop screenshot update
   // System events
   | "start" // Stream started
   | "status" // Status update
@@ -295,6 +303,7 @@ export interface ActEventData {
   tool_name: string;
   tool_input: Record<string, unknown>;
   step_number?: number;
+  execution_id?: string;  // New: unique ID for act/observe matching
 }
 
 /**
@@ -302,6 +311,8 @@ export interface ActEventData {
  */
 export interface ObserveEventData {
   observation: string;
+  tool_name?: string;       // New: tool name
+  execution_id?: string;  // New: matches act event's execution_id
 }
 
 /**
@@ -1548,7 +1559,17 @@ export type TimelineEventType =
   | "observe"
   | "work_plan"
   | "step_start"
-  | "step_end";
+  | "step_end"
+  | "text_delta"
+  | "text_start"
+  | "text_end"
+  | "desktop_started"
+  | "desktop_stopped"
+  | "desktop_status"
+  | "terminal_started"
+  | "terminal_stopped"
+  | "terminal_status"
+  | "screenshot_update";
 
 /**
  * Base timeline event (all events share these fields)
@@ -1595,6 +1616,7 @@ export interface ActEvent extends BaseTimelineEvent {
   type: "act";
   toolName: string;
   toolInput: Record<string, unknown>;
+  execution_id?: string;  // New: unique ID for act/observe matching
   execution?: {
     startTime: number;
     endTime: number;
@@ -1610,6 +1632,7 @@ export interface ObserveEvent extends BaseTimelineEvent {
   toolName: string;
   toolOutput: string;
   isError: boolean;
+  execution_id?: string;  // New: matches act event's execution_id
 }
 
 /**
@@ -1644,6 +1667,29 @@ export interface StepEndEvent extends BaseTimelineEvent {
 }
 
 /**
+ * Text delta event (typewriter effect - incremental text)
+ */
+export interface TextDeltaEvent extends BaseTimelineEvent {
+  type: "text_delta";
+  content: string;
+}
+
+/**
+ * Text start event (typewriter effect - marks beginning)
+ */
+export interface TextStartEvent extends BaseTimelineEvent {
+  type: "text_start";
+}
+
+/**
+ * Text end event (typewriter effect - marks completion)
+ */
+export interface TextEndEvent extends BaseTimelineEvent {
+  type: "text_end";
+  fullText?: string;
+}
+
+/**
  * Union type for all timeline events
  */
 export type TimelineEvent =
@@ -1654,7 +1700,17 @@ export type TimelineEvent =
   | ObserveEvent
   | WorkPlanTimelineEvent
   | StepStartEvent
-  | StepEndEvent;
+  | StepEndEvent
+  | TextDeltaEvent
+  | TextStartEvent
+  | TextEndEvent
+  | DesktopStartedEvent
+  | DesktopStoppedEvent
+  | DesktopStatusEvent
+  | TerminalStartedEvent
+  | TerminalStoppedEvent
+  | TerminalStatusEvent
+  | ScreenshotUpdateEvent;
 
 /**
  * Timeline response from API (unified event stream)
@@ -1663,4 +1719,165 @@ export interface TimelineResponse {
   conversationId: string;
   timeline: TimelineEvent[];
   total: number;
+}
+
+// ============================================
+// Sandbox Types (Desktop and Terminal)
+// ============================================
+
+/**
+ * Desktop status for remote desktop sessions
+ */
+export interface DesktopStatus {
+  running: boolean;
+  url: string | null;
+  display: string;
+  resolution: string;
+  port: number;
+  xvfbPid?: number | null;
+  xvncPid?: number | null;
+}
+
+/**
+ * Terminal status for web terminal sessions
+ */
+export interface TerminalStatus {
+  running: boolean;
+  url: string | null;
+  port: number;
+  pid?: number | null;
+  sessionId?: string | null;
+}
+
+/**
+ * Desktop started event data
+ */
+export interface DesktopStartedEventData {
+  sandbox_id: string;
+  url: string;
+  display: string;
+  resolution: string;
+  port: number;
+}
+
+/**
+ * Desktop stopped event data
+ */
+export interface DesktopStoppedEventData {
+  sandbox_id: string;
+}
+
+/**
+ * Desktop status event data
+ */
+export interface DesktopStatusEventData extends DesktopStatus {
+  sandbox_id: string;
+}
+
+/**
+ * Terminal started event data
+ */
+export interface TerminalStartedEventData {
+  sandbox_id: string;
+  url: string;
+  port: number;
+  sessionId: string;
+}
+
+/**
+ * Terminal stopped event data
+ */
+export interface TerminalStoppedEventData {
+  sandbox_id: string;
+  sessionId?: string;
+}
+
+/**
+ * Terminal status event data
+ */
+export interface TerminalStatusEventData extends TerminalStatus {
+  sandbox_id: string;
+}
+
+/**
+ * Screenshot update event data
+ */
+export interface ScreenshotUpdateEventData {
+  sandbox_id: string;
+  imageUrl: string;
+  timestamp: number;
+}
+
+/**
+ * Desktop started timeline event
+ */
+export interface DesktopStartedEvent extends BaseTimelineEvent {
+  type: "desktop_started";
+  sandboxId: string;
+  url: string;
+  display: string;
+  resolution: string;
+  port: number;
+}
+
+/**
+ * Desktop stopped timeline event
+ */
+export interface DesktopStoppedEvent extends BaseTimelineEvent {
+  type: "desktop_stopped";
+  sandboxId: string;
+}
+
+/**
+ * Desktop status timeline event
+ */
+export interface DesktopStatusEvent extends BaseTimelineEvent {
+  type: "desktop_status";
+  sandboxId: string;
+  running: boolean;
+  url: string | null;
+  display: string;
+  resolution: string;
+  port: number;
+}
+
+/**
+ * Terminal started timeline event
+ */
+export interface TerminalStartedEvent extends BaseTimelineEvent {
+  type: "terminal_started";
+  sandboxId: string;
+  url: string;
+  port: number;
+  sessionId: string;
+}
+
+/**
+ * Terminal stopped timeline event
+ */
+export interface TerminalStoppedEvent extends BaseTimelineEvent {
+  type: "terminal_stopped";
+  sandboxId: string;
+  sessionId?: string;
+}
+
+/**
+ * Terminal status timeline event
+ */
+export interface TerminalStatusEvent extends BaseTimelineEvent {
+  type: "terminal_status";
+  sandboxId: string;
+  running: boolean;
+  url: string | null;
+  port: number;
+  sessionId?: string;
+}
+
+/**
+ * Screenshot update timeline event
+ */
+export interface ScreenshotUpdateEvent extends BaseTimelineEvent {
+  type: "screenshot_update";
+  sandboxId: string;
+  imageUrl: string;
 }

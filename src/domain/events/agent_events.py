@@ -186,14 +186,25 @@ class AgentStepFinishEvent(AgentDomainEvent):
 
 
 class AgentActEvent(AgentDomainEvent):
+    """Event: Agent calls a tool.
+
+    The tool_execution_id uniquely identifies this tool execution and
+    is used to match with the corresponding AgentObserveEvent.
+    """
     event_type: AgentEventType = AgentEventType.ACT
     tool_name: str
     tool_input: Optional[Dict[str, Any]] = None
     call_id: Optional[str] = None
     status: str = "running"
+    tool_execution_id: Optional[str] = None  # New field for act/observe matching
 
 
 class AgentObserveEvent(AgentDomainEvent):
+    """Event: Tool execution result.
+
+    The tool_execution_id must match the corresponding AgentActEvent
+    for reliable act/observe pairing in the frontend.
+    """
     event_type: AgentEventType = AgentEventType.OBSERVE
     tool_name: str
     result: Optional[Any] = None
@@ -201,6 +212,7 @@ class AgentObserveEvent(AgentDomainEvent):
     duration_ms: Optional[int] = None
     call_id: Optional[str] = None
     status: str = "completed"
+    tool_execution_id: Optional[str] = None  # New field for act/observe matching
 
 
 # === Text Events ===

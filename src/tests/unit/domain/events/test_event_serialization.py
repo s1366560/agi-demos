@@ -115,3 +115,73 @@ class TestEventSerialization:
             json.dumps(event_dict)
         except (TypeError, ValueError) as e:
             pytest.fail(f"Event dict is not JSON serializable: {e}")
+
+
+class TestToolExecutionId:
+    """Test tool_execution_id field for act/observe event matching."""
+
+    def test_act_event_with_tool_execution_id(self):
+        """ActEvent should include tool_execution_id field."""
+        event = AgentActEvent(
+            tool_name="MemorySearch",
+            tool_input={"query": "test"},
+            call_id="call_123",
+            status="running",
+            tool_execution_id="exec_abc123def456",  # New field
+        )
+        event_dict = event.to_event_dict()
+
+        assert event_dict["data"]["tool_execution_id"] == "exec_abc123def456"
+        assert event_dict["data"]["tool_name"] == "MemorySearch"
+
+    def test_observe_event_with_tool_execution_id(self):
+        """ObserveEvent should include tool_execution_id field."""
+        event = AgentObserveEvent(
+            tool_name="MemorySearch",
+            result={"found": 5},
+            duration_ms=100,
+            call_id="call_123",
+            tool_execution_id="exec_abc123def456",  # New field, matches act
+        )
+        event_dict = event.to_event_dict()
+
+        assert event_dict["data"]["tool_execution_id"] == "exec_abc123def456"
+        assert event_dict["data"]["tool_name"] == "MemorySearch"
+
+    def test_act_observe_execution_id_matching(self):
+        """Act and Observe events should share the same execution_id."""
+        execution_id = "exec_xyz789"
+
+        act_event = AgentActEvent(
+            tool_name="WebSearch",
+            tool_input={"q": "test"},
+            tool_execution_id=execution_id,
+        )
+
+        observe_event = AgentObserveEvent(
+            tool_name="WebSearch",
+            result={"results": []},
+            tool_execution_id=execution_id,
+        )
+
+        assert act_event.tool_execution_id == observe_event.tool_execution_id
+        assert act_event.tool_execution_id == execution_id
+
+    def test_execution_id_uniqueness(self):
+        """Different tool executions should have unique execution_ids."""
+        import uuid
+
+        # Generate two execution IDs
+        id1 = f"exec_{uuid.uuid4().hex[:12]}"
+        id2 = f"exec_{uuid.uuid4().hex[:12]}"
+
+        # They should be different
+        assert id1 != id2
+
+        # Both should start with "exec_"
+        assert id1.startswith("exec_")
+        assert id2.startswith("exec_")
+
+        # Both should be valid length (exec_ + 12 hex chars = 17 chars)
+        assert len(id1) == 17
+        assert len(id2) == 17

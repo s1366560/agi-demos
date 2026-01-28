@@ -40,6 +40,7 @@ class ToolPart:
     metadata: Dict[str, Any] = field(default_factory=dict)
     start_time: Optional[float] = None
     end_time: Optional[float] = None
+    tool_execution_id: Optional[str] = None  # Unique ID for act/observe matching
 
     @property
     def duration_ms(self) -> Optional[int]:

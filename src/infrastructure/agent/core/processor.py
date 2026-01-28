@@ -741,6 +741,8 @@ class SessionProcessor:
                             tool_part.input = arguments
                             tool_part.status = ToolState.RUNNING
                             tool_part.start_time = time.time()
+                            # Generate unique execution_id for act/observe matching
+                            tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
 
                             # Get step number from tool-to-step mapping
                             step_number = self._tool_to_step_mapping.get(tool_name)
@@ -755,6 +757,7 @@ class SessionProcessor:
                                 tool_input=arguments,
                                 call_id=call_id,
                                 status="running",
+                                tool_execution_id=tool_part.tool_execution_id,
                             )
                             # Add step_number to the event data for frontend
                             if step_number is not None:
@@ -896,6 +899,7 @@ class SessionProcessor:
                 tool_name=tool_name,
                 error="Tool call not found",
                 call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id if tool_part else None,
             )
             return
 
@@ -910,6 +914,7 @@ class SessionProcessor:
                 tool_name=tool_name,
                 error=f"Unknown tool: {tool_name}",
                 call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
             )
             return
 
@@ -944,6 +949,7 @@ class SessionProcessor:
                         tool_name=tool_name,
                         error="Doom loop detected and rejected",
                         call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
                     )
                     return
 
@@ -956,6 +962,7 @@ class SessionProcessor:
                     tool_name=tool_name,
                     error="Permission request timed out",
                     call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
                 )
                 return
 
@@ -996,6 +1003,7 @@ class SessionProcessor:
                     tool_name=tool_name,
                     error=f"Permission denied: {tool_def.permission}",
                     call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
                 )
                 return
 
@@ -1030,6 +1038,7 @@ class SessionProcessor:
                             tool_name=tool_name,
                             error="Permission rejected by user",
                             call_id=call_id,
+                            tool_execution_id=tool_part.tool_execution_id,
                         )
                         return
 
@@ -1042,6 +1051,7 @@ class SessionProcessor:
                         tool_name=tool_name,
                         error="Permission request timed out",
                         call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
                     )
                     return
 
@@ -1085,6 +1095,7 @@ class SessionProcessor:
                 result=sse_result,
                 duration_ms=int((end_time - start_time) * 1000),
                 call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
             )
 
         except Exception as e:
@@ -1108,6 +1119,7 @@ class SessionProcessor:
                 if tool_part.start_time
                 else None,
                 call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
             )
 
         self._state = ProcessorState.OBSERVING
@@ -1231,6 +1243,7 @@ class SessionProcessor:
                     result=answer,
                     duration_ms=int((end_time - start_time) * 1000),
                     call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
                 )
 
             except asyncio.TimeoutError:
@@ -1242,6 +1255,7 @@ class SessionProcessor:
                     tool_name=tool_name,
                     error="Clarification request timed out",
                     call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
                 )
             finally:
                 # Clean up request
@@ -1258,6 +1272,7 @@ class SessionProcessor:
                 tool_name=tool_name,
                 error=str(e),
                 call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
             )
 
         self._state = ProcessorState.OBSERVING
@@ -1390,6 +1405,7 @@ class SessionProcessor:
                     result=decision,
                     duration_ms=int((end_time - start_time) * 1000),
                     call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
                 )
 
             except asyncio.TimeoutError:
@@ -1411,6 +1427,7 @@ class SessionProcessor:
                         result=f"Timeout - used default: {default_option}",
                         duration_ms=int((end_time - start_time) * 1000),
                         call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
                     )
                 else:
                     tool_part.status = ToolState.ERROR
@@ -1421,6 +1438,7 @@ class SessionProcessor:
                         tool_name=tool_name,
                         error="Decision request timed out",
                         call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
                     )
             finally:
                 # Clean up request
@@ -1437,6 +1455,7 @@ class SessionProcessor:
                 tool_name=tool_name,
                 error=str(e),
                 call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
             )
 
         self._state = ProcessorState.OBSERVING

@@ -23,7 +23,16 @@ import type {
   StepStartEventData,
   StepEndEventData,
   CompleteEventData,
+  TextDeltaEventData,
+  TextEndEventData,
   BaseTimelineEvent,
+  DesktopStartedEventData,
+  DesktopStoppedEventData,
+  DesktopStatusEventData,
+  TerminalStartedEventData,
+  TerminalStoppedEventData,
+  TerminalStatusEventData,
+  ScreenshotUpdateEventData,
 } from '../types/agent';
 
 /**
@@ -145,6 +154,7 @@ export function sseEventToTimeline(
         timestamp,
         toolName: data.tool_name,
         toolInput: data.tool_input,
+        execution_id: data.execution_id, // Unique ID for act/observe matching
         execution: {
           startTime: timestamp,
           endTime: 0, // Will be set when observe arrives
@@ -161,7 +171,8 @@ export function sseEventToTimeline(
         type: 'observe',
         sequenceNumber,
         timestamp,
-        toolName: 'unknown', // Will be matched with previous act
+        toolName: data.tool_name ?? 'unknown', // Use tool_name from event
+        execution_id: data.execution_id, // Unique ID for act/observe matching
         toolOutput: data.observation,
         isError: false,
       };
@@ -224,6 +235,133 @@ export function sseEventToTimeline(
       };
     }
 
+    case 'text_start': {
+      return {
+        id: generateTimelineEventId('text_start'),
+        type: 'text_start',
+        sequenceNumber,
+        timestamp,
+      };
+    }
+
+    case 'text_delta': {
+      const data = event.data as unknown as TextDeltaEventData;
+      return {
+        id: generateTimelineEventId('text_delta'),
+        type: 'text_delta',
+        sequenceNumber,
+        timestamp,
+        content: data.delta,
+      };
+    }
+
+    case 'text_end': {
+      const data = event.data as unknown as TextEndEventData;
+      return {
+        id: generateTimelineEventId('text_end'),
+        type: 'text_end',
+        sequenceNumber,
+        timestamp,
+        fullText: data.full_text,
+      };
+    }
+
+    // Sandbox events - desktop and terminal
+    case 'desktop_started': {
+      const data = event.data as unknown as DesktopStartedEventData;
+      return {
+        id: generateTimelineEventId('desktop_started'),
+        type: 'desktop_started',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        url: data.url,
+        display: data.display,
+        resolution: data.resolution,
+        port: data.port,
+      };
+    }
+
+    case 'desktop_stopped': {
+      const data = event.data as unknown as DesktopStoppedEventData;
+      return {
+        id: generateTimelineEventId('desktop_stopped'),
+        type: 'desktop_stopped',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+      };
+    }
+
+    case 'desktop_status': {
+      const data = event.data as unknown as DesktopStatusEventData;
+      return {
+        id: generateTimelineEventId('desktop_status'),
+        type: 'desktop_status',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        running: data.running,
+        url: data.url,
+        display: data.display,
+        resolution: data.resolution,
+        port: data.port,
+      };
+    }
+
+    case 'terminal_started': {
+      const data = event.data as unknown as TerminalStartedEventData;
+      return {
+        id: generateTimelineEventId('terminal_started'),
+        type: 'terminal_started',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        url: data.url,
+        port: data.port,
+        sessionId: data.sessionId,
+      };
+    }
+
+    case 'terminal_stopped': {
+      const data = event.data as unknown as TerminalStoppedEventData;
+      return {
+        id: generateTimelineEventId('terminal_stopped'),
+        type: 'terminal_stopped',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        sessionId: data.sessionId ?? undefined,
+      };
+    }
+
+    case 'terminal_status': {
+      const data = event.data as unknown as TerminalStatusEventData;
+      return {
+        id: generateTimelineEventId('terminal_status'),
+        type: 'terminal_status',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        running: data.running,
+        url: data.url,
+        port: data.port,
+        sessionId: data.sessionId ?? undefined,
+      };
+    }
+
+    case 'screenshot_update': {
+      const data = event.data as unknown as ScreenshotUpdateEventData;
+      return {
+        id: generateTimelineEventId('screenshot_update'),
+        type: 'screenshot_update',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        imageUrl: data.imageUrl,
+      };
+    }
+
     // Unsupported event types - return null
     case 'start':
     case 'status':
@@ -254,9 +392,6 @@ export function sseEventToTimeline(
     case 'plan_status_changed':
     case 'title_generated':
     case 'thought_delta':
-    case 'text_start':
-    case 'text_delta':
-    case 'text_end':
       return null;
 
     default:
@@ -341,6 +476,17 @@ export function isSupportedEventType(eventType: string): boolean {
     'step_end',
     'step_finish',
     'complete',
+    'text_start',
+    'text_delta',
+    'text_end',
+    // Sandbox events
+    'desktop_started',
+    'desktop_stopped',
+    'desktop_status',
+    'terminal_started',
+    'terminal_stopped',
+    'terminal_status',
+    'screenshot_update',
   ];
 
   return supportedTypes.includes(eventType);
