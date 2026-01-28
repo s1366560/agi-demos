@@ -124,7 +124,7 @@ export const TimelineEventGroup: React.FC<TimelineEventGroupProps> = memo(({
   const hasContent = group.content.length > 0;
 
   return (
-    <div className="space-y-4 animate-slide-up">
+    <div className="space-y-3 animate-slide-up">
       {/* Work Plan */}
       {hasWorkPlan && (() => {
         const props = getStepStatusProps(group.workPlan, group.toolCalls);

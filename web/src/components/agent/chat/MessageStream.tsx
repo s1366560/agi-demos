@@ -31,7 +31,7 @@ export function MessageStream({
   className = "",
 }: MessageStreamProps) {
   return (
-    <div className={`max-w-5xl mx-auto space-y-6 ${className}`}>{children}</div>
+    <div className={`max-w-3xl mx-auto space-y-4 ${className}`}>{children}</div>
   );
 }
 

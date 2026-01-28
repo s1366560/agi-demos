@@ -300,6 +300,71 @@ body {
 }
 
 /* ============================================================================
+ * AGENT CHAT SCROLLBARS
+ * Enhanced scrollbars for better UX
+ * ============================================================================ */
+
+/* Chat message area - always visible, subtle */
+.chat-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-border-light);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-dark);
+}
+
+.dark .chat-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-border-dark);
+}
+
+.dark .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+/* Chat message area - slightly thinner for cleaner look */
+.chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(203, 213, 225, 0.3);
+    border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.5);
+}
+
+.dark .chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.dark .chat-messages::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Focus state for scrollable areas during keyboard navigation */
+.chat-scrollbar:focus-visible,
+.chat-messages:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ============================================================================
  * TYPOGRAPHY UTILITIES
  * ============================================================================ */
 

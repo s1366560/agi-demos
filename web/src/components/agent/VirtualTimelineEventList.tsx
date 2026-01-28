@@ -169,7 +169,7 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   // Empty state with improved styling
   if (timeline.length === 0) {
     return (
-      <div className={`flex-1 overflow-y-auto p-6 ${className}`}>
+      <div className={`flex-1 overflow-y-auto p-6 chat-messages ${className}`}>
         <MessageStream className="max-w-3xl mx-auto">
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center">
@@ -188,12 +188,12 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   }
 
   return (
-    <div className={`flex-1 overflow-y-auto p-6 ${className}`}>
+    <div className={`flex-1 overflow-y-auto p-6 chat-messages ${className}`}>
       <MessageStream className="max-w-3xl mx-auto">
         <div
           ref={scrollContainerRef}
           data-testid="virtual-scroll-container"
-          className="overflow-auto pr-2"
+          className="overflow-auto pr-2 chat-scrollbar"
           style={{ height: `${containerHeight}px` }}
         >
           <div

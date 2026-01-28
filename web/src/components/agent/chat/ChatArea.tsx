@@ -255,7 +255,7 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   return (
     <div
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto px-4 pt-6 scroll-smooth"
+      className="flex-1 overflow-y-auto px-4 pt-6 scroll-smooth chat-messages"
       onScroll={handleScroll}
     >
       <div className="max-w-4xl mx-auto">
