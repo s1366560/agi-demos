@@ -488,6 +488,10 @@ class AgentServiceImpl implements AgentService {
       case "thought":
         handler.onThought?.(event as AgentEvent<ThoughtEventData>);
         break;
+      case "thought_delta":
+        // Route thought_delta to onThought handler for incremental thought updates
+        handler.onThought?.(event as AgentEvent<ThoughtEventData>);
+        break;
       case "work_plan":
         handler.onWorkPlan?.(event as AgentEvent<WorkPlanEventData>);
         break;

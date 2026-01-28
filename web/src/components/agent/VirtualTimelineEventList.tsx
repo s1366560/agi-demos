@@ -138,6 +138,34 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
     }
   }, [groupedEvents.length, isStreaming]);
 
+  // Estimate group height for virtual scrolling (must be called before early return)
+  const estimateGroupHeightCallback = useCallback((index: number) => {
+    return estimateGroupHeight(groupedEvents[index]);
+  }, [groupedEvents]);
+
+  // Set up virtual row virtualizer (must be called before early return)
+  const rowVirtualizer = useVirtualizer({
+    count: groupedEvents.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: estimateGroupHeightCallback,
+    overscan: 3,
+  });
+
+  // Render callback (must be called before early return)
+  const renderGroup = useCallback((group: EventGroup) => {
+    return (
+      <TimelineEventRenderer
+        events={group.events}
+        isStreaming={isStreaming && group.isStreaming}
+        showExecutionDetails={showExecutionDetails}
+        className=""
+      />
+    );
+  }, [isStreaming, showExecutionDetails]);
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+
   // Empty state
   if (timeline.length === 0) {
     return (
@@ -153,34 +181,6 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
       </div>
     );
   }
-
-  // Estimate group height for virtual scrolling
-  const estimateGroupHeightCallback = useCallback((index: number) => {
-    return estimateGroupHeight(groupedEvents[index]);
-  }, [groupedEvents]);
-
-  // Set up virtual row virtualizer
-  const rowVirtualizer = useVirtualizer({
-    count: groupedEvents.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: estimateGroupHeightCallback,
-    overscan: 3,
-  });
-
-  const virtualRows = rowVirtualizer.getVirtualItems();
-  const totalSize = rowVirtualizer.getTotalSize();
-
-  // Render a single event group
-  const renderGroup = useCallback((group: EventGroup) => {
-    return (
-      <TimelineEventRenderer
-        events={group.events}
-        isStreaming={isStreaming && group.isStreaming}
-        showExecutionDetails={showExecutionDetails}
-        className=""
-      />
-    );
-  }, [isStreaming, showExecutionDetails]);
 
   return (
     <div className={`flex-1 overflow-y-auto p-4 custom-scrollbar ${className}`}>

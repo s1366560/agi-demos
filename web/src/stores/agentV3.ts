@@ -10,11 +10,18 @@ import {
   AgentEvent,
   ActEventData,
   ObserveEventData,
+  UserMessageEvent,
+  MessageEventData,
+  ThoughtEventData,
+  WorkPlanEventData,
+  StepStartEventData,
+  CompleteEventData,
 } from "../types/agent";
 import { agentService } from "../services/agentService";
 import { agentEventReplayService } from "../services/agentEventReplayService";
 import { planService } from "../services/planService";
 import { v4 as uuidv4 } from "uuid";
+import { appendSSEEventToTimeline } from "../utils/sseEventAdapter";
 
 /**
  * Additional handlers that can be injected into sendMessage
@@ -557,7 +564,7 @@ export const useAgentV3Store = create<AgentV3State>()(
     },
 
     sendMessage: async (content, projectId, additionalHandlers) => {
-      const { activeConversationId, messages } = get();
+      const { activeConversationId, messages, timeline } = get();
 
       let conversationId = activeConversationId;
       let isNewConversation = false;
@@ -580,8 +587,9 @@ export const useAgentV3Store = create<AgentV3State>()(
         }
       }
 
+      const userMsgId = uuidv4();
       const userMsg: Message = {
-        id: uuidv4(),
+        id: userMsgId,
         conversation_id: conversationId!,
         role: "user",
         content,
@@ -600,8 +608,19 @@ export const useAgentV3Store = create<AgentV3State>()(
         metadata: { thoughts: [], tool_executions: {}, timeline: [] }, // Initialize metadata
       };
 
+      // Create user message TimelineEvent and append to timeline
+      const userMessageEvent: UserMessageEvent = {
+        id: userMsgId,
+        type: "user_message",
+        sequenceNumber: timeline.length > 0 ? timeline[timeline.length - 1].sequenceNumber + 1 : 1,
+        timestamp: Date.now(),
+        content,
+        role: "user",
+      };
+
       set({
         messages: [...messages, userMsg, assistantMsg],
+        timeline: [...timeline, userMessageEvent],
         isStreaming: true,
         streamStatus: "connecting",
         error: null,
@@ -616,22 +635,26 @@ export const useAgentV3Store = create<AgentV3State>()(
         onMessage: (_event) => {},
         onThought: (event) => {
           set((state) => {
+            // Append thought event to timeline using SSE adapter
+            const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
+
             const newThought = event.data.thought;
             // Skip empty thoughts (REASONING_START events) - only process complete thoughts
             if (!newThought || newThought.trim() === "") {
-              return { agentState: "thinking" };
+              return { agentState: "thinking", timeline: updatedTimeline };
             }
             const newMessages = state.messages.map((m) => {
               if (m.id === assistantMsgId) {
                 const thoughts = (m.metadata?.thoughts as string[]) || [];
-                const timeline = (m.metadata?.timeline as TimelineItem[]) || [];
+                const msgTimeline = (m.metadata?.timeline as TimelineItem[]) || [];
                 return {
                   ...m,
                   metadata: {
                     ...m.metadata,
                     thoughts: [...thoughts, newThought],
                     timeline: [
-                      ...timeline,
+                      ...msgTimeline,
                       {
                         type: "thought",
                         id: uuidv4(),
@@ -648,39 +671,56 @@ export const useAgentV3Store = create<AgentV3State>()(
               currentThought: state.currentThought + "\n" + newThought,
               agentState: "thinking",
               messages: newMessages,
+              timeline: updatedTimeline,
             };
           });
         },
         onWorkPlan: (event) => {
-          set({
-            workPlan: {
-              id: event.data.plan_id,
-              conversation_id: event.data.conversation_id,
-              status: event.data.status,
-              steps: event.data.steps.map((s) => ({
-                step_number: s.step_number,
-                description: s.description,
-                thought_prompt: "",
-                required_tools: [],
-                expected_output: s.expected_output,
-                dependencies: [],
-              })),
-              current_step_index: event.data.current_step,
-              created_at: new Date().toISOString(),
-            },
+          set((state) => {
+            // Append work_plan event to timeline using SSE adapter
+            const workPlanEvent: AgentEvent<WorkPlanEventData> = event as AgentEvent<WorkPlanEventData>;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, workPlanEvent);
+
+            return {
+              workPlan: {
+                id: event.data.plan_id,
+                conversation_id: event.data.conversation_id,
+                status: event.data.status,
+                steps: event.data.steps.map((s) => ({
+                  step_number: s.step_number,
+                  description: s.description,
+                  thought_prompt: "",
+                  required_tools: [],
+                  expected_output: s.expected_output,
+                  dependencies: [],
+                })),
+                current_step_index: event.data.current_step,
+                created_at: new Date().toISOString(),
+              },
+              timeline: updatedTimeline,
+            };
           });
         },
         onStepStart: (event) => {
           set((state) => {
-            if (!state.workPlan) return {};
+            // Append step_start event to timeline using SSE adapter
+            const stepStartEvent: AgentEvent<StepStartEventData> = event as AgentEvent<StepStartEventData>;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, stepStartEvent);
+
+            if (!state.workPlan) {
+              return { timeline: updatedTimeline };
+            }
             const newPlan = { ...state.workPlan };
             newPlan.current_step_index = event.data.current_step;
-            return { workPlan: newPlan, agentState: "acting" };
+            return { workPlan: newPlan, agentState: "acting", timeline: updatedTimeline };
           });
         },
         onStepEnd: (_event) => {},
         onAct: (event) => {
           set((state) => {
+            // Append act event to timeline using SSE adapter
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+
             const toolName = event.data.tool_name;
             const startTime = Date.now();
 
@@ -699,8 +739,12 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             const newMessages = state.messages.map((m) => {
               if (m.id === assistantMsgId) {
-                const executions = m.metadata?.tool_executions || {};
-                const timeline = (m.metadata?.timeline as TimelineItem[]) || [];
+                const executions = (m.metadata?.tool_executions ||
+                  {}) as Record<
+                  string,
+                  { startTime?: number; endTime?: number; duration?: number }
+                >;
+                const msgTimeline = (m.metadata?.timeline as TimelineItem[]) || [];
                 return {
                   ...m,
                   tool_calls: [
@@ -714,7 +758,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                       [toolName]: { startTime },
                     },
                     timeline: [
-                      ...timeline,
+                      ...msgTimeline,
                       {
                         type: "tool_call",
                         id: uuidv4(),
@@ -734,6 +778,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               pendingToolsStack: newStack,
               messages: newMessages,
               agentState: "acting",
+              timeline: updatedTimeline,
             };
           });
 
@@ -742,6 +787,9 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
         onObserve: (event) => {
           set((state) => {
+            // Append observe event to timeline using SSE adapter
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+
             const stack = [...state.pendingToolsStack];
             const toolName = stack.pop() || "unknown";
             const endTime = Date.now();
@@ -781,6 +829,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               messages: newMessages,
               pendingToolsStack: stack,
               agentState: "observing",
+              timeline: updatedTimeline,
             };
           });
 
@@ -824,6 +873,10 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
         onComplete: (event) => {
           set((state) => {
+            // Append complete event to timeline using SSE adapter
+            const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+
             // 更新助手消息内容（如果 complete 事件包含内容）和 trace URL
             const newMessages = state.messages.map((m) => {
               if (m.id === assistantMsgId) {
@@ -837,6 +890,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             });
             return {
               messages: newMessages,
+              timeline: updatedTimeline,
               isStreaming: false,
               streamStatus: "idle",
               agentState: "idle",
