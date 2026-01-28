@@ -9,7 +9,7 @@
  *   import { ErrorBoundary, WorkPlanCard } from '@/components'
  *
  * For more specific imports, use the sub-barrels:
- *   import { ChatLayout } from '@/components/agentV3'
+ *   import { ChatLayout } from '@/components/agent'
  *   import { WorkspaceSidebar } from '@/components/agent/layout'
  */
 
@@ -22,7 +22,7 @@ export {
     type SkeletonLoaderProps,
 } from './common'
 
-// AgentV3 components (modern agent chat UI)
+// Agent V3 components (modern agent chat UI)
 export {
     ChatLayout,
     ConversationSidebar,
@@ -35,7 +35,7 @@ export {
     ExecutionDetailsPanel,
     type ExecutionDetailsPanelProps,
     type ViewType,
-} from './agentV3'
+} from './agent'
 
 // Note: For specific agent sub-categories, import directly from sub-barrels:
 // - Layout: import { WorkspaceSidebar } from '@/components/agent/layout'

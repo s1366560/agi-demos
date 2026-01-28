@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { Button, Input, Tooltip, Switch } from "antd";
 import {
   SendOutlined,
@@ -32,18 +32,20 @@ export const InputArea: React.FC<InputAreaProps> = ({
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSend = () => {
+  // Stable callback for sending messages
+  const handleSend = useCallback(() => {
     if (!value.trim()) return;
     onSend(value);
     setValue("");
-  };
+  }, [value, onSend]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  // Stable callback for keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [handleSend]);
 
   return (
     <div className="p-4 border-t border-slate-200 bg-white">

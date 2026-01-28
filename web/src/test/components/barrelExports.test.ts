@@ -71,18 +71,18 @@ import {
     SandboxPanel,
 } from '../../components/agent/sandbox'
 
-// Test 8: AgentV3 components barrel exports (direct import)
+// Test 8: Agent components barrel exports (direct import)
 import {
     ChatLayout,
-    ConversationSidebar as AgentV3ConversationSidebar,
-    MessageList as AgentV3MessageList,
-    MessageBubble as AgentV3MessageBubble,
-    InputArea,
+    ConversationSidebar as AgentConversationSidebar,
+    MessageList as AgentMessageList,
+    MessageBubble as AgentMessageBubble,
+    InputArea as AgentInputArea,
     ThinkingChain,
     ToolCard,
     PlanViewer,
     ExecutionDetailsPanel,
-} from '../../components/agentV3'
+} from '../../components/agent'
 
 // Test 9: Individual component imports (not through barrel) to verify components exist
 import { WorkPlanCard } from '../../components/agent/WorkPlanCard'
@@ -246,25 +246,25 @@ describe('Barrel Exports', () => {
         })
     })
 
-    describe('AgentV3 Components Barrel', () => {
+    describe('Agent Components Barrel', () => {
         it('exports ChatLayout component', () => {
             expect(ChatLayout).toBeDefined()
         })
 
         it('exports ConversationSidebar component', () => {
-            expect(AgentV3ConversationSidebar).toBeDefined()
+            expect(AgentConversationSidebar).toBeDefined()
         })
 
         it('exports MessageList component', () => {
-            expect(AgentV3MessageList).toBeDefined()
+            expect(AgentMessageList).toBeDefined()
         })
 
         it('exports MessageBubble component', () => {
-            expect(AgentV3MessageBubble).toBeDefined()
+            expect(AgentMessageBubble).toBeDefined()
         })
 
         it('exports InputArea component', () => {
-            expect(InputArea).toBeDefined()
+            expect(AgentInputArea).toBeDefined()
         })
 
         it('exports ThinkingChain component', () => {
@@ -313,7 +313,7 @@ describe('Barrel Exports', () => {
             expect(RootEmptyState).toBeDefined()
         })
 
-        it('exports AgentV3 components from root barrel', () => {
+        it('exports Agent components from root barrel', () => {
             expect(RootChatLayout).toBeDefined()
             expect(RootConversationSidebar).toBeDefined()
             expect(RootMessageList).toBeDefined()

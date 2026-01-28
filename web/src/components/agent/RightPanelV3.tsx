@@ -5,7 +5,7 @@
  * both work plan viewing and sandbox terminal/output capabilities.
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo, useCallback } from "react";
 import { Tabs, Badge, Space, Button, Tooltip } from "antd";
 import {
   UnorderedListOutlined,
@@ -13,11 +13,11 @@ import {
   CloseOutlined,
 } from "@ant-design/icons";
 
-import { PlanViewer } from "./PlanViewer";
-import { SandboxPanel } from "../agent/sandbox";
+import { PlanViewer } from "./PlanViewerV3";
+import { SandboxPanel } from "./sandbox";
 import { useSandboxStore } from "../../stores/sandbox";
 import type { WorkPlan } from "../../types/agent";
-import type { ToolExecution } from "../agent/sandbox/SandboxOutputViewer";
+import type { ToolExecution } from "./sandbox/SandboxOutputViewer";
 
 export type RightPanelTab = "plan" | "sandbox";
 
@@ -75,18 +75,18 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   // Use controlled or uncontrolled tab
   const activeTab = controlledActiveTab ?? internalActiveTab;
 
-  // Handle tab change
-  const handleTabChange = (key: string) => {
+  // Stable callback for tab changes
+  const handleTabChange = useCallback((key: string) => {
     const newTab = key as RightPanelTab;
     if (onTabChange) {
       onTabChange(newTab);
     } else {
       setInternalActiveTab(newTab);
     }
-  };
+  }, [onTabChange]);
 
-  // Tab items
-  const tabItems = [
+  // Memoized tab items
+  const tabItems = useMemo(() => [
     {
       key: "plan" as RightPanelTab,
       label: (
@@ -139,7 +139,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         </div>
       ),
     },
-  ];
+  ], [workPlan, currentTool, toolExecutions, sandboxId, onFileClick]);
 
   return (
     <div className="h-full flex flex-col bg-white">

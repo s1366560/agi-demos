@@ -6,8 +6,8 @@ import {
   AgentSection,
   ReasoningLogCard,
   ToolExecutionCardDisplay,
-} from "../agent/chat/MessageStream";
-import { AssistantMessage } from "../agent/chat/AssistantMessage";
+} from "./chat/MessageStream";
+import { AssistantMessage } from "./chat/AssistantMessage";
 
 interface MessageListProps {
   messages: Message[];

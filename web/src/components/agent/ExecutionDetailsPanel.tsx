@@ -7,9 +7,12 @@
  * - activity: Atomic-level ActivityTimeline
  * - tools: ToolCallVisualization with Grid/Timeline/Flow modes
  * - tokens: TokenUsageChart
+ *
+ * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
+ * Only re-renders when message, isStreaming, or defaultView change.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, memo } from "react";
 import { Segmented } from "antd";
 import {
   BulbOutlined,
@@ -18,17 +21,17 @@ import {
   BarChartOutlined,
 } from "@ant-design/icons";
 
-import { ThinkingChain } from "./ThinkingChain";
-import { ActivityTimeline } from "../agent/execution/ActivityTimeline";
+import { ThinkingChain } from "./ThinkingChainV3";
+import { ActivityTimeline } from "./execution/ActivityTimeline";
 import {
   ToolCallVisualization,
   type ToolExecutionItem,
-} from "../agent/execution/ToolCallVisualization";
+} from "./execution/ToolCallVisualization";
 import {
   TokenUsageChart,
   type TokenData,
   type CostData,
-} from "../agent/execution/TokenUsageChart";
+} from "./execution/TokenUsageChart";
 import {
   adaptTimelineData,
   adaptToolVisualizationData,
@@ -65,7 +68,7 @@ interface ViewOption {
 /**
  * ExecutionDetailsPanel component
  */
-export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = ({
+export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(({
   message,
   isStreaming = false,
   compact = false,
@@ -163,8 +166,8 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = ({
     return null;
   }
 
-  // Render view content
-  const renderViewContent = () => {
+  // Memoized view content to avoid re-creation on every render
+  const viewContent = useMemo(() => {
     switch (effectiveView) {
       case "thinking":
         return <ThinkingChain {...thinkingChainProps} />;
@@ -205,12 +208,26 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = ({
       default:
         return <ThinkingChain {...thinkingChainProps} />;
     }
-  };
+  }, [effectiveView, thinkingChainProps, timelineData, isStreaming, compact, toolVisualizationData, tokenInfo]);
 
   // Single view mode (no selector)
   if (!showViewSelector || availableViews.length <= 1) {
-    return <div className="w-full">{renderViewContent()}</div>;
+    return <div className="w-full">{viewContent}</div>;
   }
+
+  // Memoized segmented options to avoid re-creation on every render
+  const segmentedOptions = useMemo(() =>
+    availableViews.map((opt) => ({
+      value: opt.value,
+      label: (
+        <div className="flex items-center gap-1.5 px-1">
+          {opt.icon}
+          {!compact && <span className="text-xs">{opt.label}</span>}
+        </div>
+      ),
+    })),
+    [availableViews, compact]
+  );
 
   return (
     <div className="w-full space-y-3">
@@ -220,23 +237,17 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = ({
           size="small"
           value={effectiveView}
           onChange={(value) => setCurrentView(value as ViewType)}
-          options={availableViews.map((opt) => ({
-            value: opt.value,
-            label: (
-              <div className="flex items-center gap-1.5 px-1">
-                {opt.icon}
-                {!compact && <span className="text-xs">{opt.label}</span>}
-              </div>
-            ),
-          }))}
+          options={segmentedOptions}
           className="bg-slate-100 dark:bg-slate-800"
         />
       </div>
 
       {/* View content */}
-      <div className="w-full">{renderViewContent()}</div>
+      <div className="w-full">{viewContent}</div>
     </div>
   );
-};
+});
+
+ExecutionDetailsPanel.displayName = 'ExecutionDetailsPanel';
 
 export default ExecutionDetailsPanel;

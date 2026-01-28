@@ -1,4 +1,13 @@
-import React from "react";
+/**
+ * ToolCard component
+ *
+ * Displays tool execution information with status, input, and result.
+ *
+ * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
+ * Only re-renders when toolName, status, result, or input change.
+ */
+
+import React, { memo, useMemo } from "react";
 import { Card, Tag, Collapse, Typography } from "antd";
 import { CheckCircleOutlined, SyncOutlined, CloseCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 
@@ -16,7 +25,7 @@ interface ToolCardProps {
     embedded?: boolean; // When true, use compact styling for timeline embedding
 }
 
-export const ToolCard: React.FC<ToolCardProps> = ({
+export const ToolCard: React.FC<ToolCardProps> = memo(({
     toolName,
     input,
     result,
@@ -26,6 +35,9 @@ export const ToolCard: React.FC<ToolCardProps> = ({
     duration,
     embedded = false,
 }) => {
+    // Memoize JSON.stringify to avoid re-computing on every render
+    const formattedInput = useMemo(() => JSON.stringify(input, null, 2), [input]);
+
     const getIcon = () => {
         switch (status) {
             case "running":
@@ -76,7 +88,7 @@ export const ToolCard: React.FC<ToolCardProps> = ({
                         <pre className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
                             embedded ? 'bg-white/80 border-slate-200' : 'bg-white border-slate-100'
                         }`}>
-                            {JSON.stringify(input, null, 2)}
+                            {formattedInput}
                         </pre>
                     </div>
                     {result && (
@@ -104,4 +116,8 @@ export const ToolCard: React.FC<ToolCardProps> = ({
             {content}
         </Card>
     );
-};
+});
+
+ToolCard.displayName = 'ToolCard';
+
+export default ToolCard;

@@ -4,11 +4,7 @@ import { Spin, Modal, notification } from "antd";
 import { useAgentV3Store } from "../../stores/agentV3";
 import { useSandboxStore } from "../../stores/sandbox";
 import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
-import { ChatLayout } from "../../components/agentV3/ChatLayout";
-import { MessageList } from "../../components/agentV3/MessageList";
-import { InputArea } from "../../components/agentV3/InputArea";
-import { ConversationSidebar } from "../../components/agentV3/ConversationSidebar";
-import { RightPanel } from "../../components/agentV3/RightPanel";
+import { ChatLayout, MessageList, InputArea, ConversationSidebar, RightPanel } from "../../components/agent";
 
 export const AgentChatV3: React.FC = () => {
   const { projectId, conversation: conversationId } = useParams<{

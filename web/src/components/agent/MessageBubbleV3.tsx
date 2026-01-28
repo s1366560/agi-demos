@@ -7,7 +7,7 @@
  * Only re-renders when message.id or message.content changes.
  */
 
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -26,6 +26,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   isStreaming,
 }) => {
   const isUser = message.role === "user";
+
+  // Memoize timestamp formatting to avoid re-computing on every render
+  const formattedTime = useMemo(
+    () => new Date(message.created_at).toLocaleTimeString(),
+    [message.created_at]
+  );
 
   return (
     <div
@@ -56,7 +62,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
               {isUser ? "You" : "Agent"}
             </span>
             <span className="text-xs text-slate-400">
-              {new Date(message.created_at).toLocaleTimeString()}
+              {formattedTime}
             </span>
           </div>
 

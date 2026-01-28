@@ -1,7 +1,16 @@
-import React from "react";
+/**
+ * ThinkingChain component
+ *
+ * Displays the agent's thinking process with timeline visualization.
+ *
+ * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
+ * Only re-renders when timeline, thoughts, toolCalls, or toolResults change.
+ */
+
+import React, { memo, useMemo } from "react";
 import { Collapse } from "antd";
 import { BulbOutlined, ToolOutlined } from "@ant-design/icons";
-import { ToolCard } from "./ToolCard";
+import { ToolCard } from "./ToolCardV3";
 import { ToolCall, ToolResult } from "../../types/agent";
 
 interface TimelineItem {
@@ -98,7 +107,7 @@ const TimelineNode: React.FC<TimelineNodeProps> = ({ type, sequence, timestamp, 
     );
 };
 
-export const ThinkingChain: React.FC<ThinkingChainProps> = ({
+export const ThinkingChain: React.FC<ThinkingChainProps> = memo(({
     thoughts,
     toolCalls = [],
     toolResults = [],
@@ -112,23 +121,27 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = ({
     const hasContent = timeline.length > 0 || thoughts.length > 0 || toolCalls.length > 0;
     if (!hasContent && !isThinking) return null;
 
-    const header = (
+    // Memoize header to avoid re-creation on every render
+    const header = useMemo(() => (
         <div className="flex items-center gap-2 text-slate-500">
             <BulbOutlined className={isThinking ? "animate-pulse text-amber-500" : ""} />
             <span className="text-xs font-medium">
                 {isThinking ? "Thinking..." : "Thought Process"}
             </span>
         </div>
-    );
+    ), [isThinking]);
 
-    const renderTimeline = () => {
+    // Memoize timeline items to avoid re-creation on every render
+    const timelineItems = useMemo(() => {
+        const items: React.ReactNode[] = [];
+
         if (timeline.length > 0) {
-            return timeline.map((item, index) => {
+            timeline.forEach((item, index) => {
                 const isLast = index === timeline.length - 1;
                 const sequence = index + 1;
 
                 if (item.type === 'thought') {
-                    return (
+                    items.push(
                         <TimelineNode
                             key={item.id}
                             type="thought"
@@ -144,8 +157,7 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = ({
                     const status = result ? (result.error ? "failed" : "success") : "running";
                     const execution = toolExecutions[item.toolName!];
 
-                    // Render ToolCard inside TimelineNode for tool calls
-                    return (
+                    items.push(
                         <TimelineNode
                             key={item.id}
                             type="tool_call"
@@ -166,67 +178,68 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = ({
                         </TimelineNode>
                     );
                 }
-                return null;
+            });
+        } else {
+            // Fallback: Render thoughts then tools (with synthesized timeline)
+            const fallbackItems: Array<{ type: 'thought' | 'tool_call', content?: string, toolName?: string, toolInput?: any, timestamp: number }> = [];
+
+            // Add thoughts first
+            thoughts.forEach((thought) => {
+                fallbackItems.push({ type: 'thought', content: thought, timestamp: Date.now() });
+            });
+
+            // Then add tools
+            toolCalls.forEach((call) => {
+                fallbackItems.push({ type: 'tool_call', toolName: call.name, toolInput: call.arguments, timestamp: Date.now() });
+            });
+
+            fallbackItems.forEach((item, index) => {
+                const isLast = index === fallbackItems.length - 1;
+                const sequence = index + 1;
+
+                if (item.type === 'thought') {
+                    items.push(
+                        <TimelineNode
+                            key={`fallback-thought-${index}`}
+                            type="thought"
+                            sequence={sequence}
+                            timestamp={item.timestamp}
+                            isLast={isLast}
+                        >
+                            <span className="break-words">{item.content}</span>
+                        </TimelineNode>
+                    );
+                } else {
+                    const result = toolResults.find(r => r.tool_name === item.toolName);
+                    const status = result ? (result.error ? "failed" : "success") : "running";
+                    const execution = toolExecutions[item.toolName!];
+
+                    items.push(
+                        <TimelineNode
+                            key={`fallback-tool-${index}`}
+                            type="tool_call"
+                            sequence={sequence}
+                            timestamp={item.timestamp}
+                            isLast={isLast}
+                        >
+                            <ToolCard
+                                toolName={item.toolName!}
+                                input={item.toolInput}
+                                result={result?.result || result?.error}
+                                status={status}
+                                startTime={execution?.startTime}
+                                endTime={execution?.endTime}
+                                duration={execution?.duration}
+                                embedded={true}
+                            />
+                        </TimelineNode>
+                    );
+                }
             });
         }
 
-        // Fallback: Render thoughts then tools (with synthesized timeline)
-        const fallbackItems: Array<{ type: 'thought' | 'tool_call', content?: string, toolName?: string, toolInput?: any, timestamp: number }> = [];
-
-        // Add thoughts first
-        thoughts.forEach((thought) => {
-            fallbackItems.push({ type: 'thought', content: thought, timestamp: Date.now() });
-        });
-
-        // Then add tools
-        toolCalls.forEach((call) => {
-            fallbackItems.push({ type: 'tool_call', toolName: call.name, toolInput: call.arguments, timestamp: Date.now() });
-        });
-
-        return fallbackItems.map((item, index) => {
-            const isLast = index === fallbackItems.length - 1;
-            const sequence = index + 1;
-
-            if (item.type === 'thought') {
-                return (
-                    <TimelineNode
-                        key={`fallback-thought-${index}`}
-                        type="thought"
-                        sequence={sequence}
-                        timestamp={item.timestamp}
-                        isLast={isLast}
-                    >
-                        <span className="break-words">{item.content}</span>
-                    </TimelineNode>
-                );
-            } else {
-                const result = toolResults.find(r => r.tool_name === item.toolName);
-                const status = result ? (result.error ? "failed" : "success") : "running";
-                const execution = toolExecutions[item.toolName!];
-
-                return (
-                    <TimelineNode
-                        key={`fallback-tool-${index}`}
-                        type="tool_call"
-                        sequence={sequence}
-                        timestamp={item.timestamp}
-                        isLast={isLast}
-                    >
-                        <ToolCard
-                            toolName={item.toolName!}
-                            input={item.toolInput}
-                            result={result?.result || result?.error}
-                            status={status}
-                            startTime={execution?.startTime}
-                            endTime={execution?.endTime}
-                            duration={execution?.duration}
-                            embedded={true}
-                        />
-                    </TimelineNode>
-                );
-            }
-        });
-    };
+        return items;
+    }, [timeline, thoughts, toolCalls, toolResults, toolExecutions]);
 
     return (
         <Collapse
@@ -239,7 +252,7 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = ({
                     label: header,
                     children: (
                         <div className="py-2 max-w-full overflow-hidden">
-                            {renderTimeline()}
+                            {timelineItems}
                         </div>
                     ),
                     className: "max-w-full",
@@ -247,4 +260,8 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = ({
             ]}
         />
     );
-};
+});
+
+ThinkingChain.displayName = 'ThinkingChain';
+
+export default ThinkingChain;
