@@ -139,17 +139,15 @@
 
 ---
 
-## 4. 实施计划
+## 4. 实施计划（已完成）
 
-### P1 已完成 ✅ (2025-01-28)
-
-#### 4.1 `list` 工具（sandbox-mcp-server）
+### P1 工具 ✅ (2025-01-28)
 
 #### 4.1 `list` 工具（sandbox-mcp-server）
 
 **功能**：列出目录内容，支持递归和详细信息
 
-**实现位置**：`src/tools/file_tools.py`
+**实现位置**：`sandbox-mcp-server/src/tools/file_tools.py`
 
 **输入参数**：
 ```python
@@ -176,7 +174,7 @@
 
 **功能**：应用 unified diff 格式的补丁
 
-**实现位置**：`src/tools/file_tools.py`
+**实现位置**：`sandbox-mcp-server/src/tools/file_tools.py`
 
 **输入参数**：
 ```python
@@ -191,7 +189,7 @@
 
 ---
 
-### P2 已完成 ✅ (2025-01-28)
+### P2 工具 ✅ (2025-01-28)
 
 #### 4.3 `todowrite` 工具（ReActAgent）
 
@@ -273,6 +271,7 @@
 
 ### 6.2 改进建议
 
-1. **补充缺失工具**：完成 list、patch、todowrite、todoread
+1. ✅ **补充缺失工具**：已完成 list、patch、todowrite、todoread
 2. **统一工具接口**：考虑统一的工具注册和发现机制
 3. **工具文档**：为每个工具添加详细的使用文档
+4. **持久化存储**：当前 TodoStorage 为内存存储，可考虑持久化到 Redis/数据库
