@@ -23,7 +23,9 @@ import type {
 // Base API URL from environment
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
-// Axios instance for agent config API
+// Create axios instance for agent config API with custom baseURL
+// Note: This service uses a custom baseURL (/api/v1/agent) so it creates
+// its own instance. The centralized client is still used for standard endpoints.
 const agentConfigApi = axios.create({
   baseURL: `${API_BASE_URL}/agent`,
   headers: {

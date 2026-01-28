@@ -5,7 +5,7 @@
  * status management, skill matching, and tenant skill configurations.
  */
 
-import axios from "axios";
+import { httpClient } from "./client/httpClient";
 import type {
   SkillResponse,
   SkillCreate,
@@ -18,36 +18,8 @@ import type {
   SystemSkillStatus,
 } from "../types/agent";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api/v1",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Request interceptor to add auth token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Response interceptor to handle errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// Use centralized HTTP client
+const api = httpClient;
 
 export interface SkillListParams {
   status?: "active" | "disabled" | "deprecated" | null;
@@ -68,8 +40,7 @@ export const skillAPI = {
    * List all Skills
    */
   list: async (params: SkillListParams = {}): Promise<SkillsListResponse> => {
-    const response = await api.get("/skills/", { params });
-    return response.data;
+    return await api.get<SkillsListResponse>("/skills/", { params });
   },
 
   /**
@@ -78,24 +49,21 @@ export const skillAPI = {
   listSystemSkills: async (
     params: { status?: string } = {}
   ): Promise<SkillsListResponse> => {
-    const response = await api.get("/skills/system/list", { params });
-    return response.data;
+    return await api.get<SkillsListResponse>("/skills/system/list", { params });
   },
 
   /**
    * Create a new Skill
    */
   create: async (data: SkillCreate): Promise<SkillResponse> => {
-    const response = await api.post("/skills/", data);
-    return response.data;
+    return await api.post<SkillResponse>("/skills/", data);
   },
 
   /**
    * Get a Skill by ID
    */
   get: async (skillId: string): Promise<SkillResponse> => {
-    const response = await api.get(`/skills/${skillId}`);
-    return response.data;
+    return await api.get<SkillResponse>(`/skills/${skillId}`);
   },
 
   /**
@@ -105,8 +73,7 @@ export const skillAPI = {
     skillId: string,
     data: SkillUpdate
   ): Promise<SkillResponse> => {
-    const response = await api.put(`/skills/${skillId}`, data);
-    return response.data;
+    return await api.put<SkillResponse>(`/skills/${skillId}`, data);
   },
 
   /**
@@ -123,26 +90,23 @@ export const skillAPI = {
     skillId: string,
     status: "active" | "disabled" | "deprecated"
   ): Promise<SkillResponse> => {
-    const response = await api.patch(`/skills/${skillId}/status`, null, {
+    return await api.patch<SkillResponse>(`/skills/${skillId}/status`, null, {
       params: { status },
     });
-    return response.data;
   },
 
   /**
    * Match skills based on query
    */
   match: async (params: SkillMatchParams): Promise<SkillMatchResponse> => {
-    const response = await api.post("/skills/match", params);
-    return response.data;
+    return await api.post<SkillMatchResponse>("/skills/match", params);
   },
 
   /**
    * Get skill content
    */
   getContent: async (skillId: string): Promise<SkillContentResponse> => {
-    const response = await api.get(`/skills/${skillId}/content`);
-    return response.data;
+    return await api.get<SkillContentResponse>(`/skills/${skillId}/content`);
   },
 
   /**
@@ -152,10 +116,9 @@ export const skillAPI = {
     skillId: string,
     fullContent: string
   ): Promise<SkillResponse> => {
-    const response = await api.put(`/skills/${skillId}/content`, {
+    return await api.put<SkillResponse>(`/skills/${skillId}/content`, {
       full_content: fullContent,
     });
-    return response.data;
   },
 };
 
@@ -167,16 +130,16 @@ export const tenantSkillConfigAPI = {
    * List all tenant skill configs
    */
   list: async (): Promise<TenantSkillConfigListResponse> => {
-    const response = await api.get("/tenant/skills/config/");
-    return response.data;
+    return await api.get<TenantSkillConfigListResponse>("/tenant/skills/config/");
   },
 
   /**
    * Get a specific tenant skill config
    */
   get: async (systemSkillName: string): Promise<TenantSkillConfigResponse> => {
-    const response = await api.get(`/tenant/skills/config/${systemSkillName}`);
-    return response.data;
+    return await api.get<TenantSkillConfigResponse>(
+      `/tenant/skills/config/${systemSkillName}`
+    );
   },
 
   /**
@@ -185,10 +148,12 @@ export const tenantSkillConfigAPI = {
   disable: async (
     systemSkillName: string
   ): Promise<TenantSkillConfigResponse> => {
-    const response = await api.post("/tenant/skills/config/disable", {
-      system_skill_name: systemSkillName,
-    });
-    return response.data;
+    return await api.post<TenantSkillConfigResponse>(
+      "/tenant/skills/config/disable",
+      {
+        system_skill_name: systemSkillName,
+      }
+    );
   },
 
   /**
@@ -198,11 +163,13 @@ export const tenantSkillConfigAPI = {
     systemSkillName: string,
     overrideSkillId: string
   ): Promise<TenantSkillConfigResponse> => {
-    const response = await api.post("/tenant/skills/config/override", {
-      system_skill_name: systemSkillName,
-      override_skill_id: overrideSkillId,
-    });
-    return response.data;
+    return await api.post<TenantSkillConfigResponse>(
+      "/tenant/skills/config/override",
+      {
+        system_skill_name: systemSkillName,
+        override_skill_id: overrideSkillId,
+      }
+    );
   },
 
   /**
@@ -225,10 +192,9 @@ export const tenantSkillConfigAPI = {
    * Get status of a system skill
    */
   getStatus: async (systemSkillName: string): Promise<SystemSkillStatus> => {
-    const response = await api.get(
+    return await api.get<SystemSkillStatus>(
       `/tenant/skills/config/status/${systemSkillName}`
     );
-    return response.data;
   },
 };
 

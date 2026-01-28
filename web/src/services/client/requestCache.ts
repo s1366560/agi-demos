@@ -157,4 +157,4 @@ class RequestCacheImpl {
 export const requestCache = new RequestCacheImpl();
 
 // Export type for convenience
-export type { CacheEntry, CacheStats };
+export type { CacheEntry };

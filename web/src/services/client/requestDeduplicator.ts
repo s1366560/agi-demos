@@ -149,4 +149,4 @@ class RequestDeduplicatorImpl {
 export const requestDeduplicator = new RequestDeduplicatorImpl();
 
 // Export type for convenience
-export type { DeduplicationStats };
+// DeduplicationStats is exported via the interface above

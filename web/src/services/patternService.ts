@@ -79,11 +79,10 @@ class PatternServiceImpl implements PatternService {
     }
 
     try {
-      const response = await api.get<PatternsListResponse>(
+      return await api.get<PatternsListResponse>(
         '/agent/workflows/patterns',
         { params }
       );
-      return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
@@ -107,11 +106,10 @@ class PatternServiceImpl implements PatternService {
    */
   async getPattern(patternId: string, tenantId: string): Promise<WorkflowPattern> {
     try {
-      const response = await api.get<WorkflowPattern>(
+      return await api.get<WorkflowPattern>(
         `/agent/workflows/patterns/${patternId}`,
         { params: { tenant_id: tenantId } }
       );
-      return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
@@ -163,12 +161,11 @@ class PatternServiceImpl implements PatternService {
    */
   async resetPatterns(tenantId: string): Promise<ResetPatternsResponse> {
     try {
-      const response = await api.post<ResetPatternsResponse>(
+      return await api.post<ResetPatternsResponse>(
         '/agent/workflows/patterns/reset',
         null,
         { params: { tenant_id: tenantId } }
       );
-      return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;

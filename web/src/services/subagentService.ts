@@ -5,7 +5,7 @@
  * template-based creation, and statistics retrieval.
  */
 
-import axios from 'axios';
+import { httpClient } from './client/httpClient';
 import type {
   SubAgentResponse,
   SubAgentCreate,
@@ -16,36 +16,8 @@ import type {
   SubAgentMatchResponse,
 } from '../types/agent';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor to add auth token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Response interceptor to handle errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// Use centralized HTTP client
+const api = httpClient;
 
 export interface SubAgentListParams {
   enabled_only?: boolean;
@@ -58,32 +30,28 @@ export const subagentAPI = {
    * List all SubAgents
    */
   list: async (params: SubAgentListParams = {}): Promise<SubAgentsListResponse> => {
-    const response = await api.get('/subagents/', { params });
-    return response.data;
+    return await api.get<SubAgentsListResponse>('/subagents/', { params });
   },
 
   /**
    * Create a new SubAgent
    */
   create: async (data: SubAgentCreate): Promise<SubAgentResponse> => {
-    const response = await api.post('/subagents/', data);
-    return response.data;
+    return await api.post<SubAgentResponse>('/subagents/', data);
   },
 
   /**
    * Get a SubAgent by ID
    */
   get: async (subagentId: string): Promise<SubAgentResponse> => {
-    const response = await api.get(`/subagents/${subagentId}`);
-    return response.data;
+    return await api.get<SubAgentResponse>(`/subagents/${subagentId}`);
   },
 
   /**
    * Update a SubAgent
    */
   update: async (subagentId: string, data: SubAgentUpdate): Promise<SubAgentResponse> => {
-    const response = await api.put(`/subagents/${subagentId}`, data);
-    return response.data;
+    return await api.put<SubAgentResponse>(`/subagents/${subagentId}`, data);
   },
 
   /**
@@ -97,44 +65,39 @@ export const subagentAPI = {
    * Enable or disable a SubAgent
    */
   toggle: async (subagentId: string, enabled: boolean): Promise<SubAgentResponse> => {
-    const response = await api.patch(`/subagents/${subagentId}/enable`, null, {
+    return await api.patch<SubAgentResponse>(`/subagents/${subagentId}/enable`, null, {
       params: { enabled },
     });
-    return response.data;
   },
 
   /**
    * Get SubAgent statistics
    */
   getStats: async (subagentId: string): Promise<SubAgentStatsResponse> => {
-    const response = await api.get(`/subagents/${subagentId}/stats`);
-    return response.data;
+    return await api.get<SubAgentStatsResponse>(`/subagents/${subagentId}/stats`);
   },
 
   /**
    * List available SubAgent templates
    */
   listTemplates: async (): Promise<SubAgentTemplatesResponse> => {
-    const response = await api.get('/subagents/templates/list');
-    return response.data;
+    return await api.get<SubAgentTemplatesResponse>('/subagents/templates/list');
   },
 
   /**
    * Create a SubAgent from a template
    */
   createFromTemplate: async (templateName: string): Promise<SubAgentResponse> => {
-    const response = await api.post(`/subagents/templates/${templateName}`);
-    return response.data;
+    return await api.post<SubAgentResponse>(`/subagents/templates/${templateName}`);
   },
 
   /**
    * Match a query to find the best SubAgent
    */
   match: async (taskDescription: string): Promise<SubAgentMatchResponse> => {
-    const response = await api.post('/subagents/match', {
+    return await api.post<SubAgentMatchResponse>('/subagents/match', {
       task_description: taskDescription,
     });
-    return response.data;
   },
 };
 

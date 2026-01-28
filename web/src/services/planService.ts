@@ -37,42 +37,30 @@ class PlanServiceImpl implements PlanService {
    * Enter Plan Mode for a conversation
    */
   async enterPlanMode(request: EnterPlanModeRequest): Promise<PlanDocument> {
-    const response = await api.post<PlanDocument>(
-      "/agent/plan/enter",
-      request
-    );
-    return response.data;
+    return await api.post<PlanDocument>("/agent/plan/enter", request);
   }
 
   /**
    * Exit Plan Mode for a conversation
    */
   async exitPlanMode(request: ExitPlanModeRequest): Promise<PlanDocument> {
-    const response = await api.post<PlanDocument>(
-      "/agent/plan/exit",
-      request
-    );
-    return response.data;
+    return await api.post<PlanDocument>("/agent/plan/exit", request);
   }
 
   /**
    * Get a plan by ID
    */
   async getPlan(planId: string): Promise<PlanDocument> {
-    const response = await api.get<PlanDocument>(
-      `/agent/plan/${planId}`
-    );
-    return response.data;
+    return await api.get<PlanDocument>(`/agent/plan/${planId}`);
   }
 
   /**
    * Get all plans for a conversation
    */
   async getConversationPlans(conversationId: string): Promise<PlanDocument[]> {
-    const response = await api.get<PlanDocument[]>(
+    return await api.get<PlanDocument[]>(
       `/agent/conversations/${conversationId}/plans`
     );
-    return response.data;
   }
 
   /**
@@ -82,21 +70,16 @@ class PlanServiceImpl implements PlanService {
     planId: string,
     request: UpdatePlanRequest
   ): Promise<PlanDocument> {
-    const response = await api.put<PlanDocument>(
-      `/agent/plan/${planId}`,
-      request
-    );
-    return response.data;
+    return await api.put<PlanDocument>(`/agent/plan/${planId}`, request);
   }
 
   /**
    * Get Plan Mode status for a conversation
    */
   async getPlanModeStatus(conversationId: string): Promise<PlanModeStatus> {
-    const response = await api.get<PlanModeStatus>(
+    return await api.get<PlanModeStatus>(
       `/agent/conversations/${conversationId}/plan-mode`
     );
-    return response.data;
   }
 }
 
