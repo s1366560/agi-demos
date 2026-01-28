@@ -146,7 +146,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
         <div className="text-center">
           <span className="text-[10px] text-slate-400">
-            Agent V3 can make mistakes. Check important info.
+            Agent can make mistakes. Check important info.
           </span>
         </div>
       </div>

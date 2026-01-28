@@ -4,7 +4,7 @@
  * Shows pattern details with JSON code viewer and admin notes.
  */
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { MaterialIcon } from '../shared';
 import type { PatternDefinition } from './PatternList';
 
@@ -52,7 +52,8 @@ export function PatternInspector({
 }: PatternInspectorProps) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopyJson = () => {
+  // Stable callback for copying JSON to clipboard
+  const handleCopyJson = useCallback(() => {
     if (!pattern) return;
 
     try {
@@ -62,12 +63,13 @@ export function PatternInspector({
     } catch (error) {
       console.error('Failed to copy JSON:', error);
     }
-  };
+  }, [pattern]);
 
-  const getStatusBadge = (status?: string) => {
-    if (!status) return null;
+  // Memoized status badge component
+  const statusBadge = useMemo(() => {
+    if (!pattern) return null;
 
-    switch (status) {
+    switch (pattern.status) {
       case 'preferred':
         return (
           <span className="px-2 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
@@ -89,7 +91,7 @@ export function PatternInspector({
       default:
         return null;
     }
-  };
+  }, [pattern]);
 
   if (!pattern) {
     return (
@@ -109,7 +111,7 @@ export function PatternInspector({
             <h2 className="text-lg font-bold text-slate-900 dark:text-white truncate">
               {pattern.name}
             </h2>
-            {getStatusBadge(pattern.status)}
+            {statusBadge}
           </div>
           <p className="text-xs text-slate-500 font-mono mt-1">{pattern.signature}</p>
         </div>
@@ -140,7 +142,7 @@ export function PatternInspector({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Status</p>
-            {getStatusBadge(pattern.status)}
+            {statusBadge}
           </div>
           {pattern.avgRuntime && (
             <div>

@@ -22,7 +22,7 @@ export {
     type SkeletonLoaderProps,
 } from './common'
 
-// Agent V3 components (modern agent chat UI)
+// Agent components (modern agent chat UI)
 export {
     ChatLayout,
     ConversationSidebar,

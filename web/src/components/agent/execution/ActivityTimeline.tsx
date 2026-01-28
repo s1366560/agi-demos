@@ -42,7 +42,7 @@ export interface ToolExecutionInfo {
 }
 
 export interface ActivityTimelineProps {
-  /** Timeline items (from agentV3 store) */
+  /** Timeline items (from agent store) */
   timeline: TimelineItem[];
   /** Tool execution details with timing */
   toolExecutions?: Record<string, ToolExecutionInfo>;

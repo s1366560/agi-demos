@@ -4,26 +4,27 @@
  * Exports all agent-related UI components.
  */
 
-// V3 Components (modern, Tailwind-based) - exported as defaults
-export { ChatLayout } from './ChatLayoutV3';
-export { ConversationSidebar } from './ConversationSidebarV3';
-export { MessageList } from './MessageListV3';
-export { MessageBubble } from './MessageBubbleV3';
-export { InputArea } from './InputAreaV3';
-export { ThinkingChain } from './ThinkingChainV3';
-export { ToolCard } from './ToolCardV3';
-export { PlanViewer } from './PlanViewerV3';
-export { RightPanel } from './RightPanelV3';
+// Modern components (formerly V3) - these are now the primary implementations
+export { ChatLayout } from './ChatLayout';
+export { ConversationSidebar } from './ConversationSidebar';
+export { MessageList } from './MessageList';
+export { MessageBubble } from './MessageBubble';
+export { InputArea } from './InputArea';
+export { ThinkingChain } from './ThinkingChain';
+export { ToolCard } from './ToolCard';
+export { PlanViewer } from './PlanViewer';
+export { RightPanel } from './RightPanel';
 export {
   ExecutionDetailsPanel,
   type ExecutionDetailsPanelProps,
   type ViewType,
 } from './ExecutionDetailsPanel';
 
-// Legacy Ant Design components (to be migrated) - exported with Legacy suffix
-export { MessageBubble as MessageBubbleLegacy } from './MessageBubble';
+// Legacy components (deprecated, exported with Legacy suffix)
+export { MessageBubble as MessageBubbleLegacy } from './MessageBubbleLegacy';
+export { ConversationSidebar as ConversationSidebarLegacy } from './ConversationSidebarLegacy';
+export { MessageList as MessageListLegacy } from './MessageListLegacy';
 export { MessageInput } from './MessageInput';
-export { ConversationSidebar as ConversationSidebarLegacy } from './ConversationSidebar';
 export { ProjectSelector } from './ProjectSelector';
 export { WorkPlanCard } from './WorkPlanCard';
 export { ToolExecutionCard } from './ToolExecutionCard';

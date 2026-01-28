@@ -13,7 +13,7 @@ import {
   CloseOutlined,
 } from "@ant-design/icons";
 
-import { PlanViewer } from "./PlanViewerV3";
+import { PlanViewer } from "./PlanViewer";
 import { SandboxPanel } from "./sandbox";
 import { useSandboxStore } from "../../stores/sandbox";
 import type { WorkPlan } from "../../types/agent";

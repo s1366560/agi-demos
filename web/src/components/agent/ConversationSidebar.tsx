@@ -1,197 +1,90 @@
-/**
- * ConversationSidebar component
- *
- * Sidebar showing list of conversations with ability to create,
- * select, and delete conversations.
- */
-
-import React, { useEffect } from 'react';
-import {
-  List,
-  Button,
-  Typography,
-  Popconfirm,
-  Empty,
-  Spin,
-  Space,
-} from 'antd';
+import React from "react";
+import { Button } from "antd";
 import {
   PlusOutlined,
-  DeleteOutlined,
   MessageOutlined,
-  CheckCircleOutlined,
-} from '@ant-design/icons';
-import { useAgentStore } from '../../stores/agent';
-import type { Conversation } from '../../types/agent';
-
-const { Text } = Typography;
+  DeleteOutlined,
+} from "@ant-design/icons";
+import { Conversation } from "../../types/agent";
 
 interface ConversationSidebarProps {
-  projectId: string;
-  onCreateConversation?: () => void;
-  onSelectConversation?: (conversation: Conversation) => void;
+  conversations: Conversation[];
+  activeId: string | null;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onDelete: (id: string, e: React.MouseEvent) => void;
 }
 
 export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
-  projectId,
-  onCreateConversation,
-  onSelectConversation,
+  conversations,
+  activeId,
+  onSelect,
+  onNew,
+  onDelete,
 }) => {
-  const {
-    conversations,
-    currentConversation,
-    conversationsLoading,
-    listConversations,
-    createConversation,
-    deleteConversation,
-    setCurrentConversation,
-  } = useAgentStore();
-
-  useEffect(() => {
-    if (projectId) {
-      listConversations(projectId);
-    }
-  }, [projectId, listConversations]);
-
-  const handleCreate = async () => {
-    try {
-      const newConversation = await createConversation(projectId);
-      if (onCreateConversation) {
-        onCreateConversation();
-      }
-      if (onSelectConversation) {
-        onSelectConversation(newConversation);
-      }
-      setCurrentConversation(newConversation);
-    } catch (error) {
-      console.error('Failed to create conversation:', error);
-    }
-  };
-
-  const handleSelect = (conversation: Conversation) => {
-    setCurrentConversation(conversation);
-    if (onSelectConversation) {
-      onSelectConversation(conversation);
-    }
-  };
-
-  const handleDelete = async (conversationId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await deleteConversation(conversationId, projectId);
-    } catch (error) {
-      console.error('Failed to delete conversation:', error);
-    }
-  };
-
   return (
-    <div
-      style={{
-        width: 280,
-        borderRight: '1px solid #f0f0f0',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        backgroundColor: '#fafafa',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          padding: '16px',
-          borderBottom: '1px solid #f0f0f0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <Text strong>Conversations</Text>
+    <div className="flex flex-col h-full bg-slate-50">
+      <div className="p-4 border-b border-slate-200">
         <Button
           type="primary"
-          size="small"
+          block
           icon={<PlusOutlined />}
-          onClick={handleCreate}
+          onClick={onNew}
+          className="h-10 font-medium"
         >
-          New
+          New Chat
         </Button>
       </div>
 
-      {/* Conversation list */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {conversationsLoading ? (
-          <div style={{ padding: 24, textAlign: 'center' }}>
-            <Spin />
-          </div>
-        ) : conversations.length === 0 ? (
-          <div style={{ padding: 24 }}>
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="No conversations yet"
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+        {conversations.map((item) => (
+          <div
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+            className={`
+              group relative flex items-start gap-3 p-3 mb-1 rounded-lg cursor-pointer transition-all
+              ${
+                activeId === item.id
+                  ? "bg-white shadow-sm border border-slate-200"
+                  : "hover:bg-slate-100 border border-transparent"
+              }
+            `}
+          >
+            <MessageOutlined
+              className={`mt-1 ${
+                activeId === item.id ? "text-primary" : "text-slate-400"
+              }`}
+            />
+
+            <div className="flex-1 min-w-0">
+              <div
+                className={`block truncate text-sm mb-0.5 ${
+                  activeId === item.id
+                    ? "font-semibold text-slate-900"
+                    : "text-slate-700"
+                }`}
+              >
+                {item.title || "Untitled Conversation"}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">
+                  {new Date(item.created_at).toLocaleDateString()}
+                </span>
+                {item.status === "active" && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                )}
+              </div>
+            </div>
+
+            <Button
+              type="text"
+              size="small"
+              icon={<DeleteOutlined />}
+              className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+              onClick={(e) => onDelete(item.id, e)}
             />
           </div>
-        ) : (
-          <List
-            dataSource={conversations}
-            renderItem={(conversation) => (
-              <List.Item
-                key={conversation.id}
-                onClick={() => handleSelect(conversation)}
-                style={{
-                  padding: '12px 16px',
-                  cursor: 'pointer',
-                  borderBottom: '1px solid #f0f0f0',
-                  backgroundColor:
-                    currentConversation?.id === conversation.id ? '#e6f7ff' : 'transparent',
-                }}
-              >
-                <div style={{ width: '100%' }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: 4,
-                    }}
-                  >
-                    <Text
-                      ellipsis={{ tooltip: conversation.title }}
-                      style={{
-                        flex: 1,
-                        fontWeight:
-                          currentConversation?.id === conversation.id ? 600 : 400,
-                      }}
-                    >
-                      {conversation.title}
-                    </Text>
-                    {conversation.status === 'active' && (
-                      <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-                    )}
-                  </div>
-                  <Space size="small">
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      <MessageOutlined /> {conversation.message_count}
-                    </Text>
-                    <Popconfirm
-                      title="Delete this conversation?"
-                      description="This will delete all messages in this conversation."
-                      onConfirm={(e) => handleDelete(conversation.id, e as any)}
-                      okText="Delete"
-                      cancelText="Cancel"
-                    >
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<DeleteOutlined />}
-                        onClick={(e) => e.stopPropagation()}
-                        danger
-                      />
-                    </Popconfirm>
-                  </Space>
-                </div>
-              </List.Item>
-            )}
-          />
-        )}
+        ))}
       </div>
     </div>
   );

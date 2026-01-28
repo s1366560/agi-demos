@@ -1,256 +1,208 @@
-/**
- * AgentChat page component
- *
- * Page for interacting with the React-mode Agent.
- * Refactored to use modular components and custom hooks.
- */
+import React, { useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Spin, Modal, notification } from "antd";
+import { useAgentV3Store } from "../../stores/agentV3";
+import { useSandboxStore } from "../../stores/sandbox";
+import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
+import { ChatLayout, MessageList, InputArea, ConversationSidebar, RightPanel } from "../../components/agent";
 
-import React, { memo, useMemo } from "react";
-import { Modal, Input, Form } from "antd";
-import { useAgentChat } from "../../hooks/useAgentChat";
-import { ChatArea } from "../../components/agent/chat/ChatArea";
-import { FloatingInputBar } from "../../components/agent/chat/FloatingInputBar";
-import {
-  ChatHistorySidebar,
-  type Conversation as SidebarConversation,
-} from "../../components/agent/layout/ChatHistorySidebar";
+export const AgentChat: React.FC = () => {
+  const { projectId, conversation: conversationId } = useParams<{
+    projectId: string;
+    conversation?: string;
+  }>();
+  const navigate = useNavigate();
 
-const AgentChatInternal: React.FC = () => {
   const {
-    projectId,
-    currentConversation,
     conversations,
+    activeConversationId,
     messages,
-    messagesLoading,
+    isLoadingHistory,
     isStreaming,
-    inputValue,
-    setInputValue,
-    historySidebarOpen,
-    setHistorySidebarOpen,
-    searchQuery,
-    setSearchQuery,
-    showPlanEditor,
-    showEnterPlanModal,
-    setShowEnterPlanModal,
-    planForm,
-
-    currentWorkPlan,
-    currentStepNumber,
+    // streamStatus, // Available but not currently used
     currentThought,
-    currentToolCall,
-    executionTimeline,
-    toolExecutionHistory,
-    matchedPattern,
-    currentPlan,
-    planModeStatus,
-    planLoading,
-    // Typewriter streaming state
-    assistantDraftContent,
-    isTextStreaming,
-    // Pagination state
-    hasEarlierMessages,
+    activeToolCalls,
+    agentState,
+    workPlan,
+    isPlanMode,
+    showPlanPanel,
+    pendingDecision,
+    doomLoopDetected,
+    loadConversations,
+    loadMessages,
+    setActiveConversation,
+    createNewConversation,
+    sendMessage,
+    deleteConversation,
+    abortStream,
+    togglePlanMode,
+    togglePlanPanel,
+    respondToDecision,
+    clearError,
+    error,
+  } = useAgentV3Store();
 
-    messagesEndRef,
-    scrollContainerRef,
+  // Load conversations on mount or project change
+  useEffect(() => {
+    if (projectId) {
+      loadConversations(projectId);
+    }
+  }, [projectId, loadConversations]);
 
-    handleSend,
-    handleStop,
-    handleTileClick,
-    handleSelectConversation,
-    handleNewChat,
-    handleViewPlan,
-    handleExitPlanMode,
-    handleUpdatePlan,
-    handleEnterPlanMode,
-    handleEnterPlanSubmit,
-    handleLoadEarlier,
-  } = useAgentChat();
+  // Handle URL conversation ID
+  useEffect(() => {
+    if (projectId && conversationId) {
+      // 始终设置活动对话并加载消息（当 URL 中有对话 ID 时）
+      setActiveConversation(conversationId);
+      loadMessages(conversationId, projectId);
+    } else if (projectId && !conversationId) {
+      // 清除活动对话（当 URL 中没有对话 ID 时）
+      setActiveConversation(null);
+    }
+  }, [conversationId, projectId, setActiveConversation, loadMessages]);
 
-  // Transform conversations for sidebar
-  const sidebarConversations: SidebarConversation[] = useMemo(
-    () =>
-      conversations.map((conv) => ({
-        id: conv.id,
-        title: conv.title || "New Conversation",
-        status:
-          conv.id === currentConversation?.id && isStreaming
-            ? "running"
-            : conv.status === "deleted"
-            ? "failed"
-            : "done",
-        messageCount: conv.message_count,
-        timestamp: conv.updated_at
-          ? new Date(conv.updated_at).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })
-          : undefined,
-      })),
-    [conversations, currentConversation?.id, isStreaming]
+  // Handle error notifications
+  useEffect(() => {
+    if (error) {
+      notification.error({
+        message: "Agent Error",
+        description: error,
+        onClose: clearError,
+      });
+    }
+  }, [error, clearError]);
+
+  // Handle Pending Decision
+  useEffect(() => {
+    if (pendingDecision) {
+      Modal.confirm({
+        title: "Agent Requests Decision",
+        content: pendingDecision.question,
+        okText: "Confirm",
+        cancelText: "Cancel", // Or custom options if available
+        onOk: () => respondToDecision(pendingDecision.request_id, "approved"), // Simplified
+        onCancel: () =>
+          respondToDecision(pendingDecision.request_id, "rejected"),
+      });
+    }
+  }, [pendingDecision, respondToDecision]);
+
+  // Handle Doom Loop
+  useEffect(() => {
+    if (doomLoopDetected) {
+      notification.warning({
+        message: "Doom Loop Detected",
+        description: `Tool ${doomLoopDetected.tool_name} called ${doomLoopDetected.call_count} times repeatedly. Intervention required.`,
+      });
+    }
+  }, [doomLoopDetected]);
+
+  const handleSelectConversation = (id: string) => {
+    navigate(`/project/${projectId}/agent/${id}`);
+  };
+
+  const handleNewConversation = async () => {
+    if (!projectId) return;
+
+    // Create conversation first, then navigate to it
+    const newConversationId = await createNewConversation(projectId);
+    if (newConversationId) {
+      navigate(`/project/${projectId}/agent/${newConversationId}`);
+    }
+  };
+
+  const handleDeleteConversation = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!projectId) return;
+
+    Modal.confirm({
+      title: "Delete Conversation",
+      content:
+        "Are you sure you want to delete this conversation? This action cannot be undone.",
+      okText: "Delete",
+      okType: "danger",
+      cancelText: "Cancel",
+      onOk: async () => {
+        await deleteConversation(id, projectId);
+        // If deleted conversation was active, navigate to root agent page
+        if (activeConversationId === id) {
+          navigate(`/project/${projectId}/agent`);
+        }
+      },
+    });
+  };
+
+  const handleSend = async (content: string) => {
+    if (!projectId) return;
+
+    const newConversationId = await sendMessage(content, projectId, {
+      onAct,
+      onObserve,
+    });
+
+    // If we were on the "New Chat" page (no active ID) and got a new ID, navigate
+    if (!conversationId && newConversationId) {
+      navigate(`/project/${projectId}/agent/${newConversationId}`);
+    }
+  };
+
+  // Sandbox state and handlers
+  const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel } = useSandboxStore();
+  const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
+
+  const sidebar = (
+    <ConversationSidebar
+      conversations={conversations}
+      activeId={activeConversationId}
+      onSelect={handleSelectConversation}
+      onNew={handleNewConversation}
+      onDelete={handleDeleteConversation}
+    />
   );
 
-  if (!projectId) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-            Invalid Project
-          </h2>
-          <p className="text-slate-500">
-            Please select a valid project to access the agent.
-          </p>
+  const chatArea = (
+    <div className="flex flex-col h-full relative">
+      {/* Loading Overlay */}
+      {isLoadingHistory && (
+        <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
+          <Spin size="large" />
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full relative">
-      {/* Conversation History Sidebar */}
-      {historySidebarOpen && (
-        <ChatHistorySidebar
-          conversations={sidebarConversations}
-          selectedConversationId={currentConversation?.id}
-          onSelectConversation={handleSelectConversation}
-          onNewChat={handleNewChat}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
       )}
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* History Toggle Button */}
-        {!historySidebarOpen && (
-          <button
-            onClick={() => setHistorySidebarOpen(true)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-16 bg-white dark:bg-surface-dark border border-r-0 rounded-r-lg shadow-lg flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors z-10 animate-fade-in-left"
-            title="Show chat history"
-          >
-            <span className="material-symbols-outlined text-slate-500">
-              chevron_right
-            </span>
-          </button>
-        )}
+      {/* Message List */}
+      <MessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        currentThought={currentThought}
+        activeToolCalls={activeToolCalls}
+        agentState={agentState}
+      />
 
-        {/* Hide History Button (when sidebar is open) */}
-        {historySidebarOpen && (
-          <button
-            onClick={() => setHistorySidebarOpen(false)}
-            className="absolute left-0 top-4 w-6 h-6 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-r-lg flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors z-10"
-            title="Hide chat history"
-          >
-            <span className="material-symbols-outlined text-slate-500 text-sm">
-              chevron_left
-            </span>
-          </button>
-        )}
-
-        <ChatArea
-          messages={messages}
-          currentConversation={currentConversation}
-          isStreaming={isStreaming}
-          messagesLoading={messagesLoading}
-          currentWorkPlan={currentWorkPlan}
-          currentStepNumber={currentStepNumber}
-          currentThought={currentThought}
-          currentToolCall={currentToolCall}
-          executionTimeline={executionTimeline}
-          toolExecutionHistory={toolExecutionHistory}
-          matchedPattern={matchedPattern}
-          planModeStatus={planModeStatus}
-          showPlanEditor={showPlanEditor}
-          currentPlan={currentPlan}
-          planLoading={planLoading}
-          scrollContainerRef={scrollContainerRef}
-          messagesEndRef={messagesEndRef}
-          onViewPlan={handleViewPlan}
-          onExitPlanMode={handleExitPlanMode}
-          onUpdatePlan={handleUpdatePlan}
-          onSend={handleSend}
-          onTileClick={handleTileClick}
-          assistantDraftContent={assistantDraftContent}
-          isTextStreaming={isTextStreaming}
-          hasEarlierMessages={hasEarlierMessages}
-          onLoadEarlier={handleLoadEarlier}
-        />
-
-        {/* Input Area */}
-        <div className="flex-shrink-0 border-t border-slate-200 dark:border-border-dark bg-white dark:bg-surface-dark">
-          <div className="max-w-4xl mx-auto px-6 py-4">
-            <FloatingInputBar
-              value={inputValue}
-              onChange={setInputValue}
-              onSend={handleSend}
-              onStop={handleStop}
-              disabled={isStreaming}
-              placeholder={
-                isStreaming
-                  ? "Agent is thinking..."
-                  : "Message the Agent or type '/' for commands..."
-              }
-              showFooter={true}
-              onPlanMode={currentConversation ? handleEnterPlanMode : undefined}
-              isInPlanMode={planModeStatus?.is_in_plan_mode ?? false}
-              planModeDisabled={planLoading}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Enter Plan Mode Modal */}
-      <Modal
-        title={
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-purple-600">
-              architecture
-            </span>
-            <span>Enter Plan Mode</span>
-          </div>
-        }
-        open={showEnterPlanModal}
-        onOk={handleEnterPlanSubmit}
-        onCancel={() => {
-          setShowEnterPlanModal(false);
-          planForm.resetFields();
-        }}
-        okText="Enter Plan Mode"
-        okButtonProps={{ loading: planLoading }}
-        cancelText="Cancel"
-        destroyOnHidden
-      >
-        <div className="py-4">
-          <p className="text-slate-600 dark:text-slate-400 mb-4">
-            Plan Mode allows you to create and refine implementation plans
-            before execution. The Agent will focus on planning without making
-            actual changes.
-          </p>
-          <Form form={planForm} layout="vertical">
-            <Form.Item
-              name="title"
-              label="Plan Title"
-              rules={[{ required: true, message: "Please enter a plan title" }]}
-            >
-              <Input
-                placeholder="e.g., Implement user authentication"
-                maxLength={200}
-              />
-            </Form.Item>
-            <Form.Item name="description" label="Description (Optional)">
-              <Input.TextArea
-                placeholder="Describe what you want to plan..."
-                rows={3}
-                maxLength={1000}
-              />
-            </Form.Item>
-          </Form>
-        </div>
-      </Modal>
+      {/* Input Area */}
+      <InputArea
+        onSend={handleSend}
+        onAbort={abortStream}
+        isStreaming={isStreaming}
+        isPlanMode={isPlanMode}
+        onTogglePlanMode={togglePlanMode}
+        showPlanPanel={showPlanPanel}
+        onTogglePlanPanel={togglePlanPanel}
+      />
     </div>
+  );
+
+  const rightPanel = (
+    <RightPanel
+      workPlan={workPlan}
+      sandboxId={activeSandboxId}
+      toolExecutions={toolExecutions}
+      onClose={() => togglePlanPanel()}
+    />
+  );
+
+  return (
+    <ChatLayout sidebar={sidebar} chatArea={chatArea} rightPanel={rightPanel} />
   );
 };
 
-export const AgentChat = memo(AgentChatInternal);
 export default AgentChat;

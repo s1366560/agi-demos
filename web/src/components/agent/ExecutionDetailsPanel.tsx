@@ -21,7 +21,7 @@ import {
   BarChartOutlined,
 } from "@ant-design/icons";
 
-import { ThinkingChain } from "./ThinkingChainV3";
+import { ThinkingChain } from "./ThinkingChain";
 import { ActivityTimeline } from "./execution/ActivityTimeline";
 import {
   ToolCallVisualization,

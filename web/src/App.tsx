@@ -149,7 +149,7 @@ const EdgeTypeList = lazy(() => import("./pages/project/schema/EdgeTypeList"));
 const EdgeMapList = lazy(() => import("./pages/project/schema/EdgeMapList"));
 
 // Agent pages
-const AgentChat = lazy(() => import("./pages/project/AgentChatV3"));
+const AgentChat = lazy(() => import("./pages/project/AgentChat"));
 const AgentLogs = lazy(() => import("./pages/project/agent/AgentLogs"));
 const AgentPatterns = lazy(() => import("./pages/project/agent/AgentPatterns"));
 

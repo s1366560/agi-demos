@@ -10,7 +10,7 @@
 import React, { memo, useMemo } from "react";
 import { Collapse } from "antd";
 import { BulbOutlined, ToolOutlined } from "@ant-design/icons";
-import { ToolCard } from "./ToolCardV3";
+import { ToolCard } from "./ToolCard";
 import { ToolCall, ToolResult } from "../../types/agent";
 
 interface TimelineItem {
