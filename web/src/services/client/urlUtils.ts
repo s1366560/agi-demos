@@ -12,6 +12,7 @@
  */
 
 import { parseResponseError, ApiError, ApiErrorType } from './ApiError';
+import { retryWithBackoff, type RetryConfig } from './retry';
 
 /**
  * Get the base API URL from environment or use relative path
@@ -123,6 +124,14 @@ export function createWebSocketUrl(
 }
 
 /**
+ * Fetch request options with retry support
+ */
+interface FetchOptions extends RequestInit {
+  /** Enable retry for this request (default: false) */
+  retry?: RetryConfig | boolean;
+}
+
+/**
  * Fetch wrapper with automatic /api/v1 prefix and auth headers
  *
  * Use this for fetch-based requests (SSE, file uploads, etc.) where
@@ -142,24 +151,48 @@ async function handleResponse(response: Response): Promise<Response> {
   return response;
 }
 
+/**
+ * Wrap fetch with retry logic if enabled
+ */
+async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init?: FetchOptions
+): Promise<Response> {
+  const retryOption = init?.retry;
+
+  // No retry - execute directly
+  if (!retryOption) {
+    return fetch(input, init);
+  }
+
+  // Build retry config (more conservative for fetch)
+  const retryConfig: RetryConfig =
+    typeof retryOption === 'boolean'
+      ? { maxRetries: 2, initialDelay: 1000 }
+      : { maxRetries: 2, initialDelay: 1000, ...retryOption };
+
+  // Execute with retry
+  return retryWithBackoff(() => fetch(input, init), retryConfig);
+}
+
 export const apiFetch = {
-  get: async (url: string, options: RequestInit = {}): Promise<Response> => {
+  get: async (url: string, options: FetchOptions = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     // Merge headers, with options.headers taking precedence
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetch(createApiUrl(url), {
+    const response = await fetchWithRetry(createApiUrl(url), {
       ...options,
       headers: mergedHeaders,
     });
     return handleResponse(response);
   },
 
-  post: async (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
+  post: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetch(createApiUrl(url), {
+    const response = await fetchWithRetry(createApiUrl(url), {
       ...options,
       method: 'POST',
       headers: mergedHeaders,
@@ -168,11 +201,11 @@ export const apiFetch = {
     return handleResponse(response);
   },
 
-  put: async (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
+  put: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetch(createApiUrl(url), {
+    const response = await fetchWithRetry(createApiUrl(url), {
       ...options,
       method: 'PUT',
       headers: mergedHeaders,
@@ -181,11 +214,11 @@ export const apiFetch = {
     return handleResponse(response);
   },
 
-  patch: async (url: string, data?: unknown, options: RequestInit = {}): Promise<Response> => {
+  patch: async (url: string, data?: unknown, options: FetchOptions = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetch(createApiUrl(url), {
+    const response = await fetchWithRetry(createApiUrl(url), {
       ...options,
       method: 'PATCH',
       headers: mergedHeaders,
@@ -194,11 +227,11 @@ export const apiFetch = {
     return handleResponse(response);
   },
 
-  delete: async (url: string, options: RequestInit = {}): Promise<Response> => {
+  delete: async (url: string, options: FetchOptions = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetch(createApiUrl(url), {
+    const response = await fetchWithRetry(createApiUrl(url), {
       ...options,
       method: 'DELETE',
       headers: mergedHeaders,
@@ -213,3 +246,8 @@ export const apiFetch = {
  * Services can import ApiError from either urlUtils or ApiError.
  */
 export { ApiError, ApiErrorType } from './ApiError';
+
+/**
+ * Export retry types for convenience
+ */
+export type { RetryConfig };

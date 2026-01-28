@@ -439,3 +439,94 @@ describe('httpClient', () => {
     });
   });
 });
+
+describe('httpClient retry integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('should retry request when retry is enabled', async () => {
+    const { httpClient, ApiError } = await import('@/services/client/httpClient');
+    const mockGet = vi.fn()
+      .mockRejectedValueOnce(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'))
+      .mockResolvedValueOnce({ data: 'success' });
+
+    // Mock axios.get to use our mock
+    httpClient.instance.get = mockGet as any;
+
+    const promise = httpClient.get<string>('/api/test', { retry: true });
+
+    // Initial attempt fails
+    expect(mockGet).toHaveBeenCalledTimes(1);
+
+    // Advance timers for retry delay
+    await vi.advanceTimersByTimeAsync(1200);
+
+    // Retry should succeed
+    const result = await promise;
+    expect(result).toBe('success');
+    expect(mockGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('should not retry when retry is not enabled', async () => {
+    const { httpClient, ApiError } = await import('@/services/client/httpClient');
+    const mockGet = vi.fn().mockRejectedValue(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'));
+
+    httpClient.instance.get = mockGet as any;
+
+    await expect(
+      httpClient.get('/api/test', { retry: false })
+    ).rejects.toThrow();
+
+    // Only called once, no retry
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use custom retry config when provided', async () => {
+    const { httpClient, ApiError } = await import('@/services/client/httpClient');
+    const mockGet = vi.fn()
+      .mockRejectedValueOnce(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'))
+      .mockRejectedValueOnce(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error 2'))
+      .mockResolvedValueOnce({ data: 'success' });
+
+    httpClient.instance.get = mockGet as any;
+
+    const promise = httpClient.get<string>('/api/test', {
+      retry: { maxRetries: 3, initialDelay: 100, jitter: false },
+    });
+
+    // Advance timers for each retry
+    await vi.advanceTimersByTimeAsync(100); // 1st retry
+    await vi.advanceTimersByTimeAsync(200); // 2nd retry (doubled)
+
+    const result = await promise;
+    expect(result).toBe('success');
+    expect(mockGet).toHaveBeenCalledTimes(3); // initial + 2 retries (succeeded before 3rd)
+  });
+
+  it('should not retry on non-retryable errors (4xx)', async () => {
+    const { httpClient, ApiError } = await import('@/services/client/httpClient');
+    const mockError = new ApiError(
+      'VALIDATION' as any,
+      'INVALID_INPUT',
+      'Invalid input',
+      400
+    );
+    const mockGet = vi.fn().mockRejectedValue(mockError);
+
+    httpClient.instance.get = mockGet as any;
+
+    await expect(
+      httpClient.get('/api/test', { retry: true })
+    ).rejects.toThrow();
+
+    // Only called once, 4xx errors are not retried
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+});
