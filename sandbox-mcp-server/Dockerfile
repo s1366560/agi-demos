@@ -31,6 +31,20 @@ ENV MCP_HOST=0.0.0.0
 ENV MCP_PORT=8765
 ENV MCP_WORKSPACE=/workspace
 
+# Use fast China mirrors for all architectures (x86_64, ARM64)
+# Detect architecture and write appropriate sources configuration
+# Use HTTP to avoid chicken-and-egg problem with ca-certificates
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        MIRROR="http://mirrors.aliyun.com/ubuntu"; \
+    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then \
+        MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
+    else \
+        MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
+    fi && \
+    echo "Using mirror: $MIRROR for architecture: $ARCH" && \
+    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble noble-updates noble-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources
+
 # Install system dependencies and development tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Basic utilities
@@ -117,6 +131,45 @@ RUN python -m pip install --no-cache-dir --break-system-packages \
 RUN apt-get update && apt-get install -y sudo \
     && rm -rf /var/lib/apt/lists/*
 
+# Install ttyd for web terminal access
+ENV TTYD_VERSION=1.7.4
+RUN ARCH=$(dpkg --print-architecture) && \
+    TTYD_ARCH=$([ "$ARCH" = "x86_64" ] && echo "x86_64" || \
+               [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
+               [ "$ARCH" = "arm64" ] && echo "aarch64" || echo "$ARCH") && \
+    curl -fsSL https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.linux_${TTYD_ARCH}.tar.gz \
+    | tar -xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/ttyd
+
+# Install desktop environment (LXDE) for remote desktop
+ENV DESKTOP_ENABLED=true
+ENV DESKTOP_RESOLUTION=1280x720
+ENV DESKTOP_PORT=6080
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # X11 server
+    xorg \
+    openbox \
+    # Desktop environment
+    lxde \
+    lxde-core \
+    lxterminal \
+    # VNC server
+    x11vnc \
+    # Tools
+    geany \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install noVNC for web-based VNC client
+ENV NOVNC_VERSION=1.5.0
+RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz \
+    | tar -xz -C /opt && \
+    mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC && \
+    curl -fsSL https://github.com/novnc/websockify/archive/refs/tags/v${NOVNC_VERSION}.tar.gz \
+    | tar -xz -C /opt/noVNC/utils && \
+    mv /opt/noVNC/utils/websockify-${NOVNC_VERSION} /opt/noVNC/utils/websockify && \
+    chmod +x /opt/noVNC/utils/websockify/run.py && \
+    ln -sf /opt/noVNC/utils/websockify/run.py /opt/noVNC/utils/novnc_proxy
+
 # Create non-root user for security (use GID/UID 1001 to avoid conflicts)
 RUN groupadd --gid 1001 sandbox \
     && useradd --uid 1001 --gid sandbox --shell /bin/bash --create-home sandbox \
@@ -160,8 +213,8 @@ WORKDIR /workspace
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
 
-# Expose the MCP server port
-EXPOSE 8765
+# Expose ports: MCP WebSocket (8765), Web Terminal (7681), noVNC (6080)
+EXPOSE 8765 7681 6080
 
 # Default command
 CMD ["python", "-m", "src.server.main"]

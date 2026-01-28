@@ -43,6 +43,18 @@ from src.tools.test_tools import (
     create_generate_tests_tool,
     create_run_tests_tool,
 )
+from src.tools.terminal_tools import (
+    create_restart_terminal_tool,
+    create_start_terminal_tool,
+    create_stop_terminal_tool,
+    create_terminal_status_tool,
+)
+from src.tools.desktop_tools import (
+    create_desktop_status_tool,
+    create_restart_desktop_tool,
+    create_start_desktop_tool,
+    create_stop_desktop_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +143,18 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_git_diff_tool())
     registry.register(create_git_log_tool())
     registry.register(create_generate_commit_tool())
+
+    # Register terminal tools
+    registry.register(create_start_terminal_tool())
+    registry.register(create_stop_terminal_tool())
+    registry.register(create_terminal_status_tool())
+    registry.register(create_restart_terminal_tool())
+
+    # Register desktop tools
+    registry.register(create_start_desktop_tool())
+    registry.register(create_stop_desktop_tool())
+    registry.register(create_desktop_status_tool())
+    registry.register(create_restart_desktop_tool())
 
     logger.info(f"Tool registry initialized with {len(registry.list_names())} tools")
     return registry
