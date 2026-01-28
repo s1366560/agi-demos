@@ -7,7 +7,7 @@ import { useAgentStore } from '../../stores/agent';
 import { useParams, useNavigate } from 'react-router-dom';
 
 // Mock selector functions
-const mockUseMessages = vi.fn();
+const mockUseTimelineEvents = vi.fn();
 const mockUseMessagesLoading = vi.fn();
 const mockUseHasEarlierMessages = vi.fn();
 
@@ -23,7 +23,7 @@ vi.mock('../../stores/project', () => ({
 
 vi.mock('../../stores/agent', () => ({
   useAgentStore: vi.fn(),
-  useMessages: () => mockUseMessages(),
+  useTimelineEvents: () => mockUseTimelineEvents(),
   useMessagesLoading: () => mockUseMessagesLoading(),
   useHasEarlierMessages: () => mockUseHasEarlierMessages(),
 }));
@@ -86,7 +86,7 @@ describe('useAgentChat', () => {
     });
 
     // Mock selector functions
-    mockUseMessages.mockReturnValue([]);
+    mockUseTimelineEvents.mockReturnValue([]);
     mockUseMessagesLoading.mockReturnValue(false);
     mockUseHasEarlierMessages.mockReturnValue(false);
 

@@ -147,6 +147,11 @@ interface AgentV3State {
   // Conversation State
   conversations: Conversation[];
   activeConversationId: string | null;
+
+  // Timeline State (NEW: Primary data source for consistency)
+  timeline: TimelineEvent[];
+
+  // Messages State (Derived from timeline for backward compatibility)
   messages: Message[];
   isLoadingHistory: boolean;
 
@@ -296,6 +301,11 @@ export const useAgentV3Store = create<AgentV3State>()(
   devtools((set, get) => ({
     conversations: [],
     activeConversationId: null,
+
+    // Timeline: Primary data source (stores raw events from API and streaming)
+    timeline: [],
+
+    // Messages: Derived from timeline (for backward compatibility)
     messages: [],
     isLoadingHistory: false,
 
@@ -341,9 +351,11 @@ export const useAgentV3Store = create<AgentV3State>()(
             state.activeConversationId === conversationId
               ? null
               : state.activeConversationId,
-          // Clear messages if the deleted conversation was active
+          // Clear messages and timeline if the deleted conversation was active
           messages:
             state.activeConversationId === conversationId ? [] : state.messages,
+          timeline:
+            state.activeConversationId === conversationId ? [] : state.timeline,
         }));
       } catch (error) {
         console.error("Failed to delete conversation", error);
@@ -361,8 +373,9 @@ export const useAgentV3Store = create<AgentV3State>()(
         set((state) => ({
           conversations: [newConv, ...state.conversations],
           activeConversationId: newConv.id,
-          // Clear messages for new conversation
+          // Clear messages and timeline for new conversation
           messages: [],
+          timeline: [],
           currentThought: "",
           workPlan: null,
           agentState: "idle",
@@ -380,6 +393,7 @@ export const useAgentV3Store = create<AgentV3State>()(
     loadMessages: async (conversationId, projectId) => {
       set({
         isLoadingHistory: true,
+        timeline: [],      // Clear timeline
         messages: [],
         currentThought: "",
         workPlan: null,
@@ -396,8 +410,13 @@ export const useAgentV3Store = create<AgentV3State>()(
           return;
         }
 
+        // Store the raw timeline (NEW)
         const processedMessages = processHistory(timelineToMessages(response.timeline));
-        set({ messages: processedMessages });
+        set({
+          timeline: response.timeline,
+          messages: processedMessages,
+          isLoadingHistory: false,
+        });
 
         try {
           const planStatus = await planService.getPlanModeStatus(

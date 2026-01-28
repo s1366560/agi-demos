@@ -4,7 +4,7 @@ import { Spin, Modal, notification } from "antd";
 import { useAgentV3Store } from "../../stores/agentV3";
 import { useSandboxStore } from "../../stores/sandbox";
 import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
-import { ChatLayout, MessageList, InputArea, ConversationSidebar, RightPanel } from "../../components/agent";
+import { ChatLayout, VirtualTimelineEventList, InputArea, ConversationSidebar, RightPanel } from "../../components/agent";
 
 export const AgentChat: React.FC = () => {
   const { projectId, conversation: conversationId } = useParams<{
@@ -16,13 +16,9 @@ export const AgentChat: React.FC = () => {
   const {
     conversations,
     activeConversationId,
-    messages,
+    timeline,      // NEW: Use timeline instead of messages
     isLoadingHistory,
     isStreaming,
-    // streamStatus, // Available but not currently used
-    currentThought,
-    activeToolCalls,
-    agentState,
     workPlan,
     isPlanMode,
     showPlanPanel,
@@ -170,13 +166,11 @@ export const AgentChat: React.FC = () => {
         </div>
       )}
 
-      {/* Message List */}
-      <MessageList
-        messages={messages}
+      {/* Timeline Event List - Unified rendering path */}
+      <VirtualTimelineEventList
+        timeline={timeline}
         isStreaming={isStreaming}
-        currentThought={currentThought}
-        activeToolCalls={activeToolCalls}
-        agentState={agentState}
+        showExecutionDetails={true}
       />
 
       {/* Input Area */}
@@ -190,7 +184,7 @@ export const AgentChat: React.FC = () => {
         onTogglePlanPanel={togglePlanPanel}
       />
     </div>
-  ), [isLoadingHistory, messages, isStreaming, currentThought, activeToolCalls, agentState, handleSend, abortStream, isPlanMode, togglePlanMode, showPlanPanel]);
+  ), [isLoadingHistory, timeline, isStreaming, handleSend, abortStream, isPlanMode, togglePlanMode, showPlanPanel]);
 
   const rightPanel = useMemo(() => (
     <RightPanel

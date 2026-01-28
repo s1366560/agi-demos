@@ -76,21 +76,19 @@ describe('ChatArea Performance', () => {
     });
 
     it('should have consistent props to enable effective memoization', () => {
-      const messages = [
-        { id: '1', role: 'user', content: 'Hello', created_at: '2024-01-01T00:00:00Z' },
+      const timeline = [
+        { id: '1', type: 'user_message' as const, sequenceNumber: 1, timestamp: Date.now(), content: 'Hello', role: 'user' as const },
       ];
       const currentConversation = { id: 'conv-1' };
 
       const { rerender } = render(
         <ChatArea
-          messages={messages}
+          timeline={timeline}
           currentConversation={currentConversation}
           isStreaming={false}
           messagesLoading={false}
           currentWorkPlan={null}
           currentStepNumber={null}
-          currentThought={null}
-          currentToolCall={null}
           executionTimeline={[]}
           toolExecutionHistory={[]}
           matchedPattern={null}
@@ -113,14 +111,12 @@ describe('ChatArea Performance', () => {
       // Re-render with same props - memoized component should not re-render
       rerender(
         <ChatArea
-          messages={messages}
+          timeline={timeline}
           currentConversation={currentConversation}
           isStreaming={false}
           messagesLoading={false}
           currentWorkPlan={null}
           currentStepNumber={null}
-          currentThought={null}
-          currentToolCall={null}
           executionTimeline={[]}
           toolExecutionHistory={[]}
           matchedPattern={null}
@@ -142,8 +138,8 @@ describe('ChatArea Performance', () => {
     });
   });
 
-  describe('Message Sorting Optimization', () => {
-    it('should use useMemo for sorted messages', async () => {
+  describe('Timeline Sorting Optimization', () => {
+    it('should use useMemo for sorted timeline', async () => {
       // Read the ChatArea source to verify useMemo usage
       const fs = require('fs');
       const chatAreaContent = fs.readFileSync(
@@ -151,42 +147,40 @@ describe('ChatArea Performance', () => {
         'utf-8'
       );
 
-      // Verify useMemo is used for sortedMessages
+      // Verify useMemo is used for sortedTimeline
       expect(chatAreaContent).toContain('useMemo');
-      expect(chatAreaContent).toContain('sortedMessages');
+      expect(chatAreaContent).toContain('sortedTimeline');
     });
 
-    it('should not re-sort messages on every render', async () => {
+    it('should not re-sort timeline on every render', async () => {
       const fs = require('fs');
       const chatAreaContent = fs.readFileSync(
         require.resolve('../../components/agent/chat/ChatArea.tsx'),
         'utf-8'
       );
 
-      // Verify that sortedMessages depends only on messages array
-      // Just check for useMemo usage with messages as dependency
+      // Verify that sortedTimeline depends only on timeline array
+      // Just check for useMemo usage with timeline as dependency
       expect(chatAreaContent).toContain('useMemo');
-      expect(chatAreaContent).toContain('[messages]');
+      expect(chatAreaContent).toContain('[timeline]');
     });
   });
 
   describe('Streaming State Updates', () => {
     it('should handle streaming state efficiently', () => {
       // Test that rapid streaming updates don't cause excessive re-renders
-      const messages = [
-        { id: '1', role: 'user', content: 'Hello', created_at: '2024-01-01T00:00:00Z' },
+      const timeline = [
+        { id: '1', type: 'user_message' as const, sequenceNumber: 1, timestamp: Date.now(), content: 'Hello', role: 'user' as const },
       ];
 
       const { rerender } = render(
         <ChatArea
-          messages={messages}
+          timeline={timeline}
           currentConversation={{ id: 'conv-1' }}
           isStreaming={true}
           messagesLoading={false}
           currentWorkPlan={null}
           currentStepNumber={null}
-          currentThought={null}
-          currentToolCall={null}
           executionTimeline={[]}
           toolExecutionHistory={[]}
           matchedPattern={null}
@@ -201,8 +195,6 @@ describe('ChatArea Performance', () => {
           onUpdatePlan={vi.fn()}
           onSend={vi.fn()}
           onTileClick={vi.fn()}
-          assistantDraftContent="streaming content..."
-          isTextStreaming={true}
           hasEarlierMessages={false}
           onLoadEarlier={vi.fn()}
         />
@@ -212,16 +204,18 @@ describe('ChatArea Performance', () => {
       // This should not throw errors or cause performance issues
       expect(() => {
         for (let i = 0; i < 10; i++) {
+          const updatedTimeline = [
+            ...timeline,
+            { id: `msg-${i}`, type: 'assistant_message' as const, sequenceNumber: i + 2, timestamp: Date.now(), content: `Response ${i}`, role: 'assistant' as const },
+          ];
           rerender(
             <ChatArea
-              messages={messages}
+              timeline={updatedTimeline}
               currentConversation={{ id: 'conv-1' }}
               isStreaming={true}
               messagesLoading={false}
               currentWorkPlan={null}
               currentStepNumber={null}
-              currentThought={null}
-              currentToolCall={null}
               executionTimeline={[]}
               toolExecutionHistory={[]}
               matchedPattern={null}
@@ -236,8 +230,6 @@ describe('ChatArea Performance', () => {
               onUpdatePlan={vi.fn()}
               onSend={vi.fn()}
               onTileClick={vi.fn()}
-              assistantDraftContent={`streaming content... ${i}`}
-              isTextStreaming={true}
               hasEarlierMessages={false}
               onLoadEarlier={vi.fn()}
             />

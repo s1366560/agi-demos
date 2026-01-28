@@ -2080,7 +2080,15 @@ export const useTimelineLoading = () =>
 export const useTimelineError = () =>
   useAgentStore((state) => state.timelineError);
 
-// Derived selectors for backward compatibility and convenience
+// Unified TimelineEvent selector for consistent rendering
+// Returns the raw timeline events for direct consumption by TimelineEventRenderer
+export const useTimelineEvents = () =>
+  useAgentStore((state) => state.timeline);
+
+// Derived selectors for backward compatibility
+// @deprecated Use useTimelineEvents and TimelineEventRenderer instead
+// This selector converts TimelineEvents to Message format for legacy code
+// It will be removed in a future version once all consumers are migrated
 export const useMessages = () =>
   useAgentStore((state) =>
     state.timeline
@@ -2103,8 +2111,18 @@ export const useMessages = () =>
             : undefined),
       }))
   );
+
+/**
+ * Get timeline loading state
+ * @returns True if timeline is currently loading
+ */
 export const useMessagesLoading = () =>
   useAgentStore((state) => state.timelineLoading);
+
+/**
+ * Get timeline error state
+ * @returns Timeline error message or null
+ */
 export const useMessagesError = () =>
   useAgentStore((state) => state.timelineError);
 

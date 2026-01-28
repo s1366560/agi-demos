@@ -1,3 +1,11 @@
+/**
+ * ChatArea - Unified chat message display component
+ *
+ * Refactored to use TimelineEventRenderer for consistent rendering
+ * of both streaming and historical messages.
+ *
+ * @module components/agent/chat/ChatArea
+ */
 
 import React, { memo, useMemo, useRef, useEffect, useCallback } from "react";
 import { Spin } from "antd";
@@ -5,19 +13,12 @@ import {
   IdleState,
   type StarterTile,
 } from "./IdleState";
-import {
-  MessageStream,
-  UserMessage,
-  AgentSection,
-  ReasoningLogCard,
-  ToolExecutionCardDisplay,
-} from "./MessageStream";
-import { AssistantMessage } from "./AssistantMessage";
+import { TimelineEventRenderer } from "./TimelineEventRenderer";
 import { ExecutionTimeline } from "../execution/ExecutionTimeline";
 import { FollowUpPills } from "../execution/FollowUpPills";
 import { PlanModeIndicator } from "../PlanModeIndicator";
 import { PlanEditor } from "../PlanEditor";
-import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus } from "../../../types/agent";
+import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus, TimelineEvent } from "../../../types/agent";
 
 // Default starter tiles
 const DEFAULT_STARTER_TILES: StarterTile[] = [
@@ -58,11 +59,16 @@ const MOCK_SUGGESTIONS = [
   "Analyze related trends",
 ];
 
-function shouldShowExecutionPlan(
+/**
+ * Determine if the rich ExecutionTimeline should be shown
+ * (for active streaming with complex multi-step execution)
+ */
+function shouldShowRichExecutionTimeline(
   workPlan: WorkPlan | null | undefined,
   executionTimeline: TimelineStep[],
   toolExecutionHistory: ToolExecution[]
 ): boolean {
+  // Show rich timeline only for complex multi-step work plans during streaming
   if (workPlan && workPlan.steps && workPlan.steps.length > 1) {
     return true;
   }
@@ -76,33 +82,49 @@ function shouldShowExecutionPlan(
 }
 
 interface ChatAreaProps {
-  messages: any[];
+  /** Timeline events (unified event stream) */
+  timeline: TimelineEvent[];
+  /** Current conversation */
   currentConversation: any;
+  /** Whether agent is currently streaming */
   isStreaming: boolean;
+  /** Whether timeline messages are loading */
   messagesLoading: boolean;
+  /** Current work plan (for rich timeline display) */
   currentWorkPlan: WorkPlan | null;
+  /** Current step number */
   currentStepNumber: number | null;
-  currentThought: string | null;
-  currentToolCall: any;
+  /** Execution timeline (for rich timeline display) */
   executionTimeline: TimelineStep[];
+  /** Tool execution history */
   toolExecutionHistory: ToolExecution[];
+  /** Matched workflow pattern */
   matchedPattern: any;
+  /** Plan mode status */
   planModeStatus: PlanModeStatus | null;
+  /** Whether to show plan editor */
   showPlanEditor: boolean;
+  /** Current plan document */
   currentPlan: PlanDocument | null;
+  /** Whether plan is loading */
   planLoading: boolean;
+  /** Scroll container ref */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  /** Messages end ref (for auto-scroll) */
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  /** View plan callback */
   onViewPlan: () => void;
+  /** Exit plan mode callback */
   onExitPlanMode: (approve: boolean) => Promise<void>;
+  /** Update plan callback */
   onUpdatePlan: (content: string) => Promise<void>;
+  /** Send message callback */
   onSend: (message: string) => void;
+  /** Starter tile click callback */
   onTileClick: (tile: StarterTile) => void;
-  // Typewriter streaming state
-  assistantDraftContent?: string;
-  isTextStreaming?: boolean;
-  // Pagination state
+  /** Pagination: has earlier messages to load */
   hasEarlierMessages?: boolean;
+  /** Pagination: load earlier messages callback */
   onLoadEarlier?: () => void;
 }
 
@@ -116,12 +138,10 @@ function areChatAreaPropsEqual(
 ): boolean {
   // Props that always trigger re-render
   const criticalPropsChanged =
-    prevProps.messages !== nextProps.messages ||
+    prevProps.timeline !== nextProps.timeline ||
     prevProps.currentConversation?.id !== nextProps.currentConversation?.id ||
     prevProps.isStreaming !== nextProps.isStreaming ||
-    prevProps.messagesLoading !== nextProps.messagesLoading ||
-    prevProps.assistantDraftContent !== nextProps.assistantDraftContent ||
-    prevProps.isTextStreaming !== nextProps.isTextStreaming;
+    prevProps.messagesLoading !== nextProps.messagesLoading;
 
   if (criticalPropsChanged) {
     return false;
@@ -140,7 +160,6 @@ function areChatAreaPropsEqual(
   // For the remaining props, use shallow comparison
   return (
     prevProps.currentStepNumber === nextProps.currentStepNumber &&
-    prevProps.currentThought === nextProps.currentThought &&
     prevProps.currentWorkPlan?.current_step_index === nextProps.currentWorkPlan?.current_step_index &&
     prevProps.executionTimeline.length === nextProps.executionTimeline.length &&
     prevProps.toolExecutionHistory.length === nextProps.toolExecutionHistory.length
@@ -148,14 +167,12 @@ function areChatAreaPropsEqual(
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = memo(({
-  messages,
+  timeline,
   currentConversation,
   isStreaming,
   messagesLoading,
   currentWorkPlan,
   currentStepNumber,
-  currentThought,
-  currentToolCall,
   executionTimeline,
   toolExecutionHistory,
   matchedPattern,
@@ -170,19 +187,23 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   onUpdatePlan,
   onSend,
   onTileClick,
-  assistantDraftContent,
-  isTextStreaming,
   hasEarlierMessages,
   onLoadEarlier,
 }) => {
-  // Memoize sorted messages to avoid re-sorting on every render
-  const sortedMessages = useMemo(
+  // Memoize sorted timeline events (they should already be sorted by sequence)
+  const sortedTimeline = useMemo(
     () =>
-      [...messages].sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      [...timeline].sort(
+        (a, b) => a.sequenceNumber - b.sequenceNumber
       ),
-    [messages]
+    [timeline]
+  );
+
+  // Determine if rich ExecutionTimeline should be shown
+  const showRichTimeline = shouldShowRichExecutionTimeline(
+    currentWorkPlan,
+    executionTimeline,
+    toolExecutionHistory
   );
 
   // Scroll handling for backward pagination
@@ -275,9 +296,9 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
 
         {/* Idle State - Only show when truly idle (not streaming, not loading messages) */}
         {(!currentConversation ||
-          (currentConversation && 
-           messages.length === 0 && 
-           !isStreaming && 
+          (currentConversation &&
+           sortedTimeline.length === 0 &&
+           !isStreaming &&
            !messagesLoading)) && (
           <div className="flex flex-col items-center justify-center min-h-full py-12 animate-fade-in">
             <div className="w-full text-center space-y-12">
@@ -291,249 +312,39 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
           </div>
         )}
 
-        {/* Active Chat - Show when there are messages OR when streaming (even if no messages yet) */}
-        {currentConversation && (messages.length > 0 || isStreaming) && (
+        {/* Active Chat - Show when there are timeline events OR when streaming */}
+        {currentConversation && (sortedTimeline.length > 0 || isStreaming) && (
           <div className="py-6 space-y-6">
-            <MessageStream>
-              {sortedMessages.map((message, index, arr) => {
-                  if (message.role === "user") {
-                    const isLastUserMessage = !arr
-                      .slice(index + 1)
-                      .some((m) => m.role === "user");
+            {/* Show rich ExecutionTimeline for complex multi-step execution during streaming */}
+            {showRichTimeline && isStreaming && (
+              <div className="mb-4">
+                <ExecutionTimeline
+                  workPlan={currentWorkPlan}
+                  steps={executionTimeline}
+                  toolExecutionHistory={toolExecutionHistory}
+                  isStreaming={isStreaming}
+                  currentStepNumber={currentStepNumber}
+                  matchedPattern={matchedPattern}
+                />
+              </div>
+            )}
 
-                    const shouldShowRealtimeTimeline =
-                      isLastUserMessage &&
-                      isStreaming &&
-                      shouldShowExecutionPlan(
-                        currentWorkPlan,
-                        executionTimeline,
-                        toolExecutionHistory
-                      );
+            {/* Unified TimelineEventRenderer for consistent message display */}
+            <TimelineEventRenderer
+              events={sortedTimeline}
+              isStreaming={isStreaming}
+              showExecutionDetails={true}
+            />
 
-                    const nextMessage = arr[index + 1];
-                    const hasHistoricalToolData =
-                      nextMessage?.role === "assistant" &&
-                      ((nextMessage.tool_calls &&
-                        nextMessage.tool_calls.length > 0) ||
-                        nextMessage.metadata?.work_plan);
-
-                    const historicalWorkPlan =
-                      hasHistoricalToolData &&
-                      nextMessage?.metadata?.work_plan
-                        ? (nextMessage.metadata.work_plan as WorkPlan)
-                        : null;
-
-                    const historicalToolExecutions: ToolExecution[] =
-                      hasHistoricalToolData && nextMessage?.tool_calls
-                        ? nextMessage.tool_calls.map(
-                            (tc: any, idx: number) => {
-                              const toolResult =
-                                nextMessage.tool_results?.find(
-                                  (r: any) => r.tool_name === tc.name
-                                );
-                              return {
-                                id: `${nextMessage.id}-tool-${idx}`,
-                                toolName: tc.name,
-                                input: tc.arguments || {},
-                                result: toolResult?.result || undefined,
-                                error: toolResult?.error || undefined,
-                                status: (toolResult && !toolResult.error
-                                  ? "success"
-                                  : toolResult?.error
-                                  ? "failed"
-                                  : "success") as ToolExecution["status"],
-                                startTime: nextMessage.created_at,
-                                endTime: nextMessage.created_at,
-                                duration: 0,
-                              };
-                            }
-                          )
-                        : [];
-
-                    const historicalSteps: TimelineStep[] =
-                      historicalWorkPlan?.steps?.map((step, idx) => ({
-                        stepNumber: step.step_number ?? idx + 1,
-                        description: step.description,
-                        status: "completed" as const,
-                        thoughts: [],
-                        toolExecutions: [],
-                      })) ?? [];
-
-                    const shouldShowHistoricalTimeline =
-                      !isStreaming &&
-                      isLastUserMessage &&
-                      shouldShowExecutionPlan(
-                        historicalWorkPlan || currentWorkPlan,
-                        historicalSteps.length > 0
-                          ? historicalSteps
-                          : executionTimeline,
-                        historicalToolExecutions.length > 0
-                          ? historicalToolExecutions
-                          : toolExecutionHistory
-                      );
-
-                    return (
-                      <div key={message.id} className="animate-fade-in-up">
-                        <UserMessage content={message.content} />
-                        {shouldShowRealtimeTimeline && (
-                          <div className="mt-4">
-                            <ExecutionTimeline
-                              workPlan={currentWorkPlan}
-                              steps={executionTimeline}
-                              toolExecutionHistory={toolExecutionHistory}
-                              isStreaming={isStreaming}
-                              currentStepNumber={currentStepNumber}
-                              matchedPattern={matchedPattern}
-                            />
-                          </div>
-                        )}
-                        {shouldShowHistoricalTimeline && (
-                          <div className="mt-4">
-                            <ExecutionTimeline
-                              workPlan={historicalWorkPlan || currentWorkPlan}
-                              steps={
-                                historicalSteps.length > 0
-                                  ? historicalSteps
-                                  : executionTimeline
-                              }
-                              toolExecutionHistory={
-                                historicalToolExecutions.length > 0
-                                  ? historicalToolExecutions
-                                  : toolExecutionHistory
-                              }
-                              isStreaming={false}
-                              currentStepNumber={
-                                historicalWorkPlan?.steps?.length ??
-                                currentStepNumber
-                              }
-                              matchedPattern={matchedPattern}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-
-                  const hasExecutionData =
-                    message.tool_calls && message.tool_calls.length > 0;
-                  const hasWorkPlan = message.metadata?.work_plan;
-                  const isLastMessage = index === arr.length - 1;
-
-                  return (
-                    <div key={message.id} className="space-y-4 animate-slide-up">
-                      {hasWorkPlan
-                        ? (() => {
-                            const workPlanData = message.metadata
-                              ?.work_plan as
-                              | { steps?: Array<{ description: string }> }
-                              | undefined;
-                            return (
-                              <AgentSection
-                                icon="psychology"
-                                opacity={true}
-                              >
-                                <ReasoningLogCard
-                                  steps={
-                                    workPlanData?.steps?.map(
-                                      (s) => s.description
-                                    ) || []
-                                  }
-                                  summary={`Work Plan: ${
-                                    workPlanData?.steps?.length || 0
-                                  } steps`}
-                                  completed={true}
-                                  expanded={false}
-                                />
-                              </AgentSection>
-                            );
-                          })()
-                        : null}
-
-                      {hasExecutionData &&
-                        message.tool_calls?.map(
-                          (toolCall: any, idx: number) => {
-                            const correspondingResult =
-                              message.tool_results?.find(
-                                (r: any) =>
-                                  r.tool_call_id === toolCall.call_id
-                              );
-                            return (
-                              <AgentSection
-                                key={`${message.id}-tool-${idx}`}
-                                icon="construction"
-                                iconBg="bg-slate-200 dark:bg-border-dark"
-                                opacity={true}
-                              >
-                                <ToolExecutionCardDisplay
-                                  toolName={toolCall.name}
-                                  status={
-                                    correspondingResult &&
-                                    !correspondingResult.error
-                                      ? "success"
-                                      : correspondingResult?.error
-                                      ? "error"
-                                      : "running"
-                                  }
-                                  parameters={toolCall.arguments}
-                                />
-                              </AgentSection>
-                            );
-                          }
-                        )}
-
-                      <AssistantMessage
-                        content={message.content}
-                        isReport={message.metadata?.isReport === true}
-                        generatedAt={message.created_at}
-                      />
-                      {isLastMessage && !isStreaming && (
-                        <div className="ml-11 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                          <FollowUpPills
-                            suggestions={MOCK_SUGGESTIONS}
-                            onSuggestionClick={onSend}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-              {currentThought && executionTimeline.length === 0 && (
-                <AgentSection icon="psychology">
-                  <ReasoningLogCard
-                    steps={[currentThought]}
-                    summary="Thinking..."
-                    completed={false}
-                    expanded={true}
-                  />
-                </AgentSection>
-              )}
-
-              {currentToolCall &&
-                executionTimeline.length === 0 &&
-                toolExecutionHistory.length === 0 && (
-                  <AgentSection
-                    icon="construction"
-                    iconBg="bg-slate-200 dark:bg-border-dark"
-                  >
-                    <ToolExecutionCardDisplay
-                      toolName={currentToolCall.name}
-                      status="running"
-                      parameters={currentToolCall.input}
-                    />
-                  </AgentSection>
-                )}
-
-              {/* Typewriter streaming draft content */}
-              {isTextStreaming && assistantDraftContent && (
-                <div className="animate-fade-in">
-                  <AssistantMessage
-                    content={assistantDraftContent}
-                    isReport={false}
-                  />
-                </div>
-              )}
-            </MessageStream>
+            {/* Follow-up suggestions after conversation ends */}
+            {!isStreaming && sortedTimeline.length > 0 && (
+              <div className="ml-11 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <FollowUpPills
+                  suggestions={MOCK_SUGGESTIONS}
+                  onSuggestionClick={onSend}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

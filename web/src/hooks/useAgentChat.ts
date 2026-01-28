@@ -4,33 +4,12 @@ import { message, Form } from "antd";
 import { useProjectStore } from "../stores/project";
 import {
   useAgentStore,
-  useMessages,
+  useTimelineEvents,
   useMessagesLoading,
   useHasEarlierMessages,
 } from "../stores/agent";
 import { agentService } from "../services/agentService";
 import type { StarterTile } from "../components/agent/chat/IdleState";
-import type { WorkPlan, ToolExecution, TimelineStep } from "../types/agent";
-
-/**
- * Determine if execution plan should be shown
- */
-export function shouldShowExecutionPlan(
-  workPlan: WorkPlan | null | undefined,
-  executionTimeline: TimelineStep[],
-  toolExecutionHistory: ToolExecution[]
-): boolean {
-  if (workPlan && workPlan.steps && workPlan.steps.length > 1) {
-    return true;
-  }
-  if (toolExecutionHistory.length > 1) {
-    return true;
-  }
-  if (executionTimeline.length > 1) {
-    return true;
-  }
-  return false;
-}
 
 export function useAgentChat() {
   const { projectId, conversation: conversationIdParam } = useParams<{
@@ -40,8 +19,8 @@ export function useAgentChat() {
   const navigate = useNavigate();
   const { currentProject, projects, setCurrentProject } = useProjectStore();
 
-  // Use selectors for messages (derived from timeline)
-  const messages = useMessages();
+  // Use unified timeline events (instead of deprecated useMessages)
+  const timeline = useTimelineEvents();
   const messagesLoading = useMessagesLoading();
   const hasEarlierMessages = useHasEarlierMessages();
 
@@ -56,8 +35,6 @@ export function useAgentChat() {
     isStreaming,
     currentWorkPlan,
     currentStepNumber,
-    currentThought,
-    currentToolCall,
     executionTimeline,
     toolExecutionHistory,
     matchedPattern,
@@ -69,9 +46,6 @@ export function useAgentChat() {
     updatePlan,
     getPlanModeStatus,
     loadEarlierMessages,
-    // Typewriter streaming state
-    assistantDraftContent,
-    isTextStreaming,
     // New conversation pending state (to prevent race condition)
     isNewConversationPending,
   } = useAgentStore();
@@ -125,21 +99,21 @@ export function useAgentChat() {
   }, []);
 
   useEffect(() => {
-    if (messages.length > 0 || isStreaming) {
+    if (timeline.length > 0 || isStreaming) {
       scrollToBottom("smooth");
     }
-  }, [messages.length, isStreaming, scrollToBottom]);
+  }, [timeline.length, isStreaming, scrollToBottom]);
 
   useEffect(() => {
     const wasLoading = prevMessagesLoadingRef.current;
     prevMessagesLoadingRef.current = messagesLoading;
 
-    if (wasLoading && !messagesLoading && messages.length > 0) {
+    if (wasLoading && !messagesLoading && timeline.length > 0) {
       requestAnimationFrame(() => {
         scrollToBottom("auto");
       });
     }
-  }, [messagesLoading, messages.length, scrollToBottom]);
+  }, [messagesLoading, timeline.length, scrollToBottom]);
 
   // Project sync
   useEffect(() => {
@@ -359,7 +333,7 @@ export function useAgentChat() {
     projectId,
     currentConversation,
     conversations,
-    messages,
+    timeline,
     messagesLoading,
     isStreaming,
     inputValue,
@@ -377,17 +351,13 @@ export function useAgentChat() {
     // Store State
     currentWorkPlan,
     currentStepNumber,
-    currentThought,
-    currentToolCall,
     executionTimeline,
     toolExecutionHistory,
     matchedPattern,
     currentPlan,
     planModeStatus,
     planLoading,
-    // Typewriter streaming state
-    assistantDraftContent,
-    isTextStreaming,
+
     // Pagination state
     hasEarlierMessages,
 

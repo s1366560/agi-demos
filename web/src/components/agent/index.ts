@@ -23,7 +23,6 @@ export {
 // Legacy components (deprecated, exported with Legacy suffix)
 export { MessageBubble as MessageBubbleLegacy } from './MessageBubbleLegacy';
 export { ConversationSidebar as ConversationSidebarLegacy } from './ConversationSidebarLegacy';
-export { MessageList as MessageListLegacy } from './MessageListLegacy';
 export { MessageInput } from './MessageInput';
 export { ProjectSelector } from './ProjectSelector';
 export { WorkPlanCard } from './WorkPlanCard';
@@ -50,6 +49,7 @@ export { SkillExecutionCard } from './SkillExecutionCard';
 // New Tailwind components
 export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
 export { IdleState, FloatingInputBar } from './chat';
+export { VirtualTimelineEventList } from './VirtualTimelineEventList';
 export {
   WorkPlanProgress,
   ToolExecutionLive,
