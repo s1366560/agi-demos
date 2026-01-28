@@ -17,6 +17,7 @@ Benefits:
 - 95%+ latency reduction for subsequent requests (<20ms vs 300-800ms)
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -312,21 +313,25 @@ class AgentSessionWorkflow:
                 f"Agent Session waiting for requests: tenant={config.tenant_id}, "
                 f"project={config.project_id}, idle_timeout={config.idle_timeout_seconds}s"
             )
-            await workflow.wait_condition(
-                lambda: self._stop_requested,
-                timeout=timedelta(seconds=config.idle_timeout_seconds),
-            )
 
-            if self._stop_requested:
+            # Catch TimeoutError to treat idle timeout as normal shutdown, not an error
+            # Ref: https://community.temporal.io/t/workflow-and-streaming-event-subscription-make-wait-condition-retryable/14993
+            try:
+                await workflow.wait_condition(
+                    lambda: self._stop_requested,
+                    timeout=timedelta(seconds=config.idle_timeout_seconds),
+                )
                 workflow.logger.info(
                     f"Stop requested for Agent Session: tenant={config.tenant_id}, "
                     f"project={config.project_id}"
                 )
-            else:
+            except asyncio.TimeoutError:
+                # Idle timeout is a normal shutdown condition, not an error
                 workflow.logger.info(
                     f"Agent Session idle timeout: tenant={config.tenant_id}, "
-                    f"project={config.project_id}"
+                    f"project={config.project_id} (normal shutdown after {config.idle_timeout_seconds}s)"
                 )
+                self._stop_requested = True  # Mark as stopped for cleanup
 
         except Exception as e:
             import traceback
