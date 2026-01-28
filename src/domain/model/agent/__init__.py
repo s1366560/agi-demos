@@ -43,6 +43,21 @@ from src.domain.model.agent.tool_composition import ToolComposition
 from src.domain.model.agent.tool_execution_record import ToolExecutionRecord
 from src.domain.model.agent.work_plan import WorkPlan
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
+# Plan Mode Execution Models (Enhanced execution tracking)
+from src.domain.model.agent.execution_plan import (
+    ExecutionPlan,
+    ExecutionPlanStatus,
+    ExecutionStep,
+    ExecutionStepStatus,
+)
+from src.domain.model.agent.plan_snapshot import PlanSnapshot, StepState
+from src.domain.model.agent.reflection_result import (
+    AdjustmentType,
+    ReflectionAssessment,
+    ReflectionResult,
+    StepAdjustment,
+)
+from src.domain.model.agent.step_result import StepOutcome, StepResult
 
 __all__ = [
     "Conversation",

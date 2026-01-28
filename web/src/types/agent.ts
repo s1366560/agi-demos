@@ -1881,3 +1881,284 @@ export interface ScreenshotUpdateEvent extends BaseTimelineEvent {
   sandboxId: string;
   imageUrl: string;
 }
+
+// ===========================================================================
+// Plan Mode Types
+// ===========================================================================
+
+/**
+ * Execution plan step status
+ */
+export type ExecutionStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+/**
+ * Execution plan status
+ */
+export type ExecutionPlanStatus =
+  | "draft"
+  | "approved"
+  | "executing"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+/**
+ * Reflection assessment
+ */
+export type ReflectionAssessment =
+  | "on_track"
+  | "needs_adjustment"
+  | "off_track"
+  | "complete"
+  | "failed";
+
+/**
+ * Adjustment type for plan steps
+ */
+export type AdjustmentType =
+  | "modify"
+  | "retry"
+  | "skip"
+  | "add_before"
+  | "add_after"
+  | "replace";
+
+/**
+ * Single execution step in a plan
+ */
+export interface ExecutionStep {
+  step_id: string;
+  description: string;
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  dependencies: string[];
+  status: ExecutionStepStatus;
+  result?: string;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+/**
+ * Step adjustment for reflection
+ */
+export interface StepAdjustment {
+  step_id: string;
+  adjustment_type: AdjustmentType;
+  reason: string;
+  new_tool_input?: Record<string, unknown>;
+  new_tool_name?: string;
+  new_step?: ExecutionStep;
+}
+
+/**
+ * Reflection result from plan execution
+ */
+export interface ReflectionResult {
+  assessment: ReflectionAssessment;
+  reasoning: string;
+  adjustments: StepAdjustment[];
+  suggested_next_steps?: string[];
+  confidence?: number;
+  final_summary?: string;
+  error_type?: string;
+  reflection_metadata: Record<string, unknown>;
+  is_terminal: boolean;
+}
+
+/**
+ * Plan snapshot for rollback functionality
+ */
+export interface StepState {
+  step_id: string;
+  status: string;
+  result?: string;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+  tool_input: Record<string, unknown>;
+}
+
+/**
+ * Plan snapshot for rollback
+ */
+export interface PlanSnapshot {
+  id: string;
+  plan_id: string;
+  name: string;
+  description?: string;
+  step_states: Record<string, StepState>;
+  auto_created: boolean;
+  snapshot_type: string;
+  created_at: string;
+}
+
+/**
+ * Execution plan for Plan Mode
+ */
+export interface ExecutionPlan {
+  id: string;
+  conversation_id: string;
+  user_query: string;
+  steps: ExecutionStep[];
+  status: ExecutionPlanStatus;
+  reflection_enabled: boolean;
+  max_reflection_cycles: number;
+  completed_steps: string[];
+  failed_steps: string[];
+  snapshot?: PlanSnapshot;
+  started_at?: string;
+  completed_at?: string;
+  error?: string;
+  progress_percentage: number;
+  is_complete: boolean;
+}
+
+// ===========================================================================
+// Plan Mode SSE Event Types
+// ===========================================================================
+
+/**
+ * Plan execution start event
+ */
+export interface PlanExecutionStartEvent {
+  type: "plan_execution_start";
+  data: {
+    plan_id: string;
+    total_steps: number;
+    user_query: string;
+  };
+  timestamp: string;
+}
+
+/**
+ * Plan execution complete event
+ */
+export interface PlanExecutionCompleteEvent {
+  type: "plan_execution_complete";
+  data: {
+    plan_id: string;
+    status: ExecutionPlanStatus;
+    completed_steps: number;
+    failed_steps: number;
+  };
+  timestamp: string;
+}
+
+/**
+ * Plan step ready event
+ */
+export interface PlanStepReadyEvent {
+  type: "plan_step_ready";
+  data: {
+    plan_id: string;
+    step_id: string;
+    step_number: number;
+    description: string;
+    tool_name: string;
+  };
+  timestamp: string;
+}
+
+/**
+ * Plan step complete event
+ */
+export interface PlanStepCompleteEvent {
+  type: "plan_step_complete";
+  data: {
+    plan_id: string;
+    step_id: string;
+    status: ExecutionStepStatus;
+    result?: string;
+  };
+  timestamp: string;
+}
+
+/**
+ * Plan step skipped event
+ */
+export interface PlanStepSkippedEvent {
+  type: "plan_step_skipped";
+  data: {
+    plan_id: string;
+    step_id: string;
+    reason: string;
+  };
+  timestamp: string;
+}
+
+/**
+ * Plan snapshot created event
+ */
+export interface PlanSnapshotCreatedEvent {
+  type: "plan_snapshot_created";
+  data: {
+    plan_id: string;
+    snapshot_id: string;
+    snapshot_name: string;
+    snapshot_type: string;
+  };
+  timestamp: string;
+}
+
+/**
+ * Plan rollback event
+ */
+export interface PlanRollbackEvent {
+  type: "plan_rollback";
+  data: {
+    plan_id: string;
+    snapshot_id: string;
+    reason: string;
+  };
+  timestamp: string;
+}
+
+/**
+ * Reflection complete event
+ */
+export interface ReflectionCompleteEvent {
+  type: "reflection_complete";
+  data: {
+    plan_id: string;
+    assessment: ReflectionAssessment;
+    reasoning: string;
+    has_adjustments: boolean;
+    adjustment_count: number;
+  };
+  timestamp: string;
+}
+
+/**
+ * Adjustment applied event
+ */
+export interface AdjustmentAppliedEvent {
+  type: "adjustment_applied";
+  data: {
+    plan_id: string;
+    adjustment_count: number;
+    adjustments: StepAdjustment[];
+  };
+  timestamp: string;
+}
+
+/**
+ * Union type for all Plan Mode events
+ */
+export type PlanModeEvent =
+  | PlanExecutionStartEvent
+  | PlanExecutionCompleteEvent
+  | PlanStepReadyEvent
+  | PlanStepCompleteEvent
+  | PlanStepSkippedEvent
+  | PlanSnapshotCreatedEvent
+  | PlanRollbackEvent
+  | ReflectionCompleteEvent
+  | AdjustmentAppliedEvent;

@@ -82,6 +82,15 @@ class AgentEventType(str, Enum):
     PLAN_CREATED = "plan_created"
     PLAN_UPDATED = "plan_updated"
     PLAN_STATUS_CHANGED = "plan_status_changed"
+    PLAN_EXECUTION_START = "plan_execution_start"
+    PLAN_EXECUTION_COMPLETE = "plan_execution_complete"
+    PLAN_STEP_READY = "plan_step_ready"
+    PLAN_STEP_COMPLETE = "plan_step_complete"
+    PLAN_STEP_SKIPPED = "plan_step_skipped"
+    PLAN_SNAPSHOT_CREATED = "plan_snapshot_created"
+    PLAN_ROLLBACK = "plan_rollback"
+    REFLECTION_COMPLETE = "reflection_complete"
+    ADJUSTMENT_APPLIED = "adjustment_applied"
 
     # Title generation events
     TITLE_GENERATED = "title_generated"
@@ -446,6 +455,89 @@ class AgentPlanStatusChangedEvent(AgentDomainEvent):
     new_status: str
 
 
+class AgentPlanExecutionStartEvent(AgentDomainEvent):
+    """Event emitted when plan execution starts."""
+    event_type: AgentEventType = AgentEventType.PLAN_EXECUTION_START
+    plan_id: str
+    total_steps: int
+    user_query: str
+
+
+class AgentPlanExecutionCompleteEvent(AgentDomainEvent):
+    """Event emitted when plan execution completes."""
+    event_type: AgentEventType = AgentEventType.PLAN_EXECUTION_COMPLETE
+    plan_id: str
+    total_duration_ms: int
+    steps_completed: int
+    steps_failed: int
+    final_status: str
+
+
+class AgentPlanStepReadyEvent(AgentDomainEvent):
+    """Event emitted when a step is ready to execute."""
+    event_type: AgentEventType = AgentEventType.PLAN_STEP_READY
+    plan_id: str
+    step_id: str
+    step_number: int
+    description: str
+    tool_name: str
+
+
+class AgentPlanStepCompleteEvent(AgentDomainEvent):
+    """Event emitted when a step completes."""
+    event_type: AgentEventType = AgentEventType.PLAN_STEP_COMPLETE
+    plan_id: str
+    step_id: str
+    status: str
+    result: Optional[str] = None
+    error: Optional[str] = None
+
+
+class AgentPlanStepSkippedEvent(AgentDomainEvent):
+    """Event emitted when a step is skipped."""
+    event_type: AgentEventType = AgentEventType.PLAN_STEP_SKIPPED
+    plan_id: str
+    step_id: str
+    reason: str
+
+
+class AgentPlanSnapshotCreatedEvent(AgentDomainEvent):
+    """Event emitted when a plan snapshot is created."""
+    event_type: AgentEventType = AgentEventType.PLAN_SNAPSHOT_CREATED
+    plan_id: str
+    snapshot_id: str
+    snapshot_name: str
+    snapshot_type: str
+
+
+class AgentPlanRollbackEvent(AgentDomainEvent):
+    """Event emitted when a plan is rolled back to a snapshot."""
+    event_type: AgentEventType = AgentEventType.PLAN_ROLLBACK
+    plan_id: str
+    snapshot_id: str
+    reason: str
+
+
+class AgentReflectionCompleteEvent(AgentDomainEvent):
+    """Event emitted when reflection completes."""
+    event_type: AgentEventType = AgentEventType.REFLECTION_COMPLETE
+    reflection_id: str
+    plan_id: str
+    assessment: str
+    recommended_action: str
+    summary: str
+    has_adjustments: bool
+    adjustment_count: int
+
+
+class AgentAdjustmentAppliedEvent(AgentDomainEvent):
+    """Event emitted when adjustments are applied to a plan."""
+    event_type: AgentEventType = AgentEventType.ADJUSTMENT_APPLIED
+    plan_id: str
+    adjustment_count: int
+    adjustments: List[Dict[str, Any]]
+
+
 # === Title Generation Events ===
 
 
@@ -530,6 +622,15 @@ def get_event_type_docstring() -> str:
         AgentPlanCreatedEvent,
         AgentPlanUpdatedEvent,
         AgentPlanStatusChangedEvent,
+        AgentPlanExecutionStartEvent,
+        AgentPlanExecutionCompleteEvent,
+        AgentPlanStepReadyEvent,
+        AgentPlanStepCompleteEvent,
+        AgentPlanStepSkippedEvent,
+        AgentPlanSnapshotCreatedEvent,
+        AgentPlanRollbackEvent,
+        AgentReflectionCompleteEvent,
+        AgentAdjustmentAppliedEvent,
         AgentTitleGeneratedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
