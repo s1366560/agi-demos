@@ -105,7 +105,74 @@ export interface EventGroup {
 }
 
 /**
+ * Prefixes used to identify implicit assistant groups
+ * These groups are created before a real assistant_message arrives
+ */
+const IMPLICIT_GROUP_PREFIXES = ['implicit-assistant-', 'act-group-'] as const;
+
+/**
+ * Check if a group ID represents an implicit assistant group
+ *
+ * @param groupId - The group ID to check
+ * @param hasContent - Whether the group has content (for work_plan groups)
+ * @returns True if this is an implicit group
+ */
+function isImplicitGroup(groupId: string | undefined, hasContent: boolean): boolean {
+  if (!groupId) return false;
+  return IMPLICIT_GROUP_PREFIXES.some(prefix => groupId.startsWith(prefix)) ||
+         (groupId.startsWith('group-') && !hasContent);
+}
+
+/**
+ * Normalize work plan status to valid PlanStatus type
+ *
+ * @param status - The status from the event
+ * @returns Normalized status
+ */
+function normalizeWorkPlanStatus(status: string): AggregatedWorkPlan['status'] {
+  const validStatuses: AggregatedWorkPlan['status'][] = ['planning', 'in_progress', 'completed', 'failed'];
+  return validStatuses.includes(status as AggregatedWorkPlan['status'])
+    ? (status as AggregatedWorkPlan['status'])
+    : 'in_progress';
+}
+
+/**
+ * Create a new implicit assistant group for orphaned execution events
+ *
+ * @param id - The group ID
+ * @param event - The event that triggered creation
+ * @param initialThoughts - Optional initial thoughts array
+ * @returns New implicit assistant group
+ */
+function createImplicitGroup(
+  id: string,
+  event: TimelineEvent,
+  initialThoughts: string[] = []
+): Partial<EventGroup> & { events: TimelineEvent[] } {
+  return {
+    id,
+    type: 'assistant',
+    content: '',
+    timestamp: event.timestamp,
+    thoughts: initialThoughts,
+    toolCalls: [],
+    events: [event],
+    isStreaming: true,
+  };
+}
+
+/**
  * Group TimelineEvents into renderable EventGroups
+ *
+ * Groups events into the expected pattern:
+ * user_message -> thought -> act -> observe -> assistant_message
+ *
+ * Key behaviors:
+ * 1. User messages create standalone groups immediately
+ * 2. Assistant messages merge with implicit groups or start new groups
+ * 3. Execution events (thought, act, observe) attach to current assistant group
+ * 4. Orphaned execution events create implicit assistant groups
+ * 5. Act/observe pairing uses order-based matching for SSE compatibility
  *
  * @param events - Array of TimelineEvents to group
  * @returns Array of EventGroups ready for rendering
@@ -116,205 +183,167 @@ export function groupTimelineEvents(events: TimelineEvent[]): EventGroup[] {
   }
 
   const groups: EventGroup[] = [];
-  let currentGroup: Partial<EventGroup> & { events: TimelineEvent[] } | null = null;
-  let lastUserGroupId: string | null = null;
+  let currentGroup: (Partial<EventGroup> & { events: TimelineEvent[] }) | null = null;
 
   for (const event of events) {
-    // Handle user message - always creates a new group and finalize immediately
-    if (event.type === 'user_message') {
-      // Save previous group if exists
-      if (currentGroup) {
-        groups.push(finalizeGroup(currentGroup));
-      }
-
-      // Start new user group
-      const userGroup: Partial<EventGroup> & { events: TimelineEvent[] } = {
-        id: event.id,
-        type: 'user',
-        content: (event as UserMessageEvent).content,
-        timestamp: event.timestamp,
-        thoughts: [],
-        toolCalls: [],
-        events: [event],
-        isStreaming: false,
-      };
-      groups.push(finalizeGroup(userGroup));
-      lastUserGroupId = event.id;
-      currentGroup = null; // User groups are finalized immediately
-      continue;
-    }
-
-    // Handle assistant message - always finalize previous group if exists
-    if (event.type === 'assistant_message') {
-      // Always save previous group before creating new assistant group
-      if (currentGroup) {
-        groups.push(finalizeGroup(currentGroup));
-      }
-
-      // Create new assistant group
-      currentGroup = {
-        id: event.id,
-        type: 'assistant',
-        content: (event as AssistantMessageEvent).content,
-        timestamp: event.timestamp,
-        thoughts: [],
-        toolCalls: [],
-        artifacts: (event as AssistantMessageEvent).artifacts,
-        events: [event],
-        isStreaming: false,
-      };
-      lastUserGroupId = null;
-      continue;
-    }
-
-    // Handle work plan - associate with current assistant group
-    if (event.type === 'work_plan') {
-      if (!currentGroup) {
-        // Create an assistant group for orphaned work plan
-        currentGroup = {
-          id: `group-${event.id}`,
-          type: 'assistant',
-          content: '',
-          timestamp: event.timestamp,
-          thoughts: [],
-          toolCalls: [],
-          events: [event],
-          isStreaming: true,
-        };
-      } else {
-        currentGroup.events.push(event);
-      }
-
-      const wpEvent = event as WorkPlanTimelineEvent;
-      currentGroup.workPlan = {
-        steps: wpEvent.steps.map((s, idx) => ({
-          stepNumber: s.step_number ?? idx + 1,
-          description: s.description,
-          expectedOutput: s.expected_output,
-        })),
-        status: (wpEvent.status === 'completed' || wpEvent.status === 'failed' || wpEvent.status === 'planning' || wpEvent.status === 'in_progress')
-          ? wpEvent.status
-          : 'in_progress',
-      };
-      continue;
-    }
-
-    // Handle step events - update work plan current step
-    if (event.type === 'step_start') {
-      if (currentGroup) {
-        currentGroup.events.push(event);
-        if (currentGroup.workPlan) {
-          const stepEvent = event as StepStartEvent;
-          currentGroup.workPlan.currentStep = stepEvent.stepIndex;
-          currentGroup.isStreaming = true;
-        }
-      }
-      continue;
-    }
-
-    // Handle step end - update step status
-    if (event.type === 'step_end') {
-      if (currentGroup) {
-        currentGroup.events.push(event);
-        // Step completion is tracked in work plan status
-      }
-      continue;
-    }
-
-    // Handle thought events - add to current group or create implicit assistant group
-    if (event.type === 'thought') {
-      // If we just had a user message (no currentGroup or currentGroup was user), create implicit assistant group
-      if (!currentGroup || lastUserGroupId) {
-        // Finalize any existing group first
+    switch (event.type) {
+      case 'user_message': {
+        // Finalize any existing group
         if (currentGroup) {
           groups.push(finalizeGroup(currentGroup));
+          currentGroup = null;
         }
-        // Create implicit assistant group for thought/act events
-        const thoughtEvent = event as ThoughtEvent;
-        currentGroup = {
-          id: `implicit-assistant-${event.id}`,
-          type: 'assistant',
-          content: '',
-          timestamp: event.timestamp,
-          thoughts: [thoughtEvent.content], // Initialize with this thought
-          toolCalls: [],
-          events: [event],
-          isStreaming: true,
-        };
-        lastUserGroupId = null;
-      } else {
-        currentGroup.events.push(event);
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        currentGroup.thoughts!.push((event as ThoughtEvent).content);
-        currentGroup.isStreaming = true;
-      }
-      continue;
-    }
 
-    // Handle act events - add to current group's tool calls
-    if (event.type === 'act') {
-      if (!currentGroup) {
-        // Create an assistant group for orphaned act
-        currentGroup = {
-          id: `act-group-${event.id}`,
-          type: 'assistant',
-          content: '',
+        // Create and immediately finalize user group
+        const userGroup: Partial<EventGroup> & { events: TimelineEvent[] } = {
+          id: event.id,
+          type: 'user',
+          content: (event as UserMessageEvent).content,
           timestamp: event.timestamp,
           thoughts: [],
           toolCalls: [],
           events: [event],
-          isStreaming: true,
+          isStreaming: false,
         };
-      } else {
-        currentGroup.events.push(event);
+        groups.push(finalizeGroup(userGroup));
+        break;
+      }
+
+      case 'assistant_message': {
+        const assistantEvent = event as AssistantMessageEvent;
+        const isImplicit = isImplicitGroup(currentGroup?.id, !!currentGroup?.content);
+
+        if (isImplicit && currentGroup) {
+          // Merge into current implicit group - this becomes the real assistant message
+          currentGroup.id = assistantEvent.id;
+          currentGroup.content = assistantEvent.content;
+          currentGroup.artifacts = assistantEvent.artifacts;
+          currentGroup.events.push(assistantEvent);
+          currentGroup.isStreaming = false;
+        } else {
+          // Finalize previous group and start new assistant group
+          if (currentGroup) {
+            groups.push(finalizeGroup(currentGroup));
+          }
+
+          currentGroup = {
+            id: assistantEvent.id,
+            type: 'assistant',
+            content: assistantEvent.content,
+            timestamp: assistantEvent.timestamp,
+            thoughts: [],
+            toolCalls: [],
+            artifacts: assistantEvent.artifacts,
+            events: [assistantEvent],
+            isStreaming: false,
+          };
+        }
+        break;
+      }
+
+      case 'work_plan': {
+        const wpEvent = event as WorkPlanTimelineEvent;
+
+        if (!currentGroup) {
+          currentGroup = createImplicitGroup(`group-${event.id}`, event);
+        } else {
+          currentGroup.events.push(event);
+        }
+
+        currentGroup.workPlan = {
+          steps: wpEvent.steps.map((s, idx) => ({
+            stepNumber: s.step_number ?? idx + 1,
+            description: s.description,
+            expectedOutput: s.expected_output,
+          })),
+          status: normalizeWorkPlanStatus(wpEvent.status),
+        };
+        break;
+      }
+
+      case 'step_start': {
+        if (currentGroup) {
+          currentGroup.events.push(event);
+          if (currentGroup.workPlan) {
+            currentGroup.workPlan.currentStep = (event as StepStartEvent).stepIndex;
+            currentGroup.isStreaming = true;
+          }
+        }
+        break;
+      }
+
+      case 'step_end': {
+        if (currentGroup) {
+          currentGroup.events.push(event);
+        }
+        break;
+      }
+
+      case 'thought': {
+        const thoughtEvent = event as ThoughtEvent;
+
+        if (!currentGroup) {
+          currentGroup = createImplicitGroup(`implicit-assistant-${event.id}`, event, [thoughtEvent.content]);
+        } else {
+          currentGroup.events.push(event);
+          currentGroup.thoughts!.push(thoughtEvent.content);
+          currentGroup.isStreaming = true;
+        }
+        break;
+      }
+
+      case 'act': {
         const actEvent = event as ActEvent;
 
-        // Create a new tool call entry
-        const toolCall: AggregatedToolCall = {
+        if (!currentGroup) {
+          currentGroup = createImplicitGroup(`act-group-${event.id}`, event);
+        } else {
+          currentGroup.events.push(event);
+        }
+
+        // Create new tool call entry
+        currentGroup.toolCalls!.push({
           name: actEvent.toolName,
           input: actEvent.toolInput,
           status: 'running',
           startTime: actEvent.timestamp,
-        };
-
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        currentGroup.toolCalls!.push(toolCall);
+        });
         currentGroup.isStreaming = true;
+        break;
       }
-      continue;
-    }
 
-    // Handle observe events - update matching tool call
-    if (event.type === 'observe') {
-      if (currentGroup) {
-        currentGroup.events.push(event);
+      case 'observe': {
         const obsEvent = event as ObserveEvent;
 
-        // Find the matching tool call by name
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const matchingToolCall = currentGroup.toolCalls!.find(
-          (tc) => tc.name === obsEvent.toolName && tc.status === 'running'
-        );
+        if (currentGroup) {
+          currentGroup.events.push(event);
 
-        if (matchingToolCall) {
-          const endTime = obsEvent.timestamp;
-          matchingToolCall.endTime = endTime;
-          matchingToolCall.duration = endTime - matchingToolCall.startTime;
-          matchingToolCall.status = obsEvent.isError ? 'error' : 'success';
+          // Order-based matching: find first running tool call
+          // This handles SSE case where observe.toolName is 'unknown'
+          const matchingToolCall = currentGroup.toolCalls!.find(tc => tc.status === 'running');
 
-          if (obsEvent.isError) {
-            matchingToolCall.error = obsEvent.toolOutput;
-          } else {
-            matchingToolCall.result = obsEvent.toolOutput;
+          if (matchingToolCall) {
+            const endTime = obsEvent.timestamp;
+            matchingToolCall.endTime = endTime;
+            matchingToolCall.duration = endTime - matchingToolCall.startTime;
+            matchingToolCall.status = obsEvent.isError ? 'error' : 'success';
+
+            if (obsEvent.isError) {
+              matchingToolCall.error = obsEvent.toolOutput;
+            } else {
+              matchingToolCall.result = obsEvent.toolOutput;
+            }
           }
         }
+        break;
       }
-      continue;
-    }
 
-    // For any other event type, add to current group if exists
-    if (currentGroup) {
-      currentGroup.events.push(event);
+      default:
+        // For any other event type, add to current group if exists
+        if (currentGroup) {
+          currentGroup.events.push(event);
+        }
+        break;
     }
   }
 

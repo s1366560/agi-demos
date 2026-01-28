@@ -40,6 +40,8 @@ class AgentEventType(str, Enum):
 
     # Message events
     MESSAGE = "message"
+    USER_MESSAGE = "user_message"
+    ASSISTANT_MESSAGE = "assistant_message"
 
     # Permission events
     PERMISSION_ASKED = "permission_asked"
@@ -222,9 +224,21 @@ class AgentTextEndEvent(AgentDomainEvent):
 
 
 class AgentMessageEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.MESSAGE
+    event_type: AgentEventType = Field(default=AgentEventType.MESSAGE)
     role: str
     content: str
+
+    def __init__(self, **data):
+        # Set event_type based on role
+        if "event_type" not in data:
+            role = data.get("role", "")
+            if role == "user":
+                data["event_type"] = AgentEventType.USER_MESSAGE
+            elif role == "assistant":
+                data["event_type"] = AgentEventType.ASSISTANT_MESSAGE
+            else:
+                data["event_type"] = AgentEventType.MESSAGE
+        super().__init__(**data)
 
 
 # === Permission Events ===
