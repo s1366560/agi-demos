@@ -145,6 +145,7 @@ export const TimelineEventGroup: React.FC<TimelineEventGroupProps> = memo(({
       {hasContent && (
         <AssistantMessage
           content={group.content}
+          isStreaming={isStreaming}
           isReport={group.artifacts !== undefined && group.artifacts.length > 0}
           generatedAt={new Date(group.timestamp).toISOString()}
         />

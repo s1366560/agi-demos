@@ -15,6 +15,8 @@ import {
   generateTimelineEventId,
   getNextSequenceNumber,
   resetSequenceCounter,
+  appendSSEEventToTimeline,
+  isSupportedEventType,
 } from '../../utils/sseEventAdapter';
 import type {
   AgentEvent,
@@ -26,12 +28,105 @@ import type {
   StepStartEventData,
   StepEndEventData,
   CompleteEventData,
+  TextDeltaEventData,
+  TextEndEventData,
 } from '../../types/agent';
 
 describe('SSE Event Adapter', () => {
   beforeEach(() => {
     // Reset sequence counter before each test
     resetSequenceCounter();
+  });
+
+  describe('Typewriter Effect Support (text_*)', () => {
+    it('should support text_delta event type', () => {
+      expect(isSupportedEventType('text_delta')).toBe(true);
+    });
+
+    it('should support text_start event type', () => {
+      expect(isSupportedEventType('text_start')).toBe(true);
+    });
+
+    it('should support text_end event type', () => {
+      expect(isSupportedEventType('text_end')).toBe(true);
+    });
+
+    it('should convert text_delta event to TimelineEvent', () => {
+      const event: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: { delta: 'Hello' },
+      };
+
+      const result = sseEventToTimeline(event, 1);
+
+      expect(result).not.toBeNull();
+      expect(result?.type).toBe('text_delta');
+      if (result?.type === 'text_delta') {
+        expect(result.content).toBe('Hello');
+      }
+    });
+
+    it('should append text_delta to timeline', () => {
+      const existingTimeline: any[] = [];
+      const event: AgentEvent<TextDeltaEventData> = {
+        type: 'text_delta',
+        data: { delta: 'World' },
+      };
+
+      const result = appendSSEEventToTimeline(existingTimeline, event);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe('text_delta');
+      if (result[0].type === 'text_delta') {
+        expect(result[0].content).toBe('World');
+      }
+    });
+
+    it('should handle multiple text_delta events in sequence', () => {
+      let timeline: any[] = [];
+
+      const deltas = ['Hello', ' ', 'World', '!'];
+      deltas.forEach((delta) => {
+        const event: AgentEvent<TextDeltaEventData> = {
+          type: 'text_delta',
+          data: { delta },
+        };
+        timeline = appendSSEEventToTimeline(timeline, event);
+      });
+
+      expect(timeline).toHaveLength(4);
+      if (timeline[0].type === 'text_delta') expect(timeline[0].content).toBe('Hello');
+      if (timeline[1].type === 'text_delta') expect(timeline[1].content).toBe(' ');
+      if (timeline[2].type === 'text_delta') expect(timeline[2].content).toBe('World');
+      if (timeline[3].type === 'text_delta') expect(timeline[3].content).toBe('!');
+    });
+
+    it('should convert text_start event to TimelineEvent', () => {
+      const event: AgentEvent<Record<string, unknown>> = {
+        type: 'text_start',
+        data: {},
+      };
+
+      const result = sseEventToTimeline(event, 1);
+
+      expect(result).not.toBeNull();
+      expect(result?.type).toBe('text_start');
+    });
+
+    it('should convert text_end event to TimelineEvent', () => {
+      const event: AgentEvent<TextEndEventData> = {
+        type: 'text_end',
+        data: { full_text: 'Hello World!' },
+      };
+
+      const result = sseEventToTimeline(event, 1);
+
+      expect(result).not.toBeNull();
+      expect(result?.type).toBe('text_end');
+      if (result?.type === 'text_end') {
+        expect(result.fullText).toBe('Hello World!');
+      }
+    });
   });
   describe('ID Generation', () => {
     it('should generate unique IDs for events', () => {
@@ -510,6 +605,9 @@ describe('SSE Event Adapter', () => {
  * step_end → step_end
  * step_finish → step_end (merged)
  * complete → assistant_message
+ * text_start → text_start (typewriter effect)
+ * text_delta → text_delta (typewriter effect)
+ * text_end → text_end (typewriter effect)
  *
  * Unsupported (return null):
  * - start, status, cost_update, retry, compact_needed
@@ -519,5 +617,5 @@ describe('SSE Event Adapter', () => {
  * - permission_asked, permission_replied
  * - skill_*, pattern_match, context_compressed
  * - plan_mode_enter, plan_mode_exit, plan_*, title_generated
- * - text_*, error
+ * - thought_delta, error
  */

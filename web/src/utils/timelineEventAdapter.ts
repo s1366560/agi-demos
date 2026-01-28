@@ -18,6 +18,7 @@ import type {
   AssistantMessageEvent,
   UserMessageEvent,
   StepStartEvent,
+  TextDeltaEvent,
 } from '../types/agent';
 
 /**
@@ -334,6 +335,33 @@ export function groupTimelineEvents(events: TimelineEvent[]): EventGroup[] {
               matchingToolCall.result = obsEvent.toolOutput;
             }
           }
+        }
+        break;
+      }
+
+      case 'text_delta': {
+        const deltaEvent = event as TextDeltaEvent;
+
+        // text_delta accumulates content to the current assistant group
+        if (!currentGroup) {
+          // Create implicit assistant group for streaming text
+          currentGroup = createImplicitGroup(`text-delta-group-${event.id}`, event);
+        } else {
+          currentGroup.events.push(event);
+        }
+
+        // Accumulate text content
+        currentGroup.content = (currentGroup.content || '') + deltaEvent.content;
+        currentGroup.isStreaming = true;
+        break;
+      }
+
+      case 'text_start':
+      case 'text_end': {
+        // These events mark the beginning/end of text streaming
+        // Just add them to the current group if exists
+        if (currentGroup) {
+          currentGroup.events.push(event);
         }
         break;
       }

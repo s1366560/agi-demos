@@ -286,7 +286,7 @@ describe('useDebounce', () => {
         }
       );
 
-      rerender({ value: '' as string | undefined, delay: 100 });
+      rerender({ value: undefined as string | undefined, delay: 100 });
 
       act(() => {
         vi.advanceTimersByTime(100);

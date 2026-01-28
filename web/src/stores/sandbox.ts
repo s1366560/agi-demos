@@ -2,12 +2,14 @@
  * Sandbox Store - State management for sandbox terminal and tool execution
  *
  * Manages sandbox connection state, tool execution history, and panel visibility.
+ * Extended to support desktop (noVNC) and terminal (ttyd) status management.
  */
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
 import type { ToolExecution } from "../components/agent/sandbox/SandboxOutputViewer";
+import type { DesktopStatus, TerminalStatus } from "../types/agent";
 
 // Sandbox tools that should trigger panel opening
 export const SANDBOX_TOOLS = [
@@ -36,12 +38,18 @@ export interface SandboxState {
   // Panel state
   panelVisible: boolean;
   panelMode: PanelMode;
-  activeTab: "terminal" | "output";
+  activeTab: "terminal" | "output" | "desktop" | "control";
 
   // Sandbox connection
   activeSandboxId: string | null;
   connectionStatus: ConnectionStatus;
   terminalSessionId: string | null;
+
+  // Desktop and Terminal status (extended)
+  desktopStatus: DesktopStatus | null;
+  terminalStatus: TerminalStatus | null;
+  isDesktopLoading: boolean;
+  isTerminalLoading: boolean;
 
   // Tool execution tracking
   currentTool: CurrentTool | null;
@@ -51,13 +59,28 @@ export interface SandboxState {
   // Actions
   openPanel: (sandboxId?: string | null) => void;
   closePanel: () => void;
-  setActiveTab: (tab: "terminal" | "output") => void;
+  setActiveTab: (tab: "terminal" | "output" | "desktop" | "control") => void;
   setPanelMode: (mode: PanelMode) => void;
 
   // Sandbox connection actions
   setSandboxId: (sandboxId: string | null) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setTerminalSessionId: (sessionId: string | null) => void;
+
+  // Desktop and Terminal status actions
+  setDesktopStatus: (status: DesktopStatus | null) => void;
+  setTerminalStatus: (status: TerminalStatus | null) => void;
+  setDesktopLoading: (loading: boolean) => void;
+  setTerminalLoading: (loading: boolean) => void;
+
+  // Desktop and Terminal control actions
+  startDesktop: () => Promise<void>;
+  stopDesktop: () => Promise<void>;
+  startTerminal: () => Promise<void>;
+  stopTerminal: () => Promise<void>;
+
+  // SSE event handler
+  handleSSEEvent: (event: { type: string; data: any }) => void;
 
   // Tool execution actions
   setCurrentTool: (tool: CurrentTool | null) => void;
@@ -92,6 +115,10 @@ const initialState = {
   activeSandboxId: null,
   connectionStatus: "idle" as ConnectionStatus,
   terminalSessionId: null,
+  desktopStatus: null as DesktopStatus | null,
+  terminalStatus: null as TerminalStatus | null,
+  isDesktopLoading: false,
+  isTerminalLoading: false,
   currentTool: null,
   toolExecutions: [],
   maxExecutions: 50,
@@ -129,6 +156,9 @@ export const useSandboxStore = create<SandboxState>()(
           // Reset connection state when sandbox changes
           connectionStatus: sandboxId ? "idle" : "idle",
           terminalSessionId: null,
+          // Reset desktop/terminal status when sandbox changes
+          desktopStatus: null,
+          terminalStatus: null,
         });
       },
 
@@ -138,6 +168,174 @@ export const useSandboxStore = create<SandboxState>()(
 
       setTerminalSessionId: (sessionId) => {
         set({ terminalSessionId: sessionId });
+      },
+
+      // Desktop status actions
+      setDesktopStatus: (status) => {
+        set({ desktopStatus: status });
+      },
+
+      setTerminalStatus: (status) => {
+        set({ terminalStatus: status });
+      },
+
+      setDesktopLoading: (loading) => {
+        set({ isDesktopLoading: loading });
+      },
+
+      setTerminalLoading: (loading) => {
+        set({ isTerminalLoading: loading });
+      },
+
+      // Desktop control actions
+      startDesktop: async () => {
+        const { activeSandboxId } = get();
+        if (!activeSandboxId) {
+          console.warn("Cannot start desktop: no active sandbox");
+          return;
+        }
+
+        set({ isDesktopLoading: true });
+
+        try {
+          // TODO: Call API to start desktop
+          // const response = await sandboxService.startDesktop(activeSandboxId);
+          // For now, simulate success
+          console.log("Starting desktop for sandbox:", activeSandboxId);
+        } finally {
+          set({ isDesktopLoading: false });
+        }
+      },
+
+      stopDesktop: async () => {
+        const { activeSandboxId } = get();
+        if (!activeSandboxId) {
+          console.warn("Cannot stop desktop: no active sandbox");
+          return;
+        }
+
+        set({ isDesktopLoading: true });
+
+        try {
+          // TODO: Call API to stop desktop
+          console.log("Stopping desktop for sandbox:", activeSandboxId);
+        } finally {
+          set({ isDesktopLoading: false });
+        }
+      },
+
+      // Terminal control actions
+      startTerminal: async () => {
+        const { activeSandboxId } = get();
+        if (!activeSandboxId) {
+          console.warn("Cannot start terminal: no active sandbox");
+          return;
+        }
+
+        set({ isTerminalLoading: true });
+
+        try {
+          // TODO: Call API to start terminal
+          console.log("Starting terminal for sandbox:", activeSandboxId);
+        } finally {
+          set({ isTerminalLoading: false });
+        }
+      },
+
+      stopTerminal: async () => {
+        const { activeSandboxId } = get();
+        if (!activeSandboxId) {
+          console.warn("Cannot stop terminal: no active sandbox");
+          return;
+        }
+
+        set({ isTerminalLoading: true });
+
+        try {
+          // TODO: Call API to stop terminal
+          console.log("Stopping terminal for sandbox:", activeSandboxId);
+        } finally {
+          set({ isTerminalLoading: false });
+        }
+      },
+
+      // SSE event handler for desktop/terminal events
+      handleSSEEvent: (event) => {
+        const { type, data } = event;
+
+        switch (type) {
+          case "desktop_started": {
+            const status: DesktopStatus = {
+              running: true,
+              url: data.url || null,
+              display: data.display || ":0",
+              resolution: data.resolution || "1280x720",
+              port: data.port || 6080,
+            };
+            set({ desktopStatus: status });
+            break;
+          }
+
+          case "desktop_stopped": {
+            set({
+              desktopStatus: {
+                running: false,
+                url: null,
+                display: "",
+                resolution: "",
+                port: 0,
+              },
+            });
+            break;
+          }
+
+          case "desktop_status": {
+            const status: DesktopStatus = {
+              running: data.running || false,
+              url: data.url || null,
+              display: data.display || "",
+              resolution: data.resolution || "",
+              port: data.port || 0,
+            };
+            set({ desktopStatus: status });
+            break;
+          }
+
+          case "terminal_started": {
+            const status: TerminalStatus = {
+              running: true,
+              url: data.url || null,
+              port: data.port || 7681,
+              sessionId: data.session_id || null,
+              pid: data.pid || null,
+            };
+            set({ terminalStatus: status });
+            break;
+          }
+
+          case "terminal_stopped": {
+            set({
+              terminalStatus: {
+                running: false,
+                url: null,
+                port: 0,
+              },
+            });
+            break;
+          }
+
+          case "terminal_status": {
+            const status: TerminalStatus = {
+              running: data.running || false,
+              url: data.url || null,
+              port: data.port || 0,
+              sessionId: data.session_id || null,
+              pid: data.pid || null,
+            };
+            set({ terminalStatus: status });
+            break;
+          }
+        }
       },
 
       // Tool execution actions
@@ -246,6 +444,13 @@ export const useToolExecutions = () =>
 
 export const useSandboxActiveTab = () =>
   useSandboxStore((state) => state.activeTab);
+
+// New selectors for desktop and terminal status
+export const useDesktopStatus = () =>
+  useSandboxStore((state) => state.desktopStatus);
+
+export const useTerminalStatus = () =>
+  useSandboxStore((state) => state.terminalStatus);
 
 // Helper to check if a tool is a sandbox tool
 export function isSandboxTool(toolName: string): boolean {

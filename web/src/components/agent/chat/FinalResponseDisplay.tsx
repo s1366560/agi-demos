@@ -17,6 +17,8 @@ export interface FinalResponseDisplayProps {
   version?: string;
   /** Generation timestamp */
   generatedAt?: string;
+  /** Whether currently streaming (shows typing cursor) */
+  isStreaming?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export function FinalResponseDisplay({
   content,
   version = "v1.0 Final",
   generatedAt,
+  isStreaming = false,
 }: FinalResponseDisplayProps) {
   const [copied, setCopied] = useState(false);
 
@@ -71,7 +74,9 @@ export function FinalResponseDisplay({
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-6 pb-12">
       {/* Main Content */}
-      <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md">
+      <div className={`flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 prose prose-sm dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md ${
+        isStreaming ? 'typing-cursor' : ''
+      }`}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8 border-b border-slate-100 dark:border-border-dark pb-4 -mt-4">
           <h2 className="m-0 text-2xl">Final Synthesis Report</h2>

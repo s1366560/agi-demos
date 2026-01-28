@@ -3,11 +3,11 @@ import { useNotificationStore } from '../../stores/notification'
 
 // Mock the API module
 vi.mock('../../services/api', () => ({
-  default: {
-    get: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
+    default: {
+        get: vi.fn().mockResolvedValue({ notifications: [] }),
+        put: vi.fn().mockResolvedValue({}),
+        delete: vi.fn().mockResolvedValue({}),
+    },
 }))
 
 describe('Notification Store', () => {

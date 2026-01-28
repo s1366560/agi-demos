@@ -34,8 +34,8 @@ vi.mock('../../components/AppLayout', () => ({
     ),
 }));
 
-// Mock ProjectCreateModal
-vi.mock('../../components/ProjectCreateModal', () => ({
+// Mock ProjectCreateModal - correct path after component reorganization
+vi.mock('../../components/tenant/ProjectCreateModal', () => ({
     ProjectCreateModal: ({ isOpen, onClose }: any) => (
         isOpen ? <div data-testid="create-project-modal"><button onClick={onClose}>Close</button></div> : null
     ),

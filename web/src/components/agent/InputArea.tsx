@@ -57,7 +57,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
   return (
     <div className="p-5 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm" data-testid="agent-input-area">
-      <div className="max-w-3xl mx-auto flex flex-col gap-4">
+      <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto flex flex-col gap-4">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-2" data-testid="agent-toolbar">
           <div className="flex items-center gap-5">
@@ -68,9 +68,16 @@ export const InputArea: React.FC<InputAreaProps> = ({
                   : "Switch to Plan Mode"
               }
             >
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={onTogglePlanMode}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onTogglePlanMode();
+                  }
+                }}
                 data-testid="plan-mode-toggle"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
                 aria-pressed={isPlanMode}
@@ -86,15 +93,22 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 }`}>
                   Plan Mode
                 </span>
-              </button>
+              </div>
             </Tooltip>
 
             <div className="h-4 w-px bg-slate-200" />
 
             <Tooltip title={showPlanPanel ? "Hide Plan Panel" : "Show Plan Panel"}>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={onTogglePlanPanel}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onTogglePlanPanel();
+                  }
+                }}
                 data-testid="plan-panel-toggle"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
                 aria-pressed={showPlanPanel}
@@ -110,7 +124,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 }`}>
                   Panel
                 </span>
-              </button>
+              </div>
             </Tooltip>
           </div>
         </div>

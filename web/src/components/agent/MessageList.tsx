@@ -272,7 +272,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     // User message
     if (msg.role === "user") {
       return (
-        <div className="animate-fade-in-up">
+        <div className="animate-fade-in-up pb-8">
           <UserMessage content={msg.content} />
         </div>
       );
@@ -365,7 +365,7 @@ export const MessageList: React.FC<MessageListProps> = ({
       const hasThoughts = displayThoughts.length > 0 || isThinking;
 
       return (
-        <div className="space-y-4 animate-slide-up">
+        <div className="space-y-4 animate-slide-up pb-8 pt-4">
           {useInterleavedRendering &&
             !isActivelyStreaming &&
             renderTimelineItems()}
@@ -481,6 +481,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 <div
                   key={virtualRow.key}
                   data-testid={`virtual-row-${virtualRow.index}`}
+                  ref={rowVirtualizer.measureElement}
                   style={{
                     position: "absolute",
                     top: 0,

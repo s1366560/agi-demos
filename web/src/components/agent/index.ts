@@ -50,6 +50,9 @@ export { SkillExecutionCard } from './SkillExecutionCard';
 export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
 export { IdleState, FloatingInputBar } from './chat';
 export { VirtualTimelineEventList } from './VirtualTimelineEventList';
+export type { RenderMode } from './VirtualTimelineEventList';
+export { TimelineEventItem } from './TimelineEventItem';
+export { RenderModeSwitch } from './RenderModeSwitch';
 export {
   WorkPlanProgress,
   ToolExecutionLive,

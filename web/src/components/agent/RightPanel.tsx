@@ -2,7 +2,7 @@
  * RightPanel - Combined Plan and Sandbox panel with tab navigation
  *
  * Replaces the original PlanPanel with a tabbed interface that includes
- * both work plan viewing and sandbox terminal/output capabilities.
+ * both work plan viewing and sandbox terminal/desktop/output capabilities.
  */
 
 import React, { useMemo, useCallback } from "react";
@@ -47,12 +47,20 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   activeTab: controlledActiveTab,
   onTabChange,
 }) => {
-  // Get sandbox state from store
+  // Get sandbox state from store (including desktop and terminal status)
   const {
     panelVisible: sandboxPanelVisible,
     activeSandboxId: storeSandboxId,
     toolExecutions: storeToolExecutions,
     currentTool,
+    desktopStatus,
+    terminalStatus,
+    isDesktopLoading,
+    isTerminalLoading,
+    startDesktop,
+    stopDesktop,
+    startTerminal,
+    stopTerminal,
   } = useSandboxStore();
 
   // Use props if provided, otherwise use store state
@@ -128,6 +136,14 @@ export const RightPanel: React.FC<RightPanelProps> = ({
           toolExecutions={toolExecutions}
           currentTool={currentTool}
           onFileClick={onFileClick}
+          desktopStatus={desktopStatus}
+          terminalStatus={terminalStatus}
+          onDesktopStart={startDesktop}
+          onDesktopStop={stopDesktop}
+          onTerminalStart={startTerminal}
+          onTerminalStop={stopTerminal}
+          isDesktopLoading={isDesktopLoading}
+          isTerminalLoading={isTerminalLoading}
         />
       ) : (
         <div className="h-full flex items-center justify-center text-slate-400">
@@ -139,7 +155,21 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         </div>
       ),
     },
-  ], [workPlan, currentTool, toolExecutions, sandboxId, onFileClick]);
+  ], [
+    workPlan,
+    currentTool,
+    toolExecutions,
+    sandboxId,
+    onFileClick,
+    desktopStatus,
+    terminalStatus,
+    isDesktopLoading,
+    isTerminalLoading,
+    startDesktop,
+    stopDesktop,
+    startTerminal,
+    stopTerminal,
+  ]);
 
   return (
     <div className="h-full flex flex-col bg-white">

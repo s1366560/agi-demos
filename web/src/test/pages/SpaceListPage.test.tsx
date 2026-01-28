@@ -15,7 +15,7 @@ vi.mock('../../components/AppLayout', () => ({
 }));
 
 // Mock TenantCreateModal
-vi.mock('../../components/TenantCreateModal', () => ({
+vi.mock('../../components/tenant/TenantCreateModal', () => ({
     TenantCreateModal: ({ isOpen, onClose }: any) => (
         isOpen ? <div data-testid="create-modal"><button onClick={onClose}>Close</button></div> : null
     ),
@@ -55,7 +55,8 @@ describe('SpaceListPage', () => {
             </BrowserRouter>
         );
 
-        expect(screen.getByText('My Spaces')).toBeInTheDocument();
+        // "My Spaces" appears in both title and welcome text
+        expect(screen.getAllByText('My Spaces').length).toBeGreaterThan(0);
         expect(screen.getByText('Create First Space')).toBeInTheDocument();
     });
 

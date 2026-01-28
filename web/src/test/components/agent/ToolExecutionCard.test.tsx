@@ -151,7 +151,8 @@ describe('ToolExecutionCard', () => {
       const longResult = {
         name: 'memory_search',
         input: {},
-        result: 'A'.repeat(1000),
+        // Use text that won't be parsed as base64 image (not just repeated A's)
+        result: 'This is a long search result. '.repeat(50) + 'End of result.',
         stepNumber: 0,
       }
       render(<ToolExecutionCard toolCall={longResult} />)

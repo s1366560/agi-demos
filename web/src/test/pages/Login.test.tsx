@@ -21,7 +21,7 @@ describe('Login', () => {
 
     it('renders login form', () => {
         render(<Login />)
-        expect(screen.getAllByText('VIP Memory').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Mem Stack').length).toBeGreaterThan(0)
         expect(screen.getByText('Sign in to your account')).toBeInTheDocument()
     })
 

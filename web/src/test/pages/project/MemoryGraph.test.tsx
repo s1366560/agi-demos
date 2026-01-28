@@ -4,7 +4,7 @@ import { MemoryGraph } from '../../../pages/project/MemoryGraph'
 import { useParams } from 'react-router-dom'
 
 // Mock CytoscapeGraph component
-vi.mock('../../../components/CytoscapeGraph', () => ({
+vi.mock('../../../components/graph/CytoscapeGraph', () => ({
     CytoscapeGraph: ({ onNodeClick }: any) => (
         <div data-testid="cytoscape-graph">
             <button

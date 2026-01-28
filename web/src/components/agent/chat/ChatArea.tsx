@@ -1,8 +1,8 @@
 /**
  * ChatArea - Unified chat message display component
  *
- * Refactored to use TimelineEventRenderer for consistent rendering
- * of both streaming and historical messages.
+ * Refactored to use VirtualTimelineEventList for efficient rendering
+ * with support for both grouped and timeline modes.
  *
  * @module components/agent/chat/ChatArea
  */
@@ -13,11 +13,13 @@ import {
   IdleState,
   type StarterTile,
 } from "./IdleState";
-import { TimelineEventRenderer } from "./TimelineEventRenderer";
+import { VirtualTimelineEventList } from "../VirtualTimelineEventList";
 import { ExecutionTimeline } from "../execution/ExecutionTimeline";
 import { FollowUpPills } from "../execution/FollowUpPills";
 import { PlanModeIndicator } from "../PlanModeIndicator";
 import { PlanEditor } from "../PlanEditor";
+import { RenderModeSwitch } from "../RenderModeSwitch";
+import type { RenderMode } from "../VirtualTimelineEventList";
 import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus, TimelineEvent } from "../../../types/agent";
 
 // Default starter tiles
@@ -108,6 +110,10 @@ interface ChatAreaProps {
   currentPlan: PlanDocument | null;
   /** Whether plan is loading */
   planLoading: boolean;
+  /** Render mode for timeline display */
+  renderMode?: RenderMode;
+  /** Callback when render mode changes */
+  onRenderModeChange?: (mode: RenderMode) => void;
   /** Scroll container ref */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** Messages end ref (for auto-scroll) */
@@ -151,7 +157,8 @@ function areChatAreaPropsEqual(
   const secondaryPropsChanged =
     prevProps.planModeStatus?.is_in_plan_mode !== nextProps.planModeStatus?.is_in_plan_mode ||
     prevProps.showPlanEditor !== nextProps.showPlanEditor ||
-    prevProps.currentPlan?.id !== nextProps.currentPlan?.id;
+    prevProps.currentPlan?.id !== nextProps.currentPlan?.id ||
+    prevProps.renderMode !== nextProps.renderMode;
 
   if (secondaryPropsChanged) {
     return false;
@@ -180,6 +187,8 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   showPlanEditor,
   currentPlan,
   planLoading,
+  renderMode = 'grouped',
+  onRenderModeChange,
   scrollContainerRef,
   messagesEndRef,
   onViewPlan,
@@ -253,102 +262,98 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   }, [messagesLoading]);
 
   return (
-    <div
-      ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto px-4 pt-6 scroll-smooth chat-messages"
-      onScroll={handleScroll}
-    >
-      <div className="max-w-4xl mx-auto">
-        {/* Loading indicator for earlier messages */}
-        {messagesLoading && hasEarlierMessages && (
-          <div className="flex justify-center py-2">
-            <Spin size="small" />
-            <span className="ml-2 text-sm text-slate-500">加载历史消息...</span>
-          </div>
-        )}
-        {/* Plan Mode Indicator */}
-        {planModeStatus && (
-          <PlanModeIndicator
-            status={planModeStatus}
-            onViewPlan={onViewPlan}
-            onExitPlanMode={async () => onExitPlanMode(false)}
+    <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Toolbar with RenderModeSwitch */}
+      {currentConversation && (sortedTimeline.length > 0 || isStreaming) && onRenderModeChange && (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+          <div className="flex-1" />
+          <RenderModeSwitch
+            mode={renderMode}
+            onToggle={onRenderModeChange}
           />
-        )}
+          <div className="flex-1" />
+        </div>
+      )}
 
-        {/* Plan Editor Modal */}
-        {showPlanEditor && currentPlan && (
-          <div className="mb-6 animate-fade-in">
-            <PlanEditor
-              plan={currentPlan}
-              isLoading={planLoading}
-              onUpdate={onUpdatePlan}
-              onExit={onExitPlanMode}
-              readOnly={false}
-            />
-            <button
-              onClick={async () => onExitPlanMode(false)}
-              className="mt-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-            >
-              Hide Plan Editor
-            </button>
-          </div>
-        )}
+      {/* Loading indicator for earlier messages */}
+      {messagesLoading && hasEarlierMessages && (
+        <div className="flex justify-center py-2 bg-white dark:bg-slate-900">
+          <Spin size="small" />
+          <span className="ml-2 text-sm text-slate-500">加载历史消息...</span>
+        </div>
+      )}
 
+      {/* Main content area */}
+      <div className="flex-1 overflow-hidden">
         {/* Idle State - Only show when truly idle (not streaming, not loading messages) */}
         {(!currentConversation ||
           (currentConversation &&
            sortedTimeline.length === 0 &&
            !isStreaming &&
            !messagesLoading)) && (
-          <div className="flex flex-col items-center justify-center min-h-full py-12 animate-fade-in">
-            <div className="w-full text-center space-y-12">
-              <IdleState
-                greeting="How can I help you today?"
-                subtitle="Access your intelligent memory workspace. Start a conversation or select a suggested task below."
-                starterTiles={DEFAULT_STARTER_TILES}
-                onTileClick={onTileClick}
-              />
+          <div
+            ref={scrollContainerRef}
+            className="h-full overflow-y-auto px-4 pt-6 scroll-smooth chat-messages"
+          >
+            <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
+              <div className="flex flex-col items-center justify-center min-h-full py-12 animate-fade-in">
+                <div className="w-full text-center space-y-12">
+                  <IdleState
+                    greeting="How can I help you today?"
+                    subtitle="Access your intelligent memory workspace. Start a conversation or select a suggested task below."
+                    starterTiles={DEFAULT_STARTER_TILES}
+                    onTileClick={onTileClick}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* Active Chat - Show when there are timeline events OR when streaming */}
         {currentConversation && (sortedTimeline.length > 0 || isStreaming) && (
-          <div className="py-6 space-y-6">
-            {/* Show rich ExecutionTimeline for complex multi-step execution during streaming */}
+          <div className="h-full flex flex-col">
+            {/* Rich ExecutionTimeline for complex multi-step execution during streaming */}
             {showRichTimeline && isStreaming && (
-              <div className="mb-4">
-                <ExecutionTimeline
-                  workPlan={currentWorkPlan}
-                  steps={executionTimeline}
-                  toolExecutionHistory={toolExecutionHistory}
-                  isStreaming={isStreaming}
-                  currentStepNumber={currentStepNumber}
-                  matchedPattern={matchedPattern}
-                />
+              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
+                  <ExecutionTimeline
+                    workPlan={currentWorkPlan}
+                    steps={executionTimeline}
+                    toolExecutionHistory={toolExecutionHistory}
+                    isStreaming={isStreaming}
+                    currentStepNumber={currentStepNumber}
+                    matchedPattern={matchedPattern}
+                  />
+                </div>
               </div>
             )}
 
-            {/* Unified TimelineEventRenderer for consistent message display */}
-            <TimelineEventRenderer
-              events={sortedTimeline}
-              isStreaming={isStreaming}
-              showExecutionDetails={true}
-            />
+            {/* Virtualized Timeline Event List */}
+            <div className="flex-1 overflow-hidden">
+              <VirtualTimelineEventList
+                timeline={sortedTimeline}
+                isStreaming={isStreaming}
+                showExecutionDetails={true}
+                renderMode={renderMode}
+                className="chat-messages"
+              />
+            </div>
 
             {/* Follow-up suggestions after conversation ends */}
             {!isStreaming && sortedTimeline.length > 0 && (
-              <div className="ml-11 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <FollowUpPills
-                  suggestions={MOCK_SUGGESTIONS}
-                  onSuggestionClick={onSend}
-                />
+              <div className="px-4 py-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+                <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
+                  <FollowUpPills
+                    suggestions={MOCK_SUGGESTIONS}
+                    onSuggestionClick={onSend}
+                  />
+                </div>
               </div>
             )}
           </div>
         )}
       </div>
-      <div ref={messagesEndRef} className="h-4" />
     </div>
   );
 }, areChatAreaPropsEqual);

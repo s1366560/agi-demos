@@ -1,8 +1,8 @@
 /**
- * SandboxPanel - Main sandbox panel combining terminal and output viewer
+ * SandboxPanel - Main sandbox panel combining terminal, desktop and output viewer
  *
  * Provides a tabbed interface for interacting with sandbox containers,
- * including terminal access and tool execution output viewing.
+ * including terminal access, remote desktop, and tool execution output viewing.
  */
 
 import { useState, useCallback } from "react";
@@ -10,11 +10,16 @@ import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
 import {
   CodeOutlined,
   FileTextOutlined,
+  DesktopOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
 
 import { SandboxTerminal } from "./SandboxTerminal";
 import { SandboxOutputViewer, ToolExecution } from "./SandboxOutputViewer";
+import { RemoteDesktopViewer } from "./RemoteDesktopViewer";
+import { SandboxControlPanel } from "./SandboxControlPanel";
+
+import type { DesktopStatus, TerminalStatus } from "../../../types/agent";
 
 export interface SandboxPanelProps {
   /** Active sandbox ID */
@@ -28,10 +33,26 @@ export interface SandboxPanelProps {
   /** Called when file is clicked in output */
   onFileClick?: (filePath: string) => void;
   /** Default tab (default: "terminal") */
-  defaultTab?: "terminal" | "output";
+  defaultTab?: "terminal" | "output" | "desktop" | "control";
+  /** Desktop status information */
+  desktopStatus?: DesktopStatus | null;
+  /** Terminal status information */
+  terminalStatus?: TerminalStatus | null;
+  /** Called when start desktop is requested */
+  onDesktopStart?: () => void;
+  /** Called when stop desktop is requested */
+  onDesktopStop?: () => void;
+  /** Called when start terminal is requested */
+  onTerminalStart?: () => void;
+  /** Called when stop terminal is requested */
+  onTerminalStop?: () => void;
+  /** Loading state for desktop operations */
+  isDesktopLoading?: boolean;
+  /** Loading state for terminal operations */
+  isTerminalLoading?: boolean;
 }
 
-type TabKey = "terminal" | "output";
+type TabKey = "terminal" | "output" | "desktop" | "control";
 
 export function SandboxPanel({
   sandboxId,
@@ -40,6 +61,14 @@ export function SandboxPanel({
   onClose,
   onFileClick,
   defaultTab = "terminal",
+  desktopStatus = null,
+  terminalStatus = null,
+  onDesktopStart,
+  onDesktopStop,
+  onTerminalStart,
+  onTerminalStop,
+  isDesktopLoading = false,
+  isTerminalLoading = false,
 }: SandboxPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
   const [terminalSessionId, setTerminalSessionId] = useState<string | null>(
@@ -79,6 +108,66 @@ export function SandboxPanel({
             onDisconnect={handleTerminalDisconnect}
             height="100%"
             showToolbar={true}
+          />
+        </div>
+      ) : (
+        <div className="h-full flex items-center justify-center">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="No sandbox connected"
+          />
+        </div>
+      ),
+    },
+    {
+      key: "desktop" as TabKey,
+      label: (
+        <Space size={4}>
+          <DesktopOutlined />
+          <span>Desktop</span>
+          {desktopStatus?.running && (
+            <Badge status="success" className="ml-1" />
+          )}
+        </Space>
+      ),
+      children: sandboxId ? (
+        <div className="h-full">
+          <RemoteDesktopViewer
+            sandboxId={sandboxId}
+            desktopStatus={desktopStatus}
+            height="100%"
+            showToolbar={true}
+          />
+        </div>
+      ) : (
+        <div className="h-full flex items-center justify-center">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="No sandbox connected"
+          />
+        </div>
+      ),
+    },
+    {
+      key: "control" as TabKey,
+      label: (
+        <Space size={4}>
+          <DesktopOutlined />
+          <span>Control</span>
+        </Space>
+      ),
+      children: sandboxId ? (
+        <div className="h-full overflow-y-auto p-4">
+          <SandboxControlPanel
+            sandboxId={sandboxId}
+            desktopStatus={desktopStatus}
+            terminalStatus={terminalStatus}
+            onDesktopStart={onDesktopStart}
+            onDesktopStop={onDesktopStop}
+            onTerminalStart={onTerminalStart}
+            onTerminalStop={onTerminalStop}
+            isDesktopLoading={isDesktopLoading}
+            isTerminalLoading={isTerminalLoading}
           />
         </div>
       ) : (

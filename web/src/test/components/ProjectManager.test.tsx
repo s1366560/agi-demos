@@ -13,7 +13,7 @@ vi.mock('../../stores/tenant', () => ({
 }))
 
 // Mock ProjectCreateModal
-vi.mock('../../components/ProjectCreateModal', () => ({
+vi.mock('../../components/tenant/ProjectCreateModal', () => ({
     ProjectCreateModal: ({ isOpen, onClose, onSuccess }: any) => isOpen ? (
         <div data-testid="project-create-modal">
             <button onClick={onClose}>Close</button>

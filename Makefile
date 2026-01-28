@@ -19,6 +19,9 @@
 
 .PHONY: help install update clean init reset fresh restart
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-logs sandbox-shell sandbox-status sandbox-test sandbox-clean
+.PHONY: sandbox-desktop-start sandbox-desktop-stop sandbox-desktop-status sandbox-desktop-logs
+.PHONY: sandbox-terminal-start sandbox-terminal-stop sandbox-terminal-status sandbox-terminal-logs
+.PHONY: sandbox-start-all sandbox-stop-all sandbox-all-status
 
 # =============================================================================
 # Default Target
@@ -89,15 +92,32 @@ help: ## Show this help message
 	@echo "  make docker-clean     - Clean up containers, volumes, and orphans"
 	@echo ""
 	@echo "Sandbox (MCP Server):"
-	@echo "  make sandbox-build    - Build sandbox Docker image"
-	@echo "  make sandbox-run      - Start sandbox container"
-	@echo "  make sandbox-stop     - Stop sandbox container"
-	@echo "  make sandbox-restart  - Restart sandbox container"
-	@echo "  make sandbox-status   - Show sandbox status and tools"
-	@echo "  make sandbox-logs     - Show sandbox logs"
-	@echo "  make sandbox-shell    - Open shell in sandbox"
-	@echo "  make sandbox-test     - Run sandbox integration tests"
-	@echo "  make sandbox-clean    - Remove sandbox container and volume"
+	@echo "  make sandbox-build        - Build sandbox Docker image"
+	@echo "  make sandbox-run          - Start sandbox container"
+	@echo "  make sandbox-stop         - Stop sandbox container"
+	@echo "  make sandbox-restart      - Restart sandbox container"
+	@echo "  make sandbox-status       - Show sandbox status and tools"
+	@echo "  make sandbox-logs         - Show sandbox logs"
+	@echo "  make sandbox-shell        - Open shell in sandbox"
+	@echo "  make sandbox-test         - Run sandbox integration tests"
+	@echo "  make sandbox-clean        - Remove sandbox container and volume"
+	@echo ""
+	@echo "Sandbox Desktop (noVNC):"
+	@echo "  make sandbox-desktop-start   - Start remote desktop (noVNC)"
+	@echo "  make sandbox-desktop-stop    - Stop remote desktop"
+	@echo "  make sandbox-desktop-status  - Show desktop status"
+	@echo "  make sandbox-desktop-logs    - Show desktop logs"
+	@echo ""
+	@echo "Sandbox Terminal (ttyd):"
+	@echo "  make sandbox-terminal-start  - Start web terminal (ttyd)"
+	@echo "  make sandbox-terminal-stop   - Stop web terminal"
+	@echo "  make sandbox-terminal-status - Show terminal status"
+	@echo "  make sandbox-terminal-logs   - Show terminal logs"
+	@echo ""
+	@echo "Sandbox All-in-One:"
+	@echo "  make sandbox-start-all    - Start both desktop and terminal"
+	@echo "  make sandbox-stop-all     - Stop both desktop and terminal"
+	@echo "  make sandbox-all-status   - Show both desktop and terminal status"
 	@echo ""
 	@echo "Production:"
 	@echo "  make build            - Build all for production"
@@ -391,6 +411,8 @@ status: ## Show status of all services
 	@lsof -i :6379 2>/dev/null | grep -q LISTEN && echo "  6379 (Redis): ✅ In use" || echo "  6379 (Redis): ❌ Free"
 	@lsof -i :9000 2>/dev/null | grep -q LISTEN && echo "  9000 (MinIO): ✅ In use" || echo "  9000 (MinIO): ❌ Free"
 	@lsof -i :7233 2>/dev/null | grep -q LISTEN && echo "  7233 (Temporal): ✅ In use" || echo "  7233 (Temporal): ❌ Free"
+	@lsof -i :6080 2>/dev/null | grep -q LISTEN && echo "  6080 (Desktop): ✅ In use" || echo "  6080 (Desktop): ❌ Free"
+	@lsof -i :7681 2>/dev/null | grep -q LISTEN && echo "  7681 (Terminal): ✅ In use" || echo "  7681 (Terminal): ❌ Free"
 
 # =============================================================================
 # Testing
@@ -575,6 +597,8 @@ docker-clean: ## Clean up containers, volumes, and orphans
 # =============================================================================
 
 SANDBOX_PORT?=8765
+SANDBOX_DESKTOP_PORT?=6080
+SANDBOX_TERMINAL_PORT?=7681
 SANDBOX_NAME?=sandbox-mcp-server
 
 sandbox-build: ## Build sandbox MCP server Docker image
@@ -583,20 +607,28 @@ sandbox-build: ## Build sandbox MCP server Docker image
 	@echo "✅ Sandbox image built"
 	@docker images | grep $(SANDBOX_NAME) | head -1
 
-sandbox-run: ## Start sandbox MCP server container
-	@echo "🚀 Starting sandbox MCP server..."
+sandbox-run: ## Start sandbox MCP server container with all services
+	@echo "🚀 Starting sandbox MCP server with all services (GNOME Desktop)..."
 	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)$$"; then \
 		echo "⚠️  Sandbox already running. Stop with: make sandbox-stop"; \
 	else \
 		if docker run -d --name $(SANDBOX_NAME) \
 			-p $(SANDBOX_PORT):8765 \
+			-p $(SANDBOX_DESKTOP_PORT):6080 \
+			-p $(SANDBOX_TERMINAL_PORT):7681 \
 			-v sandbox-workspace:/workspace \
-			--memory=2g --cpus=2 \
+			--memory=4g --cpus=3 \
+			--shm-size=1g \
 			$(SANDBOX_NAME):latest; then \
-			sleep 2; \
+			sleep 5; \
 			echo "✅ Sandbox started"; \
-			echo "   WebSocket: ws://localhost:$(SANDBOX_PORT)"; \
-			echo "   Health: http://localhost:$(SANDBOX_PORT)/health"; \
+			echo ""; \
+			echo "   Service Endpoints:"; \
+			echo "   • MCP Server:    ws://localhost:$(SANDBOX_PORT)"; \
+			echo "   • Health Check:  http://localhost:$(SANDBOX_PORT)/health"; \
+			echo "   • Remote Desktop: http://localhost:$(SANDBOX_DESKTOP_PORT)/vnc.html"; \
+			echo "   • Web Terminal:  ws://localhost:$(SANDBOX_TERMINAL_PORT)"; \
+			echo ""; \
 			curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || true; \
 		else \
 			echo "❌ Failed to start sandbox container"; \
@@ -644,6 +676,86 @@ sandbox-clean: ## Remove sandbox container and volume
 	@docker rm $(SANDBOX_NAME) 2>/dev/null || true
 	@docker volume rm sandbox-workspace 2>/dev/null || true
 	@echo "✅ Sandbox cleaned"
+
+# =============================================================================
+# Sandbox Desktop (noVNC) - Remote Desktop Access
+# =============================================================================
+
+DESKTOP_PORT?=6080
+DESKTOP_DISPLAY?=:0
+DESKTOP_RESOLUTION?=1280x720
+
+sandbox-desktop-start: ## Start remote desktop (noVNC) in sandbox
+	@echo "🖥️  Starting remote desktop..."
+	@curl -s -X POST http://localhost:8000/api/v1/sandbox/desktop/start \
+		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
+		-d '{"display":"$(DESKTOP_DISPLAY)","resolution":"$(DESKTOP_RESOLUTION)"}' \
+		| jq . || echo "Note: Ensure API server is running and you have a valid API key"
+	@echo "✅ Desktop start requested"
+	@echo "   Access at: http://localhost:$(DESKTOP_PORT)/vnc.html"
+
+sandbox-desktop-stop: ## Stop remote desktop in sandbox
+	@echo "🛑 Stopping remote desktop..."
+	@curl -s -X POST http://localhost:8000/api/v1/sandbox/desktop/stop \
+		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
+		| jq . || echo "Note: Ensure API server is running"
+	@echo "✅ Desktop stop requested"
+
+sandbox-desktop-status: ## Show remote desktop status
+	@echo "📊 Remote Desktop Status"
+	@echo "======================="
+	@curl -s http://localhost:8000/api/v1/sandbox/desktop/status \
+		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
+		| jq . 2>/dev/null || echo "Status: API server not running or unauthorized"
+
+sandbox-desktop-logs: ## Show desktop logs from sandbox container
+	@echo "📋 Desktop logs..."
+	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -i desktop || echo "No desktop logs found. Sandbox running?"
+
+# =============================================================================
+# Sandbox Terminal (ttyd) - Web Terminal Access
+# =============================================================================
+
+TERMINAL_PORT?=7681
+
+sandbox-terminal-start: ## Start web terminal (ttyd) in sandbox
+	@echo "🖥️  Starting web terminal..."
+	@curl -s -X POST http://localhost:8000/api/v1/sandbox/terminal/start \
+		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
+		-d '{"port":$(TERMINAL_PORT)}' \
+		| jq . || echo "Note: Ensure API server is running and you have a valid API key"
+	@echo "✅ Terminal start requested"
+	@echo "   WebSocket: ws://localhost:$(TERMINAL_PORT)"
+
+sandbox-terminal-stop: ## Stop web terminal in sandbox
+	@echo "🛑 Stopping web terminal..."
+	@curl -s -X POST http://localhost:8000/api/v1/sandbox/terminal/stop \
+		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
+		| jq . || echo "Note: Ensure API server is running"
+	@echo "✅ Terminal stop requested"
+
+sandbox-terminal-status: ## Show web terminal status
+	@echo "📊 Web Terminal Status"
+	@echo "======================="
+	@curl -s http://localhost:8000/api/v1/sandbox/terminal/status \
+		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
+		| jq . 2>/dev/null || echo "Status: API server not running or unauthorized"
+
+sandbox-terminal-logs: ## Show terminal logs from sandbox container
+	@echo "📋 Terminal logs..."
+	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -i ttyd || echo "No terminal logs found. Sandbox running?"
+
+sandbox-start-all: sandbox-desktop-start sandbox-terminal-start ## Start both desktop and terminal
+	@echo "✅ All sandbox services started"
+
+sandbox-stop-all: sandbox-desktop-stop sandbox-terminal-stop ## Stop both desktop and terminal
+	@echo "✅ All sandbox services stopped"
+
+sandbox-all-status: sandbox-desktop-status sandbox-terminal-status ## Show both desktop and terminal status
 
 # =============================================================================
 # Production

@@ -132,43 +132,62 @@ RUN apt-get update && apt-get install -y sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # Install ttyd for web terminal access
-ENV TTYD_VERSION=1.7.4
+ENV TTYD_VERSION=1.7.7
 RUN ARCH=$(dpkg --print-architecture) && \
     TTYD_ARCH=$([ "$ARCH" = "x86_64" ] && echo "x86_64" || \
                [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
-               [ "$ARCH" = "arm64" ] && echo "aarch64" || echo "$ARCH") && \
-    curl -fsSL https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.linux_${TTYD_ARCH}.tar.gz \
-    | tar -xz -C /usr/local/bin && \
+               [ "$ARCH" = "arm64" ] && echo "aarch64" || \
+               echo "$ARCH") && \
+    curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
+    -o /usr/local/bin/ttyd && \
     chmod +x /usr/local/bin/ttyd
 
-# Install desktop environment (LXDE) for remote desktop
+# Install desktop environment (GNOME) for remote desktop
 ENV DESKTOP_ENABLED=true
 ENV DESKTOP_RESOLUTION=1280x720
 ENV DESKTOP_PORT=6080
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # X11 server
+    # X11 server and virtual framebuffer
     xorg \
-    openbox \
-    # Desktop environment
-    lxde \
-    lxde-core \
-    lxterminal \
-    # VNC server
-    x11vnc \
-    # Tools
-    geany \
+    xvfb \
+    # GNOME desktop (minimal install)
+    gnome-session \
+    gnome-shell \
+    gnome-terminal \
+    nautilus \
+    gnome-control-center \
+    gnome-system-monitor \
+    # Themes and icons
+    yaru-theme-icon \
+    humanity-icon-theme \
+    # Additional utilities for GNOME
+    dbus-x11 \
+    dconf-cli \
+    dconf-gsettings-backend \
+    gsettings-desktop-schemas \
+    # Fonts for better rendering
+    fonts-freefont-ttf \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    # GNOME core dependencies for container use
+    gnome-shell-extensions \
+    gnome-settings-daemon \
+    # systemd user session replacement (for container)
+    libglib2.0-bin \
     && rm -rf /var/lib/apt/lists/*
 
+# Install x11vnc separately (needed for VNC server)
+RUN apt-get update && apt-get install -y x11vnc && rm -rf /var/lib/apt/lists/*
+
 # Install noVNC for web-based VNC client
-ENV NOVNC_VERSION=1.5.0
-RUN curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz \
+ENV NOVNC_VERSION=1.6.0
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-websockify \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz \
     | tar -xz -C /opt && \
-    mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC && \
-    curl -fsSL https://github.com/novnc/websockify/archive/refs/tags/v${NOVNC_VERSION}.tar.gz \
-    | tar -xz -C /opt/noVNC/utils && \
-    mv /opt/noVNC/utils/websockify-${NOVNC_VERSION} /opt/noVNC/utils/websockify && \
-    chmod +x /opt/noVNC/utils/websockify/run.py && \
-    ln -sf /opt/noVNC/utils/websockify/run.py /opt/noVNC/utils/novnc_proxy
+    mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC \
+    && chmod +x /opt/noVNC/utils/novnc_proxy
 
 # Create non-root user for security (use GID/UID 1001 to avoid conflicts)
 RUN groupadd --gid 1001 sandbox \
@@ -203,18 +222,23 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Set workspace ownership
 RUN chown -R sandbox:sandbox /workspace
 
-# Switch to non-root user
-USER sandbox
+# Copy and setup entrypoint script (runs as root, uses sudo for user switching)
+COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
+RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
+
+# Note: We stay as root to allow entrypoint script to start system services
+# The entrypoint script will use sudo to run the MCP server as the sandbox user
 
 # Set working directory
 WORKDIR /workspace
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+# Health check (GNOME needs more startup time)
+HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
 
 # Expose ports: MCP WebSocket (8765), Web Terminal (7681), noVNC (6080)
 EXPOSE 8765 7681 6080
 
-# Default command
-CMD ["python", "-m", "src.server.main"]
+# Default command - use entrypoint script to start all services
+# Note: The script handles service startup as root via sudo where needed
+CMD ["/usr/local/bin/sandbox-entrypoint.sh"]

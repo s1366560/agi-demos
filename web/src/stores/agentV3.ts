@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { devtools, persist } from "zustand/middleware";
 import {
   Message,
   WorkPlan,
@@ -17,6 +17,7 @@ import {
   StepStartEventData,
   CompleteEventData,
 } from "../types/agent";
+import type { RenderMode } from "../components/agent/VirtualTimelineEventList";
 import { agentService } from "../services/agentService";
 import { agentEventReplayService } from "../services/agentEventReplayService";
 import { planService } from "../services/planService";
@@ -183,6 +184,7 @@ interface AgentV3State {
   // UI State
   showPlanPanel: boolean;
   showHistorySidebar: boolean;
+  renderMode: RenderMode;
 
   // Interactivity
   pendingDecision: any; // Using any for brevity in this update
@@ -205,6 +207,7 @@ interface AgentV3State {
   abortStream: () => void;
   togglePlanPanel: () => void;
   toggleHistorySidebar: () => void;
+  setRenderMode: (mode: RenderMode) => void;
   respondToDecision: (requestId: string, decision: string) => Promise<void>;
   togglePlanMode: () => Promise<void>;
   clearError: () => void;
@@ -305,34 +308,37 @@ const processHistory = (messages: Message[]): Message[] => {
 };
 
 export const useAgentV3Store = create<AgentV3State>()(
-  devtools((set, get) => ({
-    conversations: [],
-    activeConversationId: null,
+  devtools(
+    persist(
+      (set, get) => ({
+        conversations: [],
+        activeConversationId: null,
 
-    // Timeline: Primary data source (stores raw events from API and streaming)
-    timeline: [],
+        // Timeline: Primary data source (stores raw events from API and streaming)
+        timeline: [],
 
-    // Messages: Derived from timeline (for backward compatibility)
-    messages: [],
-    isLoadingHistory: false,
+        // Messages: Derived from timeline (for backward compatibility)
+        messages: [],
+        isLoadingHistory: false,
 
-    isStreaming: false,
-    streamStatus: "idle",
-    error: null,
+        isStreaming: false,
+        streamStatus: "idle",
+        error: null,
 
-    agentState: "idle",
-    currentThought: "",
-    activeToolCalls: new Map(),
-    pendingToolsStack: [],
+        agentState: "idle",
+        currentThought: "",
+        activeToolCalls: new Map(),
+        pendingToolsStack: [],
 
-    workPlan: null,
-    isPlanMode: false,
+        workPlan: null,
+        isPlanMode: false,
 
-    showPlanPanel: true,
-    showHistorySidebar: true,
+        showPlanPanel: false,
+        showHistorySidebar: false,
+        renderMode: "grouped",
 
-    pendingDecision: null,
-    doomLoopDetected: null,
+        pendingDecision: null,
+        doomLoopDetected: null,
 
     setActiveConversation: (id) => set({ activeConversationId: id }),
 
@@ -972,6 +978,8 @@ export const useAgentV3Store = create<AgentV3State>()(
     toggleHistorySidebar: () =>
       set((state) => ({ showHistorySidebar: !state.showHistorySidebar })),
 
+    setRenderMode: (mode: RenderMode) => set({ renderMode: mode }),
+
     togglePlanMode: async () => {
       const { isPlanMode, activeConversationId } = get();
       if (!activeConversationId) return;
@@ -1001,5 +1009,13 @@ export const useAgentV3Store = create<AgentV3State>()(
     },
 
     clearError: () => set({ error: null }),
+  }),
+  {
+    name: 'agent-v3-storage',
+    partialize: (state) => ({
+      // Only persist UI preferences, not conversation/message data
+      renderMode: state.renderMode,
+      showHistorySidebar: state.showHistorySidebar,
+    }),
   }))
 );

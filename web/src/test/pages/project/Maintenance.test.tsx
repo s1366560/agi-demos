@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '../../utils'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Maintenance } from '../../../pages/project/Maintenance'
 import { graphService } from '../../../services/graphService'
 import { useParams } from 'react-router-dom'
@@ -11,6 +11,11 @@ vi.mock('../../../services/graphService', () => ({
             episodic_count: 50,
             community_count: 5,
             edge_count: 200
+        }),
+        getEmbeddingStatus: vi.fn().mockResolvedValue({
+            total_entities: 100,
+            embedded_entities: 95,
+            pending_entities: 5
         }),
         exportData: vi.fn().mockResolvedValue({ some: 'data' }),
         incrementalRefresh: vi.fn().mockResolvedValue({ episodes_processed: 10 }),
@@ -61,7 +66,7 @@ describe('Maintenance', () => {
         expect(screen.getByText('Refreshing...')).toBeInTheDocument()
 
         await waitFor(() => {
-            expect(screen.getByText('Refreshed 10 episodes')).toBeInTheDocument()
+            expect(screen.getByText('Successfully refreshed 10 episodes')).toBeInTheDocument()
         })
     })
 
@@ -70,11 +75,11 @@ describe('Maintenance', () => {
 
         render(<Maintenance />)
 
-        const checkBtns = screen.getAllByText('Check')
-        fireEvent.click(checkBtns[0]) // Deduplicate Check
+        const checkBtn = screen.getByText('Check for Duplicates')
+        fireEvent.click(checkBtn)
 
         await waitFor(() => {
-            expect(screen.getByText('Found 5 potential duplicates')).toBeInTheDocument()
+            expect(screen.getByText('Found 5 duplicate entities')).toBeInTheDocument()
         })
     })
 

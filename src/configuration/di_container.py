@@ -178,6 +178,21 @@ class DIContainer:
         """Get the Redis client for cache operations."""
         return self._redis_client
 
+    def sandbox_adapter(self):
+        """Get the MCP Sandbox adapter for desktop and terminal management."""
+        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+            MCPSandboxAdapter,
+        )
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        return MCPSandboxAdapter(
+            mcp_image=settings.sandbox_default_image,
+            default_timeout=settings.sandbox_timeout_seconds,
+            default_memory_limit=settings.sandbox_memory_limit,
+            default_cpu_limit=settings.sandbox_cpu_limit,
+        )
+
     # === Repositories ===
 
     def memory_repository(self) -> SqlAlchemyMemoryRepository:
@@ -440,13 +455,19 @@ class DIContainer:
     def execute_step_use_case(self, llm) -> ExecuteStepUseCase:
         """Get ExecuteStepUseCase with dependencies injected."""
         from src.infrastructure.agent.tools import (
+            DesktopTool,
+            TerminalTool,
             WebScrapeTool,
             WebSearchTool,
         )
 
+        sandbox_adapter = self.sandbox_adapter()
+
         tools = {
             "web_search": WebSearchTool(self._redis_client),
             "web_scrape": WebScrapeTool(),
+            "desktop": DesktopTool(sandbox_adapter=sandbox_adapter),
+            "terminal": TerminalTool(sandbox_adapter=sandbox_adapter),
         }
 
         return ExecuteStepUseCase(

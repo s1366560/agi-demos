@@ -1,7 +1,7 @@
 /**
  * Sandbox Components - Interactive sandbox debugging tools
  *
- * Provides terminal access and tool output viewing for sandbox containers.
+ * Provides terminal access, remote desktop, and tool output viewing for sandbox containers.
  */
 
 export { SandboxTerminal } from "./SandboxTerminal";
@@ -15,3 +15,9 @@ export type {
 
 export { SandboxPanel } from "./SandboxPanel";
 export type { SandboxPanelProps } from "./SandboxPanel";
+
+export { RemoteDesktopViewer } from "./RemoteDesktopViewer";
+export type { RemoteDesktopViewerProps } from "./RemoteDesktopViewer";
+
+export { SandboxControlPanel } from "./SandboxControlPanel";
+export type { SandboxControlPanelProps } from "./SandboxControlPanel";

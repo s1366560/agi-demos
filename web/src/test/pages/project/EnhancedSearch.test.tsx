@@ -5,7 +5,7 @@ import { graphService } from '../../../services/graphService'
 import { useParams } from 'react-router-dom'
 
 // Mock CytoscapeGraph component to avoid canvas issues in test environment
-vi.mock('../../../components/CytoscapeGraph', () => ({
+vi.mock('../../../components/graph/CytoscapeGraph', () => ({
     CytoscapeGraph: () => null
 }))
 

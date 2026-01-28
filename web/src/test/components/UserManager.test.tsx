@@ -13,8 +13,27 @@ vi.mock('../../stores/project', () => ({
     useProjectStore: vi.fn()
 }))
 
-// Mock fetch globally
-global.fetch = vi.fn()
+// Mock the services
+vi.mock('../../services/tenantService', () => ({
+    tenantService: {
+        listMembers: vi.fn(),
+        addMember: vi.fn(),
+        removeMember: vi.fn(),
+        updateMemberRole: vi.fn(),
+    }
+}))
+
+vi.mock('../../services/projectService', () => ({
+    projectService: {
+        listMembers: vi.fn(),
+        addMember: vi.fn(),
+        removeMember: vi.fn(),
+        updateMemberRole: vi.fn(),
+    }
+}))
+
+import { tenantService } from '../../services/tenantService'
+import { projectService } from '../../services/projectService'
 
 describe('UserManager - Component Tests', () => {
     const mockTenantUsers = [
@@ -67,11 +86,8 @@ describe('UserManager - Component Tests', () => {
 
     describe('Loading States', () => {
         it('shows loading state when fetching tenant users', async () => {
-            (global.fetch as any).mockImplementation(() =>
-                new Promise(resolve => setTimeout(() => resolve({
-                    ok: true,
-                    json: async () => ({ users: mockTenantUsers })
-                }), 100))
+            (tenantService.listMembers as any).mockImplementation(() =>
+                new Promise(resolve => setTimeout(() => resolve({ users: mockTenantUsers }), 100))
             )
 
             render(<UserManager context="tenant" />)
@@ -84,11 +100,8 @@ describe('UserManager - Component Tests', () => {
         })
 
         it('shows loading state when fetching project users', async () => {
-            (global.fetch as any).mockImplementation(() =>
-                new Promise(resolve => setTimeout(() => resolve({
-                    ok: true,
-                    json: async () => ({ users: mockProjectUsers })
-                }), 100))
+            (projectService.listMembers as any).mockImplementation(() =>
+                new Promise(resolve => setTimeout(() => resolve({ users: mockProjectUsers }), 100))
             )
 
             render(<UserManager context="project" />)
@@ -114,10 +127,7 @@ describe('UserManager - Component Tests', () => {
         })
 
         it('displays tenant users after loading', async () => {
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: async () => ({ users: mockTenantUsers })
-            })
+            (tenantService.listMembers as any).mockResolvedValue({ users: mockTenantUsers })
 
             render(<UserManager context="tenant" />)
 
@@ -128,10 +138,7 @@ describe('UserManager - Component Tests', () => {
         })
 
         it('displays project users after loading', async () => {
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: async () => ({ users: mockProjectUsers })
-            })
+            (projectService.listMembers as any).mockResolvedValue({ users: mockProjectUsers })
 
             render(<UserManager context="project" />)
 
@@ -144,7 +151,7 @@ describe('UserManager - Component Tests', () => {
 
     describe('Error Handling', () => {
         it('displays error message when API call fails', async () => {
-            (global.fetch as any).mockRejectedValue(new Error('Network error'))
+            (tenantService.listMembers as any).mockRejectedValue(new Error('Network error'))
 
             render(<UserManager context="tenant" />)
 
@@ -168,44 +175,22 @@ describe('UserManager - API Integration Tests', () => {
     })
 
     it('calls correct API endpoint for tenant members', async () => {
-        (global.fetch as any).mockResolvedValue({
-            ok: true,
-            json: async () => ({ users: [] })
-        })
+        (tenantService.listMembers as any).mockResolvedValue({ users: [] })
 
         render(<UserManager context="tenant" />)
 
         await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                '/api/v1/tenants/tenant-1/members',
-                expect.objectContaining({
-                    method: 'GET',
-                    headers: expect.objectContaining({
-                        'Content-Type': 'application/json'
-                    })
-                })
-            )
+            expect(tenantService.listMembers).toHaveBeenCalledWith('tenant-1')
         })
     })
 
     it('calls correct API endpoint for project members', async () => {
-        (global.fetch as any).mockResolvedValue({
-            ok: true,
-            json: async () => ({ users: [] })
-        })
+        (projectService.listMembers as any).mockResolvedValue({ users: [] })
 
         render(<UserManager context="project" />)
 
         await waitFor(() => {
-            expect(global.fetch).toHaveBeenCalledWith(
-                '/api/v1/projects/project-1/members',
-                expect.objectContaining({
-                    method: 'GET',
-                    headers: expect.objectContaining({
-                        'Content-Type': 'application/json'
-                    })
-                })
-            )
+            expect(projectService.listMembers).toHaveBeenCalledWith('project-1')
         })
     })
 })

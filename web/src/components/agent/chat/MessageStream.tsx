@@ -45,9 +45,9 @@ export interface UserMessageProps {
 
 export function UserMessage({ content }: UserMessageProps) {
     return (
-        <div className="flex justify-end">
-            <div className="bg-primary text-white rounded-2xl rounded-tr-none px-4 py-3 max-w-[80%] shadow-md">
-                <p className="text-sm">{content}</p>
+        <div className="flex items-start gap-3 justify-end">
+            <div className="bg-primary text-white rounded-2xl rounded-tr-none px-5 py-[18px] max-w-[80%] shadow-md">
+                <p className="text-sm leading-relaxed">{content}</p>
             </div>
         </div>
     );

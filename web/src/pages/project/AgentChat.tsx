@@ -4,7 +4,7 @@ import { Spin, Modal, notification } from "antd";
 import { useAgentV3Store } from "../../stores/agentV3";
 import { useSandboxStore } from "../../stores/sandbox";
 import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
-import { ChatLayout, VirtualTimelineEventList, InputArea, ConversationSidebar, RightPanel } from "../../components/agent";
+import { ChatLayout, VirtualTimelineEventList, InputArea, ConversationSidebar, RightPanel, RenderModeSwitch } from "../../components/agent";
 
 export const AgentChat: React.FC = () => {
   const { projectId, conversation: conversationId } = useParams<{
@@ -22,6 +22,7 @@ export const AgentChat: React.FC = () => {
     workPlan,
     isPlanMode,
     showPlanPanel,
+    renderMode,
     pendingDecision,
     doomLoopDetected,
     loadConversations,
@@ -33,6 +34,7 @@ export const AgentChat: React.FC = () => {
     abortStream,
     togglePlanMode,
     togglePlanPanel,
+    setRenderMode,
     respondToDecision,
     clearError,
     error,
@@ -166,11 +168,22 @@ export const AgentChat: React.FC = () => {
         </div>
       )}
 
+      {/* Toolbar with RenderModeSwitch */}
+      {activeConversationId && (timeline.length > 0 || isStreaming) && (
+        <div className="flex items-center justify-end px-4 py-2 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+          <RenderModeSwitch
+            mode={renderMode}
+            onToggle={setRenderMode}
+          />
+        </div>
+      )}
+
       {/* Timeline Event List - Unified rendering path */}
       <VirtualTimelineEventList
         timeline={timeline}
         isStreaming={isStreaming}
         showExecutionDetails={true}
+        renderMode={renderMode}
       />
 
       {/* Input Area */}
@@ -184,7 +197,7 @@ export const AgentChat: React.FC = () => {
         onTogglePlanPanel={togglePlanPanel}
       />
     </div>
-  ), [isLoadingHistory, timeline, isStreaming, handleSend, abortStream, isPlanMode, togglePlanMode, showPlanPanel]);
+  ), [isLoadingHistory, timeline, isStreaming, handleSend, abortStream, isPlanMode, togglePlanMode, showPlanPanel, activeConversationId, renderMode, setRenderMode]);
 
   const rightPanel = useMemo(() => (
     <RightPanel
