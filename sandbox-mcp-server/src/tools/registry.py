@@ -14,6 +14,11 @@ from src.tools.ast_tools import (
     create_ast_parse_tool,
 )
 from src.tools.bash_tool import create_bash_tool
+from src.tools.edit_tools import (
+    create_batch_edit_tool,
+    create_edit_by_ast_tool,
+    create_preview_edit_tool,
+)
 from src.tools.file_tools import (
     create_edit_tool,
     create_glob_tool,
@@ -27,6 +32,16 @@ from src.tools.index_tools import (
     create_dependency_graph_tool,
     create_find_definition_tool,
     create_find_references_tool,
+)
+from src.tools.git_tools import (
+    create_generate_commit_tool,
+    create_git_diff_tool,
+    create_git_log_tool,
+)
+from src.tools.test_tools import (
+    create_analyze_coverage_tool,
+    create_generate_tests_tool,
+    create_run_tests_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,6 +116,21 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_find_references_tool())
     registry.register(create_call_graph_tool())
     registry.register(create_dependency_graph_tool())
+
+    # Register edit tools
+    registry.register(create_edit_by_ast_tool())
+    registry.register(create_batch_edit_tool())
+    registry.register(create_preview_edit_tool())
+
+    # Register test tools
+    registry.register(create_generate_tests_tool())
+    registry.register(create_run_tests_tool())
+    registry.register(create_analyze_coverage_tool())
+
+    # Register git tools
+    registry.register(create_git_diff_tool())
+    registry.register(create_git_log_tool())
+    registry.register(create_generate_commit_tool())
 
     logger.info(f"Tool registry initialized with {len(registry.list_names())} tools")
     return registry

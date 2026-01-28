@@ -420,17 +420,41 @@ async def test_find_symbols_filter():
 | Phase 2 | `find_references` | ✅ 已完成 | - |
 | Phase 2 | `call_graph` | ✅ 已完成 | - |
 | Phase 2 | `dependency_graph` | ✅ 已完成 | - |
-| Phase 3 | `edit_by_ast` | ⏳ 待实现 | - |
-| Phase 3 | `batch_edit` | ⏳ 待实现 | - |
-| Phase 3 | `preview_edit` | ⏳ 待实现 | - |
-| Phase 4 | `generate_tests` | ⏳ 待实现 | - |
-| Phase 4 | `run_tests` | ⏳ 待实现 | - |
-| Phase 4 | `analyze_coverage` | ⏳ 待实现 | - |
-| Phase 5 | `git_diff` | ⏳ 待实现 | - |
-| Phase 5 | `git_log` | ⏳ 待实现 | - |
-| Phase 5 | `generate_commit` | ⏳ 待实现 | - |
+| Phase 3 | `edit_by_ast` | ✅ 已完成 | - |
+| Phase 3 | `batch_edit` | ✅ 已完成 | - |
+| Phase 3 | `preview_edit` | ✅ 已完成 | - |
+| Phase 4 | `generate_tests` | ✅ 已完成 | 80% |
+| Phase 4 | `run_tests` | ✅ 已完成 | - |
+| Phase 4 | `analyze_coverage` | ✅ 已完成 | - |
+| Phase 5 | `git_diff` | ✅ 已完成 | 78% |
+| Phase 5 | `git_log` | ✅ 已完成 | - |
+| Phase 5 | `generate_commit` | ✅ 已完成 | - |
 
-**测试状态**: 35 个测试全部通过 ✅
+**测试状态**: 69 个测试全部通过 ✅
+
+**工具注册**: 24 个工具已注册
 
 **Bug 修复记录**:
 - 修复 `call_graph` 字段默认值从 `set` 改为 `dict`
+- 修复 `test_tools.py` 中 `ast.unparse` 语法错误
+- 修复 `_generate_function_test` 缺少 `class_name` 参数
+- 修复 `_generate_function_test` 获取默认值的方式
+
+## 十、实现文件清单
+
+### 新增文件
+- `src/tools/ast_tools.py` - AST 解析工具 (686 行)
+- `src/tools/index_tools.py` - 代码索引工具 (876 行)
+- `src/tools/edit_tools.py` - 智能编辑工具 (526 行)
+- `src/tools/test_tools.py` - 测试工具 (550 行)
+- `src/tools/git_tools.py` - Git 工具 (460 行)
+- `tests/tools/test_ast_tools.py` - AST 工具测试 (270 行)
+- `tests/tools/test_index_tools.py` - 索引工具测试 (350 行)
+- `tests/tools/test_edit_tools.py` - 编辑工具测试 (326 行)
+- `tests/tools/test_test_tools.py` - 测试工具测试 (283 行)
+- `tests/tools/test_git_tools.py` - Git 工具测试 (360 行)
+
+### 修改文件
+- `src/tools/registry.py` - 更新工具注册
+
+**总代码量**: 约 4100+ 行新增代码
