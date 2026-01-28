@@ -212,7 +212,7 @@ describe('parseResponseError', () => {
       json: async () => {
         throw new Error('Network error');
       },
-    } as Response;
+    } as unknown as Response;
 
     const error = await parseResponseError(response);
 

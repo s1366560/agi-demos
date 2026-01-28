@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '../utils';
-import { ThemeToggle } from '../../components/ThemeToggle';
+import { ThemeToggle } from '@/components/shared/ui/ThemeToggle';
 import { useThemeStore } from '../../stores/theme';
 
 // Mock the store

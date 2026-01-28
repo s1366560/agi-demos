@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { providerAPI } from '../../services/api'
 import { ProviderConfig, ProviderType, ProviderStatus } from '../../types/memory'
-import { ProviderModal } from '../../components/ProviderModal'
+import { ProviderModal } from '@/components/tenant/ProviderModal'
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
     openai: 'OpenAI',

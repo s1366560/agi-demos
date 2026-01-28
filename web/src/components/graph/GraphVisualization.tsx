@@ -4,9 +4,9 @@ import {
     MousePointer2, Move, 
     Focus, Plus, Minus, X
 } from 'lucide-react';
-import { useMemoryStore } from '../stores/memory';
-import { useProjectStore } from '../stores/project';
-import { useThemeStore } from '../stores/theme';
+import { useMemoryStore } from '../../stores/memory';
+import { useProjectStore } from '../../stores/project';
+import { useThemeStore } from '../../stores/theme';
 
 interface GraphVisualizationProps {
   width?: number;

@@ -25,6 +25,7 @@
  */
 
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { agentService } from '../../services/agentService';
 import type { Conversation, ConversationStatus, CreateConversationRequest } from '../../types/agent';
 
@@ -82,7 +83,8 @@ export const initialState = {
  *
  * Zustand store for managing conversations state.
  */
-export const useConversationsStore = create<ConversationsState>((set, get) => ({
+export const useConversationsStore = create<ConversationsState>()(
+  devtools((set, get) => ({
   ...initialState,
 
   /**
@@ -308,7 +310,13 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
   reset: () => {
     set(initialState);
   },
-}));
+}),
+{
+  name: 'ConversationsStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 /**
  * Derived selector: Get conversations list

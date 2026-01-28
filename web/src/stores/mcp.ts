@@ -6,6 +6,7 @@
  */
 
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 import { mcpAPI } from "../services/mcpService";
 import type {
   MCPServerResponse,
@@ -120,7 +121,8 @@ const initialState = {
 // STORE CREATION
 // ============================================================================
 
-export const useMCPStore = create<MCPState>((set, get) => ({
+export const useMCPStore = create<MCPState>()(
+  devtools((set, get) => ({
   ...initialState,
 
   // ========== Server CRUD ==========
@@ -313,7 +315,13 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       testingServers: new Set<string>(),
     });
   },
-}));
+}),
+{
+  name: "MCPStore",
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 // ============================================================================
 // SELECTOR HOOKS

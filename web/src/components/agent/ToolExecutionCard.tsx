@@ -7,7 +7,7 @@
  * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
  */
 
-import React, { useState, memo } from "react";
+import { useState, memo } from "react";
 import { Card, Typography, Space, Tag, Image as AntImage } from "antd";
 import {
   ToolOutlined,
@@ -234,9 +234,7 @@ const formatDuration = (ms: number): string => {
   return `${(ms / 1000).toFixed(2)}s`;
 };
 
-export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({
-  toolCall,
-}) => {
+export const ToolExecutionCard = memo<ToolExecutionCardProps>(({ toolCall }) => {
   const [collapsed, setCollapsed] = useState(false);
   const hasResult = toolCall.result !== undefined;
   const hasError = toolCall.error !== undefined;
@@ -540,6 +538,8 @@ export const ToolExecutionCard: React.FC<ToolExecutionCardProps> = ({
       </Space>
     </Card>
   );
-};
+});
 
-export default memo(ToolExecutionCard);
+ToolExecutionCard.displayName = 'ToolExecutionCard';
+
+export default ToolExecutionCard;

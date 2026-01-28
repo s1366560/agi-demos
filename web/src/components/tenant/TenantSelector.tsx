@@ -1,7 +1,7 @@
 import React from 'react';
 import { Building2, Plus, Settings } from 'lucide-react';
-import { useTenantStore } from '../stores/tenant';
-import { Tenant } from '../types/memory';
+import { useTenantStore } from '../../stores/tenant';
+import { Tenant } from '../../types/memory';
 
 interface TenantSelectorProps {
   onCreateTenant?: () => void;

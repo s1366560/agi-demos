@@ -1,14 +1,42 @@
 /**
- * Agent service for interacting with the React-mode Agent API.
+ * Agent Service - Agent chat and conversation management
  *
- * This service provides methods for managing conversations and
- * streaming agent responses using WebSocket (replacing SSE).
+ * Provides methods for interacting with the React-mode Agent backend API, including:
+ * - Creating and managing conversations
+ * - Sending messages and receiving streaming responses via WebSocket
+ * - Getting conversation history and message lists
+ * - Listing available tools and execution history
  *
- * Supports multiple browser tabs per user via unique session_id.
+ * @packageDocumentation
+ *
+ * @example
+ * ```typescript
+ * import { agentService } from '@/services/agentService';
+ *
+ * // Create a new conversation
+ * const conversation = await agentService.createConversation({
+ *   project_id: 'proj-123',
+ *   title: 'My Conversation',
+ *   mode: 'chat'
+ * });
+ *
+ * // Chat with streaming responses
+ * await agentService.chat({
+ *   conversation_id: conversation.id,
+ *   message: 'Hello, Agent!',
+ *   project_id: 'proj-123'
+ * }, {
+ *   onMessage: (event) => console.log('Message:', event.data),
+ *   onThought: (event) => console.log('Thought:', event.data),
+ *   onComplete: (event) => console.log('Complete:', event.data),
+ *   onError: (event) => console.error('Error:', event.data.message)
+ * });
+ * ```
  */
 
-import axios from "axios";
+import { ApiError } from "./client/ApiError";
 import { httpClient } from "./client/httpClient";
+import { logger } from "../utils/logger";
 import { createWebSocketUrl } from "./client/urlUtils";
 import type {
   AgentEvent,
@@ -54,8 +82,17 @@ import type {
 const api = httpClient;
 
 /**
- * Generate a unique session ID for this browser tab.
- * Uses crypto.randomUUID if available, falls back to timestamp + random.
+ * Generate a unique session ID for this browser tab
+ *
+ * Uses crypto.randomUUID if available (modern browsers), falls back to
+ * timestamp + random string for older browsers.
+ *
+ * @returns A unique session ID string
+ *
+ * @example
+ * ```typescript
+ * const sessionId = generateSessionId(); // "550e8400-e29b-41d4-a716-446655440000"
+ * ```
  */
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -67,6 +104,16 @@ function generateSessionId(): string {
 
 /**
  * WebSocket connection status
+ *
+ * Represents the current state of the WebSocket connection to the Agent API.
+ *
+ * @example
+ * ```typescript
+ * const status: WebSocketStatus = agentService.getStatus();
+ * if (status === 'connected') {
+ *   // Safe to send messages
+ * }
+ * ```
  */
 export type WebSocketStatus =
   | "connecting"
@@ -76,6 +123,20 @@ export type WebSocketStatus =
 
 /**
  * WebSocket message from server
+ *
+ * Represents a message received from the Agent WebSocket server.
+ * Messages contain event type, optional conversation ID, and associated data.
+ *
+ * @example
+ * ```typescript
+ * const message: ServerMessage = {
+ *   type: 'text_delta',
+ *   conversation_id: 'conv-123',
+ *   data: { delta: 'Hello' },
+ *   seq: 1,
+ *   timestamp: '2024-01-01T00:00:00Z'
+ * };
+ * ```
  */
 interface ServerMessage {
   type: string;
@@ -88,8 +149,11 @@ interface ServerMessage {
 
 /**
  * Agent service implementation with WebSocket support
- * 
+ *
  * Each instance has a unique session_id to support multiple browser tabs.
+ * Manages WebSocket connection lifecycle, event routing, and reconnection logic.
+ *
+ * @see AgentService - Interface this class implements
  */
 class AgentServiceImpl implements AgentService {
   private ws: WebSocket | null = null;
@@ -122,6 +186,17 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get the session ID for this instance
+   *
+   * Returns the unique session ID generated when the service was created.
+   * This ID is used to support multiple browser tabs per user.
+   *
+   * @returns The unique session ID for this browser tab
+   *
+   * @example
+   * ```typescript
+   * const sessionId = agentService.getSessionId();
+   * console.log(`Session ID: ${sessionId}`);
+   * ```
    */
   getSessionId(): string {
     return this.sessionId;
@@ -129,11 +204,23 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Connect to WebSocket server
+   *
+   * Establishes a WebSocket connection to the Agent API. Includes authentication
+   * via Bearer token and automatic reconnection on disconnect.
+   *
+   * @returns Promise that resolves when connection is established
+   * @throws {Error} If no authentication token is found in localStorage
+   *
+   * @example
+   * ```typescript
+   * await agentService.connect();
+   * console.log('Connected to Agent WebSocket');
+   * ```
    */
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log("[AgentWS] Already connected");
+        logger.debug("[AgentWS] Already connected");
         resolve();
         return;
       }
@@ -158,7 +245,7 @@ class AgentServiceImpl implements AgentService {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-          console.log(`[AgentWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`);
+          logger.debug(`[AgentWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`);
           this.setStatus("connected");
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
@@ -176,12 +263,12 @@ class AgentServiceImpl implements AgentService {
             const message: ServerMessage = JSON.parse(event.data);
             this.handleMessage(message);
           } catch (err) {
-            console.error("[AgentWS] Failed to parse message:", err);
+            logger.error("[AgentWS] Failed to parse message:", err);
           }
         };
 
         this.ws.onclose = (event) => {
-          console.log("[AgentWS] Disconnected", event.code, event.reason);
+          logger.debug("[AgentWS] Disconnected", event.code, event.reason);
           this.setStatus("disconnected");
 
           if (
@@ -193,13 +280,13 @@ class AgentServiceImpl implements AgentService {
         };
 
         this.ws.onerror = (error) => {
-          console.error("[AgentWS] Error:", error);
+          logger.error("[AgentWS] Error:", error);
           this.setStatus("error");
           this.stopHeartbeat();
           reject(error);
         };
       } catch (err) {
-        console.error("[AgentWS] Connection error:", err);
+        logger.error("[AgentWS] Connection error:", err);
         this.setStatus("error");
         this.scheduleReconnect();
         reject(err);
@@ -209,6 +296,17 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Disconnect from WebSocket server
+   *
+   * Manually closes the WebSocket connection and stops automatic reconnection.
+   * Clears heartbeat interval and cleanup up reconnection timeout.
+   *
+   * @example
+   * ```typescript
+   * // When component unmounts
+   * useEffect(() => {
+   *   return () => agentService.disconnect();
+   * }, []);
+   * ```
    */
   disconnect(): void {
     this.isManualClose = true;
@@ -231,6 +329,18 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get current connection status
+   *
+   * Returns the current WebSocket connection status.
+   *
+   * @returns The current connection status
+   *
+   * @example
+   * ```typescript
+   * const status = agentService.getStatus();
+   * if (status === 'connected') {
+   *   // Can send messages
+   * }
+   * ```
    */
   getStatus(): WebSocketStatus {
     return this.status;
@@ -238,6 +348,17 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Check if connected
+   *
+   * Convenience method to check if WebSocket is currently connected.
+   *
+   * @returns true if WebSocket is connected, false otherwise
+   *
+   * @example
+   * ```typescript
+   * if (agentService.isConnected()) {
+   *   // Safe to send messages
+   * }
+   * ```
    */
   isConnected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
@@ -245,6 +366,22 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Register a status change listener
+   *
+   * Registers a callback function that will be invoked whenever the
+   * WebSocket connection status changes.
+   *
+   * @param listener - Callback function invoked with the new status
+   * @returns Unsubscribe function that removes the listener
+   *
+   * @example
+   * ```typescript
+   * const unsubscribe = agentService.onStatusChange((status) => {
+   *   console.log('Status changed to:', status);
+   * });
+   *
+   * // Later, to stop listening
+   * unsubscribe();
+   * ```
    */
   onStatusChange(listener: (status: WebSocketStatus) => void): () => void {
     this.statusListeners.add(listener);
@@ -254,6 +391,12 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Send a message through WebSocket
+   *
+   * Internal method to send a message to the WebSocket server.
+   *
+   * @param message - The message object to send
+   * @returns true if message was sent successfully, false otherwise
+   * @private
    */
   private send(message: Record<string, unknown>): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -265,6 +408,12 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Handle incoming WebSocket message
+   *
+   * Routes incoming messages to appropriate handlers based on event type.
+   * Records performance metrics for monitoring event latency.
+   *
+   * @param message - The server message to handle
+   * @private
    */
   private handleMessage(message: ServerMessage): void {
     const { type, conversation_id, data, seq } = message;
@@ -276,18 +425,18 @@ class AgentServiceImpl implements AgentService {
     // Enhanced logging for debugging TEXT_DELTA issues
     if (type === "text_delta") {
       const delta = (data as { delta?: string } | undefined)?.delta || "";
-      console.log(
+      logger.debug(
         `[AgentWS] TEXT_DELTA: seq=${seq}, len=${delta.length}, preview="${delta.substring(0, 30)}..."`
       );
     } else if (type === "text_start" || type === "text_end" || type === "complete" || type === "error") {
-      console.log(`[AgentWS] ${type.toUpperCase()}: seq=${seq}, conversation=${conversation_id}`);
+      logger.debug(`[AgentWS] ${type.toUpperCase()}: seq=${seq}, conversation=${conversation_id}`);
     } else {
-      console.log("[AgentWS] handleMessage:", { type, conversation_id, seq, hasData: !!data });
+      logger.debug("[AgentWS] handleMessage:", { type, conversation_id, seq, hasData: !!data });
     }
 
     // Handle non-conversation-specific messages
     if (type === "connected") {
-      console.log("[AgentWS] Connection confirmed:", data);
+      logger.debug("[AgentWS] Connection confirmed:", data);
       return;
     }
 
@@ -297,18 +446,18 @@ class AgentServiceImpl implements AgentService {
     }
 
     if (type === "ack") {
-      console.log(`[AgentWS] Ack for ${message.action} on ${conversation_id}`);
+      logger.debug(`[AgentWS] Ack for ${message.action} on ${conversation_id}`);
       return;
     }
 
     // Route conversation-specific messages to handlers
     if (conversation_id) {
       const handler = this.handlers.get(conversation_id);
-      console.log("[AgentWS] Looking for handler:", { conversation_id, hasHandler: !!handler, handlersSize: this.handlers.size });
+      logger.debug("[AgentWS] Looking for handler:", { conversation_id, hasHandler: !!handler, handlersSize: this.handlers.size });
       if (handler) {
         this.routeToHandler(type as AgentEventType, data, handler);
       } else {
-        console.warn("[AgentWS] No handler found for conversation:", conversation_id);
+        logger.warn("[AgentWS] No handler found for conversation:", conversation_id);
       }
     }
   }
@@ -316,15 +465,20 @@ class AgentServiceImpl implements AgentService {
   /**
    * Route event to appropriate handler method
    *
-   * Type assertion is safe here because the eventType determines the expected data shape.
-   * The backend ensures that data matches the event type.
+   * Routes Agent events to their corresponding handler callbacks.
+   * Type assertions are safe because the backend ensures data matches event type.
+   *
+   * @param eventType - The type of Agent event
+   * @param data - The event data (shape depends on eventType)
+   * @param handler - The handler containing callback methods
+   * @private
    */
   private routeToHandler(
     eventType: AgentEventType,
     data: unknown,
     handler: AgentStreamHandler
   ): void {
-    console.log("[AgentWS] routeToHandler:", { eventType, hasData: !!data });
+    logger.debug("[AgentWS] routeToHandler:", { eventType, hasData: !!data });
     const event = { type: eventType, data };
 
     switch (eventType) {
@@ -416,7 +570,7 @@ class AgentServiceImpl implements AgentService {
       try {
         listener(status);
       } catch (err) {
-        console.error("[AgentWS] Status listener error:", err);
+        logger.error("[AgentWS] Status listener error:", err);
       }
     });
   }
@@ -429,14 +583,14 @@ class AgentServiceImpl implements AgentService {
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
-    console.log(
+    logger.debug(
       `[AgentWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
     );
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
       this.connect().catch((err) => {
-        console.error("[AgentWS] Reconnect failed:", err);
+        logger.error("[AgentWS] Reconnect failed:", err);
       });
     }, delay);
   }
@@ -461,7 +615,7 @@ class AgentServiceImpl implements AgentService {
       }
     }, this.HEARTBEAT_INTERVAL_MS);
 
-    console.log("[AgentWS] Heartbeat started");
+    logger.debug("[AgentWS] Heartbeat started");
   }
 
   private stopHeartbeat(): void {
@@ -473,6 +627,26 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Create a new conversation
+   *
+   * Creates a new Agent conversation with the specified project and configuration.
+   *
+   * @param request - The conversation creation request
+   * @param request.project_id - The project ID to associate with the conversation
+   * @param request.title - Optional title for the conversation
+   * @param request.mode - Conversation mode ("chat" | "plan" | "execute")
+   * @param request.config - Optional Agent configuration overrides
+   * @returns Promise resolving to the created conversation
+   * @throws {ApiError} If creation fails (e.g., invalid project_id)
+   *
+   * @example
+   * ```typescript
+   * const conversation = await agentService.createConversation({
+   *   project_id: 'proj-123',
+   *   title: 'Help with research',
+   *   mode: 'chat'
+   * });
+   * console.log('Conversation ID:', conversation.id);
+   * ```
    */
   async createConversation(
     request: CreateConversationRequest
@@ -486,6 +660,23 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * List conversations for a project
+   *
+   * Retrieves a list of conversations for a project, with optional status filtering.
+   *
+   * @param projectId - The project ID to list conversations for
+   * @param status - Optional status filter ("active" | "archived" | "deleted")
+   * @param limit - Maximum number of conversations to return (default: 50)
+   * @returns Promise resolving to an array of conversations
+   * @throws {ApiError} If the project doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * // Get all active conversations
+   * const conversations = await agentService.listConversations('proj-123', 'active');
+   *
+   * // Get first 10 conversations (any status)
+   * const recent = await agentService.listConversations('proj-123', undefined, 10);
+   * ```
    */
   async listConversations(
     projectId: string,
@@ -508,6 +699,23 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get a conversation by ID
+   *
+   * Retrieves a single conversation by its ID. Returns null if not found (404).
+   *
+   * @param conversationId - The conversation ID to retrieve
+   * @param projectId - The project ID for scoping
+   * @returns Promise resolving to the conversation or null if not found
+   * @throws {ApiError} For errors other than 404 (e.g., permission denied)
+   *
+   * @example
+   * ```typescript
+   * const conversation = await agentService.getConversation('conv-123', 'proj-123');
+   * if (conversation) {
+   *   console.log('Title:', conversation.title);
+   * } else {
+   *   console.log('Conversation not found');
+   * }
+   * ```
    */
   async getConversation(
     conversationId: string,
@@ -522,7 +730,7 @@ class AgentServiceImpl implements AgentService {
       );
       return response;
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
+      if (error instanceof ApiError && error.statusCode === 404) {
         return null;
       }
       throw error;
@@ -532,7 +740,16 @@ class AgentServiceImpl implements AgentService {
   /**
    * Stop the chat/agent execution for a conversation
    *
-   * This is a key advantage of WebSocket - we can send stop signal immediately
+   * Sends a stop signal through WebSocket to halt ongoing Agent execution.
+   * This is a key advantage of WebSocket - immediate bidirectional communication.
+   *
+   * @param conversationId - The conversation ID to stop
+   *
+   * @example
+   * ```typescript
+   * // User clicks "Stop" button during Agent execution
+   * agentService.stopChat('conv-123');
+   * ```
    */
   stopChat(conversationId: string): void {
     // Send stop signal through WebSocket
@@ -542,7 +759,7 @@ class AgentServiceImpl implements AgentService {
     });
 
     if (sent) {
-      console.log(
+      logger.debug(
         `[AgentWS] Stop signal sent for conversation ${conversationId}`
       );
     }
@@ -553,9 +770,36 @@ class AgentServiceImpl implements AgentService {
   }
 
   /**
-   * Chat with the agent using WebSocket
+   * Chat with the Agent using WebSocket
    *
-   * Replaces SSE-based chat with bidirectional WebSocket communication.
+   * Sends a message to the Agent and receives streaming responses through WebSocket.
+   * Replaces the previous SSE-based implementation with bidirectional communication.
+   *
+   * Events are routed to the appropriate handler callbacks (onMessage, onThought, etc.).
+   *
+   * @param request - The chat request
+   * @param request.conversation_id - The conversation ID
+   * @param request.message - The message content to send
+   * @param request.project_id - The project ID for scoping
+   * @param handler - Event handler callbacks for streaming responses
+   * @returns Promise that resolves when message is sent
+   * @throws {Error} If WebSocket is not connected
+   *
+   * @example
+   * ```typescript
+   * await agentService.chat({
+   *   conversation_id: 'conv-123',
+   *   message: 'What is the capital of France?',
+   *   project_id: 'proj-123'
+   * }, {
+   *   onMessage: (event) => updateUI(event.data),
+   *   onThought: (event) => showThought(event.data.content),
+   *   onComplete: (event) => markComplete(),
+   *   onError: (event) => showError(event.data.message)
+   * });
+   * ```
+   *
+   * @see AgentStreamHandler - Handler interface for all available callbacks
    */
   async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {
     const { conversation_id, message, project_id } = request;
@@ -591,6 +835,21 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Subscribe to a conversation's events
+   *
+   * Registers to receive events for a specific conversation.
+   * Useful for reconnecting to an active conversation or monitoring background execution.
+   *
+   * @param conversationId - The conversation ID to subscribe to
+   * @param handler - Event handler callbacks for this conversation
+   *
+   * @example
+   * ```typescript
+   * // Reconnect to an existing conversation
+   * agentService.subscribe('conv-123', {
+   *   onTextDelta: (event) => appendToOutput(event.data.delta),
+   *   onComplete: (event) => saveResponse(event.data.content)
+   * });
+   * ```
    */
   subscribe(conversationId: string, handler: AgentStreamHandler): void {
     this.handlers.set(conversationId, handler);
@@ -606,6 +865,19 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Unsubscribe from a conversation's events
+   *
+   * Removes the event handler for a conversation and stops receiving its events.
+   *
+   * @param conversationId - The conversation ID to unsubscribe from
+   *
+   * @example
+   * ```typescript
+   * // When navigating away from conversation page
+   * useEffect(() => {
+   *   agentService.subscribe(conversationId, handler);
+   *   return () => agentService.unsubscribe(conversationId);
+   * }, [conversationId]);
+   * ```
    */
   unsubscribe(conversationId: string): void {
     this.handlers.delete(conversationId);
@@ -621,6 +893,15 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Send heartbeat to keep connection alive
+   *
+   * Manually sends a heartbeat message. Usually not needed as the service
+   * automatically sends heartbeats every 30 seconds.
+   *
+   * @example
+   * ```typescript
+   * // Force a heartbeat (rarely needed)
+   * agentService.sendHeartbeat();
+   * ```
    */
   sendHeartbeat(): void {
     this.send({ type: "heartbeat" });
@@ -628,6 +909,19 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Delete a conversation
+   *
+   * Permanently deletes a conversation and all its associated messages.
+   *
+   * @param conversationId - The conversation ID to delete
+   * @param projectId - The project ID for scoping
+   * @returns Promise that resolves when deletion is complete
+   * @throws {ApiError} If conversation doesn't exist or user lacks permission
+   *
+   * @example
+   * ```typescript
+   * await agentService.deleteConversation('conv-123', 'proj-123');
+   * console.log('Conversation deleted');
+   * ```
    */
   async deleteConversation(
     conversationId: string,
@@ -639,7 +933,21 @@ class AgentServiceImpl implements AgentService {
   }
 
   /**
-   * Generate and update conversation title based on first message
+   * Generate and update conversation title
+   *
+   * Uses the Agent to analyze the conversation and generate an appropriate title.
+   * Useful for auto-titling conversations based on their content.
+   *
+   * @param conversationId - The conversation ID to generate a title for
+   * @param projectId - The project ID for scoping
+   * @returns Promise resolving to the updated conversation with new title
+   * @throws {ApiError} If conversation doesn't exist or title generation fails
+   *
+   * @example
+   * ```typescript
+   * const updated = await agentService.generateConversationTitle('conv-123', 'proj-123');
+   * console.log('New title:', updated.title);
+   * ```
    */
   async generateConversationTitle(
     conversationId: string,
@@ -657,6 +965,32 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get messages in a conversation
+   *
+   * Retrieves paginated messages from a conversation, with optional sequence-based filtering.
+   *
+   * @param conversationId - The conversation ID
+   * @param projectId - The project ID for scoping
+   * @param limit - Maximum number of messages to return (default: 100)
+   * @param fromSequence - Optional starting sequence number (for pagination)
+   * @param beforeSequence - Optional ending sequence number (for pagination)
+   * @returns Promise resolving to messages and pagination metadata
+   * @throws {ApiError} If conversation doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * // Get first 100 messages
+   * const result = await agentService.getConversationMessages('conv-123', 'proj-123');
+   * console.log('Messages:', result.messages);
+   * console.log('Has more:', result.has_more);
+   *
+   * // Get messages after a specific sequence
+   * const more = await agentService.getConversationMessages(
+   *   'conv-123',
+   *   'proj-123',
+   *   100,
+   *   result.last_sequence
+   * );
+   * ```
    */
   async getConversationMessages(
     conversationId: string,
@@ -664,11 +998,7 @@ class AgentServiceImpl implements AgentService {
     limit = 100,
     fromSequence?: number,
     beforeSequence?: number
-  ): Promise<ConversationMessagesResponse & {
-    has_more: boolean;
-    first_sequence: number | null;
-    last_sequence: number | null;
-  }> {
+  ): Promise<ConversationMessagesResponse> {
     const params: Record<string, string | number> = {
       project_id: projectId,
       limit,
@@ -684,7 +1014,7 @@ class AgentServiceImpl implements AgentService {
       has_more?: boolean;
       first_sequence?: number | null;
       last_sequence?: number | null;
-    } & ConversationMessagesResponse>(
+    } & Omit<ConversationMessagesResponse, 'has_more' | 'first_sequence' | 'last_sequence'>>(
       `/agent/conversations/${conversationId}/messages`,
       { params }
     );
@@ -699,6 +1029,18 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * List available tools
+   *
+   * Retrieves the list of tools available to the Agent.
+   * Useful for displaying tool capabilities in the UI.
+   *
+   * @returns Promise resolving to the list of available tools
+   * @throws {ApiError} If the request fails
+   *
+   * @example
+   * ```typescript
+   * const tools = await agentService.listTools();
+   * console.log('Available tools:', tools.tools);
+   * ```
    */
   async listTools(): Promise<ToolsListResponse> {
     const response = await api.get<ToolsListResponse>("/agent/tools");
@@ -707,6 +1049,31 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get execution history for a conversation
+   *
+   * Retrieves the execution history (plan steps) for a conversation,
+   * with optional filtering by status and tool.
+   *
+   * @param conversationId - The conversation ID
+   * @param projectId - The project ID for scoping
+   * @param limit - Maximum number of execution records to return (default: 50)
+   * @param statusFilter - Optional filter by execution status
+   * @param toolFilter - Optional filter by tool name
+   * @returns Promise resolving to execution history
+   * @throws {ApiError} If conversation doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * // Get all execution history
+   * const history = await agentService.getExecutionHistory('conv-123', 'proj-123');
+   *
+   * // Get only failed executions
+   * const failed = await agentService.getExecutionHistory(
+   *   'conv-123',
+   *   'proj-123',
+   *   50,
+   *   'failed'
+   * );
+   * ```
    */
   async getExecutionHistory(
     conversationId: string,
@@ -731,6 +1098,21 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get execution statistics for a conversation
+   *
+   * Retrieves aggregated statistics about Agent execution in a conversation,
+   * including step counts, success rates, and tool usage.
+   *
+   * @param conversationId - The conversation ID
+   * @param projectId - The project ID for scoping
+   * @returns Promise resolving to execution statistics
+   * @throws {ApiError} If conversation doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * const stats = await agentService.getExecutionStats('conv-123', 'proj-123');
+   * console.log('Total steps:', stats.total_steps);
+   * console.log('Success rate:', stats.success_rate);
+   * ```
    */
   async getExecutionStats(
     conversationId: string,
@@ -747,6 +1129,28 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get tool execution records for a conversation
+   *
+   * Retrieves detailed tool execution records for a conversation.
+   *
+   * @param conversationId - The conversation ID
+   * @param projectId - The project ID for scoping
+   * @param messageId - Optional filter by message ID
+   * @param limit - Maximum number of records to return (default: 100)
+   * @returns Promise resolving to tool execution records
+   * @throws {ApiError} If conversation doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * // Get all tool executions
+   * const executions = await agentService.getToolExecutions('conv-123', 'proj-123');
+   *
+   * // Get executions for a specific message
+   * const messageExecutions = await agentService.getToolExecutions(
+   *   'conv-123',
+   *   'proj-123',
+   *   'msg-456'
+   * );
+   * ```
    */
   async getToolExecutions(
     conversationId: string,
@@ -771,10 +1175,22 @@ class AgentServiceImpl implements AgentService {
   /**
    * Get conversation events for replay
    *
+   * Retrieves raw conversation events for replay or debugging purposes.
+   * Useful for reconstructing conversation state or analyzing execution flow.
+   *
    * @param conversationId - The conversation ID
    * @param fromSequence - Starting sequence number (default: 0)
    * @param limit - Maximum events to return (default: 1000)
-   * @returns Promise resolving to events and whether more exist
+   * @returns Promise resolving to events array and pagination flag
+   * @throws {ApiError} If conversation doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * // Get first 1000 events
+   * const result = await agentService.getConversationEvents('conv-123');
+   * console.log('Events:', result.events);
+   * console.log('Has more:', result.has_more);
+   * ```
    */
   async getConversationEvents(
     conversationId: string,
@@ -799,8 +1215,22 @@ class AgentServiceImpl implements AgentService {
   /**
    * Get execution status for a conversation
    *
+   * Retrieves the current execution status of a conversation.
+   * Useful for checking if the Agent is still running.
+   *
    * @param conversationId - The conversation ID
    * @returns Promise resolving to execution status
+   * @throws {ApiError} If conversation doesn't exist or user lacks access
+   *
+   * @example
+   * ```typescript
+   * const status = await agentService.getExecutionStatus('conv-123');
+   * if (status.is_running) {
+   *   console.log('Agent is still running');
+   * } else {
+   *   console.log('Last sequence:', status.last_sequence);
+   * }
+   * ```
    */
   async getExecutionStatus(conversationId: string): Promise<{
     is_running: boolean;
@@ -836,7 +1266,18 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Get performance metrics for diagnostics
-   * Returns event timing statistics for monitoring WebSocket event latency
+   *
+   * Returns event timing statistics for monitoring WebSocket event latency.
+   * Useful for debugging performance issues.
+   *
+   * @returns Record mapping event types to their count and last seen timestamp
+   *
+   * @example
+   * ```typescript
+   * const metrics = agentService.getPerformanceMetrics();
+   * console.log('text_delta count:', metrics.text_delta.count);
+   * console.log('text_delta last seen:', metrics.text_delta.lastSeen);
+   * ```
    */
   getPerformanceMetrics(): Record<string, { count: number; lastSeen: number }> {
     const result: Record<string, { count: number; lastSeen: number }> = {};
@@ -851,6 +1292,14 @@ class AgentServiceImpl implements AgentService {
 
   /**
    * Clear performance metrics
+   *
+   * Resets all recorded performance metrics.
+   *
+   * @example
+   * ```typescript
+   * agentService.clearPerformanceMetrics();
+   * console.log('Metrics cleared');
+   * ```
    */
   clearPerformanceMetrics(): void {
     this.performanceMetrics.clear();

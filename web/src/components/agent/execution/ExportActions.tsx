@@ -108,6 +108,7 @@ export function ExportActions({
         onClick={handleCopy}
         disabled={!content}
         className={buttonClass}
+        aria-label={copied ? '已复制到剪贴板' : '复制到剪贴板'}
         title="Copy to clipboard"
       >
         <MaterialIcon name={copied ? 'check' : 'content_copy'} size={18} />
@@ -123,6 +124,7 @@ export function ExportActions({
         onClick={handleExportPDF}
         disabled={exporting}
         className={buttonClass}
+        aria-label={exporting ? '正在导出 PDF' : '导出为 PDF'}
         title="Export to PDF"
       >
         <MaterialIcon name={exporting ? 'hourglass_empty' : 'picture_as_pdf'} size={18} />
@@ -138,6 +140,7 @@ export function ExportActions({
         onClick={handleShare}
         disabled={!conversationId}
         className={buttonClass}
+        aria-label={copied ? '链接已复制' : '分享对话链接'}
         title="Share link"
       >
         <MaterialIcon name={copied ? 'check' : 'share'} size={18} />

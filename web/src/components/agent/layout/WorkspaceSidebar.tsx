@@ -94,11 +94,14 @@ export function WorkspaceSidebar({
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1" aria-label="主导航">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               onClick={() => handleNavClick(item)}
+              aria-label={collapsed ? item.label : undefined}
+              aria-pressed={isActive(item.id)}
+              aria-current={isActive(item.id) ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer w-full text-left justify-${collapsed ? 'center' : 'start'} ${
                 isActive(item.id)
                   ? 'bg-primary/10 text-primary'
@@ -118,6 +121,7 @@ export function WorkspaceSidebar({
             <button
               key={item.id}
               onClick={() => handleNavClick(item)}
+              aria-label={collapsed ? item.label : undefined}
               className={`flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-text-muted hover:bg-slate-100 dark:hover:bg-border-dark transition-colors cursor-pointer rounded-lg w-full text-left justify-${collapsed ? 'center' : 'start'}`}
               title={collapsed ? item.label : ''}
             >

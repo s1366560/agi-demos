@@ -23,6 +23,7 @@
  */
 
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import type { WorkPlan, TimelineStep, ToolExecution } from '../../types/agent';
 
 /**
@@ -120,7 +121,8 @@ function isObservationError(observation: string): boolean {
  *
  * Zustand store for managing execution state.
  */
-export const useExecutionStore = create<ExecutionState>((set) => ({
+export const useExecutionStore = create<ExecutionState>()(
+  devtools((set) => ({
   ...initialState,
 
   /**
@@ -464,7 +466,13 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
   reset: () => {
     set(initialState);
   },
-}));
+}),
+{
+  name: 'ExecutionStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 /**
  * Derived selector: Get current work plan

@@ -1,6 +1,7 @@
 import React from 'react'
 import { NavLink, Outlet, useParams } from 'react-router-dom'
 import { LayoutDashboard, Box, Network, GitMerge } from 'lucide-react'
+import { RouteErrorBoundary } from '../components/common/RouteErrorBoundary'
 
 export const SchemaLayout: React.FC = () => {
     const { projectId } = useParams<{ projectId: string }>()
@@ -41,7 +42,9 @@ export const SchemaLayout: React.FC = () => {
 
             {/* Content Area */}
             <div className="flex-1 overflow-hidden min-h-0 relative">
-                <Outlet />
+                <RouteErrorBoundary context="Schema" fallbackPath={`/project/${projectId}/schema`}>
+                    <Outlet />
+                </RouteErrorBoundary>
             </div>
         </div>
     )

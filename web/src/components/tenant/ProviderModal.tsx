@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { providerAPI } from '../services/api'
-import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../types/memory'
+import { providerAPI } from '../../services/api'
+import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../../types/memory'
 
 interface ProviderModalProps {
     isOpen: boolean

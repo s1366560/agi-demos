@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { ProjectManager } from '../../components/ProjectManager'
+import { ProjectManager } from '@/components/tenant/ProjectManager'
 import { useProjectStore } from '../../stores/project'
 import { useTenantStore } from '../../stores/tenant'
 

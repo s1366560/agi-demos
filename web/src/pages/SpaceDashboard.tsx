@@ -19,10 +19,10 @@ import {
     Badge,
     Globe
 } from 'lucide-react';
-import { AppLayout, NavigationGroup } from '../components/AppLayout';
+import { AppLayout, NavigationGroup } from '@/components/shared/layouts/AppLayout';
 import { useTenantStore } from '../stores/tenant';
 import { useProjectStore } from '../stores/project';
-import { ProjectCreateModal } from '../components/ProjectCreateModal';
+import { ProjectCreateModal } from '@/components/tenant/ProjectCreateModal';
 import { Project } from '../types/memory';
 import { tenantAPI } from '../services/api';
 

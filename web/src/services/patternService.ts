@@ -11,8 +11,8 @@
  * - POST /agent/workflows/patterns/reset - Reset all patterns
  */
 
-import axios from 'axios';
 import { httpClient } from './client/httpClient';
+import { ApiError } from './client/ApiError';
 import type {
   WorkflowPattern,
   PatternsListResponse,
@@ -84,9 +84,9 @@ class PatternServiceImpl implements PatternService {
         { params }
       );
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.detail || error.message;
+      if (error instanceof ApiError) {
+        const status = error.statusCode;
+        const message = error.getUserMessage();
 
         if (status === 403) {
           throw new PatternServiceError('Access denied to tenant patterns', status, 'FORBIDDEN');
@@ -111,9 +111,9 @@ class PatternServiceImpl implements PatternService {
         { params: { tenant_id: tenantId } }
       );
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.detail || error.message;
+      if (error instanceof ApiError) {
+        const status = error.statusCode;
+        const message = error.getUserMessage();
 
         if (status === 403) {
           throw new PatternServiceError('Access denied to pattern', status, 'FORBIDDEN');
@@ -137,9 +137,9 @@ class PatternServiceImpl implements PatternService {
         params: { tenant_id: tenantId },
       });
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.detail || error.message;
+      if (error instanceof ApiError) {
+        const status = error.statusCode;
+        const message = error.getUserMessage();
 
         if (status === 403) {
           throw new PatternServiceError('Admin access required to delete patterns', status, 'FORBIDDEN');
@@ -167,9 +167,9 @@ class PatternServiceImpl implements PatternService {
         { params: { tenant_id: tenantId } }
       );
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const message = error.response?.data?.detail || error.message;
+      if (error instanceof ApiError) {
+        const status = error.statusCode;
+        const message = error.getUserMessage();
 
         if (status === 403) {
           throw new PatternServiceError('Admin access required to reset patterns', status, 'FORBIDDEN');

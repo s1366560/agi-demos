@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Brain, User, Calendar, Tag, Hash, Eye, Edit3, Share2, Download, Save, XCircle } from 'lucide-react';
-import { Memory } from '../types/memory';
-import { memoryService } from '../services/memoryService';
+import { Memory } from '../../types/memory';
+import { memoryService } from '../../services/memoryService';
 
 interface MemoryDetailModalProps {
   isOpen: boolean;

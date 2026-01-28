@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Link as LinkIcon, Copy, Trash2, Calendar, Shield, Loader2, Check } from 'lucide-react';
-import { Memory } from '../types/memory';
-import { memoryAPI } from '../services/api';
+import { Memory } from '../../types/memory';
+import { memoryAPI } from '../../services/api';
 
 interface ShareLink {
     id: string;

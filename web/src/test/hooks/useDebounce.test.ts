@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useDebounce } from '../../hooks/useDebounce';
 
 describe('useDebounce', () => {
@@ -286,7 +286,7 @@ describe('useDebounce', () => {
         }
       );
 
-      rerender({ value: undefined, delay: 100 });
+      rerender({ value: '' as string | undefined, delay: 100 });
 
       act(() => {
         vi.advanceTimersByTime(100);

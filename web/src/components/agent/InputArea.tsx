@@ -48,10 +48,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
   }, [handleSend]);
 
   return (
-    <div className="p-4 border-t border-slate-200 bg-white">
+    <div className="p-4 border-t border-slate-200 bg-white" data-testid="agent-input-area">
       <div className="max-w-4xl mx-auto flex flex-col gap-3">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-1">
+        <div className="flex items-center justify-between px-1" data-testid="agent-toolbar">
           <div className="flex items-center gap-4">
             <Tooltip
               title={
@@ -63,6 +63,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
               <div
                 className="flex items-center gap-2 cursor-pointer"
                 onClick={onTogglePlanMode}
+                data-testid="plan-mode-toggle"
               >
                 <Switch size="small" checked={isPlanMode} />
                 <span
@@ -82,6 +83,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
               <div
                 className="flex items-center gap-2 cursor-pointer"
                 onClick={onTogglePlanPanel}
+                data-testid="plan-panel-toggle"
               >
                 <Switch size="small" checked={showPlanPanel} />
                 <span
@@ -114,6 +116,9 @@ export const InputArea: React.FC<InputAreaProps> = ({
             autoSize={{ minRows: 1, maxRows: 8 }}
             className="!border-0 !shadow-none !bg-transparent !px-4 !py-3 !text-sm !resize-none"
             disabled={isStreaming}
+            data-testid="agent-message-textarea"
+            aria-label={isPlanMode ? "Describe what you want to plan" : "Message Agent"}
+            aria-required="false"
           />
 
           <div className="flex justify-between items-center px-2 pb-2">
@@ -122,6 +127,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
               icon={<PaperClipOutlined />}
               className="text-slate-400 hover:text-slate-600"
               disabled={isStreaming}
+              data-testid="attach-button"
             />
 
             {isStreaming ? (
@@ -131,6 +137,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 shape="circle"
                 icon={<StopOutlined />}
                 onClick={onAbort}
+                data-testid="stop-streaming-button"
               />
             ) : (
               <Button
@@ -139,6 +146,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 icon={<SendOutlined />}
                 onClick={handleSend}
                 disabled={!value.trim()}
+                data-testid="send-message-button"
               />
             )}
           </div>

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AppLayout } from '../../components/AppLayout';
+import { AppLayout } from '@/components/shared/layouts/AppLayout';
 import { useAuthStore } from '../../stores/auth';
 
 // Mock lucide-react icons

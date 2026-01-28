@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -10,22 +10,28 @@ interface ThemeState {
 }
 
 export const useThemeStore = create<ThemeState>()(
-  persist(
-    (set) => ({
-      theme: 'system',
-      computedTheme: 'light', // Default initial
-      setTheme: (theme) => {
-        set({ theme });
-        updateDocumentClass(theme);
-      },
-    }),
+  devtools(
+    persist(
+      (set) => ({
+        theme: 'system',
+        computedTheme: 'light', // Default initial
+        setTheme: (theme) => {
+          set({ theme });
+          updateDocumentClass(theme);
+        },
+      }),
+      {
+        name: 'theme-storage',
+        onRehydrateStorage: () => (state) => {
+          if (state) {
+            updateDocumentClass(state.theme);
+          }
+        },
+      }
+    ),
     {
-      name: 'theme-storage',
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          updateDocumentClass(state.theme);
-        }
-      },
+      name: 'ThemeStore',
+      enabled: import.meta.env.DEV,
     }
   )
 );

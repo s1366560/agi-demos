@@ -29,7 +29,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 // Import component after mocks are set up
-import { NotificationPanel } from '../../components/NotificationPanel'
+import { NotificationPanel } from '@/components/shared/ui/NotificationPanel'
 
 describe('NotificationPanel', () => {
   beforeEach(() => {

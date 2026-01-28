@@ -2,24 +2,75 @@ import { Component, ErrorInfo, ReactNode } from 'react'
 import { Result, Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 
+/**
+ * Props for ErrorBoundary component
+ */
 interface Props {
+    /** Child components to be wrapped by the error boundary */
     children: ReactNode
+    /** Custom fallback UI to render when an error is caught */
     fallback?: ReactNode
+    /** Optional context identifier for error source (e.g., "Agent", "Project", "Tenant") */
+    context?: string
+    /** Optional custom error handler callback */
+    onError?: (error: Error, errorInfo: ErrorInfo) => void
+    /** Whether to show the home button in the fallback UI */
+    showHomeButton?: boolean
 }
 
+/**
+ * Internal state for ErrorBoundary
+ */
 interface State {
+    /** Whether an error has been caught */
     hasError: boolean
+    /** The error that was caught, if any */
     error?: Error
 }
 
 /**
- * Error Boundary Component
- * Catches JavaScript errors anywhere in the child component tree,
- * logs those errors, and displays a fallback UI.
+ * ErrorBoundary Component - React error boundary for catching errors
  *
- * Usage:
+ * Catches JavaScript errors anywhere in the child component tree,
+ * logs those errors, and displays a fallback UI. Prevents the entire
+ * app from crashing due to errors in individual components.
+ *
+ * @component
+ *
+ * @features
+ * - Catches errors in child component tree
+ * - Logs errors to console (ready for Sentry integration)
+ * - Displays user-friendly error UI with retry option
+ * - Shows error stack trace in development mode
+ * - Supports custom fallback UI
+ * - Internationalization support via react-i18next
+ * - Optional context prefix for error identification
+ * - Custom error handler callback support
+ * - Configurable home button visibility
+ *
+ * @example
  * ```tsx
- * <ErrorBoundary>
+ * import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+ *
+ * function App() {
+ *   return (
+ *     <ErrorBoundary>
+ *       <YourComponent />
+ *     </ErrorBoundary>
+ *   )
+ * }
+ * ```
+ *
+ * @example
+ * ```tsx
+ * // With context and custom error handler
+ * <ErrorBoundary
+ *   context="Agent"
+ *   onError={(error, errorInfo) => {
+ *     console.error('[Agent] Error:', error)
+ *   }}
+ *   showHomeButton={true}
+ * >
  *   <YourComponent />
  * </ErrorBoundary>
  * ```
@@ -34,9 +85,22 @@ export class ErrorBoundary extends Component<Props, State> {
         return { hasError: true, error }
     }
 
+    /**
+     * Log error with optional context prefix
+     */
+    private logError(error: Error, errorInfo: ErrorInfo): void {
+        const prefix = this.props.context ? `[${this.props.context}]` : 'ErrorBoundary'
+        console.error(`${prefix} caught an error:`, error, errorInfo)
+    }
+
     override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-        // Log error to console
-        console.error('ErrorBoundary caught an error:', error, errorInfo)
+        // Log error to console with context prefix
+        this.logError(error, errorInfo)
+
+        // Call custom error handler if provided
+        if (this.props.onError) {
+            this.props.onError(error, errorInfo)
+        }
 
         // Log error to error reporting service (e.g., Sentry)
         // logErrorToService(error, errorInfo)
@@ -48,7 +112,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     override render(): ReactNode {
         const { hasError, error } = this.state
-        const { children, fallback } = this.props
+        const { children, fallback, showHomeButton = true } = this.props
 
         if (hasError) {
             // Custom fallback UI
@@ -57,7 +121,13 @@ export class ErrorBoundary extends Component<Props, State> {
             }
 
             // Default error UI
-            return <ErrorFallback error={error} onReset={this.handleReset} />
+            return (
+                <ErrorFallback
+                    error={error}
+                    onReset={this.handleReset}
+                    showHomeButton={showHomeButton}
+                />
+            )
         }
 
         return children
@@ -65,10 +135,39 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 /**
- * Default error fallback UI component
+ * Props for ErrorFallback component
  */
-function ErrorFallback({ error, onReset }: { error?: Error; onReset: () => void }) {
+interface ErrorFallbackProps {
+    /** The error that occurred */
+    error?: Error
+    /** Callback to reset the error boundary and retry */
+    onReset: () => void
+    /** Whether to show the home button */
+    showHomeButton?: boolean
+}
+
+/**
+ * Default error fallback UI component
+ *
+ * Displays a user-friendly error message with retry and home buttons.
+ * Shows error stack trace in development mode for debugging.
+ */
+function ErrorFallback({ error, onReset, showHomeButton = true }: ErrorFallbackProps) {
     const { t } = useTranslation()
+
+    const buttons = [
+        <Button type="primary" key="retry" onClick={onReset}>
+            {t('error.retry', { defaultValue: 'Try Again' })}
+        </Button>,
+    ]
+
+    if (showHomeButton) {
+        buttons.push(
+            <Button key="home" onClick={() => (window.location.href = '/')}>
+                {t('error.home', { defaultValue: 'Go Home' })}
+            </Button>
+        )
+    }
 
     return (
         <div style={{ padding: '50px', textAlign: 'center' }}>
@@ -81,14 +180,7 @@ function ErrorFallback({ error, onReset }: { error?: Error; onReset: () => void 
                         defaultValue: 'An unexpected error occurred. Please try again.',
                     })
                 }
-                extra={[
-                    <Button type="primary" key="retry" onClick={onReset}>
-                        {t('error.retry', { defaultValue: 'Try Again' })}
-                    </Button>,
-                    <Button key="home" onClick={() => (window.location.href = '/')}>
-                        {t('error.home', { defaultValue: 'Go Home' })}
-                    </Button>,
-                ]}
+                extra={buttons}
             />
             {error && process.env.NODE_ENV === 'development' && (
                 <details style={{ marginTop: '20px', textAlign: 'left' }}>

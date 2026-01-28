@@ -8,11 +8,11 @@ import {
     ArrowLeft,
     LayoutDashboard
 } from 'lucide-react';
-import { AppLayout, NavigationItem } from '../components/AppLayout';
+import { AppLayout, NavigationItem } from '@/components/shared/layouts/AppLayout';
 import { useTenantStore } from '../stores/tenant';
 import { useProjectStore } from '../stores/project';
-import { MemoryManager } from '../components/MemoryManager';
-import { GraphVisualization } from '../components/GraphVisualization';
+import { MemoryManager } from '@/components/project/MemoryManager';
+import { GraphVisualization } from '@/components/graph/GraphVisualization';
 import { Overview } from '../components/workbench/Overview';
 
 export const ProjectDashboard: React.FC = () => {

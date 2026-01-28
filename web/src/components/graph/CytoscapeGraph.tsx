@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import cytoscape, { Core, ElementDefinition } from 'cytoscape'
-import { graphService } from '../services/graphService'
-import { useThemeStore } from '../stores/theme'
+import { graphService } from '../../services/graphService'
+import { useThemeStore } from '../../stores/theme'
 
 // Theme configuration
 const THEME_COLORS = {

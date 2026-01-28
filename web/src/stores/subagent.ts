@@ -6,6 +6,7 @@
  */
 
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 import { subagentAPI } from "../services/subagentService";
 import type {
   SubAgentResponse,
@@ -117,7 +118,8 @@ const initialState = {
 // STORE CREATION
 // ============================================================================
 
-export const useSubAgentStore = create<SubAgentState>((set, get) => ({
+export const useSubAgentStore = create<SubAgentState>()(
+  devtools((set, get) => ({
   ...initialState,
 
   // ========== SubAgent CRUD ==========
@@ -294,7 +296,13 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
   clearError: () => set({ error: null }),
 
   reset: () => set(initialState),
-}));
+}),
+{
+  name: "SubAgentStore",
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 // ============================================================================
 // SELECTORS - Fine-grained subscriptions for performance

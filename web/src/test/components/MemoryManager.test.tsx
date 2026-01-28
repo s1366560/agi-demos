@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryManager } from '../../components/MemoryManager'
+import { MemoryManager } from '@/components/project/MemoryManager'
 import { useMemoryStore } from '../../stores/memory'
 import { useProjectStore } from '../../stores/project'
 

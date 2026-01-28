@@ -21,6 +21,7 @@
  */
 
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { agentService } from '../../services/agentService';
 import type { TimelineEvent } from '../../types/agent';
 
@@ -60,7 +61,8 @@ export const initialState = {
  *
  * Zustand store for managing timeline state.
  */
-export const useTimelineStore = create<TimelineState>((set, get) => ({
+export const useTimelineStore = create<TimelineState>()(
+  devtools((set, get) => ({
   ...initialState,
 
   /**
@@ -208,7 +210,13 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
   reset: () => {
     set(initialState);
   },
-}));
+}),
+{
+  name: 'TimelineStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 /**
  * Derived selector: Get timeline events

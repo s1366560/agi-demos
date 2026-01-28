@@ -79,7 +79,7 @@ const stepStatusConfig: Record<
   failed: { icon: <CloseCircleOutlined />, class: "step-failed" },
 };
 
-export const WorkPlanCard: React.FC<WorkPlanCardProps> = ({ workPlan }) => {
+export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
   const [collapsed, setCollapsed] = useState(false);
   const status = statusConfig[workPlan.status];
   const progressPercentage =
@@ -264,6 +264,8 @@ export const WorkPlanCard: React.FC<WorkPlanCardProps> = ({ workPlan }) => {
       />
     </Card>
   );
-};
+});
 
-export default memo(WorkPlanCard);
+WorkPlanCard.displayName = 'WorkPlanCard';
+
+export default WorkPlanCard;

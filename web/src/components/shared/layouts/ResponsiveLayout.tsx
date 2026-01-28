@@ -13,9 +13,9 @@ import {
   User,
   Bell
 } from 'lucide-react';
-import { useAuthStore } from '../stores/auth';
-import { useTenantStore } from '../stores/tenant';
-import { useProjectStore } from '../stores/project';
+import { useAuthStore } from '@/stores/auth';
+import { useTenantStore } from '@/stores/tenant';
+import { useProjectStore } from '@/stores/project';
 
 interface ResponsiveLayoutProps {
   children: React.ReactNode;

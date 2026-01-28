@@ -502,6 +502,10 @@ export interface ConversationMessagesResponse {
   conversationId: string;
   timeline: TimelineEvent[];
   total: number;
+  // Pagination metadata
+  has_more: boolean;
+  first_sequence: number | null;
+  last_sequence: number | null;
 }
 
 /**

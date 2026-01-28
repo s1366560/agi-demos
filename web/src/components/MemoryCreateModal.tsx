@@ -110,6 +110,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            aria-label="关闭创建记忆弹窗"
           >
             <X className="h-5 w-5" />
           </button>
@@ -162,8 +163,8 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto" id="memory-form">
           <div className="p-6 space-y-4">
             {error && (
-              <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md">
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md" role="alert" aria-live="assertive">
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
                 <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
               </div>
             )}
@@ -171,27 +172,28 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             {activeTab === 'basic' && (
               <>
                 <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="memory-create-title" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     记忆标题 *
                   </label>
                   <input
                     type="text"
-                    id="title"
+                    id="memory-create-title"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入记忆标题"
                     required
                     disabled={isLoading}
+                    aria-required="true"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="content" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="memory-create-content" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     记忆内容 *
                   </label>
                   <textarea
-                    id="content"
+                    id="memory-create-content"
                     value={formData.content}
                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
@@ -199,16 +201,17 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     rows={6}
                     required
                     disabled={isLoading}
+                    aria-required="true"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="content_type" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="memory-create-type" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       记忆类型
                     </label>
                     <select
-                      id="content_type"
+                      id="memory-create-type"
                       value={formData.content_type}
                       onChange={(e) => setFormData({ ...formData, content_type: e.target.value as any })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
@@ -222,18 +225,22 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   </div>
 
                   <div>
-                    <label htmlFor="author_id" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="memory-create-author" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       用户ID
                     </label>
                     <input
                       type="text"
-                      id="author_id"
+                      id="memory-create-author"
                       value={formData.author_id}
                       onChange={(e) => setFormData({ ...formData, author_id: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       placeholder="输入用户ID（可选）"
                       disabled={isLoading}
+                      aria-describedby="memory-create-author-help"
                     />
+                    <span id="memory-create-author-help" className="text-xs text-gray-500 dark:text-slate-400">
+                      可选：记录创建此记忆的用户
+                    </span>
                   </div>
                 </div>
               </>
@@ -367,12 +374,12 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="tags" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="memory-create-tags" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     标签
                   </label>
                   <input
                     type="text"
-                    id="tags"
+                    id="memory-create-tags"
                     value={formData.metadata?.tags?.join(', ') || ''}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -384,7 +391,11 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入标签，用逗号分隔"
                     disabled={isLoading}
+                    aria-describedby="memory-create-tags-help"
                   />
+                  <span id="memory-create-tags-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    使用逗号分隔多个标签
+                  </span>
                 </div>
               </>
             )}

@@ -4,6 +4,7 @@ import { Spin } from "antd";
 import "./i18n/config";
 import { ThemeProvider } from "./theme";
 import { Login } from "./pages/Login";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { TenantLayout } from "./layouts/TenantLayout";
 import { ProjectLayout } from "./layouts/ProjectLayout";
 import { AgentLayout } from "./layouts/AgentLayout";
@@ -171,8 +172,9 @@ function App() {
     const { isAuthenticated } = useAuthStore();
 
     return (
-        <ThemeProvider>
-            <Suspense fallback={<PageLoader />}>
+        <ErrorBoundary>
+            <ThemeProvider>
+                <Suspense fallback={<PageLoader />}>
                 <Routes>
                     <Route
                         path="/login"
@@ -652,6 +654,7 @@ function App() {
                 </Routes>
             </Suspense>
         </ThemeProvider>
+        </ErrorBoundary>
     );
 }
 

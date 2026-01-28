@@ -20,6 +20,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { Tooltip } from 'antd';
+import { RouteErrorBoundary } from '../components/common/RouteErrorBoundary';
 import { useProjectStore } from '../stores/project';
 import { useTenantStore } from '../stores/tenant';
 import { useAuthStore } from '../stores/auth';
@@ -314,7 +315,9 @@ export const AgentLayout: React.FC = () => {
 
                 {/* Page Content */}
                 <div className="flex-1 overflow-hidden">
-                    <Outlet />
+                    <RouteErrorBoundary context="Agent" fallbackPath={`/project/${projectId}/agent`}>
+                        <Outlet />
+                    </RouteErrorBoundary>
                 </div>
             </main>
         </div>

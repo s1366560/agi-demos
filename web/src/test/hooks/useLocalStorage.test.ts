@@ -214,7 +214,7 @@ describe('useLocalStorage', () => {
     });
 
     it('should work with array values', () => {
-      const { result } = renderHook(() => useLocalStorage(TEST_KEY, []));
+      const { result } = renderHook(() => useLocalStorage<number[]>(TEST_KEY, []));
 
       act(() => {
         result.current.setValue([1, 2, 3]);
@@ -426,7 +426,7 @@ describe('useLocalStorage', () => {
         },
       };
 
-      const { result } = renderHook(() => useLocalStorage(TEST_KEY, null));
+      const { result } = renderHook(() => useLocalStorage<typeof nestedObj | null>(TEST_KEY, null));
 
       act(() => {
         result.current.setValue(nestedObj);
@@ -441,7 +441,7 @@ describe('useLocalStorage', () => {
         { id: 2, name: 'Bob' },
       ];
 
-      const { result } = renderHook(() => useLocalStorage(TEST_KEY, []));
+      const { result } = renderHook(() => useLocalStorage<typeof arrayOfObjects>(TEST_KEY, []));
 
       act(() => {
         result.current.setValue(arrayOfObjects);

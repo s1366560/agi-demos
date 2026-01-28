@@ -20,6 +20,7 @@
  */
 
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
 /**
  * Stream status type
@@ -62,7 +63,8 @@ export const initialState = {
  *
  * Zustand store for managing streaming state.
  */
-export const useStreamingStore = create<StreamingState>((set) => ({
+export const useStreamingStore = create<StreamingState>()(
+  devtools((set) => ({
   ...initialState,
 
   /**
@@ -167,7 +169,13 @@ export const useStreamingStore = create<StreamingState>((set) => ({
   reset: () => {
     set(initialState);
   },
-}));
+}),
+{
+  name: 'StreamingStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 /**
  * Derived selector: Check if actively streaming

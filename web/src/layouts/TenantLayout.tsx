@@ -25,10 +25,11 @@ import {
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Tooltip } from "antd";
-import { WorkspaceSwitcher } from "../components/WorkspaceSwitcher";
-import { ThemeToggle } from "../components/ThemeToggle";
-import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { WorkspaceSwitcher } from "../components/shared/ui/WorkspaceSwitcher";
+import { ThemeToggle } from "../components/shared/ui/ThemeToggle";
+import { LanguageSwitcher } from "../components/shared/ui/LanguageSwitcher";
 import { TenantCreateModal } from "../pages/tenant/TenantCreate";
+import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { useTenantStore } from "../stores/tenant";
 import { useAuthStore } from "../stores/auth";
 import { useProjectStore } from "../stores/project";
@@ -567,7 +568,9 @@ export const TenantLayout: React.FC = () => {
           {/* Page Content */}
           <div className="flex-1 overflow-y-auto p-6 lg:p-8">
             <div className="max-w-7xl mx-auto">
-              <Outlet />
+              <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
+                <Outlet />
+              </RouteErrorBoundary>
             </div>
           </div>
         </main>

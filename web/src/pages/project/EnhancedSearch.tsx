@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { graphService } from '../../services/graphService'
-import { CytoscapeGraph } from '../../components/CytoscapeGraph'
+import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph'
 import { useProjectStore } from '../../stores/project'
 
 // Type declarations for Web Speech API

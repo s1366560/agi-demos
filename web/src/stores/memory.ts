@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { memoryAPI } from '../services/api';
 import type {
   Memory,
@@ -58,7 +59,8 @@ interface MemoryState {
   setCurrentMemory: (memory: Memory | null) => void;
 }
 
-export const useMemoryStore = create<MemoryState>((set, get) => ({
+export const useMemoryStore = create<MemoryState>()(
+  devtools((set, get) => ({
   memories: [],
   currentMemory: null,
   isLoading: false,
@@ -234,7 +236,13 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
   clearError: () => set({ error: null }),
   setCurrentMemory: (memory: Memory | null) => set({ currentMemory: memory }),
-}));
+}),
+{
+  name: 'MemoryStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 // ============================================================================
 // SELECTORS - Fine-grained subscriptions for performance

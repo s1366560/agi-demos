@@ -57,11 +57,11 @@ describe('EntitiesList', () => {
         });
 
         // Mock ResizeObserver for VirtualGrid
-        global.ResizeObserver = vi.fn().mockImplementation(function() {
-            this.observe = vi.fn();
-            this.unobserve = vi.fn();
-            this.disconnect = vi.fn();
-        }) as any;
+        global.ResizeObserver = vi.fn().mockImplementation(() => ({
+            observe: vi.fn(),
+            unobserve: vi.fn(),
+            disconnect: vi.fn(),
+        }));
     })
 
     it('renders entities list', async () => {

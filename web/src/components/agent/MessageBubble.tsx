@@ -35,6 +35,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
 
   return (
     <div
+      data-testid={`message-bubble-${message.id}`}
+      data-role={message.role}
       className={`flex w-full mb-6 ${isUser ? "justify-end" : "justify-start"}`}
     >
       <div
@@ -47,6 +49,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
             isUser ? "bg-blue-600 text-white" : "bg-emerald-600 text-white"
           }`}
+          data-testid={`avatar-${message.role}`}
         >
           {isUser ? <UserOutlined /> : <RobotOutlined />}
         </div>
@@ -67,6 +70,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
           </div>
 
           <div
+            data-testid={`message-content-${message.id}`}
             className={`rounded-2xl px-5 py-3 shadow-sm max-w-full overflow-hidden ${
               isUser
                 ? "bg-blue-600 text-white rounded-tr-none"

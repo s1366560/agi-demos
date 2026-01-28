@@ -37,6 +37,28 @@ export {
     type ViewType,
 } from './agent'
 
+// Shared components (layouts, modals, UI components)
+export {
+    AppLayout,
+    ResponsiveLayout,
+    Layout,
+    DeleteConfirmationModal,
+    LanguageSwitcher,
+    NotificationPanel,
+    ThemeToggle,
+    WorkspaceSwitcher,
+} from './shared'
+
+// Graph components (knowledge graph visualization)
+export {
+    GraphVisualization,
+    CytoscapeGraph,
+    EntityCard,
+    getEntityTypeColor,
+    type Entity,
+    type EntityCardProps,
+} from './graph'
+
 // Note: For specific agent sub-categories, import directly from sub-barrels:
 // - Layout: import { WorkspaceSidebar } from '@/components/agent/layout'
 // - Chat: import { IdleState } from '@/components/agent/chat'

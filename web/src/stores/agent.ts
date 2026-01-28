@@ -1,7 +1,10 @@
 /**
- * Agent store for managing agent state using Zustand.
+ * Agent Store - Agent conversation and execution state management
  *
- * This store manages conversations, messages, and agent execution state.
+ * This store manages conversations, messages, timeline events, and agent execution state.
+ * Supports multi-level thinking, work plans, tool execution, and Plan Mode.
+ *
+ * @module stores/agent
  *
  * Project-Scoped Conversations (FR-017):
  * - All conversations are scoped to a specific project_id
@@ -12,10 +15,33 @@
  * Multi-Level Thinking Support:
  * - Work plans for complex queries
  * - Step tracking for plan execution
- * - Execution history retrieval
+ * - Execution timeline visualization
+ * - Tool execution history
+ *
+ * Timeline Events:
+ * - Unified event stream (user/assistant messages, thoughts, tool calls)
+ * - Pagination support for loading earlier messages
+ * - Per-conversation state caching for concurrent conversations
+ *
+ * Human Interaction:
+ * - Clarification requests/responses
+ * - Decision requests/responses
+ * - Doom loop detection and intervention
+ *
+ * @example
+ * const {
+ *   conversations,
+ *   currentConversation,
+ *   timeline,
+ *   isStreaming,
+ *   sendMessage,
+ *   createConversation
+ * } = useAgentStore();
  */
 
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+import { logger } from "../utils/logger";
 import { agentService } from "../services/agentService";
 import { planService } from "../services/planService";
 import {
@@ -321,7 +347,8 @@ const initialState = {
   conversationStates: new Map<string, ConversationState>(),
 };
 
-export const useAgentStore = create<AgentState>((set, get) => ({
+export const useAgentStore = create<AgentState>()(
+  devtools((set, get) => ({
   ...initialState,
 
   listConversations: async (
@@ -425,7 +452,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     conversation: Conversation | null,
     skipLoadMessages = false
   ) => {
-    console.log(
+    logger.debug(
       "[Agent] setCurrentConversation called:",
       conversation?.id,
       "skipLoadMessages:",
@@ -436,7 +463,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     // Save current conversation state before switching (for concurrent conversation support)
     if (current?.id && current.id !== conversation?.id) {
-      console.log("[Agent] Saving state for conversation:", current.id);
+      logger.debug("[Agent] Saving state for conversation:", current.id);
       saveConversationState(current.id);
     }
 
@@ -448,7 +475,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       !isNewConversationPending &&
       !skipLoadMessages
     ) {
-      console.log(
+      logger.debug(
         "[Agent] Same conversation, skipping redundant setCurrentConversation"
       );
       return;
@@ -461,7 +488,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // Try to restore saved state for this conversation (concurrent conversation support)
       const savedState = get().conversationStates.get(conversation.id);
       if (savedState) {
-        console.log("[Agent] Restoring saved state for conversation:", conversation.id);
+        logger.debug("[Agent] Restoring saved state for conversation:", conversation.id);
         restoreConversationState(conversation.id);
         set({ timelineLoading: false }); // Already have data
       } else {
@@ -494,7 +521,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
         // Auto-load timeline for this conversation (unless skipLoadMessages is true)
         if (!skipLoadMessages) {
-          console.log(
+          logger.debug(
             "[Agent] Calling getTimeline for conversation:",
             conversation.id,
             "project:",
@@ -534,16 +561,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     projectId: string,
     limit = 100
   ) => {
-    console.log("[Agent] getTimeline called:", conversationId, projectId);
+    logger.debug("[Agent] getTimeline called:", conversationId, projectId);
     set({ timelineLoading: true, timelineError: null });
     try {
       const response = await agentService.getConversationMessages(
         conversationId,
         projectId,
         limit
-      ) as any;  // Type cast to access pagination metadata
+      );
 
-      console.log(
+      logger.debug(
         "[Agent] getTimeline response:",
         response.timeline.length,
         "events"
@@ -562,7 +589,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       });
     } catch (error: unknown) {
     const err = error as { response?: { data?: { detail?: string } }; message?: string };
-      console.error("[Agent] getTimeline error:", error);
+      logger.error("[Agent] getTimeline error:", error);
       set({
         timelineError: err?.response?.data?.detail || "Failed to get timeline",
         timelineLoading: false,
@@ -576,7 +603,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Prevent duplicate events - check by sequenceNumber
     const lastEvent = timeline[timeline.length - 1];
     if (lastEvent && lastEvent.sequenceNumber >= event.sequenceNumber) {
-      console.log("[Agent] Skipping duplicate event:", event.type, event.id);
+      logger.debug("[Agent] Skipping duplicate event:", event.type, event.id);
       return;
     }
 
@@ -587,7 +614,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       sequenceNumber: event.sequenceNumber > 0 ? event.sequenceNumber : maxSeq + 1,
     };
 
-    console.log(
+    logger.debug(
       "[Agent] Adding timeline event:",
       newEvent.type,
       "seq:",
@@ -613,11 +640,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     // Guard: Don't load if already loading or no pagination point exists
     if (!earliestLoadedSequence || timelineLoading) {
-      console.log("[Agent] Cannot load earlier messages: no pagination point or already loading");
+      logger.debug("[Agent] Cannot load earlier messages: no pagination point or already loading");
       return;
     }
 
-    console.log("[Agent] Loading earlier messages before sequence:", earliestLoadedSequence);
+    logger.debug("[Agent] Loading earlier messages before sequence:", earliestLoadedSequence);
     set({ timelineLoading: true, timelineError: null });
 
     try {
@@ -627,7 +654,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         limit,
         undefined,  // from_sequence
         earliestLoadedSequence  // before_sequence
-      ) as any;
+      );
 
       // Prepend new events to existing timeline
       const { timeline } = get();
@@ -641,7 +668,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       });
     } catch (error: unknown) {
     const err = error as { response?: { data?: { detail?: string } }; message?: string };
-      console.error("[Agent] Failed to load earlier messages:", error);
+      logger.error("[Agent] Failed to load earlier messages:", error);
       set({
         timelineError: err?.response?.data?.detail || "Failed to load earlier messages",
         timelineLoading: false,
@@ -658,7 +685,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Prevent sending multiple messages simultaneously for the SAME conversation using per-conversation locks
     // This allows concurrent conversations to stream independently
     if (isConversationLocked(conversationLocks, conversationId)) {
-      console.warn(
+      logger.warn(
         `[Agent] Message send already in progress for conversation ${conversationId}, ignoring duplicate request`
       );
       return;
@@ -706,7 +733,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       content: messageText,
       role: "user",
     } as TimelineEvent;
-    console.log("[Agent] sendMessage: calling addTimelineEvent for user message", messageText);
+    logger.debug("[Agent] sendMessage: calling addTimelineEvent for user message", messageText);
     get().addTimelineEvent(userMessageEvent);
 
     // Track if we received the first event from server (success signal)
@@ -744,7 +771,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // Skip user messages from SSE - we already added them client-side
         // The backend echoes user messages in the stream, but we don't want duplicates
         if (messageRole === "user") {
-          console.log(
+          logger.debug(
             "[Agent] onMessage: skipping user message from SSE (already added client-side)"
           );
           return;
@@ -761,7 +788,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           artifacts,
           metadata: artifacts ? { artifacts } : undefined,
         } as TimelineEvent;
-        console.log(
+        logger.debug(
           "[Agent] onMessage: adding assistant event",
           assistantEvent.type,
           (assistantEvent as any).content?.substring(0, 50),
@@ -1123,7 +1150,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       // Typewriter effect handlers
       onTextStart: () => {
-        console.log("[Agent] TEXT_START received - starting typewriter effect");
+        logger.debug("[Agent] TEXT_START received - starting typewriter effect");
         receivedServerEvent = true;
         get().onTextStart();
       },
@@ -1133,7 +1160,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const delta = event.data?.delta as string;
         
         if (!delta) {
-          console.warn("[Agent] TEXT_DELTA received with empty delta:", event);
+          logger.warn("[Agent] TEXT_DELTA received with empty delta:", event);
           return;
         }
 
@@ -1142,7 +1169,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         
         // Log every 5th delta or when buffer is about to flush
         if (textDeltaBuffer.length <= delta.length || textDeltaBuffer.length >= TEXT_DELTA_BUFFER_SIZE) {
-          console.log(
+          logger.debug(
             `[Agent] TEXT_DELTA: +${delta.length} chars, buffer=${textDeltaBuffer.length}, ` +
             `preview="${delta.substring(0, 20)}..."`
           );
@@ -1162,7 +1189,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       onTextEnd: (event: any) => {
         const fullText = event.data?.full_text;
-        console.log(
+        logger.debug(
           `[Agent] TEXT_END received - fullText=${fullText?.length || 0} chars, ` +
           `buffered=${textDeltaBuffer.length} chars`
         );
@@ -1338,7 +1365,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       onContextCompressed: (event: any) => {
         receivedServerEvent = true;
         const data = event.data as ContextCompressedEventData;
-        console.log("[Agent] Context compressed:", data);
+        logger.debug("[Agent] Context compressed:", data);
         set({
           contextCompressionInfo: {
             wasCompressed: data.was_compressed,
@@ -1362,7 +1389,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           message_id?: string;
           generated_by?: string;
         };
-        console.log("[Agent] Title generated event:", data);
+        logger.debug("[Agent] Title generated event:", data);
 
         const { currentConversation, conversations } = get();
 
@@ -1390,7 +1417,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
         // Complete event contains the final response - add it as a message
         const { data } = event;
-        console.log("[Agent] onComplete received:", {
+        logger.debug("[Agent] onComplete received:", {
           hasContent: !!data.content,
           contentLength: data.content?.length,
           dataId: data.id,
@@ -1409,7 +1436,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             artifacts,
             metadata: artifacts ? { artifacts } : undefined,
           } as TimelineEvent;
-          console.log("[Agent] onComplete calling addTimelineEvent with:", {
+          logger.debug("[Agent] onComplete calling addTimelineEvent with:", {
             id: assistantEvent.id,
             type: assistantEvent.type,
             contentPreview: (assistantEvent as any).content?.substring(0, 50),
@@ -1538,7 +1565,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Prevent concurrent title generation
     const { isGeneratingTitle } = get();
     if (isGeneratingTitle) {
-      console.log("[Agent] Title generation already in progress, skipping");
+      logger.debug("[Agent] Title generation already in progress, skipping");
       return;
     }
 
@@ -1559,14 +1586,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         c.id === conversationId ? updatedConversation : c
       );
       set({ conversations: updatedList });
-      console.log(
+      logger.debug(
         "[Agent] Generated conversation title:",
         updatedConversation.title
       );
     } catch (error: unknown) {
     const err = error as { response?: { data?: { detail?: string } }; message?: string };
       const errorMsg = err?.response?.data?.detail || "Failed to generate title";
-      console.error("[Agent] Failed to generate conversation title:", error);
+      logger.error("[Agent] Failed to generate conversation title:", error);
       set({ titleGenerationError: errorMsg });
     } finally {
       set({ isGeneratingTitle: false });
@@ -1590,7 +1617,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         executionHistoryLoading: false,
       });
     } catch (error: unknown) {
-      console.error("Failed to get execution history:", error);
+      logger.error("Failed to get execution history:", error);
       set({ executionHistoryLoading: false });
       throw error;
     }
@@ -1602,14 +1629,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const response = await agentService.listTools();
       set({ tools: response.tools, toolsLoading: false });
     } catch (error: unknown) {
-      console.error("Failed to list tools:", error);
+      logger.error("Failed to list tools:", error);
       set({ toolsLoading: false });
     }
   },
 
   // Typewriter effect actions
   onTextStart: () => {
-    console.log("[Agent] onTextStart: setting isTextStreaming=true");
+    logger.debug("[Agent] onTextStart: setting isTextStreaming=true");
     set({
       assistantDraftContent: "",
       isTextStreaming: true,
@@ -1617,16 +1644,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   onTextDelta: (delta: string) => {
-    console.log("[Agent] onTextDelta: received delta length=", delta.length, "content=", delta.substring(0, 50));
+    logger.debug("[Agent] onTextDelta: received delta length=", delta.length, "content=", delta.substring(0, 50));
     set((state) => {
       const newContent = state.assistantDraftContent + delta;
-      console.log("[Agent] onTextDelta: new content length=", newContent.length);
+      logger.debug("[Agent] onTextDelta: new content length=", newContent.length);
       return { assistantDraftContent: newContent };
     });
   },
 
   onTextEnd: (fullText?: string) => {
-    console.log("[Agent] onTextEnd: fullText length=", fullText?.length, "setting isTextStreaming=false");
+    logger.debug("[Agent] onTextEnd: fullText length=", fullText?.length, "setting isTextStreaming=false");
     set((state) => ({
       assistantDraftContent: fullText || state.assistantDraftContent,
       isTextStreaming: false,
@@ -1960,7 +1987,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   reset: () => {
     set(initialState);
   },
-}));
+}),
+{
+  name: "AgentStore",
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 // ============================================================================
 // SELECTORS - Fine-grained subscriptions for performance
@@ -1975,19 +2008,75 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 // ============================================================================
 
 // Conversation selectors
+
+/**
+ * Get all conversations
+ *
+ * @returns Array of conversations
+ * @example
+ * const conversations = useConversations();
+ */
 export const useConversations = () =>
   useAgentStore((state) => state.conversations);
+
+/**
+ * Get current active conversation
+ *
+ * @returns Current conversation or null
+ * @example
+ * const conversation = useCurrentConversation();
+ */
 export const useCurrentConversation = () =>
   useAgentStore((state) => state.currentConversation);
+
+/**
+ * Get conversations loading state
+ *
+ * @returns True if conversations are loading
+ * @example
+ * const isLoading = useConversationsLoading();
+ */
 export const useConversationsLoading = () =>
   useAgentStore((state) => state.conversationsLoading);
+
+/**
+ * Get conversations error message
+ *
+ * @returns Error message or null
+ * @example
+ * const error = useConversationsError();
+ */
 export const useConversationsError = () =>
   useAgentStore((state) => state.conversationsError);
 
 // Timeline selectors (unified event stream)
+
+/**
+ * Get timeline events (unified event stream)
+ *
+ * @returns Array of timeline events
+ * @example
+ * const timeline = useTimeline();
+ */
 export const useTimeline = () => useAgentStore((state) => state.timeline);
+
+/**
+ * Get timeline loading state
+ *
+ * @returns True if timeline is loading
+ * @example
+ * const isLoading = useTimelineLoading();
+ */
 export const useTimelineLoading = () =>
   useAgentStore((state) => state.timelineLoading);
+
+/**
+ * Get timeline error message
+ *
+ * @returns Error message or null
+ * @example
+ * const error = useTimelineError();
+ */
 export const useTimelineError = () =>
   useAgentStore((state) => state.timelineError);
 
@@ -2020,13 +2109,53 @@ export const useMessagesError = () =>
   useAgentStore((state) => state.timelineError);
 
 // Streaming state selectors
+
+/**
+ * Check if agent is currently streaming
+ *
+ * @returns True if streaming is active
+ * @example
+ * const isStreaming = useIsStreaming();
+ */
 export const useIsStreaming = () => useAgentStore((state) => state.isStreaming);
+
+/**
+ * Get current agent thought
+ *
+ * @returns Current thought content or null
+ * @example
+ * const thought = useCurrentThought();
+ */
 export const useCurrentThought = () =>
   useAgentStore((state) => state.currentThought);
+
+/**
+ * Get current thought level (L1/L2/L3/L4)
+ *
+ * @returns Thought level or null
+ * @example
+ * const level = useCurrentThoughtLevel();
+ */
 export const useCurrentThoughtLevel = () =>
   useAgentStore((state) => state.currentThoughtLevel);
+
+/**
+ * Get current tool call
+ *
+ * @returns Current tool call info or null
+ * @example
+ * const toolCall = useCurrentToolCall();
+ */
 export const useCurrentToolCall = () =>
   useAgentStore((state) => state.currentToolCall);
+
+/**
+ * Get current tool observation
+ *
+ * @returns Current observation or null
+ * @example
+ * const observation = useCurrentObservation();
+ */
 export const useCurrentObservation = () =>
   useAgentStore((state) => state.currentObservation);
 
@@ -2037,12 +2166,44 @@ export const useIsTextStreaming = () =>
   useAgentStore((state) => state.isTextStreaming);
 
 // Multi-level thinking selectors
+
+/**
+ * Get current work plan
+ *
+ * @returns Current work plan or null
+ * @example
+ * const workPlan = useCurrentWorkPlan();
+ */
 export const useCurrentWorkPlan = () =>
   useAgentStore((state) => state.currentWorkPlan);
+
+/**
+ * Get current step number
+ *
+ * @returns Current step number or null
+ * @example
+ * const stepNumber = useCurrentStepNumber();
+ */
 export const useCurrentStepNumber = () =>
   useAgentStore((state) => state.currentStepNumber);
+
+/**
+ * Get current step status
+ *
+ * @returns Current step status or null
+ * @example
+ * const stepStatus = useCurrentStepStatus();
+ */
 export const useCurrentStepStatus = () =>
   useAgentStore((state) => state.currentStepStatus);
+
+/**
+ * Get matched pattern info
+ *
+ * @returns Matched pattern or null
+ * @example
+ * const pattern = useMatchedPattern();
+ */
 export const useMatchedPattern = () =>
   useAgentStore((state) => state.matchedPattern);
 
@@ -2078,11 +2239,51 @@ export const usePendingDoomLoopIntervention = () =>
   useAgentStore((state) => state.pendingDoomLoopIntervention);
 
 // Plan Mode selectors
+
+/**
+ * Get current Plan Mode document
+ *
+ * @returns Current plan or null
+ * @example
+ * const plan = useCurrentPlan();
+ */
 export const useCurrentPlan = () => useAgentStore((state) => state.currentPlan);
+
+/**
+ * Get Plan Mode status
+ *
+ * @returns Plan mode status or null
+ * @example
+ * const status = usePlanModeStatus();
+ */
 export const usePlanModeStatus = () =>
   useAgentStore((state) => state.planModeStatus);
+
+/**
+ * Get Plan Mode loading state
+ *
+ * @returns True if plan is loading
+ * @example
+ * const isLoading = usePlanLoading();
+ */
 export const usePlanLoading = () => useAgentStore((state) => state.planLoading);
+
+/**
+ * Get Plan Mode error message
+ *
+ * @returns Error message or null
+ * @example
+ * const error = usePlanError();
+ */
 export const usePlanError = () => useAgentStore((state) => state.planError);
+
+/**
+ * Check if currently in Plan Mode
+ *
+ * @returns True if in Plan Mode
+ * @example
+ * const isInPlanMode = useIsInPlanMode();
+ */
 export const useIsInPlanMode = () =>
   useAgentStore((state) => state.planModeStatus?.is_in_plan_mode ?? false);
 
@@ -2115,6 +2316,14 @@ export const useConversationState = (conversationId: string) =>
   useAgentStore((state) => state.getConversationState(conversationId));
 
 // Action selectors (for components that need to call actions)
+
+/**
+ * Get all agent actions
+ *
+ * @returns Object containing all agent actions
+ * @example
+ * const { sendMessage, createConversation, stopChat } = useAgentActions();
+ */
 export const useAgentActions = () =>
   useAgentStore((state) => ({
     listConversations: state.listConversations,

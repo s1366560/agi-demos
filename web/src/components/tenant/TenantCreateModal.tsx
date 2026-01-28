@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Building2, AlertCircle } from 'lucide-react';
-import { useTenantStore } from '../stores/tenant';
+import { useTenantStore } from '../../stores/tenant';
 
 interface TenantCreateModalProps {
   isOpen: boolean;
@@ -50,6 +50,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            aria-label="关闭创建工作空间弹窗"
           >
             <X className="h-5 w-5" />
           </button>
@@ -57,49 +58,54 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md">
-              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md" role="alert" aria-live="assertive">
+              <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
               <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
             </div>
           )}
 
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label htmlFor="tenant-create-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               工作空间名称 *
             </label>
             <input
               type="text"
-              id="name"
+              id="tenant-create-name"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
               placeholder="输入工作空间名称"
               required
               disabled={isLoading}
+              aria-required="true"
             />
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label htmlFor="tenant-create-description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               描述
             </label>
             <textarea
-              id="description"
+              id="tenant-create-description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
               placeholder="描述这个工作空间的用途"
               rows={3}
               disabled={isLoading}
+              aria-describedby="tenant-create-description-help"
             />
+            <span id="tenant-create-description-help" className="text-xs text-gray-500 dark:text-slate-400">
+              可选：描述工作空间的用途
+            </span>
           </div>
 
           <div>
-            <label htmlFor="plan" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label htmlFor="tenant-create-plan" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
               计划类型
             </label>
             <select
-              id="plan"
+              id="tenant-create-plan"
               value={formData.plan}
               onChange={(e) => setFormData({ ...formData, plan: e.target.value as any })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"

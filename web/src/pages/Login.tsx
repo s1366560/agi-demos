@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Brain, Eye, EyeOff, AlertCircle, Share2, Database, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/auth';
-import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { LanguageSwitcher } from '@/components/shared/ui/LanguageSwitcher';
 
 export const Login: React.FC = () => {
     const { t } = useTranslation();
@@ -127,7 +127,7 @@ export const Login: React.FC = () => {
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6" data-testid="login-form">
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1.5">
                                 {t('login.email')}
@@ -142,6 +142,7 @@ export const Login: React.FC = () => {
                                     placeholder="name@company.com"
                                     required
                                     disabled={isLoading || authLoading}
+                                    data-testid="email-input"
                                 />
                             </div>
                         </div>
@@ -165,12 +166,14 @@ export const Login: React.FC = () => {
                                     placeholder={t('login.form.password_placeholder')}
                                     required
                                     disabled={isLoading || authLoading}
+                                    data-testid="password-input"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute inset-y-0 right-0 pr-3 flex items-center"
                                     disabled={isLoading || authLoading}
+                                    data-testid="toggle-password-visibility"
                                 >
                                     {showPassword ? (
                                         <EyeOff className="h-5 w-5 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 transition-colors" />
@@ -185,6 +188,7 @@ export const Login: React.FC = () => {
                             type="submit"
                             className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:-translate-y-0.5"
                             disabled={isLoading || authLoading}
+                            data-testid="login-submit-button"
                         >
                             {isLoading || authLoading ? (
                                 <>

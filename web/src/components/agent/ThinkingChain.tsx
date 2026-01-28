@@ -56,7 +56,8 @@ interface TimelineNodeProps {
     isLast: boolean;
 }
 
-const TimelineNode: React.FC<TimelineNodeProps> = ({ type, sequence, timestamp, children, isLast }) => {
+// Memoize TimelineNode to prevent re-renders when parent re-renders
+const TimelineNode: React.FC<TimelineNodeProps> = memo(({ type, sequence, timestamp, children, isLast }) => {
     const isThought = type === 'thought';
 
     return (
@@ -105,7 +106,9 @@ const TimelineNode: React.FC<TimelineNodeProps> = ({ type, sequence, timestamp, 
             </div>
         </div>
     );
-};
+});
+
+TimelineNode.displayName = 'TimelineNode';
 
 export const ThinkingChain: React.FC<ThinkingChainProps> = memo(({
     thoughts,

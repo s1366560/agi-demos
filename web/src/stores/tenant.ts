@@ -1,4 +1,17 @@
+/**
+ * Tenant Store - Tenant (organization) state management
+ *
+ * Manages tenant CRUD operations, member management, and current tenant selection.
+ * Tenants are the top-level organizational unit in the multi-tenant system.
+ *
+ * @module stores/tenant
+ *
+ * @example
+ * const { tenants, currentTenant, listTenants, createTenant } = useTenantStore();
+ */
+
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { tenantAPI } from '../services/api';
 import type { Tenant, TenantCreate, TenantUpdate, TenantListResponse, UserTenant } from '../types/memory';
 
@@ -42,7 +55,8 @@ function getErrorMessage(error: unknown): string {
     : 'Failed to process request';
 }
 
-export const useTenantStore = create<TenantState>((set, get) => ({
+export const useTenantStore = create<TenantState>()(
+  devtools((set, get) => ({
   tenants: [],
   currentTenant: null,
   isLoading: false,
@@ -51,6 +65,14 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   page: 1,
   pageSize: 20,
 
+  /**
+   * List tenants
+   *
+   * @param params - Query params (page, page_size, search)
+   * @throws {ApiError} API failure
+   * @example
+   * await listTenants({ page: 1, page_size: 20 });
+   */
   listTenants: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
@@ -71,6 +93,14 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Fetch a single tenant by ID
+   *
+   * @param id - Tenant ID
+   * @throws {ApiError} API failure
+   * @example
+   * await getTenant('tenant-1');
+   */
   getTenant: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -88,6 +118,14 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Create a new tenant
+   *
+   * @param data - Tenant creation data
+   * @throws {ApiError} API failure
+   * @example
+   * await createTenant({ name: 'My Organization', slug: 'my-org' });
+   */
   createTenant: async (data: TenantCreate) => {
     set({ isLoading: true, error: null });
     try {
@@ -106,6 +144,15 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Update an existing tenant
+   *
+   * @param id - Tenant ID
+   * @param data - Tenant update data
+   * @throws {ApiError} API failure
+   * @example
+   * await updateTenant('tenant-1', { name: 'Updated Name' });
+   */
   updateTenant: async (id: string, data: TenantUpdate) => {
     set({ isLoading: true, error: null });
     try {
@@ -125,6 +172,14 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Delete a tenant
+   *
+   * @param id - Tenant ID
+   * @throws {ApiError} API failure
+   * @example
+   * await deleteTenant('tenant-1');
+   */
   deleteTenant: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -144,6 +199,13 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Set the current active tenant
+   *
+   * @param tenant - Tenant to set as current, or null to clear
+   * @example
+   * setCurrentTenant(selectedTenant);
+   */
   setCurrentTenant: (tenant: Tenant | null) => {
     set({ currentTenant: tenant });
     // If tenant is cleared (logout), also clear the list
@@ -152,6 +214,16 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Add a member to a tenant
+   *
+   * @param tenantId - Tenant ID
+   * @param userId - User ID to add
+   * @param role - Member role (e.g., 'owner', 'admin', 'member')
+   * @throws {ApiError} API failure
+   * @example
+   * await addMember('tenant-1', 'user-1', 'admin');
+   */
   addMember: async (tenantId: string, userId: string, role: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -166,6 +238,15 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * Remove a member from a tenant
+   *
+   * @param tenantId - Tenant ID
+   * @param userId - User ID to remove
+   * @throws {ApiError} API failure
+   * @example
+   * await removeMember('tenant-1', 'user-1');
+   */
   removeMember: async (tenantId: string, userId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -180,6 +261,15 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     }
   },
 
+  /**
+   * List members of a tenant
+   *
+   * @param tenantId - Tenant ID
+   * @returns Array of user-tenant relationships
+   * @throws {ApiError} API failure
+   * @example
+   * const members = await listMembers('tenant-1');
+   */
   listMembers: async (tenantId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -196,4 +286,104 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-}));
+}),
+{
+  name: 'TenantStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
+
+// ============================================================================
+// SELECTORS - Fine-grained subscriptions for performance
+// ============================================================================
+
+// Tenant data selectors
+
+/**
+ * Get all tenants
+ *
+ * @returns Array of tenants
+ * @example
+ * const tenants = useTenants();
+ */
+export const useTenants = () => useTenantStore((state) => state.tenants);
+
+/**
+ * Get current active tenant
+ *
+ * @returns Current tenant or null
+ * @example
+ * const tenant = useCurrentTenant();
+ */
+export const useCurrentTenant = () => useTenantStore((state) => state.currentTenant);
+
+/**
+ * Get total tenant count
+ *
+ * @returns Total number of tenants
+ * @example
+ * const total = useTenantTotal();
+ */
+export const useTenantTotal = () => useTenantStore((state) => state.total);
+
+/**
+ * Get current page number
+ *
+ * @returns Current page
+ * @example
+ * const page = useTenantPage();
+ */
+export const useTenantPage = () => useTenantStore((state) => state.page);
+
+/**
+ * Get current page size
+ *
+ * @returns Number of items per page
+ * @example
+ * const pageSize = useTenantPageSize();
+ */
+export const useTenantPageSize = () => useTenantStore((state) => state.pageSize);
+
+// Loading and error selectors
+
+/**
+ * Get tenant loading state
+ *
+ * @returns True if tenants are loading
+ * @example
+ * const isLoading = useTenantLoading();
+ */
+export const useTenantLoading = () => useTenantStore((state) => state.isLoading);
+
+/**
+ * Get tenant error message
+ *
+ * @returns Error message or null
+ * @example
+ * const error = useTenantError();
+ */
+export const useTenantError = () => useTenantStore((state) => state.error);
+
+// Action selectors
+
+/**
+ * Get all tenant actions
+ *
+ * @returns Object containing all tenant actions
+ * @example
+ * const { listTenants, createTenant, addMember } = useTenantActions();
+ */
+export const useTenantActions = () =>
+  useTenantStore((state) => ({
+    listTenants: state.listTenants,
+    getTenant: state.getTenant,
+    createTenant: state.createTenant,
+    updateTenant: state.updateTenant,
+    deleteTenant: state.deleteTenant,
+    setCurrentTenant: state.setCurrentTenant,
+    addMember: state.addMember,
+    removeMember: state.removeMember,
+    listMembers: state.listMembers,
+    clearError: state.clearError,
+  }));

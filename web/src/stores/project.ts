@@ -1,4 +1,17 @@
+/**
+ * Project Store - Project state management
+ *
+ * Manages project CRUD operations and state within a tenant context.
+ * Projects are tenant-scoped entities for multi-tenant isolation.
+ *
+ * @module stores/project
+ *
+ * @example
+ * const { projects, currentProject, listProjects, createProject } = useProjectStore();
+ */
+
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { projectAPI } from '../services/api';
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
@@ -39,7 +52,8 @@ function getErrorMessage(error: unknown): string {
     : 'Failed to process request';
 }
 
-export const useProjectStore = create<ProjectState>((set, get) => ({
+export const useProjectStore = create<ProjectState>()(
+  devtools((set, get) => ({
   projects: [],
   currentProject: null,
   isLoading: false,
@@ -48,6 +62,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   page: 1,
   pageSize: 20,
 
+  /**
+   * List projects for a tenant
+   *
+   * @param tenantId - Tenant ID
+   * @param params - Query params (page, page_size, search)
+   * @throws {ApiError} API failure
+   * @example
+   * await listProjects('tenant-1', { page: 1, page_size: 20 });
+   */
   listProjects: async (tenantId: string, params = {}) => {
     set({ isLoading: true, error: null });
     try {
@@ -68,6 +91,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
+  /**
+   * Create a new project
+   *
+   * @param tenantId - Tenant ID
+   * @param data - Project creation data
+   * @throws {ApiError} API failure
+   * @example
+   * await createProject('tenant-1', { name: 'My Project', description: '...' });
+   */
   createProject: async (tenantId: string, data: ProjectCreate) => {
     set({ isLoading: true, error: null });
     try {
@@ -86,6 +118,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
+  /**
+   * Update an existing project
+   *
+   * @param tenantId - Tenant ID
+   * @param projectId - Project ID
+   * @param data - Project update data
+   * @throws {ApiError} API failure
+   * @example
+   * await updateProject('tenant-1', 'proj-1', { name: 'Updated Name' });
+   */
   updateProject: async (tenantId: string, projectId: string, data: ProjectUpdate) => {
     set({ isLoading: true, error: null });
     try {
@@ -105,6 +147,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
+  /**
+   * Delete a project
+   *
+   * @param tenantId - Tenant ID
+   * @param projectId - Project ID
+   * @throws {ApiError} API failure
+   * @example
+   * await deleteProject('tenant-1', 'proj-1');
+   */
   deleteProject: async (tenantId: string, projectId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -124,10 +175,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
+  /**
+   * Set the current active project
+   *
+   * @param project - Project to set as current, or null to clear
+   * @example
+   * setCurrentProject(selectedProject);
+   */
   setCurrentProject: (project: Project | null) => {
     set({ currentProject: project });
   },
 
+  /**
+   * Fetch a single project by ID
+   *
+   * @param tenantId - Tenant ID
+   * @param projectId - Project ID
+   * @returns The project data
+   * @throws {ApiError} API failure
+   * @example
+   * const project = await getProject('tenant-1', 'proj-1');
+   */
   getProject: async (tenantId: string, projectId: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -144,24 +212,94 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-}));
+}),
+{
+  name: 'ProjectStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 // ============================================================================
 // SELECTORS - Fine-grained subscriptions for performance
 // ============================================================================
 
 // Project data selectors
+
+/**
+ * Get all projects
+ *
+ * @returns Array of projects
+ * @example
+ * const projects = useProjects();
+ */
 export const useProjects = () => useProjectStore((state) => state.projects);
+
+/**
+ * Get current active project
+ *
+ * @returns Current project or null
+ * @example
+ * const project = useCurrentProject();
+ */
 export const useCurrentProject = () => useProjectStore((state) => state.currentProject);
+
+/**
+ * Get total project count
+ *
+ * @returns Total number of projects
+ * @example
+ * const total = useProjectTotal();
+ */
 export const useProjectTotal = () => useProjectStore((state) => state.total);
+
+/**
+ * Get current page number
+ *
+ * @returns Current page
+ * @example
+ * const page = useProjectPage();
+ */
 export const useProjectPage = () => useProjectStore((state) => state.page);
+
+/**
+ * Get current page size
+ *
+ * @returns Number of items per page
+ * @example
+ * const pageSize = useProjectPageSize();
+ */
 export const useProjectPageSize = () => useProjectStore((state) => state.pageSize);
 
 // Loading and error selectors
+
+/**
+ * Get project loading state
+ *
+ * @returns True if projects are loading
+ * @example
+ * const isLoading = useProjectLoading();
+ */
 export const useProjectLoading = () => useProjectStore((state) => state.isLoading);
+
+/**
+ * Get project error message
+ *
+ * @returns Error message or null
+ * @example
+ * const error = useProjectError();
+ */
 export const useProjectError = () => useProjectStore((state) => state.error);
 
 // Action selectors
+
+/**
+ * Get all project actions
+ *
+ * @returns Object containing all project actions
+ * @example
+ * const { listProjects, createProject, updateProject } = useProjectActions();
+ */
 export const useProjectActions = () =>
   useProjectStore((state) => ({
     listProjects: state.listProjects,

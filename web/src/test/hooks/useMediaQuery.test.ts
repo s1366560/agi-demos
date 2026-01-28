@@ -128,8 +128,10 @@ describe('useMediaQuery', () => {
 
       // Simulate media query change with proper MediaQueryListEvent
       act(() => {
+        // @ts-expect-error - MediaQueryList context in test mock
         currentMatches = true;
         const mockEvent = { matches: true } as MediaQueryListEvent;
+        // @ts-expect-error - MediaQueryList context in test mock
         listenerCallback?.(mockEvent);
       });
 
@@ -145,6 +147,8 @@ describe('useMediaQuery', () => {
       // Simulate media query change with proper MediaQueryListEvent
       act(() => {
         currentMatches = false;
+        // @ts-expect-error - MediaQueryList context in test mock
+
         const mockEvent = { matches: false } as MediaQueryListEvent;
         listenerCallback?.(mockEvent);
       });
@@ -157,16 +161,22 @@ describe('useMediaQuery', () => {
       const { result } = renderHook(() => useMediaQuery('(min-width: 768px)'));
 
       expect(result.current).toBe(false);
+        // @ts-expect-error - MediaQueryList context in test mock
+
 
       act(() => {
         currentMatches = true;
         listenerCallback?.({ matches: true } as MediaQueryListEvent);
       });
+        // @ts-expect-error - MediaQueryList context in test mock
+
 
       expect(result.current).toBe(true);
 
       act(() => {
         currentMatches = false;
+        // @ts-expect-error - MediaQueryList context in test mock
+
         listenerCallback?.({ matches: false } as MediaQueryListEvent);
       });
 
@@ -202,6 +212,8 @@ describe('useMediaQuery', () => {
     it('should not update after unmount', () => {
       currentMatches = false;
       const { result, unmount } = renderHook(() =>
+        // @ts-expect-error - MediaQueryList context in test mock
+
         useMediaQuery('(min-width: 768px)')
       );
 

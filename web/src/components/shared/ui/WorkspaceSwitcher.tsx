@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useTenantStore } from '../stores/tenant'
-import { useProjectStore } from '../stores/project'
-import { Tenant, Project } from '../types/memory'
+import { useTenantStore } from '@/stores/tenant'
+import { useProjectStore } from '@/stores/project'
+import { Tenant, Project } from '@/types/memory'
 
 interface WorkspaceSwitcherProps {
     mode: 'tenant' | 'project'
@@ -12,7 +12,10 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
     const navigate = useNavigate()
     const { projectId } = useParams()
     const [isOpen, setIsOpen] = useState(false)
+    const [focusedIndex, setFocusedIndex] = useState(-1)
     const dropdownRef = useRef<HTMLDivElement>(null)
+    const triggerButtonRef = useRef<HTMLButtonElement>(null)
+    const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([])
 
     // Stores
     const { tenants, currentTenant, setCurrentTenant, listTenants } = useTenantStore()
@@ -29,6 +32,14 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
         }
     }, [mode, currentTenant, projects.length, listProjects])
 
+    // Reset focused index when dropdown closes
+    useEffect(() => {
+        if (!isOpen) {
+            setFocusedIndex(-1)
+            menuItemRefs.current = []
+        }
+    }, [isOpen])
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -39,6 +50,79 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
+
+    // Get menu items count for keyboard navigation
+    const menuItemsCount = mode === 'tenant'
+        ? tenants.length + 1 // tenants + "Create Tenant" button
+        : projects.length + 1 // projects + "Back to Tenant" button
+
+    // Handle keyboard navigation on trigger button
+    const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+        switch (e.key) {
+            case 'ArrowDown':
+            case 'ArrowUp':
+            case 'Enter':
+            case ' ':
+                e.preventDefault()
+                setIsOpen(true)
+                setFocusedIndex(0)
+                // Focus first menu item after dropdown opens
+                setTimeout(() => {
+                    menuItemRefs.current[0]?.focus()
+                }, 0)
+                break
+            case 'Escape':
+                e.preventDefault()
+                setIsOpen(false)
+                break
+        }
+    }
+
+    // Handle keyboard navigation within menu
+    const handleMenuKeyDown = (e: React.KeyboardEvent, index: number) => {
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault()
+                const nextIndex = (index + 1) % menuItemsCount
+                setFocusedIndex(nextIndex)
+                menuItemRefs.current[nextIndex]?.focus()
+                break
+            case 'ArrowUp':
+                e.preventDefault()
+                const prevIndex = (index - 1 + menuItemsCount) % menuItemsCount
+                setFocusedIndex(prevIndex)
+                menuItemRefs.current[prevIndex]?.focus()
+                break
+            case 'Home':
+                e.preventDefault()
+                setFocusedIndex(0)
+                menuItemRefs.current[0]?.focus()
+                break
+            case 'End':
+                e.preventDefault()
+                const lastIndex = menuItemsCount - 1
+                setFocusedIndex(lastIndex)
+                menuItemRefs.current[lastIndex]?.focus()
+                break
+            case 'Escape':
+                e.preventDefault()
+                setIsOpen(false)
+                triggerButtonRef.current?.focus()
+                break
+            case 'Enter':
+            case ' ':
+                // Let the default click handler handle Enter/Space
+                // We just prevent default to avoid any unwanted behavior
+                if (e.key === ' ') {
+                    e.preventDefault()
+                }
+                break
+            case 'Tab':
+                // Allow Tab navigation but close dropdown
+                setIsOpen(false)
+                break
+        }
+    }
 
     const handleTenantSwitch = (tenant: Tenant) => {
         setCurrentTenant(tenant)
@@ -80,8 +164,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
     return (
         <div className="relative" ref={dropdownRef}>
             <button
+                ref={triggerButtonRef}
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 w-full p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+                onKeyDown={handleTriggerKeyDown}
+                aria-expanded={isOpen}
+                aria-haspopup="listbox"
+                className="flex items-center gap-2 w-full p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
                 {mode === 'tenant' ? (
                     <>
@@ -117,18 +205,28 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
 
             {/* Dropdown Menu */}
             {isOpen && (
-                <div className="absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                <div
+                    role="listbox"
+                    aria-orientation="vertical"
+                    aria-labelledby="workspace-switcher-label"
+                    className="absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+                >
                     <div className="p-2">
                         {mode === 'tenant' ? (
                             <>
-                                <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                <div id="workspace-switcher-label" className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                                     Switch Tenant
                                 </div>
-                                {tenants.map(tenant => (
+                                {tenants.map((tenant, index) => (
                                     <button
                                         key={tenant.id}
+                                        ref={el => { menuItemRefs.current[index] = el }}
                                         onClick={() => handleTenantSwitch(tenant)}
-                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${currentTenant?.id === tenant.id
+                                        onKeyDown={(e) => handleMenuKeyDown(e, index)}
+                                        role="option"
+                                        aria-selected={currentTenant?.id === tenant.id}
+                                        tabIndex={focusedIndex === index ? 0 : -1}
+                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${currentTenant?.id === tenant.id
                                             ? 'bg-primary/10 text-primary'
                                             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                                             }`}
@@ -142,8 +240,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                                 ))}
                                 <div className="h-px bg-slate-100 dark:bg-slate-700 my-2"></div>
                                 <button
+                                    ref={el => { menuItemRefs.current[tenants.length] = el }}
                                     onClick={() => navigate('/tenants/new')}
-                                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                    onKeyDown={(e) => handleMenuKeyDown(e, tenants.length)}
+                                    role="option"
+                                    tabIndex={focusedIndex === tenants.length ? 0 : -1}
+                                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
                                 >
                                     <span className="material-symbols-outlined text-[18px]">add</span>
                                     <span className="text-sm font-medium">Create Tenant</span>
@@ -151,14 +253,19 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                             </>
                         ) : (
                             <>
-                                <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                <div id="workspace-switcher-label" className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                                     Switch Project
                                 </div>
-                                {projects.map(project => (
+                                {projects.map((project, index) => (
                                     <button
                                         key={project.id}
+                                        ref={el => { menuItemRefs.current[index] = el }}
                                         onClick={() => handleProjectSwitch(project)}
-                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${projectId === project.id
+                                        onKeyDown={(e) => handleMenuKeyDown(e, index)}
+                                        role="option"
+                                        aria-selected={projectId === project.id}
+                                        tabIndex={focusedIndex === index ? 0 : -1}
+                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${projectId === project.id
                                             ? 'bg-primary/10 text-primary'
                                             : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                                             }`}
@@ -172,8 +279,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                                 ))}
                                 <div className="h-px bg-slate-100 dark:bg-slate-700 my-2"></div>
                                 <button
+                                    ref={el => { menuItemRefs.current[projects.length] = el }}
                                     onClick={handleBackToTenant}
-                                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                    onKeyDown={(e) => handleMenuKeyDown(e, projects.length)}
+                                    role="option"
+                                    tabIndex={focusedIndex === projects.length ? 0 : -1}
+                                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
                                 >
                                     <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                                     <span className="text-sm font-medium">Back to Tenant</span>

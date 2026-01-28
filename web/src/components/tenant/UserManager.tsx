@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, UserPlus, Shield, Trash2, Edit3, Search, Mail, Calendar } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useTenantStore } from '../stores/tenant';
-import { useProjectStore } from '../stores/project';
-import { projectService } from '../services/projectService';
-import { tenantService } from '../services/tenantService';
+import { useTenantStore } from '../../stores/tenant';
+import { useProjectStore } from '../../stores/project';
+import { projectService } from '../../services/projectService';
+import { tenantService } from '../../services/tenantService';
 import { EditUserModal } from './EditUserModal';
 
 interface User {

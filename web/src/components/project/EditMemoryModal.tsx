@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Save } from 'lucide-react';
-import { Memory } from '../types/memory';
-import { memoryAPI } from '../services/api';
+import { Memory } from '../../types/memory';
+import { memoryAPI } from '../../services/api';
 
 interface EditMemoryModalProps {
     isOpen: boolean;
@@ -106,6 +106,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                         onClick={onClose}
                         className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
                         disabled={isSaving}
+                        aria-label="关闭"
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -114,16 +115,17 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
                     {error && (
-                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4" role="alert" aria-live="assertive">
                             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
                         </div>
                     )}
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                        <label htmlFor="memory-title" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                             标题 *
                         </label>
                         <input
+                            id="memory-title"
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
@@ -131,14 +133,16 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                             placeholder="输入记忆标题"
                             required
                             disabled={isSaving}
+                            aria-required="true"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                        <label htmlFor="memory-content" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                             内容 *
                         </label>
                         <textarea
+                            id="memory-content"
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             rows={12}
@@ -146,11 +150,12 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                             placeholder="输入记忆内容..."
                             required
                             disabled={isSaving}
+                            aria-required="true"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                        <label htmlFor="memory-tags" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                             标签
                         </label>
                         <div className="flex flex-wrap gap-2 mb-2">
@@ -165,6 +170,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                                         onClick={() => handleRemoveTag(tag)}
                                         className="hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50"
                                         disabled={isSaving}
+                                        aria-label={`移除标签 ${tag}`}
                                     >
                                         <X className="h-3 w-3" />
                                     </button>
@@ -173,6 +179,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                         </div>
                         <div className="flex gap-2">
                             <input
+                                id="memory-tags"
                                 type="text"
                                 value={newTag}
                                 onChange={(e) => setNewTag(e.target.value)}
@@ -180,6 +187,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
                                 className="flex-1 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                                 placeholder="添加新标签"
                                 disabled={isSaving}
+                                aria-label="添加新标签"
                             />
                             <button
                                 type="button"

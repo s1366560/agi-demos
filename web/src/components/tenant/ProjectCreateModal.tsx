@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Folder, AlertCircle, Settings, Brain, Users } from 'lucide-react';
-import { useProjectStore } from '../stores/project';
-import { useTenantStore } from '../stores/tenant';
+import { useProjectStore } from '../../stores/project';
+import { useTenantStore } from '../../stores/tenant';
 
 interface ProjectCreateModalProps {
   isOpen: boolean;
@@ -104,6 +104,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
           <button
             onClick={handleClose}
             className="p-1 text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 rounded-md transition-colors"
+            aria-label="关闭创建项目弹窗"
           >
             <X className="h-5 w-5" />
           </button>
@@ -156,8 +157,8 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto" id="project-form">
           <div className="p-6 space-y-4">
             {error && (
-              <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md">
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md" role="alert" aria-live="assertive">
+                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
                 <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
               </div>
             )}
@@ -165,42 +166,47 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             {activeTab === 'basic' && (
               <>
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="project-create-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     项目名称 *
                   </label>
                   <input
                     type="text"
-                    id="name"
+                    id="project-create-name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入项目名称"
                     required
                     disabled={isLoading}
+                    aria-required="true"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="project-create-description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     项目描述
                   </label>
                   <textarea
-                    id="description"
+                    id="project-create-description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="描述这个项目的目标和用途"
                     rows={3}
                     disabled={isLoading}
+                    aria-describedby="project-create-description-help"
                   />
+                  <span id="project-create-description-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    可选：描述项目的目标和用途
+                  </span>
                 </div>
 
                 <div>
-                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="project-create-status" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     项目状态
                   </label>
                   <select
-                    id="status"
+                    id="project-create-status"
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
@@ -218,12 +224,12 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="max_episodes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="project-create-max-episodes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       最大记忆片段数
                     </label>
                     <input
                       type="number"
-                      id="max_episodes"
+                      id="project-create-max-episodes"
                       value={formData.memory_rules.max_episodes}
                       onChange={(e) => setFormData({
                         ...formData,
@@ -236,16 +242,20 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       min="100"
                       max="10000"
                       disabled={isLoading}
+                      aria-describedby="project-create-max-episodes-help"
                     />
+                    <span id="project-create-max-episodes-help" className="text-xs text-gray-500 dark:text-slate-400">
+                      范围：100 - 10000
+                    </span>
                   </div>
 
                   <div>
-                    <label htmlFor="retention_days" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="project-create-retention-days" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       保留天数
                     </label>
                     <input
                       type="number"
-                      id="retention_days"
+                      id="project-create-retention-days"
                       value={formData.memory_rules.retention_days}
                       onChange={(e) => setFormData({
                         ...formData,
@@ -258,17 +268,21 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       min="1"
                       max="365"
                       disabled={isLoading}
+                      aria-describedby="project-create-retention-days-help"
                     />
+                    <span id="project-create-retention-days-help" className="text-xs text-gray-500 dark:text-slate-400">
+                      范围：1 - 365 天
+                    </span>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="refresh_interval" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="project-create-refresh-interval" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     自动刷新间隔（小时）
                   </label>
                   <input
                     type="number"
-                    id="refresh_interval"
+                    id="project-create-refresh-interval"
                     value={formData.memory_rules.refresh_interval}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -281,13 +295,17 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     min="1"
                     max="168"
                     disabled={isLoading}
+                    aria-describedby="project-create-refresh-interval-help"
                   />
+                  <span id="project-create-refresh-interval-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    范围：1 - 168 小时
+                  </span>
                 </div>
 
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    id="auto_refresh"
+                    id="project-create-auto-refresh"
                     checked={formData.memory_rules.auto_refresh}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -299,7 +317,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                     disabled={isLoading}
                   />
-                  <label htmlFor="auto_refresh" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                  <label htmlFor="project-create-auto-refresh" className="text-sm font-medium text-gray-700 dark:text-slate-300">
                     启用自动刷新
                   </label>
                 </div>
@@ -310,12 +328,12 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="max_nodes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="project-create-max-nodes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       最大节点数
                     </label>
                     <input
                       type="number"
-                      id="max_nodes"
+                      id="project-create-max-nodes"
                       value={formData.graph_config.max_nodes}
                       onChange={(e) => setFormData({
                         ...formData,
@@ -328,16 +346,20 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       min="100"
                       max="50000"
                       disabled={isLoading}
+                      aria-describedby="project-create-max-nodes-help"
                     />
+                    <span id="project-create-max-nodes-help" className="text-xs text-gray-500 dark:text-slate-400">
+                      范围：100 - 50000
+                    </span>
                   </div>
 
                   <div>
-                    <label htmlFor="max_edges" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label htmlFor="project-create-max-edges" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                       最大边数
                     </label>
                     <input
                       type="number"
-                      id="max_edges"
+                      id="project-create-max-edges"
                       value={formData.graph_config.max_edges}
                       onChange={(e) => setFormData({
                         ...formData,
@@ -350,17 +372,21 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       min="100"
                       max="100000"
                       disabled={isLoading}
+                      aria-describedby="project-create-max-edges-help"
                     />
+                    <span id="project-create-max-edges-help" className="text-xs text-gray-500 dark:text-slate-400">
+                      范围：100 - 100000
+                    </span>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="similarity_threshold" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label htmlFor="project-create-similarity" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                     相似度阈值
                   </label>
                   <input
                     type="range"
-                    id="similarity_threshold"
+                    id="project-create-similarity"
                     min="0.1"
                     max="1.0"
                     step="0.1"
@@ -374,10 +400,11 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     })}
                     className="w-full"
                     disabled={isLoading}
+                    aria-describedby="project-create-similarity-value"
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 mt-1">
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 mt-1" id="project-create-similarity-value">
                     <span>0.1</span>
-                    <span>{formData.graph_config.similarity_threshold}</span>
+                    <span aria-live="polite">{formData.graph_config.similarity_threshold}</span>
                     <span>1.0</span>
                   </div>
                 </div>
@@ -385,7 +412,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                 <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
-                    id="community_detection"
+                    id="project-create-community-detection"
                     checked={formData.graph_config.community_detection}
                     onChange={(e) => setFormData({
                       ...formData,
@@ -397,7 +424,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded bg-white dark:bg-slate-800"
                     disabled={isLoading}
                   />
-                  <label htmlFor="community_detection" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                  <label htmlFor="project-create-community-detection" className="text-sm font-medium text-gray-700 dark:text-slate-300">
                     启用社区检测
                   </label>
                 </div>

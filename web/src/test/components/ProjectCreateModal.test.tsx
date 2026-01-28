@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { ProjectCreateModal } from '../../components/ProjectCreateModal'
+import { ProjectCreateModal } from '@/components/tenant/ProjectCreateModal'
 import { useProjectStore } from '../../stores/project'
 import { useTenantStore } from '../../stores/tenant'
 

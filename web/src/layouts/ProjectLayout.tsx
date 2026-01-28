@@ -24,9 +24,10 @@ import {
 } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Tooltip } from "antd";
-import { WorkspaceSwitcher } from "../components/WorkspaceSwitcher";
-import { ThemeToggle } from "../components/ThemeToggle";
-import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { WorkspaceSwitcher } from "../components/shared/ui/WorkspaceSwitcher";
+import { ThemeToggle } from "../components/shared/ui/ThemeToggle";
+import { LanguageSwitcher } from "../components/shared/ui/LanguageSwitcher";
+import { RouteErrorBoundary } from "../components/common/RouteErrorBoundary";
 import { useProjectStore } from "../stores/project";
 import { useTenantStore } from "../stores/tenant";
 import { useAuthStore } from "../stores/auth";
@@ -504,7 +505,9 @@ export const ProjectLayout: React.FC = () => {
           }`}
         >
           <div className="max-w-7xl mx-auto">
-            <Outlet />
+            <RouteErrorBoundary context="Project" fallbackPath={`/project/${projectId}`}>
+              <Outlet />
+            </RouteErrorBoundary>
           </div>
         </div>
       </main>

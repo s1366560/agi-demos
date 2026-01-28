@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, Building2, ArrowRight } from 'lucide-react';
-import { AppLayout, NavigationItem } from '../components/AppLayout';
+import { AppLayout, NavigationItem } from '@/components/shared/layouts/AppLayout';
 import { useTenantStore } from '../stores/tenant';
-import { TenantCreateModal } from '../components/TenantCreateModal';
+import { TenantCreateModal } from '@/components/tenant/TenantCreateModal';
 import { Tenant } from '../types/memory';
 
 export const SpaceListPage: React.FC = () => {

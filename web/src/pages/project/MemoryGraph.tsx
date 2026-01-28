@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { CytoscapeGraph } from '../../components/CytoscapeGraph'
+import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph'
 
 export const MemoryGraph: React.FC = () => {
     const { t } = useTranslation()

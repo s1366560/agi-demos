@@ -13,34 +13,16 @@
  * - Only tenant admins can modify config
  */
 
-import axios, { type AxiosError } from 'axios';
+import { httpClient } from './client/httpClient';
+import { ApiError } from './client/ApiError';
 import type {
   TenantAgentConfig,
   TenantAgentConfigService as ITenantAgentConfigService,
   UpdateTenantAgentConfigRequest,
 } from '@/types/agent';
 
-// Base API URL from environment
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-
-// Create axios instance for agent config API with custom baseURL
-// Note: This service uses a custom baseURL (/api/v1/agent) so it creates
-// its own instance. The centralized client is still used for standard endpoints.
-const agentConfigApi = axios.create({
-  baseURL: `${API_BASE_URL}/agent`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add auth token interceptor
-agentConfigApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Use centralized HTTP client
+const api = httpClient;
 
 /**
  * Error class for tenant agent config API errors
@@ -73,10 +55,9 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
    */
   async getConfig(tenantId: string): Promise<TenantAgentConfig> {
     try {
-      const response = await agentConfigApi.get<TenantAgentConfig>('/config', {
+      return await api.get<TenantAgentConfig>('/agent/config', {
         params: { tenant_id: tenantId },
       });
-      return response.data;
     } catch (error) {
       this._handleError(error, 'Failed to fetch tenant agent configuration');
     }
@@ -100,14 +81,13 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
     request: UpdateTenantAgentConfigRequest
   ): Promise<TenantAgentConfig> {
     try {
-      const response = await agentConfigApi.put<TenantAgentConfig>(
-        '/config',
+      return await api.put<TenantAgentConfig>(
+        '/agent/config',
         request,
         {
           params: { tenant_id: tenantId },
         }
       );
-      return response.data;
     } catch (error) {
       this._handleError(error, 'Failed to update tenant agent configuration');
     }
@@ -141,10 +121,9 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
    * Handle API errors
    */
   private _handleError(error: unknown, defaultMessage: string): never {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<{ detail?: string }>;
-      const statusCode = axiosError.response?.status;
-      const detail = axiosError.response?.data?.detail;
+    if (error instanceof ApiError) {
+      const statusCode = error.statusCode;
+      const detail = error.details;
 
       // Handle specific error codes
       if (statusCode === 403) {
@@ -173,13 +152,13 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
 
       // Generic error with detail if available
       throw new TenantAgentConfigError(
-        detail || defaultMessage,
+        error.getUserMessage(),
         statusCode,
-        axiosError.response?.data
+        detail
       );
     }
 
-    // Non-Axios errors
+    // Non-ApiError errors
     throw new TenantAgentConfigError(defaultMessage, undefined, error);
   }
 }

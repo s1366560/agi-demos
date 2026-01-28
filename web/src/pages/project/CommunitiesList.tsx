@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { logger } from '../../utils/logger'
 import { graphService } from '../../services/graphService'
 import { TaskList } from '../../components/tasks/TaskList'
 import { createApiUrl } from '../../services/client/urlUtils'
+import { VirtualGrid } from '../../components/common'
 
 interface Community {
     uuid: string
@@ -54,7 +56,7 @@ export const CommunitiesList: React.FC = () => {
         setLoading(true)
         setError(null)
         try {
-            console.log('Loading communities...', { projectId, limit, offset: page * limit })
+            logger.debug('Loading communities...', { projectId, limit, offset: page * limit })
 
             const result = await graphService.listCommunities({
                 tenant_id: undefined,
@@ -64,7 +66,7 @@ export const CommunitiesList: React.FC = () => {
                 offset: page * limit,
             })
 
-            console.log('Communities loaded:', {
+            logger.debug('Communities loaded:', {
                 count: result.communities.length,
                 total: result.total,
                 communities: result.communities
@@ -73,8 +75,8 @@ export const CommunitiesList: React.FC = () => {
             setCommunities(result.communities)
             setTotalCount(result.total || result.communities.length)
         } catch (err: any) {
-            console.error('Failed to load communities:', err)
-            console.error('Error details:', {
+            logger.error('Failed to load communities:', err)
+            logger.error('Error details:', {
                 message: err.message,
                 response: err.response?.data,
                 status: err.response?.status
@@ -90,34 +92,34 @@ export const CommunitiesList: React.FC = () => {
             const result = await graphService.getCommunityMembers(communityUuid, 100)
             setMembers(result.members)
         } catch (err) {
-            console.error('Failed to load members:', err)
+            logger.error('Failed to load members:', err)
         }
     }
 
     const streamTaskStatus = useCallback((taskId: string) => {
-        console.log(`📡 Connecting to SSE stream for task: ${taskId}`)
+        logger.debug(`📡 Connecting to SSE stream for task: ${taskId}`)
 
         // Use centralized URL utility for SSE endpoint
         const streamUrl = createApiUrl(`/tasks/${taskId}/stream`)
-        console.log(`📡 Connecting to SSE: ${streamUrl}`)
+        logger.debug(`📡 Connecting to SSE: ${streamUrl}`)
 
         const eventSource = new EventSource(streamUrl)
 
         // Log connection open
         eventSource.onopen = () => {
-            console.log('✅ SSE connection opened successfully')
+            logger.debug('✅ SSE connection opened successfully')
         }
 
         // Log all messages for debugging
         eventSource.onmessage = (e) => {
-            console.log('📨 SSE message received (no event type):', e.data)
+            logger.debug('📨 SSE message received (no event type):', e.data)
         }
 
         // Handle progress updates
         eventSource.addEventListener('progress', (e: MessageEvent) => {
             try {
                 const data = JSON.parse(e.data)
-                console.log(`📊 Task progress:`, data)
+                logger.debug(`📊 Task progress:`, data)
 
                 // Map backend status to frontend status
                 // Backend sends: "processing", "completed", "failed"
@@ -141,7 +143,7 @@ export const CommunitiesList: React.FC = () => {
                     error: data.error
                 })
             } catch (err) {
-                console.error('Failed to parse progress event:', err)
+                logger.error('Failed to parse progress event:', err)
             }
         })
 
@@ -149,7 +151,7 @@ export const CommunitiesList: React.FC = () => {
         eventSource.addEventListener('completed', (e: MessageEvent) => {
             try {
                 const task = JSON.parse(e.data)
-                console.log(`✅ Task completed:`, task)
+                logger.debug(`✅ Task completed:`, task)
 
                 setCurrentTask({
                     task_id: task.id,
@@ -171,9 +173,9 @@ export const CommunitiesList: React.FC = () => {
                 loadCommunities().then(() => {
                     const communitiesCount = task.result?.communities_count || 0
                     const edgesCount = task.result?.edges_count || 0
-                    console.log(`✅ Rebuild completed: ${communitiesCount} communities, ${edgesCount} edges`)
+                    logger.debug(`✅ Rebuild completed: ${communitiesCount} communities, ${edgesCount} edges`)
                 }).catch((loadErr: any) => {
-                    console.error('Failed to reload communities:', loadErr)
+                    logger.error('Failed to reload communities:', loadErr)
                     setError('Communities rebuilt but failed to refresh the list. Please manually refresh.')
                 })
 
@@ -182,7 +184,7 @@ export const CommunitiesList: React.FC = () => {
                     setCurrentTask(null)
                 }, 5000)
             } catch (err) {
-                console.error('Failed to parse completed event:', err)
+                logger.error('Failed to parse completed event:', err)
             }
         })
 
@@ -190,7 +192,7 @@ export const CommunitiesList: React.FC = () => {
         eventSource.addEventListener('failed', (e: MessageEvent) => {
             try {
                 const task = JSON.parse(e.data)
-                console.error(`❌ Task failed:`, task)
+                logger.error(`❌ Task failed:`, task)
 
                 setCurrentTask({
                     task_id: task.id,
@@ -209,18 +211,18 @@ export const CommunitiesList: React.FC = () => {
                 setError(`Rebuild failed: ${task.error || 'Unknown error'}`)
                 eventSource.close()
             } catch (err) {
-                console.error('Failed to parse failed event:', err)
+                logger.error('Failed to parse failed event:', err)
             }
         })
 
         // Handle connection errors
         eventSource.onerror = (e) => {
-            console.error('❌ SSE connection error:', e)
-            console.error('   ReadyState:', eventSource.readyState)
+            logger.error('❌ SSE connection error:', e)
+            logger.error('   ReadyState:', eventSource.readyState)
 
             // EventSource.CLOSED = 2, CONNECTING = 0, OPEN = 1
             if (eventSource.readyState === 2) {
-                console.error('   Connection CLOSED - check for CORS errors')
+                logger.error('   Connection CLOSED - check for CORS errors')
                 eventSource.close()
                 setRebuilding(false)
                 setError('Failed to connect to task updates. Please refresh the page.')
@@ -231,12 +233,12 @@ export const CommunitiesList: React.FC = () => {
         eventSource.addEventListener('error', (e: MessageEvent) => {
             try {
                 const error = JSON.parse(e.data)
-                console.error(`❌ Server error event:`, error)
+                logger.error(`❌ Server error event:`, error)
                 setRebuilding(false)
                 setError(error.error || error.message || 'Unknown error')
                 eventSource.close()
             } catch (err) {
-                console.error('❌ Failed to parse error event:', err)
+                logger.error('❌ Failed to parse error event:', err)
             }
         })
 
@@ -253,27 +255,27 @@ export const CommunitiesList: React.FC = () => {
         setError(null)
 
         try {
-            console.log(`🔄 Starting community rebuild for project: ${projectId}`)
+            logger.debug(`🔄 Starting community rebuild for project: ${projectId}`)
 
             // Start background rebuild with project_id
             const result = await graphService.rebuildCommunities(true, projectId) // background=true, projectId from URL
 
-            console.log(`✅ Rebuild task submitted:`, result)
+            logger.debug(`✅ Rebuild task submitted:`, result)
 
             if (result.task_id) {
                 // Start streaming task status using SSE
-                console.log(`📊 Starting to stream task status for: ${result.task_id}`)
+                logger.debug(`📊 Starting to stream task status for: ${result.task_id}`)
                 streamTaskStatus(result.task_id)
             } else {
                 // Fallback to synchronous mode
-                console.log('⚠️ No task_id returned, assuming synchronous mode')
+                logger.debug('⚠️ No task_id returned, assuming synchronous mode')
                 await loadCommunities()
                 alert(`Success! ${result.message}`)
                 setRebuilding(false)
             }
         } catch (err: any) {
-            console.error('❌ Failed to rebuild communities:', err)
-            console.error('Error details:', {
+            logger.error('❌ Failed to rebuild communities:', err)
+            logger.error('Error details:', {
                 message: err.message,
                 response: err.response?.data,
                 status: err.response?.status
@@ -293,7 +295,7 @@ export const CommunitiesList: React.FC = () => {
             setRebuilding(false)
             alert('Task cancelled')
         } catch (err: any) {
-            console.error('Failed to cancel task:', err)
+            logger.error('Failed to cancel task:', err)
             setError('Failed to cancel task')
         }
     }
@@ -495,20 +497,13 @@ export const CommunitiesList: React.FC = () => {
                             </span>
                             <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.loading')}</p>
                         </div>
-                    ) : communities.length === 0 ? (
-                        <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <span className="material-symbols-outlined text-4xl text-slate-400">groups</span>
-                            <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.title')}</p>
-                            <p className="text-sm text-slate-400 mt-1">
-                                {t('project.graph.communities.empty.desc')}
-                            </p>
-                        </div>
                     ) : (
                         <>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {communities.map((community, index) => (
+                            {/* Virtual Grid for community cards */}
+                            <VirtualGrid
+                                items={communities}
+                                renderItem={(community: Community, index: number) => (
                                     <div
-                                        key={community.uuid}
                                         onClick={() => handleCommunityClick(community)}
                                         className={`bg-white dark:bg-slate-800 rounded-lg border p-5 cursor-pointer transition-all hover:shadow-md ${selectedCommunity?.uuid === community.uuid
                                             ? 'border-purple-500 shadow-md ring-2 ring-purple-500 ring-opacity-20'
@@ -537,8 +532,21 @@ export const CommunitiesList: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
-                                ))}
-                            </div>
+                                )}
+                                estimateSize={() => 180} // Estimated height for each community card
+                                containerHeight={600} // Fixed height for scroll container
+                                overscan={3}
+                                columns="responsive"
+                                emptyComponent={
+                                    <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                                        <span className="material-symbols-outlined text-4xl text-slate-400">groups</span>
+                                        <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.title')}</p>
+                                        <p className="text-sm text-slate-400 mt-1">
+                                            {t('project.graph.communities.empty.desc')}
+                                        </p>
+                                    </div>
+                                }
+                            />
 
                             {/* Pagination */}
                             {totalCount > limit && (

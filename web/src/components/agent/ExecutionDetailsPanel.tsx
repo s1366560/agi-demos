@@ -1,15 +1,41 @@
 /**
- * ExecutionDetailsPanel - Multi-view execution details panel
+ * ExecutionDetailsPanel Component - Multi-view execution details panel
  *
  * Integrates new visualization components with backward-compatible ThinkingChain.
- * Provides tab switching between:
- * - thinking: Original ThinkingChain (default for backward compatibility)
- * - activity: Atomic-level ActivityTimeline
- * - tools: ToolCallVisualization with Grid/Timeline/Flow modes
- * - tokens: TokenUsageChart
+ * Provides tab switching between different views of agent execution data.
  *
- * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
- * Only re-renders when message, isStreaming, or defaultView change.
+ * @component
+ *
+ * @features
+ * - Multiple view modes: Thinking, Activity, Tools, Tokens
+ * - Automatic view availability detection
+ * - Backward compatible with original ThinkingChain
+ * - Memoized data transformations for performance
+ * - Compact mode support for smaller displays
+ * - Auto-switches to available view when current is not available
+ *
+ * @views
+ * - **thinking**: Original ThinkingChain with thoughts and tool calls
+ * - **activity**: Atomic-level ActivityTimeline with time visualization
+ * - **tools**: ToolCallVisualization with Grid/Timeline/Flow modes
+ * - **tokens**: TokenUsageChart with cost breakdown
+ *
+ * @example
+ * ```tsx
+ * import { ExecutionDetailsPanel } from '@/components/agent/ExecutionDetailsPanel'
+ *
+ * function PlanPanel() {
+ *   const { currentMessage } = useAgentV3Store()
+ *
+ *   return (
+ *     <ExecutionDetailsPanel
+ *       message={currentMessage}
+ *       isStreaming={true}
+ *       defaultView="activity"
+ *     />
+ *   )
+ * }
+ * ```
  */
 
 import React, { useMemo, useState, memo, useCallback } from "react";
@@ -40,18 +66,22 @@ import {
 } from "../../utils/agentDataAdapters";
 import type { Message } from "../../types/agent";
 
+/** Available view types for the execution details panel */
 export type ViewType = "thinking" | "activity" | "tools" | "tokens";
 
+/**
+ * Props for ExecutionDetailsPanel component
+ */
 export interface ExecutionDetailsPanelProps {
-  /** Message data from store */
+  /** Message data from store containing execution metadata */
   message: Message;
   /** Whether the message is currently streaming */
   isStreaming?: boolean;
-  /** Compact mode for smaller displays */
+  /** Compact mode for smaller displays (reduced padding, smaller text) */
   compact?: boolean;
-  /** Default view to show */
+  /** Default view to show on first render */
   defaultView?: ViewType;
-  /** Show view selector */
+  /** Whether to show the view selector tabs */
   showViewSelector?: boolean;
 }
 
@@ -59,15 +89,15 @@ export interface ExecutionDetailsPanelProps {
  * View option configuration
  */
 interface ViewOption {
+  /** View type identifier */
   value: ViewType;
+  /** Display label for the view */
   label: string;
+  /** Icon component for the view tab */
   icon: React.ReactNode;
+  /** Whether this view has data to display */
   available: boolean;
 }
-
-/**
- * ExecutionDetailsPanel component
- */
 export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(({
   message,
   isStreaming = false,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { EditUserModal } from '../../components/EditUserModal'
+import { EditUserModal } from '@/components/tenant/EditUserModal'
 
 describe('EditUserModal - Component Tests', () => {
     const mockUser = {

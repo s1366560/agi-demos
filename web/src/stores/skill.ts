@@ -6,6 +6,7 @@
  */
 
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 import { skillAPI, tenantSkillConfigAPI } from "../services/skillService";
 import type {
   SkillResponse,
@@ -130,7 +131,8 @@ const initialState = {
 // STORE CREATION
 // ============================================================================
 
-export const useSkillStore = create<SkillState>((set, get) => ({
+export const useSkillStore = create<SkillState>()(
+  devtools((set, get) => ({
   ...initialState,
 
   // ========== Skill CRUD ==========
@@ -398,7 +400,13 @@ export const useSkillStore = create<SkillState>((set, get) => ({
   reset: () => {
     set(initialState);
   },
-}));
+}),
+{
+  name: "SkillStore",
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 // ============================================================================
 // SELECTOR HOOKS

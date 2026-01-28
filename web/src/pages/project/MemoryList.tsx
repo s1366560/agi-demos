@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useDebounce } from 'use-debounce'
 import { memoryAPI } from '../../services/api'
 import { Memory } from '../../types/memory'
-import { DeleteConfirmationModal } from '../../components/DeleteConfirmationModal'
+import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal'
 import { subscribeToTask, TaskStatus } from '../../hooks/useTaskSSE'
 
 // Track task progress for each memory

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Folder, Plus, Settings, Trash2, AlertCircle, Search } from 'lucide-react';
-import { useProjectStore } from '../stores/project';
-import { useTenantStore } from '../stores/tenant';
-import { Project } from '../types/memory';
+import { useProjectStore } from '../../stores/project';
+import { useTenantStore } from '../../stores/tenant';
+import { Project } from '../../types/memory';
 import { ProjectCreateModal } from './ProjectCreateModal';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
-import { projectService } from '../services/projectService';
+import { projectService } from '../../services/projectService';
 
 interface ProjectManagerProps {
   onProjectSelect?: (project: Project) => void;

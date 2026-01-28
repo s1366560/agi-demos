@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
-import { useNotificationStore } from '../stores/notification';
+import { useNotificationStore } from '@/stores/notification';
 import { useNavigate } from 'react-router-dom';
 
 export const NotificationPanel: React.FC = () => {

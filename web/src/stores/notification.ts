@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
 interface Notification {
   id: string;
@@ -27,7 +28,8 @@ interface NotificationsResponse {
   notifications: Notification[];
 }
 
-export const useNotificationStore = create<NotificationState>((set, get) => ({
+export const useNotificationStore = create<NotificationState>()(
+  devtools((set, get) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: false,
@@ -99,4 +101,10 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       console.error('Failed to delete notification:', error);
     }
   },
-}));
+}),
+{
+  name: 'NotificationStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);

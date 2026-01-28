@@ -385,7 +385,7 @@ describe('retryWithBackoff', () => {
       jitter: false,
     };
 
-    const startTime = Date.now();
+    // const startTime = Date.now();
     const promise = retryWithBackoff(fn, config);
 
     // First attempt (fails)

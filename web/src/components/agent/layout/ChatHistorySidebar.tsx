@@ -102,6 +102,7 @@ export function ChatHistorySidebar({
         {/* New Chat Button */}
         <button
           onClick={onNewChat}
+          aria-label="新建对话"
           className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-primary/20 text-sm font-semibold"
         >
           <span className="material-symbols-outlined text-xl">add_comment</span>
@@ -110,7 +111,10 @@ export function ChatHistorySidebar({
 
         {/* Search Input */}
         <div className="relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg">
+          <span
+            className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-lg"
+            aria-hidden="true"
+          >
             search
           </span>
           <input
@@ -118,6 +122,7 @@ export function ChatHistorySidebar({
             value={localSearch}
             onChange={handleSearchChange}
             placeholder="Search history..."
+            aria-label="搜索对话历史"
             className="w-full bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-all placeholder:text-text-muted text-slate-900 dark:text-white shadow-md"
           />
         </div>
@@ -134,6 +139,9 @@ export function ChatHistorySidebar({
                 <button
                   key={conversation.id}
                   onClick={() => onSelectConversation?.(conversation.id)}
+                  aria-label={conversation.title}
+                  aria-pressed={selectedConversationId === conversation.id}
+                  aria-current={selectedConversationId === conversation.id ? 'true' : undefined}
                   className={`w-full text-left p-3 rounded-xl cursor-pointer transition-colors group ${
                     selectedConversationId === conversation.id
                       ? "bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark ring-1 ring-primary/30"
@@ -183,6 +191,8 @@ export function ChatHistorySidebar({
                 <button
                   key={conversation.id}
                   onClick={() => onSelectConversation?.(conversation.id)}
+                  aria-label={conversation.title}
+                  aria-pressed={selectedConversationId === conversation.id}
                   className="w-full text-left p-3 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl cursor-pointer transition-colors group"
                 >
                   <div className="flex justify-between items-start mb-1">

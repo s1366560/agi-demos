@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryDetailModal } from '../../components/MemoryDetailModal'
+import { MemoryDetailModal } from '@/components/project/MemoryDetailModal'
 
 describe('MemoryDetailModal', () => {
     const mockOnClose = vi.fn()

@@ -55,9 +55,10 @@ export function TopNavigation({
         </h1>
 
         {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 ml-6">
+        <nav className="flex items-center gap-1 ml-6" aria-label="主导航">
           <button
             onClick={() => onTabChange?.('dashboard')}
+            aria-pressed={activeTab === 'dashboard'}
             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
               activeTab === 'dashboard'
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
@@ -68,6 +69,7 @@ export function TopNavigation({
           </button>
           <button
             onClick={() => onTabChange?.('logs')}
+            aria-pressed={activeTab === 'logs'}
             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
               activeTab === 'logs'
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
@@ -100,18 +102,27 @@ export function TopNavigation({
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           {/* Insights Button */}
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors">
+          <button
+            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors"
+            aria-label="查看洞察"
+          >
             <MaterialIcon name="insights" size={20} />
             <span className="text-sm font-medium">Insights</span>
           </button>
 
           {/* Cloud Sync Button */}
-          <button className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors">
+          <button
+            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors"
+            aria-label="云同步"
+          >
             <MaterialIcon name="cloud_sync" size={20} />
           </button>
 
           {/* Notifications */}
-          <button className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+          <button
+            className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
+            aria-label={notificationCount > 0 ? `通知 (${notificationCount} 条未读)` : "通知"}
+          >
             <MaterialIcon name="notifications" size={20} />
             {notificationCount > 0 && (
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-surface-dark" />
@@ -122,6 +133,7 @@ export function TopNavigation({
           <button
             onClick={onSettingsClick}
             className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
+            aria-label="设置"
           >
             <MaterialIcon name="settings" size={20} />
           </button>

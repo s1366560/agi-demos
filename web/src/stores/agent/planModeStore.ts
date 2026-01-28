@@ -20,6 +20,7 @@
  */
 
 import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { planService } from '../../services/planService';
 import type {
   EnterPlanModeRequest,
@@ -76,7 +77,8 @@ export const initialState = {
  *
  * Zustand store for managing Plan Mode state.
  */
-export const usePlanModeStore = create<PlanModeState>((set) => ({
+export const usePlanModeStore = create<PlanModeState>()(
+  devtools((set) => ({
   ...initialState,
 
   /**
@@ -275,7 +277,13 @@ export const usePlanModeStore = create<PlanModeState>((set) => ({
   reset: (): void => {
     set(initialState);
   },
-}));
+}),
+{
+  name: 'PlanModeStore',
+  enabled: import.meta.env.DEV,
+}
+)
+);
 
 /**
  * Derived selector: Check if currently in plan mode

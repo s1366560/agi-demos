@@ -11,8 +11,101 @@
  * 4. Use apiFetch for fetch-based requests (SSE, etc.)
  */
 
-import { parseResponseError, ApiError, ApiErrorType } from './ApiError';
-import { retryWithBackoff, type RetryConfig } from './retry';
+import { parseResponseError } from './ApiError';
+
+/**
+ * Retry configuration for apiFetch
+ *
+ * Controls retry behavior for fetch-based requests.
+ */
+export interface FetchRetryConfig {
+  /** Maximum number of retry attempts (default: 2) */
+  maxRetries?: number;
+  /** Initial delay in milliseconds (default: 1000) */
+  initialDelay?: number;
+  /** Maximum delay between retries (default: 10000) */
+  maxDelay?: number;
+  /** Backoff multiplier (default: 2) */
+  backoffMultiplier?: number;
+  /** Whether to add jitter (default: true) */
+  jitter?: boolean;
+  /** Custom function to determine if an error is retryable */
+  isRetryable?: (error: unknown) => boolean;
+}
+
+const DEFAULT_FETCH_RETRY: Required<Omit<FetchRetryConfig, 'isRetryable'>> = {
+  maxRetries: 2,
+  initialDelay: 1000,
+  maxDelay: 10000,
+  backoffMultiplier: 2,
+  jitter: true,
+};
+
+/**
+ * Check if a fetch error is retryable
+ * Only retry network errors and 5xx status codes
+ */
+function isFetchErrorRetryable(error: unknown): boolean {
+  // Network errors (TypeError from fetch)
+  if (error instanceof TypeError) {
+    return true;
+  }
+  // HTTP 5xx responses
+  if (error instanceof Response && error.status >= 500) {
+    return true;
+  }
+  // AbortError (user cancelled) - don't retry
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Delay with jitter
+ */
+function delayWithJitter(ms: number): Promise<void> {
+  // Add jitter: delay * (0.5 + Math.random() * 0.5)
+  const jittered = ms * (0.5 + Math.random() * 0.5);
+  return new Promise((resolve) => setTimeout(resolve, jittered));
+}
+
+/**
+ * Retry fetch with exponential backoff
+ */
+async function fetchWithRetry<T>(
+  fn: () => Promise<T>,
+  config: FetchRetryConfig = {}
+): Promise<T> {
+  const {
+    maxRetries = DEFAULT_FETCH_RETRY.maxRetries,
+    initialDelay = DEFAULT_FETCH_RETRY.initialDelay,
+    maxDelay = DEFAULT_FETCH_RETRY.maxDelay,
+    backoffMultiplier = DEFAULT_FETCH_RETRY.backoffMultiplier,
+    isRetryable = isFetchErrorRetryable,
+  } = config;
+
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries && isRetryable(error)) {
+        const delay = Math.min(
+          initialDelay * Math.pow(backoffMultiplier, attempt),
+          maxDelay
+        );
+        await delayWithJitter(delay);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError;
+}
 
 /**
  * Get the base API URL from environment or use relative path
@@ -126,9 +219,9 @@ export function createWebSocketUrl(
 /**
  * Fetch request options with retry support
  */
-interface FetchOptions extends RequestInit {
+export interface FetchOptions extends RequestInit {
   /** Enable retry for this request (default: false) */
-  retry?: RetryConfig | boolean;
+  retry?: FetchRetryConfig | boolean;
 }
 
 /**
@@ -154,7 +247,7 @@ async function handleResponse(response: Response): Promise<Response> {
 /**
  * Wrap fetch with retry logic if enabled
  */
-async function fetchWithRetry(
+async function fetchWithRetryWrapper(
   input: RequestInfo | URL,
   init?: FetchOptions
 ): Promise<Response> {
@@ -165,23 +258,22 @@ async function fetchWithRetry(
     return fetch(input, init);
   }
 
-  // Build retry config (more conservative for fetch)
-  const retryConfig: RetryConfig =
+  // Build retry config
+  const retryConfig: FetchRetryConfig =
     typeof retryOption === 'boolean'
-      ? { maxRetries: 2, initialDelay: 1000 }
-      : { maxRetries: 2, initialDelay: 1000, ...retryOption };
+      ? {}
+      : retryOption;
 
   // Execute with retry
-  return retryWithBackoff(() => fetch(input, init), retryConfig);
+  return fetchWithRetry(() => fetch(input, init), retryConfig);
 }
 
 export const apiFetch = {
   get: async (url: string, options: FetchOptions = {}): Promise<Response> => {
     const headers = getDefaultHeaders();
-    // Merge headers, with options.headers taking precedence
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetchWithRetry(createApiUrl(url), {
+    const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       headers: mergedHeaders,
     });
@@ -192,7 +284,7 @@ export const apiFetch = {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetchWithRetry(createApiUrl(url), {
+    const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'POST',
       headers: mergedHeaders,
@@ -205,7 +297,7 @@ export const apiFetch = {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetchWithRetry(createApiUrl(url), {
+    const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'PUT',
       headers: mergedHeaders,
@@ -218,7 +310,7 @@ export const apiFetch = {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetchWithRetry(createApiUrl(url), {
+    const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'PATCH',
       headers: mergedHeaders,
@@ -231,7 +323,7 @@ export const apiFetch = {
     const headers = getDefaultHeaders();
     const mergedHeaders = { ...headers, ...options.headers };
 
-    const response = await fetchWithRetry(createApiUrl(url), {
+    const response = await fetchWithRetryWrapper(createApiUrl(url), {
       ...options,
       method: 'DELETE',
       headers: mergedHeaders,
@@ -246,8 +338,3 @@ export const apiFetch = {
  * Services can import ApiError from either urlUtils or ApiError.
  */
 export { ApiError, ApiErrorType } from './ApiError';
-
-/**
- * Export retry types for convenience
- */
-export type { RetryConfig };
