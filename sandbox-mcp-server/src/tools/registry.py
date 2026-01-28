@@ -23,6 +23,8 @@ from src.tools.file_tools import (
     create_edit_tool,
     create_glob_tool,
     create_grep_tool,
+    create_list_tool,
+    create_patch_tool,
     create_read_tool,
     create_write_tool,
 )
@@ -112,6 +114,8 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_edit_tool())
     registry.register(create_glob_tool())
     registry.register(create_grep_tool())
+    registry.register(create_list_tool())
+    registry.register(create_patch_tool())
 
     # Register bash tool
     registry.register(create_bash_tool())

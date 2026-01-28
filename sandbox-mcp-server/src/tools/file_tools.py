@@ -602,3 +602,432 @@ def create_grep_tool() -> MCPTool:
         },
         handler=grep_files,
     )
+
+
+# =============================================================================
+# LIST TOOL
+# =============================================================================
+
+
+async def list_directory(
+    path: str = ".",
+    recursive: bool = False,
+    include_hidden: bool = False,
+    detailed: bool = False,
+    _workspace_dir: str = "/workspace",
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    List directory contents.
+
+    Args:
+        path: Path to list (default: current directory)
+        recursive: Whether to list recursively
+        include_hidden: Whether to include hidden files/directories
+        detailed: Whether to show detailed info (permissions, size, etc.)
+        _workspace_dir: Workspace directory
+
+    Returns:
+        Formatted directory listing
+    """
+    try:
+        resolved = _resolve_path(path, _workspace_dir)
+
+        if not resolved.exists():
+            return {
+                "content": [{"type": "text", "text": f"Error: Path not found: {path}"}],
+                "isError": True,
+            }
+
+        if resolved.is_file():
+            # Single file - return file info
+            stat = resolved.stat()
+            size_str = _format_size(stat.st_size)
+            mtime = _format_mtime(stat.st_mtime)
+
+            return {
+                "content": [{"type": "text", "text": f"📄 {resolved.name} ({size_str}, {mtime})"}],
+                "isError": False,
+            }
+
+        # It's a directory - list contents
+        entries = []
+
+        if recursive:
+            # Recursive listing using rglob
+            pattern = "**/*" if include_hidden else "*"
+            items = sorted(resolved.rglob(pattern), key=lambda p: (not p.name.startswith("."), p.name.lower()))
+        else:
+            # Non-recursive
+            items = sorted(
+                resolved.iterdir(),
+                key=lambda p: (not p.name.startswith("."), p.name.lower()),
+            )
+
+        if not items:
+            return {
+                "content": [{"type": "text", "text": f"📁 Empty directory: {path}"}],
+                "isError": False,
+            }
+
+        for item in items:
+            try:
+                # Skip hidden files if not requested
+                if not include_hidden and item.name.startswith("."):
+                    continue
+
+                stat = item.stat()
+                is_dir = item.is_dir()
+
+                if is_dir:
+                    icon = "📁"
+                    name = item.name + "/"
+                    size_str = "-"
+                    mtime = _format_mtime(stat.st_mtime)
+                else:
+                    icon = "📄"
+                    name = item.name
+                    size_str = _format_size(stat.st_size)
+                    mtime = _format_mtime(stat.st_mtime)
+
+                if detailed:
+                    # Add permissions
+                    perms = stat.st_mode
+                    perm_str = _format_permissions(perms)
+                    entries.append(f"{icon} {perm_str} {size_str:>8} {mtime} {name}")
+                else:
+                    entries.append(f"{icon} {name}")
+
+            except Exception as e:
+                logger.debug(f"Error listing item: {e}")
+
+        if not entries:
+            return {
+                "content": [{"type": "text", "text": f"📁 Empty directory: {path}"}],
+                "isError": False,
+            }
+
+        header = f"📁 Listing: {path}"
+        if recursive:
+            header += " (recursive)"
+        if include_hidden:
+            header += " (including hidden)"
+
+        result = f"{header}\n" + "\n".join(entries)
+
+        if recursive and len(entries) > 50:
+            result += f"\n... ({len(entries)} total entries)"
+
+        return {
+            "content": [{"type": "text", "text": result}],
+            "isError": False,
+            "metadata": {"total_entries": len(entries)},
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing directory: {e}")
+        return {
+            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "isError": True,
+        }
+
+
+def _format_size(size: int) -> str:
+    """Format file size in human-readable format."""
+    for unit, threshold in [("B", 1024), ("KB", 1024**2), ("MB", 1024**3), ("GB", 1024**4)]:
+        if size < threshold:
+            return f"{size}{unit}"
+        size /= threshold
+    return f"{size:.1f}GB"
+
+
+def _format_mtime(mtime: float) -> str:
+    """Format modification time."""
+    from datetime import datetime
+
+    dt = datetime.fromtimestamp(mtime)
+    return dt.strftime("%Y-%m-%d %H:%M")
+
+
+def _format_permissions(mode: int) -> str:
+    """Format file permissions (ls -l style)."""
+    user_r = "r" if (mode & 0o400) else "-"
+    user_w = "w" if (mode & 0o200) else "-"
+    user_x = "x" if (mode & 0o100) else "-"
+    return f"{user_r}{user_w}{user_x}"
+
+
+def create_list_tool() -> MCPTool:
+    """Create the list directory tool."""
+    return MCPTool(
+        name="list",
+        description="List directory contents. Supports recursive listing, hidden files, and detailed info.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Path to list (default: current directory)",
+                    "default": ".",
+                },
+                "recursive": {
+                    "type": "boolean",
+                    "description": "List directories recursively",
+                    "default": False,
+                },
+                "include_hidden": {
+                    "type": "boolean",
+                    "description": "Include hidden files and directories",
+                    "default": False,
+                },
+                "detailed": {
+                    "type": "boolean",
+                    "description": "Show detailed info (permissions, size, modification time)",
+                    "default": False,
+                },
+            },
+        },
+        handler=list_directory,
+    )
+
+
+# =============================================================================
+# PATCH TOOL
+# =============================================================================
+
+
+async def apply_patch(
+    file_path: str,
+    patch: str,
+    strip: int = 0,
+    _workspace_dir: str = "/workspace",
+    **kwargs,
+) -> Dict[str, Any]:
+    """
+    Apply a unified diff patch to a file.
+
+    Args:
+        file_path: Path to the file to patch
+        patch: Unified diff format patch content
+        strip: Number of path components to strip from file names in patch
+        _workspace_dir: Workspace directory
+
+    Returns:
+        Result dict with success/error status
+    """
+    try:
+        resolved = _resolve_path(file_path, _workspace_dir)
+
+        if not resolved.exists():
+            return {
+                "content": [{"type": "text", "text": f"Error: File not found: {file_path}"}],
+                "isError": True,
+            }
+
+        if not resolved.is_file():
+            return {
+                "content": [{"type": "text", "text": f"Error: Not a file: {file_path}"}],
+                "isError": True,
+            }
+
+        # Read original file
+        async with aiofiles.open(resolved, "r", encoding="utf-8") as f:
+            original_lines = await f.readlines()
+
+        # Parse patch
+        parsed_hunks = _parse_unified_diff(patch, strip)
+        if not parsed_hunks:
+            return {
+                "content": [{"type": "text", "text": "Error: Invalid patch format or no hunks found"}],
+                "isError": True,
+            }
+
+        # Apply hunks to file content
+        new_lines, failed_hunks = _apply_hunks(original_lines, parsed_hunks)
+
+        if failed_hunks:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Error: Patch application failed. {len(failed_hunks)} hunks could not be applied.",
+                    }
+                ],
+                "isError": True,
+                "metadata": {"failed_hunks": failed_hunks},
+            }
+
+        # Write patched content
+        async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
+            await f.writelines(new_lines)
+
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Successfully applied patch to {file_path} ({len(parsed_hunks)} hunks)",
+                }
+            ],
+            "isError": False,
+            "metadata": {"hunks_applied": len(parsed_hunks)},
+        }
+
+    except ValueError as e:
+        # Path security error
+        return {
+            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "isError": True,
+        }
+    except Exception as e:
+        logger.error(f"Error applying patch: {e}")
+        return {
+            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "isError": True,
+        }
+
+
+def _parse_unified_diff(patch_content: str, strip: int = 0) -> list:
+    """
+    Parse unified diff format patch into hunks.
+
+    Args:
+        patch_content: Unified diff patch content
+        strip: Number of path components to strip
+
+    Returns:
+        List of hunk dictionaries
+    """
+    hunks = []
+    lines = patch_content.split("\n")
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Look for hunk header: @@ -old_start,old_count +new_start,new_count @@
+        if line.startswith("@@"):
+            try:
+                # Parse hunk header
+                header = line
+                # Extract -old_start,old_count +new_start,new_count
+                parts = header.split("@@")[1].strip().split()
+                old_range = parts[0]  # -old_start,old_count
+                new_range = parts[1]  # +new_start,new_count
+
+                old_start = int(old_range.split(",")[0].lstrip("-"))
+                old_count = int(old_range.split(",")[1]) if "," in old_range else 1
+                new_start = int(new_range.split(",")[0].lstrip("+"))
+                new_count = int(new_range.split(",")[1]) if "," in new_range else 1
+
+                # Collect hunk lines
+                i += 1
+                hunk_lines = []
+                while i < len(lines):
+                    hunk_line = lines[i]
+                    if hunk_line.startswith("@@") or hunk_line.startswith("---") or hunk_line.startswith("+++"):
+                        break  # Next hunk or new file
+
+                    if hunk_line.startswith(" ") or hunk_line.startswith("+") or hunk_line.startswith("-"):
+                        hunk_lines.append(hunk_line)
+                    elif hunk_line == "\\":
+                        # Handle "\ No newline at end of file"
+                        pass
+                    elif hunk_line.strip():  # Non-empty line not starting with +/-/space
+                        # Could be context line or garbage, stop
+                        if not hunk_line.startswith(" "):
+                            # Unexpected format
+                            break
+                    i += 1
+
+                hunks.append({
+                    "old_start": old_start - 1,  # Convert to 0-based
+                    "old_count": old_count,
+                    "new_start": new_start - 1,  # Convert to 0-based
+                    "new_count": new_count,
+                    "lines": hunk_lines,
+                })
+                continue
+            except (ValueError, IndexError):
+                # Failed to parse hunk header, skip
+                pass
+
+        i += 1
+
+    return hunks
+
+
+def _apply_hunks(original_lines: list, hunks: list) -> tuple:
+    """
+    Apply hunks to file content.
+
+    Args:
+        original_lines: Original file lines
+        hunks: List of parsed hunks
+
+    Returns:
+        Tuple of (new_lines, failed_hunks)
+    """
+    # Sort hunks by old_start (apply from bottom to top to avoid line number shifts)
+    sorted_hunks = sorted(hunks, key=lambda h: h["old_start"], reverse=True)
+
+    result_lines = original_lines.copy()
+    failed_hunks = []
+
+    for hunk in sorted_hunks:
+        old_start = hunk["old_start"]
+        old_count = hunk["old_count"]
+        hunk_lines = hunk["lines"]
+
+        # Check if old lines match (normalize by stripping newlines for comparison)
+        old_lines_from_hunk = [line[1:].rstrip("\n") for line in hunk_lines if line.startswith(" ") or line.startswith("-")]
+        actual_old_lines = [line.rstrip("\n") for line in result_lines[old_start:old_start + old_count]] if old_start < len(result_lines) else []
+
+        if old_lines_from_hunk != actual_old_lines:
+            failed_hunks.append(hunk)
+            continue
+
+        # Apply hunk: remove old lines, insert new lines
+        # Remove old lines
+        del result_lines[old_start:old_start + old_count]
+
+        # Build new lines to insert
+        new_lines = []
+        for line in hunk_lines:
+            if line.startswith(" ") or line.startswith("+"):
+                new_lines.append(line[1:] + "\n")
+            elif line == "\\ No newline at end of file":
+                pass  # Special marker, no line to add
+
+        # Insert new lines at old_start position
+        for new_line in reversed(new_lines):
+            result_lines.insert(old_start, new_line)
+
+    return result_lines, failed_hunks
+
+
+def create_patch_tool() -> MCPTool:
+    """Create the patch tool."""
+    return MCPTool(
+        name="patch",
+        description="Apply a unified diff patch to a file. Supports multiple hunks and path stripping.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to the file to patch",
+                },
+                "patch": {
+                    "type": "string",
+                    "description": "Unified diff format patch content",
+                },
+                "strip": {
+                    "type": "integer",
+                    "description": "Number of path components to strip from file names in patch (default: 0)",
+                    "default": 0,
+                },
+            },
+            "required": ["file_path", "patch"],
+        },
+        handler=apply_patch,
+    )
