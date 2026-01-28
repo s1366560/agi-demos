@@ -91,6 +91,7 @@ MCP_WORKSPACE=/workspace
 DESKTOP_ENABLED=true
 DESKTOP_RESOLUTION=1280x720
 DESKTOP_PORT=6080
+VNC_SERVER_TYPE=tigervnc  # Options: tigervnc (default), x11vnc
 
 # Terminal Configuration
 TERMINAL_PORT=7681

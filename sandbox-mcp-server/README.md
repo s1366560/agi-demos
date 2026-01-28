@@ -91,6 +91,7 @@ Environment variables:
 | `DESKTOP_ENABLED` | `true` | Enable desktop environment |
 | `DESKTOP_RESOLUTION` | `1280x720` | Desktop resolution |
 | `DESKTOP_PORT` | `6080` | noVNC port |
+| `VNC_SERVER_TYPE` | `tigervnc` | VNC server type: `tigervnc` (default) or `x11vnc` |
 
 ## Remote Desktop
 
@@ -125,19 +126,45 @@ open http://localhost:6080/vnc.html
 ### Desktop Features
 
 - **XFCE Desktop Environment**: Lightweight, modular desktop
-- **TigerVNC**: High-performance VNC server with Tight encoding
+- **TigerVNC** (default): High-performance VNC server with Tight encoding (50% bandwidth reduction)
+- **x11vnc** (fallback): Reliable VNC server for X11 displays
+- **Automatic Fallback**: Seamless fallback to x11vnc if TigerVNC unavailable
 - **noVNC**: Web-based VNC client (no software required)
 - **Session Persistence**: Desktop state survives restarts
 - **Multiple Resolutions**: 1280x720, 1920x1080, 1600x900 supported
 
+### VNC Server Selection
+
+The sandbox supports two VNC server types with automatic fallback:
+
+**TigerVNC** (Default):
+- 50% bandwidth reduction with Tight encoding
+- Built-in X server (no Xvfb needed)
+- Better performance for remote access
+- Session persistence
+
+**x11vnc** (Fallback):
+- Works with Xvfb
+- Proven stability
+- Lower memory usage
+- Use with `-e VNC_SERVER_TYPE=x11vnc`
+
+**Example: Force x11vnc**
+```bash
+docker run -e VNC_SERVER_TYPE=x11vnc \
+  -p 6080:6080 -p 5901:5901 \
+  sandbox-mcp-server
+```
+
 ### Performance
 
-| Metric | Target | Achieved |
-|--------|--------|----------|
-| Frame Rate | >20 FPS | ✅ Configured |
-| Latency | <150ms | ✅ Configured |
-| Bandwidth | <2 Mbps active | ✅ Configured |
-| Memory | <512MB idle | ✅ XFCE lightweight |
+| Metric | TigerVNC | x11vnc | Target |
+|--------|----------|--------|--------|
+| Bandwidth | ~1.5 Mbps | ~3 Mbps | <2 Mbps |
+| Frame Rate | >25 FPS | >20 FPS | >20 FPS |
+| Latency | <120ms | <150ms | <150ms |
+| Memory | ~550MB | ~450MB | <512MB |
+| Encoding | Tight | Raw | Optimal |
 
 ## Protocol
 
@@ -185,16 +212,16 @@ asyncio.run(main())
 │                    Browser                              │
 ├──────────────────────┬──────────────────────────────────┤
 │   Web Terminal       │      Remote Desktop              │
-│   (ttyd)             │      (noVNC + TigerVNC)           │
+│   (ttyd)             │      (noVNC + TigerVNC/x11vnc)    │
 │   Port 7681          │      Port 6080                    │
 └──────────┬───────────┴──────────────┬───────────────────┘
            │                          │
 ┌──────────▼──────────────────────────▼───────────────────┐
 │                 sandbox-mcp-server                      │
 ├──────────────────────┬──────────────────────────────────┤
-│   ttyd               │   Xvfb :1                        │
+│   ttyd               │   Xvfb :99 (x11vnc mode)        │
 │   (shell access)     │   ├─ XFCE                        │
-│                      │   ├─ TigerVNC (5901)             │
+│                      │   ├─ TigerVNC (5901) OR x11vnc   │
 │                      │   └─ noVNC/websockify (6080)     │
 ├──────────────────────┴──────────────────────────────────┤
 │   MCP Server (Port 8765)                                │

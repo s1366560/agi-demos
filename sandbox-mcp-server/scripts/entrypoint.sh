@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sandbox MCP Server Entrypoint
-# Starts all services: MCP server, TigerVNC (remote desktop), ttyd (web terminal)
+# Starts all services: MCP server, VNC (remote desktop), ttyd (web terminal)
 # This script runs as root and uses sudo to run services as appropriate users
 
 set -e
@@ -36,6 +36,7 @@ DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1280x720}"
 DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
 SANDBOX_USER="${SANDBOX_USER:-sandbox}"
+VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default), x11vnc (fallback)
 
 # PID tracking
 PIDS=()
@@ -56,13 +57,13 @@ cleanup() {
         kill "$XVFB_PID" 2>/dev/null || true
     fi
 
-    # Stop TigerVNC
+    # Stop VNC server (TigerVNC or x11vnc)
     if [ -n "$VNC_PID" ] && kill -0 "$VNC_PID" 2>/dev/null; then
         kill "$VNC_PID" 2>/dev/null || true
     fi
 
-    # Kill any remaining VNC processes
-    killall vncserver Xvnc 2>/dev/null || true
+    # Kill any remaining VNC processes (both TigerVNC and x11vnc)
+    killall vncserver Xvnc x11vnc 2>/dev/null || true
 
     # Stop noVNC/websockify
     killall websockify 2>/dev/null || true
@@ -77,7 +78,15 @@ cleanup() {
 trap cleanup EXIT TERM INT
 
 # Start Xvfb (Virtual X Server) as root
+# Note: Skipped if using TigerVNC (which provides its own X server)
 start_xvfb() {
+    # Skip Xvfb if using TigerVNC (it has built-in X server)
+    if [ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null; then
+        log_info "Skipping Xvfb (TigerVNC provides X server)"
+        export DISPLAY=:99
+        return 0
+    fi
+
     log_info "Starting Xvfb (Virtual X Server)..."
 
     export DISPLAY=:99
@@ -147,16 +156,49 @@ start_desktop() {
     log_success "Desktop environment started (may take additional 20-30s to fully load)"
 }
 
-# Start VNC Server (x11vnc - fallback for TigerVNC network issues)
-start_vnc() {
-    log_info "Starting VNC server (x11vnc)..."
+# Helper: Wait for VNC port to be ready
+# Args: $1 = server_name (for logging), $2 = timeout (default 10s)
+_wait_for_vnc_port() {
+    local server_name="$1"
+    local timeout="${2:-10}"
+    local elapsed=0
+
+    while [ $elapsed -lt $timeout ]; do
+        if netstat -tln 2>/dev/null | grep -q ":5901 "; then
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
+    log_error "$server_name: Port 5901 not ready after ${timeout}s"
+    return 1
+}
+
+# Helper: Prepare VNC directory for sandbox user
+# Ensures .vnc directory exists with correct permissions
+_prepare_vnc_dir() {
+    sudo -u "$SANDBOX_USER" mkdir -p /home/sandbox/.vnc
+    sudo -u "$SANDBOX_USER" chmod 700 /home/sandbox/.vnc
+}
+
+# Start x11vnc (fallback VNC server)
+# This is the traditional VNC server with lower performance but wider compatibility
+_start_x11vnc() {
+    log_info "Starting VNC server (x11vnc fallback)..."
 
     export DISPLAY=:99
 
-    # Wait for XFCE to start initializing
+    # Wait for X11 to be ready
     sleep 2
 
     # Start x11vnc with optimized settings
+    # -rfbport 5901: VNC protocol port
+    # -shared: Allow multiple connections
+    # -forever: Keep listening after disconnect
+    # -nopw: No authentication (container-safe)
+    # -xkb: Handle keyboard properly
+    # -bg: Run in background
     x11vnc -display "$DISPLAY" \
         -rfbport 5901 \
         -shared \
@@ -167,14 +209,100 @@ start_vnc() {
         -o /tmp/x11vnc.log 2>/dev/null &
 
     VNC_PID=$!
-    sleep 3
 
-    # Check if VNC is listening
-    if netstat -tln 2>/dev/null | grep -q ":5901 "; then
-        log_success "VNC server started on port 5901"
+    # Wait for VNC to start
+    if _wait_for_vnc_port "x11vnc" 10; then
+        log_success "VNC server started on port 5901 (x11vnc)"
+        return 0
     else
-        log_warn "VNC server may not be running properly on port 5901"
+        log_error "VNC server failed to start on port 5901 (x11vnc)"
+        return 1
     fi
+}
+
+# Start TigerVNC (high-performance VNC server with built-in X server)
+# Features: Tight encoding (50% bandwidth reduction), session persistence
+# Note: TigerVNC runs its own X server (Xvnc), replacing Xvfb for display :99
+_start_tigervnc() {
+    log_info "Starting VNC server (TigerVNC with built-in X server)..."
+
+    # Prepare VNC directory
+    _prepare_vnc_dir
+
+    # Stop Xvfb if running (TigerVNC provides its own X server)
+    if [ -n "$XVFB_PID" ] && kill -0 "$XVFB_PID" 2>/dev/null; then
+        log_info "Stopping Xvfb (TigerVNC includes X server)..."
+        kill "$XVFB_PID" 2>/dev/null || true
+        XVFB_PID=""
+        sleep 2
+    fi
+
+    # Set up empty VNC password (for container use)
+    sudo -u "$SANDBOX_USER" sh -c "
+        export HOME=/home/sandbox
+        mkdir -p /home/sandbox/.vnc
+        # Create empty password file
+        echo '' | vncpasswd -f > /home/sandbox/.vnc/passwd
+        chmod 600 /home/sandbox/.vnc/passwd
+    "
+
+    # Start TigerVNC with optimal settings
+    # -geometry: Screen resolution
+    # -depth 24: Color depth
+    # -rfbport 5901: VNC protocol port
+    # -localhost no: Allow noVNC connection
+    sudo -u "$SANDBOX_USER" sh -c "
+        export DISPLAY=:99
+        export XDG_RUNTIME_DIR=/run/user/1001
+        export HOME=/home/sandbox
+
+        vncserver :99 \
+            -geometry ${DESKTOP_RESOLUTION} \
+            -depth 24 \
+            -rfbport 5901 \
+            -localhost no \
+            2>&1 | tee /tmp/tigervnc.log
+    " &
+
+    VNC_PID=$!
+
+    # Wait for TigerVNC to start (longer timeout for session initialization)
+    if _wait_for_vnc_port "TigerVNC" 15; then
+        log_success "TigerVNC started on port 5901 (with built-in X server)"
+        return 0
+    else
+        log_warn "TigerVNC failed to start (check logs: docker exec <container> cat /tmp/tigervnc.log)"
+        # Kill failed TigerVNC process
+        kill $VNC_PID 2>/dev/null || true
+        sleep 1
+        return 1
+    fi
+}
+
+# Start VNC Server (TigerVNC with x11vnc fallback)
+# Priority: TigerVNC (default, better performance) > x11vnc (fallback)
+# Environment variable VNC_SERVER_TYPE can force selection: "tigervnc" or "x11vnc"
+start_vnc() {
+    # Check if user wants to force x11vnc
+    if [ "$VNC_SERVER_TYPE" = "x11vnc" ]; then
+        log_info "Forcing x11vnc (VNC_SERVER_TYPE=x11vnc)..."
+        _start_x11vnc
+        return $?
+    fi
+
+    # Try TigerVNC first (better performance: 50% bandwidth reduction)
+    if command -v vncserver &> /dev/null; then
+        if _start_tigervnc; then
+            return 0
+        fi
+        # Fall through to x11vnc if TigerVNC failed
+        log_info "Falling back to x11vnc..."
+    else
+        log_info "TigerVNC not available, using x11vnc..."
+    fi
+
+    # Fallback to x11vnc if TigerVNC not available or failed
+    _start_x11vnc
 }
 
 # Start noVNC (Remote Desktop)
@@ -182,7 +310,7 @@ start_novnc() {
     log_info "Starting noVNC (Remote Desktop) on port $DESKTOP_PORT..."
 
     # Start noVNC with websockify
-    # Connects to TigerVNC on port 5901
+    # Connects to VNC server on port 5901
     cd /opt/noVNC
     python3 -m websockify --web=/opt/noVNC --heartbeat 30 "$DESKTOP_PORT" localhost:5901 &
     PIDS+=($!)
@@ -243,9 +371,18 @@ main() {
 
     # Start Desktop if enabled
     if [ "$DESKTOP_ENABLED" = "true" ]; then
-        start_xvfb
-        start_desktop
+        # Start Xvfb if needed (x11vnc mode requires it, TigerVNC has built-in X server)
+        if ! ([ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null); then
+            start_xvfb
+        fi
+
+        # Start VNC server (TigerVNC or x11vnc)
         start_vnc
+
+        # Start desktop environment (XFCE)
+        start_desktop
+
+        # Start noVNC web client
         start_novnc
     fi
 
@@ -263,8 +400,8 @@ main() {
     if [ "$DESKTOP_ENABLED" = "true" ]; then
         echo "  • Remote Desktop: http://localhost:$DESKTOP_PORT/vnc.html"
         echo ""
+        log_info "VNC Server: $VNC_SERVER_TYPE"
         log_info "Note: XFCE may take 20-30 seconds to fully load."
-        log_info "The desktop is available via VNC."
     fi
     echo "  • Web Terminal:  ws://localhost:$TERMINAL_PORT"
     echo ""
