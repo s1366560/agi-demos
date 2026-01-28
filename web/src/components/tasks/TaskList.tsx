@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import { format } from 'date-fns'
 import {
     RefreshCw,
@@ -12,14 +12,15 @@ import { taskAPI } from '../../services/api'
 
 interface Task {
     id: string
-    name: string
+    task_type?: string  // From API, renamed to name for display
+    name: string       // Display name
     status: string
     created_at: string
-    completed_at: string | null
-    error: string | null
-    worker_id: string | null
-    retries: number
-    duration: string | null
+    completed_at?: string | null
+    error?: string | null
+    worker_id?: string | null
+    retries?: number
+    duration?: string | null
     entity_id?: string
     entity_type?: string
 }
@@ -50,7 +51,15 @@ export const TaskList: React.FC<TaskListProps> = ({ entityId, entityType, embedd
                 status: statusFilter !== 'All Statuses' ? statusFilter : undefined,
                 task_type: entityType
             })
-            setTasks(data)
+            // Map RecentTask to Task interface
+            const tasks: Task[] = data.map(item => ({
+                id: item.id,
+                task_type: item.task_type,
+                name: item.task_type || item.id, // Use task_type as display name
+                status: item.status,
+                created_at: item.created_at,
+            }))
+            setTasks(tasks)
             setLoading(false)
             setRefreshing(false)
         } catch (error) {
@@ -93,25 +102,41 @@ export const TaskList: React.FC<TaskListProps> = ({ entityId, entityType, embedd
         }
     }
 
-    const getStatusColor = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-            case 'failed': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'
-            case 'processing': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
-            case 'stopped': return 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-            default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+    // Memoize status color functions to avoid re-computing on every render
+    const getStatusColor = useMemo(() => {
+        const colorMap: Record<string, string> = {
+            completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200',
+            failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
+            processing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
+            stopped: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+            pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200',
         }
-    }
+        return (status: string): string => colorMap[status.toLowerCase()] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+    }, [])
 
-    const getStatusDot = (status: string) => {
-        switch (status.toLowerCase()) {
-            case 'completed': return 'bg-green-600'
-            case 'failed': return 'bg-red-600'
-            case 'processing': return 'bg-blue-600'
-            case 'stopped': return 'bg-gray-600'
-            default: return 'bg-gray-500'
+    const getStatusDot = useMemo(() => {
+        const dotMap: Record<string, string> = {
+            completed: 'bg-green-600',
+            failed: 'bg-red-600',
+            processing: 'bg-blue-600',
+            stopped: 'bg-gray-600',
+            pending: 'bg-yellow-600',
         }
-    }
+        return (status: string): string => dotMap[status.toLowerCase()] || 'bg-gray-500'
+    }, [])
+
+    // Memoize filtered and formatted tasks to avoid re-computing on every render
+    const filteredTasks = useMemo(() => {
+        return tasks.map(task => ({
+            ...task,
+            statusColor: getStatusColor(task.status),
+            statusDot: getStatusDot(task.status),
+            formattedDate: format(new Date(task.created_at), 'MMM d, HH:mm:ss'),
+            shortId: task.id.substring(0, 8),
+            canRetry: task.status === 'Failed',
+            canStop: task.status === 'Pending' || task.status === 'Processing',
+        }))
+    }, [tasks, getStatusColor, getStatusDot])
 
     if (loading && !tasks.length) {
         return (
@@ -180,18 +205,18 @@ export const TaskList: React.FC<TaskListProps> = ({ entityId, entityType, embedd
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
-                        {tasks.length > 0 ? (
-                            tasks.map((task) => (
+                        {filteredTasks.length > 0 ? (
+                            filteredTasks.map((task) => (
                                 <tr key={task.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                                            <span className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse' : ''} ${getStatusDot(task.status)}`}></span>
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${task.statusColor}`}>
+                                            <span className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse' : ''} ${task.statusDot}`}></span>
                                             {task.status}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300">
                                         {task.name}
-                                        <div className="text-xs text-slate-400 font-mono mt-0.5">{task.id.substring(0, 8)}...</div>
+                                        <div className="text-xs text-slate-400 font-mono mt-0.5">{task.shortId}...</div>
                                     </td>
                                     {!entityId && (
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 font-mono">
@@ -202,11 +227,11 @@ export const TaskList: React.FC<TaskListProps> = ({ entityId, entityType, embedd
                                         {task.duration || '-'}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
-                                        {format(new Date(task.created_at), 'MMM d, HH:mm:ss')}
+                                        {task.formattedDate}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end gap-2">
-                                            {task.status === 'Failed' && (
+                                            {task.canRetry && (
                                                 <button
                                                     onClick={() => handleRetry(task.id)}
                                                     className="text-primary hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium text-xs mr-2"
@@ -214,7 +239,7 @@ export const TaskList: React.FC<TaskListProps> = ({ entityId, entityType, embedd
                                                     Retry
                                                 </button>
                                             )}
-                                            {(task.status === 'Pending' || task.status === 'Processing') && (
+                                            {task.canStop && (
                                                 <button
                                                     onClick={() => handleStop(task.id)}
                                                     className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 font-medium text-xs mr-2 flex items-center gap-1"
@@ -247,7 +272,7 @@ export const TaskList: React.FC<TaskListProps> = ({ entityId, entityType, embedd
             {!embedded && (
                 <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-between">
                     <div className="text-sm text-slate-500 dark:text-slate-400">
-                        Showing {tasks.length} tasks
+                        Showing {filteredTasks.length} tasks
                     </div>
                     <div className="flex gap-2">
                          <button 

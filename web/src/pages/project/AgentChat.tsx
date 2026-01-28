@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Spin, Modal, notification } from "antd";
 import { useAgentV3Store } from "../../stores/agentV3";
@@ -41,6 +41,10 @@ export const AgentChat: React.FC = () => {
     clearError,
     error,
   } = useAgentV3Store();
+
+  // Sandbox state and handlers (declared early for use in handleSend)
+  const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel } = useSandboxStore();
+  const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
   // Load conversations on mount or project change
   useEffect(() => {
@@ -97,11 +101,11 @@ export const AgentChat: React.FC = () => {
     }
   }, [doomLoopDetected]);
 
-  const handleSelectConversation = (id: string) => {
+  const handleSelectConversation = useCallback((id: string) => {
     navigate(`/project/${projectId}/agent/${id}`);
-  };
+  }, [navigate, projectId]);
 
-  const handleNewConversation = async () => {
+  const handleNewConversation = useCallback(async () => {
     if (!projectId) return;
 
     // Create conversation first, then navigate to it
@@ -109,9 +113,9 @@ export const AgentChat: React.FC = () => {
     if (newConversationId) {
       navigate(`/project/${projectId}/agent/${newConversationId}`);
     }
-  };
+  }, [projectId, createNewConversation, navigate]);
 
-  const handleDeleteConversation = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!projectId) return;
 
@@ -130,9 +134,9 @@ export const AgentChat: React.FC = () => {
         }
       },
     });
-  };
+  }, [projectId, activeConversationId, deleteConversation, navigate]);
 
-  const handleSend = async (content: string) => {
+  const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
 
     const newConversationId = await sendMessage(content, projectId, {
@@ -144,13 +148,10 @@ export const AgentChat: React.FC = () => {
     if (!conversationId && newConversationId) {
       navigate(`/project/${projectId}/agent/${newConversationId}`);
     }
-  };
+  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate]);
 
-  // Sandbox state and handlers
-  const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel } = useSandboxStore();
-  const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
-
-  const sidebar = (
+  // Memoize panel components to prevent re-creation on every render
+  const sidebar = useMemo(() => (
     <ConversationSidebar
       conversations={conversations}
       activeId={activeConversationId}
@@ -158,9 +159,9 @@ export const AgentChat: React.FC = () => {
       onNew={handleNewConversation}
       onDelete={handleDeleteConversation}
     />
-  );
+  ), [conversations, activeConversationId, handleSelectConversation, handleNewConversation, handleDeleteConversation]);
 
-  const chatArea = (
+  const chatArea = useMemo(() => (
     <div className="flex flex-col h-full relative">
       {/* Loading Overlay */}
       {isLoadingHistory && (
@@ -189,16 +190,16 @@ export const AgentChat: React.FC = () => {
         onTogglePlanPanel={togglePlanPanel}
       />
     </div>
-  );
+  ), [isLoadingHistory, messages, isStreaming, currentThought, activeToolCalls, agentState, handleSend, abortStream, isPlanMode, togglePlanMode, showPlanPanel]);
 
-  const rightPanel = (
+  const rightPanel = useMemo(() => (
     <RightPanel
       workPlan={workPlan}
       sandboxId={activeSandboxId}
       toolExecutions={toolExecutions}
       onClose={() => togglePlanPanel()}
     />
-  );
+  ), [workPlan, activeSandboxId, toolExecutions, togglePlanPanel]);
 
   return (
     <ChatLayout sidebar={sidebar} chatArea={chatArea} rightPanel={rightPanel} />
