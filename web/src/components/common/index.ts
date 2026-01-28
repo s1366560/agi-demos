@@ -1,5 +1,7 @@
 export { ErrorBoundary } from './ErrorBoundary'
 export { SkeletonLoader } from './SkeletonLoader'
 export { EmptyState } from './EmptyState'
+export { VirtualGrid } from './VirtualGrid'
 export type { EmptyStateProps } from './EmptyState'
 export type { SkeletonLoaderProps } from './SkeletonLoader'
+export type { VirtualGridProps } from './VirtualGrid'
