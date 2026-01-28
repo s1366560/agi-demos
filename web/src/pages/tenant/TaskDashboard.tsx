@@ -38,16 +38,19 @@ ChartJS.register(
 interface TaskStats {
     total: number
     pending: number
-    processing: number
+    processing?: number
+    running?: number
     completed: number
     failed: number
-    throughput_per_minute: number
-    error_rate: number
+    throughput_per_minute?: number
+    error_rate?: number
 }
 
 interface QueueDepth {
-    queues: Record<string, number>
-    total: number
+    queues?: Record<string, number>
+    total?: number
+    depth?: number
+    timestamp?: string
 }
 
 export const TaskDashboard: React.FC = () => {
@@ -73,9 +76,12 @@ export const TaskDashboard: React.FC = () => {
             // Update queue history for chart
             setQueueHistory((prev) => {
                 const now = new Date()
+                const total = (queueData as { total?: number }).total
+                const depth = (queueData as { depth?: number }).depth
+                const count = total ?? depth ?? 0
                 const newPoint = {
                     time: format(now, 'HH:mm'),
-                    count: queueData.total,
+                    count,
                 }
                 const newHistory = [...prev, newPoint]
                 if (newHistory.length > 20) newHistory.shift() // Keep last 20 points
@@ -237,7 +243,7 @@ export const TaskDashboard: React.FC = () => {
                     </div>
                     <div className="flex items-end gap-2 mt-2">
                         <p className="text-slate-900 dark:text-white text-2xl font-bold leading-none">
-                            {stats?.throughput_per_minute.toFixed(1)}/min
+                            {stats?.throughput_per_minute?.toFixed(1) || '0.0'}/min
                         </p>
                     </div>
                 </div>
@@ -267,7 +273,7 @@ export const TaskDashboard: React.FC = () => {
                             {stats?.failed.toLocaleString()}
                         </p>
                         <span className="text-slate-500 dark:text-slate-400 text-xs font-normal">
-                            {stats?.error_rate.toFixed(1)}% {t('tenant.tasks.stats.rate')}
+                            {stats?.error_rate?.toFixed(1) || '0.0'}% {t('tenant.tasks.stats.rate')}
                         </span>
                     </div>
                 </div>

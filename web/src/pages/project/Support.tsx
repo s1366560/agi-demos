@@ -16,6 +16,18 @@ interface SupportTicket {
     resolved_at: string | null;
 }
 
+interface SupportTicketResponse {
+    id: string;
+    tenant_id: string | null;
+    subject: string;
+    message: string;
+    priority: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    resolved_at: string | null;
+}
+
 export const Support: React.FC = () => {
     const { t } = useTranslation();
     const { currentTenant } = useTenantStore();
@@ -37,7 +49,8 @@ export const Support: React.FC = () => {
             const response = await api.get('/support/tickets', {
                 params: { tenant_id: currentTenant.id }
             });
-            setTickets(response.data.tickets);
+            const data = response as { data: { tickets: SupportTicketResponse[] } };
+            setTickets(data.data.tickets as SupportTicket[]);
         } catch (error) {
             console.error('Failed to load support tickets:', error);
         } finally {

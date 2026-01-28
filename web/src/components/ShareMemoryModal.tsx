@@ -15,6 +15,18 @@ interface ShareLink {
     access_count: number;
 }
 
+interface ShareLinkResponse {
+    id: string;
+    share_token: string;
+    permissions: {
+        view: boolean;
+        edit: boolean;
+    };
+    expires_at: string | null;
+    created_at: string;
+    access_count: number;
+}
+
 interface ShareMemoryModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -40,7 +52,7 @@ export const ShareMemoryModal: React.FC<ShareMemoryModalProps> = ({
         setIsLoading(true);
         try {
             const sharesData = await memoryAPI.listShares(memory.id);
-            setShares(sharesData);
+            setShares(sharesData as ShareLink[]);
         } catch (error) {
             console.error('Failed to load shares:', error);
             setShares([]);
@@ -74,12 +86,12 @@ export const ShareMemoryModal: React.FC<ShareMemoryModalProps> = ({
 
             // Transform API response to match ShareLink interface
             const newShare: ShareLink = {
-                id: response.id,
-                share_token: response.share_token,
-                permissions: response.permissions,
-                expires_at: response.expires_at,
-                created_at: response.created_at,
-                access_count: response.access_count
+                id: (response as ShareLinkResponse).id,
+                share_token: (response as ShareLinkResponse).share_token,
+                permissions: (response as ShareLinkResponse).permissions,
+                expires_at: (response as ShareLinkResponse).expires_at,
+                created_at: (response as ShareLinkResponse).created_at,
+                access_count: (response as ShareLinkResponse).access_count
             };
 
             setShares([...shares, newShare]);

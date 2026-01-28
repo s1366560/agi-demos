@@ -128,11 +128,12 @@ export const SkillModal: React.FC<SkillModalProps> = ({
       }
 
       onSuccess();
-    } catch (error: any) {
-      if (error.errorFields) {
+    } catch (error: unknown) {
+      const err = error as { errorFields?: Array<{ name?: string[] }> };
+      if (err.errorFields) {
         // Form validation error - switch to the tab with the error
-        const firstErrorField = error.errorFields[0]?.name[0];
-        if (["name", "description", "trigger_type"].includes(firstErrorField)) {
+        const firstErrorField = err.errorFields[0]?.name?.[0];
+        if (firstErrorField && ["name", "description", "trigger_type"].includes(firstErrorField)) {
           setActiveTab("basic");
         }
       }

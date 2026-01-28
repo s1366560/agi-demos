@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTenantStore } from '../../stores/tenant'
+import type { UserTenant } from '../../types/memory'
 
 interface TenantMember {
     user_id: string
@@ -24,7 +25,16 @@ export const UserList: React.FC = () => {
             if (currentTenant) {
                 try {
                     const response = await listMembers(currentTenant.id)
-                    setMembers(response.members)
+                    // Map UserTenant to TenantMember
+                    const members: TenantMember[] = response.map((member: UserTenant) => ({
+                        user_id: member.user_id,
+                        email: member.user_id, // user_id is email in this context
+                        name: member.user_id.split('@')[0] || member.user_id, // Extract name from email
+                        role: member.role,
+                        permissions: member.permissions,
+                        created_at: member.created_at
+                    }))
+                    setMembers(members)
                 } catch (error) {
                     console.error('Failed to fetch members:', error)
                 }

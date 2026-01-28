@@ -2,8 +2,8 @@
  * Agent Data Adapters
  *
  * Utility functions to transform Store data to component props.
- * These adapters ensure data compatibility between agentV3 store
- * and the new visualization components.
+ * These adapters ensure data compatibility between agent store
+ * and the visualization components.
  */
 
 import type { Message, ToolCall, ToolResult } from "../types/agent";

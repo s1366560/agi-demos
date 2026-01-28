@@ -77,13 +77,14 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             // Call the update callback to refresh the list
             onUpdate();
             onClose();
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Failed to update memory:', err);
+            const error = err as { response?: { status?: number; data?: { detail?: string } } };
             // Handle version conflict error specifically
-            if (err.response?.status === 409) {
+            if (error.response?.status === 409) {
                 setError('This memory has been modified by another user. Please refresh and try again.');
             } else {
-                setError(err.response?.data?.detail || 'Failed to update memory. Please try again.');
+                setError(error.response?.data?.detail || 'Failed to update memory. Please try again.');
             }
         } finally {
             setIsSaving(false);

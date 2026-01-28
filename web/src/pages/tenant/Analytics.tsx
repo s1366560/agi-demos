@@ -38,7 +38,7 @@ export const Analytics: React.FC = () => {
             if (currentTenant) {
                 try {
                     const data = await projectAPI.list(currentTenant.id)
-                    setProjects(data)
+                    setProjects(data.projects)
                 } catch (error) {
                     console.error('Failed to fetch projects:', error)
                 } finally {

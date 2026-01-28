@@ -153,18 +153,21 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       }
 
       onSuccess();
-    } catch (error: any) {
-      if (error.errorFields) {
+    } catch (error: unknown) {
+      const err = error as { errorFields?: Array<{ name?: string[] }> };
+      if (err.errorFields) {
         // Form validation error - switch to the tab with the error
-        const firstErrorField = error.errorFields[0]?.name[0];
-        if (
-          ["name", "display_name", "system_prompt", "model"].includes(
-            firstErrorField
-          )
-        ) {
-          setActiveTab("basic");
-        } else if (["trigger_description"].includes(firstErrorField)) {
-          setActiveTab("trigger");
+        const firstErrorField = err.errorFields[0]?.name?.[0];
+        if (firstErrorField) {
+          if (
+            ["name", "display_name", "system_prompt", "model"].includes(
+              firstErrorField
+            )
+          ) {
+            setActiveTab("basic");
+          } else if (["trigger_description"].includes(firstErrorField)) {
+            setActiveTab("trigger");
+          }
         }
       }
       // API errors handled by store

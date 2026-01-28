@@ -159,8 +159,9 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
       }
 
       onSuccess();
-    } catch (error: any) {
-      if (!error.errorFields) {
+    } catch (error: unknown) {
+      const err = error as { errorFields?: unknown };
+      if (!err.errorFields) {
         // Not a form validation error
         console.error("Submit error:", error);
       }

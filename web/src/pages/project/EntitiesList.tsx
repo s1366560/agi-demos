@@ -127,7 +127,22 @@ const EntitiesListInternal: React.FC = () => {
     const loadRelationships = async (entityUuid: string) => {
         try {
             const result = await graphService.getEntityRelationships(entityUuid, { limit: 50 })
-            setRelationships(result.relationships)
+            // Map API response to Relationship interface
+            const mappedRelationships: Relationship[] = result.relationships.map(rel => ({
+                edge_id: `${rel.source_entity_name}-${rel.relationship_type}-${rel.target_entity_name || ''}`,
+                relation_type: rel.relationship_type,
+                direction: rel.target_entity_name ? 'outgoing' : 'incoming',
+                fact: `${rel.source_entity_name} ${rel.relationship_type} ${rel.target_entity_name || ''}`,
+                score: 0,
+                created_at: undefined,
+                related_entity: {
+                    uuid: '',
+                    name: rel.target_entity_name || rel.source_entity_name,
+                    entity_type: rel.target_entity_type || rel.source_entity_type,
+                    summary: ''
+                }
+            }))
+            setRelationships(mappedRelationships)
         } catch (err) {
             console.error('Failed to load relationships:', err)
         }

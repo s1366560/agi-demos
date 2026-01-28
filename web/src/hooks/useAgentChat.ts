@@ -336,9 +336,10 @@ export function useAgentChat() {
       message.success("Entered Plan Mode successfully");
       setShowEnterPlanModal(false);
       planForm.resetFields();
-    } catch (error: any) {
-      if (!error.errorFields) {
-        message.error(error.message || "Failed to enter Plan Mode");
+    } catch (error: unknown) {
+      const err = error as { errorFields?: unknown; message?: string };
+      if (!err.errorFields) {
+        message.error(err.message || "Failed to enter Plan Mode");
       }
     }
   }, [currentConversation?.id, enterPlanMode, planForm]);

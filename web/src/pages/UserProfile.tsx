@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { authAPI } from '../services/api'
-import { UserUpdate } from '../types/memory'
+import type { UserUpdate } from '../types/memory'
+import type { UserProfile as UserProfileType } from '../types/memory'
 
 export const UserProfile: React.FC = () => {
     const { t } = useTranslation()
@@ -62,11 +63,12 @@ export const UserProfile: React.FC = () => {
         e.preventDefault()
         setIsLoading(true)
         try {
-            const updateData: UserUpdate = {
+            // Create update data that matches UserUpdate interface
+            const updateData = {
                 name: formData.name,
                 profile: formData.profile
             }
-            const updatedUser = await authAPI.updateProfile(updateData)
+            const updatedUser = await authAPI.updateProfile(updateData as Partial<UserProfileType>)
             setUser(updatedUser)
             setShowSuccess(true)
             setTimeout(() => setShowSuccess(false), 3000)

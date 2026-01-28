@@ -69,7 +69,8 @@ export const ProviderList: React.FC = () => {
                 params.provider_type = typeFilter
             }
             const response = await providerAPI.list(params)
-            setProviders(response.providers || response)
+            // providerAPI.list returns ProviderConfig[] directly
+            setProviders(response)
         } catch (err) {
             console.error('Failed to load providers:', err)
             setError(t('common.error'))

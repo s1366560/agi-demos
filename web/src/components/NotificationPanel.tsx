@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
 import { useNotificationStore } from '../stores/notification';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +32,8 @@ export const NotificationPanel: React.FC = () => {
     return undefined;
   }, [isOpen]);
 
-  const handleNotificationClick = async (notification: any) => {
+  // Stable callback for notification clicks
+  const handleNotificationClick = useCallback(async (notification: any) => {
     if (!notification.is_read) {
       await markAsRead(notification.id);
     }
@@ -40,12 +41,34 @@ export const NotificationPanel: React.FC = () => {
       navigate(notification.action_url);
       setIsOpen(false);
     }
-  };
+  }, [markAsRead, navigate]);
+
+  // Stable callback for toggling panel
+  const togglePanel = useCallback(() => {
+    setIsOpen(prev => !prev);
+  }, []);
+
+  // Stable callback for closing panel
+  const closePanel = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+
+  // Stable callback for inline mark as read
+  const handleInlineMarkAsRead = useCallback((e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
+    markAsRead(notificationId);
+  }, [markAsRead]);
+
+  // Stable callback for inline delete
+  const handleInlineDelete = useCallback((e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
+    deleteNotification(notificationId);
+  }, [deleteNotification]);
 
   return (
     <div className="relative" ref={panelRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={togglePanel}
         className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         title="通知"
       >
@@ -70,7 +93,7 @@ export const NotificationPanel: React.FC = () => {
                   全部已读
                 </button>
               )}
-              <button onClick={() => setIsOpen(false)}><X className="w-4 h-4" /></button>
+              <button onClick={closePanel}><X className="w-4 h-4" /></button>
             </div>
           </div>
 
@@ -104,7 +127,7 @@ export const NotificationPanel: React.FC = () => {
                     <div className="flex items-center gap-1 ml-2">
                       {!notification.is_read && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); markAsRead(notification.id); }}
+                          onClick={(e) => handleInlineMarkAsRead(e, notification.id)}
                           className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
                           title="标记为已读"
                         >
@@ -112,7 +135,7 @@ export const NotificationPanel: React.FC = () => {
                         </button>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteNotification(notification.id); }}
+                        onClick={(e) => handleInlineDelete(e, notification.id)}
                         className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
                         title="删除"
                       >
