@@ -37,6 +37,7 @@
 import { ApiError } from "./client/ApiError";
 import { httpClient } from "./client/httpClient";
 import { logger } from "../utils/logger";
+import { getAuthToken } from "../utils/tokenResolver";
 import { createWebSocketUrl } from "./client/urlUtils";
 import type {
   AgentEvent,
@@ -228,7 +229,7 @@ class AgentServiceImpl implements AgentService {
       this.isManualClose = false;
       this.setStatus("connecting");
 
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       if (!token) {
         this.setStatus("error");
         reject(new Error("No authentication token"));

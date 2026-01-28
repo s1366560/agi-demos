@@ -39,6 +39,7 @@ import { requestCache } from './requestCache';
 import { requestDeduplicator } from './requestDeduplicator';
 import { parseAxiosError } from './ApiError';
 import { retryWithBackoff, type RetryConfig, DEFAULT_RETRY_CONFIG } from './retry';
+import { getAuthToken } from '@/utils/tokenResolver';
 
 /**
  * HTTP request configuration interface
@@ -99,9 +100,12 @@ const client = axios.create({
  * Request interceptor to inject auth token
  *
  * Automatically adds the Bearer token from localStorage to all requests.
+ * Token is stored by Zustand persist in 'memstack-auth-storage' key.
  */
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  // Use shared token resolver for consistent token reading
+  const token = getAuthToken();
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -122,7 +126,9 @@ client.interceptors.response.use(
 
     // Handle authentication errors
     if (apiError.isAuthError()) {
-      // Clear token and user data
+      // Clear token and user data from Zustand persist storage
+      localStorage.removeItem('memstack-auth-storage');
+      // Also clear legacy keys for backward compatibility
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       // Redirect to login if not already there

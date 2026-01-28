@@ -136,6 +136,7 @@ export const useAuthStore = create<AuthState>()(
                     await authAPI.verifyToken(token);
 
                     set({
+                        isAuthenticated: true,
                         isLoading: false,
                         error: null,
                     });
@@ -158,6 +159,7 @@ export const useAuthStore = create<AuthState>()(
                 partialize: (state) => ({
                     user: state.user,
                     token: state.token,
+                    isAuthenticated: state.isAuthenticated,
                 }),
             }
         ),
