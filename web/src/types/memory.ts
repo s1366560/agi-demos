@@ -250,7 +250,7 @@ export interface UserTenant {
     user_id: string;
     tenant_id: string;
     role: 'owner' | 'admin' | 'member' | 'guest';
-    permissions: Record<string, any>;
+    permissions: Record<string, unknown>;
     created_at: string;
 }
 
@@ -259,7 +259,7 @@ export interface UserProject {
     user_id: string;
     project_id: string;
     role: 'owner' | 'admin' | 'member' | 'viewer';
-    permissions: Record<string, any>;
+    permissions: Record<string, unknown>;
     created_at: string;
 }
 
@@ -341,4 +341,58 @@ export interface TenantProviderMapping {
     provider_id: string;
     priority: number;
     created_at: string;
+}
+
+// Task API types (placeholders for types that may be defined elsewhere)
+export interface TaskStats {
+    total: number;
+    pending: number;
+    running: number;
+    completed: number;
+    failed: number;
+}
+
+export interface QueueDepth {
+    depth: number;
+    timestamp: string;
+}
+
+export interface RecentTask {
+    id: string;
+    task_type: string;
+    status: string;
+    created_at: string;
+}
+
+export interface StatusBreakdown {
+    total: number;
+    by_status: Record<string, number>;
+}
+
+// Schema API types (placeholders)
+export interface SchemaEntityType {
+    id: string;
+    name: string;
+    display_name?: string;
+    description?: string;
+    properties?: Record<string, unknown>;
+    project_id: string;
+}
+
+export interface SchemaEdgeType {
+    id: string;
+    name: string;
+    display_name?: string;
+    description?: string;
+    source_entity_type: string;
+    target_entity_type: string;
+    project_id: string;
+}
+
+export interface EdgeMapping {
+    id: string;
+    name: string;
+    source_entity_type_id: string;
+    target_entity_type_id: string;
+    project_id: string;
 }
