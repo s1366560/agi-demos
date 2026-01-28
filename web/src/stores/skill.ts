@@ -13,6 +13,22 @@ import type {
   SkillUpdate,
   TenantSkillConfigResponse,
 } from "../types/agent";
+import type { UnknownError } from "../types/common";
+
+/**
+ * Helper function to extract error message from unknown error
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  const err = error as UnknownError;
+  if (err.response?.data?.detail) {
+    const detail = err.response.data.detail;
+    return typeof detail === "string" ? detail : JSON.stringify(detail);
+  }
+  if (err.message) {
+    return err.message;
+  }
+  return fallback;
+}
 
 // ============================================================================
 // STATE INTERFACE
@@ -135,12 +151,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         total: response.total || 0,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list skills";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list skills");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -154,12 +166,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         systemSkills: response.skills || [],
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list system skills";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list system skills");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -171,12 +179,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       const response = await skillAPI.get(id);
       set({ currentSkill: response, isLoading: false });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to get skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to get skill");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -193,12 +197,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to create skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to create skill");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -215,12 +215,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to update skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to update skill");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -236,12 +232,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         total: get().total - 1,
         isSubmitting: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to delete skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to delete skill");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -259,12 +251,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         skills: skills.map((s) => (s.id === id ? response : s)),
         isSubmitting: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to update skill status";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to update skill status");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -285,12 +273,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to update skill content";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to update skill content");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -306,12 +290,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         tenantConfigs: response.configs || [],
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list tenant configs";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list tenant configs");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -338,12 +318,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
           isSubmitting: false,
         });
       }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to disable system skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to disable system skill");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -360,12 +336,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
         ),
         isSubmitting: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to enable system skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to enable system skill");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -398,12 +370,8 @@ export const useSkillStore = create<SkillState>((set, get) => ({
           isSubmitting: false,
         });
       }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to override system skill";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to override system skill");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }

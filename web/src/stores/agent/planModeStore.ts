@@ -116,9 +116,10 @@ export const usePlanModeStore = create<PlanModeState>((set) => ({
       });
 
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || 'Failed to enter Plan Mode',
+        planError: err?.response?.data?.detail || 'Failed to enter Plan Mode',
         planLoading: false,
       });
       throw error;
@@ -165,9 +166,10 @@ export const usePlanModeStore = create<PlanModeState>((set) => ({
       });
 
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || 'Failed to exit Plan Mode',
+        planError: err?.response?.data?.detail || 'Failed to exit Plan Mode',
         planLoading: false,
       });
       throw error;
@@ -187,9 +189,10 @@ export const usePlanModeStore = create<PlanModeState>((set) => ({
       const plan = await planService.getPlan(planId);
       set({ currentPlan: plan, planLoading: false });
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || 'Failed to get plan',
+        planError: err?.response?.data?.detail || 'Failed to get plan',
         planLoading: false,
       });
       throw error;
@@ -213,9 +216,10 @@ export const usePlanModeStore = create<PlanModeState>((set) => ({
       const plan = await planService.updatePlan(planId, request);
       set({ currentPlan: plan, planLoading: false });
       return plan;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || 'Failed to update plan',
+        planError: err?.response?.data?.detail || 'Failed to update plan',
         planLoading: false,
       });
       throw error;
@@ -239,9 +243,10 @@ export const usePlanModeStore = create<PlanModeState>((set) => ({
         planLoading: false,
       });
       return status;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
-        planError: error.response?.data?.detail || 'Failed to get Plan Mode status',
+        planError: err?.response?.data?.detail || 'Failed to get Plan Mode status',
         planLoading: false,
       });
       throw error;

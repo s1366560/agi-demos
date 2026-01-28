@@ -13,6 +13,22 @@ import type {
   SubAgentUpdate,
   SubAgentTemplate,
 } from "../types/agent";
+import type { UnknownError } from "../types/common";
+
+/**
+ * Helper function to extract error message from unknown error
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  const err = error as UnknownError;
+  if (err.response?.data?.detail) {
+    const detail = err.response.data.detail;
+    return typeof detail === "string" ? detail : JSON.stringify(detail);
+  }
+  if (err.message) {
+    return err.message;
+  }
+  return fallback;
+}
 
 // ============================================================================
 // STATE INTERFACE
@@ -120,12 +136,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         total: response.total || 0,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list subagents";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list subagents");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -137,12 +149,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
       const response = await subagentAPI.get(id);
       set({ currentSubAgent: response, isLoading: false });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to get subagent";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to get subagent");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -160,12 +168,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to create subagent";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to create subagent");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -183,12 +187,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to update subagent";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to update subagent");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -205,12 +205,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         total: Math.max(0, get().total - 1),
         isSubmitting: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to delete subagent";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to delete subagent");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -234,14 +230,10 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         currentSubAgent:
           currentSubAgent?.id === id ? response : currentSubAgent,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Rollback on error
       set({ subagents: originalSubagents });
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to toggle subagent";
+      const errorMessage = getErrorMessage(error, "Failed to toggle subagent");
       set({ error: errorMessage });
       throw error;
     }
@@ -261,12 +253,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         templates: response.templates || [],
         isTemplatesLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list templates";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list templates");
       set({ error: errorMessage, isTemplatesLoading: false });
       throw error;
     }
@@ -284,12 +272,8 @@ export const useSubAgentStore = create<SubAgentState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to create from template";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to create from template");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }

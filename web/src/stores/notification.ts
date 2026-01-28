@@ -5,7 +5,7 @@ interface Notification {
   type: string;
   title: string;
   message: string;
-  data: any;
+  data: Record<string, unknown>;
   is_read: boolean;
   action_url?: string;
   created_at: string;
@@ -23,6 +23,10 @@ interface NotificationState {
   deleteNotification: (id: string) => Promise<void>;
 }
 
+interface NotificationsResponse {
+  notifications: Notification[];
+}
+
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
   unreadCount: 0,
@@ -32,8 +36,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ isLoading: true });
     try {
       const api = (await import('../services/api')).default;
-      const response = await api.get('/notifications/', { params: { unread_only: unreadOnly } });
-      const notificationsList = response.data.notifications;
+      const response = await api.get<NotificationsResponse>('/notifications/', { params: { unread_only: unreadOnly } });
+      const notificationsList = response.notifications;
 
       set({
         notifications: notificationsList,

@@ -1,15 +1,31 @@
 import { create } from 'zustand';
 import { memoryAPI } from '../services/api';
-import type { 
-  Memory, 
-  MemoryCreate, 
-  MemoryUpdate, 
-  MemoryQuery, 
+import type {
+  Memory,
+  MemoryCreate,
+  MemoryUpdate,
+  MemoryQuery,
   MemorySearchResponse,
   Entity,
   Relationship,
   GraphData
 } from '../types/memory';
+import type { UnknownError } from '../types/common';
+
+/**
+ * Helper function to extract error message from unknown error
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  const err = error as UnknownError;
+  if (err.response?.data?.detail) {
+    const detail = err.response.data.detail;
+    return typeof detail === 'string' ? detail : JSON.stringify(detail);
+  }
+  if (err.message) {
+    return err.message;
+  }
+  return fallback;
+}
 
 interface MemoryState {
   memories: Memory[];
@@ -65,10 +81,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         pageSize: response.page_size,
         isLoading: false,
       });
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to list memories', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to list memories'),
+        isLoading: false
       });
       throw error;
     }
@@ -83,10 +99,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         memories: [response, ...memories],
         isLoading: false,
       });
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to create memory', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to create memory'),
+        isLoading: false
       });
       throw error;
     }
@@ -102,10 +118,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         currentMemory: get().currentMemory?.id === memoryId ? response : get().currentMemory,
         isLoading: false,
       });
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to update memory', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to update memory'),
+        isLoading: false
       });
       throw error;
     }
@@ -121,10 +137,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         currentMemory: get().currentMemory?.id === memoryId ? null : get().currentMemory,
         isLoading: false,
       });
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to delete memory', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to delete memory'),
+        isLoading: false
       });
       throw error;
     }
@@ -136,10 +152,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const response = await memoryAPI.search(projectId, query);
       set({ isLoading: false });
       return response;
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to search memories', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to search memories'),
+        isLoading: false
       });
       throw error;
     }
@@ -151,10 +167,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const response = await memoryAPI.get(projectId, memoryId);
       set({ isLoading: false });
       return response;
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to get memory', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to get memory'),
+        isLoading: false
       });
       throw error;
     }
@@ -171,10 +187,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         isLoading: false,
       });
       return response;
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to get graph data', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to get graph data'),
+        isLoading: false
       });
       throw error;
     }
@@ -189,10 +205,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         isLoading: false,
       });
       return response;
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to extract entities', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to extract entities'),
+        isLoading: false
       });
       throw error;
     }
@@ -207,10 +223,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         isLoading: false,
       });
       return response;
-    } catch (error: any) {
-      set({ 
-        error: error.response?.data?.detail || 'Failed to extract relationships', 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to extract relationships'),
+        isLoading: false
       });
       throw error;
     }

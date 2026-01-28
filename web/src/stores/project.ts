@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { projectAPI } from '../services/api';
-import type { Project, ProjectCreate, ProjectUpdate } from '../types/memory';
+import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string | Record<string, unknown>;
+    };
+  };
+}
 
 interface ProjectState {
   projects: Project[];
@@ -10,7 +18,7 @@ interface ProjectState {
   total: number;
   page: number;
   pageSize: number;
-  
+
   // Actions
   listProjects: (tenantId: string, params?: { page?: number; page_size?: number; search?: string }) => Promise<void>;
   createProject: (tenantId: string, data: ProjectCreate) => Promise<void>;
@@ -19,6 +27,16 @@ interface ProjectState {
   setCurrentProject: (project: Project | null) => void;
   getProject: (tenantId: string, projectId: string) => Promise<Project>;
   clearError: () => void;
+}
+
+function getErrorMessage(error: unknown): string {
+  const apiError = error as ApiError;
+  const detail = apiError.response?.data?.detail;
+  return detail
+    ? (typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail))
+    : 'Failed to process request';
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -33,7 +51,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   listProjects: async (tenantId: string, params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await projectAPI.list(tenantId, params);
+      const response: ProjectListResponse = await projectAPI.list(tenantId, params);
       set({
         projects: response.projects,
         total: response.total,
@@ -41,15 +59,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         pageSize: response.page_size,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to list projects';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -58,21 +71,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   createProject: async (tenantId: string, data: ProjectCreate) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await projectAPI.create(tenantId, data);
+      const response: Project = await projectAPI.create(tenantId, data);
       const { projects } = get();
       set({
         projects: [...projects, response],
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to create project';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -81,22 +89,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   updateProject: async (tenantId: string, projectId: string, data: ProjectUpdate) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await projectAPI.update(tenantId, projectId, data);
+      const response: Project = await projectAPI.update(tenantId, projectId, data);
       const { projects } = get();
       set({
         projects: projects.map(project => project.id === projectId ? response : project),
         currentProject: get().currentProject?.id === projectId ? response : get().currentProject,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to update project';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -112,15 +115,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         currentProject: get().currentProject?.id === projectId ? null : get().currentProject,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to delete project';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -133,18 +131,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   getProject: async (tenantId: string, projectId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await projectAPI.get(tenantId, projectId);
+      const response: Project = await projectAPI.get(tenantId, projectId);
       set({ isLoading: false });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to get project';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }

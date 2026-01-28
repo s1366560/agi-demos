@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { tenantAPI } from '../services/api';
-import type { Tenant, TenantCreate, TenantUpdate } from '../types/memory';
+import type { Tenant, TenantCreate, TenantUpdate, TenantListResponse, UserTenant } from '../types/memory';
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string | Record<string, unknown>;
+    };
+  };
+}
 
 interface TenantState {
   tenants: Tenant[];
@@ -10,7 +18,7 @@ interface TenantState {
   total: number;
   page: number;
   pageSize: number;
-  
+
   // Actions
   listTenants: (params?: { page?: number; page_size?: number; search?: string }) => Promise<void>;
   getTenant: (id: string) => Promise<void>;
@@ -20,8 +28,18 @@ interface TenantState {
   setCurrentTenant: (tenant: Tenant | null) => void;
   addMember: (tenantId: string, userId: string, role: string) => Promise<void>;
   removeMember: (tenantId: string, userId: string) => Promise<void>;
-  listMembers: (tenantId: string) => Promise<any>;
+  listMembers: (tenantId: string) => Promise<UserTenant[]>;
   clearError: () => void;
+}
+
+function getErrorMessage(error: unknown): string {
+  const apiError = error as ApiError;
+  const detail = apiError.response?.data?.detail;
+  return detail
+    ? (typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail))
+    : 'Failed to process request';
 }
 
 export const useTenantStore = create<TenantState>((set, get) => ({
@@ -36,7 +54,7 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   listTenants: async (params = {}) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await tenantAPI.list(params);
+      const response: TenantListResponse = await tenantAPI.list(params);
       set({
         tenants: response.tenants,
         total: response.total,
@@ -44,15 +62,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
         pageSize: response.page_size,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to list tenants';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -61,20 +74,15 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   getTenant: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await tenantAPI.get(id);
+      const response: Tenant = await tenantAPI.get(id);
       set({
         currentTenant: response,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to get tenant';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -83,21 +91,16 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   createTenant: async (data: TenantCreate) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await tenantAPI.create(data);
+      const response: Tenant = await tenantAPI.create(data);
       const { tenants } = get();
       set({
         tenants: [...tenants, response],
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to create tenant';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -106,22 +109,17 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   updateTenant: async (id: string, data: TenantUpdate) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await tenantAPI.update(id, data);
+      const response: Tenant = await tenantAPI.update(id, data);
       const { tenants } = get();
       set({
         tenants: tenants.map(tenant => tenant.id === id ? response : tenant),
         currentTenant: get().currentTenant?.id === id ? response : get().currentTenant,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to update tenant';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -137,15 +135,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
         currentTenant: get().currentTenant?.id === id ? null : get().currentTenant,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to delete tenant';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -164,15 +157,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     try {
       await tenantAPI.addMember(tenantId, userId, role);
       set({ isLoading: false });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to add member';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -183,15 +171,10 @@ export const useTenantStore = create<TenantState>((set, get) => ({
     try {
       await tenantAPI.removeMember(tenantId, userId);
       set({ isLoading: false });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to remove member';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }
@@ -200,18 +183,13 @@ export const useTenantStore = create<TenantState>((set, get) => ({
   listMembers: async (tenantId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await tenantAPI.listMembers(tenantId);
+      const response: UserTenant[] = await tenantAPI.listMembers(tenantId);
       set({ isLoading: false });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail 
-        ? (typeof error.response.data.detail === 'string' 
-            ? error.response.data.detail 
-            : JSON.stringify(error.response.data.detail))
-        : 'Failed to list members';
-      set({ 
-        error: errorMessage, 
-        isLoading: false 
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error),
+        isLoading: false
       });
       throw error;
     }

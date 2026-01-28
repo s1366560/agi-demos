@@ -15,6 +15,22 @@ import type {
   MCPToolInfo,
   MCPServerTestResponse,
 } from "../types/agent";
+import type { UnknownError } from "../types/common";
+
+/**
+ * Helper function to extract error message from unknown error
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  const err = error as UnknownError;
+  if (err.response?.data?.detail) {
+    const detail = err.response.data.detail;
+    return typeof detail === "string" ? detail : JSON.stringify(detail);
+  }
+  if (err.message) {
+    return err.message;
+  }
+  return fallback;
+}
 
 // ============================================================================
 // STATE INTERFACE
@@ -118,12 +134,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
         total: servers?.length || 0,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list MCP servers";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list MCP servers");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -135,12 +147,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       const response = await mcpAPI.get(id);
       set({ currentServer: response, isLoading: false });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to get MCP server";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to get MCP server");
       set({ error: errorMessage, isLoading: false });
       throw error;
     }
@@ -157,12 +165,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to create MCP server";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to create MCP server");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -179,12 +183,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
         isSubmitting: false,
       });
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to update MCP server";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to update MCP server");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -200,12 +200,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
         total: get().total - 1,
         isSubmitting: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to delete MCP server";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to delete MCP server");
       set({ error: errorMessage, isSubmitting: false });
       throw error;
     }
@@ -221,14 +217,10 @@ export const useMCPStore = create<MCPState>((set, get) => ({
 
     try {
       await mcpAPI.toggleEnabled(id, enabled);
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Revert on error
       set({ servers: originalServers });
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to toggle server status";
+      const errorMessage = getErrorMessage(error, "Failed to toggle server status");
       set({ error: errorMessage });
       throw error;
     }
@@ -252,12 +244,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
       set({
         servers: servers.map((s) => (s.id === id ? updatedServer : s)),
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to sync MCP server tools";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to sync MCP server tools");
       set({ error: errorMessage });
       throw error;
     } finally {
@@ -277,12 +265,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     try {
       const response = await mcpAPI.test(id);
       return response;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to test MCP server connection";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to test MCP server connection");
       set({ error: errorMessage });
       throw error;
     } finally {
@@ -297,12 +281,8 @@ export const useMCPStore = create<MCPState>((set, get) => ({
     try {
       const tools = await mcpAPI.listAllTools();
       set({ allTools: tools });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail
-        ? typeof error.response.data.detail === "string"
-          ? error.response.data.detail
-          : JSON.stringify(error.response.data.detail)
-        : "Failed to list all tools";
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, "Failed to list all tools");
       set({ error: errorMessage });
       throw error;
     }

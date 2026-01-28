@@ -94,10 +94,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
         earliestLoadedSequence: firstSequence,
         latestLoadedSequence: lastSequence,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       console.error('[TimelineStore] getTimeline error:', error);
       set({
-        timelineError: error.response?.data?.detail || 'Failed to get timeline',
+        timelineError: err?.response?.data?.detail || 'Failed to get timeline',
         timelineLoading: false,
       });
       throw error;
@@ -188,10 +189,11 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       });
 
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       console.error('[TimelineStore] loadEarlierMessages error:', error);
       set({
-        timelineError: error.response?.data?.detail || 'Failed to load earlier messages',
+        timelineError: err?.response?.data?.detail || 'Failed to load earlier messages',
         timelineLoading: false,
       });
       throw error;

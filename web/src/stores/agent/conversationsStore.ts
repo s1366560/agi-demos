@@ -105,10 +105,11 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
         limit
       );
       set({ conversations, conversationsLoading: false });
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || 'Failed to list conversations',
+          err?.response?.data?.detail || 'Failed to list conversations',
         conversationsLoading: false,
       });
       throw error;
@@ -138,10 +139,11 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
         isNewConversationPending: true, // Mark as pending to prevent URL sync effect race condition
       });
       return conversation;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || 'Failed to create conversation',
+          err?.response?.data?.detail || 'Failed to create conversation',
         conversationsLoading: false,
       });
       throw error;
@@ -164,10 +166,11 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
       );
       set({ currentConversation: conversation, conversationsLoading: false });
       return conversation;
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || 'Failed to get conversation',
+          err?.response?.data?.detail || 'Failed to get conversation',
         conversationsLoading: false,
       });
       return null;
@@ -194,10 +197,11 @@ export const useConversationsStore = create<ConversationsState>((set, get) => ({
         conversationsLoading: false,
       });
       // Note: Conversation state cleanup is handled by the main agent store
-    } catch (error: any) {
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         conversationsError:
-          error.response?.data?.detail || 'Failed to delete conversation',
+          err?.response?.data?.detail || 'Failed to delete conversation',
         conversationsLoading: false,
       });
       throw error;

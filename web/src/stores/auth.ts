@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { authAPI } from '../services/api';
+import type { User } from '../types/memory';
 
 interface AuthState {
-    user: any | null;
+    user: User | null;
     token: string | null;
     isLoading: boolean;
     error: string | null;
@@ -13,7 +14,15 @@ interface AuthState {
     logout: () => void;
     checkAuth: () => Promise<void>;
     clearError: () => void;
-    setUser: (user: any) => void;
+    setUser: (user: User | null) => void;
+}
+
+interface ApiError {
+    response?: {
+        data?: {
+            detail?: string | Record<string, unknown>;
+        };
+    };
 }
 
 export const useAuthStore = create<AuthState>((set, _) => ({
@@ -40,11 +49,13 @@ export const useAuthStore = create<AuthState>((set, _) => ({
                 isLoading: false,
                 error: null,
             });
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.detail
-                ? (typeof error.response.data.detail === 'string'
-                    ? error.response.data.detail
-                    : JSON.stringify(error.response.data.detail))
+        } catch (error: unknown) {
+            const apiError = error as ApiError;
+            const detail = apiError.response?.data?.detail;
+            const errorMessage = detail
+                ? (typeof detail === 'string'
+                    ? detail
+                    : JSON.stringify(detail))
                 : '登录失败，请检查您的凭据';
             set({
                 error: errorMessage,
@@ -83,7 +94,7 @@ export const useAuthStore = create<AuthState>((set, _) => ({
 
         try {
             await authAPI.verifyToken(token);
-            const user = JSON.parse(localStorage.getItem('user') || 'null');
+            const user = JSON.parse(localStorage.getItem('user') || 'null') as User | null;
 
             set({
                 user,
