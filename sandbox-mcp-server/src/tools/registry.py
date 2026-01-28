@@ -7,6 +7,12 @@ import logging
 from typing import Dict, List
 
 from src.server.websocket_server import MCPTool
+from src.tools.ast_tools import (
+    create_ast_extract_function_tool,
+    create_ast_find_symbols_tool,
+    create_ast_get_imports_tool,
+    create_ast_parse_tool,
+)
 from src.tools.bash_tool import create_bash_tool
 from src.tools.file_tools import (
     create_edit_tool,
@@ -14,6 +20,13 @@ from src.tools.file_tools import (
     create_grep_tool,
     create_read_tool,
     create_write_tool,
+)
+from src.tools.index_tools import (
+    create_call_graph_tool,
+    create_code_index_build_tool,
+    create_dependency_graph_tool,
+    create_find_definition_tool,
+    create_find_references_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,6 +88,19 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
 
     # Register bash tool
     registry.register(create_bash_tool())
+
+    # Register AST tools
+    registry.register(create_ast_parse_tool())
+    registry.register(create_ast_find_symbols_tool())
+    registry.register(create_ast_extract_function_tool())
+    registry.register(create_ast_get_imports_tool())
+
+    # Register code indexing tools
+    registry.register(create_code_index_build_tool())
+    registry.register(create_find_definition_tool())
+    registry.register(create_find_references_tool())
+    registry.register(create_call_graph_tool())
+    registry.register(create_dependency_graph_tool())
 
     logger.info(f"Tool registry initialized with {len(registry.list_names())} tools")
     return registry
