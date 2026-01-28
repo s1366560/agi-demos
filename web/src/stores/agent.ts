@@ -64,10 +64,14 @@ import type {
   DoomLoopDetectedEventData,
   EnterPlanModeRequest,
   ExitPlanModeRequest,
+  ExecutionPlan,
+  ExecutionStep,
+  ExecutionStepStatus,
   MessageRole,
   PlanDocument,
   PlanModeStatus,
   PlanStatus,
+  ReflectionResult,
   SkillExecutionState,
   SkillMatchedEventData,
   SkillExecutionStartEventData,
@@ -88,6 +92,17 @@ import type {
 // Per-conversation locks to prevent simultaneous message sends per conversation
 let conversationLocks: ConversationLocks = new Map();
 
+/**
+ * Execution Plan Status for Plan Mode v2
+ */
+export type ExecutionPlanStatus =
+  | "idle"
+  | "planning"
+  | "executing"
+  | "reflecting"
+  | "complete"
+  | "failed";
+
 interface AgentState {
   // Conversations
   conversations: Conversation[];
@@ -104,6 +119,13 @@ interface AgentState {
   earliestLoadedSequence: number | null;
   latestLoadedSequence: number | null;
   hasEarlierMessages: boolean;
+
+  // Execution Plan state (Plan Mode v2)
+  executionPlan: ExecutionPlan | null;
+  reflectionResult: ReflectionResult | null;
+  executionPlanStatus: ExecutionPlanStatus;
+  detectionMethod: string | null;
+  detectionConfidence: number | null;
 
   // Agent execution state
   isStreaming: boolean;
@@ -278,6 +300,19 @@ interface AgentState {
   getPlanModeStatus: (conversationId: string) => Promise<PlanModeStatus>;
   clearPlanState: () => void;
 
+  // Execution Plan actions (Plan Mode v2)
+  updateExecutionPlanStatus: (status: ExecutionPlanStatus) => void;
+  updateDetectionInfo: (method: string, confidence: number) => void;
+  updateExecutionPlan: (plan: ExecutionPlan) => void;
+  updateReflectionResult: (result: ReflectionResult) => void;
+  updatePlanStepStatus: (
+    stepId: string,
+    status: ExecutionStepStatus,
+    result?: string,
+    error?: string
+  ) => void;
+  clearExecutionPlanState: () => void;
+
   // State management
   clearErrors: () => void;
   reset: () => void;
@@ -337,6 +372,12 @@ const initialState = {
   planModeStatus: null,
   planLoading: false,
   planError: null,
+  // Execution Plan state (Plan Mode v2)
+  executionPlan: null as ExecutionPlan | null,
+  reflectionResult: null as ReflectionResult | null,
+  executionPlanStatus: 'idle' as const,
+  detectionMethod: null as string | null,
+  detectionConfidence: null as number | null,
   // New conversation pending state
   isNewConversationPending: false,
   // Title generation state
@@ -1848,6 +1889,116 @@ export const useAgentStore = create<AgentState>()(
     });
   },
 
+  // Execution Plan actions (Plan Mode v2)
+
+  /**
+   * Update execution plan status
+   * @param status - The new status
+   */
+  updateExecutionPlanStatus: (status: ExecutionPlanStatus) => {
+    set({ executionPlanStatus: status });
+  },
+
+  /**
+   * Update detection info for plan mode trigger
+   * @param method - Detection method (llm, heuristic, cache)
+   * @param confidence - Confidence score (0-1)
+   */
+  updateDetectionInfo: (method: string, confidence: number) => {
+    set({
+      detectionMethod: method,
+      detectionConfidence: confidence,
+    });
+  },
+
+  /**
+   * Store execution plan
+   * @param plan - The execution plan to store
+   */
+  updateExecutionPlan: (plan: ExecutionPlan) => {
+    set({ executionPlan: plan });
+  },
+
+  /**
+   * Store reflection result
+   * @param result - The reflection result to store
+   */
+  updateReflectionResult: (result: ReflectionResult) => {
+    set({ reflectionResult: result });
+  },
+
+  /**
+   * Update status of a specific step in the execution plan
+   * @param stepId - The step ID to update
+   * @param status - The new status
+   * @param result - Optional result of the step
+   * @param error - Optional error message
+   */
+  updatePlanStepStatus: (
+    stepId: string,
+    status: ExecutionStepStatus,
+    result?: string,
+    error?: string
+  ) => {
+    const { executionPlan } = get();
+    if (!executionPlan) {
+      return;
+    }
+
+    const updatedSteps = executionPlan.steps.map((step) => {
+      if (step.step_id !== stepId) {
+        return step;
+      }
+
+      const updatedStep: ExecutionStep = {
+        ...step,
+        status,
+      };
+
+      // Set timestamps based on status
+      if (status === "running" && !step.started_at) {
+        updatedStep.started_at = new Date().toISOString();
+      } else if (
+        status === "completed" ||
+        status === "failed" ||
+        status === "skipped" ||
+        status === "cancelled"
+      ) {
+        updatedStep.completed_at = new Date().toISOString();
+      }
+
+      // Set result or error
+      if (result !== undefined) {
+        updatedStep.result = result;
+      }
+      if (error !== undefined) {
+        updatedStep.error = error;
+      }
+
+      return updatedStep;
+    });
+
+    set({
+      executionPlan: {
+        ...executionPlan,
+        steps: updatedSteps,
+      },
+    });
+  },
+
+  /**
+   * Clear all execution plan state
+   */
+  clearExecutionPlanState: () => {
+    set({
+      executionPlan: null,
+      reflectionResult: null,
+      executionPlanStatus: "idle",
+      detectionMethod: null,
+      detectionConfidence: null,
+    });
+  },
+
   clearErrors: () => {
     set({
       conversationsError: null,
@@ -2277,6 +2428,58 @@ export const useCurrentPlan = () => useAgentStore((state) => state.currentPlan);
 export const usePlanModeStatus = () =>
   useAgentStore((state) => state.planModeStatus);
 
+// Execution Plan selectors (Plan Mode v2)
+
+/**
+ * Get current execution plan
+ *
+ * @returns Current execution plan or null
+ * @example
+ * const executionPlan = useExecutionPlan();
+ */
+export const useExecutionPlan = () =>
+  useAgentStore((state) => state.executionPlan);
+
+/**
+ * Get execution plan status
+ *
+ * @returns Execution plan status
+ * @example
+ * const status = useExecutionPlanStatus();
+ */
+export const useExecutionPlanStatus = () =>
+  useAgentStore((state) => state.executionPlanStatus);
+
+/**
+ * Get reflection result
+ *
+ * @returns Latest reflection result or null
+ * @example
+ * const reflection = useReflectionResult();
+ */
+export const useReflectionResult = () =>
+  useAgentStore((state) => state.reflectionResult);
+
+/**
+ * Get detection method
+ *
+ * @returns Detection method used to trigger plan mode
+ * @example
+ * const method = useDetectionMethod();
+ */
+export const useDetectionMethod = () =>
+  useAgentStore((state) => state.detectionMethod);
+
+/**
+ * Get detection confidence
+ *
+ * @returns Confidence score of detection (0-1)
+ * @example
+ * const confidence = useDetectionConfidence();
+ */
+export const useDetectionConfidence = () =>
+  useAgentStore((state) => state.detectionConfidence);
+
 /**
  * Get Plan Mode loading state
  *
@@ -2366,6 +2569,13 @@ export const useAgentActions = () =>
     updatePlan: state.updatePlan,
     getPlanModeStatus: state.getPlanModeStatus,
     clearPlanState: state.clearPlanState,
+    // Execution Plan actions (Plan Mode v2)
+    updateExecutionPlanStatus: state.updateExecutionPlanStatus,
+    updateDetectionInfo: state.updateDetectionInfo,
+    updateExecutionPlan: state.updateExecutionPlan,
+    updateReflectionResult: state.updateReflectionResult,
+    updatePlanStepStatus: state.updatePlanStepStatus,
+    clearExecutionPlanState: state.clearExecutionPlanState,
     clearErrors: state.clearErrors,
     reset: state.reset,
   }));

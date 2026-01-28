@@ -1,1 +1,1 @@
-"""Unit tests for agent planning module."""
+"""Tests for agent planning components."""

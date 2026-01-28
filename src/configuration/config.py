@@ -287,6 +287,25 @@ class Settings(BaseSettings):
     )  # ms (increased from 30000 to 120000 = 2 minutes)
     mcp_auto_connect: bool = Field(default=True, alias="MCP_AUTO_CONNECT")
 
+    # Plan Mode Detection Settings (Hybrid Detection Strategy)
+    plan_mode_enabled: bool = Field(default=False, alias="PLAN_MODE_ENABLED")
+    plan_mode_detection_strategy: str = Field(
+        default="hybrid", alias="PLAN_MODE_DETECTION_STRATEGY"
+    )  # "hybrid", "heuristic", "llm", "always", "never"
+    plan_mode_heuristic_threshold_high: float = Field(
+        default=0.8, alias="PLAN_MODE_HEURISTIC_THRESHOLD_HIGH"
+    )  # Score above which to auto-accept
+    plan_mode_heuristic_threshold_low: float = Field(
+        default=0.2, alias="PLAN_MODE_HEURISTIC_THRESHOLD_LOW"
+    )  # Score below which to auto-reject
+    plan_mode_min_length: int = Field(default=30, alias="PLAN_MODE_MIN_LENGTH")
+    plan_mode_llm_confidence_threshold: float = Field(
+        default=0.7, alias="PLAN_MODE_LLM_CONFIDENCE_THRESHOLD"
+    )
+    plan_mode_cache_enabled: bool = Field(default=True, alias="PLAN_MODE_CACHE_ENABLED")
+    plan_mode_cache_ttl: int = Field(default=3600, alias="PLAN_MODE_CACHE_TTL")
+    plan_mode_cache_max_size: int = Field(default=100, alias="PLAN_MODE_CACHE_MAX_SIZE")
+
     # OpenTelemetry Settings
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")

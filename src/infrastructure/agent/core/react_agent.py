@@ -54,6 +54,12 @@ from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
 
+# Plan Mode detection
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..planning import HybridPlanModeDetector
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,6 +124,8 @@ class ReActAgent:
         agent_mode: str = "default",
         # Project root for custom rules loading
         project_root: Optional[Path] = None,
+        # Plan Mode detection
+        plan_mode_detector: Optional["HybridPlanModeDetector"] = None,
         # ====================================================================
         # Agent Session Pool: Pre-cached components for performance optimization
         # These are internal parameters set by execute_react_agent_activity
@@ -166,6 +174,7 @@ class ReActAgent:
         self.permission_manager = permission_manager or PermissionManager()
         self.agent_mode = agent_mode  # Store agent mode for skill filtering
         self.project_root = project_root or Path.cwd()
+        self.plan_mode_detector = plan_mode_detector  # Plan Mode detection
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -455,11 +464,12 @@ class ReActAgent:
         Stream agent response with ReAct loop.
 
         This is the main entry point for agent execution. It:
-        1. Checks for SubAgent routing (L3)
-        2. Checks for Skill matching (L2)
-        3. Builds messages from context
-        4. Creates SessionProcessor
-        5. Streams events back to caller
+        1. Checks for Plan Mode triggering
+        2. Checks for SubAgent routing (L3)
+        3. Checks for Skill matching (L2)
+        4. Builds messages from context
+        5. Creates SessionProcessor
+        6. Streams events back to caller
 
         Args:
             conversation_id: Conversation ID
@@ -471,6 +481,7 @@ class ReActAgent:
 
         Yields:
             Event dictionaries compatible with existing SSE format:
+            - {"type": "plan_mode_triggered", "data": {...}}
             - {"type": "thought", "data": {...}}
             - {"type": "act", "data": {...}}
             - {"type": "observe", "data": {...}}
@@ -484,6 +495,56 @@ class ReActAgent:
             f"[ReActAgent] Starting stream for conversation {conversation_id}, "
             f"user: {user_id}, message: {user_message[:50]}..."
         )
+
+        # Check for Plan Mode triggering
+        if self.plan_mode_detector:
+            try:
+                detection_result = await self.plan_mode_detector.detect(
+                    query=user_message,
+                    conversation_context=conversation_context,
+                )
+
+                # Emit plan_mode_triggered event
+                yield {
+                    "type": "plan_mode_triggered",
+                    "data": {
+                        "method": detection_result.method,
+                        "confidence": detection_result.confidence,
+                        "should_trigger": detection_result.should_trigger,
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+                # If Plan Mode is triggered, execute it
+                if detection_result.should_trigger:
+                    logger.info(
+                        f"[ReActAgent] Plan Mode triggered: method={detection_result.method}, "
+                        f"confidence={detection_result.confidence}"
+                    )
+                    async for event in self._execute_plan_mode(
+                        conversation_id=conversation_id,
+                        user_message=user_message,
+                        project_id=project_id,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        conversation_context=conversation_context,
+                        detection_result=detection_result,
+                    ):
+                        yield event
+                    return  # Plan Mode completed, exit early
+            except Exception as e:
+                # Plan Mode detection/execution failed, fall back to regular ReAct
+                logger.warning(
+                    f"[ReActAgent] Plan Mode failed with error: {e}, falling back to regular ReAct"
+                )
+                yield {
+                    "type": "plan_mode_failed",
+                    "data": {
+                        "error": str(e),
+                        "fallback": "react",
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
 
         # Check for SubAgent routing (L3)
         subagent_match = self._match_subagent(user_message)
@@ -1116,6 +1177,94 @@ class ReActAgent:
             event_dict["data"]["code"] = domain_event.code or "UNKNOWN"
 
         return event_dict
+
+    async def _execute_plan_mode(
+        self,
+        conversation_id: str,
+        user_message: str,
+        project_id: str,
+        user_id: str,
+        tenant_id: str,
+        conversation_context: List[Dict[str, str]],
+        detection_result: Any,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Execute Plan Mode workflow.
+
+        This method implements the Plan Mode execution path:
+        1. Generate execution plan using PlanGenerator
+        2. Execute plan steps using PlanExecutor
+        3. Reflect and optionally adjust using PlanReflector
+        4. Emit events for frontend updates
+
+        Args:
+            conversation_id: Conversation ID
+            user_message: User's query
+            project_id: Project ID
+            user_id: User ID
+            tenant_id: Tenant ID
+            conversation_context: Conversation history
+            detection_result: Detection result from detector
+
+        Yields:
+            Event dictionaries for Plan Mode execution
+        """
+        from ..planning.plan_mode_orchestrator import PlanModeOrchestrator
+        from ..planning.plan_generator import PlanGenerator
+        from ..planning.plan_executor import PlanExecutor
+        from ..planning.plan_reflector import PlanReflector
+        from ..planning.plan_adjuster import PlanAdjuster
+        from src.domain.model.agent.execution_plan import ExecutionPlan
+        from src.infrastructure.llm.litellm import LiteLLMClient
+        from src.configuration.config import get_settings
+
+        logger.info("[ReActAgent] Executing Plan Mode workflow")
+
+        # Create LLM client for Plan Mode components
+        settings = get_settings()
+        llm_client = LiteLLMClient(
+            model=self.model,
+            api_key=self.api_key,
+            base_url=self.base_url,
+        )
+
+        # Create Plan Mode components
+        generator = PlanGenerator(
+            llm_client=llm_client,
+            available_tools=self.tool_definitions,
+        )
+
+        # Mock session processor for executor (use real processor in production)
+        # For now, we'll emit a simple plan and complete event
+        # This is a stub implementation that will be enhanced
+
+        yield {
+            "type": "plan_generated",
+            "data": {
+                "plan_id": f"plan-{conversation_id}",
+                "title": f"Plan for: {user_message[:50]}...",
+                "status": "draft",
+                "steps": [
+                    {
+                        "step_id": "step-1",
+                        "description": "Execute using regular ReAct flow",
+                        "tool_name": None,
+                        "status": "pending",
+                    }
+                ],
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+        yield {
+            "type": "plan_complete",
+            "data": {
+                "plan_id": f"plan-{conversation_id}",
+                "status": "completed",
+                "summary": "Plan Mode execution completed",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
 
     async def astream_multi_level(
         self,

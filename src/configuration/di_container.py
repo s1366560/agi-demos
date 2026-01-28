@@ -537,6 +537,50 @@ class DIContainer:
 
         return GetPlanUseCase(plan_repository=self.plan_repository())
 
+    # === Plan Mode Detection ===
+
+    def plan_mode_cache(self):
+        """Get LLMResponseCache for Plan Mode detection."""
+        from src.infrastructure.agent.planning import LLMResponseCache
+
+        if not self._settings.plan_mode_cache_enabled:
+            return None
+
+        return LLMResponseCache(
+            max_size=self._settings.plan_mode_cache_max_size,
+            default_ttl=self._settings.plan_mode_cache_ttl,
+        )
+
+    def fast_heuristic_detector(self):
+        """Get FastHeuristicDetector for Plan Mode Layer 1 & 2."""
+        from src.infrastructure.agent.planning import FastHeuristicDetector
+
+        return FastHeuristicDetector(
+            high_threshold=self._settings.plan_mode_heuristic_threshold_high,
+            low_threshold=self._settings.plan_mode_heuristic_threshold_low,
+            min_length=self._settings.plan_mode_min_length,
+        )
+
+    def llm_classifier(self, llm):
+        """Get LLMClassifier for Plan Mode Layer 3."""
+        from src.infrastructure.agent.planning import LLMClassifier
+
+        return LLMClassifier(
+            llm_client=llm,
+            confidence_threshold=self._settings.plan_mode_llm_confidence_threshold,
+        )
+
+    def hybrid_plan_mode_detector(self, llm):
+        """Get HybridPlanModeDetector for Plan Mode detection."""
+        from src.infrastructure.agent.planning import HybridPlanModeDetector
+
+        return HybridPlanModeDetector(
+            heuristic_detector=self.fast_heuristic_detector(),
+            llm_classifier=self.llm_classifier(llm),
+            cache=self.plan_mode_cache(),
+            enabled=self._settings.plan_mode_enabled,
+        )
+
     # === Memory Use Cases ===
 
     def create_memory_use_case(self) -> MemCreateMemoryUseCase:
