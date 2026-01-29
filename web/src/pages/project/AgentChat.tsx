@@ -136,13 +136,6 @@ export const AgentChat: React.FC = () => {
     }
   }, [doomLoopDetected]);
 
-  // Ensure sandbox exists when projectId changes or component mounts
-  useEffect(() => {
-    if (projectId) {
-      ensureSandbox();
-    }
-  }, [projectId, ensureSandbox]);
-
   const handleSelectConversation = useCallback((id: string) => {
     navigate(`/project/${projectId}/agent/${id}`);
   }, [navigate, projectId]);
