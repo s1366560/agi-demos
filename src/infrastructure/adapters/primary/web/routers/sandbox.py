@@ -357,13 +357,22 @@ async def terminate_sandbox(
     return {"status": "terminated", "sandbox_id": sandbox_id}
 
 
+@router.get("", response_model=ListSandboxesResponse)
 @router.get("/", response_model=ListSandboxesResponse)
 async def list_sandboxes(
     status: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ):
-    """List all sandboxes."""
+    """List all sandboxes.
+
+    Note: Two route decorators are used to handle both:
+    - GET /api/v1/sandbox (no trailing slash) - from frontend
+    - GET /api/v1/sandbox/ (with trailing slash) - backward compatibility
+
+    This prevents FastAPI from returning 307 redirect which would drop
+    the Authorization header (HTTP security behavior).
+    """
     status_filter = None
     if status:
         try:
