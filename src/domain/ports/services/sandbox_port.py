@@ -36,9 +36,13 @@ class SandboxConfig:
     memory_limit: str = "2G"
     timeout_seconds: int = 60
     network_isolated: bool = True
+    network_mode: str = "bridge"  # bridge, none, host, container:<name>
+    allowed_networks: List[str] = field(default_factory=list)  # CIDR ranges
+    blocked_ports: List[int] = field(default_factory=list)  # Ports to block
     security_profile: str = "standard"
     environment: Dict[str, str] = field(default_factory=dict)
     volumes: Dict[str, str] = field(default_factory=dict)
+    desktop_enabled: bool = True  # Whether to start desktop environment (VNC/noVNC)
 
 
 @dataclass

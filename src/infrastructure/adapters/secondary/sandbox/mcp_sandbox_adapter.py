@@ -14,6 +14,10 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 import docker
 from docker.errors import ImageNotFound, NotFound
 
+from src.application.services.sandbox_url_service import (
+    SandboxInstanceInfo,
+    SandboxUrlService,
+)
 from src.domain.ports.services.sandbox_port import (
     CodeExecutionRequest,
     CodeExecutionResult,
@@ -122,6 +126,9 @@ class MCPSandboxAdapter(SandboxPort):
         self._desktop_port_counter = 0
         self._terminal_port_counter = 0
         self._used_ports: set = set()
+
+        # URL service for building service URLs
+        self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
 
         # Initialize Docker client
         try:
@@ -249,10 +256,19 @@ class MCPSandboxAdapter(SandboxPort):
             # Wait for container to be ready
             await asyncio.sleep(1)
 
-            # Determine service URLs
-            websocket_url = f"ws://localhost:{host_mcp_port}"
-            desktop_url = f"http://localhost:{host_desktop_port}/vnc.html"
-            terminal_url = f"http://localhost:{host_terminal_port}"
+            # Build service URLs using SandboxUrlService
+            instance_info = SandboxInstanceInfo(
+                mcp_port=host_mcp_port,
+                desktop_port=host_desktop_port,
+                terminal_port=host_terminal_port,
+                sandbox_id=sandbox_id,
+                host="localhost",
+            )
+            urls = self._url_service.build_all_urls(instance_info)
+
+            websocket_url = urls.mcp_url
+            desktop_url = urls.desktop_url
+            terminal_url = urls.terminal_url
 
             # Create instance record with port information
             instance = MCPSandboxInstance(

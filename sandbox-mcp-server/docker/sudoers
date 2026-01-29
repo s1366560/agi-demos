@@ -1,0 +1,38 @@
+# Sudoers configuration for sandbox user
+# Restricts sudo access to only essential commands
+
+# Defaults
+Defaults !lecture, !mail_badpass, !authenticate
+Defaults secure_path = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Sandbox user can only run specific commands without password
+sandbox ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/bin/pip, /usr/bin/pip3
+
+# Allow restarting specific services (for development)
+sandbox ALL=(ALL) NOPASSWD: /bin/systemctl restart ssh.service
+sandbox ALL=(ALL) NOPASSWD: /bin/systemctl restart nginx.service
+
+# Allow file operations in /workspace only
+sandbox ALL=(ALL) NOPASSWD: /bin/chmod -R g+rw /workspace/*
+sandbox ALL=(ALL) NOPASSWD: /bin/chown -R sandbox:sandbox /workspace/*
+
+# Explicitly deny dangerous commands
+sandbox ALL=(ALL) !/bin/su
+sandbox ALL=(ALL) !/bin/su -
+sandbox ALL=(ALL) !/usr/bin/sudo
+sandbox ALL=(ALL) !/usr/bin/passwd
+sandbox ALL=(ALL) !/usr/bin/chsh
+sandbox ALL=(ALL) !/usr/bin/chfn
+sandbox ALL=(ALL) !/usr/bin/gpasswd
+sandbox ALL=(ALL) !/usr/bin/newgrp
+sandbox ALL=(ALL) !/usr/sbin/visudo
+sandbox ALL=(ALL) !/usr/sbin/usermod
+sandbox ALL=(ALL) !/usr/sbin/userdel
+sandbox ALL=(ALL) !/usr/sbin/adduser
+sandbox ALL=(ALL) !/bin/rm -rf /
+sandbox ALL=(ALL) !/bin/dd if=/dev/zero
+sandbox ALL=(ALL) !/bin/dd if=/dev/urandom
+sandbox ALL=(ALL) !/sbin/iptables *
+sandbox ALL=(ALL) !/sbin/iptables-restore *
+sandbox ALL=(ALL) !/sbin/iptables-save *
+sandbox ALL=(ALL) !/usr/sbin/tcpdump

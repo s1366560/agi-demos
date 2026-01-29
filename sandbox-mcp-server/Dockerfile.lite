@@ -1,0 +1,152 @@
+# Sandbox MCP Server - Lite Dockerfile
+# Lightweight version without desktop environment
+# Only MCP server + Web Terminal (ttyd)
+#
+# Build: docker build -f Dockerfile.lite -t sandbox-mcp-server:lite .
+# Run:   docker run -p 8765:8765 -p 7681:7681 -v $(pwd)/workspace:/workspace sandbox-mcp-server:lite
+
+FROM ubuntu:25.04
+
+LABEL maintainer="MemStack Team"
+LABEL description="Lightweight Sandbox MCP Server (no desktop, MCP + Terminal only)"
+
+# ====================
+# Environment Variables
+# ====================
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+# Development versions
+ENV PYTHON_VERSION=3.13 \
+    NODE_VERSION=22
+
+# MCP Server configuration
+ENV MCP_HOST=0.0.0.0 \
+    MCP_PORT=8765 \
+    MCP_WORKSPACE=/workspace
+
+# Desktop DISABLED for lite version
+ENV DESKTOP_ENABLED=false
+
+# Terminal configuration
+ENV TERMINAL_ENABLED=true \
+    TERMINAL_PORT=7681
+
+# ====================
+# Base System Setup
+# ====================
+# First install ca-certificates for HTTPS support, then configure mirrors
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y ca-certificates; \
+    ARCH=$(dpkg --print-architecture); \
+    if [ "$ARCH" = "amd64" ]; then MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu"; \
+    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"; \
+    else MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"; \
+    fi; \
+    echo "Using mirror: $MIRROR for $ARCH"; \
+    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky plucky-updates plucky-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources; \
+    apt-get update; \
+    apt-get upgrade -y
+
+# ====================
+# Install System Dependencies (cached layer)
+# ====================
+# Minimal dependencies - no desktop components
+RUN set -eux; \
+    apt-get install -y --no-install-recommends \
+        # Basic utilities
+        curl wget ca-certificates gnupg lsb-release git vim nano unzip zip tar gzip bzip2 xz-utils \
+        # Build essentials
+        build-essential gcc g++ make cmake pkg-config \
+        # Python
+        python${PYTHON_VERSION} python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev python3-pip \
+        # Network tools
+        iputils-ping net-tools dnsutils \
+        # Process management
+        procps htop \
+        # Text processing
+        jq \
+        # File management
+        tree rsync sudo \
+    ; \
+    rm -rf /var/lib/apt/lists/*
+
+# ====================
+# Install Node.js via NodeSource (cached layer)
+# ====================
+RUN set -eux; \
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -; \
+    apt-get install -y nodejs; \
+    rm -rf /var/lib/apt/lists/*
+
+# ====================
+# Install Global Node Packages (with cache mount)
+# ====================
+RUN --mount=type=cache,target=/root/.npm npm install -g pnpm yarn
+
+# ====================
+# Configure Python Alternatives (cached layer)
+# ====================
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1
+
+# ====================
+# Install Python Tools (with cache mount for pip)
+# ====================
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages pipx uv && \
+    pipx ensurepath
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    "aiohttp>=3.9.0" "aiofiles>=24.1.0" "pydantic>=2.5.0" "watchfiles>=0.21.0" \
+    virtualenv pipenv poetry ipython black ruff mypy pytest pytest-asyncio
+
+# ====================
+# Install ttyd for Web Terminal
+# ====================
+ENV TTYD_VERSION=1.7.7
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    TTYD_ARCH=$([ "$ARCH" = "x86_64" ] && echo "x86_64" || \
+               [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
+               [ "$ARCH" = "arm64" ] && echo "aarch64" || \
+               echo "$ARCH"); \
+    curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
+        -o /usr/local/bin/ttyd; \
+    chmod +x /usr/local/bin/ttyd
+
+# ====================
+# Create workspace directory
+# ====================
+WORKDIR /workspace
+VOLUME ["/workspace"]
+
+# ====================
+# Copy MCP Server source
+# ====================
+COPY src/ /app/
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ====================
+# Expose ports
+# ====================
+# MCP server port
+EXPOSE 8765
+# Terminal (ttyd) port
+EXPOSE 7681
+
+# ====================
+# Health check
+# ====================
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/health', timeout=5)" || exit 1
+
+# ====================
+# Entrypoint
+# ====================
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -16,7 +16,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
+from src.application.services.sandbox_health_service import (
+    HealthCheckLevel,
+    HealthCheckResult,
+    SandboxHealthService,
+)
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
+from src.application.services.sandbox_profile import (
+    SandboxProfile,
+    SandboxProfileType,
+    get_profile,
+    list_profiles,
+)
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -103,12 +114,21 @@ class CreateSandboxRequest(BaseModel):
     project_path: str = Field(
         default="/tmp/sandbox_workspace", description="Path to mount as workspace"
     )
+    profile: Optional[str] = Field(
+        default="standard", description="Sandbox profile: lite, standard, or full"
+    )
     image: Optional[str] = Field(
         default=None, description="Docker image (default: sandbox-mcp-server)"
     )
-    memory_limit: Optional[str] = Field(default="2g", description="Memory limit")
-    cpu_limit: Optional[str] = Field(default="2", description="CPU limit")
-    timeout_seconds: Optional[int] = Field(default=3600, description="Max sandbox lifetime")
+    memory_limit: Optional[str] = Field(
+        default=None, description="Memory limit (overrides profile if set)"
+    )
+    cpu_limit: Optional[str] = Field(
+        default=None, description="CPU limit (overrides profile if set)"
+    )
+    timeout_seconds: Optional[int] = Field(
+        default=None, description="Max sandbox lifetime (overrides profile if set)"
+    )
     network_isolated: bool = Field(default=False, description="Network isolation")
     environment: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
 
@@ -220,35 +240,31 @@ class TerminalStopResponse(BaseModel):
     message: str = Field(default="", description="Status message")
 
 
-# --- Request/Response Schemas ---
+# --- Profile Response Schemas ---
 
 
-class CreateSandboxRequest(BaseModel):
-    """Request to create a new sandbox."""
+class ProfileInfo(BaseModel):
+    """Information about a sandbox profile."""
 
-    project_path: str = Field(
-        default="/tmp/sandbox_workspace", description="Path to mount as workspace"
-    )
-    image: Optional[str] = Field(
-        default=None, description="Docker image (default: sandbox-mcp-server)"
-    )
-    memory_limit: Optional[str] = Field(default="2g", description="Memory limit")
-    cpu_limit: Optional[str] = Field(default="2", description="CPU limit")
-    timeout_seconds: Optional[int] = Field(default=3600, description="Max sandbox lifetime")
-    network_isolated: bool = Field(default=False, description="Network isolation")
-    environment: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
+    name: str = Field(..., description="Profile name (e.g., 'Lite', 'Standard', 'Full')")
+    profile_type: str = Field(..., description="Profile type identifier (lite, standard, full)")
+    description: str = Field(..., description="Profile description")
+    desktop_enabled: bool = Field(..., description="Whether desktop environment is enabled")
+    memory_limit: str = Field(..., description="Memory limit (e.g., '512m', '2g', '4g')")
+    cpu_limit: str = Field(..., description="CPU limit (e.g., '0.5', '2', '4')")
+    timeout_seconds: int = Field(..., description="Maximum sandbox lifetime in seconds")
+    preinstalled_tools: List[str] = Field(..., description="List of preinstalled tools")
+    max_instances: int = Field(..., description="Maximum concurrent instances")
 
 
-class SandboxResponse(BaseModel):
-    """Sandbox instance response."""
+class ListProfilesResponse(BaseModel):
+    """Response listing all available sandbox profiles."""
 
-    id: str
-    status: str
-    project_path: str
-    endpoint: Optional[str] = None
-    websocket_url: Optional[str] = None
-    created_at: str
-    tools: List[str] = Field(default_factory=list)
+    profiles: List[ProfileInfo]
+
+
+# --- Duplicate Request/Response Schemas removed ---
+# The canonical definitions are above (lines 103-159)
 
 
 class ToolCallRequest(BaseModel):
@@ -287,7 +303,92 @@ class ListToolsResponse(BaseModel):
     tools: List[ToolInfo]
 
 
+# --- Health Check Response Schemas ---
+
+
+class HealthCheckResponse(BaseModel):
+    """Health check response."""
+
+    level: str = Field(..., description="Health check level performed")
+    status: str = Field(..., description="Overall health status")
+    healthy: bool = Field(..., description="Whether the sandbox is healthy")
+    details: Dict[str, Any] = Field(default_factory=dict, description="Detailed health information")
+    timestamp: str = Field(..., description="ISO format timestamp")
+    sandbox_id: str = Field(..., description="Sandbox ID")
+    errors: List[str] = Field(default_factory=list, description="List of errors found")
+
+
 # --- Endpoints ---
+
+
+@router.get("/profiles", response_model=ListProfilesResponse)
+async def list_sandbox_profiles():
+    """
+    List all available sandbox profiles.
+
+    Returns a list of predefined sandbox configurations with different
+    resource limits and capabilities.
+    """
+    profiles = list_profiles()
+
+    profile_infos = [
+        ProfileInfo(
+            name=p.name,
+            profile_type=p.profile_type.value,
+            description=p.description,
+            desktop_enabled=p.desktop_enabled,
+            memory_limit=p.memory_limit,
+            cpu_limit=p.cpu_limit,
+            timeout_seconds=p.timeout_seconds,
+            preinstalled_tools=p.preinstalled_tools,
+            max_instances=p.max_instances,
+        )
+        for p in profiles
+    ]
+
+    return ListProfilesResponse(profiles=profile_infos)
+
+
+@router.get("/{sandbox_id}/health", response_model=HealthCheckResponse)
+async def check_sandbox_health(
+    sandbox_id: str,
+    level: str = Query("basic", description="Health check level: basic, mcp, services, full"),
+    _current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+):
+    """
+    Check sandbox health status.
+
+    Performs health checks at the specified level:
+    - basic: Container running status
+    - mcp: MCP connection status
+    - services: Desktop and Terminal service status
+    - full: All checks combined
+    """
+    # Validate and parse level
+    try:
+        health_level = HealthCheckLevel(level)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid health check level: {level}. Valid values: basic, mcp, services, full"
+        )
+
+    # Create health service
+    health_service = SandboxHealthService(sandbox_adapter=adapter)
+
+    # Perform health check
+    result = await health_service.check_health(sandbox_id, level=health_level)
+
+    return HealthCheckResponse(
+        level=result.level.value,
+        status=result.status.value,
+        healthy=result.healthy,
+        details=result.details,
+        timestamp=(result.timestamp.isoformat()) if result.timestamp else "",
+        sandbox_id=result.sandbox_id,
+        errors=result.errors,
+    )
 
 
 @router.post("/create", response_model=SandboxResponse)
@@ -310,13 +411,22 @@ async def create_sandbox(
         # Extract project_id from project_path
         project_id = extract_project_id(request.project_path)
 
+        # Get profile and apply settings (with override support)
+        profile = get_profile(request.profile or "standard")
+
+        # Use profile defaults, allow explicit overrides
+        memory_limit = request.memory_limit if request.memory_limit is not None else profile.memory_limit
+        cpu_limit = request.cpu_limit if request.cpu_limit is not None else profile.cpu_limit
+        timeout_seconds = request.timeout_seconds if request.timeout_seconds is not None else profile.timeout_seconds
+
         config = SandboxConfig(
             image=request.image,
-            memory_limit=request.memory_limit,
-            cpu_limit=request.cpu_limit,
-            timeout_seconds=request.timeout_seconds,
+            memory_limit=memory_limit,
+            cpu_limit=cpu_limit,
+            timeout_seconds=timeout_seconds,
             network_isolated=request.network_isolated,
             environment=request.environment,
+            desktop_enabled=profile.desktop_enabled,
         )
 
         instance = await adapter.create_sandbox(

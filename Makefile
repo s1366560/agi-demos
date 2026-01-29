@@ -18,7 +18,7 @@
 # =============================================================================
 
 .PHONY: help install update clean init reset fresh restart
-.PHONY: sandbox-build sandbox-run sandbox-run-tigervnc sandbox-stop sandbox-restart sandbox-logs sandbox-shell sandbox-root-shell sandbox-status sandbox-ps sandbox-test sandbox-clean sandbox-reset
+.PHONY: sandbox-build sandbox-build-lite sandbox-run sandbox-run-lite sandbox-run-tigervnc sandbox-stop sandbox-stop-lite sandbox-restart sandbox-logs sandbox-shell sandbox-root-shell sandbox-status sandbox-status-lite sandbox-ps sandbox-test sandbox-clean sandbox-reset
 .PHONY: sandbox-desktop-start sandbox-desktop-stop sandbox-desktop-status sandbox-desktop-logs
 .PHONY: sandbox-terminal-start sandbox-terminal-stop sandbox-terminal-status sandbox-terminal-logs
 .PHONY: sandbox-start-all sandbox-stop-all sandbox-all-status
@@ -92,20 +92,24 @@ help: ## Show this help message
 	@echo "  make docker-clean     - Clean up containers, volumes, and orphans"
 	@echo ""
 	@echo "Sandbox (All-in-one Dev Environment):"
-	@echo "  make sandbox-build        - Build sandbox Docker image"
-	@echo "  make sandbox-run          - Start sandbox (x11vnc VNC, XFCE desktop)"
-	@echo "  make sandbox-run-tigervnc - Start sandbox (TigerVNC, experimental)"
-	@echo "  make sandbox-stop         - Stop sandbox container"
-	@echo "  make sandbox-restart      - Restart sandbox container"
-	@echo "  make sandbox-status       - Show status, VNC type, processes"
-	@echo "  make sandbox-logs         - Show and follow logs"
-	@echo "  make sandbox-shell        - Open sandbox shell (sandbox user)"
-	@echo "  make sandbox-root-shell   - Open root shell in sandbox"
-	@echo "  make sandbox-ps           - Show all running processes"
-	@echo "  make sandbox-test         - Run VNC config validation test"
-	@echo "  make sandbox-test-complete - Run complete XFCE 4.20 + VNC verification"
-	@echo "  make sandbox-clean        - Remove container and volume"
-	@echo "  make sandbox-reset        - Clean and rebuild sandbox"
+	@echo "  make sandbox-build          - Build full sandbox Docker image (with desktop)"
+	@echo "  make sandbox-build-lite     - Build lite sandbox image (no desktop, MCP+Terminal only)"
+	@echo "  make sandbox-run            - Start full sandbox (XFCE desktop, TigerVNC)"
+	@echo "  make sandbox-run-lite       - Start lite sandbox (no desktop, MCP+Terminal only)"
+	@echo "  make sandbox-run-tigervnc   - Start sandbox with TigerVNC (experimental)"
+	@echo "  make sandbox-stop           - Stop sandbox container"
+	@echo "  make sandbox-stop-lite      - Stop lite sandbox container"
+	@echo "  make sandbox-restart        - Restart sandbox container"
+	@echo "  make sandbox-status         - Show status, VNC type, processes"
+	@echo "  make sandbox-status-lite    - Show lite sandbox status"
+	@echo "  make sandbox-logs           - Show and follow logs"
+	@echo "  make sandbox-shell          - Open sandbox shell (sandbox user)"
+	@echo "  make sandbox-root-shell     - Open root shell in sandbox"
+	@echo "  make sandbox-ps             - Show all running processes"
+	@echo "  make sandbox-test           - Run VNC config validation test"
+	@echo "  make sandbox-test-complete  - Run complete XFCE 4.20 + VNC verification"
+	@echo "  make sandbox-clean          - Remove container and volume"
+	@echo "  make sandbox-reset          - Clean and rebuild sandbox"
 	@echo ""
 	@echo "Sandbox Desktop (XFCE4 + noVNC):"
 	@echo "  make sandbox-desktop-status  - Show desktop & VNC processes"
@@ -602,11 +606,17 @@ SANDBOX_TERMINAL_PORT?=7681
 SANDBOX_NAME?=sandbox-mcp-server
 SANDBOX_VNC?=tigervnc  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
 
-sandbox-build: ## Build sandbox MCP server Docker image
-	@echo "🏗️  Building sandbox MCP server image..."
+sandbox-build: ## Build sandbox MCP server Docker image (full version with desktop)
+	@echo "🏗️  Building sandbox MCP server image (full)..."
 	cd sandbox-mcp-server && docker build -t $(SANDBOX_NAME):latest .
 	@echo "✅ Sandbox image built"
 	@docker images | grep $(SANDBOX_NAME) | head -1
+
+sandbox-build-lite: ## Build lightweight sandbox image (no desktop, MCP + Terminal only)
+	@echo "🏗️  Building sandbox MCP server image (lite)..."
+	cd sandbox-mcp-server && docker build -f Dockerfile.lite -t $(SANDBOX_NAME):lite .
+	@echo "✅ Sandbox lite image built"
+	@docker images | grep $(SANDBOX_NAME) | head -2
 
 sandbox-run: ## Start sandbox container (with XFCE desktop, TigerVNC by default)
 	@echo "🚀 Starting sandbox MCP server with XFCE Desktop ($(SANDBOX_VNC) VNC)..."
@@ -655,6 +665,50 @@ sandbox-run-x11vnc: ## Start sandbox with x11vnc (stable fallback)
 sandbox-run-tigervnc: ## Start sandbox with TigerVNC (default)
 	@echo "🚀 Starting sandbox with TigerVNC (default, high-performance)..."
 	@$(MAKE) sandbox-run SANDBOX_VNC=tigervnc
+
+sandbox-run-lite: ## Start lightweight sandbox (no desktop, MCP + Terminal only)
+	@echo "🚀 Starting lightweight sandbox (no desktop)..."
+	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)-lite$$"; then \
+		echo "⚠️  Lite sandbox already running. Stop with: make sandbox-stop-lite"; \
+	else \
+		if docker run -d --name $(SANDBOX_NAME)-lite \
+			-p $(SANDBOX_PORT):8765 \
+			-p $(SANDBOX_TERMINAL_PORT):7681 \
+			-v sandbox-workspace-lite:/workspace \
+			-e DESKTOP_ENABLED=false \
+			$(SANDBOX_NAME):lite; then \
+			echo "✅ Lite sandbox started"; \
+			echo "📡 MCP: http://localhost:$(SANDBOX_PORT)"; \
+			echo "🖥️  Terminal: http://localhost:$(SANDBOX_TERMINAL_PORT)"; \
+			sleep 2; \
+			$(MAKE) sandbox-status-lite; \
+		else \
+			echo "❌ Failed to start lite sandbox"; \
+		fi; \
+	fi
+
+sandbox-stop-lite: ## Stop lightweight sandbox container
+	@echo "🛑 Stopping lite sandbox..."
+	@if docker stop $(SANDBOX_NAME)-lite 2>/dev/null; then \
+		docker rm $(SANDBOX_NAME)-lite 2>/dev/null; \
+		echo "✅ Lite sandbox stopped"; \
+	else \
+		echo "ℹ️  Lite sandbox was not running"; \
+	fi
+
+sandbox-status-lite: ## Show lightweight sandbox status
+	@echo "📊 Lite Sandbox Status"
+	@echo "====================="
+	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)-lite$$"; then \
+		echo "Status: ✅ Running"; \
+		echo ""; \
+		docker exec $(SANDBOX_NAME)-lite ps aux | grep -E "mcp|ttyd" | grep -v grep || echo "No services found"; \
+		echo ""; \
+		curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || echo "Health check: failed"; \
+	else \
+		echo "Status: ❌ Not running"; \
+		echo "Start with: make sandbox-run-lite"; \
+	fi
 
 sandbox-logs: ## Show sandbox container logs
 	@docker logs -f $(SANDBOX_NAME) 2>/dev/null || echo "ℹ️  Sandbox not running"
