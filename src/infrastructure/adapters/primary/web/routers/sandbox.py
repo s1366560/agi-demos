@@ -2,6 +2,8 @@
 
 Provides REST API endpoints for managing MCP sandboxes and executing
 file system operations in isolated containers.
+
+Refactored to use SandboxOrchestrator for unified sandbox service management.
 """
 
 import asyncio
@@ -14,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
+from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -25,8 +28,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/sandbox", tags=["sandbox"])
 
-# Global adapter instance (singleton pattern)
+# Global instances (singleton pattern)
 _sandbox_adapter: Optional[MCPSandboxAdapter] = None
+_sandbox_orchestrator: Optional[SandboxOrchestrator] = None
 _event_publisher: Optional[SandboxEventPublisher] = None
 
 
@@ -36,6 +40,28 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     if _sandbox_adapter is None:
         _sandbox_adapter = MCPSandboxAdapter()
     return _sandbox_adapter
+
+
+def get_sandbox_orchestrator() -> SandboxOrchestrator:
+    """Get or create the sandbox orchestrator singleton."""
+    global _sandbox_orchestrator, _event_publisher
+    if _sandbox_orchestrator is None:
+        from src.configuration.di_container import DIContainer
+        from src.configuration.config import get_settings
+
+        container = DIContainer()
+        settings = get_settings()
+
+        # Initialize event publisher if not already
+        if _event_publisher is None:
+            _event_publisher = container.sandbox_event_publisher()
+
+        _sandbox_orchestrator = SandboxOrchestrator(
+            sandbox_adapter=get_sandbox_adapter(),
+            event_publisher=_event_publisher,
+            default_timeout=settings.sandbox_timeout_seconds,
+        )
+    return _sandbox_orchestrator
 
 
 def get_event_publisher() -> Optional[SandboxEventPublisher]:
@@ -167,16 +193,31 @@ class DesktopStopResponse(BaseModel):
     success: bool = Field(..., description="Whether the operation was successful")
     message: str = Field(default="", description="Status message")
 
-# Global adapter instance (singleton pattern)
-_sandbox_adapter: Optional[MCPSandboxAdapter] = None
+
+# --- Terminal Request/Response Schemas ---
 
 
-def get_sandbox_adapter() -> MCPSandboxAdapter:
-    """Get or create the sandbox adapter singleton."""
-    global _sandbox_adapter
-    if _sandbox_adapter is None:
-        _sandbox_adapter = MCPSandboxAdapter()
-    return _sandbox_adapter
+class TerminalStartRequest(BaseModel):
+    """Request to start terminal service."""
+
+    port: int = Field(default=7681, description="Port for the ttyd WebSocket server")
+
+
+class TerminalStatusResponse(BaseModel):
+    """Terminal service status response."""
+
+    running: bool = Field(..., description="Whether terminal service is running")
+    url: Optional[str] = Field(None, description="WebSocket URL (if running)")
+    port: int = Field(default=0, description="Ttyd port number")
+    pid: Optional[int] = Field(None, description="Process ID")
+    session_id: Optional[str] = Field(None, description="Terminal session ID")
+
+
+class TerminalStopResponse(BaseModel):
+    """Response from stopping terminal."""
+
+    success: bool = Field(..., description="Whether the operation was successful")
+    message: str = Field(default="", description="Status message")
 
 
 # --- Request/Response Schemas ---
@@ -261,6 +302,9 @@ async def create_sandbox(
 
     Creates a Docker container running the sandbox-mcp-server, which provides
     file system operations via MCP protocol over WebSocket.
+
+    After successful creation and MCP connection, registers sandbox tools
+    to the Agent tool registry for dynamic tool injection.
     """
     try:
         # Extract project_id from project_path
@@ -286,6 +330,32 @@ async def create_sandbox(
             await adapter.connect_mcp(instance.id)
             tool_list = await adapter.list_tools(instance.id)
             tools = [t["name"] for t in tool_list]
+
+            # Register tools to Agent context via SandboxToolRegistry
+            if tools:
+                try:
+                    from src.configuration.di_container import DIContainer
+
+                    container = DIContainer()
+                    tool_registry = container.sandbox_tool_registry()
+
+                    # Use current_user's tenant_id
+                    tenant_id = str(current_user.tenant_id) if hasattr(current_user, 'tenant_id') else "default"
+
+                    registered_tools = await tool_registry.register_sandbox_tools(
+                        sandbox_id=instance.id,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        tools=tools,
+                    )
+
+                    logger.info(
+                        f"[SandboxAPI] Registered {len(registered_tools)} tools "
+                        f"for sandbox={instance.id} to Agent context"
+                    )
+                except Exception as e:
+                    logger.warning(f"[SandboxAPI] Failed to register tools to Agent: {e}")
+
         except Exception as e:
             logger.warning(f"Could not connect MCP: {e}")
 
@@ -359,7 +429,20 @@ async def terminate_sandbox(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ):
-    """Terminate a sandbox."""
+    """Terminate a sandbox and unregister its tools from Agent context."""
+    # Unregister tools from Agent context first
+    try:
+        from src.configuration.di_container import DIContainer
+
+        container = DIContainer()
+        tool_registry = container.sandbox_tool_registry()
+
+        unregistered = await tool_registry.unregister_sandbox_tools(sandbox_id)
+        if unregistered:
+            logger.info(f"[SandboxAPI] Unregistered tools for sandbox={sandbox_id}")
+    except Exception as e:
+        logger.warning(f"[SandboxAPI] Failed to unregister tools: {e}")
+
     success = await adapter.terminate_sandbox(sandbox_id)
 
     if not success:
@@ -452,6 +535,60 @@ async def list_tools(
 
     except Exception as e:
         logger.error(f"Failed to list tools: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{sandbox_id}/tools/agent")
+async def list_agent_tools(
+    sandbox_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List sandbox tools registered to Agent context.
+
+    Returns the namespaced tool names that have been registered
+    to the Agent tool registry for this sandbox.
+
+    The tools are returned with their Agent-side namespaced names
+    (e.g., "sandbox_abc123_bash") which can be used directly in
+    Agent tool execution.
+    """
+    from src.configuration.di_container import DIContainer
+
+    try:
+        container = DIContainer()
+        tool_registry = container.sandbox_tool_registry()
+
+        # Get registered tool names
+        tool_names = await tool_registry.get_sandbox_tools(sandbox_id)
+
+        if tool_names is None:
+            return {
+                "sandbox_id": sandbox_id,
+                "registered": False,
+                "tools": [],
+                "message": "Sandbox tools not registered to Agent context",
+            }
+
+        # Generate namespaced tool names
+        namespaced_tools = [
+            {
+                "agent_name": f"sandbox_{sandbox_id}_{tool_name}",
+                "original_name": tool_name,
+                "description": f"[Sandbox:{sandbox_id[:8]}...] {tool_name}",
+            }
+            for tool_name in tool_names
+        ]
+
+        return {
+            "sandbox_id": sandbox_id,
+            "registered": True,
+            "tools": namespaced_tools,
+            "count": len(namespaced_tools),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to list agent tools: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -568,12 +705,13 @@ async def start_desktop(
     request: DesktopStartRequest = DesktopStartRequest(),
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
     """
     Start the remote desktop service (noVNC) for a sandbox.
 
-    Starts Xvfb (virtual display), TigerVNC server, and noVNC web client,
+    Starts Xvfb (virtual display), VNC server, and noVNC web client,
     allowing browser-based GUI access to the sandbox.
 
     Args:
@@ -595,64 +733,35 @@ async def start_desktop(
     project_id = extract_project_id(instance.project_path)
 
     try:
-        # Call MCP tool to start desktop
-        result = await adapter.call_tool(
-            sandbox_id=sandbox_id,
-            tool_name="start_desktop",
-            arguments={
-                "display": request.display,
-                "resolution": request.resolution,
-            },
-            timeout=30.0,
+        from src.application.services.sandbox_orchestrator import DesktopConfig
+
+        config = DesktopConfig(
+            resolution=request.resolution,
+            display=request.display,
         )
 
-        # Check for error in tool result
-        if result.get("is_error"):
-            error_content = result.get("content", [{}])[0].get("text", "Unknown error")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to start desktop: {error_content}"
-            )
+        status = await orchestrator.start_desktop(sandbox_id, config)
 
-        # Parse tool response
-        content = result.get("content", [])
-        if not content:
-            raise HTTPException(
-                status_code=500,
-                detail="Empty response from desktop tool"
-            )
-
-        import json
-        response_text = content[0].get("text", "{}")
-        desktop_data = json.loads(response_text) if isinstance(response_text, str) else response_text
-
-        if not desktop_data.get("success"):
-            error_msg = desktop_data.get("error", "Unknown error")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Desktop start failed: {error_msg}"
-            )
-
-        # Emit desktop_started event
-        if event_publisher:
+        # Emit desktop_started event via event_publisher
+        if event_publisher and status.running:
             try:
                 await event_publisher.publish_desktop_started(
                     project_id=project_id,
                     sandbox_id=sandbox_id,
-                    url=desktop_data.get("url"),
-                    display=desktop_data.get("display", request.display),
-                    resolution=desktop_data.get("resolution", request.resolution),
-                    port=desktop_data.get("port", 6080),
+                    url=status.url,
+                    display=status.display,
+                    resolution=status.resolution,
+                    port=status.port,
                 )
             except Exception as e:
                 logger.warning(f"Failed to publish desktop_started event: {e}")
 
         return DesktopStatusResponse(
-            running=True,
-            url=desktop_data.get("url"),
-            display=desktop_data.get("display", request.display),
-            resolution=desktop_data.get("resolution", request.resolution),
-            port=desktop_data.get("port", 6080),
+            running=status.running,
+            url=status.url,
+            display=status.display,
+            resolution=status.resolution,
+            port=status.port,
         )
 
     except HTTPException:
@@ -670,12 +779,13 @@ async def stop_desktop(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
     """
     Stop the remote desktop service for a sandbox.
 
-    Stops the Xvfb, TigerVNC, and noVNC processes.
+    Stops the Xvfb, VNC, and noVNC processes.
 
     Args:
         sandbox_id: Sandbox identifier
@@ -695,27 +805,9 @@ async def stop_desktop(
     project_id = extract_project_id(instance.project_path)
 
     try:
-        # Call MCP tool to stop desktop
-        result = await adapter.call_tool(
-            sandbox_id=sandbox_id,
-            tool_name="stop_desktop",
-            arguments={},
-            timeout=10.0,
-        )
+        success = await orchestrator.stop_desktop(sandbox_id)
 
-        # Parse tool response
-        content = result.get("content", [])
-        if content:
-            import json
-            response_text = content[0].get("text", "{}")
-            desktop_data = json.loads(response_text) if isinstance(response_text, str) else response_text
-            success = desktop_data.get("success", True)
-            message = desktop_data.get("message", "Desktop stopped")
-        else:
-            success = True
-            message = "Desktop stopped"
-
-        # Emit desktop_stopped event
+        # Emit desktop_stopped event via event_publisher
         if event_publisher and success:
             try:
                 await event_publisher.publish_desktop_stopped(
@@ -725,7 +817,10 @@ async def stop_desktop(
             except Exception as e:
                 logger.warning(f"Failed to publish desktop_stopped event: {e}")
 
-        return DesktopStopResponse(success=success, message=message)
+        return DesktopStopResponse(
+            success=success,
+            message="Desktop stopped" if success else "Failed to stop desktop"
+        )
 
     except HTTPException:
         raise
@@ -742,6 +837,7 @@ async def get_desktop_status(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
 ):
     """
     Get the current status of the remote desktop service.
@@ -764,36 +860,14 @@ async def get_desktop_status(
         )
 
     try:
-        # Call MCP tool to get desktop status
-        result = await adapter.call_tool(
-            sandbox_id=sandbox_id,
-            tool_name="get_desktop_status",
-            arguments={},
-            timeout=10.0,
-        )
+        status = await orchestrator.get_desktop_status(sandbox_id)
 
-        # Parse tool response
-        content = result.get("content", [])
-        if content:
-            import json
-            response_text = content[0].get("text", "{}")
-            desktop_data = json.loads(response_text) if isinstance(response_text, str) else response_text
-
-            return DesktopStatusResponse(
-                running=desktop_data.get("running", False),
-                url=desktop_data.get("url"),
-                display=desktop_data.get("display", ""),
-                resolution=desktop_data.get("resolution", ""),
-                port=desktop_data.get("port", 0),
-            )
-
-        # Return default "not running" status
         return DesktopStatusResponse(
-            running=False,
-            url=None,
-            display="",
-            resolution="",
-            port=0,
+            running=status.running,
+            url=status.url,
+            display=status.display,
+            resolution=status.resolution,
+            port=status.port,
         )
 
     except HTTPException:
@@ -803,6 +877,195 @@ async def get_desktop_status(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get desktop status: {str(e)}"
+        )
+
+
+# --- Terminal Management Endpoints ---
+
+
+@router.post("/{sandbox_id}/terminal", response_model=TerminalStatusResponse)
+async def start_terminal(
+    sandbox_id: str,
+    request: TerminalStartRequest = TerminalStartRequest(),
+    current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
+    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+):
+    """
+    Start the web terminal service (ttyd) for a sandbox.
+
+    Starts a ttyd server that provides shell access via WebSocket.
+
+    Args:
+        sandbox_id: Sandbox identifier
+        request: Terminal start configuration (port)
+
+    Returns:
+        Terminal status with connection URL
+    """
+    # Verify sandbox exists
+    instance = await adapter.get_sandbox(sandbox_id)
+    if not instance:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sandbox not found: {sandbox_id}"
+        )
+
+    # Extract project_id from sandbox instance
+    project_id = extract_project_id(instance.project_path)
+
+    try:
+        from src.application.services.sandbox_orchestrator import TerminalConfig
+
+        config = TerminalConfig(port=request.port)
+
+        status = await orchestrator.start_terminal(sandbox_id, config)
+
+        # Emit terminal_started event via event_publisher
+        if event_publisher and status.running:
+            try:
+                await event_publisher.publish_terminal_started(
+                    project_id=project_id,
+                    sandbox_id=sandbox_id,
+                    url=status.url,
+                    port=status.port,
+                    pid=status.pid,
+                    session_id=status.session_id,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to publish terminal_started event: {e}")
+
+        return TerminalStatusResponse(
+            running=status.running,
+            url=status.url,
+            port=status.port,
+            pid=status.pid,
+            session_id=status.session_id,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to start terminal for sandbox {sandbox_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start terminal: {str(e)}"
+        )
+
+
+@router.delete("/{sandbox_id}/terminal", response_model=TerminalStopResponse)
+async def stop_terminal(
+    sandbox_id: str,
+    current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
+    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+):
+    """
+    Stop the web terminal service for a sandbox.
+
+    Stops the ttyd server process.
+
+    Args:
+        sandbox_id: Sandbox identifier
+
+    Returns:
+        Operation success status
+    """
+    # Verify sandbox exists
+    instance = await adapter.get_sandbox(sandbox_id)
+    if not instance:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sandbox not found: {sandbox_id}"
+        )
+
+    # Extract project_id from sandbox instance
+    project_id = extract_project_id(instance.project_path)
+
+    try:
+        success = await orchestrator.stop_terminal(sandbox_id)
+
+        # Emit terminal_stopped event via event_publisher
+        if event_publisher and success:
+            try:
+                await event_publisher.publish_terminal_stopped(
+                    project_id=project_id,
+                    sandbox_id=sandbox_id,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to publish terminal_stopped event: {e}")
+
+        return TerminalStopResponse(
+            success=success,
+            message="Terminal stopped" if success else "Failed to stop terminal"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to stop terminal for sandbox {sandbox_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to stop terminal: {str(e)}"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to stop terminal for sandbox {sandbox_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to stop terminal: {str(e)}"
+        )
+
+
+@router.get("/{sandbox_id}/terminal", response_model=TerminalStatusResponse)
+async def get_terminal_status(
+    sandbox_id: str,
+    current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+    orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
+):
+    """
+    Get the current status of the web terminal service.
+
+    Returns information about whether the terminal is running,
+    port, URL, and session ID.
+
+    Args:
+        sandbox_id: Sandbox identifier
+
+    Returns:
+        Terminal status information
+    """
+    # Verify sandbox exists
+    instance = await adapter.get_sandbox(sandbox_id)
+    if not instance:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sandbox not found: {sandbox_id}"
+        )
+
+    try:
+        status = await orchestrator.get_terminal_status(sandbox_id)
+
+        return TerminalStatusResponse(
+            running=status.running,
+            url=status.url,
+            port=status.port,
+            pid=status.pid,
+            session_id=status.session_id,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get terminal status for sandbox {sandbox_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get terminal status: {str(e)}"
         )
 
 

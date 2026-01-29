@@ -11,6 +11,7 @@ from src.infrastructure.agent.tools.desktop_tool import DesktopTool, DesktopStat
 from src.infrastructure.agent.tools.plan_enter import PlanEnterTool
 from src.infrastructure.agent.tools.plan_exit import PlanExitTool
 from src.infrastructure.agent.tools.plan_update import PlanUpdateTool
+from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
 from src.infrastructure.agent.tools.terminal_tool import TerminalTool, TerminalStatus
 from src.infrastructure.agent.tools.todo_tools import TodoReadTool, TodoWriteTool, create_todoread_tool, create_todowrite_tool
@@ -26,6 +27,7 @@ __all__ = [
     "PlanEnterTool",
     "PlanExitTool",
     "PlanUpdateTool",
+    "SandboxMCPToolWrapper",
     "SkillLoaderTool",
     "TerminalTool",
     "TerminalStatus",

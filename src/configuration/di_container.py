@@ -8,6 +8,13 @@ if TYPE_CHECKING:
 
 # Application Services
 from src.application.services.agent_service import AgentService
+from src.application.services.sandbox_orchestrator import (
+    DesktopConfig,
+    DesktopStatus,
+    SandboxOrchestrator,
+    TerminalConfig,
+    TerminalStatus,
+)
 from src.application.services.memory_service import MemoryService
 from src.application.services.project_service import ProjectService
 from src.application.services.search_service import SearchService
@@ -415,6 +422,23 @@ class DIContainer:
 
         return SandboxEventPublisher(event_bus=event_bus)
 
+    def sandbox_orchestrator(self):
+        """Get SandboxOrchestrator for unified sandbox service management."""
+        return SandboxOrchestrator(
+            sandbox_adapter=self.sandbox_adapter(),
+            event_publisher=self.sandbox_event_publisher(),
+            default_timeout=self._settings.sandbox_timeout_seconds,
+        )
+
+    def sandbox_tool_registry(self):
+        """Get SandboxToolRegistry for dynamic MCP tool registration to Agent."""
+        from src.application.services.sandbox_tool_registry import SandboxToolRegistry
+
+        return SandboxToolRegistry(
+            redis_client=self._redis_client,
+            mcp_adapter=self.sandbox_adapter(),
+        )
+
     def agent_service(self, llm) -> AgentService:
         """Get AgentService with dependencies injected."""
         if not self._graph_service:
@@ -478,13 +502,13 @@ class DIContainer:
             WebSearchTool,
         )
 
-        sandbox_adapter = self.sandbox_adapter()
+        sandbox_orchestrator = self.sandbox_orchestrator()
 
         tools = {
             "web_search": WebSearchTool(self._redis_client),
             "web_scrape": WebScrapeTool(),
-            "desktop": DesktopTool(sandbox_adapter=sandbox_adapter),
-            "terminal": TerminalTool(sandbox_adapter=sandbox_adapter),
+            "desktop": DesktopTool(orchestrator=sandbox_orchestrator),
+            "terminal": TerminalTool(orchestrator=sandbox_orchestrator),
         }
 
         return ExecuteStepUseCase(
