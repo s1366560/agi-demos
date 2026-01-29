@@ -163,8 +163,8 @@ describe('Timeline Styles', () => {
 
       const { container } = render(<TimelineEventItem event={event} />);
 
-      // User messages use animate-fade-in-up
-      const animated = container.querySelector('.animate-fade-in-up');
+      // User messages use animate-slide-up
+      const animated = container.querySelector('.animate-slide-up');
       expect(animated).toBeInTheDocument();
     });
 

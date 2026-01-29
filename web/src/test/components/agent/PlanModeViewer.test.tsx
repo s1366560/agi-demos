@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { PlanModeViewer } from "../../../components/agent/PlanModeViewer";
 import { ExecutionPlan, ExecutionPlanStatus, ReflectionResult } from "../../../types/agent";
 
@@ -32,7 +32,8 @@ describe("PlanModeViewer", () => {
 
     expect(screen.getByText("Execution Plan")).toBeInTheDocument();
     expect(screen.getByText(/plan-123/)).toBeInTheDocument();
-    expect(screen.getByText("Search for Python memories")).toBeInTheDocument();
+    expect(screen.getByText(/Query:/, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(/Search for Python memories/, { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Enabled")).toBeInTheDocument();
   });
 
@@ -167,7 +168,11 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} />);
 
-    expect(screen.getByText(/Test step/)).toBeInTheDocument();
+    // Click to expand the collapse panel (use the first matching element which is the header)
+    const stepHeaders = screen.getAllByText(/Test step/);
+    fireEvent.click(stepHeaders[0]);
+
+    // After expanding, we should see the result
     expect(screen.getByText("Success!")).toBeInTheDocument();
   });
 
@@ -198,7 +203,11 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} />);
 
-    expect(screen.getByText(/Failing step/)).toBeInTheDocument();
+    // Click to expand the collapse panel
+    const stepHeaders = screen.getAllByText(/Failing step/);
+    fireEvent.click(stepHeaders[0]);
+
+    // After expanding, we should see the error
     expect(screen.getByText("Connection timeout")).toBeInTheDocument();
   });
 
@@ -247,6 +256,10 @@ describe("PlanModeViewer", () => {
     };
 
     render(<PlanModeViewer plan={plan} />);
+
+    // Click to expand the collapse panel to see dependencies
+    const stepHeader = screen.getByText(/Dependent step/);
+    fireEvent.click(stepHeader);
 
     expect(screen.getByText(/Dependencies: step-1/)).toBeInTheDocument();
   });
