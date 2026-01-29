@@ -327,6 +327,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # MCP Ecosystem Integration (Phase 4)
     app.include_router(mcp.router)
 
+    # Session Management (feat/bot)
+    app.include_router(sessions.router)
+
     # Sandbox (MCP-enabled Docker containers)
     app.include_router(sandbox.router)
 

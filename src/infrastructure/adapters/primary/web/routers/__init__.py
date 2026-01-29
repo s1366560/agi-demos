@@ -1,4 +1,4 @@
-"""FastAPI routers for the MemStack API."""
+"""FastAPI routers for MemStack API."""
 
 from src.infrastructure.adapters.primary.web.routers import (
     agent_websocket,
@@ -18,7 +18,9 @@ from src.infrastructure.adapters.primary.web.routers import (
     recall,
     sandbox,
     schema,
+    sessions,
     shares,
+    subagents,
     support,
     tasks,
     tenants,
@@ -44,6 +46,8 @@ __all__ = [
     "llm_providers",
     "notifications",
     "sandbox",
+    "sessions",
     "shares",
     "support",
+    "subagents",
 ]
