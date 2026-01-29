@@ -185,6 +185,8 @@ interface AgentV3State {
   showPlanPanel: boolean;
   showHistorySidebar: boolean;
   renderMode: RenderMode;
+  leftSidebarWidth: number;
+  rightPanelWidth: number;
 
   // Interactivity
   pendingDecision: any; // Using any for brevity in this update
@@ -208,6 +210,8 @@ interface AgentV3State {
   togglePlanPanel: () => void;
   toggleHistorySidebar: () => void;
   setRenderMode: (mode: RenderMode) => void;
+  setLeftSidebarWidth: (width: number) => void;
+  setRightPanelWidth: (width: number) => void;
   respondToDecision: (requestId: string, decision: string) => Promise<void>;
   togglePlanMode: () => Promise<void>;
   clearError: () => void;
@@ -336,6 +340,8 @@ export const useAgentV3Store = create<AgentV3State>()(
         showPlanPanel: false,
         showHistorySidebar: false,
         renderMode: "grouped",
+        leftSidebarWidth: 280,
+        rightPanelWidth: 400,
 
         pendingDecision: null,
         doomLoopDetected: null,
@@ -980,6 +986,9 @@ export const useAgentV3Store = create<AgentV3State>()(
 
     setRenderMode: (mode: RenderMode) => set({ renderMode: mode }),
 
+    setLeftSidebarWidth: (width: number) => set({ leftSidebarWidth: width }),
+    setRightPanelWidth: (width: number) => set({ rightPanelWidth: width }),
+
     togglePlanMode: async () => {
       const { isPlanMode, activeConversationId } = get();
       if (!activeConversationId) return;
@@ -1016,6 +1025,8 @@ export const useAgentV3Store = create<AgentV3State>()(
       // Only persist UI preferences, not conversation/message data
       renderMode: state.renderMode,
       showHistorySidebar: state.showHistorySidebar,
+      leftSidebarWidth: state.leftSidebarWidth,
+      rightPanelWidth: state.rightPanelWidth,
     }),
   }))
 );
