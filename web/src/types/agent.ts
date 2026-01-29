@@ -208,6 +208,9 @@ export type AgentEventType =
   | "permission_asked" // Permission asked
   | "permission_replied" // Permission replied
   // Sandbox events (desktop and terminal)
+  | "sandbox_created" // Sandbox container created
+  | "sandbox_terminated" // Sandbox container terminated
+  | "sandbox_status" // Sandbox status update
   | "desktop_started" // Remote desktop started
   | "desktop_stopped" // Remote desktop stopped
   | "desktop_status" // Remote desktop status update
@@ -1563,6 +1566,9 @@ export type TimelineEventType =
   | "text_delta"
   | "text_start"
   | "text_end"
+  | "sandbox_created"
+  | "sandbox_terminated"
+  | "sandbox_status"
   | "desktop_started"
   | "desktop_stopped"
   | "desktop_status"
@@ -1710,7 +1716,10 @@ export type TimelineEvent =
   | TerminalStartedEvent
   | TerminalStoppedEvent
   | TerminalStatusEvent
-  | ScreenshotUpdateEvent;
+  | ScreenshotUpdateEvent
+  | SandboxCreatedEvent
+  | SandboxTerminatedEvent
+  | SandboxStatusEvent;
 
 /**
  * Timeline response from API (unified event stream)
@@ -1809,6 +1818,32 @@ export interface ScreenshotUpdateEventData {
 }
 
 /**
+ * Sandbox created event data
+ */
+export interface SandboxCreatedEventData {
+  sandbox_id: string;
+  project_id: string;
+  status: string;
+  endpoint?: string;
+  websocket_url?: string;
+}
+
+/**
+ * Sandbox terminated event data
+ */
+export interface SandboxTerminatedEventData {
+  sandbox_id: string;
+}
+
+/**
+ * Sandbox status event data
+ */
+export interface SandboxStatusEventData {
+  sandbox_id: string;
+  status: string;
+}
+
+/**
  * Desktop started timeline event
  */
 export interface DesktopStartedEvent extends BaseTimelineEvent {
@@ -1880,6 +1915,35 @@ export interface ScreenshotUpdateEvent extends BaseTimelineEvent {
   type: "screenshot_update";
   sandboxId: string;
   imageUrl: string;
+}
+
+/**
+ * Sandbox created timeline event
+ */
+export interface SandboxCreatedEvent extends BaseTimelineEvent {
+  type: "sandbox_created";
+  sandboxId: string;
+  projectId: string;
+  status: string;
+  endpoint?: string;
+  websocketUrl?: string;
+}
+
+/**
+ * Sandbox terminated timeline event
+ */
+export interface SandboxTerminatedEvent extends BaseTimelineEvent {
+  type: "sandbox_terminated";
+  sandboxId: string;
+}
+
+/**
+ * Sandbox status timeline event
+ */
+export interface SandboxStatusEvent extends BaseTimelineEvent {
+  type: "sandbox_status";
+  sandboxId: string;
+  status: string;
 }
 
 // ===========================================================================

@@ -15,10 +15,10 @@
 | ✅ | Phase 4 | 修复 RightPanel Tab 切换逻辑 |
 | ✅ | Phase 5 | 修复 AgentChat 中的 Sandbox 集成 |
 | ✅ | Phase 6 | 后端路由验证与适配 |
-| ⏳ | Phase 3 | 后端 Sandbox SSE 事件 (待实施) |
-| ⏳ | Phase 7 | 后端 Desktop 端点实现 (待实施) |
+| ✅ | Phase 3 | 后端 Sandbox SSE 事件 (已完成) |
+| ✅ | Phase 7 | 后端 Desktop 端点实现 (TDD 完成) |
 
-**整体进度**: 5/7 阶段完成 (71%)
+**整体进度**: 7/7 阶段完成 (100%) ✅
 
 ---
 
@@ -49,8 +49,9 @@
 
 | 任务 | 描述 | 优先级 |
 |------|------|--------|
-| **后端 Desktop 端点** | 后端未实现 noVNC 桌面相关 API | P2 |
-| **SSE 事件** | 后端不发送 `sandbox_created`/`terminal_started` 等事件 | P2 |
+| **后端发送 SSE 事件** | 在 Sandbox/Terminal/Desktop 操作时发送对应的 SSE 事件 | P2 |
+
+**说明**: 事件类型定义已完成，需要在实际操作（创建 Sandbox、启动终端等）时发送这些事件。
 
 ---
 
@@ -121,22 +122,42 @@ export const useDesktopStatus = () => useSandboxStore((state) => state.desktopSt
 export const useTerminalStatus = () => useSandboxStore((state) => state.terminalStatus);
 ```
 
-### Phase 3: 后端 Sandbox SSE 事件 ⏳
+### Phase 3: 后端 Sandbox SSE 事件 ✅
 
-**文件**: `src/infrastructure/agent/core/processor.py`
-**状态**: ⏳ 待实施
+**文件**: `src/domain/events/agent_events.py`, `web/src/types/agent.ts`
+**状态**: ✅ 已完成 (TDD)
 
-**需要添加的 SSE 事件**:
+**实现的 SSE 事件**:
 ```python
-# 在 AgentEventType 中添加:
+# 已在 AgentEventType 枚举中添加:
 SANDBOX_CREATED = "sandbox_created"
+SANDBOX_TERMINATED = "sandbox_terminated"
+SANDBOX_STATUS = "sandbox_status"
 DESKTOP_STARTED = "desktop_started"
 DESKTOP_STOPPED = "desktop_stopped"
+DESKTOP_STATUS = "desktop_status"
 TERMINAL_STARTED = "terminal_started"
 TERMINAL_STOPPED = "terminal_stopped"
+TERMINAL_STATUS = "terminal_status"
 ```
 
-**说明**: 前端 `sandboxStore` 已实现 `handleSSEEvent()` 方法处理这些事件，只需后端发送即可。
+**事件类**:
+- `AgentSandboxCreatedEvent` - Sandbox 容器创建事件
+- `AgentSandboxTerminatedEvent` - Sandbox 容器终止事件
+- `AgentSandboxStatusEvent` - Sandbox 状态更新事件
+- `AgentDesktopStartedEvent` - 桌面服务启动事件
+- `AgentDesktopStoppedEvent` - 桌面服务停止事件
+- `AgentDesktopStatusEvent` - 桌面状态事件
+- `AgentTerminalStartedEvent` - 终端服务启动事件
+- `AgentTerminalStoppedEvent` - 终端服务停止事件
+- `AgentTerminalStatusEvent` - 终端状态事件
+
+**测试覆盖**:
+- `src/tests/unit/domain/events/test_sandbox_events.py` - 16 个测试全部通过
+
+**前端集成**:
+- `web/src/types/agent.ts` - 添加了事件类型定义和 TimelineEvent 接口
+- `web/src/utils/sseEventAdapter.ts` - 添加了事件转换处理逻辑
 
 ### Phase 4: 修复 RightPanel Tab 切换逻辑 ✅
 
@@ -219,34 +240,37 @@ const handleSend = useCallback(async (content: string) => {
 | `/api/v1/terminal/{id}/sessions` | GET | ✅ | 列出终端会话 |
 | `/api/v1/terminal/{id}/sessions/{session_id}` | DELETE | ✅ | 关闭终端会话 |
 | `/api/v1/terminal/{id}/ws` | WebSocket | ✅ | 终端 WebSocket |
-| `/api/v1/sandbox/{id}/desktop` | POST | ❌ | 未实现 |
-| `/api/v1/sandbox/{id}/desktop` | DELETE | ❌ | 未实现 |
+| `/api/v1/sandbox/{id}/desktop` | POST | ✅ | 启动桌面服务 |
+| `/api/v1/sandbox/{id}/desktop` | DELETE | ✅ | 停止桌面服务 |
+| `/api/v1/sandbox/{id}/desktop` | GET | ✅ | 获取桌面状态 |
 
-### Phase 7: 后端 Desktop 端点实现 ⏳
+### Phase 7: 后端 Desktop 端点实现 ✅
 
-**状态**: ⏳ 待实施
+**状态**: ✅ 已完成 (TDD)
 
-**需要添加的端点**:
+**实现的端点** (`src/infrastructure/adapters/primary/web/routers/sandbox.py`):
 ```python
-@router.post("/{sandbox_id}/desktop")
+@router.post("/{sandbox_id}/desktop", response_model=DesktopStatusResponse)
 async def start_desktop(
     sandbox_id: str,
-    resolution: str = "1280x720",
+    request: DesktopStartRequest = DesktopStartRequest(),
     current_user: User = Depends(get_current_user),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ):
-    """启动 noVNC 桌面服务"""
-    # TODO: 实现 noVNC 启动逻辑
-    pass
+    """启动 noVNC 桌面服务 (Xvfb + TigerVNC + noVNC)"""
 
-@router.delete("/{sandbox_id}/desktop")
-async def stop_desktop(
-    sandbox_id: str,
-    current_user: User = Depends(get_current_user),
-):
+@router.delete("/{sandbox_id}/desktop", response_model=DesktopStopResponse)
+async def stop_desktop(...):
     """停止 noVNC 桌面服务"""
-    # TODO: 实现 noVNC 停止逻辑
-    pass
+
+@router.get("/{sandbox_id}/desktop", response_model=DesktopStatusResponse)
+async def get_desktop_status(...):
+    """获取桌面服务状态"""
 ```
+
+**测试覆盖**:
+- `src/tests/integration/test_sandbox_desktop.py` - 8 个测试全部通过
+- `web/src/test/services/sandboxService.test.ts` - 21 个测试全部通过
 
 ---
 

@@ -95,6 +95,17 @@ class AgentEventType(str, Enum):
     # Title generation events
     TITLE_GENERATED = "title_generated"
 
+    # Sandbox events
+    SANDBOX_CREATED = "sandbox_created"
+    SANDBOX_TERMINATED = "sandbox_terminated"
+    SANDBOX_STATUS = "sandbox_status"
+    DESKTOP_STARTED = "desktop_started"
+    DESKTOP_STOPPED = "desktop_stopped"
+    DESKTOP_STATUS = "desktop_status"
+    TERMINAL_STARTED = "terminal_started"
+    TERMINAL_STOPPED = "terminal_stopped"
+    TERMINAL_STATUS = "terminal_status"
+
 
 class AgentDomainEvent(BaseModel):
     """Base class for all agent domain events."""
@@ -554,6 +565,87 @@ class AgentTitleGeneratedEvent(AgentDomainEvent):
     generated_by: str = "llm"  # "llm" or "fallback"
 
 
+# === Sandbox Events ===
+
+
+class AgentSandboxCreatedEvent(AgentDomainEvent):
+    """Event emitted when a sandbox is created."""
+    event_type: AgentEventType = AgentEventType.SANDBOX_CREATED
+    sandbox_id: str
+    project_id: str
+    status: str
+    endpoint: Optional[str] = None
+    websocket_url: Optional[str] = None
+
+
+class AgentSandboxTerminatedEvent(AgentDomainEvent):
+    """Event emitted when a sandbox is terminated."""
+    event_type: AgentEventType = AgentEventType.SANDBOX_TERMINATED
+    sandbox_id: str
+
+
+class AgentSandboxStatusEvent(AgentDomainEvent):
+    """Event emitted when sandbox status changes."""
+    event_type: AgentEventType = AgentEventType.SANDBOX_STATUS
+    sandbox_id: str
+    status: str
+
+
+class AgentDesktopStartedEvent(AgentDomainEvent):
+    """Event emitted when remote desktop service is started."""
+    event_type: AgentEventType = AgentEventType.DESKTOP_STARTED
+    sandbox_id: str
+    url: Optional[str] = None
+    display: str = ":1"
+    resolution: str = "1280x720"
+    port: int = 6080
+
+
+class AgentDesktopStoppedEvent(AgentDomainEvent):
+    """Event emitted when remote desktop service is stopped."""
+    event_type: AgentEventType = AgentEventType.DESKTOP_STOPPED
+    sandbox_id: str
+
+
+class AgentDesktopStatusEvent(AgentDomainEvent):
+    """Event emitted with current desktop status."""
+    event_type: AgentEventType = AgentEventType.DESKTOP_STATUS
+    sandbox_id: str
+    running: bool
+    url: Optional[str] = None
+    display: str = ""
+    resolution: str = ""
+    port: int = 0
+
+
+class AgentTerminalStartedEvent(AgentDomainEvent):
+    """Event emitted when terminal service is started."""
+    event_type: AgentEventType = AgentEventType.TERMINAL_STARTED
+    sandbox_id: str
+    url: Optional[str] = None
+    port: int = 7681
+    session_id: Optional[str] = None
+    pid: Optional[int] = None
+
+
+class AgentTerminalStoppedEvent(AgentDomainEvent):
+    """Event emitted when terminal service is stopped."""
+    event_type: AgentEventType = AgentEventType.TERMINAL_STOPPED
+    sandbox_id: str
+    session_id: Optional[str] = None
+
+
+class AgentTerminalStatusEvent(AgentDomainEvent):
+    """Event emitted with current terminal status."""
+    event_type: AgentEventType = AgentEventType.TERMINAL_STATUS
+    sandbox_id: str
+    running: bool
+    url: Optional[str] = None
+    port: int = 0
+    session_id: Optional[str] = None
+    pid: Optional[int] = None
+
+
 # =========================================================================
 # Event Type Utilities
 # =========================================================================
@@ -632,6 +724,15 @@ def get_event_type_docstring() -> str:
         AgentReflectionCompleteEvent,
         AgentAdjustmentAppliedEvent,
         AgentTitleGeneratedEvent,
+        AgentSandboxCreatedEvent,
+        AgentSandboxTerminatedEvent,
+        AgentSandboxStatusEvent,
+        AgentDesktopStartedEvent,
+        AgentDesktopStoppedEvent,
+        AgentDesktopStatusEvent,
+        AgentTerminalStartedEvent,
+        AgentTerminalStoppedEvent,
+        AgentTerminalStatusEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
 

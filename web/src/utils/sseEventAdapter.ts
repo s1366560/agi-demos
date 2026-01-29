@@ -33,6 +33,9 @@ import type {
   TerminalStoppedEventData,
   TerminalStatusEventData,
   ScreenshotUpdateEventData,
+  SandboxCreatedEventData,
+  SandboxTerminatedEventData,
+  SandboxStatusEventData,
 } from '../types/agent';
 
 /**
@@ -350,6 +353,45 @@ export function sseEventToTimeline(
       };
     }
 
+    // Sandbox events - container lifecycle
+    case 'sandbox_created': {
+      const data = event.data as unknown as SandboxCreatedEventData;
+      return {
+        id: generateTimelineEventId('sandbox_created'),
+        type: 'sandbox_created',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        projectId: data.project_id,
+        status: data.status,
+        endpoint: data.endpoint,
+        websocketUrl: data.websocket_url,
+      };
+    }
+
+    case 'sandbox_terminated': {
+      const data = event.data as unknown as SandboxTerminatedEventData;
+      return {
+        id: generateTimelineEventId('sandbox_terminated'),
+        type: 'sandbox_terminated',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+      };
+    }
+
+    case 'sandbox_status': {
+      const data = event.data as unknown as SandboxStatusEventData;
+      return {
+        id: generateTimelineEventId('sandbox_status'),
+        type: 'sandbox_status',
+        sequenceNumber,
+        timestamp,
+        sandboxId: data.sandbox_id,
+        status: data.status,
+      };
+    }
+
     case 'screenshot_update': {
       const data = event.data as unknown as ScreenshotUpdateEventData;
       return {
@@ -487,6 +529,10 @@ export function isSupportedEventType(eventType: string): boolean {
     'terminal_stopped',
     'terminal_status',
     'screenshot_update',
+    // Sandbox lifecycle events
+    'sandbox_created',
+    'sandbox_terminated',
+    'sandbox_status',
   ];
 
   return supportedTypes.includes(eventType);
