@@ -36,7 +36,7 @@ DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1280x720}"
 DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
 SANDBOX_USER="${SANDBOX_USER:-sandbox}"
-VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default), x11vnc (fallback)
+VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-x11vnc}"  # Options: x11vnc (default, no-password), tigervnc (requires password)
 
 # PID tracking
 PIDS=()
@@ -112,6 +112,10 @@ start_xvfb() {
 start_desktop() {
     log_info "Starting XFCE desktop environment..."
 
+    # Fix ICE directory permission (required for XFCE session)
+    mkdir -p /tmp/.ICE-unix
+    chmod 777 /tmp/.ICE-unix
+
     # Set up runtime directory for sandbox user
     mkdir -p /run/user/1001
     chown sandbox:sandbox /run/user/1001
@@ -140,6 +144,7 @@ start_desktop() {
         # Create necessary directories
         mkdir -p \$XDG_DATA_HOME
         mkdir -p \$XDG_CONFIG_HOME
+        mkdir -p \$XDG_CONFIG_HOME/xfce4
         mkdir -p \$XDG_CACHE_HOME
         mkdir -p /home/sandbox/.vnc
 
@@ -147,8 +152,24 @@ start_desktop() {
         dbus-daemon --session --address=unix:path=/run/user/1001/bus --nofork --syslog &
         sleep 1
 
-        # Start XFCE desktop environment
-        dbus-launch --exit-with-session startxfce4 &
+        # Set DBUS_SESSION_BUS_ADDRESS for all child processes
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
+
+        # Start XFCE desktop environment with explicit components
+        # Start window manager first
+        xfwm4 --display=:99 &
+        sleep 1
+
+        # Start panel
+        xfce4-panel --display=:99 &
+        sleep 1
+
+        # Start desktop
+        xfdesktop --display=:99 &
+        sleep 1
+
+        # Start session (coordinates components)
+        xfce4-session &
     " &
 
     sleep 5
@@ -237,20 +258,19 @@ _start_tigervnc() {
         sleep 2
     fi
 
-    # Set up empty VNC password (for container use)
+    # Configure VNC to NOT require authentication (for container use)
+    # Note: Modern TigerVNC requires at least one password, so we set an empty one
     sudo -u "$SANDBOX_USER" sh -c "
         export HOME=/home/sandbox
         mkdir -p /home/sandbox/.vnc
-        # Create empty password file
-        echo '' | vncpasswd -f > /home/sandbox/.vnc/passwd
+
+        # Create empty password (just press enter twice)
+        echo '' | vncpasswd -f > /home/sandbox/.vnc/passwd 2>/dev/null || true
         chmod 600 /home/sandbox/.vnc/passwd
     "
 
     # Start TigerVNC with optimal settings
-    # -geometry: Screen resolution
-    # -depth 24: Color depth
-    # -rfbport 5901: VNC protocol port
-    # -localhost no: Allow noVNC connection
+    # Using VncAuth with empty password for container compatibility
     sudo -u "$SANDBOX_USER" sh -c "
         export DISPLAY=:99
         export XDG_RUNTIME_DIR=/run/user/1001

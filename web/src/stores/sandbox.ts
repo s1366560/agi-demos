@@ -10,6 +10,7 @@ import { devtools } from "zustand/middleware";
 
 import type { ToolExecution } from "../components/agent/sandbox/SandboxOutputViewer";
 import type { DesktopStatus, TerminalStatus } from "../types/agent";
+import { sandboxService } from "../services/sandboxService";
 
 // Sandbox tools that should trigger panel opening
 export const SANDBOX_TOOLS = [
@@ -198,12 +199,12 @@ export const useSandboxStore = create<SandboxState>()(
         set({ isDesktopLoading: true });
 
         try {
-          // TODO: Call API to start desktop
-          // const response = await sandboxService.startDesktop(activeSandboxId);
-          // For now, simulate success
-          console.log("Starting desktop for sandbox:", activeSandboxId);
-        } finally {
+          const status = await sandboxService.startDesktop(activeSandboxId);
+          set({ desktopStatus: status, isDesktopLoading: false });
+        } catch (error) {
+          console.error("Failed to start desktop:", error);
           set({ isDesktopLoading: false });
+          throw error;
         }
       },
 
@@ -217,10 +218,21 @@ export const useSandboxStore = create<SandboxState>()(
         set({ isDesktopLoading: true });
 
         try {
-          // TODO: Call API to stop desktop
-          console.log("Stopping desktop for sandbox:", activeSandboxId);
-        } finally {
+          await sandboxService.stopDesktop(activeSandboxId);
+          set({
+            desktopStatus: {
+              running: false,
+              url: null,
+              display: "",
+              resolution: "",
+              port: 0,
+            },
+            isDesktopLoading: false,
+          });
+        } catch (error) {
+          console.error("Failed to stop desktop:", error);
           set({ isDesktopLoading: false });
+          throw error;
         }
       },
 
@@ -235,10 +247,12 @@ export const useSandboxStore = create<SandboxState>()(
         set({ isTerminalLoading: true });
 
         try {
-          // TODO: Call API to start terminal
-          console.log("Starting terminal for sandbox:", activeSandboxId);
-        } finally {
+          const status = await sandboxService.startTerminal(activeSandboxId);
+          set({ terminalStatus: status, isTerminalLoading: false });
+        } catch (error) {
+          console.error("Failed to start terminal:", error);
           set({ isTerminalLoading: false });
+          throw error;
         }
       },
 
@@ -252,10 +266,21 @@ export const useSandboxStore = create<SandboxState>()(
         set({ isTerminalLoading: true });
 
         try {
-          // TODO: Call API to stop terminal
-          console.log("Stopping terminal for sandbox:", activeSandboxId);
-        } finally {
+          await sandboxService.stopTerminal(activeSandboxId);
+          set({
+            terminalStatus: {
+              running: false,
+              url: null,
+              port: 0,
+              sessionId: null,
+              pid: null,
+            },
+            isTerminalLoading: false,
+          });
+        } catch (error) {
+          console.error("Failed to stop terminal:", error);
           set({ isTerminalLoading: false });
+          throw error;
         }
       },
 

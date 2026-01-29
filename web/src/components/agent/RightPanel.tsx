@@ -5,7 +5,7 @@
  * both work plan viewing and sandbox terminal/desktop/output capabilities.
  */
 
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useEffect } from "react";
 import { Tabs, Badge, Space, Button, Tooltip } from "antd";
 import {
   UnorderedListOutlined,
@@ -15,7 +15,7 @@ import {
 
 import { PlanViewer } from "./PlanViewer";
 import { SandboxPanel } from "./sandbox";
-import { useSandboxStore } from "../../stores/sandbox";
+import { useSandboxStore, isSandboxTool } from "../../stores/sandbox";
 import type { WorkPlan } from "../../types/agent";
 import type { ToolExecution } from "./sandbox/SandboxOutputViewer";
 
@@ -92,6 +92,17 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       setInternalActiveTab(newTab);
     }
   }, [onTabChange]);
+
+  // Auto-switch to sandbox tab when a sandbox tool is being executed
+  useEffect(() => {
+    if (currentTool && isSandboxTool(currentTool.name) && sandboxId) {
+      if (onTabChange) {
+        onTabChange("sandbox");
+      } else {
+        setInternalActiveTab("sandbox");
+      }
+    }
+  }, [currentTool, sandboxId, onTabChange]);
 
   // Memoized tab items
   const tabItems = useMemo(() => [

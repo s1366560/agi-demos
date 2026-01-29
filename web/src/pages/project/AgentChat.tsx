@@ -5,6 +5,7 @@ import { useAgentV3Store } from "../../stores/agentV3";
 import { useSandboxStore } from "../../stores/sandbox";
 import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
 import { ChatLayout, VirtualTimelineEventList, InputArea, ConversationSidebar, RightPanel, RenderModeSwitch } from "../../components/agent";
+import { sandboxService } from "../../services/sandboxService";
 
 export const AgentChat: React.FC = () => {
   const { projectId, conversation: conversationId } = useParams<{
@@ -41,8 +42,44 @@ export const AgentChat: React.FC = () => {
   } = useAgentV3Store();
 
   // Sandbox state and handlers (declared early for use in handleSend)
-  const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel } = useSandboxStore();
+  const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel, setSandboxId } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
+
+  /**
+   * Ensure a sandbox exists for the current project.
+   * Creates a new sandbox if none exists.
+   * This is called automatically before sending the first message.
+   */
+  const ensureSandbox = useCallback(async () => {
+    // If we already have an active sandbox, return it
+    if (activeSandboxId) {
+      return activeSandboxId;
+    }
+
+    // Try to list existing sandboxes for this project
+    if (!projectId) {
+      console.warn("[AgentChat] Cannot ensure sandbox: no projectId");
+      return null;
+    }
+
+    try {
+      const { sandboxes } = await sandboxService.listSandboxes(projectId);
+
+      // Use the first existing sandbox if available
+      if (sandboxes.length > 0 && sandboxes[0].status === "running") {
+        setSandboxId(sandboxes[0].id);
+        return sandboxes[0].id;
+      }
+
+      // Create a new sandbox
+      const { sandbox } = await sandboxService.createSandbox({ project_id: projectId });
+      setSandboxId(sandbox.id);
+      return sandbox.id;
+    } catch (error) {
+      console.error("[AgentChat] Failed to ensure sandbox:", error);
+      return null;
+    }
+  }, [activeSandboxId, projectId, setSandboxId]);
 
   // Load conversations on mount or project change
   useEffect(() => {
@@ -99,6 +136,13 @@ export const AgentChat: React.FC = () => {
     }
   }, [doomLoopDetected]);
 
+  // Ensure sandbox exists when projectId changes or component mounts
+  useEffect(() => {
+    if (projectId) {
+      ensureSandbox();
+    }
+  }, [projectId, ensureSandbox]);
+
   const handleSelectConversation = useCallback((id: string) => {
     navigate(`/project/${projectId}/agent/${id}`);
   }, [navigate, projectId]);
@@ -137,6 +181,9 @@ export const AgentChat: React.FC = () => {
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
 
+    // Ensure sandbox exists before sending message
+    await ensureSandbox();
+
     const newConversationId = await sendMessage(content, projectId, {
       onAct,
       onObserve,
@@ -146,7 +193,7 @@ export const AgentChat: React.FC = () => {
     if (!conversationId && newConversationId) {
       navigate(`/project/${projectId}/agent/${newConversationId}`);
     }
-  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate]);
+  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox]);
 
   // Memoize panel components to prevent re-creation on every render
   const sidebar = useMemo(() => (
