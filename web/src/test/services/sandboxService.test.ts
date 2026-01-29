@@ -21,7 +21,7 @@ vi.mock("../../services/client/httpClient", () => ({
 }));
 
 describe("sandboxService", () => {
-  const mockHttpClient = httpClient as {
+  const mockHttpClient = httpClient as unknown as {
     post: ReturnType<typeof vi.fn>;
     get: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;

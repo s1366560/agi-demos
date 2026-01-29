@@ -2,9 +2,17 @@ import React, { useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Spin, Modal, notification } from "antd";
 import { useAgentV3Store } from "../../stores/agentV3";
+import { usePlanModeStore } from "../../stores/agent/planModeStore";
 import { useSandboxStore } from "../../stores/sandbox";
 import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
-import { ChatLayout, VirtualTimelineEventList, InputArea, ConversationSidebar, RightPanel } from "../../components/agent";
+import {
+  ChatLayout,
+  VirtualTimelineEventList,
+  InputArea,
+  ConversationSidebar,
+  RightPanel,
+  PlanModeIndicator,
+} from "../../components/agent";
 import { sandboxService } from "../../services/sandboxService";
 
 export const AgentChat: React.FC = () => {
@@ -14,6 +22,7 @@ export const AgentChat: React.FC = () => {
   }>();
   const navigate = useNavigate();
 
+  // Agent V3 store state
   const {
     conversations,
     activeConversationId,
@@ -38,6 +47,9 @@ export const AgentChat: React.FC = () => {
     clearError,
     error,
   } = useAgentV3Store();
+
+  // Plan Mode store state
+  const { planModeStatus, exitPlanMode } = usePlanModeStore();
 
   // Sandbox state and handlers (declared early for use in handleSend)
   const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel, setSandboxId } = useSandboxStore();
@@ -197,12 +209,51 @@ export const AgentChat: React.FC = () => {
     />
   ), [conversations, activeConversationId, handleSelectConversation, handleNewConversation, handleDeleteConversation]);
 
+  // Handle View Plan callback - opens plan panel
+  const handleViewPlan = useCallback(() => {
+    if (!showPlanPanel) {
+      togglePlanPanel();
+    }
+  }, [showPlanPanel, togglePlanPanel]);
+
+  // Handle Exit Plan Mode callback
+  const handleExitPlanMode = useCallback(async () => {
+    if (!activeConversationId || !planModeStatus?.current_plan_id) return;
+
+    try {
+      await exitPlanMode(
+        activeConversationId,
+        planModeStatus.current_plan_id,
+        false // Don't approve, just exit
+      );
+      // Update local state
+      togglePlanMode(); // This will sync with backend
+    } catch (error) {
+      console.error("[AgentChat] Failed to exit plan mode:", error);
+      notification.error({
+        message: "Failed to exit Plan Mode",
+        description: "Please try again.",
+      });
+    }
+  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode]);
+
   const chatArea = useMemo(() => (
     <div className="flex flex-col h-full relative">
       {/* Loading Overlay */}
       {isLoadingHistory && (
         <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
           <Spin size="large" />
+        </div>
+      )}
+
+      {/* Plan Mode Indicator - shown when in plan/explore mode */}
+      {(planModeStatus?.is_in_plan_mode || planModeStatus?.current_mode === "explore") && (
+        <div className="px-4 pt-4 bg-white">
+          <PlanModeIndicator
+            status={planModeStatus}
+            onViewPlan={handleViewPlan}
+            onExitPlanMode={handleExitPlanMode}
+          />
         </div>
       )}
 
@@ -223,7 +274,20 @@ export const AgentChat: React.FC = () => {
         onTogglePlanPanel={togglePlanPanel}
       />
     </div>
-  ), [isLoadingHistory, timeline, isStreaming, handleSend, abortStream, isPlanMode, togglePlanMode, showPlanPanel, activeConversationId]);
+  ), [
+    isLoadingHistory,
+    timeline,
+    isStreaming,
+    handleSend,
+    abortStream,
+    isPlanMode,
+    togglePlanMode,
+    showPlanPanel,
+    togglePlanPanel,
+    planModeStatus,
+    handleViewPlan,
+    handleExitPlanMode,
+  ]);
 
   const rightPanel = useMemo(() => (
     <RightPanel

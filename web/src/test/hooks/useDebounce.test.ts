@@ -279,14 +279,17 @@ describe('useDebounce', () => {
     });
 
     it('should work with undefined values', () => {
-      const { result, rerender } = renderHook(
+      const { result, rerender } = renderHook<
+        string | undefined,
+        { value: string | undefined; delay: number }
+      >(
         ({ value, delay }) => useDebounce(value, delay),
         {
           initialProps: { value: 'initial', delay: 100 },
         }
       );
 
-      rerender({ value: undefined as string | undefined, delay: 100 });
+      rerender({ value: undefined, delay: 100 });
 
       act(() => {
         vi.advanceTimersByTime(100);

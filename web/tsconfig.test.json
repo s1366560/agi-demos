@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/test/**/*",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "vitest.config.ts",
+    "src/test/setup.ts"
+  ]
+}

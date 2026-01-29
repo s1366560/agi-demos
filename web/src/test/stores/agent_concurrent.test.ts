@@ -204,7 +204,7 @@ describe('Agent Store - Concurrent Conversation Switching (RED Phase)', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
       });
 
-      let state = useAgentStore.getState();
+      const state = useAgentStore.getState();
       expect(state.isStreaming).toBe(true);
 
       // Try to send message to conv2 - this should NOT be blocked with per-conversation locks
@@ -294,7 +294,7 @@ describe('Agent Store - Concurrent Conversation Switching (RED Phase)', () => {
       });
 
       // After switching, tool state should be clean for conv2
-      let state = useAgentStore.getState();
+      const state = useAgentStore.getState();
       expect(state.currentToolExecution).toBe(null);
 
       // TODO: After implementation, conv1's tool execution should be preserved
@@ -335,7 +335,7 @@ describe('Agent Store - Concurrent Conversation Switching (RED Phase)', () => {
       });
 
       // After switching, skill state should be clean for conv2
-      let state = useAgentStore.getState();
+      const state = useAgentStore.getState();
       expect(state.currentSkillExecution).toBe(null);
 
       // TODO: After implementation, conv1's skill execution should be preserved

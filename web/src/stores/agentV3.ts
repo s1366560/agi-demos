@@ -11,7 +11,6 @@ import {
   ActEventData,
   ObserveEventData,
   UserMessageEvent,
-  MessageEventData,
   ThoughtEventData,
   WorkPlanEventData,
   StepStartEventData,

@@ -7,7 +7,7 @@
  * @module components/agent/chat/ChatArea
  */
 
-import React, { memo, useMemo, useRef, useEffect, useCallback } from "react";
+import React, { memo, useMemo } from "react";
 import { Spin } from "antd";
 import {
   IdleState,
@@ -16,8 +16,6 @@ import {
 import { VirtualTimelineEventList } from "../VirtualTimelineEventList";
 import { ExecutionTimeline } from "../execution/ExecutionTimeline";
 import { FollowUpPills } from "../execution/FollowUpPills";
-import { PlanModeIndicator } from "../PlanModeIndicator";
-import { PlanEditor } from "../PlanEditor";
 import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus, TimelineEvent } from "../../../types/agent";
 
 // Default starter tiles
@@ -166,19 +164,19 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   executionTimeline,
   toolExecutionHistory,
   matchedPattern,
-  planModeStatus,
-  showPlanEditor,
-  currentPlan,
-  planLoading,
+  planModeStatus: _planModeStatus,
+  showPlanEditor: _showPlanEditor,
+  currentPlan: _currentPlan,
+  planLoading: _planLoading,
   scrollContainerRef,
-  messagesEndRef,
-  onViewPlan,
-  onExitPlanMode,
-  onUpdatePlan,
+  messagesEndRef: _messagesEndRef,
+  onViewPlan: _onViewPlan,
+  onExitPlanMode: _onExitPlanMode,
+  onUpdatePlan: _onUpdatePlan,
   onSend,
   onTileClick,
   hasEarlierMessages,
-  onLoadEarlier,
+  onLoadEarlier: _onLoadEarlier,
 }) => {
   // Memoize sorted timeline events (they should already be sorted by sequence)
   const sortedTimeline = useMemo(
@@ -197,10 +195,12 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   );
 
   // Scroll handling for backward pagination
+  // TODO: Apply this scroll handler to the scroll container for backward pagination
+  /*
   const isLoadingEarlierRef = useRef(false);
   const previousScrollHeightRef = useRef(0);
 
-  const handleScroll = useCallback(
+  const _handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.target as HTMLDivElement;
       const { scrollTop, scrollHeight } = target;
@@ -229,8 +229,12 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
     },
     [messagesLoading, currentConversation, hasEarlierMessages, onLoadEarlier]
   );
+  */
 
   // Restore scroll position after loading earlier messages
+  // TODO: Enable when backward pagination is implemented
+  /*
+  const previousScrollHeightRef = useRef(0);
   useEffect(() => {
     if (!messagesLoading && previousScrollHeightRef.current > 0 && scrollContainerRef.current) {
       const scrollContainer = scrollContainerRef.current;
@@ -241,6 +245,7 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
       previousScrollHeightRef.current = 0;
     }
   }, [messagesLoading, scrollContainerRef]);
+  */
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">

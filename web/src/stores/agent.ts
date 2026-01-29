@@ -69,7 +69,11 @@ import type {
   ExecutionStepStatus,
   MessageRole,
   PlanDocument,
+  PlanModeEnterEventData,
+  PlanModeExitEventData,
+  PlanCreatedEventData,
   PlanModeStatus,
+  PlanUpdatedEventData,
   PlanStatus,
   ReflectionResult,
   SkillExecutionState,
@@ -1419,6 +1423,72 @@ export const useAgentStore = create<AgentState>()(
             summarizedMessageCount: data.summarized_message_count,
           },
         });
+      },
+
+      // Plan Mode event handlers
+      onPlanModeEnter: (event: any) => {
+        receivedServerEvent = true;
+        const data = event.data as PlanModeEnterEventData;
+        logger.debug("[Agent] Plan mode entered:", data);
+        set({
+          planModeStatus: {
+            is_in_plan_mode: true,
+            current_mode: "plan",
+            current_plan_id: data.plan_id,
+            plan: null, // Will be loaded via onPlanCreated
+          },
+        });
+      },
+
+      onPlanModeExit: (event: any) => {
+        receivedServerEvent = true;
+        const data = event.data as PlanModeExitEventData;
+        logger.debug("[Agent] Plan mode exited:", data);
+        set({
+          planModeStatus: {
+            is_in_plan_mode: false,
+            current_mode: "build",
+            current_plan_id: null,
+            plan: null,
+          },
+        });
+      },
+
+      onPlanCreated: (event: any) => {
+        receivedServerEvent = true;
+        const data = event.data as PlanCreatedEventData;
+        logger.debug("[Agent] Plan created:", data);
+        // Load the full plan document
+        const { getPlan } = get();
+        if (data.plan_id) {
+          getPlan(data.plan_id).catch((err) => {
+            logger.error("[Agent] Failed to load plan after creation:", err);
+          });
+        }
+      },
+
+      onPlanUpdated: (event: any) => {
+        receivedServerEvent = true;
+        const data = event.data as PlanUpdatedEventData;
+        logger.debug("[Agent] Plan updated:", data);
+        // Update current plan if it matches
+        const { currentPlan, planModeStatus } = get();
+        if (currentPlan?.id === data.plan_id) {
+          set({
+            currentPlan: {
+              ...currentPlan,
+              content: data.content ?? currentPlan.content,
+              version: data.version ?? currentPlan.version,
+              updated_at: new Date().toISOString(),
+            },
+          });
+        } else if (planModeStatus?.current_plan_id === data.plan_id) {
+          // Reload the plan if we don't have it but should
+          const { getPlan } = get();
+          getPlan(data.plan_id).catch((err) => {
+            logger.error("[Agent] Failed to load plan after update:", err);
+          });
+        }
       },
 
       onTitleGenerated: (event: any) => {
