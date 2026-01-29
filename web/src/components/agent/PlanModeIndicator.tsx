@@ -1,17 +1,18 @@
 /**
  * PlanModeIndicator component for displaying Plan Mode status.
  *
- * Shows a visual indicator when the conversation is in Plan Mode,
+ * Shows a compact visual indicator when the conversation is in Plan Mode,
  * with quick actions to view the plan or exit Plan Mode.
  */
 
 import React from "react";
-import { Alert, Button, Space, Tag, Tooltip } from "antd";
+import { Button, Tag, Tooltip, Badge } from "antd";
 import {
   FileTextOutlined,
   ExperimentOutlined,
   BuildOutlined,
   EyeOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import type { AgentMode, PlanModeStatus } from "../../types/agent";
 
@@ -29,21 +30,39 @@ const modeIcons: Record<AgentMode, React.ReactNode> = {
 };
 
 const modeColors: Record<AgentMode, string> = {
-  build: "green",
-  plan: "blue",
-  explore: "purple",
+  build: "success",
+  plan: "processing",
+  explore: "warning",
+};
+
+const modeBgColors: Record<AgentMode, string> = {
+  build: "bg-emerald-50 border-emerald-200",
+  plan: "bg-blue-50 border-blue-200",
+  explore: "bg-amber-50 border-amber-200",
+};
+
+const modeTextColors: Record<AgentMode, string> = {
+  build: "text-emerald-700",
+  plan: "text-blue-700",
+  explore: "text-amber-700",
+};
+
+const modeIconColors: Record<AgentMode, string> = {
+  build: "text-emerald-600",
+  plan: "text-blue-600",
+  explore: "text-amber-600",
 };
 
 const modeLabels: Record<AgentMode, string> = {
-  build: "Build Mode",
-  plan: "Plan Mode",
-  explore: "Explore Mode",
+  build: "Build",
+  plan: "Plan",
+  explore: "Explore",
 };
 
 const modeDescriptions: Record<AgentMode, string> = {
-  build: "Full access - you can read, write, and execute code",
-  plan: "Read-only + plan editing - explore the codebase and design your approach",
-  explore: "Pure read-only - exploring as a SubAgent",
+  build: "Full access - read, write, and execute",
+  plan: "Read-only + plan editing - design your approach",
+  explore: "Pure read-only - exploring as SubAgent",
 };
 
 export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
@@ -62,7 +81,11 @@ export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
   if (compact) {
     return (
       <Tooltip title={modeDescriptions[currentMode]}>
-        <Tag color={modeColors[currentMode]} icon={modeIcons[currentMode]}>
+        <Tag
+          color={modeColors[currentMode]}
+          icon={modeIcons[currentMode]}
+          className="cursor-pointer"
+        >
           {modeLabels[currentMode]}
         </Tag>
       </Tooltip>
@@ -75,41 +98,69 @@ export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
   }
 
   return (
-    <Alert
-      type={
-        currentMode === "plan"
-          ? "info"
-          : currentMode === "explore"
-          ? "warning"
-          : "success"
-      }
-      showIcon
-      icon={modeIcons[currentMode]}
-      message={
-        <Space>
-          <span>{modeLabels[currentMode]}</span>
-          {status.plan && <Tag color="blue">{status.plan.title}</Tag>}
-        </Space>
-      }
-      description={modeDescriptions[currentMode]}
-      action={
-        isInPlanMode && (
-          <Space direction="vertical" size="small">
-            {onViewPlan && status.plan && (
-              <Button size="small" icon={<EyeOutlined />} onClick={onViewPlan}>
-                View Plan
+    <div
+      className={`
+        flex items-center justify-between px-4 py-2.5 rounded-xl border
+        ${modeBgColors[currentMode]} mb-4 mx-4 mt-2
+        transition-all duration-200 animate-slide-down
+      `}
+    >
+      {/* Left: Mode Icon + Info */}
+      <div className="flex items-center gap-3">
+        <div
+          className={`
+            w-8 h-8 rounded-lg flex items-center justify-center
+            bg-white/80 shadow-sm
+          `}
+        >
+          <span className={modeIconColors[currentMode]}>
+            {modeIcons[currentMode]}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span className={`font-semibold text-sm ${modeTextColors[currentMode]}`}>
+              {modeLabels[currentMode]} Mode
+            </span>
+            <Badge status={modeColors[currentMode] as any} size="small" />
+          </div>
+          <span className="text-xs text-slate-500">
+            {modeDescriptions[currentMode]}
+          </span>
+        </div>
+      </div>
+
+      {/* Right: Actions */}
+      {isInPlanMode && (
+        <div className="flex items-center gap-2">
+          {onViewPlan && status.plan && (
+            <Tooltip title="View Plan">
+              <Button
+                size="small"
+                icon={<EyeOutlined />}
+                onClick={onViewPlan}
+                className="flex items-center gap-1"
+              >
+                View
               </Button>
-            )}
-            {onExitPlanMode && (
-              <Button size="small" type="primary" onClick={onExitPlanMode}>
-                Exit Plan Mode
+            </Tooltip>
+          )}
+          {onExitPlanMode && (
+            <Tooltip title="Exit Plan Mode">
+              <Button
+                size="small"
+                type="primary"
+                danger
+                icon={<CloseOutlined />}
+                onClick={onExitPlanMode}
+              >
+                Exit
               </Button>
-            )}
-          </Space>
-        )
-      }
-      style={{ marginBottom: 16 }}
-    />
+            </Tooltip>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -1,12 +1,12 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Button, Input, Tooltip, Switch } from "antd";
+import { Button, Input, Tooltip, Badge } from "antd";
 import {
   SendOutlined,
   PaperClipOutlined,
   BuildOutlined,
   StopOutlined,
   LayoutOutlined,
-  EditOutlined,
+  LoadingOutlined,
 } from "@ant-design/icons";
 
 const { TextArea } = Input;
@@ -22,12 +22,13 @@ interface InputAreaProps {
 }
 
 /**
- * InputArea Component - Message input area for agent chat
+ * InputArea Component - Optimized message input area for agent chat
  *
- * Provides a polished input interface with toolbar controls,
- * mode toggles, and send/abort actions.
- *
- * Features Plan Mode visual feedback with different styling.
+ * Features:
+ * - Compact toolbar with integrated mode indicators
+ * - Clean input field with floating action buttons
+ * - Visual feedback for Plan Mode
+ * - Responsive design
  *
  * @component
  */
@@ -51,127 +52,118 @@ export const InputArea: React.FC<InputAreaProps> = ({
   }, [value, onSend]);
 
   // Stable callback for keyboard shortcuts
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [handleSend]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [handleSend]
+  );
 
   // Dynamic styling based on Plan Mode
-  const planModeClass = isPlanMode
-    ? "bg-blue-50/50 border-blue-200/60"
-    : "bg-white/80 backdrop-blur-sm";
+  const containerClass = isPlanMode
+    ? "bg-gradient-to-r from-blue-50/80 via-white/90 to-blue-50/80 border-t-blue-200/50"
+    : "bg-white/95 border-t-slate-200/60";
 
-  const inputFieldClass = isPlanMode
-    ? "border-blue-300 focus-within:ring-blue-100 focus-within:border-blue-400"
-    : "border-slate-200 focus-within:ring-primary/30 focus-within:border-primary/50";
+  const inputContainerClass = isPlanMode
+    ? "border-blue-300/60 shadow-blue-100/50 focus-within:ring-blue-200 focus-within:border-blue-400"
+    : "border-slate-200/80 focus-within:ring-primary/20 focus-within:border-primary/40";
 
   return (
     <div
-      className={`p-5 border-t ${planModeClass} transition-colors duration-300`}
+      className={`${containerClass} border-t backdrop-blur-xl transition-all duration-300`}
       data-testid="agent-input-area"
     >
-      <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto flex flex-col gap-4">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-2" data-testid="agent-toolbar">
-          <div className="flex items-center gap-5">
+      <div className="w-full max-w-4xl mx-auto px-4 py-4">
+        {/* Compact Toolbar */}
+        <div
+          className="flex items-center justify-between mb-3 px-1"
+          data-testid="agent-toolbar"
+        >
+          {/* Left: Mode Toggles */}
+          <div className="flex items-center gap-2">
+            {/* Plan Mode Toggle */}
             <Tooltip
               title={
                 isPlanMode
-                  ? "Plan Mode Active (Read-only research)"
-                  : "Switch to Plan Mode"
+                  ? "Exit Plan Mode (Read-only research)"
+                  : "Enter Plan Mode"
               }
             >
-              <div
-                role="button"
-                tabIndex={0}
+              <button
                 onClick={onTogglePlanMode}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onTogglePlanMode();
-                  }
-                }}
                 data-testid="plan-mode-toggle"
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer border ${
-                  isPlanMode
-                    ? "border-blue-300 bg-blue-50"
-                    : "border-transparent hover:border-slate-200"
-                }`}
-                aria-pressed={isPlanMode}
+                className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium
+                  transition-all duration-200 border
+                  ${
+                    isPlanMode
+                      ? "bg-blue-100 border-blue-300 text-blue-700 shadow-sm"
+                      : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
+                  }
+                `}
               >
-                <Switch
-                  size="small"
-                  checked={isPlanMode}
-                  className="pointer-events-none"
-                />
-                <BuildOutlined
-                  className={`text-sm ${
-                    isPlanMode ? "text-blue-600" : "text-slate-400"
-                  }`}
-                />
-                <span
-                  className={`text-sm font-medium ${
-                    isPlanMode ? "text-blue-600" : "text-slate-600"
-                  }`}
-                >
-                  Plan Mode
-                </span>
-              </div>
+                <BuildOutlined className="text-xs" />
+                <span>Plan</span>
+                {isStreaming && isPlanMode && (
+                  <LoadingOutlined className="text-xs ml-1" spin />
+                )}
+              </button>
             </Tooltip>
 
-            <div className="h-4 w-px bg-slate-200" />
-
-            <Tooltip title={showPlanPanel ? "Hide Plan Panel" : "Show Plan Panel"}>
-              <div
-                role="button"
-                tabIndex={0}
+            {/* Panel Toggle */}
+            <Tooltip
+              title={showPlanPanel ? "Hide Side Panel" : "Show Side Panel"}
+            >
+              <button
                 onClick={onTogglePlanPanel}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onTogglePlanPanel();
-                  }
-                }}
                 data-testid="plan-panel-toggle"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-                aria-pressed={showPlanPanel}
+                className={`
+                  flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium
+                  transition-all duration-200 border
+                  ${
+                    showPlanPanel
+                      ? "bg-primary/10 border-primary/30 text-primary shadow-sm"
+                      : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
+                  }
+                `}
               >
-                <Switch
-                  size="small"
-                  checked={showPlanPanel}
-                  className="pointer-events-none"
-                />
-                <LayoutOutlined
-                  className={`text-sm ${showPlanPanel ? "text-primary" : "text-slate-400"}`}
-                />
-                <span
-                  className={`text-sm font-medium ${
-                    showPlanPanel ? "text-primary" : "text-slate-600"
-                  }`}
-                >
-                  Panel
-                </span>
-              </div>
+                <LayoutOutlined className="text-xs" />
+                <span>Panel</span>
+              </button>
             </Tooltip>
           </div>
 
-          {/* Plan Mode indicator icon (shown when in plan mode) */}
+          {/* Right: Status */}
+          <div className="flex items-center gap-2">
+            {isStreaming && (
+              <Badge
+                status="processing"
+                text={<span className="text-xs text-slate-500">Thinking...</span>}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Input Field Container */}
+        <div
+          className={`
+            relative rounded-2xl border bg-white shadow-sm
+            transition-all duration-200 ${inputContainerClass}
+            focus-within:ring-2 focus-within:shadow-md
+          `}
+        >
+          {/* Plan Mode Badge - Floating */}
           {isPlanMode && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200">
-              <EditOutlined className="text-sm text-blue-600" />
-              <span className="text-xs text-blue-600 font-medium">
-                Planning Mode
+            <div className="absolute -top-3 left-4 z-10">
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-500 text-white text-[10px] font-medium shadow-sm">
+                Plan Mode
               </span>
             </div>
           )}
-        </div>
 
-        {/* Input Field */}
-        <div
-          className={`relative rounded-2xl border shadow-sm bg-white transition-all duration-200 ${inputFieldClass}`}
-        >
           <TextArea
             ref={textareaRef}
             id="agent-message-input"
@@ -181,68 +173,94 @@ export const InputArea: React.FC<InputAreaProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={
               isPlanMode
-                ? "Describe what you want to plan..."
-                : "Message Agent..."
+                ? "Describe what you want to plan... (Shift+Enter for new line)"
+                : "Message the AI agent... (Shift+Enter for new line)"
             }
-            autoSize={{ minRows: 2, maxRows: 8 }}
-            className="!border-0 !shadow-none !bg-transparent !px-5 !py-4 !text-sm !resize-none rounded-2xl"
+            autoSize={{ minRows: 1, maxRows: 6 }}
+            className="!border-0 !shadow-none !bg-transparent !px-4 !py-3.5 !text-sm !resize-none rounded-2xl"
             disabled={isStreaming}
             data-testid="agent-message-textarea"
-            aria-label={isPlanMode ? "Describe what you want to plan" : "Message Agent"}
-            aria-required="false"
-            style={{ fontSize: '14px', lineHeight: '1.5' }}
+            aria-label={
+              isPlanMode ? "Describe what you want to plan" : "Message Agent"
+            }
+            style={{
+              fontSize: "14px",
+              lineHeight: "1.6",
+            }}
           />
 
-          <div className="flex justify-between items-center px-3 pb-3">
-            <Button
-              type="text"
-              icon={<PaperClipOutlined />}
-              className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors rounded-lg h-9 w-9"
-              disabled={isStreaming || isPlanMode}
-              data-testid="attach-button"
-              aria-label="Attach file"
-            />
+          {/* Action Buttons */}
+          <div className="flex justify-between items-center px-3 pb-3 pt-1">
+            {/* Left: Attach */}
+            <Tooltip title="Attach file (coming soon)">
+              <Button
+                type="text"
+                icon={<PaperClipOutlined />}
+                className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors rounded-lg h-8 w-8"
+                disabled={isStreaming || isPlanMode}
+                data-testid="attach-button"
+              />
+            </Tooltip>
 
-            {isStreaming ? (
-              <Button
-                type="primary"
-                danger
-                shape="circle"
-                size="large"
-                icon={<StopOutlined />}
-                onClick={onAbort}
-                className="shadow-sm hover:shadow-md transition-shadow"
-                data-testid="stop-streaming-button"
-                aria-label="Stop generation"
-              />
-            ) : (
-              <Button
-                type={isPlanMode ? "default" : "primary"}
-                shape="circle"
-                size="large"
-                icon={<SendOutlined />}
-                onClick={handleSend}
-                disabled={!value.trim()}
-                className={`shadow-sm hover:shadow-md transition-shadow ${
-                  !value.trim() ? 'opacity-40' : ''
-                } ${isPlanMode ? "border-blue-500 hover:bg-blue-50 hover:!bg-blue-500 hover:!text-blue-500" : ""}`}
-                data-testid="send-message-button"
-                aria-label="Send message"
-                style={isPlanMode ? { borderColor: '#1890ff', color: '#1890ff' } : undefined}
-              />
-            )}
+            {/* Right: Send/Stop */}
+            <div className="flex items-center gap-2">
+              {/* Character Count - subtle */}
+              {value.length > 0 && !isStreaming && (
+                <span className="text-[10px] text-slate-400 px-2">
+                  {value.length}
+                </span>
+              )}
+
+              {isStreaming ? (
+                <Button
+                  type="primary"
+                  danger
+                  shape="circle"
+                  size="large"
+                  icon={<StopOutlined />}
+                  onClick={onAbort}
+                  className="shadow-md hover:shadow-lg transition-all"
+                  data-testid="stop-streaming-button"
+                />
+              ) : (
+                <Button
+                  type={isPlanMode ? "default" : "primary"}
+                  shape="circle"
+                  size="large"
+                  icon={<SendOutlined />}
+                  onClick={handleSend}
+                  disabled={!value.trim()}
+                  className={`
+                    shadow-sm hover:shadow-md transition-all
+                    ${!value.trim() ? "opacity-40" : ""}
+                    ${
+                      isPlanMode
+                        ? "border-blue-500 text-blue-500 hover:bg-blue-50"
+                        : ""
+                    }
+                  `}
+                  data-testid="send-message-button"
+                />
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="text-center">
-          <span className="text-[11px] text-slate-400">
-            {isPlanMode
-              ? "In Plan Mode: Describe your goals, and I'll create a structured plan for approval."
-              : "Agent can make mistakes. Consider checking important information."
-            }
+        {/* Footer Hint */}
+        <div className="text-center mt-2">
+          <span className="text-[10px] text-slate-400">
+            {isPlanMode ? (
+              <span className="text-blue-500/70">
+                Plan Mode: AI will help create a structured plan for approval
+              </span>
+            ) : (
+              "AI responses are generated based on context and may vary"
+            )}
           </span>
         </div>
       </div>
     </div>
   );
 };
+
+export default InputArea;

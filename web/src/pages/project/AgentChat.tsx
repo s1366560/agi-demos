@@ -26,7 +26,7 @@ export const AgentChat: React.FC = () => {
   const {
     conversations,
     activeConversationId,
-    timeline,      // NEW: Use timeline instead of messages
+    timeline,
     isLoadingHistory,
     isStreaming,
     workPlan,
@@ -52,22 +52,18 @@ export const AgentChat: React.FC = () => {
   // Plan Mode store state
   const { planModeStatus, exitPlanMode } = usePlanModeStore();
 
-  // Sandbox state and handlers (declared early for use in handleSend)
-  const { activeSandboxId, toolExecutions, closePanel: _closeSandboxPanel, setSandboxId } = useSandboxStore();
+  // Sandbox state and handlers
+  const { activeSandboxId, toolExecutions, setSandboxId } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
   /**
    * Ensure a sandbox exists for the current project.
-   * Creates a new sandbox if none exists.
-   * This is called automatically before sending the first message.
    */
   const ensureSandbox = useCallback(async () => {
-    // If we already have an active sandbox, return it
     if (activeSandboxId) {
       return activeSandboxId;
     }
 
-    // Try to list existing sandboxes for this project
     if (!projectId) {
       console.warn("[AgentChat] Cannot ensure sandbox: no projectId");
       return null;
@@ -76,13 +72,11 @@ export const AgentChat: React.FC = () => {
     try {
       const { sandboxes } = await sandboxService.listSandboxes(projectId);
 
-      // Use the first existing sandbox if available
       if (sandboxes.length > 0 && sandboxes[0].status === "running") {
         setSandboxId(sandboxes[0].id);
         return sandboxes[0].id;
       }
 
-      // Create a new sandbox
       const { sandbox } = await sandboxService.createSandbox({ project_id: projectId });
       setSandboxId(sandbox.id);
       return sandbox.id;
@@ -102,11 +96,9 @@ export const AgentChat: React.FC = () => {
   // Handle URL conversation ID
   useEffect(() => {
     if (projectId && conversationId) {
-      // 始终设置活动对话并加载消息（当 URL 中有对话 ID 时）
       setActiveConversation(conversationId);
       loadMessages(conversationId, projectId);
     } else if (projectId && !conversationId) {
-      // 清除活动对话（当 URL 中没有对话 ID 时）
       setActiveConversation(null);
     }
   }, [conversationId, projectId, setActiveConversation, loadMessages]);
@@ -129,8 +121,8 @@ export const AgentChat: React.FC = () => {
         title: "Agent Requests Decision",
         content: pendingDecision.question,
         okText: "Confirm",
-        cancelText: "Cancel", // Or custom options if available
-        onOk: () => respondToDecision(pendingDecision.request_id, "approved"), // Simplified
+        cancelText: "Cancel",
+        onOk: () => respondToDecision(pendingDecision.request_id, "approved"),
         onCancel: () =>
           respondToDecision(pendingDecision.request_id, "rejected"),
       });
@@ -154,7 +146,6 @@ export const AgentChat: React.FC = () => {
   const handleNewConversation = useCallback(async () => {
     if (!projectId) return;
 
-    // Create conversation first, then navigate to it
     const newConversationId = await createNewConversation(projectId);
     if (newConversationId) {
       navigate(`/project/${projectId}/agent/${newConversationId}`);
@@ -167,14 +158,12 @@ export const AgentChat: React.FC = () => {
 
     Modal.confirm({
       title: "Delete Conversation",
-      content:
-        "Are you sure you want to delete this conversation? This action cannot be undone.",
+      content: "Are you sure you want to delete this conversation? This action cannot be undone.",
       okText: "Delete",
       okType: "danger",
       cancelText: "Cancel",
       onOk: async () => {
         await deleteConversation(id, projectId);
-        // If deleted conversation was active, navigate to root agent page
         if (activeConversationId === id) {
           navigate(`/project/${projectId}/agent`);
         }
@@ -185,7 +174,6 @@ export const AgentChat: React.FC = () => {
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
 
-    // Ensure sandbox exists before sending message
     await ensureSandbox();
 
     const newConversationId = await sendMessage(content, projectId, {
@@ -193,13 +181,12 @@ export const AgentChat: React.FC = () => {
       onObserve,
     });
 
-    // If we were on the "New Chat" page (no active ID) and got a new ID, navigate
     if (!conversationId && newConversationId) {
       navigate(`/project/${projectId}/agent/${newConversationId}`);
     }
   }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox]);
 
-  // Memoize panel components to prevent re-creation on every render
+  // Memoize panel components
   const sidebar = useMemo(() => (
     <ConversationSidebar
       conversations={conversations}
@@ -210,7 +197,7 @@ export const AgentChat: React.FC = () => {
     />
   ), [conversations, activeConversationId, handleSelectConversation, handleNewConversation, handleDeleteConversation]);
 
-  // Handle View Plan callback - opens plan panel
+  // Handle View Plan callback
   const handleViewPlan = useCallback(() => {
     if (!showPlanPanel) {
       togglePlanPanel();
@@ -225,10 +212,9 @@ export const AgentChat: React.FC = () => {
       await exitPlanMode(
         activeConversationId,
         planModeStatus.current_plan_id,
-        false // Don't approve, just exit
+        false
       );
-      // Update local state
-      togglePlanMode(); // This will sync with backend
+      togglePlanMode();
     } catch (error) {
       console.error("[AgentChat] Failed to exit plan mode:", error);
       notification.error({
@@ -242,14 +228,14 @@ export const AgentChat: React.FC = () => {
     <div className="flex flex-col h-full relative">
       {/* Loading Overlay */}
       {isLoadingHistory && (
-        <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
-          <Spin size="large" />
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center">
+          <Spin size="large" tip="Loading conversation..." />
         </div>
       )}
 
-      {/* Plan Mode Indicator - shown when in plan/explore mode */}
+      {/* Plan Mode Indicator */}
       {(planModeStatus?.is_in_plan_mode || planModeStatus?.current_mode === "explore") && (
-        <div className="px-4 pt-4 bg-white">
+        <div className="flex-shrink-0">
           <PlanModeIndicator
             status={planModeStatus}
             onViewPlan={handleViewPlan}
@@ -258,7 +244,7 @@ export const AgentChat: React.FC = () => {
         </div>
       )}
 
-      {/* Timeline Event List - Timeline mode only */}
+      {/* Timeline Event List */}
       <VirtualTimelineEventList
         timeline={timeline}
         isStreaming={isStreaming}
