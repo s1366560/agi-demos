@@ -36,12 +36,14 @@ ENV DESKTOP_ENABLED=true \
 # ====================
 # Base System Setup
 # ====================
-# Configure apt mirrors and update in one layer
+# First install ca-certificates for HTTPS support, then configure mirrors
 RUN set -eux; \
+    apt-get update; \
+    apt-get install -y ca-certificates; \
     ARCH=$(dpkg --print-architecture); \
-    if [ "$ARCH" = "amd64" ]; then MIRROR="http://mirrors.aliyun.com/ubuntu"; \
-    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
-    else MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
+    if [ "$ARCH" = "amd64" ]; then MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu"; \
+    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"; \
+    else MIRROR="https://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports"; \
     fi; \
     echo "Using mirror: $MIRROR for $ARCH"; \
     printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky plucky-updates plucky-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources; \

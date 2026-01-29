@@ -3,22 +3,25 @@
  *
  * Features:
  * - Tabbed interface for Plan and Sandbox
+ * - PlanEditor integration for Plan Mode
  * - Integrated Terminal and Remote Desktop
  * - Tool execution output viewer
  * - Modern, clean design
  */
 
 import React, { useState } from 'react';
-import { Tabs, Button, Empty, Badge } from 'antd';
-import { 
-  X, 
-  ListTodo, 
+import { Tabs, Button, Empty, Badge, Alert, Spin } from 'antd';
+import {
+  X,
+  ListTodo,
   Terminal,
   CheckCircle2,
   Play,
   Clock
 } from 'lucide-react';
 import { SandboxSection } from './SandboxSection';
+import { PlanEditor } from './PlanEditor';
+import { usePlanModeStore } from '../../stores/agent/planModeStore';
 import type { WorkPlan } from '../../types/agent';
 import type { ExecutionPlan } from '../../types/agent';
 import type { ToolExecution } from './sandbox/SandboxOutputViewer';
@@ -37,11 +40,64 @@ export interface RightPanelProps {
 }
 
 // Plan Tab Content
-const PlanContent: React.FC<{ 
-  workPlan: WorkPlan | null; 
+const PlanContent: React.FC<{
+  workPlan: WorkPlan | null;
   executionPlan: ExecutionPlan | null;
 }> = ({ workPlan, executionPlan }) => {
-  if (!workPlan && !executionPlan) {
+  const { planModeStatus, currentPlan, planLoading, planError } = usePlanModeStore();
+
+  // Show error state if plan mode failed
+  if (planError && planModeStatus?.is_in_plan_mode) {
+    return (
+      <div className="p-4">
+        <Alert
+          type="error"
+          message="Plan Mode Error"
+          description={planError}
+          showIcon
+          closable
+        />
+      </div>
+    );
+  }
+
+  // Show PlanEditor when in Plan Mode with an active plan
+  if (planModeStatus?.is_in_plan_mode && currentPlan) {
+    return (
+      <PlanEditor
+        plan={currentPlan}
+        isLoading={planLoading}
+        onUpdate={async (content: string) => {
+          const { updatePlan } = usePlanModeStore.getState();
+          await updatePlan(currentPlan.id, { content });
+        }}
+        onSubmitForReview={async () => {
+          const { submitPlanForReview } = usePlanModeStore.getState();
+          await submitPlanForReview(currentPlan.id);
+        }}
+        onExit={async (approve: boolean, summary?: string) => {
+          // Get conversation ID from planModeStatus or parent context
+          // For now, we'll need to pass this down or get it from route
+          const conversationId = currentPlan.metadata?.conversation_id as string;
+          const { exitPlanMode } = usePlanModeStore.getState();
+          await exitPlanMode(conversationId, currentPlan.id, approve, summary);
+        }}
+      />
+    );
+  }
+
+  // Show loading spinner when in plan mode but plan not yet loaded
+  if (planModeStatus?.is_in_plan_mode && planLoading && !currentPlan) {
+    return (
+      <div className="p-8 text-center">
+        <Spin size="large" />
+        <p className="mt-4 text-slate-500">Loading plan...</p>
+      </div>
+    );
+  }
+
+  // Show EmptyState if no plan at all
+  if (!workPlan && !executionPlan && !planModeStatus?.is_in_plan_mode) {
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}

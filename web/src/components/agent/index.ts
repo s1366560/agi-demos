@@ -31,6 +31,7 @@ export { PlanEditor } from './PlanEditor';
 export { PlanModeIndicator } from './PlanModeIndicator';
 export { PlanModeViewer } from './PlanModeViewer';
 export { ExecutionPlanProgress } from './ExecutionPlanProgress';
+export { ExecutionPlanViewer } from './ExecutionPlanViewer';
 export { StepAdjustmentModal } from './StepAdjustmentModal';
 export { CodeExecutorResultCard } from './CodeExecutorResultCard';
 export { FileDownloadButton } from './FileDownloadButton';

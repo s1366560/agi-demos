@@ -1215,7 +1215,7 @@ class ReActAgent:
         from ..planning.plan_reflector import PlanReflector
         from ..planning.plan_adjuster import PlanAdjuster
         from src.domain.model.agent.execution_plan import ExecutionPlan
-        from src.infrastructure.llm.litellm import LiteLLMClient
+        from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
         from src.configuration.config import get_settings
 
         logger.info("[ReActAgent] Executing Plan Mode workflow")

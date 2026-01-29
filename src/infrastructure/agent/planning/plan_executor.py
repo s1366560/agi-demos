@@ -6,6 +6,7 @@ execution plans created by the PlanGenerator.
 """
 
 import asyncio
+import logging
 from typing import Any
 
 from src.domain.model.agent.execution_plan import (
@@ -14,6 +15,8 @@ from src.domain.model.agent.execution_plan import (
     ExecutionStepStatus,
     ExecutionPlanStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PlanExecutor:
@@ -295,6 +298,9 @@ class PlanExecutor:
         """
         Execute plan with parallel execution of independent steps.
 
+        Uses Semaphore to limit concurrent execution and properly handles
+        errors, abort signals, and step dependencies.
+
         Args:
             plan: The execution plan
             abort_signal: Optional abort signal
@@ -302,9 +308,57 @@ class PlanExecutor:
         Returns:
             Updated execution plan
         """
+        # Use Semaphore to limit concurrent executions
+        semaphore = asyncio.Semaphore(self.max_parallel_steps)
+
+        async def execute_with_limit(step_id: str) -> tuple[str, ExecutionStep | None]:
+            """Execute step with semaphore limit."""
+            async with semaphore:
+                # Check abort signal before executing
+                if abort_signal and abort_signal.is_set():
+                    return step_id, None
+
+                try:
+                    step = plan.get_step_by_id(step_id)
+                    if not step:
+                        logger.error(f"Step {step_id} not found in plan")
+                        return step_id, None
+
+                    # Emit ready event
+                    self._emit_step_ready_event(step)
+
+                    # Mark step as started
+                    plan = plan.mark_step_started(step_id)
+                    step = plan.get_step_by_id(step_id)
+
+                    if not step:
+                        return step_id, None
+
+                    # Execute the step
+                    result = await self._execute_step(step, plan.conversation_id)
+
+                    # Mark step as completed
+                    plan = plan.mark_step_completed(step_id, result)
+                    updated_step = plan.get_step_by_id(step_id)
+
+                    if updated_step:
+                        self._emit_step_complete_event(updated_step)
+
+                    return step_id, updated_step
+                except Exception as e:
+                    logger.error(f"Step {step_id} failed with error: {e}")
+                    # Mark step as failed
+                    step = plan.get_step_by_id(step_id)
+                    if step:
+                        plan = await self._handle_step_failure(plan, step, e)
+                        failed_step = plan.get_step_by_id(step_id)
+                        return step_id, failed_step
+                    return step_id, None
+
         while not plan.is_complete:
             # Check abort signal
             if abort_signal and abort_signal.is_set():
+                logger.info("Abort signal set, stopping parallel execution")
                 break
 
             # Get ready steps
@@ -321,42 +375,36 @@ class PlanExecutor:
                 # If there are pending steps but none ready, we might be stuck
                 # waiting on a failed dependency
                 if plan.failed_steps:
+                    logger.warning("No ready steps but failed steps detected, stopping execution")
                     break
                 # Wait a bit and check again
                 await asyncio.sleep(0.01)
                 continue
 
-            # Limit parallel execution
-            batch = ready_steps[:self.max_parallel_steps]
-
-            # Execute batch in parallel
-            tasks = []
-            for step_id in batch:
-                step = plan.get_step_by_id(step_id)
-                if step:
-                    self._emit_step_ready_event(step)
-                    plan = plan.mark_step_started(step_id)
-                    tasks.append(self._execute_and_update_step(plan, step_id, step))
+            # Execute all ready steps in parallel (Semaphore will limit concurrency)
+            tasks = [
+                execute_with_limit(step_id)
+                for step_id in ready_steps
+            ]
 
             if tasks:
                 # Execute all tasks in parallel
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                # Update plan with results
-                for i, result in enumerate(results):
-                    step_id = batch[i]
-                    step = plan.get_step_by_id(step_id)
-
+                # Update plan state based on results
+                for result in results:
                     if isinstance(result, Exception):
-                        if step:
-                            plan = await self._handle_step_failure(plan, step, result)
-                            # Stop on first failure in parallel mode too
-                            break
-                    elif step:
-                        plan = plan.mark_step_completed(step_id, result)
-                        updated_step = plan.get_step_by_id(step_id)
+                        logger.error(f"Task failed with exception: {result}")
+                        continue
+
+                    if isinstance(result, tuple):
+                        step_id, updated_step = result
                         if updated_step:
-                            self._emit_step_complete_event(updated_step)
+                            # Plan is already updated inside execute_with_limit
+                            pass
+                        else:
+                            # Step was skipped or aborted
+                            pass
 
         return plan
 
