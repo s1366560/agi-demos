@@ -1,257 +1,223 @@
 # Sandbox MCP Server Dockerfile
-# Multi-language development environment with Python, Java, and Node.js
+# Multi-language development environment with Python, Java, Node.js
+# Optimized for fast builds using layer caching and BuildKit
 #
 # Build: docker build -t sandbox-mcp-server .
 # Run:   docker run -p 8765:8765 -v $(pwd)/workspace:/workspace sandbox-mcp-server
-#
-# SECURITY NOTE: The 'sandbox' user has sudo access with NOPASSWD for development
-# flexibility. This allows installation of system packages via 'apt install'.
-# In production, consider removing sudo access or using a more restricted setup.
 
-FROM ubuntu:24.04
+FROM ubuntu:25.04
 
 LABEL maintainer="MemStack Team"
-LABEL description="Sandbox MCP Server with Python, Java, Node.js development environment"
+LABEL description="Sandbox MCP Server with XFCE 4.20, Python, Java, Node.js"
 
-# Prevent interactive prompts during installation
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
+# ====================
+# Environment Variables
+# ====================
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
-# Language environment
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-
-# Development environment versions
-ENV PYTHON_VERSION=3.12
-ENV NODE_VERSION=22
-ENV JAVA_VERSION=21
+# Development versions
+ENV PYTHON_VERSION=3.13 \
+    NODE_VERSION=22 \
+    JAVA_VERSION=21
 
 # MCP Server configuration
-ENV MCP_HOST=0.0.0.0
-ENV MCP_PORT=8765
-ENV MCP_WORKSPACE=/workspace
+ENV MCP_HOST=0.0.0.0 \
+    MCP_PORT=8765 \
+    MCP_WORKSPACE=/workspace
 
-# Use fast China mirrors for all architectures (x86_64, ARM64)
-# Detect architecture and write appropriate sources configuration
-# Use HTTP to avoid chicken-and-egg problem with ca-certificates
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "amd64" ]; then \
-        MIRROR="http://mirrors.aliyun.com/ubuntu"; \
-    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then \
-        MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
-    else \
-        MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
-    fi && \
-    echo "Using mirror: $MIRROR for architecture: $ARCH" && \
-    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble noble-updates noble-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources
+# Desktop configuration
+ENV DESKTOP_ENABLED=true \
+    DESKTOP_RESOLUTION=1920x1080 \
+    DESKTOP_PORT=6080
 
-# Install system dependencies and development tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# ====================
+# Base System Setup
+# ====================
+# Configure apt mirrors and update in one layer
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    if [ "$ARCH" = "amd64" ]; then MIRROR="http://mirrors.aliyun.com/ubuntu"; \
+    elif [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
+    else MIRROR="http://mirrors.ustc.edu.cn/ubuntu-ports"; \
+    fi; \
+    echo "Using mirror: $MIRROR for $ARCH"; \
+    printf "Enabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky plucky-updates plucky-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nEnabled: yes\nTypes: deb deb-src\nURIs: %s\nSuites: plucky-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n" "$MIRROR" "$MIRROR" > /etc/apt/sources.list.d/ubuntu.sources; \
+    apt-get update; \
+    apt-get upgrade -y
+
+# ====================
+# Install System Dependencies (cached layer)
+# ====================
+RUN set -eux; \
+    apt-get install -y --no-install-recommends \
     # Basic utilities
-    curl \
-    wget \
-    ca-certificates \
-    gnupg \
-    lsb-release \
-    git \
-    vim \
-    nano \
-    unzip \
-    zip \
-    tar \
-    gzip \
-    bzip2 \
-    xz-utils \
+    curl wget ca-certificates gnupg lsb-release git vim nano unzip zip tar gzip bzip2 xz-utils \
     # Build essentials
-    build-essential \
-    gcc \
-    g++ \
-    make \
-    cmake \
-    pkg-config \
-    # Python dependencies
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-venv \
-    python${PYTHON_VERSION}-dev \
-    python3-pip \
-    # Java OpenJDK
-    openjdk-${JAVA_VERSION}-jdk \
-    maven \
-    gradle \
+    build-essential gcc g++ make cmake pkg-config \
+    # Python
+    python${PYTHON_VERSION} python${PYTHON_VERSION}-venv python${PYTHON_VERSION}-dev python3-pip \
+    # Java
+    openjdk-${JAVA_VERSION}-jdk maven gradle \
     # Network tools
-    iputils-ping \
-    net-tools \
-    dnsutils \
+    iputils-ping net-tools dnsutils \
     # Process management
-    procps \
-    htop \
+    procps htop \
     # Text processing
     jq \
     # File management
-    tree \
-    rsync \
-    && rm -rf /var/lib/apt/lists/*
+    tree rsync sudo \
+    ; \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Node.js (using NodeSource)
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
+# ====================
+# Install Node.js via NodeSource (cached layer)
+# ====================
+RUN set -eux; \
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -; \
+    apt-get install -y nodejs; \
+    rm -rf /var/lib/apt/lists/*
 
-# Install pnpm and yarn globally
-RUN npm install -g pnpm yarn
+# ====================
+# Install Global Node Packages (with cache mount)
+# ====================
+RUN --mount=type=cache,target=/root/.npm npm install -g pnpm yarn
 
-# Set Python 3.12 as default python/python3
+# ====================
+# Configure Python Alternatives (cached layer)
+# ====================
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1
 
-# Install pipx and uv globally
-RUN python -m pip install --no-cache-dir --break-system-packages pipx uv \
-    && pipx ensurepath
+# ====================
+# Install Python Tools (with cache mount for pip)
+# ====================
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages pipx uv && \
+    pipx ensurepath
 
-# Install Python development tools using pip (without upgrading system pip)
-RUN python -m pip install --no-cache-dir --break-system-packages \
-    # MCP server dependencies
-    "aiohttp>=3.9.0" \
-    "aiofiles>=24.1.0" \
-    "pydantic>=2.5.0" \
-    "watchfiles>=0.21.0" \
-    # Common Python tools
-    virtualenv \
-    pipenv \
-    poetry \
-    # Development utilities
-    ipython \
-    black \
-    ruff \
-    mypy \
-    pytest \
-    pytest-asyncio
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    "aiohttp>=3.9.0" "aiofiles>=24.1.0" "pydantic>=2.5.0" "watchfiles>=0.21.0" \
+    virtualenv pipenv poetry ipython black ruff mypy pytest pytest-asyncio
 
-# Install sudo for package management capability
-RUN apt-get update && apt-get install -y sudo \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install ttyd for web terminal access
+# ====================
+# Install ttyd for Web Terminal
+# ====================
 ENV TTYD_VERSION=1.7.7
-RUN ARCH=$(dpkg --print-architecture) && \
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
     TTYD_ARCH=$([ "$ARCH" = "x86_64" ] && echo "x86_64" || \
                [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
                [ "$ARCH" = "arm64" ] && echo "aarch64" || \
-               echo "$ARCH") && \
+               echo "$ARCH"); \
     curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
-    -o /usr/local/bin/ttyd && \
+        -o /usr/local/bin/ttyd; \
     chmod +x /usr/local/bin/ttyd
 
-# Install desktop environment (XFCE) for remote desktop
-ENV DESKTOP_ENABLED=true
-ENV DESKTOP_RESOLUTION=1280x720
-ENV DESKTOP_PORT=6080
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # X11 server and virtual framebuffer
-    xorg \
-    xvfb \
-    # XFCE desktop (lightweight, modular)
-    xfce4 \
-    xfce4-goodies \
-    xfce4-terminal \
-    xfce4-taskmanager \
-    thunar \
-    # Themes and icons
-    gtk2-engines-murrine \
-    gtk2-engines-pixbuf \
-    xfce4-indicator-plugin \
-    xfce4-places-plugin \
-    # Additional utilities for XFCE
-    dbus-x11 \
-    dconf-cli \
-    dconf-gsettings-backend \
-    gsettings-desktop-schemas \
-    # VNC server
-    x11vnc \
-    # Fonts for better rendering
-    fonts-freefont-ttf \
-    fonts-noto-cjk \
-    fonts-noto-color-emoji \
-    # XFCE settings daemon for container use
-    xfce4-settings \
-    xfconf \
-    # systemd user session replacement (for container)
-    libglib2.0-bin \
-    # TigerVNC server (replaces x11vnc for better performance)
-    tigervnc-standalone-server \
-    tigervnc-tools \
-    && rm -rf /var/lib/apt/lists/*
+# ====================
+# Install XFCE 4.20 Desktop Environment
+# ====================
+# Ubuntu 25.04 includes XFCE 4.20 natively
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        # X11 and display
+        xorg xvfb \
+        # XFCE 4.20 desktop
+        xfce4 xfce4-goodies xfce4-terminal xfce4-taskmanager thunar \
+        # Themes and plugins
+        gtk2-engines-murrine gtk2-engines-pixbuf \
+        xfce4-indicator-plugin xfce4-places-plugin \
+        # Utilities
+        dbus-x11 dconf-cli dconf-gsettings-backend gsettings-desktop-schemas \
+        # VNC servers
+        x11vnc tigervnc-standalone-server tigervnc-tools \
+        # Fonts
+        fonts-freefont-ttf fonts-noto-cjk fonts-noto-color-emoji \
+        # Settings
+        xfce4-settings xfconf libglib2.0-bin \
+    ; \
+    rm -rf /var/lib/apt/lists/*
 
-# Install noVNC for web-based VNC client
+# ====================
+# Install noVNC
+# ====================
 ENV NOVNC_VERSION=1.6.0
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3-websockify \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz \
-    | tar -xz -C /opt && \
-    mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC \
-    && chmod +x /opt/noVNC/utils/novnc_proxy
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends python3-websockify; \
+    rm -rf /var/lib/apt/lists/*; \
+    curl -fsSL "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
+        | tar -xz -C /opt; \
+    mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC; \
+    chmod +x /opt/noVNC/utils/novnc_proxy
 
-# Create non-root user for security (use GID/UID 1001 to avoid conflicts)
-RUN groupadd --gid 1001 sandbox \
-    && useradd --uid 1001 --gid sandbox --shell /bin/bash --create-home sandbox \
-    && usermod -aG sudo sandbox \
-    && echo "sandbox ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/sandbox \
-    && chmod 440 /etc/sudoers.d/sandbox
+# ====================
+# User Setup
+# ====================
+RUN set -eux; \
+    groupadd --gid 1001 sandbox; \
+    useradd --uid 1001 --gid sandbox --shell /bin/bash --create-home sandbox; \
+    usermod -aG sudo sandbox; \
+    echo "sandbox ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/sandbox; \
+    chmod 440 /etc/sudoers.d/sandbox; \
+    mkdir -p /workspace /home/sandbox/.vnc; \
+    chown -R sandbox:sandbox /workspace /home/sandbox/.vnc
 
-# Create workspace directory
-RUN mkdir -p /workspace && chown sandbox:sandbox /workspace
-
-# Copy application code
-WORKDIR /app
-COPY --chown=sandbox:sandbox . /app/
-
-# Install the MCP server package
-RUN python -m pip install --no-cache-dir --break-system-packages -e .
-
-# Set environment variables for Java (auto-detect architecture at build time)
-RUN ARCH=$(dpkg --print-architecture) && \
-    JAVA_HOME_PATH="/usr/lib/jvm/java-21-openjdk-${ARCH}" && \
-    echo "export JAVA_HOME=${JAVA_HOME_PATH}" >> /etc/profile.d/java.sh && \
-    echo "export PATH=\${JAVA_HOME}/bin:\${PATH}" >> /etc/profile.d/java.sh && \
-    # Also write to /etc/environment for non-login shells
+# ====================
+# Java Environment Setup
+# ====================
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    JAVA_HOME_PATH="/usr/lib/jvm/java-21-openjdk-${ARCH}"; \
+    echo "export JAVA_HOME=${JAVA_HOME_PATH}" >> /etc/profile.d/java.sh; \
+    echo "export PATH=\${JAVA_HOME}/bin:\${PATH}" >> /etc/profile.d/java.sh; \
     echo "JAVA_HOME=${JAVA_HOME_PATH}" >> /etc/environment
 
-# Dynamically set JAVA_HOME based on architecture  
 ARG TARGETARCH
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-${TARGETARCH:-arm64}
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Set workspace ownership
-RUN chown -R sandbox:sandbox /workspace
+# ====================
+# Application Setup
+# ====================
+WORKDIR /app
+COPY --chown=sandbox:sandbox . /app/
 
-# Copy XFCE configuration files (optimized for VNC)
+# Install MCP server (with cache mount)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages -e .
+
+# ====================
+# Configuration Files
+# ====================
+# XFCE configs
 COPY docker/xfce-configs/ /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
 COPY docker/xfce-configs/whiskermenu-1.rc /etc/xdg/xfce4/panel/
 COPY docker/xfce-configs/autostart/ /etc/xdg/autostart/
 
-# Copy TigerVNC configuration files
+# VNC configs
 COPY docker/vnc-configs/vncserver-config /etc/vnc/config
 COPY docker/vnc-configs/xstartup /etc/vnc/xstartup.template
-RUN chmod +x /etc/vnc/xstartup.template
+COPY docker/vnc-configs/test-vnc-config.sh /etc/vnc/test-vnc-config.sh
+COPY docker/vnc-configs/test-novnc-config.sh /etc/vnc/test-novnc-config.sh
+COPY docker/vnc-configs/novnc-defaults.json /opt/noVNC/defaults.json
+RUN chmod +x /etc/vnc/xstartup.template /etc/vnc/test-vnc-config.sh /etc/vnc/test-novnc-config.sh
 
-# Copy and setup entrypoint script (runs as root, uses sudo for user switching)
+# Entrypoint
 COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 
-# Note: We stay as root to allow entrypoint script to start system services
-# The entrypoint script will use sudo to run the MCP server as the sandbox user
-
-# Set working directory
+# ====================
+# Final Setup
+# ====================
 WORKDIR /workspace
 
-# Health check (XFCE starts faster than GNOME)
 HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:${MCP_PORT}/health || exit 1
 
-# Expose ports: MCP WebSocket (8765), Web Terminal (7681), noVNC (6080)
 EXPOSE 8765 7681 6080
-
-# Default command - use entrypoint script to start all services
-# Note: The script handles service startup as root via sudo where needed
 CMD ["/usr/local/bin/sandbox-entrypoint.sh"]
