@@ -173,6 +173,8 @@ interface AgentV3State {
   // Agent Execution State
   agentState: "idle" | "thinking" | "acting" | "observing" | "awaiting_input";
   currentThought: string;
+  streamingThought: string; // For streaming thought_delta content
+  isThinkingStreaming: boolean; // Whether thought is currently streaming
   activeToolCalls: Map<
     string,
     ToolCall & { status: "running" | "success" | "failed"; startTime: number }
@@ -332,6 +334,8 @@ export const useAgentV3Store = create<AgentV3State>()(
 
         agentState: "idle",
         currentThought: "",
+        streamingThought: "",
+        isThinkingStreaming: false,
         activeToolCalls: new Map(),
         pendingToolsStack: [],
 
@@ -397,6 +401,8 @@ export const useAgentV3Store = create<AgentV3State>()(
           messages: [],
           timeline: [],
           currentThought: "",
+          streamingThought: "",
+          isThinkingStreaming: false,
           workPlan: null,
           executionPlan: null,
           agentState: "idle",
@@ -417,6 +423,8 @@ export const useAgentV3Store = create<AgentV3State>()(
         timeline: [],      // Clear timeline
         messages: [],
         currentThought: "",
+        streamingThought: "",
+        isThinkingStreaming: false,
         workPlan: null,
         executionPlan: null,
         agentState: "idle",
@@ -640,6 +648,8 @@ export const useAgentV3Store = create<AgentV3State>()(
         streamStatus: "connecting",
         error: null,
         currentThought: "",
+        streamingThought: "",
+        isThinkingStreaming: false,
         activeToolCalls: new Map(),
         pendingToolsStack: [],
         agentState: "thinking",
@@ -649,16 +659,41 @@ export const useAgentV3Store = create<AgentV3State>()(
       const handler: AgentStreamHandler = {
         onMessage: (_event) => {},
         onThought: (event) => {
+          const newThought = event.data.thought;
+          
+          // Check if this is a thought_delta (streaming) or complete thought
+          const isDelta = (event as any).type === "thought_delta" || 
+                         (event as any).delta !== undefined;
+          
+          if (isDelta) {
+            // Streaming thought - only update streamingThought, skip timeline for performance
+            const delta = (event as any).delta || newThought || "";
+            if (!delta) return;
+            
+            set((state) => ({
+              streamingThought: state.streamingThought + delta,
+              isThinkingStreaming: true,
+              agentState: "thinking",
+            }));
+            return;
+          }
+          
+          // Complete thought - add to messages, timeline, and reset streaming state
           set((state) => {
             // Append thought event to timeline using SSE adapter
             const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
             const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
 
-            const newThought = event.data.thought;
-            // Skip empty thoughts (REASONING_START events) - only process complete thoughts
+            // Skip empty thoughts (REASONING_START events)
             if (!newThought || newThought.trim() === "") {
-              return { agentState: "thinking", timeline: updatedTimeline };
+              return { 
+                agentState: "thinking", 
+                timeline: updatedTimeline,
+                streamingThought: "",
+                isThinkingStreaming: false,
+              };
             }
+            
             const newMessages = state.messages.map((m) => {
               if (m.id === assistantMsgId) {
                 const thoughts = (m.metadata?.thoughts as string[]) || [];
@@ -684,6 +719,8 @@ export const useAgentV3Store = create<AgentV3State>()(
             });
             return {
               currentThought: state.currentThought + "\n" + newThought,
+              streamingThought: "",
+              isThinkingStreaming: false,
               agentState: "thinking",
               messages: newMessages,
               timeline: updatedTimeline,
@@ -1087,3 +1124,7 @@ export const useAgentV3Store = create<AgentV3State>()(
     }),
   }))
 );
+
+// Selectors for streaming content
+export const useStreamingThought = () => useAgentV3Store((state) => state.streamingThought);
+export const useIsThinkingStreaming = () => useAgentV3Store((state) => state.isThinkingStreaming);

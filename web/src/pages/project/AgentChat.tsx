@@ -1,32 +1,42 @@
-import React, { useEffect, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Spin, Modal, notification } from "antd";
-import { useAgentV3Store } from "../../stores/agentV3";
-import { usePlanModeStore } from "../../stores/agent/planModeStore";
-import { useSandboxStore } from "../../stores/sandbox";
-import { useSandboxAgentHandlers } from "../../hooks/useSandboxDetection";
+/**
+ * AgentChat - Agent Chat Page
+ * 
+ * Main Agent Chat interface with modern design.
+ */
+
+import React, { useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Modal, notification } from 'antd';
+import { useAgentV3Store } from '../../stores/agentV3';
+import { usePlanModeStore } from '../../stores/agent/planModeStore';
+import { useSandboxStore } from '../../stores/sandbox';
+import { useSandboxAgentHandlers } from '../../hooks/useSandboxDetection';
+import { sandboxService } from '../../services/sandboxService';
+
+// Import design components
 import {
   ChatLayout,
-  VirtualTimelineEventList,
-  InputArea,
   ConversationSidebar,
+  MessageArea,
+  InputBar,
   RightPanel,
-  PlanModeIndicator,
-} from "../../components/agent";
-import { sandboxService } from "../../services/sandboxService";
+  StatusBar,
+} from '../../components/agent';
+import { EmptyState } from '../../components/agent/EmptyState';
 
-export const AgentChat: React.FC = () => {
+const AgentChat: React.FC = () => {
   const { projectId, conversation: conversationId } = useParams<{
     projectId: string;
     conversation?: string;
   }>();
   const navigate = useNavigate();
 
-  // Agent V3 store state
+  // Store state
   const {
     conversations,
     activeConversationId,
     timeline,
+    messages,
     isLoadingHistory,
     isStreaming,
     workPlan,
@@ -49,51 +59,58 @@ export const AgentChat: React.FC = () => {
     error,
   } = useAgentV3Store();
 
-  // Plan Mode store state
-  const { planModeStatus, exitPlanMode } = usePlanModeStore();
+  // Get streaming content from the last assistant message
+  const streamingContent = React.useMemo(() => {
+    if (!isStreaming || messages.length === 0) return '';
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === 'assistant') {
+      return lastMessage.content || '';
+    }
+    return '';
+  }, [messages, isStreaming]);
 
-  // Sandbox state and handlers
-  const { activeSandboxId, toolExecutions, setSandboxId } = useSandboxStore();
+  // Get streaming thought from store
+  const { streamingThought, isThinkingStreaming } = useAgentV3Store();
+
+  const { planModeStatus, exitPlanMode } = usePlanModeStore();
+  const { 
+    activeSandboxId, 
+    toolExecutions, 
+    currentTool,
+    setSandboxId 
+  } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
-  /**
-   * Ensure a sandbox exists for the current project.
-   */
-  const ensureSandbox = useCallback(async () => {
-    if (activeSandboxId) {
-      return activeSandboxId;
-    }
+  // Local UI state
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const [panelCollapsed, setPanelCollapsed] = React.useState(!showPlanPanel);
 
-    if (!projectId) {
-      console.warn("[AgentChat] Cannot ensure sandbox: no projectId");
-      return null;
-    }
+  // Ensure sandbox exists
+  const ensureSandbox = useCallback(async () => {
+    if (activeSandboxId) return activeSandboxId;
+    if (!projectId) return null;
 
     try {
       const { sandboxes } = await sandboxService.listSandboxes(projectId);
-
-      if (sandboxes.length > 0 && sandboxes[0].status === "running") {
+      if (sandboxes.length > 0 && sandboxes[0].status === 'running') {
         setSandboxId(sandboxes[0].id);
         return sandboxes[0].id;
       }
-
       const { sandbox } = await sandboxService.createSandbox({ project_id: projectId });
       setSandboxId(sandbox.id);
       return sandbox.id;
     } catch (error) {
-      console.error("[AgentChat] Failed to ensure sandbox:", error);
+      console.error('[AgentChat] Failed to ensure sandbox:', error);
       return null;
     }
   }, [activeSandboxId, projectId, setSandboxId]);
 
-  // Load conversations on mount or project change
+  // Load conversations
   useEffect(() => {
-    if (projectId) {
-      loadConversations(projectId);
-    }
+    if (projectId) loadConversations(projectId);
   }, [projectId, loadConversations]);
 
-  // Handle URL conversation ID
+  // Handle URL changes
   useEffect(() => {
     if (projectId && conversationId) {
       setActiveConversation(conversationId);
@@ -103,90 +120,86 @@ export const AgentChat: React.FC = () => {
     }
   }, [conversationId, projectId, setActiveConversation, loadMessages]);
 
-  // Handle error notifications
+  // Handle errors
   useEffect(() => {
     if (error) {
-      notification.error({
-        message: "Agent Error",
-        description: error,
-        onClose: clearError,
-      });
+      notification.error({ message: 'Agent Error', description: error, onClose: clearError });
     }
   }, [error, clearError]);
 
-  // Handle Pending Decision
+  // Handle pending decisions
   useEffect(() => {
     if (pendingDecision) {
       Modal.confirm({
-        title: "Agent Requests Decision",
+        title: 'Agent Requests Decision',
         content: pendingDecision.question,
-        okText: "Confirm",
-        cancelText: "Cancel",
-        onOk: () => respondToDecision(pendingDecision.request_id, "approved"),
-        onCancel: () =>
-          respondToDecision(pendingDecision.request_id, "rejected"),
+        okText: 'Confirm',
+        cancelText: 'Cancel',
+        onOk: () => respondToDecision(pendingDecision.request_id, 'approved'),
+        onCancel: () => respondToDecision(pendingDecision.request_id, 'rejected'),
       });
     }
   }, [pendingDecision, respondToDecision]);
 
-  // Handle Doom Loop
+  // Handle doom loop
   useEffect(() => {
     if (doomLoopDetected) {
       notification.warning({
-        message: "Doom Loop Detected",
-        description: `Tool ${doomLoopDetected.tool_name} called ${doomLoopDetected.call_count} times repeatedly. Intervention required.`,
+        message: 'Doom Loop Detected',
+        description: `Tool ${doomLoopDetected.tool_name} called ${doomLoopDetected.call_count} times repeatedly.`,
       });
     }
   }, [doomLoopDetected]);
 
+  // Handlers
   const handleSelectConversation = useCallback((id: string) => {
     navigate(`/project/${projectId}/agent/${id}`);
   }, [navigate, projectId]);
 
   const handleNewConversation = useCallback(async () => {
     if (!projectId) return;
-
-    const newConversationId = await createNewConversation(projectId);
-    if (newConversationId) {
-      navigate(`/project/${projectId}/agent/${newConversationId}`);
-    }
+    const newId = await createNewConversation(projectId);
+    if (newId) navigate(`/project/${projectId}/agent/${newId}`);
   }, [projectId, createNewConversation, navigate]);
 
   const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!projectId) return;
-
     Modal.confirm({
-      title: "Delete Conversation",
-      content: "Are you sure you want to delete this conversation? This action cannot be undone.",
-      okText: "Delete",
-      okType: "danger",
-      cancelText: "Cancel",
+      title: 'Delete Conversation',
+      content: 'Are you sure? This action cannot be undone.',
+      okText: 'Delete',
+      okType: 'danger',
       onOk: async () => {
         await deleteConversation(id, projectId);
-        if (activeConversationId === id) {
-          navigate(`/project/${projectId}/agent`);
-        }
+        if (activeConversationId === id) navigate(`/project/${projectId}/agent-new`);
       },
     });
   }, [projectId, activeConversationId, deleteConversation, navigate]);
 
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
-
     await ensureSandbox();
-
-    const newConversationId = await sendMessage(content, projectId, {
-      onAct,
-      onObserve,
-    });
-
-    if (!conversationId && newConversationId) {
-      navigate(`/project/${projectId}/agent/${newConversationId}`);
-    }
+    const newId = await sendMessage(content, projectId, { onAct, onObserve });
+    if (!conversationId && newId) navigate(`/project/${projectId}/agent-new/${newId}`);
   }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox]);
 
-  // Memoize panel components
+  const handleViewPlan = useCallback(() => {
+    setPanelCollapsed(false);
+    togglePlanPanel();
+  }, [togglePlanPanel]);
+
+  const handleExitPlanMode = useCallback(async () => {
+    if (!activeConversationId || !planModeStatus?.current_plan_id) return;
+    try {
+      await exitPlanMode(activeConversationId, planModeStatus.current_plan_id, false);
+      togglePlanMode();
+    } catch (error) {
+      notification.error({ message: 'Failed to exit Plan Mode', description: 'Please try again.' });
+    }
+  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode]);
+
+  // Memoized components
   const sidebar = useMemo(() => (
     <ConversationSidebar
       conversations={conversations}
@@ -194,87 +207,39 @@ export const AgentChat: React.FC = () => {
       onSelect={handleSelectConversation}
       onNew={handleNewConversation}
       onDelete={handleDeleteConversation}
+      collapsed={sidebarCollapsed}
+      onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
     />
-  ), [conversations, activeConversationId, handleSelectConversation, handleNewConversation, handleDeleteConversation]);
+  ), [conversations, activeConversationId, sidebarCollapsed, handleSelectConversation, handleNewConversation, handleDeleteConversation]);
 
-  // Handle View Plan callback
-  const handleViewPlan = useCallback(() => {
-    if (!showPlanPanel) {
-      togglePlanPanel();
-    }
-  }, [showPlanPanel, togglePlanPanel]);
-
-  // Handle Exit Plan Mode callback
-  const handleExitPlanMode = useCallback(async () => {
-    if (!activeConversationId || !planModeStatus?.current_plan_id) return;
-
-    try {
-      await exitPlanMode(
-        activeConversationId,
-        planModeStatus.current_plan_id,
-        false
-      );
-      togglePlanMode();
-    } catch (error) {
-      console.error("[AgentChat] Failed to exit plan mode:", error);
-      notification.error({
-        message: "Failed to exit Plan Mode",
-        description: "Please try again.",
-      });
-    }
-  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode]);
-
-  const chatArea = useMemo(() => (
-    <div className="flex flex-col h-full relative">
-      {/* Loading Overlay */}
-      {isLoadingHistory && (
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center">
-          <Spin size="large" tip="Loading conversation..." />
-        </div>
-      )}
-
-      {/* Plan Mode Indicator */}
-      {(planModeStatus?.is_in_plan_mode || planModeStatus?.current_mode === "explore") && (
-        <div className="flex-shrink-0">
-          <PlanModeIndicator
-            status={planModeStatus}
-            onViewPlan={handleViewPlan}
-            onExitPlanMode={handleExitPlanMode}
-          />
-        </div>
-      )}
-
-      {/* Timeline Event List */}
-      <VirtualTimelineEventList
+  const messageArea = useMemo(() => (
+    timeline.length === 0 && !activeConversationId ? (
+      <EmptyState onNewConversation={handleNewConversation} />
+    ) : (
+      <MessageArea
         timeline={timeline}
+        streamingContent={streamingContent}
+        streamingThought={streamingThought}
         isStreaming={isStreaming}
+        isThinkingStreaming={isThinkingStreaming}
+        isLoading={isLoadingHistory}
+        planModeStatus={planModeStatus}
+        onViewPlan={handleViewPlan}
+        onExitPlanMode={handleExitPlanMode}
       />
+    )
+  ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation]);
 
-      {/* Input Area */}
-      <InputArea
-        onSend={handleSend}
-        onAbort={abortStream}
-        isStreaming={isStreaming}
-        isPlanMode={isPlanMode}
-        onTogglePlanMode={togglePlanMode}
-        showPlanPanel={showPlanPanel}
-        onTogglePlanPanel={togglePlanPanel}
-      />
-    </div>
-  ), [
-    isLoadingHistory,
-    timeline,
-    isStreaming,
-    handleSend,
-    abortStream,
-    isPlanMode,
-    togglePlanMode,
-    showPlanPanel,
-    togglePlanPanel,
-    planModeStatus,
-    handleViewPlan,
-    handleExitPlanMode,
-  ]);
+  const inputBar = useMemo(() => (
+    <InputBar
+      onSend={handleSend}
+      onAbort={abortStream}
+      isStreaming={isStreaming}
+      isPlanMode={isPlanMode}
+      onTogglePlanMode={togglePlanMode}
+      disabled={isLoadingHistory}
+    />
+  ), [handleSend, abortStream, isStreaming, isPlanMode, togglePlanMode, isLoadingHistory]);
 
   const rightPanel = useMemo(() => (
     <RightPanel
@@ -282,12 +247,39 @@ export const AgentChat: React.FC = () => {
       executionPlan={executionPlan}
       sandboxId={activeSandboxId}
       toolExecutions={toolExecutions}
-      onClose={() => togglePlanPanel()}
+      currentTool={currentTool}
+      onClose={() => {
+        setPanelCollapsed(true);
+        togglePlanPanel();
+      }}
+      collapsed={panelCollapsed}
     />
-  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, togglePlanPanel]);
+  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, togglePlanPanel]);
+
+  const statusBar = useMemo(() => (
+    <StatusBar
+      isStreaming={isStreaming}
+      isPlanMode={isPlanMode}
+      messageCount={timeline.length}
+      sandboxConnected={!!activeSandboxId}
+    />
+  ), [isStreaming, isPlanMode, timeline.length, activeSandboxId]);
 
   return (
-    <ChatLayout sidebar={sidebar} chatArea={chatArea} rightPanel={rightPanel} />
+    <ChatLayout
+      sidebar={sidebar}
+      messageArea={messageArea}
+      inputBar={inputBar}
+      rightPanel={rightPanel}
+      statusBar={statusBar}
+      sidebarCollapsed={sidebarCollapsed}
+      panelCollapsed={panelCollapsed}
+      onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+      onTogglePanel={() => {
+        setPanelCollapsed(!panelCollapsed);
+        togglePlanPanel();
+      }}
+    />
   );
 };
 

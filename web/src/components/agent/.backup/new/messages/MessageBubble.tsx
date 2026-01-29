@@ -18,7 +18,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { TimelineEvent, ActEvent, ObserveEvent } from '../../types/agent';
+import type { TimelineEvent, ActEvent, ObserveEvent } from '../../../../types/agent';
 
 interface MessageBubbleProps {
   event: TimelineEvent;

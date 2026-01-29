@@ -1,78 +1,42 @@
 /**
  * VirtualTimelineEventList - Optimized virtualized timeline event list
- *
- * Uses @tanstack/react-virtual with TimelineEventItem for efficient
- * rendering of large conversation histories.
- *
- * Features:
- * - Virtual scrolling for performance
- * - Auto-scroll to bottom during streaming
- * - Manual scroll position preservation
- * - Floating scroll controls
- * - Smooth animations
- *
- * @module components/agent/VirtualTimelineEventList
  */
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button, Badge } from "antd";
-import {
-  DownOutlined,
-  MessageOutlined,
-} from "@ant-design/icons";
+import { DownOutlined, MessageOutlined } from "@ant-design/icons";
 import { TimelineEventItem } from "./TimelineEventItem";
 import { MessageStream } from "./chat/MessageStream";
 import type { TimelineEvent } from "../../types/agent";
 
 interface VirtualTimelineEventListProps {
-  /** Timeline events to render */
   timeline: TimelineEvent[];
-  /** Whether currently streaming */
   isStreaming?: boolean;
-  /** Additional CSS class name */
   className?: string;
-  /** Height of the container (default: auto from parent) */
   height?: number;
 }
 
-/**
- * Estimate height for a single timeline event
- */
 function estimateEventHeight(event: TimelineEvent): number {
-  // Base height for any event
-  let height = 60;
-
   switch (event.type) {
     case "user_message":
-      height = 70;
-      break;
+      return 70;
     case "assistant_message":
-      height = 100;
-      break;
+      return 100;
     case "thought":
-      height = 100;
-      break;
+      return 100;
     case "act":
     case "observe":
-      height = 180;
-      break;
+      return 180;
     case "work_plan":
-      height = 120 + (event.steps?.length || 0) * 35;
-      break;
+      return 120 + (event.steps?.length || 0) * 35;
     case "text_delta":
-      height = 50;
-      break;
+      return 50;
     default:
-      height = 60;
+      return 60;
   }
-
-  return height;
 }
 
-/**
- * Empty State Component
- */
 const EmptyState: React.FC = () => (
   <div className="flex items-center justify-center min-h-[400px]">
     <div className="text-center">
@@ -83,21 +47,16 @@ const EmptyState: React.FC = () => (
         Start a conversation
       </h3>
       <p className="text-slate-400 text-sm max-w-xs mx-auto leading-relaxed">
-        Send a message to begin chatting with the AI agent. You can ask
-        questions, request tasks, or plan complex workflows.
+        Send a message to begin chatting with the AI agent.
       </p>
     </div>
   </div>
 );
 
-/**
- * Scroll to Bottom Button
- */
 const ScrollToBottomButton: React.FC<{
   onClick: () => void;
   show: boolean;
-  hasNewMessages?: boolean;
-}> = ({ onClick, show, hasNewMessages }) => {
+}> = ({ onClick, show }) => {
   if (!show) return null;
 
   return (
@@ -108,31 +67,20 @@ const ScrollToBottomButton: React.FC<{
         size="middle"
         icon={<DownOutlined />}
         onClick={onClick}
-        className="shadow-lg hover:shadow-xl transition-all flex items-center gap-1 pr-4"
+        className="shadow-lg hover:shadow-xl transition-all"
       >
-        {hasNewMessages ? "New messages" : "Scroll to bottom"}
+        Scroll to bottom
       </Button>
     </div>
   );
 };
 
-/**
- * VirtualTimelineEventList component
- *
- * @example
- * ```tsx
- * import { VirtualTimelineEventList } from '@/components/agent/VirtualTimelineEventList'
- *
- * function ChatArea({ timeline, isStreaming }) {
- *   return (
- *     <VirtualTimelineEventList
- *       timeline={timeline}
- *       isStreaming={isStreaming}
- *     />
- *   )
- * }
- * ```
- */
+// Check if scroll is near bottom
+const isNearBottom = (element: HTMLElement, threshold = 100): boolean => {
+  const { scrollHeight, scrollTop, clientHeight } = element;
+  return scrollHeight - scrollTop - clientHeight < threshold;
+};
+
 export const VirtualTimelineEventList: React.FC<
   VirtualTimelineEventListProps
 > = ({
@@ -142,17 +90,14 @@ export const VirtualTimelineEventList: React.FC<
   height: propHeight,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const autoScrollRef = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const [hasNewMessages, setHasNewMessages] = useState(false);
-  const prevTimelineLength = useRef(timeline.length);
+  const prevTimelineLengthRef = useRef(timeline.length);
+  const isUserScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Set up virtual row virtualizer
+  // Virtual list setup
   const estimateEventHeightCallback = useCallback(
-    (index: number) => {
-      return estimateEventHeight(timeline[index]);
-    },
+    (index: number) => estimateEventHeight(timeline[index]),
     [timeline]
   );
 
@@ -163,49 +108,86 @@ export const VirtualTimelineEventList: React.FC<
     overscan: 5,
   });
 
-  // Track user scroll position
-  useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
+  // Handle scroll events
+  const handleScroll = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-    const handleScroll = () => {
-      const isNearBottom =
-        scrollContainer.scrollHeight -
-          scrollContainer.scrollTop -
-          scrollContainer.clientHeight <
-        150;
-      autoScrollRef.current = isNearBottom;
-      setShowScrollButton(!isNearBottom && timeline.length > 0);
-    };
+    // Mark that user is scrolling
+    isUserScrollingRef.current = true;
 
-    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
-    return () => scrollContainer.removeEventListener("scroll", handleScroll);
-  }, [timeline.length]);
-
-  // Auto-scroll to bottom when content changes
-  useEffect(() => {
-    if (!scrollContainerRef.current) return;
-
-    if (autoScrollRef.current || isStreaming) {
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
-    } else if (timeline.length > prevTimelineLength.current) {
-      // New messages arrived but user scrolled up
-      setHasNewMessages(true);
+    // Clear existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
     }
 
-    prevTimelineLength.current = timeline.length;
+    // Set new timeout to detect when scrolling stops
+    scrollTimeoutRef.current = setTimeout(() => {
+      isUserScrollingRef.current = false;
+    }, 150);
+
+    // Update button visibility based on scroll position
+    const nearBottom = isNearBottom(container, 100);
+    setShowScrollButton(!nearBottom && timeline.length > 0);
+  }, [timeline.length]);
+
+  // Auto-scroll to bottom when new messages arrive (only if already near bottom)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const hasNewMessages = timeline.length > prevTimelineLengthRef.current;
+    prevTimelineLengthRef.current = timeline.length;
+
+    if (!hasNewMessages) return;
+
+    // If streaming or user is near bottom, auto scroll
+    if (isStreaming || isNearBottom(container, 200)) {
+      // Use requestAnimationFrame for smoother scroll
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+      setShowScrollButton(false);
+    } else {
+      // User is scrolled up and new messages arrived - show button
+      setShowScrollButton(true);
+    }
   }, [timeline.length, isStreaming]);
+
+  // Initial scroll to bottom
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    // Only scroll on initial load if there are messages
+    if (timeline.length > 0 && prevTimelineLengthRef.current === 0) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Scroll to bottom handler
   const scrollToBottom = useCallback(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop =
-        scrollContainerRef.current.scrollHeight;
-      autoScrollRef.current = true;
-      setHasNewMessages(false);
-    }
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth',
+    });
+    setShowScrollButton(false);
   }, []);
+
+  const virtualItems = eventVirtualizer.getVirtualItems();
+  const totalHeight = eventVirtualizer.getTotalSize();
 
   // Empty state
   if (timeline.length === 0) {
@@ -221,45 +203,41 @@ export const VirtualTimelineEventList: React.FC<
     );
   }
 
-  const virtualRows = eventVirtualizer.getVirtualItems();
-  const totalSize = eventVirtualizer.getTotalSize();
-
   return (
     <div className="relative flex-1 overflow-hidden">
       <div
         ref={scrollContainerRef}
+        onScroll={handleScroll}
         data-testid="virtual-scroll-container"
         className={`h-full overflow-y-auto chat-scrollbar ${className}`}
         style={propHeight ? { height: propHeight } : undefined}
       >
         <div className="py-6 px-4 min-h-full">
           <div className="w-full max-w-4xl mx-auto">
-            {/* Message Stream Container */}
             <MessageStream>
               <div
                 data-testid="virtual-message-list"
                 style={{
                   position: "relative",
-                  height: `${totalSize}px`,
+                  height: `${totalHeight}px`,
                   width: "100%",
                 }}
               >
-                {virtualRows.map((virtualRow) => {
-                  const event = timeline[virtualRow.index];
+                {virtualItems.map((virtualItem) => {
+                  const event = timeline[virtualItem.index];
                   if (!event) return null;
 
                   return (
                     <div
-                      key={virtualRow.key}
+                      key={virtualItem.key}
                       ref={eventVirtualizer.measureElement}
-                      data-index={virtualRow.index}
-                      data-testid={`virtual-row-${virtualRow.index}`}
+                      data-index={virtualItem.index}
                       style={{
                         position: "absolute",
                         top: 0,
                         left: 0,
                         width: "100%",
-                        transform: `translateY(${virtualRow.start}px)`,
+                        transform: `translateY(${virtualItem.start}px)`,
                       }}
                     >
                       <TimelineEventItem
@@ -271,7 +249,6 @@ export const VirtualTimelineEventList: React.FC<
                   );
                 })}
               </div>
-              <div ref={bottomRef} className="h-4" />
             </MessageStream>
           </div>
         </div>
@@ -280,12 +257,11 @@ export const VirtualTimelineEventList: React.FC<
       {/* Scroll to Bottom Button */}
       <ScrollToBottomButton
         onClick={scrollToBottom}
-        show={showScrollButton || (hasNewMessages && !isStreaming)}
-        hasNewMessages={hasNewMessages}
+        show={showScrollButton}
       />
 
-      {/* Message Count Badge - top right */}
-      <div className="absolute top-4 right-4 z-10">
+      {/* Message Count Badge */}
+      <div className="absolute top-4 right-4 z-10 pointer-events-none">
         <Badge
           count={timeline.length}
           showZero={false}

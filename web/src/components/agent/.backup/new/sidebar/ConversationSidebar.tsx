@@ -13,8 +13,8 @@ import {
   Edit3,
   Bot
 } from 'lucide-react';
-import type { Conversation } from '../../types/agent';
-import { formatDistanceToNow } from '../../utils/date';
+import type { Conversation } from '../../../../types/agent';
+import { formatDistanceToNow } from '../../../../utils/date';
 
 interface ConversationSidebarProps {
   conversations: Conversation[];

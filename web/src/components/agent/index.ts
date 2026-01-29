@@ -4,29 +4,19 @@
  * Exports all agent-related UI components.
  */
 
-// Modern components (formerly V3) - these are now the primary implementations
+// Primary Agent Chat Components (Modern Design)
 export { ChatLayout } from './ChatLayout';
 export { ConversationSidebar } from './ConversationSidebar';
-export { MessageList } from './MessageList';
+export { MessageArea } from './MessageArea';
 export { MessageBubble } from './MessageBubble';
-export { InputArea } from './InputArea';
-export { ThinkingChain } from './ThinkingChain';
-export { ToolCard } from './ToolCard';
-export { PlanViewer } from './PlanViewer';
+export { InputBar } from './InputBar';
 export { RightPanel } from './RightPanel';
-export {
-  ExecutionDetailsPanel,
-  type ExecutionDetailsPanelProps,
-  type ViewType,
-} from './ExecutionDetailsPanel';
+export { StatusBar } from './StatusBar';
+export { PlanModeBanner } from './PlanModeBanner';
+export { SandboxSection } from './SandboxSection';
 
-// Legacy components (deprecated, exported with Legacy suffix)
-export { MessageBubble as MessageBubbleLegacy } from './MessageBubbleLegacy';
-export { ConversationSidebar as ConversationSidebarLegacy } from './ConversationSidebarLegacy';
-export { MessageInput } from './MessageInput';
+// Utility Components
 export { ProjectSelector } from './ProjectSelector';
-export { WorkPlanCard } from './WorkPlanCard';
-export { ToolExecutionCard } from './ToolExecutionCard';
 export { TenantAgentConfigEditor } from './TenantAgentConfigEditor';
 export { TenantAgentConfigView } from './TenantAgentConfigView';
 export { ReportViewer } from './ReportViewer';
@@ -42,14 +32,13 @@ export { PlanModeIndicator } from './PlanModeIndicator';
 export { PlanModeViewer } from './PlanModeViewer';
 export { ExecutionPlanProgress } from './ExecutionPlanProgress';
 export { StepAdjustmentModal } from './StepAdjustmentModal';
-export { ThoughtBubble } from './ThoughtBubble';
 export { CodeExecutorResultCard } from './CodeExecutorResultCard';
 export { FileDownloadButton } from './FileDownloadButton';
 export { WebScrapeResultCard } from './WebScrapeResultCard';
 export { WebSearchResultCard } from './WebSearchResultCard';
 export { SkillExecutionCard } from './SkillExecutionCard';
 
-// New Tailwind components
+// Layout & Chat Components
 export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
 export { IdleState, FloatingInputBar } from './chat';
 export { VirtualTimelineEventList } from './VirtualTimelineEventList';

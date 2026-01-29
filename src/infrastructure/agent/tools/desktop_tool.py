@@ -2,27 +2,21 @@
 
 Provides tools for starting, stopping, and checking the status of
 remote desktop sessions in sandbox environments.
+
+Refactored to use SandboxOrchestrator for unified sandbox service management.
 """
 
-import json
 import logging
-from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from src.application.services.sandbox_orchestrator import (
+    DesktopConfig,
+    DesktopStatus,
+    SandboxOrchestrator,
+)
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DesktopStatus:
-    """Status of the remote desktop."""
-
-    running: bool
-    url: Optional[str] = None
-    display: str = ":1"
-    resolution: str = "1280x720"
-    port: int = 6080
 
 
 class DesktopTool(AgentTool):
@@ -30,7 +24,9 @@ class DesktopTool(AgentTool):
     Tool for managing remote desktop sessions.
 
     Provides the ability to start, stop, and check the status of
-    LXDE desktop environments accessible via noVNC in a web browser.
+    desktop environments accessible via noVNC in a web browser.
+
+    Uses SandboxOrchestrator for unified sandbox service management.
 
     Actions:
         - start: Launch the remote desktop server
@@ -38,23 +34,30 @@ class DesktopTool(AgentTool):
         - status: Get current desktop status
 
     Example:
-        tool = DesktopTool(sandbox_adapter)
+        tool = DesktopTool(orchestrator=orchestrator, sandbox_id="sb-123")
         result = await tool.execute(action="start", resolution="1920x1080")
     """
 
-    def __init__(self, sandbox_adapter: Any, sandbox_id: str = "test_sandbox"):
+    def __init__(
+        self,
+        orchestrator: Optional[SandboxOrchestrator] = None,
+        sandbox_adapter: Optional[Any] = None,
+        sandbox_id: str = "test_sandbox",
+    ):
         """
         Initialize the DesktopTool.
 
         Args:
-            sandbox_adapter: Adapter for communicating with sandbox
+            orchestrator: SandboxOrchestrator for unified sandbox operations
+            sandbox_adapter: Legacy adapter for backwards compatibility (deprecated)
             sandbox_id: ID of the sandbox to manage
         """
         super().__init__(
             name="desktop",
-            description="Manage remote desktop sessions (LXDE + noVNC) for browser-based GUI access. "
+            description="Manage remote desktop sessions (noVNC) for browser-based GUI access. "
             "Actions: start, stop, status. Example: action='start', resolution='1280x720'",
         )
+        self._orchestrator = orchestrator
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
 
@@ -153,28 +156,46 @@ class DesktopTool(AgentTool):
             Status message with connection URL
         """
         try:
-            # Prepare arguments for MCP tool call
-            mcp_args = {"_workspace_dir": "/workspace"}
-
-            if "resolution" in kwargs:
-                mcp_args["resolution"] = kwargs["resolution"]
-            if "display" in kwargs:
-                mcp_args["display"] = kwargs["display"]
-            if "port" in kwargs:
-                mcp_args["port"] = kwargs["port"]
-
-            # Call MCP tool via sandbox adapter
-            result = await self._sandbox_adapter.call_tool(
-                self._sandbox_id,
-                "start_desktop",
-                mcp_args,
-            )
-
-            return self._format_result(result, "Desktop started successfully")
+            # Use SandboxOrchestrator if available
+            if self._orchestrator:
+                config = DesktopConfig(
+                    resolution=kwargs.get("resolution", "1280x720"),
+                    display=kwargs.get("display", ":1"),
+                    port=kwargs.get("port", 6080),
+                )
+                status = await self._orchestrator.start_desktop(self._sandbox_id, config)
+                return self._format_status(status, "Desktop started successfully")
+            else:
+                # Fallback to direct adapter call (legacy path)
+                return await self._start_desktop_legacy(**kwargs)
 
         except Exception as e:
             logger.error(f"Failed to start desktop: {e}")
             return f"Error: Failed to start desktop - {str(e)}"
+
+    async def _start_desktop_legacy(self, **kwargs: Any) -> str:
+        """Legacy start_desktop using direct adapter call."""
+        if not self._sandbox_adapter:
+            return "Error: No orchestrator or sandbox adapter available"
+
+        # Prepare arguments for MCP tool call
+        mcp_args = {"_workspace_dir": "/workspace"}
+
+        if "resolution" in kwargs:
+            mcp_args["resolution"] = kwargs["resolution"]
+        if "display" in kwargs:
+            mcp_args["display"] = kwargs["display"]
+        if "port" in kwargs:
+            mcp_args["port"] = kwargs["port"]
+
+        # Call MCP tool via sandbox adapter
+        result = await self._sandbox_adapter.call_tool(
+            self._sandbox_id,
+            "start_desktop",
+            mcp_args,
+        )
+
+        return self._format_legacy_result(result, "Desktop started successfully")
 
     async def _stop_desktop(self) -> str:
         """
@@ -184,17 +205,31 @@ class DesktopTool(AgentTool):
             Status message
         """
         try:
-            result = await self._sandbox_adapter.call_tool(
-                self._sandbox_id,
-                "stop_desktop",
-                {"_workspace_dir": "/workspace"},
-            )
-
-            return self._format_result(result, "Desktop stopped successfully")
+            if self._orchestrator:
+                success = await self._orchestrator.stop_desktop(self._sandbox_id)
+                if success:
+                    return "Desktop stopped successfully"
+                else:
+                    return "Desktop stop operation failed"
+            else:
+                return await self._stop_desktop_legacy()
 
         except Exception as e:
             logger.error(f"Failed to stop desktop: {e}")
             return f"Error: Failed to stop desktop - {str(e)}"
+
+    async def _stop_desktop_legacy(self) -> str:
+        """Legacy stop_desktop using direct adapter call."""
+        if not self._sandbox_adapter:
+            return "Error: No orchestrator or sandbox adapter available"
+
+        result = await self._sandbox_adapter.call_tool(
+            self._sandbox_id,
+            "stop_desktop",
+            {"_workspace_dir": "/workspace"},
+        )
+
+        return self._format_legacy_result(result, "Desktop stopped successfully")
 
     async def _get_desktop_status(self) -> str:
         """
@@ -204,21 +239,62 @@ class DesktopTool(AgentTool):
             Status message with desktop information
         """
         try:
-            result = await self._sandbox_adapter.call_tool(
-                self._sandbox_id,
-                "get_desktop_status",
-                {"_workspace_dir": "/workspace"},
-            )
-
-            return self._format_result(result, "Desktop status retrieved")
+            if self._orchestrator:
+                status = await self._orchestrator.get_desktop_status(self._sandbox_id)
+                return self._format_status(status, "Desktop status retrieved")
+            else:
+                return await self._get_desktop_status_legacy()
 
         except Exception as e:
             logger.error(f"Failed to get desktop status: {e}")
             return f"Error: Failed to get desktop status - {str(e)}"
 
-    def _format_result(self, result: Dict[str, Any], success_message: str) -> str:
+    async def _get_desktop_status_legacy(self) -> str:
+        """Legacy get_desktop_status using direct adapter call."""
+        if not self._sandbox_adapter:
+            return "Error: No orchestrator or sandbox adapter available"
+
+        result = await self._sandbox_adapter.call_tool(
+            self._sandbox_id,
+            "get_desktop_status",
+            {"_workspace_dir": "/workspace"},
+        )
+
+        return self._format_legacy_result(result, "Desktop status retrieved")
+
+    def _format_status(self, status: DesktopStatus, success_message: str) -> str:
         """
-        Format the result from MCP tool call.
+        Format DesktopStatus into a readable message.
+
+        Args:
+            status: DesktopStatus object
+            success_message: Default message on success
+
+        Returns:
+            Formatted status message
+        """
+        parts = []
+        if status.running:
+            parts.append("Desktop is running")
+        else:
+            parts.append("Desktop is not running")
+
+        if status.url:
+            parts.append(f"URL: {status.url}")
+        if status.port:
+            parts.append(f"Port: {status.port}")
+        if status.display:
+            parts.append(f"Display: {status.display}")
+        if status.resolution:
+            parts.append(f"Resolution: {status.resolution}")
+        if status.pid:
+            parts.append(f"PID: {status.pid}")
+
+        return " | ".join(parts) if parts else success_message
+
+    def _format_legacy_result(self, result: Dict[str, Any], success_message: str) -> str:
+        """
+        Format the result from legacy MCP tool call.
 
         Args:
             result: Raw result from sandbox adapter
@@ -227,6 +303,8 @@ class DesktopTool(AgentTool):
         Returns:
             Formatted status message
         """
+        import json
+
         if result.get("is_error"):
             content_list = result.get("content", [])
             if content_list and len(content_list) > 0:

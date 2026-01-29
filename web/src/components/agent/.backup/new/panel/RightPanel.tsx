@@ -19,9 +19,9 @@ import {
   Clock
 } from 'lucide-react';
 import { SandboxSection } from './SandboxSection';
-import type { WorkPlan } from '../../types/agent';
-import type { ExecutionPlan } from '../../types/agent';
-import type { ToolExecution } from './sandbox/SandboxOutputViewer';
+import type { WorkPlan } from '../../../../types/agent';
+import type { ExecutionPlan } from '../../../../types/agent';
+import type { ToolExecution } from '../../sandbox/SandboxOutputViewer';
 
 export type RightPanelTab = 'plan' | 'sandbox';
 

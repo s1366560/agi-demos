@@ -26,15 +26,13 @@ export {
 export {
     ChatLayout,
     ConversationSidebar,
-    MessageList,
+    MessageArea,
     MessageBubble,
-    InputArea,
-    ThinkingChain,
-    ToolCard,
-    PlanViewer,
-    ExecutionDetailsPanel,
-    type ExecutionDetailsPanelProps,
-    type ViewType,
+    InputBar,
+    RightPanel,
+    StatusBar,
+    PlanModeBanner,
+    SandboxSection,
 } from './agent'
 
 // Shared components (layouts, modals, UI components)
