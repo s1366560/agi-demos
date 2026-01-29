@@ -32,11 +32,11 @@ log_error() {
 MCP_HOST="${MCP_HOST:-0.0.0.0}"
 MCP_PORT="${MCP_PORT:-8765}"
 DESKTOP_ENABLED="${DESKTOP_ENABLED:-true}"
-DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1280x720}"
+DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1920x1080}"
 DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
 SANDBOX_USER="${SANDBOX_USER:-sandbox}"
-VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-x11vnc}"  # Options: x11vnc (default, no-password), tigervnc (requires password)
+VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
 
 # PID tracking
 PIDS=()
@@ -244,11 +244,9 @@ _start_x11vnc() {
 # Start TigerVNC (high-performance VNC server with built-in X server)
 # Features: Tight encoding (50% bandwidth reduction), session persistence
 # Note: TigerVNC runs its own X server (Xvnc), replacing Xvfb for display :99
+# Ubuntu 25.04 Note: TigerVNC now uses ~/.config/tigervnc for configuration
 _start_tigervnc() {
     log_info "Starting VNC server (TigerVNC with built-in X server)..."
-
-    # Prepare VNC directory
-    _prepare_vnc_dir
 
     # Stop Xvfb if running (TigerVNC provides its own X server)
     if [ -n "$XVFB_PID" ] && kill -0 "$XVFB_PID" 2>/dev/null; then
@@ -258,29 +256,74 @@ _start_tigervnc() {
         sleep 2
     fi
 
-    # Configure VNC to NOT require authentication (for container use)
-    # Note: Modern TigerVNC requires at least one password, so we set an empty one
+    # Set up runtime directory for TigerVNC
+    mkdir -p /run/user/1001
+    chown sandbox:sandbox /run/user/1001
+    chmod 700 /run/user/1001
+
+    # Clean up any old .vnc directory that might cause migration issues on Ubuntu 25.04
+    # New TigerVNC uses ~/.config/tigervnc instead of ~/.vnc
     sudo -u "$SANDBOX_USER" sh -c "
         export HOME=/home/sandbox
-        mkdir -p /home/sandbox/.vnc
-
-        # Create empty password (just press enter twice)
-        echo '' | vncpasswd -f > /home/sandbox/.vnc/passwd 2>/dev/null || true
-        chmod 600 /home/sandbox/.vnc/passwd
+        # Remove old .vnc directory to avoid migration errors
+        rm -rf /home/sandbox/.vnc
+        # Create new config directory for TigerVNC
+        mkdir -p /home/sandbox/.config/tigervnc
     "
 
-    # Start TigerVNC with optimal settings
-    # Using VncAuth with empty password for container compatibility
+    # Create xstartup in the new TigerVNC location
+    sudo -u "$SANDBOX_USER" sh -c "
+        export HOME=/home/sandbox
+        export DISPLAY=:99
+        export XDG_RUNTIME_DIR=/run/user/1001
+
+        # Create config directory
+        mkdir -p /home/sandbox/.config/tigervnc
+
+        # Create xstartup file for XFCE session
+        # IMPORTANT: Must NOT exit - TigerVNC monitors this process
+        cat > /home/sandbox/.config/tigervnc/xstartup << 'XSTARTUP_EOF'
+#!/bin/sh
+# X startup script for TigerVNC with XFCE 4.20
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# Set display
+export DISPLAY=:99
+export XDG_RUNTIME_DIR=/run/user/1001
+export HOME=/home/sandbox
+
+# Start D-Bus session if not already running
+if [ -z \"\$DBUS_SESSION_BUS_ADDRESS\" ]; then
+    mkdir -p /run/user/1001
+    dbus-daemon --session --address=unix:path=/run/user/1001/bus --nofork --syslog
+    sleep 1
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
+fi
+
+# Start XFCE desktop environment and wait for it
+# Using xfce4-session in foreground mode to keep xstartup alive
+exec xfce4-session
+XSTARTUP_EOF
+
+        chmod +x /home/sandbox/.config/tigervnc/xstartup
+    "
+
+    # Start TigerVNC with NO authentication
+    # Ubuntu 25.04 TigerVNC uses new config structure
     sudo -u "$SANDBOX_USER" sh -c "
         export DISPLAY=:99
         export XDG_RUNTIME_DIR=/run/user/1001
         export HOME=/home/sandbox
 
-        vncserver :99 \
-            -geometry ${DESKTOP_RESOLUTION} \
-            -depth 24 \
-            -rfbport 5901 \
-            -localhost no \
+        vncserver :99 \\
+            -geometry ${DESKTOP_RESOLUTION} \\
+            -depth 24 \\
+            -rfbport 5901 \\
+            -localhost no \\
+            -securitytypes none \\
+            --I-KNOW-THIS-IS-INSECURE \\
+            -AlwaysShared \\
             2>&1 | tee /tmp/tigervnc.log
     " &
 
@@ -294,6 +337,8 @@ _start_tigervnc() {
         log_warn "TigerVNC failed to start (check logs: docker exec <container> cat /tmp/tigervnc.log)"
         # Kill failed TigerVNC process
         kill $VNC_PID 2>/dev/null || true
+        # Clean up vncserver processes
+        sudo -u "$SANDBOX_USER" vncserver -kill :99 2>/dev/null || true
         sleep 1
         return 1
     fi
@@ -400,7 +445,12 @@ main() {
         start_vnc
 
         # Start desktop environment (XFCE)
-        start_desktop
+        # Note: TigerVNC runs xstartup automatically, so skip start_desktop
+        if [ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null; then
+            log_info "TigerVNC manages desktop via xstartup, skipping start_desktop"
+        else
+            start_desktop
+        fi
 
         # Start noVNC web client
         start_novnc
