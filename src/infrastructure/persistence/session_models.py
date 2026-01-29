@@ -54,7 +54,7 @@ class SessionModel(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
 
     # Flexible metadata
-    metadata: Mapped[dict] = mapped_column(
+    meta_data: Mapped[dict] = mapped_column(
         JSONB, default=dict, nullable=False
     )
 
@@ -122,7 +122,7 @@ class SessionMessageModel(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Flexible metadata
-    metadata: Mapped[dict] = mapped_column(
+    meta_data: Mapped[dict] = mapped_column(
         JSONB, default=dict, nullable=False
     )
 

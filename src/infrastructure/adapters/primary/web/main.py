@@ -31,6 +31,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     recall,
     sandbox,
     schema,
+    sessions,
     shares,
     skills,
     subagents,

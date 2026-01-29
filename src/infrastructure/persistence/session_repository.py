@@ -15,7 +15,7 @@ from src.domain.ports.session_repository import (
     SessionMessageRepository,
     SessionAggregateRepository,
 )
-from src.infrastructure.persistence.models import SessionModel, SessionMessageModel
+from src.infrastructure.persistence.session_models import SessionModel, SessionMessageModel
 
 
 class PostgresSessionRepository(SessionRepository):
@@ -39,7 +39,7 @@ class PostgresSessionRepository(SessionRepository):
                     kind=session.kind.value,
                     model=session.model,
                     status=session.status.value,
-                    metadata=session.metadata,
+                    meta_data=session.metadata,
                     last_active_at=session.last_active_at,
                 )
             )
@@ -53,7 +53,7 @@ class PostgresSessionRepository(SessionRepository):
                 kind=session.kind.value,
                 model=session.model,
                 status=session.status.value,
-                metadata=session.metadata,
+                meta_data=session.metadata,
                 created_at=session.created_at,
                 last_active_at=session.last_active_at,
             )
@@ -159,7 +159,7 @@ class PostgresSessionRepository(SessionRepository):
             kind=SessionKind(model.kind),
             model=model.model,
             status=SessionStatus(model.status),
-            metadata=model.metadata or {},
+            metadata=model.meta_data or {},
             created_at=model.created_at,
             last_active_at=model.last_active_at,
         )
@@ -184,7 +184,7 @@ class PostgresSessionMessageRepository(SessionMessageRepository):
                     session_id=message.session_id,
                     role=message.role.value,
                     content=message.content,
-                    metadata=message.metadata,
+                    meta_data=message.metadata,
                 )
             )
             await self._session.execute(stmt)
@@ -195,7 +195,7 @@ class PostgresSessionMessageRepository(SessionMessageRepository):
                 session_id=message.session_id,
                 role=message.role.value,
                 content=message.content,
-                metadata=message.metadata,
+                meta_data=message.metadata,
                 created_at=message.created_at,
             )
             self._session.add(model)
@@ -277,7 +277,7 @@ class PostgresSessionMessageRepository(SessionMessageRepository):
             session_id=model.session_id,
             role=MessageRole(model.role),
             content=model.content,
-            metadata=model.metadata or {},
+            metadata=model.meta_data or {},
             created_at=model.created_at,
         )
 
