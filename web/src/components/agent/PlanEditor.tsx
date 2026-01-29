@@ -37,7 +37,10 @@ interface PlanEditorProps {
   isLoading?: boolean;
   onUpdate?: (content: string) => Promise<void>;
   onApprove?: () => Promise<void>;
-  onExit?: (approve: boolean) => Promise<void>;
+  /** Submit plan for review (draft → reviewing) */
+  onSubmitForReview?: () => Promise<void>;
+  /** Exit plan mode with optional approval and summary */
+  onExit?: (approve: boolean, summary?: string) => Promise<void>;
   readOnly?: boolean;
 }
 
@@ -60,6 +63,7 @@ export const PlanEditor: React.FC<PlanEditorProps> = ({
   isLoading = false,
   onUpdate,
   onApprove: _onApprove,
+  onSubmitForReview,
   onExit,
   readOnly = false,
 }) => {
@@ -216,6 +220,20 @@ export const PlanEditor: React.FC<PlanEditorProps> = ({
               )}
               {onExit && isEditable && (
                 <>
+                  {plan.status === "draft" && onSubmitForReview && (
+                    <Button
+                      onClick={async () => {
+                        try {
+                          await onSubmitForReview();
+                          message.success("Plan submitted for review");
+                        } catch {
+                          message.error("Failed to submit plan for review");
+                        }
+                      }}
+                    >
+                      Submit for Review
+                    </Button>
+                  )}
                   <Button onClick={handleExitWithoutApproval}>
                     Exit without Approval
                   </Button>

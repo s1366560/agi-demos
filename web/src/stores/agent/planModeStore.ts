@@ -58,6 +58,7 @@ interface PlanModeState {
     request: UpdatePlanRequest
   ) => Promise<PlanDocument>;
   getPlanModeStatus: (conversationId: string) => Promise<PlanModeStatus>;
+  submitPlanForReview: (planId: string) => Promise<PlanDocument>;
   clearPlanState: () => void;
   reset: () => void;
 }
@@ -249,6 +250,31 @@ export const usePlanModeStore = create<PlanModeState>()(
     const err = error as { response?: { data?: { detail?: string } }; message?: string };
       set({
         planError: err?.response?.data?.detail || 'Failed to get Plan Mode status',
+        planLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Submit a plan for review
+   *
+   * Changes plan status from 'draft' to 'reviewing'.
+   *
+   * @param planId - The plan ID
+   * @returns The updated plan document
+   */
+  submitPlanForReview: async (planId: string): Promise<PlanDocument> => {
+    set({ planLoading: true, planError: null });
+
+    try {
+      const plan = await planService.submitPlanForReview(planId);
+      set({ currentPlan: plan, planLoading: false });
+      return plan;
+    } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      set({
+        planError: err?.response?.data?.detail || 'Failed to submit plan for review',
         planLoading: false,
       });
       throw error;

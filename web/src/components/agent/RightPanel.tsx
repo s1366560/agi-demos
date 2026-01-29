@@ -2,24 +2,36 @@
  * RightPanel - Combined Plan and Sandbox panel with tab navigation
  *
  * Replaces the original PlanPanel with a tabbed interface that includes
- * both work plan viewing and sandbox terminal/desktop/output capabilities.
+ * both work plan viewing, plan editing, and sandbox terminal/desktop/output capabilities.
+ *
+ * Plan tab shows:
+ * - PlanEditor for draft/reviewing plans (editable)
+ * - PlanModeViewer for executing plans (read-only with progress)
+ * - PlanViewer for WorkPlan visualization
  */
 
-import React, { useMemo, useCallback, useEffect } from "react";
-import { Tabs, Badge, Space, Button, Tooltip } from "antd";
+import React, { useMemo, useCallback, useEffect, useState } from "react";
+import { Tabs, Badge, Space, Button, Tooltip, Segmented } from "antd";
 import {
   UnorderedListOutlined,
   CodeOutlined,
   CloseOutlined,
+  EditOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 
 import { PlanViewer } from "./PlanViewer";
+import { PlanEditor } from "./PlanEditor";
+import { PlanModeViewer } from "./PlanModeViewer";
 import { SandboxPanel } from "./sandbox";
 import { useSandboxStore, isSandboxTool } from "../../stores/sandbox";
+import { usePlanModeStore } from "../../stores/agent/planModeStore";
 import type { WorkPlan } from "../../types/agent";
 import type { ToolExecution } from "./sandbox/SandboxOutputViewer";
+import type { ExecutionPlan } from "../../types/agent";
 
 export type RightPanelTab = "plan" | "sandbox";
+export type PlanViewMode = "work" | "document" | "execution";
 
 export interface RightPanelProps {
   /** Current work plan */
@@ -36,6 +48,8 @@ export interface RightPanelProps {
   activeTab?: RightPanelTab;
   /** Callback when tab changes */
   onTabChange?: (tab: RightPanelTab) => void;
+  /** Execution plan for plan mode (optional) */
+  executionPlan?: ExecutionPlan | null;
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({
@@ -46,6 +60,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   onFileClick,
   activeTab: controlledActiveTab,
   onTabChange,
+  executionPlan,
 }) => {
   // Get sandbox state from store (including desktop and terminal status)
   const {
@@ -63,9 +78,46 @@ export const RightPanel: React.FC<RightPanelProps> = ({
     stopTerminal,
   } = useSandboxStore();
 
+  // Get plan mode state
+  const { currentPlan, updatePlan, exitPlanMode, submitPlanForReview } = usePlanModeStore();
+
   // Use props if provided, otherwise use store state
   const sandboxId = propSandboxId ?? storeSandboxId;
   const toolExecutions = propToolExecutions ?? storeToolExecutions;
+
+  // Plan view mode state (for plan tab)
+  const [planViewMode, setPlanViewMode] = useState<PlanViewMode>("work");
+
+  // Determine available plan view modes based on state
+  const availablePlanModes = useMemo(() => {
+    const modes: { value: PlanViewMode; label: string; icon: React.ReactNode }[] = [];
+
+    // Work plan view (always available)
+    modes.push({ value: "work", label: "Work Plan", icon: <UnorderedListOutlined /> });
+
+    // Document view (available when there's a plan document)
+    if (currentPlan) {
+      modes.push({ value: "document", label: "Document", icon: <EditOutlined /> });
+    }
+
+    // Execution view (available when there's an execution plan)
+    if (executionPlan) {
+      modes.push({ value: "execution", label: "Execution", icon: <EyeOutlined /> });
+    }
+
+    return modes;
+  }, [currentPlan, executionPlan]);
+
+  // Auto-switch plan view mode based on state
+  useEffect(() => {
+    if (executionPlan && planViewMode === "work") {
+      setPlanViewMode("execution");
+    } else if (!executionPlan && !currentPlan && planViewMode !== "work") {
+      setPlanViewMode("work");
+    } else if (!executionPlan && currentPlan && planViewMode === "execution") {
+      setPlanViewMode("document");
+    }
+  }, [executionPlan, currentPlan, planViewMode]);
 
   // Compute default tab based on current state
   const defaultTab = useMemo((): RightPanelTab => {
@@ -104,6 +156,50 @@ export const RightPanel: React.FC<RightPanelProps> = ({
     }
   }, [currentTool, sandboxId, onTabChange]);
 
+  // Render plan content based on view mode
+  const planContent = useMemo(() => {
+    // Execution plan view (read-only with progress)
+    if (planViewMode === "execution" && executionPlan) {
+      return (
+        <div className="h-full overflow-auto p-4">
+          <PlanModeViewer plan={executionPlan} />
+        </div>
+      );
+    }
+
+    // Document view (editable)
+    if (planViewMode === "document" && currentPlan) {
+      return (
+        <div className="h-full overflow-auto p-4">
+          <PlanEditor
+            plan={currentPlan}
+            onUpdate={async (content) => {
+              // Handle plan update via planModeStore
+              await updatePlan(currentPlan.id, { content });
+            }}
+            onSubmitForReview={async () => {
+              // Handle submit for review via planModeStore
+              await submitPlanForReview(currentPlan.id);
+            }}
+            onExit={async (approve, summary) => {
+              // Handle plan exit via planModeStore
+              // Use empty string for conversation_id if not available
+              const conversationId = currentPlan.conversation_id || "";
+              await exitPlanMode(conversationId, currentPlan.id, approve, summary);
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Work plan view (default)
+    return (
+      <div className="h-full">
+        <PlanViewer plan={workPlan} />
+      </div>
+    );
+  }, [planViewMode, executionPlan, currentPlan, workPlan]);
+
   // Memoized tab items
   const tabItems = useMemo(() => [
     {
@@ -118,8 +214,23 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         </Space>
       ),
       children: (
-        <div className="h-full">
-          <PlanViewer plan={workPlan} />
+        <div className="h-full flex flex-col">
+          {/* Plan view mode selector - shown when multiple modes available */}
+          {availablePlanModes.length > 1 && (
+            <div className="px-4 pt-3 pb-2 border-b border-slate-100">
+              <Segmented
+                value={planViewMode}
+                onChange={(value) => setPlanViewMode(value as PlanViewMode)}
+                options={availablePlanModes.map((mode) => ({
+                  value: mode.value,
+                  label: mode.label,
+                  icon: mode.icon,
+                }))}
+                size="small"
+              />
+            </div>
+          )}
+          {planContent}
         </div>
       ),
     },

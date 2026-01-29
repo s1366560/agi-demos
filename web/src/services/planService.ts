@@ -26,6 +26,7 @@ export interface PlanService {
   getPlan(planId: string): Promise<PlanDocument>;
   getConversationPlans(conversationId: string): Promise<PlanDocument[]>;
   updatePlan(planId: string, request: UpdatePlanRequest): Promise<PlanDocument>;
+  submitPlanForReview(planId: string): Promise<PlanDocument>;
   getPlanModeStatus(conversationId: string): Promise<PlanModeStatus>;
 }
 
@@ -80,6 +81,13 @@ class PlanServiceImpl implements PlanService {
     return await api.get<PlanModeStatus>(
       `/agent/conversations/${conversationId}/plan-mode`
     );
+  }
+
+  /**
+   * Submit a plan for review (changes status from draft to reviewing)
+   */
+  async submitPlanForReview(planId: string): Promise<PlanDocument> {
+    return await api.post<PlanDocument>(`/agent/plan/${planId}/submit`, {});
   }
 }
 
