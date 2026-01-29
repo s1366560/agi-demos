@@ -636,8 +636,6 @@ const commonTranslations: Record<string, string> = {
     'space.dashboard.welcome.subtitle': 'Here is what is happening with your space today.',
     'space.dashboard.back_button_title': 'Back to Spaces',
     'space.dashboard.breadcrumbs.home': 'Home',
-    'nav.platform': 'Platform',
-    'nav.administration': 'Administration',
 
     // Maintenance Page
     'maintenance.title': 'Maintenance',
