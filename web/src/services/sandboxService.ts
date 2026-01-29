@@ -169,10 +169,11 @@ export interface SandboxService {
   /**
    * Stop terminal service
    * @param sandboxId - Sandbox ID
+   * @param sessionId - Optional specific session ID to stop
    * @returns Promise that resolves when stopped
    * @throws {ApiError} If stop fails
    */
-  stopTerminal(sandboxId: string): Promise<void>;
+  stopTerminal(sandboxId: string, sessionId?: string): Promise<void>;
 
   /**
    * Get current desktop status
@@ -199,19 +200,72 @@ class SandboxServiceImpl implements SandboxService {
 
   async createSandbox(request: CreateSandboxRequest): Promise<CreateSandboxResponse> {
     logger.debug(`[SandboxService] Creating sandbox for project: ${request.project_id}`);
-    return this.api.post<CreateSandboxResponse>("/sandbox", request);
+    // Backend uses POST /sandbox/create
+    const response = await this.api.post<any>("/sandbox/create", {
+      project_path: `/tmp/memstack_${request.project_id}`,
+      image: request.image,
+      memory_limit: request.resources?.memory || "2g",
+      cpu_limit: request.resources?.cpu || "2",
+    });
+
+    // Transform backend response to match frontend types
+    return {
+      sandbox: {
+        id: response.id,
+        project_id: request.project_id,
+        status: response.status as SandboxStatus,
+        created_at: response.created_at,
+        container_id: response.id,
+        image: response.tools?.join(","),
+      },
+      urls: {
+        desktop: response.endpoint,
+        terminal: response.websocket_url,
+      },
+    };
   }
 
   async getSandbox(sandboxId: string): Promise<Sandbox> {
     logger.debug(`[SandboxService] Getting sandbox: ${sandboxId}`);
-    return this.api.get<Sandbox>(`/sandbox/${sandboxId}`);
+    const response = await this.api.get<any>(`/sandbox/${sandboxId}`);
+
+    // Extract project_id from project_path (format: /tmp/memstack_{project_id})
+    const projectIdMatch = response.project_path?.match(/memstack_([a-zA-Z0-9_-]+)$/);
+    const projectId = projectIdMatch ? projectIdMatch[1] : "";
+
+    return {
+      id: response.id,
+      project_id: projectId,
+      status: response.status as SandboxStatus,
+      created_at: response.created_at,
+      container_id: response.id,
+      image: response.tools?.join(",") || response.image,
+    };
   }
 
   async listSandboxes(projectId: string): Promise<ListSandboxesResponse> {
     logger.debug(`[SandboxService] Listing sandboxes for project: ${projectId}`);
-    return this.api.get<ListSandboxesResponse>("/sandbox", {
-      params: { project_id: projectId },
+    // Backend lists all sandboxes, we need to filter by project_id
+    const response = await this.api.get<any>("/sandbox");
+
+    // Filter sandboxes by project_id extracted from project_path
+    const allSandboxes = response.sandboxes || [];
+    const filteredSandboxes = allSandboxes.filter((sb: any) => {
+      const projectIdMatch = sb.project_path?.match(/memstack_([a-zA-Z0-9_-]+)$/);
+      return projectIdMatch && projectIdMatch[1] === projectId;
     });
+
+    return {
+      sandboxes: filteredSandboxes.map((sb: any) => ({
+        id: sb.id,
+        project_id: projectId,
+        status: sb.status as SandboxStatus,
+        created_at: sb.created_at,
+        container_id: sb.id,
+        image: sb.tools?.join(",") || sb.image,
+      })),
+      total: filteredSandboxes.length,
+    };
   }
 
   async deleteSandbox(sandboxId: string): Promise<void> {
@@ -219,36 +273,101 @@ class SandboxServiceImpl implements SandboxService {
     await this.api.delete(`/sandbox/${sandboxId}`);
   }
 
-  async startDesktop(sandboxId: string, resolution = "1280x720"): Promise<DesktopStatus> {
-    logger.debug(`[SandboxService] Starting desktop for sandbox: ${sandboxId}`);
-    return this.api.post<DesktopStatus>(`/sandbox/${sandboxId}/desktop`, {
-      resolution,
-    });
+  async startDesktop(_sandboxId: string, _resolution = "1280x720"): Promise<DesktopStatus> {
+    // Desktop not implemented in backend yet, return simulated status
+    // TODO: Implement actual desktop endpoint
+    console.warn("Desktop not yet implemented in backend");
+    return {
+      running: false,
+      url: null,
+      display: "",
+      resolution: "",
+      port: 0,
+    };
   }
 
-  async stopDesktop(sandboxId: string): Promise<void> {
-    logger.debug(`[SandboxService] Stopping desktop for sandbox: ${sandboxId}`);
-    await this.api.delete(`/sandbox/${sandboxId}/desktop`);
+  async stopDesktop(_sandboxId: string): Promise<void> {
+    // Desktop not implemented in backend yet
+    console.warn("Desktop not yet implemented in backend");
   }
 
   async startTerminal(sandboxId: string): Promise<TerminalStatus> {
     logger.debug(`[SandboxService] Starting terminal for sandbox: ${sandboxId}`);
-    return this.api.post<TerminalStatus>(`/sandbox/${sandboxId}/terminal`);
+    // Backend uses /terminal/{sandbox_id}/create
+    const response = await this.api.post<any>(`/terminal/${sandboxId}/create`, {
+      shell: "/bin/bash",
+      cols: 80,
+      rows: 24,
+    });
+
+    // Backend returns: session_id, container_id, cols, rows, is_active
+    // Construct WebSocket URL for terminal connection
+    const wsUrl = `ws://localhost:8000/api/v1/terminal/${sandboxId}/ws?session_id=${response.session_id}`;
+
+    return {
+      running: response.is_active,
+      url: wsUrl,
+      port: 8000, // WebSocket port is same as API
+      sessionId: response.session_id,
+      pid: null,
+    };
   }
 
-  async stopTerminal(sandboxId: string): Promise<void> {
+  async stopTerminal(sandboxId: string, sessionId?: string): Promise<void> {
     logger.debug(`[SandboxService] Stopping terminal for sandbox: ${sandboxId}`);
-    await this.api.delete(`/sandbox/${sandboxId}/terminal`);
+
+    if (sessionId) {
+      // Close specific session
+      await this.api.delete(`/terminal/${sandboxId}/sessions/${sessionId}`);
+    } else {
+      // Get active sessions and close them
+      const sessions = await this.api.get<any>(`/terminal/${sandboxId}/sessions`);
+      if (sessions && sessions.length > 0) {
+        for (const session of sessions) {
+          await this.api.delete(`/terminal/${sandboxId}/sessions/${session.session_id}`);
+        }
+      }
+    }
   }
 
-  async getDesktopStatus(sandboxId: string): Promise<DesktopStatus> {
-    logger.debug(`[SandboxService] Getting desktop status for sandbox: ${sandboxId}`);
-    return this.api.get<DesktopStatus>(`/sandbox/${sandboxId}/desktop`);
+  async getDesktopStatus(_sandboxId: string): Promise<DesktopStatus> {
+    // Desktop not implemented in backend yet
+    // Return default "not running" status
+    return {
+      running: false,
+      url: null,
+      display: "",
+      resolution: "",
+      port: 0,
+    };
   }
 
   async getTerminalStatus(sandboxId: string): Promise<TerminalStatus> {
     logger.debug(`[SandboxService] Getting terminal status for sandbox: ${sandboxId}`);
-    return this.api.get<TerminalStatus>(`/sandbox/${sandboxId}/terminal`);
+    // Backend returns array of sessions
+    const sessions = await this.api.get<any>(`/terminal/${sandboxId}/sessions`);
+
+    const hasActiveSession = sessions && sessions.length > 0;
+    const activeSession = hasActiveSession ? sessions[0] : null;
+
+    if (activeSession) {
+      const wsUrl = `ws://localhost:8000/api/v1/terminal/${sandboxId}/ws?session_id=${activeSession.session_id}`;
+      return {
+        running: activeSession.is_active,
+        url: wsUrl,
+        port: 8000,
+        sessionId: activeSession.session_id,
+        pid: null,
+      };
+    }
+
+    return {
+      running: false,
+      url: null,
+      port: 0,
+      sessionId: null,
+      pid: null,
+    };
   }
 }
 

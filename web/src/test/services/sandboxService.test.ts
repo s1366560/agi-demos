@@ -37,22 +37,17 @@ describe("sandboxService", () => {
 
   describe("createSandbox", () => {
     it("should create a new sandbox and return response", async () => {
-      const mockResponse = {
-        sandbox: {
-          id: "sb_123456",
-          project_id: "proj_789",
-          status: "running" as const,
-          created_at: "2024-01-15T10:30:00Z",
-          container_id: "container_abc",
-          image: "memstack/sandbox:latest",
-        },
-        urls: {
-          desktop: "ws://localhost:6080",
-          terminal: "ws://localhost:7681",
-        },
+      const mockBackendResponse = {
+        id: "sb_123456",
+        status: "running",
+        project_path: "/tmp/memstack_proj_789",
+        endpoint: "ws://localhost:8080",
+        websocket_url: "ws://localhost:7681",
+        created_at: "2024-01-15T10:30:00Z",
+        tools: ["read", "write", "bash"],
       };
 
-      mockHttpClient.post.mockResolvedValue(mockResponse);
+      mockHttpClient.post.mockResolvedValue(mockBackendResponse);
 
       const request = {
         project_id: "proj_789",
@@ -61,10 +56,17 @@ describe("sandboxService", () => {
 
       const result = await sandboxService.createSandbox(request);
 
-      expect(result).toEqual(mockResponse);
+      expect(result.sandbox.id).toBe("sb_123456");
+      expect(result.sandbox.project_id).toBe("proj_789");
+      expect(result.sandbox.status).toBe("running");
+      expect(result.urls?.desktop).toBe("ws://localhost:8080");
+      expect(result.urls?.terminal).toBe("ws://localhost:7681");
       expect(mockHttpClient.post).toHaveBeenCalledWith(
-        "/sandbox",
-        request
+        "/sandbox/create",
+        expect.objectContaining({
+          project_path: "/tmp/memstack_proj_789",
+          image: "memstack/sandbox:latest",
+        })
       );
     });
 
@@ -86,20 +88,25 @@ describe("sandboxService", () => {
   });
 
   describe("getSandbox", () => {
-    it("should get sandbox by ID", async () => {
-      const mockSandbox = {
+    it("should get sandbox by ID and extract project_id from path", async () => {
+      const mockBackendResponse = {
         id: "sb_123456",
-        project_id: "proj_789",
-        status: "running" as const,
+        status: "running",
+        project_path: "/tmp/memstack_proj_789",
+        endpoint: "ws://localhost:8080",
+        websocket_url: "ws://localhost:7681",
         created_at: "2024-01-15T10:30:00Z",
-        container_id: "container_abc",
+        tools: ["read", "write", "bash"],
       };
 
-      mockHttpClient.get.mockResolvedValue(mockSandbox);
+      mockHttpClient.get.mockResolvedValue(mockBackendResponse);
 
       const result = await sandboxService.getSandbox("sb_123456");
 
-      expect(result).toEqual(mockSandbox);
+      expect(result.id).toBe("sb_123456");
+      expect(result.project_id).toBe("proj_789"); // Extracted from project_path
+      expect(result.status).toBe("running");
+      expect(result.container_id).toBe("sb_123456"); // Same as id
       expect(mockHttpClient.get).toHaveBeenCalledWith("/sandbox/sb_123456");
     });
 
@@ -119,42 +126,62 @@ describe("sandboxService", () => {
   });
 
   describe("listSandboxes", () => {
-    it("should list sandboxes for a project", async () => {
-      const mockResponse = {
+    it("should list and filter sandboxes for a project", async () => {
+      const mockBackendResponse = {
         sandboxes: [
           {
             id: "sb_123",
-            project_id: "proj_789",
-            status: "running" as const,
+            status: "running",
+            project_path: "/tmp/memstack_proj_789",
             created_at: "2024-01-15T10:30:00Z",
+            tools: ["read", "write"],
           },
           {
             id: "sb_456",
-            project_id: "proj_789",
-            status: "stopped" as const,
+            status: "stopped",
+            project_path: "/tmp/memstack_other_project",
             created_at: "2024-01-14T10:30:00Z",
+            tools: [],
+          },
+          {
+            id: "sb_789",
+            status: "running",
+            project_path: "/tmp/memstack_proj_789",
+            created_at: "2024-01-13T10:30:00Z",
+            tools: ["bash"],
           },
         ],
-        total: 2,
+        total: 3,
       };
 
-      mockHttpClient.get.mockResolvedValue(mockResponse);
+      mockHttpClient.get.mockResolvedValue(mockBackendResponse);
 
       const result = await sandboxService.listSandboxes("proj_789");
 
-      expect(result).toEqual(mockResponse);
-      expect(mockHttpClient.get).toHaveBeenCalledWith("/sandbox", {
-        params: { project_id: "proj_789" },
-      });
+      // Should only return sandboxes matching the project_id
+      expect(result.sandboxes).toHaveLength(2);
+      expect(result.sandboxes[0].id).toBe("sb_123");
+      expect(result.sandboxes[0].project_id).toBe("proj_789");
+      expect(result.sandboxes[1].id).toBe("sb_789");
+      expect(result.total).toBe(2);
+      expect(mockHttpClient.get).toHaveBeenCalledWith("/sandbox");
     });
 
-    it("should return empty array when no sandboxes exist", async () => {
-      const mockResponse = {
-        sandboxes: [],
-        total: 0,
+    it("should return empty array when no matching sandboxes exist", async () => {
+      const mockBackendResponse = {
+        sandboxes: [
+          {
+            id: "sb_456",
+            status: "stopped",
+            project_path: "/tmp/memstack_other_project",
+            created_at: "2024-01-14T10:30:00Z",
+            tools: [],
+          },
+        ],
+        total: 1,
       };
 
-      mockHttpClient.get.mockResolvedValue(mockResponse);
+      mockHttpClient.get.mockResolvedValue(mockBackendResponse);
 
       const result = await sandboxService.listSandboxes("proj_empty");
 
@@ -188,136 +215,135 @@ describe("sandboxService", () => {
   });
 
   describe("startDesktop", () => {
-    it("should start desktop service with default resolution", async () => {
-      const mockStatus = {
-        running: true,
-        url: "ws://localhost:6080",
-        display: ":0",
-        resolution: "1280x720",
-        port: 6080,
-      };
-
-      mockHttpClient.post.mockResolvedValue(mockStatus);
-
+    it("should return not running status (desktop not implemented in backend)", async () => {
       const result = await sandboxService.startDesktop("sb_123");
 
-      expect(result).toEqual(mockStatus);
-      expect(mockHttpClient.post).toHaveBeenCalledWith("/sandbox/sb_123/desktop", {
-        resolution: "1280x720",
-      });
+      // Desktop endpoints not implemented in backend, returns default status
+      expect(result.running).toBe(false);
+      expect(result.url).toBeNull();
+      expect(result.port).toBe(0);
     });
 
-    it("should start desktop service with custom resolution", async () => {
-      const mockStatus = {
-        running: true,
-        url: "ws://localhost:6080",
-        display: ":0",
-        resolution: "1920x1080",
-        port: 6080,
-      };
-
-      mockHttpClient.post.mockResolvedValue(mockStatus);
-
+    it("should pass custom resolution but still return not running", async () => {
       const result = await sandboxService.startDesktop("sb_123", "1920x1080");
 
-      expect(result.resolution).toBe("1920x1080");
-      expect(mockHttpClient.post).toHaveBeenCalledWith("/sandbox/sb_123/desktop", {
-        resolution: "1920x1080",
-      });
+      expect(result.running).toBe(false);
+      expect(result.resolution).toBe("");
     });
   });
 
   describe("stopDesktop", () => {
-    it("should stop desktop service", async () => {
-      mockHttpClient.delete.mockResolvedValue(undefined);
-
+    it("should handle stop desktop (no-op since not implemented)", async () => {
+      // Should not throw even though backend doesn't implement this
       await sandboxService.stopDesktop("sb_123");
-
-      expect(mockHttpClient.delete).toHaveBeenCalledWith("/sandbox/sb_123/desktop");
     });
   });
 
   describe("startTerminal", () => {
-    it("should start terminal service", async () => {
-      const mockStatus = {
-        running: true,
-        url: "ws://localhost:7681",
-        port: 7681,
-        sessionId: "sess_abc123",
-        pid: 12345,
+    it("should start terminal service and return constructed WebSocket URL", async () => {
+      const mockBackendResponse = {
+        session_id: "sess_abc123",
+        container_id: "sb_123",
+        cols: 80,
+        rows: 24,
+        is_active: true,
       };
 
-      mockHttpClient.post.mockResolvedValue(mockStatus);
+      mockHttpClient.post.mockResolvedValue(mockBackendResponse);
 
       const result = await sandboxService.startTerminal("sb_123");
 
-      expect(result).toEqual(mockStatus);
-      expect(mockHttpClient.post).toHaveBeenCalledWith("/sandbox/sb_123/terminal");
+      expect(result.running).toBe(true);
+      expect(result.sessionId).toBe("sess_abc123");
+      expect(result.port).toBe(8000);
+      expect(result.url).toBe("ws://localhost:8000/api/v1/terminal/sb_123/ws?session_id=sess_abc123");
+      expect(mockHttpClient.post).toHaveBeenCalledWith("/terminal/sb_123/create", {
+        shell: "/bin/bash",
+        cols: 80,
+        rows: 24,
+      });
     });
   });
 
   describe("stopTerminal", () => {
-    it("should stop terminal service", async () => {
-      mockHttpClient.delete.mockResolvedValue(undefined);
+    it("should stop terminal service by session ID", async () => {
+      mockHttpClient.delete.mockResolvedValue({ success: true, session_id: "sess_abc" });
+
+      await sandboxService.stopTerminal("sb_123", "sess_abc");
+
+      expect(mockHttpClient.delete).toHaveBeenCalledWith("/terminal/sb_123/sessions/sess_abc");
+    });
+
+    it("should stop all terminal sessions when no session ID provided", async () => {
+      const mockSessions = [
+        { session_id: "sess_abc", container_id: "sb_123", is_active: true },
+        { session_id: "sess_def", container_id: "sb_123", is_active: true },
+      ];
+
+      mockHttpClient.get.mockResolvedValue(mockSessions);
+      mockHttpClient.delete.mockResolvedValue({ success: true });
 
       await sandboxService.stopTerminal("sb_123");
 
-      expect(mockHttpClient.delete).toHaveBeenCalledWith("/sandbox/sb_123/terminal");
+      expect(mockHttpClient.get).toHaveBeenCalledWith("/terminal/sb_123/sessions");
+      expect(mockHttpClient.delete).toHaveBeenCalledWith("/terminal/sb_123/sessions/sess_abc");
+      expect(mockHttpClient.delete).toHaveBeenCalledWith("/terminal/sb_123/sessions/sess_def");
     });
   });
 
   describe("getDesktopStatus", () => {
-    it("should get current desktop status", async () => {
-      const mockStatus = {
-        running: true,
-        url: "ws://localhost:6080",
-        display: ":0",
-        resolution: "1280x720",
-        port: 6080,
-      };
-
-      mockHttpClient.get.mockResolvedValue(mockStatus);
-
-      const result = await sandboxService.getDesktopStatus("sb_123");
-
-      expect(result).toEqual(mockStatus);
-      expect(mockHttpClient.get).toHaveBeenCalledWith("/sandbox/sb_123/desktop");
-    });
-
-    it("should return not running status when desktop is stopped", async () => {
-      const mockStatus = {
-        running: false,
-        url: null,
-        display: "",
-        resolution: "",
-        port: 0,
-      };
-
-      mockHttpClient.get.mockResolvedValue(mockStatus);
-
+    it("should return not running status (desktop not implemented)", async () => {
       const result = await sandboxService.getDesktopStatus("sb_123");
 
       expect(result.running).toBe(false);
       expect(result.url).toBeNull();
+      expect(result.display).toBe("");
+      expect(result.resolution).toBe("");
+      expect(result.port).toBe(0);
     });
   });
 
   describe("getTerminalStatus", () => {
-    it("should get current terminal status", async () => {
-      const mockStatus = {
-        running: true,
-        url: "ws://localhost:7681",
-        port: 7681,
-        sessionId: "sess_abc123",
-        pid: 12345,
-      };
+    it("should get current terminal status with active session", async () => {
+      const mockSessions = [
+        {
+          session_id: "sess_abc123",
+          container_id: "sb_123",
+          cols: 80,
+          rows: 24,
+          is_active: true,
+        },
+      ];
 
-      mockHttpClient.get.mockResolvedValue(mockStatus);
+      mockHttpClient.get.mockResolvedValue(mockSessions);
 
       const result = await sandboxService.getTerminalStatus("sb_123");
 
-      expect(result).toEqual(mockStatus);
-      expect(mockHttpClient.get).toHaveBeenCalledWith("/sandbox/sb_123/terminal");
+      expect(result.running).toBe(true);
+      expect(result.sessionId).toBe("sess_abc123");
+      expect(result.port).toBe(8000);
+      expect(result.url).toBe("ws://localhost:8000/api/v1/terminal/sb_123/ws?session_id=sess_abc123");
+      expect(mockHttpClient.get).toHaveBeenCalledWith("/terminal/sb_123/sessions");
+    });
+
+    it("should return not running when no active sessions", async () => {
+      mockHttpClient.get.mockResolvedValue([]);
+
+      const result = await sandboxService.getTerminalStatus("sb_123");
+
+      expect(result.running).toBe(false);
+      expect(result.sessionId).toBeNull();
+      expect(result.url).toBeNull();
+      expect(result.port).toBe(0);
+    });
+
+    it("should return not running when sessions array is empty", async () => {
+      mockHttpClient.get.mockResolvedValue([]);
+
+      const result = await sandboxService.getTerminalStatus("sb_123");
+
+      expect(result.running).toBe(false);
+      expect(result.url).toBeNull();
     });
   });
 });
