@@ -11,6 +11,7 @@ import { devtools } from "zustand/middleware";
 import type { ToolExecution } from "../components/agent/sandbox/SandboxOutputViewer";
 import type { DesktopStatus, TerminalStatus } from "../types/agent";
 import { sandboxService } from "../services/sandboxService";
+import { sandboxSSEService } from "../services/sandboxSSEService";
 
 // Sandbox tools that should trigger panel opening
 export const SANDBOX_TOOLS = [
@@ -43,8 +44,10 @@ export interface SandboxState {
 
   // Sandbox connection
   activeSandboxId: string | null;
+  activeProjectId: string | null;
   connectionStatus: ConnectionStatus;
   terminalSessionId: string | null;
+  sseUnsubscribe: (() => void) | null;
 
   // Desktop and Terminal status (extended)
   desktopStatus: DesktopStatus | null;
@@ -73,6 +76,11 @@ export interface SandboxState {
   setTerminalStatus: (status: TerminalStatus | null) => void;
   setDesktopLoading: (loading: boolean) => void;
   setTerminalLoading: (loading: boolean) => void;
+
+  // SSE subscription actions
+  setProjectId: (projectId: string | null) => void;
+  subscribeSSE: (projectId: string) => void;
+  unsubscribeSSE: () => void;
 
   // Desktop and Terminal control actions
   startDesktop: () => Promise<void>;
@@ -114,8 +122,10 @@ const initialState = {
   panelMode: "terminal" as PanelMode,
   activeTab: "terminal" as const,
   activeSandboxId: null,
+  activeProjectId: null,
   connectionStatus: "idle" as ConnectionStatus,
   terminalSessionId: null,
+  sseUnsubscribe: null,
   desktopStatus: null as DesktopStatus | null,
   terminalStatus: null as TerminalStatus | null,
   isDesktopLoading: false,
@@ -186,6 +196,42 @@ export const useSandboxStore = create<SandboxState>()(
 
       setTerminalLoading: (loading) => {
         set({ isTerminalLoading: loading });
+      },
+
+      // Project ID setter
+      setProjectId: (projectId) => {
+        set({ activeProjectId: projectId });
+      },
+
+      // SSE subscription methods
+      subscribeSSE: (projectId) => {
+        // Unsubscribe from previous subscription if exists
+        const { sseUnsubscribe } = get();
+        if (sseUnsubscribe) {
+          sseUnsubscribe();
+        }
+
+        // Subscribe to new project events
+        const unsubscribe = sandboxSSEService.subscribe(projectId, {
+          onDesktopStarted: get().handleSSEEvent,
+          onDesktopStopped: get().handleSSEEvent,
+          onTerminalStarted: get().handleSSEEvent,
+          onTerminalStopped: get().handleSSEEvent,
+          onStatusUpdate: get().handleSSEEvent,
+          onError: (error) => {
+            console.error("[SandboxSSE] Error:", error);
+          },
+        });
+
+        set({ sseUnsubscribe: unsubscribe, activeProjectId: projectId });
+      },
+
+      unsubscribeSSE: () => {
+        const { sseUnsubscribe } = get();
+        if (sseUnsubscribe) {
+          sseUnsubscribe();
+          set({ sseUnsubscribe: null });
+        }
       },
 
       // Desktop control actions
@@ -442,7 +488,13 @@ export const useSandboxStore = create<SandboxState>()(
 
       // Reset
       reset: () => {
+        // Clean up SSE subscription before reset
+        const { sseUnsubscribe } = get();
+        if (sseUnsubscribe) {
+          sseUnsubscribe();
+        }
         set(initialState);
+        set({ sseUnsubscribe: null });
       },
     }),
     {
