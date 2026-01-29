@@ -1,16 +1,15 @@
 /**
  * ChatArea.test.tsx
  *
- * Tests for the ChatArea component, specifically for render mode integration.
- * Tests the VirtualTimelineEventList integration with RenderModeSwitch.
+ * Tests for the ChatArea component.
+ * Tests the VirtualTimelineEventList integration with timeline-only mode.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ChatArea } from '../../../../components/agent/chat/ChatArea';
-import type { TimelineEvent, WorkPlan, ToolExecution, TimelineStep, PlanModeStatus, PlanDocument } from '../../../../types/agent';
+import type { TimelineEvent, WorkPlan, ToolExecution, TimelineStep } from '../../../../types/agent';
 import type { StarterTile } from '../../../../components/agent/chat/IdleState';
-import type { RenderMode } from '../../../../components/agent/VirtualTimelineEventList';
 
 // Mock the IdleState component
 vi.mock('../../../../components/agent/chat/IdleState', () => ({
@@ -42,43 +41,16 @@ vi.mock('../../../../components/agent/execution/FollowUpPills', () => ({
   ),
 }));
 
-// Mock the PlanModeIndicator component
-vi.mock('../../../../components/agent/PlanModeIndicator', () => ({
-  PlanModeIndicator: ({ status }: { status: PlanModeStatus }) => (
-    <div data-testid="plan-mode-indicator" data-in-plan-mode={status.is_in_plan_mode}>
-      Plan Mode
-    </div>
-  ),
-}));
-
-// Mock the PlanEditor component
-vi.mock('../../../../components/agent/PlanEditor', () => ({
-  PlanEditor: ({ plan }: { plan: PlanDocument }) => (
-    <div data-testid="plan-editor">{plan.content}</div>
-  ),
-}));
-
 // Mock the VirtualTimelineEventList component
 vi.mock('../../../../components/agent/VirtualTimelineEventList', () => ({
-  VirtualTimelineEventList: ({ renderMode }: { renderMode?: RenderMode; timeline: TimelineEvent[]; isStreaming: boolean }) => (
-    <div data-testid="virtual-timeline-list" data-render-mode={renderMode || 'grouped'}>
-      Virtual Timeline
+  VirtualTimelineEventList: ({ timeline, isStreaming }: { timeline: TimelineEvent[]; isStreaming: boolean }) => (
+    <div data-testid="virtual-timeline-list" data-streaming={isStreaming}>
+      Virtual Timeline ({timeline.length} events)
     </div>
   ),
 }));
 
-// Mock the RenderModeSwitch component
-vi.mock('../../../../components/agent/RenderModeSwitch', () => ({
-  RenderModeSwitch: ({ mode, onToggle }: { mode: RenderMode; onToggle: (m: RenderMode) => void }) => (
-    <div data-testid="render-mode-switch" data-mode={mode}>
-      <button onClick={() => onToggle(mode === 'grouped' ? 'timeline' : 'grouped')}>
-        Toggle Mode
-      </button>
-    </div>
-  ),
-}));
-
-describe('ChatArea - RenderMode Integration', () => {
+describe('ChatArea', () => {
   const mockScrollContainerRef = { current: null };
   const mockMessagesEndRef = { current: null };
 
@@ -96,8 +68,6 @@ describe('ChatArea - RenderMode Integration', () => {
     showPlanEditor: false,
     currentPlan: null,
     planLoading: false,
-    renderMode: 'grouped' as RenderMode,
-    onRenderModeChange: vi.fn(),
     scrollContainerRef: mockScrollContainerRef,
     messagesEndRef: mockMessagesEndRef,
     onViewPlan: vi.fn(),
@@ -247,82 +217,6 @@ describe('ChatArea - RenderMode Integration', () => {
     });
   });
 
-  describe('Plan Mode', () => {
-    it('should show ExecutionTimeline when in plan mode (rich timeline)', () => {
-      const planModeStatus: PlanModeStatus = {
-        is_in_plan_mode: true,
-        current_plan_id: 'plan-1',
-        can_exit_plan_mode: true,
-      };
-
-      const mockWorkPlan: WorkPlan = {
-        id: 'plan-1',
-        conversation_id: 'conv-1',
-        status: 'in_progress',
-        steps: [
-          {
-            step_number: 1,
-            description: 'Step 1',
-            expected_output: 'Output 1',
-            thought_prompt: '',
-            required_tools: [],
-            dependencies: [],
-          },
-          {
-            step_number: 2,
-            description: 'Step 2',
-            expected_output: 'Output 2',
-            thought_prompt: '',
-            required_tools: [],
-            dependencies: [],
-          },
-        ],
-        current_step_index: 0,
-        created_at: new Date().toISOString(),
-      };
-
-      // Need to provide executionTimeline to trigger rich timeline display
-      const mockExecutionTimeline: TimelineStep[] = [
-        {
-          step_number: 1,
-          description: 'Step 1',
-          status: 'completed',
-          timestamp: Date.now(),
-        },
-        {
-          step_number: 2,
-          description: 'Step 2',
-          status: 'in_progress',
-          timestamp: Date.now(),
-        },
-      ];
-
-      render(
-        <ChatArea
-          {...defaultProps}
-          planModeStatus={planModeStatus}
-          currentWorkPlan={mockWorkPlan}
-          executionTimeline={mockExecutionTimeline}
-          currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          timeline={[
-            {
-              id: '1',
-              type: 'user_message',
-              sequenceNumber: 1,
-              timestamp: Date.now(),
-              content: 'Hello',
-              role: 'user',
-            },
-          ]}
-          isStreaming={true}
-        />
-      );
-
-      // Should show execution timeline during streaming with complex work plan
-      expect(screen.getByTestId('execution-timeline')).toBeInTheDocument();
-    });
-  });
-
   describe('User Interactions', () => {
     it('should call onTileClick when starter tile is clicked', () => {
       render(<ChatArea {...defaultProps} />);
@@ -365,36 +259,6 @@ describe('ChatArea - RenderMode Integration', () => {
       fireEvent.click(suggestionButton);
 
       expect(defaultProps.onSend).toHaveBeenCalledWith('Compare with competitors?');
-    });
-
-    it('should call onViewPlan when PlanModeIndicator action is triggered', () => {
-      const planModeStatus: PlanModeStatus = {
-        is_in_plan_mode: true,
-        current_plan_id: 'plan-1',
-        can_exit_plan_mode: true,
-      };
-
-      render(
-        <ChatArea
-          {...defaultProps}
-          planModeStatus={planModeStatus}
-          currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          timeline={[
-            {
-              id: '1',
-              type: 'user_message',
-              sequenceNumber: 1,
-              timestamp: Date.now(),
-              content: 'Hello',
-              role: 'user',
-            },
-          ]}
-        />
-      );
-
-      // PlanModeIndicator should have onViewPlan callback
-      // This test verifies the prop is passed correctly
-      expect(defaultProps.onViewPlan).toBeDefined();
     });
   });
 
@@ -451,101 +315,8 @@ describe('ChatArea - RenderMode Integration', () => {
     });
   });
 
-  describe('RenderMode Switch Integration', () => {
-    it('should show RenderModeSwitch when conversation is active and has events', () => {
-      const mockTimeline: TimelineEvent[] = [
-        {
-          id: '1',
-          type: 'user_message',
-          sequenceNumber: 1,
-          timestamp: Date.now(),
-          content: 'Hello',
-          role: 'user',
-        },
-      ];
-
-      render(
-        <ChatArea
-          {...defaultProps}
-          timeline={mockTimeline}
-          currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          renderMode="grouped"
-          onRenderModeChange={vi.fn()}
-        />
-      );
-
-      expect(screen.getByTestId('render-mode-switch')).toBeInTheDocument();
-    });
-
-    it('should not show RenderModeSwitch when no conversation', () => {
-      render(<ChatArea {...defaultProps} />);
-
-      expect(screen.queryByTestId('render-mode-switch')).not.toBeInTheDocument();
-    });
-
-    it('should not show RenderModeSwitch when conversation has no events', () => {
-      render(
-        <ChatArea
-          {...defaultProps}
-          currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          timeline={[]}
-        />
-      );
-
-      expect(screen.queryByTestId('render-mode-switch')).not.toBeInTheDocument();
-    });
-
-    it('should not show RenderModeSwitch when onRenderModeChange is not provided', () => {
-      const mockTimeline: TimelineEvent[] = [
-        {
-          id: '1',
-          type: 'user_message',
-          sequenceNumber: 1,
-          timestamp: Date.now(),
-          content: 'Hello',
-          role: 'user',
-        },
-      ];
-
-      render(
-        <ChatArea
-          {...defaultProps}
-          timeline={mockTimeline}
-          currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          renderMode="grouped"
-          onRenderModeChange={undefined as any}
-        />
-      );
-
-      expect(screen.queryByTestId('render-mode-switch')).not.toBeInTheDocument();
-    });
-
-    it('should pass renderMode to VirtualTimelineEventList', () => {
-      const mockTimeline: TimelineEvent[] = [
-        {
-          id: '1',
-          type: 'user_message',
-          sequenceNumber: 1,
-          timestamp: Date.now(),
-          content: 'Hello',
-          role: 'user',
-        },
-      ];
-
-      render(
-        <ChatArea
-          {...defaultProps}
-          timeline={mockTimeline}
-          currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          renderMode="timeline"
-        />
-      );
-
-      const virtualList = screen.getByTestId('virtual-timeline-list');
-      expect(virtualList).toHaveAttribute('data-render-mode', 'timeline');
-    });
-
-    it('should use grouped mode by default', () => {
+  describe('Timeline-only Mode', () => {
+    it('should render VirtualTimelineEventList with timeline events', () => {
       const mockTimeline: TimelineEvent[] = [
         {
           id: '1',
@@ -566,10 +337,11 @@ describe('ChatArea - RenderMode Integration', () => {
       );
 
       const virtualList = screen.getByTestId('virtual-timeline-list');
-      expect(virtualList).toHaveAttribute('data-render-mode', 'grouped');
+      expect(virtualList).toBeInTheDocument();
+      expect(virtualList).toHaveTextContent('Virtual Timeline (1 events)');
     });
 
-    it('should call onRenderModeChange when switch is clicked', () => {
+    it('should pass isStreaming prop to VirtualTimelineEventList', () => {
       const mockTimeline: TimelineEvent[] = [
         {
           id: '1',
@@ -581,22 +353,17 @@ describe('ChatArea - RenderMode Integration', () => {
         },
       ];
 
-      const mockOnRenderModeChange = vi.fn();
-
       render(
         <ChatArea
           {...defaultProps}
           timeline={mockTimeline}
           currentConversation={{ id: 'conv-1', title: 'Test Conversation' }}
-          renderMode="grouped"
-          onRenderModeChange={mockOnRenderModeChange}
+          isStreaming={true}
         />
       );
 
-      const toggleButton = screen.getByText('Toggle Mode');
-      fireEvent.click(toggleButton);
-
-      expect(mockOnRenderModeChange).toHaveBeenCalledWith('timeline');
+      const virtualList = screen.getByTestId('virtual-timeline-list');
+      expect(virtualList).toHaveAttribute('data-streaming', 'true');
     });
   });
 });

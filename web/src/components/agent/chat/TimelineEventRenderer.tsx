@@ -7,10 +7,9 @@
  * @module components/agent/chat/TimelineEventRenderer
  */
 
-import React, { useMemo, memo } from 'react';
+import React, { memo } from 'react';
 import { MessageStream } from './MessageStream';
-import { TimelineEventGroup } from './TimelineEventGroup';
-import { groupTimelineEvents } from '../../../utils/timelineEventAdapter';
+import { TimelineEventItem } from '../TimelineEventItem';
 import type { TimelineEvent } from '../../../types/agent';
 
 interface TimelineEventRendererProps {
@@ -28,7 +27,7 @@ interface TimelineEventRendererProps {
  * TimelineEventRenderer component
  *
  * Renders TimelineEvents in a consistent unified format.
- * Uses groupTimelineEvents to convert events into renderable groups.
+ * Each event is rendered independently in timeline mode.
  *
  * @example
  * ```tsx
@@ -50,14 +49,8 @@ export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(
   showExecutionDetails: _showExecutionDetails = true,
   className = '',
 }) => {
-  // Memoize grouping to avoid re-computing on every render
-  const groups = useMemo(
-    () => groupTimelineEvents(events),
-    [events]
-  );
-
   // Empty state
-  if (groups.length === 0) {
+  if (events.length === 0) {
     return (
       <MessageStream className={className}>
         <div className="flex items-center justify-center h-96">
@@ -72,11 +65,12 @@ export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(
 
   return (
     <MessageStream className={className}>
-      {groups.map((group) => (
-        <TimelineEventGroup
-          key={group.id}
-          group={group}
+      {events.map((event) => (
+        <TimelineEventItem
+          key={event.id}
+          event={event}
           isStreaming={isStreaming}
+          allEvents={events}
         />
       ))}
     </MessageStream>

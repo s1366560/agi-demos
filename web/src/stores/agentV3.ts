@@ -17,7 +17,6 @@ import {
   StepStartEventData,
   CompleteEventData,
 } from "../types/agent";
-import type { RenderMode } from "../components/agent/VirtualTimelineEventList";
 import { agentService } from "../services/agentService";
 import { agentEventReplayService } from "../services/agentEventReplayService";
 import { planService } from "../services/planService";
@@ -184,7 +183,6 @@ interface AgentV3State {
   // UI State
   showPlanPanel: boolean;
   showHistorySidebar: boolean;
-  renderMode: RenderMode;
   leftSidebarWidth: number;
   rightPanelWidth: number;
 
@@ -209,7 +207,6 @@ interface AgentV3State {
   abortStream: () => void;
   togglePlanPanel: () => void;
   toggleHistorySidebar: () => void;
-  setRenderMode: (mode: RenderMode) => void;
   setLeftSidebarWidth: (width: number) => void;
   setRightPanelWidth: (width: number) => void;
   respondToDecision: (requestId: string, decision: string) => Promise<void>;
@@ -339,7 +336,6 @@ export const useAgentV3Store = create<AgentV3State>()(
 
         showPlanPanel: false,
         showHistorySidebar: false,
-        renderMode: "grouped",
         leftSidebarWidth: 280,
         rightPanelWidth: 400,
 
@@ -984,8 +980,6 @@ export const useAgentV3Store = create<AgentV3State>()(
     toggleHistorySidebar: () =>
       set((state) => ({ showHistorySidebar: !state.showHistorySidebar })),
 
-    setRenderMode: (mode: RenderMode) => set({ renderMode: mode }),
-
     setLeftSidebarWidth: (width: number) => set({ leftSidebarWidth: width }),
     setRightPanelWidth: (width: number) => set({ rightPanelWidth: width }),
 
@@ -1023,7 +1017,6 @@ export const useAgentV3Store = create<AgentV3State>()(
     name: 'agent-v3-storage',
     partialize: (state) => ({
       // Only persist UI preferences, not conversation/message data
-      renderMode: state.renderMode,
       showHistorySidebar: state.showHistorySidebar,
       leftSidebarWidth: state.leftSidebarWidth,
       rightPanelWidth: state.rightPanelWidth,

@@ -1,8 +1,8 @@
 /**
  * ChatArea - Unified chat message display component
  *
- * Refactored to use VirtualTimelineEventList for efficient rendering
- * with support for both grouped and timeline modes.
+ * Uses VirtualTimelineEventList for efficient rendering
+ * with timeline mode - each event displayed independently in chronological order.
  *
  * @module components/agent/chat/ChatArea
  */
@@ -18,8 +18,6 @@ import { ExecutionTimeline } from "../execution/ExecutionTimeline";
 import { FollowUpPills } from "../execution/FollowUpPills";
 import { PlanModeIndicator } from "../PlanModeIndicator";
 import { PlanEditor } from "../PlanEditor";
-import { RenderModeSwitch } from "../RenderModeSwitch";
-import type { RenderMode } from "../VirtualTimelineEventList";
 import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus, TimelineEvent } from "../../../types/agent";
 
 // Default starter tiles
@@ -110,10 +108,6 @@ interface ChatAreaProps {
   currentPlan: PlanDocument | null;
   /** Whether plan is loading */
   planLoading: boolean;
-  /** Render mode for timeline display */
-  renderMode?: RenderMode;
-  /** Callback when render mode changes */
-  onRenderModeChange?: (mode: RenderMode) => void;
   /** Scroll container ref */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** Messages end ref (for auto-scroll) */
@@ -153,17 +147,6 @@ function areChatAreaPropsEqual(
     return false;
   }
 
-  // Props that can trigger re-render but less frequently
-  const secondaryPropsChanged =
-    prevProps.planModeStatus?.is_in_plan_mode !== nextProps.planModeStatus?.is_in_plan_mode ||
-    prevProps.showPlanEditor !== nextProps.showPlanEditor ||
-    prevProps.currentPlan?.id !== nextProps.currentPlan?.id ||
-    prevProps.renderMode !== nextProps.renderMode;
-
-  if (secondaryPropsChanged) {
-    return false;
-  }
-
   // For the remaining props, use shallow comparison
   return (
     prevProps.currentStepNumber === nextProps.currentStepNumber &&
@@ -187,8 +170,6 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   showPlanEditor,
   currentPlan,
   planLoading,
-  renderMode = 'grouped',
-  onRenderModeChange,
   scrollContainerRef,
   messagesEndRef,
   onViewPlan,
@@ -259,22 +240,10 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
       scrollContainer.scrollTop = scrollOffset;
       previousScrollHeightRef.current = 0;
     }
-  }, [messagesLoading]);
+  }, [messagesLoading, scrollContainerRef]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Toolbar with RenderModeSwitch */}
-      {currentConversation && (sortedTimeline.length > 0 || isStreaming) && onRenderModeChange && (
-        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
-          <div className="flex-1" />
-          <RenderModeSwitch
-            mode={renderMode}
-            onToggle={onRenderModeChange}
-          />
-          <div className="flex-1" />
-        </div>
-      )}
-
       {/* Loading indicator for earlier messages */}
       {messagesLoading && hasEarlierMessages && (
         <div className="flex justify-center py-2 bg-white dark:bg-slate-900">
@@ -334,8 +303,6 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
               <VirtualTimelineEventList
                 timeline={sortedTimeline}
                 isStreaming={isStreaming}
-                showExecutionDetails={true}
-                renderMode={renderMode}
                 className="chat-messages"
               />
             </div>
@@ -358,4 +325,4 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   );
 }, areChatAreaPropsEqual);
 
-ChatArea.displayName = "ChatArea";
+ChatArea.displayName = 'ChatArea';
