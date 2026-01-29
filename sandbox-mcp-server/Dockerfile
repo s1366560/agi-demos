@@ -121,24 +121,48 @@ RUN set -eux; \
 # Install XFCE 4.20 Desktop Environment
 # ====================
 # Ubuntu 25.04 includes XFCE 4.20 natively
+# Note: Some packages from 24.04 are not available in 25.04 yet
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         # X11 and display
         xorg xvfb \
-        # XFCE 4.20 desktop
+        # XFCE 4.20 desktop core
         xfce4 xfce4-goodies xfce4-terminal xfce4-taskmanager thunar \
-        # Themes and plugins
+        # Panel plugins (available in Ubuntu 25.04)
+        xfce4-whiskermenu-plugin \
+        xfce4-pulseaudio-plugin \
+        xfce4-power-manager \
+        xfce4-clipman-plugin \
+        xfce4-xkb-plugin \
+        xfce4-time-out-plugin \
+        xfce4-diskperf-plugin \
+        xfce4-netload-plugin \
+        xfce4-cpugraph-plugin \
+        xfce4-genmon-plugin \
+        # File manager enhancements
+        thunar-archive-plugin thunar-media-tags-plugin \
+        # Desktop and window manager
+        xfdesktop4 xfwm4 \
+        # Settings and appearance
+        xfce4-settings \
         gtk2-engines-murrine gtk2-engines-pixbuf \
         xfce4-indicator-plugin xfce4-places-plugin \
+        # Themes and icons (Ubuntu 25.04 available packages)
+        arc-theme \
+        # Sound
+        pulseaudio pulseaudio-utils pavucontrol \
+        # Network
+        network-manager-gnome \
         # Utilities
         dbus-x11 dconf-cli dconf-gsettings-backend gsettings-desktop-schemas \
         # VNC servers
         x11vnc tigervnc-standalone-server tigervnc-tools \
-        # Fonts
+        # Fonts (including CJK support for Asian languages)
         fonts-freefont-ttf fonts-noto-cjk fonts-noto-color-emoji \
-        # Settings
-        xfce4-settings xfconf libglib2.0-bin \
+        fonts-liberation fonts-dejavu-core \
+        # System monitor
+        htop \
     ; \
     rm -rf /var/lib/apt/lists/*
 
@@ -204,8 +228,9 @@ COPY docker/vnc-configs/vncserver-config /etc/vnc/config
 COPY docker/vnc-configs/xstartup /etc/vnc/xstartup.template
 COPY docker/vnc-configs/test-vnc-config.sh /etc/vnc/test-vnc-config.sh
 COPY docker/vnc-configs/test-novnc-config.sh /etc/vnc/test-novnc-config.sh
+COPY docker/vnc-configs/test-complete-setup.sh /etc/vnc/test-complete-setup.sh
 COPY docker/vnc-configs/novnc-defaults.json /opt/noVNC/defaults.json
-RUN chmod +x /etc/vnc/xstartup.template /etc/vnc/test-vnc-config.sh /etc/vnc/test-novnc-config.sh
+RUN chmod +x /etc/vnc/xstartup.template /etc/vnc/test-vnc-config.sh /etc/vnc/test-novnc-config.sh /etc/vnc/test-complete-setup.sh
 
 # Entrypoint
 COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh

@@ -30,6 +30,7 @@ export const AgentChat: React.FC = () => {
     isLoadingHistory,
     isStreaming,
     workPlan,
+    executionPlan,
     isPlanMode,
     showPlanPanel,
     pendingDecision,
@@ -292,11 +293,12 @@ export const AgentChat: React.FC = () => {
   const rightPanel = useMemo(() => (
     <RightPanel
       workPlan={workPlan}
+      executionPlan={executionPlan}
       sandboxId={activeSandboxId}
       toolExecutions={toolExecutions}
       onClose={() => togglePlanPanel()}
     />
-  ), [workPlan, activeSandboxId, toolExecutions, togglePlanPanel]);
+  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, togglePlanPanel]);
 
   return (
     <ChatLayout sidebar={sidebar} chatArea={chatArea} rightPanel={rightPanel} />

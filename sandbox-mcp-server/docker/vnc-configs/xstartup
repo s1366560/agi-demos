@@ -1,34 +1,88 @@
 #!/bin/bash
-# TigerVNC session startup script
+# TigerVNC session startup script for XFCE 4.20 on Ubuntu 25.04
 # This script is executed when a VNC session is started
+# IMPORTANT: This script MUST keep running or the VNC session will terminate
 
 # Get the VNC display number
-DISPLAY=${DISPLAY:-:1}
+DISPLAY=${DISPLAY:-:99}
 
 # Set up the X11 display
 export DISPLAY
 
-# Start XFCE desktop environment
-# Using xfce4-session for the full desktop experience
-if [ -x /usr/bin/xfce4-session ]; then
-    # Start XFCE session with proper DBus session
-    dbus-launch --exit-with-session xfce4-session &
-else
-    # Fallback to startxfce4 if xfce4-session is not available
-    if [ -x /usr/bin/startxfce4 ]; then
-        startxfce4 &
-    else
-        # Ultimate fallback - just start a terminal
-        xfce4-terminal &
-    fi
+# Set up XDG runtime directory for D-Bus and session services
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/1001}
+export XDG_DATA_HOME=/home/sandbox/.local/share
+export XDG_CONFIG_HOME=/home/sandbox/.config
+export XDG_CACHE_HOME=/home/sandbox/.cache
+export XDG_STATE_HOME=/home/sandbox/.local/state
+export HOME=/home/sandbox
+
+# Create user directories
+mkdir -p "$XDG_CONFIG_HOME/xfce4"
+mkdir -p "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml"
+mkdir -p "$XDG_CONFIG_HOME/xfce4/panel"
+mkdir -p "$XDG_DATA_HOME"
+mkdir -p "$XDG_CACHE_HOME"
+mkdir -p /tmp/.ICE-unix
+chmod 777 /tmp/.ICE-unix 2>/dev/null || true
+
+# Copy default XFCE 4.20 configs on first run
+[ -d /etc/xdg/xfce4 ] && for f in /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/*.xml; do
+    [ -f "$f" ] || continue
+    cfgname="$(basename "$f")"
+    [ -f "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml/$cfgname" ] || \
+        cp "$f" "$XDG_CONFIG_HOME/xfce4/xfconf/xfce-perchannel-xml/" 2>/dev/null || true
+done
+
+# Copy whiskermenu config if not exists
+[ -f "$XDG_CONFIG_HOME/xfce4/panel/whiskermenu-1.rc" ] || \
+    mkdir -p "$XDG_CONFIG_HOME/xfce4/panel" && \
+    cp /etc/xdg/xfce4/panel/whiskermenu-1.rc "$XDG_CONFIG_HOME/xfce4/panel/" 2>/dev/null || true
+
+# Unset session management variables for VNC
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export DESKTOP_SESSION=xfce
+
+# Start D-Bus session if not already running
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    mkdir -p "$XDG_RUNTIME_DIR"
+    dbus-daemon --session --address=unix:path=$XDG_RUNTIME_DIR/bus --nofork --syslog &
+    sleep 1
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
 fi
 
-# Optional: Start additional applications
-# Examples:
-# - xfce4-terminal: Terminal emulator
-# - thunar: File manager
-# - xfce4-taskmanager: Task manager
+# Start XFCE configuration daemon
+/usr/lib/*/xfce4/xfconf/xfconfd --replace &
+sleep 1
 
-# Keep the script running
-# If this script exits, the VNC session will terminate
-wait
+# Start XFCE 4.20 components manually for better control
+# This ensures all components start correctly in VNC environment
+
+# 1. Start window manager first
+if [ -x /usr/bin/xfwm4 ]; then
+    /usr/bin/xfwm4 --display="$DISPLAY" &
+    sleep 1
+fi
+
+# 2. Start panel
+if [ -x /usr/bin/xfce4-panel ]; then
+    /usr/bin/xfce4-panel --display="$DISPLAY" &
+    sleep 1
+fi
+
+# 3. Start desktop (background/icons)
+if [ -x /usr/bin/xfdesktop ]; then
+    /usr/bin/xfdesktop --display="$DISPLAY" &
+    sleep 1
+fi
+
+# 4. Start settings daemon for themes
+if [ -x /usr/bin/xfsettingsd ]; then
+    /usr/bin/xfsettingsd --display="$DISPLAY" &
+    sleep 1
+fi
+
+# Keep script running - use sleep infinity instead of wait
+# This prevents the VNC session from terminating
+exec sleep infinity

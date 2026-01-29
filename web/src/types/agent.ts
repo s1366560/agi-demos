@@ -206,7 +206,9 @@ export type AgentEventType =
   | "plan_status_changed" // Plan status changed
   | "plan_execution_start" // Plan execution started
   | "plan_step_complete" // Plan step completed
+  | "plan_execution_complete" // Plan execution completed
   | "reflection_complete" // Reflection completed
+  | "adjustment_applied" // Adjustment applied
   // Permission events
   | "permission_asked" // Permission asked
   | "permission_replied" // Permission replied
@@ -654,6 +656,10 @@ export interface AgentStreamHandler {
   onPlanModeExit?: (event: AgentEvent<PlanModeExitEventData>) => void;
   onPlanCreated?: (event: AgentEvent<PlanCreatedEventData>) => void;
   onPlanUpdated?: (event: AgentEvent<PlanUpdatedEventData>) => void;
+  // Plan Mode execution handlers
+  onPlanExecutionStart?: (event: AgentEvent<PlanExecutionStartEvent>) => void;
+  onPlanExecutionComplete?: (event: AgentEvent<PlanExecutionCompleteEvent>) => void;
+  onReflectionComplete?: (event: AgentEvent<ReflectionCompleteEvent>) => void;
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;
   onClose?: () => void;

@@ -1220,6 +1220,17 @@ class ReActAgent:
 
         logger.info("[ReActAgent] Executing Plan Mode workflow")
 
+        # Emit plan_mode_entered event
+        yield {
+            "type": "plan_mode_entered",
+            "data": {
+                "conversation_id": conversation_id,
+                "method": detection_result.method,
+                "confidence": detection_result.confidence,
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
         # Create LLM client for Plan Mode components
         settings = get_settings()
         llm_client = LiteLLMClient(
@@ -1234,35 +1245,196 @@ class ReActAgent:
             available_tools=self.tool_definitions,
         )
 
-        # Mock session processor for executor (use real processor in production)
-        # For now, we'll emit a simple plan and complete event
-        # This is a stub implementation that will be enhanced
+        # Create a simple session processor wrapper for tool execution
+        class SessionProcessorWrapper:
+            def __init__(wrapper_self, tools, permission_manager):
+                wrapper_self.tools = tools
+                wrapper_self.permission_manager = permission_manager
 
-        yield {
-            "type": "plan_generated",
-            "data": {
-                "plan_id": f"plan-{conversation_id}",
-                "title": f"Plan for: {user_message[:50]}...",
-                "status": "draft",
-                "steps": [
-                    {
-                        "step_id": "step-1",
-                        "description": "Execute using regular ReAct flow",
-                        "tool_name": None,
-                        "status": "pending",
-                    }
-                ],
-            },
-            "timestamp": datetime.utcnow().isoformat(),
+            async def execute_tool(wrapper_self, tool_name: str, tool_input: Dict, conversation_id: str) -> str:
+                """Execute a tool by name."""
+                if tool_name == "__think__":
+                    return f"Thought: {tool_input.get('thought', '')}"
+
+                # Find the tool
+                tool = None
+                for t in wrapper_self.tools:
+                    if t.name == tool_name:
+                        tool = t
+                        break
+
+                if not tool:
+                    return f"Error: Tool '{tool_name}' not found"
+
+                # Execute the tool
+                try:
+                    result = await tool.execute(**tool_input)
+                    return str(result) if result else ""
+                except Exception as e:
+                    return f"Error executing {tool_name}: {str(e)}"
+
+        # Create wrapper instance
+        session_processor = SessionProcessorWrapper(
+            self.tool_definitions,
+            self.permission_manager
+        )
+
+        # Event emitter for Plan Mode events
+        plan_events = []
+        def event_emitter(event):
+            plan_events.append(event)
+            logger.debug(f"[PlanMode] Event emitted: {event['type']}")
+
+        # Create executor with event emitter
+        executor = PlanExecutor(
+            session_processor=session_processor,
+            event_emitter=event_emitter,
+            parallel_execution=False,  # Sequential execution for stability
+            max_parallel_steps=1,
+        )
+
+        reflector = PlanReflector(
+            llm_client=llm_client,
+            max_tokens=2048,
+        )
+
+        adjuster = PlanAdjuster()
+
+        # Create orchestrator
+        orchestrator = PlanModeOrchestrator(
+            plan_generator=generator,
+            plan_executor=executor,
+            plan_reflector=reflector,
+            plan_adjuster=adjuster,
+            event_emitter=event_emitter,
+            max_reflection_cycles=3,
+        )
+
+        try:
+            # Generate plan
+            logger.info("[ReActAgent] Generating execution plan")
+            yield {
+                "type": "plan_generation_started",
+                "data": {
+                    "conversation_id": conversation_id,
+                    "query": user_message[:100],
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            plan = await generator.generate_plan(
+                conversation_id=conversation_id,
+                query=user_message,
+                context=conversation_context,
+                reflection_enabled=True,
+                max_reflection_cycles=3,
+            )
+
+            # Emit plan_generated event
+            yield {
+                "type": "plan_generated",
+                "data": {
+                    "plan_id": plan.id,
+                    "title": f"Plan for: {user_message[:50]}...",
+                    "status": plan.status.value,
+                    "steps": [
+                        {
+                            "step_id": step.step_id,
+                            "description": step.description,
+                            "tool_name": step.tool_name,
+                            "status": step.status.value,
+                            "dependencies": step.dependencies,
+                        }
+                        for step in plan.steps
+                    ],
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            # Execute plan with orchestrator
+            logger.info(f"[ReActAgent] Executing plan with {len(plan.steps)} steps")
+            yield {
+                "type": "plan_execution_started",
+                "data": {
+                    "plan_id": plan.id,
+                    "step_count": len(plan.steps),
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            # Stream plan events during execution
+            for event in plan_events:
+                yield self._convert_plan_event(event)
+            plan_events.clear()
+
+            # Execute the plan
+            final_plan = await orchestrator.execute_plan(plan=plan)
+
+            # Emit any remaining events
+            for event in plan_events:
+                yield self._convert_plan_event(event)
+
+            # Emit plan_complete event
+            completed_steps = sum(
+                1 for s in final_plan.steps
+                if s.status.value == "completed"
+            )
+            failed_steps = sum(
+                1 for s in final_plan.steps
+                if s.status.value == "failed"
+            )
+
+            yield {
+                "type": "plan_complete",
+                "data": {
+                    "plan_id": final_plan.id,
+                    "status": final_plan.status.value,
+                    "summary": f"Plan execution completed. "
+                               f"Completed: {completed_steps}, Failed: {failed_steps}",
+                    "completed_steps": completed_steps,
+                    "failed_steps": failed_steps,
+                    "total_steps": len(final_plan.steps),
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except Exception as e:
+            logger.error(f"[ReActAgent] Plan Mode execution failed: {e}", exc_info=True)
+            yield {
+                "type": "plan_execution_failed",
+                "data": {
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+    def _convert_plan_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert internal Plan Mode event to SSE event format.
+
+        Args:
+            event: Internal event from Plan Mode components
+
+        Returns:
+            SSE-compatible event dict
+        """
+        event_type = event.get("type", "unknown")
+
+        # Map internal event types to SSE types
+        type_mapping = {
+            "PLAN_EXECUTION_START": "plan_execution_start",
+            "PLAN_STEP_READY": "plan_step_ready",
+            "PLAN_STEP_COMPLETE": "plan_step_complete",
+            "PLAN_STEP_SKIPPED": "plan_step_skipped",
+            "PLAN_EXECUTION_COMPLETE": "plan_execution_complete",
+            "REFLECTION_COMPLETE": "reflection_complete",
+            "ADJUSTMENT_APPLIED": "adjustment_applied",
         }
 
-        yield {
-            "type": "plan_complete",
-            "data": {
-                "plan_id": f"plan-{conversation_id}",
-                "status": "completed",
-                "summary": "Plan Mode execution completed",
-            },
+        return {
+            "type": type_mapping.get(event_type, event_type.lower()),
+            "data": event.get("data", {}),
             "timestamp": datetime.utcnow().isoformat(),
         }
 

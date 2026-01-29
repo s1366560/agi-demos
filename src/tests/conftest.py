@@ -789,3 +789,12 @@ async def test_tenant_in_db(test_db: AsyncSession, test_user: User) -> dict:
     await test_db.commit()
     await test_db.refresh(tenant)
     return {"id": tenant.id, "name": tenant.name}
+
+
+# --- Sandbox Fixtures ---
+
+
+@pytest.fixture
+def test_sandbox_id() -> str:
+    """Provide a test sandbox ID for sandbox-related tests."""
+    return "test-sandbox-12345"

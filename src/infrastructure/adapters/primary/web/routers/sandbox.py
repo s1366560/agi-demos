@@ -97,6 +97,12 @@ class SandboxResponse(BaseModel):
     websocket_url: Optional[str] = None
     created_at: str
     tools: List[str] = Field(default_factory=list)
+    # Service ports and URLs
+    mcp_port: Optional[int] = None
+    desktop_port: Optional[int] = None
+    terminal_port: Optional[int] = None
+    desktop_url: Optional[str] = None
+    terminal_url: Optional[str] = None
 
 
 class ToolCallRequest(BaseModel):
@@ -304,6 +310,11 @@ async def create_sandbox(
             websocket_url=instance.websocket_url,
             created_at=instance.created_at.isoformat(),
             tools=tools,
+            mcp_port=getattr(instance, 'mcp_port', None),
+            desktop_port=getattr(instance, 'desktop_port', None),
+            terminal_port=getattr(instance, 'terminal_port', None),
+            desktop_url=getattr(instance, 'desktop_url', None),
+            terminal_url=getattr(instance, 'terminal_url', None),
         )
 
     except Exception as e:

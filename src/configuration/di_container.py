@@ -398,6 +398,23 @@ class DIContainer:
             filesystem_loader=fs_loader,
         )
 
+    def sandbox_event_publisher(self):
+        """Get SandboxEventPublisher for SSE event emission."""
+        from src.application.services.sandbox_event_service import SandboxEventPublisher
+
+        event_bus = None
+        if self._redis_client:
+            try:
+                from src.infrastructure.adapters.secondary.event.redis_event_bus import (
+                    RedisEventBusAdapter,
+                )
+                event_bus = RedisEventBusAdapter(self._redis_client)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Could not create event bus: {e}")
+
+        return SandboxEventPublisher(event_bus=event_bus)
+
     def agent_service(self, llm) -> AgentService:
         """Get AgentService with dependencies injected."""
         if not self._graph_service:

@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-XFCE XSettings Configuration for VNC/Remote Desktop
+XFCE XSettings Configuration for VNC/Remote Desktop (XFCE 4.20)
 
 Optimized for:
-- Lightweight Adwaita theme
-- System icons
-- Sans 10pt font (readable)
-- Minimal rendering options
+- Greybird theme (lightweight, good for VNC)
+- Adwaita icons (high visibility)
+- Noto Sans 10pt font (excellent CJK support)
+- Minimal rendering options for remote desktop
 
 Source: docker/xfce-configs/xsettings.xml
 -->
 <channel name="xsettings" version="1.0">
   <!-- Theme Settings -->
   <property name="Net" type="empty">
-    <property name="ThemeName" type="string" value="Adwaita"/>
+    <property name="ThemeName" type="string" value="Greybird"/>
     <property name="IconThemeName" type="string" value="Adwaita"/>
     <property name="FallbackIconThemeName" type="string" value="hicolor"/>
   </property>
 
   <!-- Font Settings -->
   <property name="Gtk" type="empty">
-    <!-- Default Font -->
-    <property name="FontName" type="string" value="Sans 10"/>
+    <!-- Default Font - Noto Sans for excellent CJK support -->
+    <property name="FontName" type="string" value="Noto Sans 10"/>
 
     <!-- Monospace Font -->
-    <property name="MonospaceFontName" type="string" value="Monospace 10"/>
+    <property name="MonospaceFontName" type="string" value="Noto Sans Mono 10"/>
 
     <!-- Toolbar Style -->
     <property name="ToolbarStyle" type="string" value="icons"/>

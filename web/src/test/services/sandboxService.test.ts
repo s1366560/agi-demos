@@ -321,7 +321,8 @@ describe("sandboxService", () => {
       expect(result.running).toBe(true);
       expect(result.sessionId).toBe("sess_abc123");
       expect(result.port).toBe(8000);
-      expect(result.url).toBe("ws://localhost:8000/api/v1/terminal/sb_123/ws?session_id=sess_abc123");
+      // URL is now dynamically generated based on window.location
+      expect(result.url).toMatch(/ws:\/\/localhost:\d+\/api\/v1\/terminal\/sb_123\/ws\?session_id=sess_abc123/);
       expect(mockHttpClient.post).toHaveBeenCalledWith("/terminal/sb_123/create", {
         shell: "/bin/bash",
         cols: 80,
@@ -418,7 +419,8 @@ describe("sandboxService", () => {
       expect(result.running).toBe(true);
       expect(result.sessionId).toBe("sess_abc123");
       expect(result.port).toBe(8000);
-      expect(result.url).toBe("ws://localhost:8000/api/v1/terminal/sb_123/ws?session_id=sess_abc123");
+      // URL is now dynamically generated based on window.location
+      expect(result.url).toMatch(/ws:\/\/localhost:\d+\/api\/v1\/terminal\/sb_123\/ws\?session_id=sess_abc123/);
       expect(mockHttpClient.get).toHaveBeenCalledWith("/terminal/sb_123/sessions");
     });
 

@@ -6,11 +6,13 @@ interactive shells via terminal proxy.
 
 import asyncio
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
@@ -27,6 +29,7 @@ router = APIRouter(prefix="/api/v1/terminal", tags=["terminal"])
 
 # Global adapter instance (reuse from sandbox module)
 _sandbox_adapter: Optional[MCPSandboxAdapter] = None
+_event_publisher: Optional[SandboxEventPublisher] = None
 
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
@@ -35,6 +38,43 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     if _sandbox_adapter is None:
         _sandbox_adapter = MCPSandboxAdapter()
     return _sandbox_adapter
+
+
+def get_event_publisher() -> Optional[SandboxEventPublisher]:
+    """Get or create the sandbox event publisher singleton."""
+    global _event_publisher
+    if _event_publisher is None:
+        try:
+            from src.configuration.di_container import DIContainer
+            container = DIContainer()
+            _event_publisher = container.sandbox_event_publisher()
+        except Exception as e:
+            logger.warning(f"Could not create event publisher: {e}")
+            _event_publisher = None
+    return _event_publisher
+
+
+async def get_project_id_from_sandbox(sandbox_id: str) -> Optional[str]:
+    """
+    Extract project_id from sandbox by inspecting its project_path.
+
+    Args:
+        sandbox_id: Sandbox/container identifier
+
+    Returns:
+        Extracted project_id or None
+    """
+    adapter = get_sandbox_adapter()
+    try:
+        # Note: get_sandbox returns a coroutine, need to await
+        sandbox = await adapter.get_sandbox(sandbox_id)
+        if sandbox and sandbox.project_path:
+            match = re.search(r"memstack_([a-zA-Z0-9_-]+)$", sandbox.project_path)
+            if match:
+                return match.group(1)
+    except Exception as e:
+        logger.warning(f"Could not get project_id from sandbox {sandbox_id}: {e}")
+    return None
 
 
 # --- Request/Response Schemas ---
@@ -66,6 +106,7 @@ async def create_terminal_session(
     sandbox_id: str,
     request: CreateTerminalRequest,
     _user: User = Depends(get_current_user),
+    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ) -> TerminalSessionResponse:
     """
     Create a new terminal session for a sandbox.
@@ -76,7 +117,7 @@ async def create_terminal_session(
     adapter = get_sandbox_adapter()
 
     # Verify sandbox exists
-    sandbox = adapter.get_sandbox(sandbox_id)
+    sandbox = await adapter.get_sandbox(sandbox_id)
     if not sandbox:
         raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
@@ -97,6 +138,26 @@ async def create_terminal_session(
     except Exception as e:
         logger.error(f"Failed to create terminal session: {e}")
         raise HTTPException(status_code=500, detail="Failed to create terminal session")
+
+    # Emit terminal_started event
+    if event_publisher:
+        project_id = await get_project_id_from_sandbox(sandbox_id)
+        if project_id:
+            try:
+                # Determine port from terminal proxy (default 7681)
+                port = 7681
+                # WebSocket URL format: ws://host:port/{session_id}
+                ws_url = f"ws://localhost:{port}/{session.session_id}"
+
+                await event_publisher.publish_terminal_started(
+                    project_id=project_id,
+                    sandbox_id=sandbox_id,
+                    url=ws_url,
+                    port=port,
+                    session_id=session.session_id,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to publish terminal_started event: {e}")
 
     return TerminalSessionResponse(
         session_id=session.session_id,
@@ -136,6 +197,7 @@ async def close_terminal_session(
     sandbox_id: str,
     session_id: str,
     _user: User = Depends(get_current_user),
+    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ) -> dict:
     """Close a terminal session."""
     proxy = get_terminal_proxy()
@@ -145,6 +207,20 @@ async def close_terminal_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     success = await proxy.close_session(session_id)
+
+    # Emit terminal_stopped event
+    if event_publisher and success:
+        project_id = await get_project_id_from_sandbox(sandbox_id)
+        if project_id:
+            try:
+                await event_publisher.publish_terminal_stopped(
+                    project_id=project_id,
+                    sandbox_id=sandbox_id,
+                    session_id=session_id,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to publish terminal_stopped event: {e}")
+
     return {"success": success, "session_id": session_id}
 
 

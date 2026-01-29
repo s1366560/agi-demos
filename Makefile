@@ -18,7 +18,7 @@
 # =============================================================================
 
 .PHONY: help install update clean init reset fresh restart
-.PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-logs sandbox-shell sandbox-status sandbox-test sandbox-clean
+.PHONY: sandbox-build sandbox-run sandbox-run-tigervnc sandbox-stop sandbox-restart sandbox-logs sandbox-shell sandbox-root-shell sandbox-status sandbox-ps sandbox-test sandbox-clean sandbox-reset
 .PHONY: sandbox-desktop-start sandbox-desktop-stop sandbox-desktop-status sandbox-desktop-logs
 .PHONY: sandbox-terminal-start sandbox-terminal-stop sandbox-terminal-status sandbox-terminal-logs
 .PHONY: sandbox-start-all sandbox-stop-all sandbox-all-status
@@ -91,33 +91,29 @@ help: ## Show this help message
 	@echo "  make docker-build     - Build Docker images"
 	@echo "  make docker-clean     - Clean up containers, volumes, and orphans"
 	@echo ""
-	@echo "Sandbox (MCP Server):"
+	@echo "Sandbox (All-in-one Dev Environment):"
 	@echo "  make sandbox-build        - Build sandbox Docker image"
-	@echo "  make sandbox-run          - Start sandbox container"
+	@echo "  make sandbox-run          - Start sandbox (x11vnc VNC, XFCE desktop)"
+	@echo "  make sandbox-run-tigervnc - Start sandbox (TigerVNC, experimental)"
 	@echo "  make sandbox-stop         - Stop sandbox container"
 	@echo "  make sandbox-restart      - Restart sandbox container"
-	@echo "  make sandbox-status       - Show sandbox status and tools"
-	@echo "  make sandbox-logs         - Show sandbox logs"
-	@echo "  make sandbox-shell        - Open shell in sandbox"
-	@echo "  make sandbox-test         - Run sandbox integration tests"
-	@echo "  make sandbox-clean        - Remove sandbox container and volume"
+	@echo "  make sandbox-status       - Show status, VNC type, processes"
+	@echo "  make sandbox-logs         - Show and follow logs"
+	@echo "  make sandbox-shell        - Open sandbox shell (sandbox user)"
+	@echo "  make sandbox-root-shell   - Open root shell in sandbox"
+	@echo "  make sandbox-ps           - Show all running processes"
+	@echo "  make sandbox-test         - Run VNC config validation test"
+	@echo "  make sandbox-test-complete - Run complete XFCE 4.20 + VNC verification"
+	@echo "  make sandbox-clean        - Remove container and volume"
+	@echo "  make sandbox-reset        - Clean and rebuild sandbox"
 	@echo ""
-	@echo "Sandbox Desktop (noVNC):"
-	@echo "  make sandbox-desktop-start   - Start remote desktop (noVNC)"
-	@echo "  make sandbox-desktop-stop    - Stop remote desktop"
-	@echo "  make sandbox-desktop-status  - Show desktop status"
-	@echo "  make sandbox-desktop-logs    - Show desktop logs"
+	@echo "Sandbox Desktop (XFCE4 + noVNC):"
+	@echo "  make sandbox-desktop-status  - Show desktop & VNC processes"
+	@echo "  make sandbox-desktop-logs    - Show desktop & VNC logs"
 	@echo ""
 	@echo "Sandbox Terminal (ttyd):"
-	@echo "  make sandbox-terminal-start  - Start web terminal (ttyd)"
-	@echo "  make sandbox-terminal-stop   - Stop web terminal"
-	@echo "  make sandbox-terminal-status - Show terminal status"
+	@echo "  make sandbox-terminal-status - Show terminal process"
 	@echo "  make sandbox-terminal-logs   - Show terminal logs"
-	@echo ""
-	@echo "Sandbox All-in-One:"
-	@echo "  make sandbox-start-all    - Start both desktop and terminal"
-	@echo "  make sandbox-stop-all     - Stop both desktop and terminal"
-	@echo "  make sandbox-all-status   - Show both desktop and terminal status"
 	@echo ""
 	@echo "Production:"
 	@echo "  make build            - Build all for production"
@@ -593,13 +589,18 @@ docker-clean: ## Clean up containers, volumes, and orphans
 	@echo "✅ Docker containers and volumes cleaned"
 
 # =============================================================================
-# Sandbox (MCP Server for Agent File Operations)
+# Sandbox MCP Server - All-in-one development environment
+# =============================================================================
+# Services: MCP Server (8765), noVNC Desktop (6080), Web Terminal (7681)
+# Desktop: XFCE4 (lightweight, container-friendly)
+# VNC: x11vnc (default, no-password) or TigerVNC (experimental)
 # =============================================================================
 
 SANDBOX_PORT?=8765
 SANDBOX_DESKTOP_PORT?=6080
 SANDBOX_TERMINAL_PORT?=7681
 SANDBOX_NAME?=sandbox-mcp-server
+SANDBOX_VNC?=tigervnc  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
 
 sandbox-build: ## Build sandbox MCP server Docker image
 	@echo "🏗️  Building sandbox MCP server image..."
@@ -607,8 +608,8 @@ sandbox-build: ## Build sandbox MCP server Docker image
 	@echo "✅ Sandbox image built"
 	@docker images | grep $(SANDBOX_NAME) | head -1
 
-sandbox-run: ## Start sandbox MCP server container with all services
-	@echo "🚀 Starting sandbox MCP server with all services (GNOME Desktop)..."
+sandbox-run: ## Start sandbox container (with XFCE desktop, TigerVNC by default)
+	@echo "🚀 Starting sandbox MCP server with XFCE Desktop ($(SANDBOX_VNC) VNC)..."
 	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)$$"; then \
 		echo "⚠️  Sandbox already running. Stop with: make sandbox-stop"; \
 	else \
@@ -617,6 +618,8 @@ sandbox-run: ## Start sandbox MCP server container with all services
 			-p $(SANDBOX_DESKTOP_PORT):6080 \
 			-p $(SANDBOX_TERMINAL_PORT):7681 \
 			-v sandbox-workspace:/workspace \
+			-e VNC_SERVER_TYPE=$(SANDBOX_VNC) \
+			-e DESKTOP_RESOLUTION=$(DESKTOP_RESOLUTION) \
 			--memory=4g --cpus=3 \
 			--shm-size=1g \
 			$(SANDBOX_NAME):latest; then \
@@ -628,6 +631,8 @@ sandbox-run: ## Start sandbox MCP server container with all services
 			echo "   • Health Check:  http://localhost:$(SANDBOX_PORT)/health"; \
 			echo "   • Remote Desktop: http://localhost:$(SANDBOX_DESKTOP_PORT)/vnc.html"; \
 			echo "   • Web Terminal:  ws://localhost:$(SANDBOX_TERMINAL_PORT)"; \
+			echo ""; \
+			echo "   VNC Server: $(SANDBOX_VNC)"; \
 			echo ""; \
 			curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || true; \
 		else \
@@ -642,6 +647,15 @@ sandbox-stop: ## Stop sandbox MCP server container
 
 sandbox-restart: sandbox-stop sandbox-run ## Restart sandbox container
 
+# Run with specific VNC server types
+sandbox-run-x11vnc: ## Start sandbox with x11vnc (stable fallback)
+	@echo "🚀 Starting sandbox with x11vnc (stable fallback)..."
+	@$(MAKE) sandbox-run SANDBOX_VNC=x11vnc
+
+sandbox-run-tigervnc: ## Start sandbox with TigerVNC (default)
+	@echo "🚀 Starting sandbox with TigerVNC (default, high-performance)..."
+	@$(MAKE) sandbox-run SANDBOX_VNC=tigervnc
+
 sandbox-logs: ## Show sandbox container logs
 	@docker logs -f $(SANDBOX_NAME) 2>/dev/null || echo "ℹ️  Sandbox not running"
 
@@ -649,26 +663,22 @@ sandbox-shell: ## Open shell in sandbox container
 	@echo "🐚 Opening sandbox shell..."
 	@docker exec -it $(SANDBOX_NAME) bash 2>/dev/null || echo "ℹ️  Sandbox not running. Start with: make sandbox-run"
 
-sandbox-status: ## Show sandbox status and available tools
+sandbox-status: ## Show sandbox status, services, and VNC type
 	@echo "📊 Sandbox Status"
 	@echo "================"
 	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)$$"; then \
 		echo "Status: ✅ Running"; \
 		echo ""; \
-		curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || echo "Health check failed"; \
+		docker exec $(SANDBOX_NAME) bash -c 'echo "VNC Server: $$VNC_SERVER_TYPE"' 2>/dev/null || echo "VNC: unknown"; \
 		echo ""; \
-		echo "Tools:"; \
-		docker exec $(SANDBOX_NAME) bash -c "python --version && node --version && npm --version" 2>/dev/null; \
+		docker exec $(SANDBOX_NAME) ps aux | grep -E "vnc|xfce|ttyd" | grep -v grep || echo "No services found"; \
+		echo ""; \
+		curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || echo "Health check: failed"; \
 	else \
 		echo "Status: ❌ Not running"; \
 		echo ""; \
 		echo "Start with: make sandbox-run"; \
 	fi
-
-sandbox-test: ## Run sandbox integration tests
-	@echo "🧪 Running sandbox tests..."
-	PYTHONPATH=. uv run python src/tests/integration/test_mcp_sandbox.py
-	@echo "✅ Sandbox tests completed"
 
 sandbox-clean: ## Remove sandbox container and volume
 	@echo "🧹 Cleaning sandbox..."
@@ -677,42 +687,47 @@ sandbox-clean: ## Remove sandbox container and volume
 	@docker volume rm sandbox-workspace 2>/dev/null || true
 	@echo "✅ Sandbox cleaned"
 
+sandbox-reset: sandbox-clean sandbox-build ## Reset sandbox (clean + rebuild)
+
+sandbox-ps: ## Show all running processes in sandbox
+	@echo "📋 Sandbox Processes"
+	@echo "==================="
+	@docker exec $(SANDBOX_NAME) ps aux 2>/dev/null || echo "Sandbox not running"
+
+sandbox-root-shell: ## Open root shell in sandbox container
+	@echo "🔓 Opening root shell in sandbox..."
+	@docker exec -it -u root $(SANDBOX_NAME) bash 2>/dev/null || echo "ℹ️  Sandbox not running. Start with: make sandbox-run"
+
+sandbox-test: ## Run VNC configuration validation test
+	@echo "🧪 Running VNC config validation..."
+	@docker exec $(SANDBOX_NAME) bash /etc/vnc/test-vnc-config.sh 2>/dev/null || echo "Sandbox not running or test script not found"
+
+sandbox-test-complete: ## Run complete XFCE 4.20 + VNC setup verification
+	@echo "🧪 Running complete setup verification..."
+	@docker exec $(SANDBOX_NAME) bash /etc/vnc/test-complete-setup.sh 2>/dev/null || echo "Sandbox not running or test script not found"
+
 # =============================================================================
 # Sandbox Desktop (noVNC) - Remote Desktop Access
 # =============================================================================
 
 DESKTOP_PORT?=6080
 DESKTOP_DISPLAY?=:0
-DESKTOP_RESOLUTION?=1280x720
+DESKTOP_RESOLUTION?=1920x1080
 
-sandbox-desktop-start: ## Start remote desktop (noVNC) in sandbox
-	@echo "🖥️  Starting remote desktop..."
-	@curl -s -X POST http://localhost:8000/api/v1/sandbox/desktop/start \
-		-H "Content-Type: application/json" \
-		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
-		-d '{"display":"$(DESKTOP_DISPLAY)","resolution":"$(DESKTOP_RESOLUTION)"}' \
-		| jq . || echo "Note: Ensure API server is running and you have a valid API key"
-	@echo "✅ Desktop start requested"
-	@echo "   Access at: http://localhost:$(DESKTOP_PORT)/vnc.html"
+sandbox-desktop-start: ## (Deprecated) Desktop starts automatically with container
+	@echo "ℹ️  Desktop starts automatically with the container. Use 'make sandbox-run'."
 
-sandbox-desktop-stop: ## Stop remote desktop in sandbox
-	@echo "🛑 Stopping remote desktop..."
-	@curl -s -X POST http://localhost:8000/api/v1/sandbox/desktop/stop \
-		-H "Content-Type: application/json" \
-		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
-		| jq . || echo "Note: Ensure API server is running"
-	@echo "✅ Desktop stop requested"
+sandbox-desktop-stop: ## (Deprecated) Desktop stops when container stops
+	@echo "ℹ️  Desktop stops when container stops. Use 'make sandbox-stop'."
 
-sandbox-desktop-status: ## Show remote desktop status
-	@echo "📊 Remote Desktop Status"
-	@echo "======================="
-	@curl -s http://localhost:8000/api/v1/sandbox/desktop/status \
-		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
-		| jq . 2>/dev/null || echo "Status: API server not running or unauthorized"
+sandbox-desktop-status: ## Show desktop component status in sandbox
+	@echo "📊 Desktop Component Status"
+	@echo "==========================="
+	@docker exec $(SANDBOX_NAME) ps aux | grep -E "xfce|Xvnc|x11vnc|vncserver" | grep -v grep || echo "No desktop processes. Sandbox running?"
 
-sandbox-desktop-logs: ## Show desktop logs from sandbox container
-	@echo "📋 Desktop logs..."
-	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -i desktop || echo "No desktop logs found. Sandbox running?"
+sandbox-desktop-logs: ## Show desktop & VNC logs from sandbox
+	@echo "📋 Desktop & VNC logs..."
+	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -iE "vnc|xfce|desktop" | tail -30 || echo "No desktop logs. Sandbox running?"
 
 # =============================================================================
 # Sandbox Terminal (ttyd) - Web Terminal Access
@@ -720,42 +735,33 @@ sandbox-desktop-logs: ## Show desktop logs from sandbox container
 
 TERMINAL_PORT?=7681
 
-sandbox-terminal-start: ## Start web terminal (ttyd) in sandbox
-	@echo "🖥️  Starting web terminal..."
-	@curl -s -X POST http://localhost:8000/api/v1/sandbox/terminal/start \
-		-H "Content-Type: application/json" \
-		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
-		-d '{"port":$(TERMINAL_PORT)}' \
-		| jq . || echo "Note: Ensure API server is running and you have a valid API key"
-	@echo "✅ Terminal start requested"
-	@echo "   WebSocket: ws://localhost:$(TERMINAL_PORT)"
+sandbox-terminal-start: ## (Deprecated) Terminal starts automatically with container
+	@echo "ℹ️  Terminal starts automatically with the container. Use 'make sandbox-run'."
 
-sandbox-terminal-stop: ## Stop web terminal in sandbox
-	@echo "🛑 Stopping web terminal..."
-	@curl -s -X POST http://localhost:8000/api/v1/sandbox/terminal/stop \
-		-H "Content-Type: application/json" \
-		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
-		| jq . || echo "Note: Ensure API server is running"
-	@echo "✅ Terminal stop requested"
+sandbox-terminal-stop: ## (Deprecated) Terminal stops when container stops
+	@echo "ℹ️  Terminal stops when container stops. Use 'make sandbox-stop'."
 
 sandbox-terminal-status: ## Show web terminal status
-	@echo "📊 Web Terminal Status"
-	@echo "======================="
-	@curl -s http://localhost:8000/api/v1/sandbox/terminal/status \
-		-H "Authorization: Bearer $${SANDBOX_API_KEY:-ms_sk_test}" \
-		| jq . 2>/dev/null || echo "Status: API server not running or unauthorized"
+	@echo "📊 Terminal Status"
+	@echo "================"
+	@if docker exec $(SANDBOX_NAME) ps aux | grep -q ttyd; then \
+		echo "Status: ✅ Running"; \
+		docker exec $(SANDBOX_NAME) ps aux | grep ttyd | grep -v grep; \
+	else \
+		echo "Status: ❌ Not running"; \
+	fi
 
 sandbox-terminal-logs: ## Show terminal logs from sandbox container
 	@echo "📋 Terminal logs..."
 	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -i ttyd || echo "No terminal logs found. Sandbox running?"
 
-sandbox-start-all: sandbox-desktop-start sandbox-terminal-start ## Start both desktop and terminal
+sandbox-start-all: sandbox-run ## Start all sandbox services (alias for sandbox-run)
 	@echo "✅ All sandbox services started"
 
-sandbox-stop-all: sandbox-desktop-stop sandbox-terminal-stop ## Stop both desktop and terminal
+sandbox-stop-all: sandbox-stop ## Stop all sandbox services (alias for sandbox-stop)
 	@echo "✅ All sandbox services stopped"
 
-sandbox-all-status: sandbox-desktop-status sandbox-terminal-status ## Show both desktop and terminal status
+sandbox-all-status: sandbox-status ## Show all sandbox services status (alias for sandbox-status)
 
 # =============================================================================
 # Production

@@ -11,6 +11,11 @@
 
 import { httpClient } from "./client/httpClient";
 import { logger } from "../utils/logger";
+import {
+  buildTerminalWebSocketUrl,
+  buildDirectDesktopUrl,
+  getApiHost,
+} from "./sandboxWebSocketUtils";
 
 /**
  * Sandbox container status
@@ -33,6 +38,16 @@ export interface Sandbox {
   container_id?: string;
   /** Container image used */
   image?: string;
+  /** MCP WebSocket port on host */
+  mcp_port?: number;
+  /** Desktop (noVNC) port on host */
+  desktop_port?: number;
+  /** Terminal (ttyd) port on host */
+  terminal_port?: number;
+  /** Desktop (noVNC) URL */
+  desktop_url?: string;
+  /** Terminal (ttyd) URL */
+  terminal_url?: string;
 }
 
 /**
@@ -217,10 +232,15 @@ class SandboxServiceImpl implements SandboxService {
         created_at: response.created_at,
         container_id: response.id,
         image: response.tools?.join(","),
+        mcp_port: response.mcp_port,
+        desktop_port: response.desktop_port,
+        terminal_port: response.terminal_port,
+        desktop_url: response.desktop_url,
+        terminal_url: response.terminal_url,
       },
       urls: {
-        desktop: response.endpoint,
-        terminal: response.websocket_url,
+        desktop: response.desktop_url || response.endpoint,
+        terminal: response.terminal_url || response.websocket_url,
       },
     };
   }
@@ -240,6 +260,11 @@ class SandboxServiceImpl implements SandboxService {
       created_at: response.created_at,
       container_id: response.id,
       image: response.tools?.join(",") || response.image,
+      mcp_port: response.mcp_port,
+      desktop_port: response.desktop_port,
+      terminal_port: response.terminal_port,
+      desktop_url: response.desktop_url,
+      terminal_url: response.terminal_url,
     };
   }
 
@@ -263,6 +288,11 @@ class SandboxServiceImpl implements SandboxService {
         created_at: sb.created_at,
         container_id: sb.id,
         image: sb.tools?.join(",") || sb.image,
+        mcp_port: sb.mcp_port,
+        desktop_port: sb.desktop_port,
+        terminal_port: sb.terminal_port,
+        desktop_url: sb.desktop_url,
+        terminal_url: sb.terminal_url,
       })),
       total: filteredSandboxes.length,
     };
@@ -306,8 +336,8 @@ class SandboxServiceImpl implements SandboxService {
     });
 
     // Backend returns: session_id, container_id, cols, rows, is_active
-    // Construct WebSocket URL for terminal connection
-    const wsUrl = `ws://localhost:8000/api/v1/terminal/${sandboxId}/ws?session_id=${response.session_id}`;
+    // Construct WebSocket URL for terminal connection (dynamic)
+    const wsUrl = buildTerminalWebSocketUrl(sandboxId, response.session_id);
 
     return {
       running: response.is_active,
@@ -340,9 +370,16 @@ class SandboxServiceImpl implements SandboxService {
     // Backend uses GET /sandbox/{sandbox_id}/desktop
     const response = await this.api.get<any>(`/sandbox/${sandboxId}/desktop`);
 
+    // Build direct URL if we have port info
+    let desktopUrl = response.url;
+    if (response.port && !desktopUrl) {
+      const host = getApiHost().split(":")[0];
+      desktopUrl = buildDirectDesktopUrl(host, response.port);
+    }
+
     return {
       running: response.running,
-      url: response.url,
+      url: desktopUrl,
       display: response.display,
       resolution: response.resolution,
       port: response.port,
@@ -358,7 +395,7 @@ class SandboxServiceImpl implements SandboxService {
     const activeSession = hasActiveSession ? sessions[0] : null;
 
     if (activeSession) {
-      const wsUrl = `ws://localhost:8000/api/v1/terminal/${sandboxId}/ws?session_id=${activeSession.session_id}`;
+      const wsUrl = buildTerminalWebSocketUrl(sandboxId, activeSession.session_id);
       return {
         running: activeSession.is_active,
         url: wsUrl,

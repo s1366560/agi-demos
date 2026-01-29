@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+XFCE Desktop Configuration for XFCE 4.20
+
+Optimized for VNC remote desktop with SVG background support (XFCE 4.20 feature)
+-->
+<channel name="xfce4-desktop" version="1.0">
+  <property name="desktop-icons" type="empty">
+    <property name="file-icons" type="empty">
+      <property name="show-home" type="bool" value="true"/>
+      <property name="show-filesystem" type="bool" value="true"/>
+      <property name="show-removable" type="bool" value="true"/>
+      <property name="show-trash" type="bool" value="true"/>
+    </property>
+    <property name="icon-size" type="uint" value="48"/>
+  </property>
+  <property name="last" type="empty">
+    <property name="window-width" type="int" value="1920"/>
+    <property name="window-height" type="int" value="1080"/>
+  </property>
+  <!-- Background settings - XFCE 4.20 supports SVG backgrounds -->
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitorVirtual1" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="color-style" type="int" value="0"/>
+          <property name="image-style" type="int" value="5"/>
+          <!-- Use gradient color if no image available -->
+          <property name="image-show" type="bool" value="true"/>
+          <!-- Fallback to default background if specific file not found -->
+          <property name="image-path" type="string" value="/usr/share/xfce4/backdrops/xfce-blue.jpg"/>
+        </property>
+      </property>
+    </property>
+  </property>
+  <!-- Font settings for desktop icons -->
+  <property name="desktop-icons" type="empty">
+    <property name="font" type="string" value="Noto Sans 10"/>
+    <property name="use-font-custom" type="bool" value="true"/>
+  </property>
+</channel>

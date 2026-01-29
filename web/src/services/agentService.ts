@@ -81,6 +81,9 @@ import type {
   PlanModeExitEventData,
   PlanCreatedEventData,
   PlanUpdatedEventData,
+  PlanExecutionStartEvent,
+  PlanExecutionCompleteEvent,
+  ReflectionCompleteEvent,
 } from "../types/agent";
 
 // Use centralized HTTP client for REST API calls
@@ -582,6 +585,16 @@ class AgentServiceImpl implements AgentService {
         break;
       case "plan_updated":
         handler.onPlanUpdated?.(event as AgentEvent<PlanUpdatedEventData>);
+        break;
+      // Plan Mode execution events
+      case "plan_execution_start":
+        handler.onPlanExecutionStart?.(event as AgentEvent<PlanExecutionStartEvent>);
+        break;
+      case "plan_execution_complete":
+        handler.onPlanExecutionComplete?.(event as AgentEvent<PlanExecutionCompleteEvent>);
+        break;
+      case "reflection_complete":
+        handler.onReflectionComplete?.(event as AgentEvent<ReflectionCompleteEvent>);
         break;
     }
   }

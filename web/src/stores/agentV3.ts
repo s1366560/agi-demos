@@ -15,6 +15,10 @@ import {
   WorkPlanEventData,
   StepStartEventData,
   CompleteEventData,
+  ExecutionPlan,
+  PlanExecutionStartEvent,
+  PlanExecutionCompleteEvent,
+  ReflectionCompleteEvent,
 } from "../types/agent";
 import { agentService } from "../services/agentService";
 import { agentEventReplayService } from "../services/agentEventReplayService";
@@ -178,6 +182,7 @@ interface AgentV3State {
   // Plan State
   workPlan: WorkPlan | null;
   isPlanMode: boolean;
+  executionPlan: ExecutionPlan | null;
 
   // UI State
   showPlanPanel: boolean;
@@ -332,6 +337,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
         workPlan: null,
         isPlanMode: false,
+        executionPlan: null,
 
         showPlanPanel: false,
         showHistorySidebar: false,
@@ -392,6 +398,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           timeline: [],
           currentThought: "",
           workPlan: null,
+          executionPlan: null,
           agentState: "idle",
           isStreaming: false,
           error: null,
@@ -411,6 +418,7 @@ export const useAgentV3Store = create<AgentV3State>()(
         messages: [],
         currentThought: "",
         workPlan: null,
+        executionPlan: null,
         agentState: "idle",
       });
       try {
@@ -723,6 +731,63 @@ export const useAgentV3Store = create<AgentV3State>()(
           });
         },
         onStepEnd: (_event) => {},
+        onPlanExecutionStart: (event) => {
+          set((state) => {
+            const executionPlanEvent: AgentEvent<PlanExecutionStartEvent> = event;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, executionPlanEvent);
+            // Access data from event.data.data (nested structure)
+            const eventData = (event as any).data || {};
+            // Create a minimal execution plan from the event data
+            const newExecutionPlan: ExecutionPlan = {
+              id: eventData.plan_id || `plan-${Date.now()}`,
+              conversation_id: state.activeConversationId || "",
+              user_query: eventData.user_query || "",
+              steps: [],
+              status: "executing",
+              reflection_enabled: true,
+              max_reflection_cycles: 3,
+              completed_steps: [],
+              failed_steps: [],
+              progress_percentage: 0,
+              is_complete: false,
+            };
+            return {
+              executionPlan: newExecutionPlan,
+              timeline: updatedTimeline,
+            };
+          });
+        },
+        onPlanExecutionComplete: (event) => {
+          set((state) => {
+            const executionPlanEvent: AgentEvent<PlanExecutionCompleteEvent> = event;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, executionPlanEvent);
+            // Access data from event.data
+            const eventData = (event as any).data || {};
+            return {
+              executionPlan: state.executionPlan
+                ? {
+                    ...state.executionPlan,
+                    status: eventData.status || state.executionPlan.status,
+                    completed_steps: Array(eventData.completed_steps || 0).fill(""),
+                    failed_steps: Array(eventData.failed_steps || 0).fill(""),
+                    progress_percentage: (eventData.completed_steps || 0) / (state.executionPlan.steps.length || 1),
+                    is_complete: eventData.status === "completed" || eventData.status === "failed",
+                  }
+                : null,
+              timeline: updatedTimeline,
+            };
+          });
+        },
+        onReflectionComplete: (event) => {
+          set((state) => {
+            const reflectionEvent: AgentEvent<ReflectionCompleteEvent> = event;
+            const updatedTimeline = appendSSEEventToTimeline(state.timeline, reflectionEvent);
+            return {
+              timeline: updatedTimeline,
+            };
+          });
+        },
+
         onAct: (event) => {
           set((state) => {
             // Append act event to timeline using SSE adapter

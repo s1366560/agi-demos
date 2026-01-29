@@ -37,11 +37,13 @@ DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
 SANDBOX_USER="${SANDBOX_USER:-sandbox}"
 VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
+SKIP_MCP_SERVER="${SKIP_MCP_SERVER:-false}"  # Set to true to skip MCP server (for desktop testing)
 
 # PID tracking
 PIDS=()
 XVFB_PID=""
 VNC_PID=""
+MCP_PID=""
 
 # Cleanup function
 cleanup() {
@@ -280,31 +282,27 @@ _start_tigervnc() {
         # Create config directory
         mkdir -p /home/sandbox/.config/tigervnc
 
-        # Create xstartup file for XFCE session
-        # IMPORTANT: Must NOT exit - TigerVNC monitors this process
-        cat > /home/sandbox/.config/tigervnc/xstartup << 'XSTARTUP_EOF'
-#!/bin/sh
-# X startup script for TigerVNC with XFCE 4.20
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
+        # Initialize XFCE configuration from system defaults
+        mkdir -p /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml
+        mkdir -p /home/sandbox/.config/xfce4/panel
 
-# Set display
-export DISPLAY=:99
-export XDG_RUNTIME_DIR=/run/user/1001
-export HOME=/home/sandbox
+        # Copy default XFCE configs (only if not exists)
+        [ -f /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml ] || \
+            cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
+               /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
+        [ -f /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml ] || \
+            cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml \
+               /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
+        [ -f /home/sandbox/.config/xfce4/panel/whiskermenu-1.rc ] || \
+            cp /etc/xdg/xfce4/panel/whiskermenu-1.rc \
+               /home/sandbox/.config/xfce4/panel/ 2>/dev/null || true
 
-# Start D-Bus session if not already running
-if [ -z \"\$DBUS_SESSION_BUS_ADDRESS\" ]; then
-    mkdir -p /run/user/1001
-    dbus-daemon --session --address=unix:path=/run/user/1001/bus --nofork --syslog
-    sleep 1
-    export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
-fi
+        chown -R sandbox:sandbox /home/sandbox/.config
 
-# Start XFCE desktop environment and wait for it
-# Using xfce4-session in foreground mode to keep xstartup alive
-exec xfce4-session
-XSTARTUP_EOF
+        # Create xstartup file for XFCE 4.20 session
+        # Copy from template for consistency
+        cp /etc/vnc/xstartup.template /home/sandbox/.config/tigervnc/xstartup
+        chmod +x /home/sandbox/.config/tigervnc/xstartup
 
         chmod +x /home/sandbox/.config/tigervnc/xstartup
     "
@@ -408,9 +406,15 @@ start_ttyd() {
 
 # Start MCP Server as sandbox user
 start_mcp_server() {
+    if [ "$SKIP_MCP_SERVER" = "true" ]; then
+        log_warn "Skipping MCP Server (SKIP_MCP_SERVER=true)"
+        return 0
+    fi
+
     log_info "Starting MCP Server on $MCP_HOST:$MCP_PORT..."
 
     cd /app
+    # Start MCP server in background, continue even if it fails
     sudo -u "$SANDBOX_USER" sh -c "export MCP_HOST=$MCP_HOST MCP_PORT=$MCP_PORT && cd /app && python -m src.server.main" &
     MCP_PID=$!
 
@@ -477,8 +481,22 @@ main() {
     echo ""
     log_info "Container ready. Waiting for signals..."
 
-    # Wait for MCP server process
-    wait $MCP_PID
+    # Wait for appropriate process
+    if [ -n "$MCP_PID" ] && kill -0 "$MCP_PID" 2>/dev/null; then
+        # Wait for MCP server process
+        wait $MCP_PID
+    else
+        # No MCP server running, wait indefinitely for desktop
+        log_info "Waiting for VNC/Desktop sessions..."
+        while true; do
+            # Check if container should exit
+            if ! kill -0 "$$VNC_PID" 2>/dev/null && [ "$DESKTOP_ENABLED" = "true" ]; then
+                log_warn "VNC server died, exiting..."
+                break
+            fi
+            sleep 60
+        done
+    fi
 }
 
 # Run main function

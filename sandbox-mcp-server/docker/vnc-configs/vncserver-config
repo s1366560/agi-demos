@@ -1,39 +1,25 @@
 # TigerVNC Server Configuration
-# This file controls the default settings for VNC server sessions
+# Modern INI format for TigerVNC 1.10+
+# NOTE: Only include options that TigerVNC actually supports
+#
+# Unsupported options that cause errors:
+# - encoding (removed, use default)
+# - compressionLevel (removed, use default)
+# - jpegQuality (removed, use default)
+# - sendPrimary/sendClipboard (removed, use default)
 
-# VNC geometry (screen resolution)
-# Can be overridden by command-line: vncserver -geometry 1920x1080 :1
-$geometry = "1280x720";
+# Session type (desktop environment to start)
+session=xfce
+
+# Screen geometry (resolution)
+geometry=1920x1080
 
 # Color depth (24 = true color)
-$depth = 24;
-
-# VNC encoding - prefer Tight for web VNC via noVNC
-# Options: Tight, ZRLE, H264, RGB, etc.
-$encoding = "Tight";
-
-# Compression level (0-9, higher = more compression, more CPU)
-# Level 5 provides good balance between compression and CPU usage
-$compressionLevel = 5;
-
-# JPEG quality for images (0-9, higher = better quality, more bandwidth)
-# Level 8 provides good visual quality with reasonable bandwidth
-$jpegQuality = 8;
+depth=24
 
 # Security settings for container use
-# Disable authentication for local container use
-$securityTypes = "None";
+# IMPORTANT: Use lowercase 'none' for TigerVNC 1.10+
+securitytypes=none
 
 # Allow connections from any host (required for noVNC websockify)
-$localhost = "no";
-
-# Log file location
-# $vncUserDir = "/home/sandbox/.vnc";
-
-# Additional performance settings
-# Handle keyboard events properly
-$sendPrimary = "true";
-# Handle cut-and-paste
-$sendClipboard = "true";
-# Handle X keyboard events
-$geometry = "1280x720";
+localhost=no
