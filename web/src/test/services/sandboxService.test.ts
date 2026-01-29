@@ -215,27 +215,92 @@ describe("sandboxService", () => {
   });
 
   describe("startDesktop", () => {
-    it("should return not running status (desktop not implemented in backend)", async () => {
+    it("should start desktop service with default resolution", async () => {
+      const mockBackendResponse = {
+        running: true,
+        url: "http://localhost:6080/vnc.html",
+        display: ":1",
+        resolution: "1280x720",
+        port: 6080,
+      };
+
+      mockHttpClient.post.mockResolvedValue(mockBackendResponse);
+
       const result = await sandboxService.startDesktop("sb_123");
 
-      // Desktop endpoints not implemented in backend, returns default status
-      expect(result.running).toBe(false);
-      expect(result.url).toBeNull();
-      expect(result.port).toBe(0);
+      expect(result.running).toBe(true);
+      expect(result.url).toBe("http://localhost:6080/vnc.html");
+      expect(result.display).toBe(":1");
+      expect(result.resolution).toBe("1280x720");
+      expect(result.port).toBe(6080);
+      expect(mockHttpClient.post).toHaveBeenCalledWith("/sandbox/sb_123/desktop", {
+        resolution: "1280x720",
+        display: ":1",
+      });
     });
 
-    it("should pass custom resolution but still return not running", async () => {
+    it("should start desktop service with custom resolution", async () => {
+      const mockBackendResponse = {
+        running: true,
+        url: "http://localhost:6080/vnc.html",
+        display: ":1",
+        resolution: "1920x1080",
+        port: 6080,
+      };
+
+      mockHttpClient.post.mockResolvedValue(mockBackendResponse);
+
       const result = await sandboxService.startDesktop("sb_123", "1920x1080");
 
-      expect(result.running).toBe(false);
-      expect(result.resolution).toBe("");
+      expect(result.running).toBe(true);
+      expect(result.resolution).toBe("1920x1080");
+      expect(mockHttpClient.post).toHaveBeenCalledWith("/sandbox/sb_123/desktop", {
+        resolution: "1920x1080",
+        display: ":1",
+      });
+    });
+
+    it("should handle start desktop failure", async () => {
+      const apiError = new ApiError(
+        ApiErrorType.SERVER,
+        "INTERNAL_ERROR",
+        "Failed to start desktop",
+        500
+      );
+      mockHttpClient.post.mockRejectedValue(apiError);
+
+      await expect(sandboxService.startDesktop("sb_123")).rejects.toThrow(
+        "Failed to start desktop"
+      );
     });
   });
 
   describe("stopDesktop", () => {
-    it("should handle stop desktop (no-op since not implemented)", async () => {
-      // Should not throw even though backend doesn't implement this
+    it("should stop desktop service", async () => {
+      const mockBackendResponse = {
+        success: true,
+        message: "Desktop stopped successfully",
+      };
+
+      mockHttpClient.delete.mockResolvedValue(mockBackendResponse);
+
       await sandboxService.stopDesktop("sb_123");
+
+      expect(mockHttpClient.delete).toHaveBeenCalledWith("/sandbox/sb_123/desktop");
+    });
+
+    it("should handle stop desktop failure", async () => {
+      const apiError = new ApiError(
+        ApiErrorType.SERVER,
+        "INTERNAL_ERROR",
+        "Failed to stop desktop",
+        500
+      );
+      mockHttpClient.delete.mockRejectedValue(apiError);
+
+      await expect(sandboxService.stopDesktop("sb_123")).rejects.toThrow(
+        "Failed to stop desktop"
+      );
     });
   });
 
@@ -292,7 +357,38 @@ describe("sandboxService", () => {
   });
 
   describe("getDesktopStatus", () => {
-    it("should return not running status (desktop not implemented)", async () => {
+    it("should return running status when desktop is active", async () => {
+      const mockBackendResponse = {
+        running: true,
+        url: "http://localhost:6080/vnc.html",
+        display: ":1",
+        resolution: "1280x720",
+        port: 6080,
+      };
+
+      mockHttpClient.get.mockResolvedValue(mockBackendResponse);
+
+      const result = await sandboxService.getDesktopStatus("sb_123");
+
+      expect(result.running).toBe(true);
+      expect(result.url).toBe("http://localhost:6080/vnc.html");
+      expect(result.display).toBe(":1");
+      expect(result.resolution).toBe("1280x720");
+      expect(result.port).toBe(6080);
+      expect(mockHttpClient.get).toHaveBeenCalledWith("/sandbox/sb_123/desktop");
+    });
+
+    it("should return not running status when desktop is stopped", async () => {
+      const mockBackendResponse = {
+        running: false,
+        url: null,
+        display: "",
+        resolution: "",
+        port: 0,
+      };
+
+      mockHttpClient.get.mockResolvedValue(mockBackendResponse);
+
       const result = await sandboxService.getDesktopStatus("sb_123");
 
       expect(result.running).toBe(false);

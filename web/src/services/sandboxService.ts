@@ -273,22 +273,27 @@ class SandboxServiceImpl implements SandboxService {
     await this.api.delete(`/sandbox/${sandboxId}`);
   }
 
-  async startDesktop(_sandboxId: string, _resolution = "1280x720"): Promise<DesktopStatus> {
-    // Desktop not implemented in backend yet, return simulated status
-    // TODO: Implement actual desktop endpoint
-    console.warn("Desktop not yet implemented in backend");
+  async startDesktop(sandboxId: string, resolution = "1280x720"): Promise<DesktopStatus> {
+    logger.debug(`[SandboxService] Starting desktop for sandbox: ${sandboxId}`);
+    // Backend uses POST /sandbox/{sandbox_id}/desktop
+    const response = await this.api.post<any>(`/sandbox/${sandboxId}/desktop`, {
+      resolution,
+      display: ":1",
+    });
+
     return {
-      running: false,
-      url: null,
-      display: "",
-      resolution: "",
-      port: 0,
+      running: response.running,
+      url: response.url,
+      display: response.display,
+      resolution: response.resolution,
+      port: response.port,
     };
   }
 
-  async stopDesktop(_sandboxId: string): Promise<void> {
-    // Desktop not implemented in backend yet
-    console.warn("Desktop not yet implemented in backend");
+  async stopDesktop(sandboxId: string): Promise<void> {
+    logger.debug(`[SandboxService] Stopping desktop for sandbox: ${sandboxId}`);
+    // Backend uses DELETE /sandbox/{sandbox_id}/desktop
+    await this.api.delete(`/sandbox/${sandboxId}/desktop`);
   }
 
   async startTerminal(sandboxId: string): Promise<TerminalStatus> {
@@ -330,15 +335,17 @@ class SandboxServiceImpl implements SandboxService {
     }
   }
 
-  async getDesktopStatus(_sandboxId: string): Promise<DesktopStatus> {
-    // Desktop not implemented in backend yet
-    // Return default "not running" status
+  async getDesktopStatus(sandboxId: string): Promise<DesktopStatus> {
+    logger.debug(`[SandboxService] Getting desktop status for sandbox: ${sandboxId}`);
+    // Backend uses GET /sandbox/{sandbox_id}/desktop
+    const response = await this.api.get<any>(`/sandbox/${sandboxId}/desktop`);
+
     return {
-      running: false,
-      url: null,
-      display: "",
-      resolution: "",
-      port: 0,
+      running: response.running,
+      url: response.url,
+      display: response.display,
+      resolution: response.resolution,
+      port: response.port,
     };
   }
 
