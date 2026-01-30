@@ -185,26 +185,16 @@ const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
   isStreaming 
 }) => {
   if (!content) return null;
-  const [expanded, setExpanded] = useState(isStreaming);
 
   return (
     <div className="flex items-start gap-3 mb-3 opacity-80 animate-slide-up">
       <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
         <Sparkles size={14} className="text-amber-600 dark:text-amber-400" />
       </div>
-      <div className="flex-1">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          <span>Thinking...</span>
-        </button>
-        {expanded && (
-          <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-900/30">
-            <p className="text-sm text-slate-700 dark:text-slate-300 italic font-sans break-words">{content}</p>
-          </div>
-        )}
+      <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-900/30">
+          <p className="text-sm text-slate-700 dark:text-slate-300 italic font-sans break-words">{content}</p>
+        </div>
       </div>
     </div>
   );
