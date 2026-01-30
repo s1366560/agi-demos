@@ -251,6 +251,9 @@ class ReActAgent:
             # Extract tool metadata
             description = getattr(tool, "description", f"Tool: {name}")
 
+            # Extract permission if available
+            permission = getattr(tool, "permission", None)
+
             # Get parameters schema - prefer get_parameters_schema() method
             parameters = {"type": "object", "properties": {}, "required": []}
             if hasattr(tool, "get_parameters_schema"):
@@ -293,6 +296,7 @@ class ReActAgent:
                     description=description,
                     parameters=parameters,
                     execute=make_execute_wrapper(tool, name),
+                    permission=permission,
                 )
             )
 
