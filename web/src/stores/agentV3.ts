@@ -471,13 +471,20 @@ export const useAgentV3Store = create<AgentV3State>()(
         const response = await agentService.getConversationMessages(
           conversationId,
           projectId,
-          50  // Load latest 50 messages
+          200  // Load latest 200 messages (increased from 50 to show more assistant_message events)
         ) as any;
 
         if (get().activeConversationId !== conversationId) {
           console.log("Conversation changed during load, ignoring result");
           return;
         }
+
+        // DEBUG: Log assistant_message events from API
+        const assistantEvents = response.timeline.filter((e: any) => e.type === 'assistant_message');
+        console.log('[AgentV3] loadMessages - assistant_message events from API:', assistantEvents.length);
+        assistantEvents.forEach((e: any, i: number) => {
+          console.log(`  [${i}] id=${e.id}, seq=${e.sequenceNumber}, content="${(e.content || '').slice(0, 50)}..."`);
+        });
 
         // Store the raw timeline and pagination metadata
         const processedMessages = processHistory(timelineToMessages(response.timeline));
@@ -646,7 +653,7 @@ export const useAgentV3Store = create<AgentV3State>()(
         const response = await agentService.getConversationMessages(
           conversationId,
           projectId,
-          50,  // Load 50 more messages
+          200,  // Load 200 more messages (increased from 50)
           undefined,  // from_sequence
           earliestLoadedSequence  // before_sequence
         ) as any;

@@ -277,6 +277,15 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t]);
 
   // Memoized components
+  // DEBUG: Log timeline events before rendering
+  useEffect(() => {
+    const events = timeline.filter((e: any) => e.type === 'assistant_message');
+    console.log('[AgentChatContent] Rendering - assistant_message events in timeline:', events.length);
+    events.forEach((e: any, i: number) => {
+      console.log(`  [${i}] id=${e.id}, seq=${e.sequenceNumber}, content="${((e as any).content || '').slice(0, 50)}..."`);
+    });
+  }, [timeline]);
+
   const messageArea = useMemo(() => (
     timeline.length === 0 && !activeConversationId ? (
       <EmptyState onNewConversation={handleNewConversation} />

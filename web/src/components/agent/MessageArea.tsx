@@ -255,6 +255,16 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
     );
   }
 
+  // DEBUG: Log assistant_message events
+  const assistantEvents = timeline.filter((e: any) => e.type === 'assistant_message');
+  console.log('[MessageArea] Rendering - assistant_message events:', assistantEvents.length, 'out of', timeline.length, 'total');
+  if (assistantEvents.length > 1) {
+    console.log('[MessageArea] Multiple assistant_message events detected (should render separately):');
+    assistantEvents.forEach((e: any, i: number) => {
+      console.log(`  [${i}] id=${e.id}, seq=${e.sequenceNumber}, content="${((e as any).content || '').slice(0, 40)}..."`);
+    });
+  }
+
   // 判断是否应该显示 loading 指示器
   const shouldShowLoading = (propIsLoadingEarlier && hasEarlierMessages) || (showLoadingIndicator && hasEarlierMessages);
 
