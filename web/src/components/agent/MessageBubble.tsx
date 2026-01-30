@@ -16,6 +16,7 @@ import {
   Clock
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { TimelineEvent, ActEvent, ObserveEvent } from '../../types/agent';
@@ -148,7 +149,6 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                 {content}
               </ReactMarkdown>
             ) : null}
-            {isStreaming && <span className="typing-cursor" />}
           </div>
         </div>
       </div>
@@ -169,9 +169,10 @@ const TextDeltaBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
       </Avatar>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-          <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
-            <p className="whitespace-pre-wrap text-base leading-relaxed break-words">{content}</p>
-            {isStreaming && <span className="typing-cursor" />}
+          <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {content}
+            </ReactMarkdown>
           </div>
         </div>
       </div>
@@ -179,7 +180,7 @@ const TextDeltaBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
   );
 }
 
-// Thought/Reasoning Component
+// Thought/Reasoning Component - Uses same styling as ReasoningLogCard
 const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({ 
   content, 
   isStreaming 
@@ -187,13 +188,26 @@ const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
   if (!content) return null;
 
   return (
-    <div className="flex items-start gap-3 mb-3 opacity-80 animate-slide-up">
-      <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-        <Sparkles size={14} className="text-amber-600 dark:text-amber-400" />
+    <div className="flex items-start gap-3 mb-3 animate-slide-up">
+      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+        <span className="material-symbols-outlined text-primary text-lg">psychology</span>
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-900/30">
-          <p className="text-sm text-slate-700 dark:text-slate-300 italic font-sans break-words">{content}</p>
+        <div className="bg-slate-50 dark:bg-surface-dark/50 border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="material-symbols-outlined text-sm text-primary">chevron_right</span>
+            <span className="font-semibold uppercase text-[10px] text-primary">Reasoning Log</span>
+            {isStreaming && (
+              <span className="flex gap-0.5 ml-2">
+                <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
+            )}
+          </div>
+          <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed">
+            <p className="whitespace-pre-wrap">{content}</p>
+          </div>
         </div>
       </div>
     </div>

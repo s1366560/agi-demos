@@ -17,6 +17,7 @@ import type {
   TimelineEvent,
   MessageEventData,
   ThoughtEventData,
+  ThoughtDeltaEventData,
   ActEventData,
   ObserveEventData,
   WorkPlanEventData,

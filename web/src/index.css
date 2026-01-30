@@ -484,18 +484,6 @@ body {
  * AGENT CHAT STYLES
  * ============================================================================ */
 
-/* Typewriter cursor animation for streaming messages */
-@keyframes typing-cursor-blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-}
-
-.typing-cursor::after {
-    content: '▋';
-    animation: typing-cursor-blink 1s step-end infinite;
-    color: var(--color-primary);
-}
-
 /* Timeline animation effects */
 @keyframes slide-up {
     from {

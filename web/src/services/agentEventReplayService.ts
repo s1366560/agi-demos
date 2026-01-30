@@ -134,12 +134,8 @@ export class AgentEventReplayService {
         await handler.onThought?.(event as any);
         break;
       case "thought_delta":
-        // Handle thought_delta by treating it like a thought event with delta content
-        // The handler can process the delta to accumulate thoughts
-        await handler.onThought?.({
-          type: "thought",
-          data: { thought: (event as any).data?.delta || "" },
-        } as any);
+        // Handle thought_delta using dedicated onThoughtDelta handler
+        await handler.onThoughtDelta?.(event as any);
         break;
       case "work_plan":
         await handler.onWorkPlan?.(event as any);

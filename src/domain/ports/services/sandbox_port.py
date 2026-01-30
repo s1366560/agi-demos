@@ -58,6 +58,7 @@ class SandboxInstance:
     terminated_at: Optional[datetime] = None
     error_message: Optional[str] = None
     last_activity_at: Optional[datetime] = None  # Last tool execution/activity time
+    labels: Dict[str, str] = field(default_factory=dict)  # Container labels for identification
 
 
 @dataclass
@@ -98,6 +99,8 @@ class SandboxPort(ABC):
         self,
         project_path: str,
         config: Optional[SandboxConfig] = None,
+        project_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> SandboxInstance:
         """
         Create a new sandbox instance.
@@ -105,6 +108,8 @@ class SandboxPort(ABC):
         Args:
             project_path: Path to mount as workspace (or temp path for empty sandbox)
             config: Sandbox configuration
+            project_id: Optional project ID for labeling and identification
+            tenant_id: Optional tenant ID for labeling and identification
 
         Returns:
             SandboxInstance with connection details

@@ -55,6 +55,7 @@ import type {
   ToolsListResponse,
   MessageEventData,
   ThoughtEventData,
+  ThoughtDeltaEventData,
   WorkPlanEventData,
   PatternMatchEventData,
   StepStartEventData,
@@ -559,8 +560,8 @@ class AgentServiceImpl implements AgentService {
         handler.onThought?.(event as AgentEvent<ThoughtEventData>);
         break;
       case "thought_delta":
-        // Route thought_delta to onThought handler for incremental thought updates
-        handler.onThought?.(event as AgentEvent<ThoughtEventData>);
+        // Route thought_delta to onThoughtDelta handler for incremental thought updates
+        handler.onThoughtDelta?.(event as AgentEvent<ThoughtDeltaEventData>);
         break;
       case "work_plan":
         handler.onWorkPlan?.(event as AgentEvent<WorkPlanEventData>);

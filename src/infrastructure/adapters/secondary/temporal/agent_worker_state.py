@@ -74,6 +74,7 @@ __all__ = [
     # MCP Sandbox Adapter
     "set_mcp_sandbox_adapter",
     "get_mcp_sandbox_adapter",
+    "sync_mcp_sandbox_adapter_from_docker",
     # SubAgentRouter
     "get_or_create_subagent_router",
     "invalidate_subagent_router_cache",
@@ -182,6 +183,29 @@ def set_mcp_sandbox_adapter(adapter: Any) -> None:
     global _mcp_sandbox_adapter
     _mcp_sandbox_adapter = adapter
     logger.info("Agent Worker: MCP Sandbox Adapter registered for Activities")
+
+
+async def sync_mcp_sandbox_adapter_from_docker() -> int:
+    """Sync existing sandbox containers from Docker on startup.
+
+    Called during Agent Worker initialization to discover and recover
+    existing sandbox containers that may have been created before
+    the adapter was (re)initialized.
+
+    Returns:
+        Number of sandboxes discovered and synced
+    """
+    if _mcp_sandbox_adapter is None:
+        return 0
+
+    try:
+        count = await _mcp_sandbox_adapter.sync_from_docker()
+        if count > 0:
+            logger.info(f"Agent Worker: Synced {count} existing sandboxes from Docker")
+        return count
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to sync sandboxes from Docker: {e}")
+        return 0
 
 
 def get_mcp_sandbox_adapter() -> Optional[Any]:
@@ -342,10 +366,7 @@ async def get_or_create_tools(
     Returns:
         Dictionary of tool name -> tool instance (built-in + MCP + skill_loader)
     """
-    from src.infrastructure.agent.tools import (
-        WebScrapeTool,
-        WebSearchTool,
-    )
+    from src.infrastructure.agent.tools import WebScrapeTool, WebSearchTool
 
     # 1. Get or create cached built-in tools
     async with _tools_cache_lock:
@@ -407,7 +428,7 @@ async def get_or_create_tools(
 
                     # No tools loaded - MCP servers might not be ready yet
                     # Wait with exponential backoff before retry
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.warning(
                         f"Agent Worker: No MCP tools loaded for tenant {tenant_id} "
                         f"(attempt {attempt + 1}/{max_retries}). "
@@ -498,14 +519,14 @@ async def _load_project_sandbox_tools(
         project_sandbox_id = None
         for sandbox in all_sandboxes:
             # Check if sandbox belongs to this project by checking the project_path
-            project_path = getattr(sandbox, 'project_path', '') or ''
+            project_path = getattr(sandbox, "project_path", "") or ""
             if project_path and f"memstack_{project_id}" in project_path:
                 project_sandbox_id = sandbox.id
                 break
 
             # Also check labels if available
-            labels = getattr(sandbox, 'labels', {}) or {}
-            if labels.get('memstack.project_id') == project_id:
+            labels = getattr(sandbox, "labels", {}) or {}
+            if labels.get("memstack.project_id") == project_id:
                 project_sandbox_id = sandbox.id
                 break
 
@@ -536,8 +557,7 @@ async def _load_project_sandbox_tools(
             tools[wrapper.name] = wrapper
 
         logger.info(
-            f"Loaded {len(tools)} tools from sandbox {project_sandbox_id} "
-            f"for project {project_id}"
+            f"Loaded {len(tools)} tools from sandbox {project_sandbox_id} for project {project_id}"
         )
 
     except Exception as e:

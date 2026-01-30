@@ -7,18 +7,12 @@
 - 清理过期 Sandbox
 """
 
-import asyncio
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.application.services.sandbox_profile import (
-    SandboxProfile,
-    SandboxProfileType,
-    get_profile as get_sandbox_profile,
-)
+from src.application.services.sandbox_profile import SandboxProfileType
+from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
 
 logger = logging.getLogger(__name__)
@@ -101,6 +95,7 @@ class SandboxManagerService:
         project_path: Optional[str] = None,
         profile: Optional[SandboxProfileType] = None,
         config_override: Optional[Dict[str, Any]] = None,
+        tenant_id: Optional[str] = None,
     ) -> SandboxCreateResult:
         """创建一个新的 Sandbox.
 
@@ -109,6 +104,7 @@ class SandboxManagerService:
             project_path: 项目路径（自动生成）
             profile: 配置类型
             config_override: 配置覆盖
+            tenant_id: 租户 ID（可选）
 
         Returns:
             SandboxCreateResult 创建结果
@@ -121,8 +117,13 @@ class SandboxManagerService:
         # 解析配置
         config = self._resolve_config(profile, config_override)
 
-        # 创建 sandbox
-        sandbox = await self._adapter.create_sandbox(resolved_path, config)
+        # 创建 sandbox with project/tenant identification
+        sandbox = await self._adapter.create_sandbox(
+            project_path=resolved_path,
+            config=config,
+            project_id=project_id,
+            tenant_id=tenant_id,
+        )
 
         # 连接 MCP
         tools: List[str] = []
@@ -253,11 +254,13 @@ class SandboxManagerService:
             except Exception as e:
                 logger.warning(f"Batch create failed for {project_id}: {e}")
                 # 返回错误结果
-                results.append(SandboxCreateResult(
-                    sandbox_id="",
-                    status=SandboxStatus.ERROR,
-                    project_path=project_path or "",
-                ))
+                results.append(
+                    SandboxCreateResult(
+                        sandbox_id="",
+                        status=SandboxStatus.ERROR,
+                        project_path=project_path or "",
+                    )
+                )
 
         return results
 

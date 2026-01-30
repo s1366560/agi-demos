@@ -291,11 +291,12 @@ async def main():
 
     # Initialize MCP Sandbox Adapter for Project Sandbox tool loading
     try:
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-            set_mcp_sandbox_adapter,
-        )
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
             MCPSandboxAdapter,
+        )
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            set_mcp_sandbox_adapter,
+            sync_mcp_sandbox_adapter_from_docker,
         )
 
         mcp_sandbox_adapter = MCPSandboxAdapter(
@@ -306,8 +307,14 @@ async def main():
         )
         set_mcp_sandbox_adapter(mcp_sandbox_adapter)
         logger.info("Agent Worker: MCP Sandbox Adapter initialized")
+
+        # Sync existing sandbox containers from Docker
+        asyncio.create_task(sync_mcp_sandbox_adapter_from_docker())
+
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to initialize MCP Sandbox adapter (Sandbox tools disabled): {e}")
+        logger.warning(
+            f"Agent Worker: Failed to initialize MCP Sandbox adapter (Sandbox tools disabled): {e}"
+        )
 
     # Optional: Prewarm agent session caches to reduce first-request latency
     if settings.agent_session_prewarm_enabled:
@@ -315,7 +322,7 @@ async def main():
         logger.info("Agent Worker: Prewarm task scheduled")
 
     # Import agent-specific workflows and activities
-    from src.infrastructure.adapters.secondary.temporal.activities.agent import (
+    from src.infrastructure.adapters.secondary.temporal.activities.agent import (  # New: uses ReActAgent  # Legacy: hardcoded logic
         clear_agent_running,
         execute_react_agent_activity,
         execute_react_step_activity,
@@ -323,7 +330,7 @@ async def main():
         save_checkpoint_activity,
         save_event_activity,
         set_agent_running,
-    )  # New: uses ReActAgent  # Legacy: hardcoded logic
+    )
     from src.infrastructure.adapters.secondary.temporal.activities.agent_session import (
         cleanup_agent_session_activity,
         execute_chat_activity,

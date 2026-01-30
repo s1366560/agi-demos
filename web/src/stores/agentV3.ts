@@ -12,6 +12,7 @@ import {
   ObserveEventData,
   UserMessageEvent,
   ThoughtEventData,
+  ThoughtDeltaEventData,
   WorkPlanEventData,
   StepStartEventData,
   CompleteEventData,
@@ -670,25 +671,19 @@ export const useAgentV3Store = create<AgentV3State>()(
       // Define handler first (needed for both new and existing conversations)
       const handler: AgentStreamHandler = {
         onMessage: (_event) => {},
+        onThoughtDelta: (event) => {
+          // Streaming thought - incrementally update streamingThought
+          const delta = event.data.delta;
+          if (!delta) return;
+          
+          set((state) => ({
+            streamingThought: state.streamingThought + delta,
+            isThinkingStreaming: true,
+            agentState: "thinking",
+          }));
+        },
         onThought: (event) => {
           const newThought = event.data.thought;
-          
-          // Check if this is a thought_delta (streaming) or complete thought
-          const isDelta = (event as any).type === "thought_delta" || 
-                         (event as any).delta !== undefined;
-          
-          if (isDelta) {
-            // Streaming thought - only update streamingThought, skip timeline for performance
-            const delta = (event as any).delta || newThought || "";
-            if (!delta) return;
-            
-            set((state) => ({
-              streamingThought: state.streamingThought + delta,
-              isThinkingStreaming: true,
-              agentState: "thinking",
-            }));
-            return;
-          }
           
           // Complete thought - add to messages, timeline, and reset streaming state
           set((state) => {

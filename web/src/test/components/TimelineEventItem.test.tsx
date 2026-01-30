@@ -139,7 +139,8 @@ describe('TimelineEventItem', () => {
       expect(wrapper).toBeInTheDocument();
     });
 
-    it('should show typing cursor when streaming assistant message', () => {
+    // Note: Typing cursor effect has been removed from streaming messages
+    it('should render assistant message without typing cursor', () => {
       const event: AssistantMessageEvent = {
         id: 'test-stream',
         type: 'assistant_message',
@@ -151,22 +152,9 @@ describe('TimelineEventItem', () => {
 
       const { container } = render(<TimelineEventItem event={event} isStreaming={true} />);
 
-      const cursor = container.querySelector('.typing-cursor');
-      expect(cursor).toBeInTheDocument();
-    });
-
-    it('should not show typing cursor when not streaming', () => {
-      const event: AssistantMessageEvent = {
-        id: 'test-no-stream',
-        type: 'assistant_message',
-        sequenceNumber: 1,
-        timestamp: Date.now(),
-        content: 'Complete text',
-        role: 'assistant',
-      };
-
-      const { container } = render(<TimelineEventItem event={event} isStreaming={false} />);
-
+      // Verify content is rendered
+      expect(container.textContent).toContain('Partial text...');
+      // Verify no typing cursor
       const cursor = container.querySelector('.typing-cursor');
       expect(cursor).not.toBeInTheDocument();
     });

@@ -65,6 +65,11 @@ class MCPWebSocketClient:
         tools = await client.list_tools()
         result = await client.call_tool("read_file", {"path": "/etc/hosts"})
         await client.disconnect()
+
+    Or use as async context manager:
+        async with MCPWebSocketClient(url="ws://sandbox:8765") as client:
+            tools = await client.list_tools()
+            result = await client.call_tool("read_file", {"path": "/etc/hosts"})
     """
 
     def __init__(
@@ -100,10 +105,29 @@ class MCPWebSocketClient:
         self._lock = asyncio.Lock()
         self._pending_requests: Dict[int, asyncio.Future] = {}
         self._receive_task: Optional[asyncio.Task] = None
+        self._cleanup_lock = asyncio.Lock()  # Lock to prevent double cleanup
+        self._is_cleaning_up = False
 
         self.server_info: Optional[Dict[str, Any]] = None
         self._tools: List[MCPToolSchema] = []
         self._connected = False
+
+    async def __aenter__(self) -> "MCPWebSocketClient":
+        """Async context manager entry - connect to server."""
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit - disconnect from server."""
+        await self.disconnect()
+
+    def __del__(self):
+        """Destructor - ensure cleanup warning if not properly closed."""
+        if self._connected or self._ws is not None or self._session is not None:
+            logger.warning(
+                f"MCPWebSocketClient for {self.url} was not properly closed. "
+                "Use 'await client.disconnect()' or async context manager."
+            )
 
     @property
     def is_connected(self) -> bool:
@@ -187,37 +211,60 @@ class MCPWebSocketClient:
             return False
 
     async def disconnect(self) -> None:
-        """Close the WebSocket connection."""
-        logger.info("Disconnecting MCP WebSocket client")
-        self._connected = False
+        """Close the WebSocket connection with proper cleanup protection."""
+        # Prevent double cleanup
+        async with self._cleanup_lock:
+            if self._is_cleaning_up:
+                logger.debug("Disconnect already in progress, skipping")
+                return
+            self._is_cleaning_up = True
 
-        # Cancel receive task
-        if self._receive_task and not self._receive_task.done():
-            self._receive_task.cancel()
-            try:
-                await self._receive_task
-            except asyncio.CancelledError:
-                pass
-            self._receive_task = None
+        try:
+            logger.info("Disconnecting MCP WebSocket client")
+            self._connected = False
 
-        # Close WebSocket
-        if self._ws and not self._ws.closed:
-            await self._ws.close()
-        self._ws = None
+            # Cancel receive task
+            if self._receive_task and not self._receive_task.done():
+                self._receive_task.cancel()
+                try:
+                    await asyncio.wait_for(self._receive_task, timeout=5.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+                except Exception as e:
+                    logger.warning(f"Error waiting for receive task: {e}")
+                self._receive_task = None
 
-        # Close session
-        if self._session and not self._session.closed:
-            await self._session.close()
-        self._session = None
+            # Close WebSocket with timeout
+            if self._ws and not self._ws.closed:
+                try:
+                    await asyncio.wait_for(self._ws.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("WebSocket close timed out")
+                except Exception as e:
+                    logger.warning(f"Error closing WebSocket: {e}")
+            self._ws = None
 
-        # Fail pending requests
-        for request_id, future in list(self._pending_requests.items()):
-            if not future.done():
-                future.set_exception(RuntimeError("WebSocket connection closed"))
-        self._pending_requests.clear()
+            # Close session with timeout
+            if self._session and not self._session.closed:
+                try:
+                    await asyncio.wait_for(self._session.close(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Session close timed out")
+                except Exception as e:
+                    logger.warning(f"Error closing session: {e}")
+            self._session = None
 
-        self._tools = []
-        self.server_info = None
+            # Fail pending requests
+            for request_id, future in list(self._pending_requests.items()):
+                if not future.done():
+                    future.set_exception(RuntimeError("WebSocket connection closed"))
+            self._pending_requests.clear()
+
+            self._tools = []
+            self.server_info = None
+        finally:
+            async with self._cleanup_lock:
+                self._is_cleaning_up = False
 
     async def _receive_loop(self) -> None:
         """Background task to receive and dispatch WebSocket messages."""

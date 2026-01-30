@@ -10,83 +10,103 @@ import asyncio
 import json
 import logging
 import re
+import threading
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.application.services.sandbox_health_service import (
-    HealthCheckLevel,
-    HealthCheckResult,
-    SandboxHealthService,
-)
+from src.application.services.sandbox_health_service import HealthCheckLevel, SandboxHealthService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
-from src.application.services.sandbox_profile import (
-    SandboxProfile,
-    SandboxProfileType,
-    get_profile,
-    list_profiles,
-)
+from src.application.services.sandbox_profile import get_profile, list_profiles
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-    MCPSandboxAdapter,
-)
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/sandbox", tags=["sandbox"])
 
-# Global instances (singleton pattern)
+# Thread-safe singleton management with lock
+_singleton_lock = threading.Lock()
 _sandbox_adapter: Optional[MCPSandboxAdapter] = None
 _sandbox_orchestrator: Optional[SandboxOrchestrator] = None
 _event_publisher: Optional[SandboxEventPublisher] = None
+_worker_id: Optional[int] = None  # Track worker ID for multi-worker detection
+
+
+def _get_worker_id() -> int:
+    """Get current worker/process ID for tracking."""
+    import os
+
+    return os.getpid()
 
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
-    """Get or create the sandbox adapter singleton."""
-    global _sandbox_adapter
-    if _sandbox_adapter is None:
-        _sandbox_adapter = MCPSandboxAdapter()
-    return _sandbox_adapter
+    """Get or create the sandbox adapter singleton with thread-safe initialization."""
+    global _sandbox_adapter, _worker_id
+
+    current_worker = _get_worker_id()
+
+    with _singleton_lock:
+        # Reinitialize if worker changed (fork detection)
+        if _worker_id is not None and _worker_id != current_worker:
+            logger.warning(
+                f"Worker ID changed from {_worker_id} to {current_worker}. "
+                "Reinitializing sandbox adapter for new worker."
+            )
+            _sandbox_adapter = None
+            _worker_id = current_worker
+
+        if _sandbox_adapter is None:
+            _sandbox_adapter = MCPSandboxAdapter()
+            _worker_id = current_worker
+            logger.info(f"Initialized sandbox adapter for worker {current_worker}")
+
+        return _sandbox_adapter
 
 
 def get_sandbox_orchestrator() -> SandboxOrchestrator:
-    """Get or create the sandbox orchestrator singleton."""
+    """Get or create the sandbox orchestrator singleton with thread-safe initialization."""
     global _sandbox_orchestrator, _event_publisher
-    if _sandbox_orchestrator is None:
-        from src.configuration.di_container import DIContainer
-        from src.configuration.config import get_settings
 
-        container = DIContainer()
-        settings = get_settings()
+    with _singleton_lock:
+        if _sandbox_orchestrator is None:
+            from src.configuration.config import get_settings
+            from src.configuration.di_container import DIContainer
 
-        # Initialize event publisher if not already
-        if _event_publisher is None:
-            _event_publisher = container.sandbox_event_publisher()
+            container = DIContainer()
+            settings = get_settings()
 
-        _sandbox_orchestrator = SandboxOrchestrator(
-            sandbox_adapter=get_sandbox_adapter(),
-            event_publisher=_event_publisher,
-            default_timeout=settings.sandbox_timeout_seconds,
-        )
-    return _sandbox_orchestrator
+            # Initialize event publisher if not already
+            if _event_publisher is None:
+                _event_publisher = container.sandbox_event_publisher()
+
+            _sandbox_orchestrator = SandboxOrchestrator(
+                sandbox_adapter=get_sandbox_adapter(),
+                event_publisher=_event_publisher,
+                default_timeout=settings.sandbox_timeout_seconds,
+            )
+        return _sandbox_orchestrator
 
 
 def get_event_publisher() -> Optional[SandboxEventPublisher]:
-    """Get or create the sandbox event publisher singleton."""
+    """Get or create the sandbox event publisher singleton with thread-safe initialization."""
     global _event_publisher
-    if _event_publisher is None:
-        try:
-            from src.configuration.di_container import DIContainer
-            container = DIContainer()
-            _event_publisher = container.sandbox_event_publisher()
-        except Exception as e:
-            logger.warning(f"Could not create event publisher: {e}")
-            _event_publisher = None
-    return _event_publisher
+
+    with _singleton_lock:
+        if _event_publisher is None:
+            try:
+                from src.configuration.di_container import DIContainer
+
+                container = DIContainer()
+                _event_publisher = container.sandbox_event_publisher()
+            except Exception as e:
+                logger.warning(f"Could not create event publisher: {e}")
+                _event_publisher = None
+        return _event_publisher
 
 
 def extract_project_id(project_path: str) -> str:
@@ -263,46 +283,6 @@ class ListProfilesResponse(BaseModel):
     profiles: List[ProfileInfo]
 
 
-# --- Duplicate Request/Response Schemas removed ---
-# The canonical definitions are above (lines 103-159)
-
-
-class ToolCallRequest(BaseModel):
-    """Request to call an MCP tool."""
-
-    tool_name: str = Field(..., description="Tool name (read, write, edit, glob, grep, bash)")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
-    timeout: float = Field(default=30.0, description="Timeout in seconds")
-
-
-class ToolCallResponse(BaseModel):
-    """Tool call response."""
-
-    content: List[Dict[str, Any]]
-    is_error: bool
-
-
-class ListSandboxesResponse(BaseModel):
-    """List sandboxes response."""
-
-    sandboxes: List[SandboxResponse]
-    total: int
-
-
-class ToolInfo(BaseModel):
-    """Tool information."""
-
-    name: str
-    description: Optional[str] = None
-    input_schema: Dict[str, Any] = Field(default_factory=dict)
-
-
-class ListToolsResponse(BaseModel):
-    """List tools response."""
-
-    tools: List[ToolInfo]
-
-
 # --- Health Check Response Schemas ---
 
 
@@ -371,7 +351,7 @@ async def check_sandbox_health(
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid health check level: {level}. Valid values: basic, mcp, services, full"
+            detail=f"Invalid health check level: {level}. Valid values: basic, mcp, services, full",
         )
 
     # Create health service
@@ -415,9 +395,15 @@ async def create_sandbox(
         profile = get_profile(request.profile or "standard")
 
         # Use profile defaults, allow explicit overrides
-        memory_limit = request.memory_limit if request.memory_limit is not None else profile.memory_limit
+        memory_limit = (
+            request.memory_limit if request.memory_limit is not None else profile.memory_limit
+        )
         cpu_limit = request.cpu_limit if request.cpu_limit is not None else profile.cpu_limit
-        timeout_seconds = request.timeout_seconds if request.timeout_seconds is not None else profile.timeout_seconds
+        timeout_seconds = (
+            request.timeout_seconds
+            if request.timeout_seconds is not None
+            else profile.timeout_seconds
+        )
 
         config = SandboxConfig(
             image=request.image,
@@ -450,7 +436,11 @@ async def create_sandbox(
                     tool_registry = container.sandbox_tool_registry()
 
                     # Use current_user's tenant_id
-                    tenant_id = str(current_user.tenant_id) if hasattr(current_user, 'tenant_id') else "default"
+                    tenant_id = (
+                        str(current_user.tenant_id)
+                        if hasattr(current_user, "tenant_id")
+                        else "default"
+                    )
 
                     registered_tools = await tool_registry.register_sandbox_tools(
                         sandbox_id=instance.id,
@@ -490,11 +480,11 @@ async def create_sandbox(
             websocket_url=instance.websocket_url,
             created_at=instance.created_at.isoformat(),
             tools=tools,
-            mcp_port=getattr(instance, 'mcp_port', None),
-            desktop_port=getattr(instance, 'desktop_port', None),
-            terminal_port=getattr(instance, 'terminal_port', None),
-            desktop_url=getattr(instance, 'desktop_url', None),
-            terminal_url=getattr(instance, 'terminal_url', None),
+            mcp_port=getattr(instance, "mcp_port", None),
+            desktop_port=getattr(instance, "desktop_port", None),
+            terminal_port=getattr(instance, "terminal_port", None),
+            desktop_url=getattr(instance, "desktop_url", None),
+            terminal_url=getattr(instance, "terminal_url", None),
         )
 
     except Exception as e:
@@ -834,10 +824,7 @@ async def start_desktop(
     # Verify sandbox exists
     instance = await adapter.get_sandbox(sandbox_id)
     if not instance:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sandbox not found: {sandbox_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
     # Extract project_id from sandbox instance
     project_id = extract_project_id(instance.project_path)
@@ -878,10 +865,7 @@ async def start_desktop(
         raise
     except Exception as e:
         logger.error(f"Failed to start desktop for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to start desktop: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {str(e)}")
 
 
 @router.delete("/{sandbox_id}/desktop", response_model=DesktopStopResponse)
@@ -906,10 +890,7 @@ async def stop_desktop(
     # Verify sandbox exists
     instance = await adapter.get_sandbox(sandbox_id)
     if not instance:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sandbox not found: {sandbox_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
     # Extract project_id from sandbox instance
     project_id = extract_project_id(instance.project_path)
@@ -928,18 +909,14 @@ async def stop_desktop(
                 logger.warning(f"Failed to publish desktop_stopped event: {e}")
 
         return DesktopStopResponse(
-            success=success,
-            message="Desktop stopped" if success else "Failed to stop desktop"
+            success=success, message="Desktop stopped" if success else "Failed to stop desktop"
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to stop desktop for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to stop desktop: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {str(e)}")
 
 
 @router.get("/{sandbox_id}/desktop", response_model=DesktopStatusResponse)
@@ -964,10 +941,7 @@ async def get_desktop_status(
     # Verify sandbox exists
     instance = await adapter.get_sandbox(sandbox_id)
     if not instance:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sandbox not found: {sandbox_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
     try:
         status = await orchestrator.get_desktop_status(sandbox_id)
@@ -984,10 +958,7 @@ async def get_desktop_status(
         raise
     except Exception as e:
         logger.error(f"Failed to get desktop status for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get desktop status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get desktop status: {str(e)}")
 
 
 # --- Terminal Management Endpoints ---
@@ -1017,10 +988,7 @@ async def start_terminal(
     # Verify sandbox exists
     instance = await adapter.get_sandbox(sandbox_id)
     if not instance:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sandbox not found: {sandbox_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
     # Extract project_id from sandbox instance
     project_id = extract_project_id(instance.project_path)
@@ -1058,10 +1026,7 @@ async def start_terminal(
         raise
     except Exception as e:
         logger.error(f"Failed to start terminal for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to start terminal: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {str(e)}")
 
 
 @router.delete("/{sandbox_id}/terminal", response_model=TerminalStopResponse)
@@ -1086,10 +1051,7 @@ async def stop_terminal(
     # Verify sandbox exists
     instance = await adapter.get_sandbox(sandbox_id)
     if not instance:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sandbox not found: {sandbox_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
     # Extract project_id from sandbox instance
     project_id = extract_project_id(instance.project_path)
@@ -1108,27 +1070,20 @@ async def stop_terminal(
                 logger.warning(f"Failed to publish terminal_stopped event: {e}")
 
         return TerminalStopResponse(
-            success=success,
-            message="Terminal stopped" if success else "Failed to stop terminal"
+            success=success, message="Terminal stopped" if success else "Failed to stop terminal"
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to stop terminal for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to stop terminal: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {str(e)}")
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to stop terminal for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to stop terminal: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {str(e)}")
 
 
 @router.get("/{sandbox_id}/terminal", response_model=TerminalStatusResponse)
@@ -1153,10 +1108,7 @@ async def get_terminal_status(
     # Verify sandbox exists
     instance = await adapter.get_sandbox(sandbox_id)
     if not instance:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sandbox not found: {sandbox_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Sandbox not found: {sandbox_id}")
 
     try:
         status = await orchestrator.get_terminal_status(sandbox_id)
@@ -1173,10 +1125,7 @@ async def get_terminal_status(
         raise
     except Exception as e:
         logger.error(f"Failed to get terminal status for sandbox {sandbox_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get terminal status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get terminal status: {str(e)}")
 
 
 # --- SSE Event Stream Endpoints ---

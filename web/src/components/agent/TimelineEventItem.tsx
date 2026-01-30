@@ -12,6 +12,8 @@
  */
 
 import { memo } from "react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   UserMessage,
   AgentSection,
@@ -270,6 +272,7 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
 
 /**
  * Render text_delta event (typewriter effect)
+ * Uses ReactMarkdown for consistent rendering with final message
  */
 function TextDeltaItem({
   event,
@@ -289,11 +292,11 @@ function TextDeltaItem({
           </span>
         </div>
         <div
-          className={`flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none ${
-            isStreaming ? "typing-cursor" : ""
-          }`}
+          className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed"
         >
-          {event.content}
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {event.content}
+          </ReactMarkdown>
         </div>
       </div>
       <div className="pl-11">

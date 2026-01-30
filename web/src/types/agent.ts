@@ -463,6 +463,15 @@ export interface DoomLoopIntervenedEventData {
 }
 
 /**
+ * Thought delta event data (streaming thought)
+ */
+export interface ThoughtDeltaEventData {
+  delta: string;
+  thought_level?: ThoughtLevel;
+  step_number?: number;
+}
+
+/**
  * Text delta event data (typewriter effect)
  */
 export interface TextDeltaEventData {
@@ -615,6 +624,7 @@ export interface ToolExecutionsResponse {
 export interface AgentStreamHandler {
   onMessage?: (event: AgentEvent<MessageEventData>) => void;
   onThought?: (event: AgentEvent<ThoughtEventData>) => void;
+  onThoughtDelta?: (event: AgentEvent<ThoughtDeltaEventData>) => void; // Streaming thought
   onWorkPlan?: (event: AgentEvent<WorkPlanEventData>) => void;
   onPatternMatch?: (event: AgentEvent<PatternMatchEventData>) => void; // T079
   onStepStart?: (event: AgentEvent<StepStartEventData>) => void;

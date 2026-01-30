@@ -364,19 +364,6 @@ const MessageBubbleInternal: React.FC<MessageBubbleProps> = ({
                   }}
                 >
                   {message.content}
-                  {isStreaming && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 2,
-                        height: "1em",
-                        backgroundColor: "#52c41a",
-                        marginLeft: 2,
-                        verticalAlign: "text-bottom",
-                        animation: "typing-cursor-blink 1s step-end infinite",
-                      }}
-                    />
-                  )}
                 </Paragraph>
               )}
             </>

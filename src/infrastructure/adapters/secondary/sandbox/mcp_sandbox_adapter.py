@@ -15,10 +15,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Set
 import docker
 from docker.errors import ImageNotFound, NotFound
 
-from src.application.services.sandbox_url_service import (
-    SandboxInstanceInfo,
-    SandboxUrlService,
-)
+from src.application.services.sandbox_url_service import SandboxInstanceInfo, SandboxUrlService
 from src.domain.ports.services.sandbox_port import (
     CodeExecutionRequest,
     CodeExecutionResult,
@@ -29,9 +26,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxPort,
     SandboxStatus,
 )
-from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import (
-    MCPWebSocketClient,
-)
+from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
 
 logger = logging.getLogger(__name__)
 
@@ -132,15 +127,21 @@ class MCPSandboxAdapter(SandboxPort):
         self._max_memory_mb = max_memory_mb
         self._max_cpu_cores = max_cpu_cores
 
+        # Thread-safe lock for shared state access
+        self._lock = asyncio.Lock()
+
         # Track active sandboxes and port allocation
         self._active_sandboxes: Dict[str, MCPSandboxInstance] = {}
         self._port_counter = 0
         self._desktop_port_counter = 0
         self._terminal_port_counter = 0
-        self._used_ports: set = set()
+        self._used_ports: Set[int] = set()
 
         # Pending queue for sandbox creation requests
         self._pending_queue: List[Dict[str, Any]] = []
+
+        # Track cleanup state to prevent double cleanup
+        self._cleanup_in_progress: Set[str] = set()
 
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
@@ -158,21 +159,21 @@ class MCPSandboxAdapter(SandboxPort):
 
     def _is_port_available(self, port: int) -> bool:
         """Check if a port is available on the host.
-        
+
         Performs two checks:
         1. Checks if port is already in use by existing Docker containers
         2. Attempts to bind to the port to verify it's free
-        
+
         Args:
             port: The port number to check
-            
+
         Returns:
             True if port is available, False otherwise
         """
         # Check if port is in our tracking set
         if port in self._used_ports:
             return False
-        
+
         # Check if port is used by existing Docker containers
         try:
             containers = self._docker.containers.list(all=True)
@@ -182,23 +183,23 @@ class MCPSandboxAdapter(SandboxPort):
                 for port_mappings in ports.values():
                     if port_mappings:
                         for mapping in port_mappings:
-                            host_port = mapping.get('HostPort')
+                            host_port = mapping.get("HostPort")
                             if host_port and int(host_port) == port:
                                 return False
         except Exception as e:
             logger.warning(f"Error checking Docker container ports: {e}")
-        
+
         # Try to bind to the port to verify it's free
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.bind(('0.0.0.0', port))
+                sock.bind(("0.0.0.0", port))
                 return True
         except OSError:
             return False
 
-    def _get_next_port(self) -> int:
-        """Get next available host port for MCP."""
+    def _get_next_port_unsafe(self) -> int:
+        """Get next available host port for MCP (must be called with lock held)."""
         for _ in range(1000):
             port = self._host_port_start + self._port_counter
             self._port_counter = (self._port_counter + 1) % 1000
@@ -207,8 +208,8 @@ class MCPSandboxAdapter(SandboxPort):
                 return port
         raise RuntimeError("No available ports for MCP")
 
-    def _get_next_desktop_port(self) -> int:
-        """Get next available host port for desktop (noVNC)."""
+    def _get_next_desktop_port_unsafe(self) -> int:
+        """Get next available host port for desktop (noVNC) (must be called with lock held)."""
         for _ in range(1000):
             port = self._desktop_port_start + self._desktop_port_counter
             self._desktop_port_counter = (self._desktop_port_counter + 1) % 1000
@@ -217,8 +218,8 @@ class MCPSandboxAdapter(SandboxPort):
                 return port
         raise RuntimeError("No available ports for desktop")
 
-    def _get_next_terminal_port(self) -> int:
-        """Get next available host port for terminal (ttyd)."""
+    def _get_next_terminal_port_unsafe(self) -> int:
+        """Get next available host port for terminal (ttyd) (must be called with lock held)."""
         for _ in range(1000):
             port = self._terminal_port_start + self._terminal_port_counter
             self._terminal_port_counter = (self._terminal_port_counter + 1) % 1000
@@ -227,8 +228,8 @@ class MCPSandboxAdapter(SandboxPort):
                 return port
         raise RuntimeError("No available ports for terminal")
 
-    def _release_ports(self, ports: List[int]) -> None:
-        """Release ports when sandbox is terminated."""
+    def _release_ports_unsafe(self, ports: List[int]) -> None:
+        """Release ports when sandbox is terminated (must be called with lock held)."""
         for port in ports:
             self._used_ports.discard(port)
 
@@ -236,6 +237,8 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         project_path: str,
         config: Optional[SandboxConfig] = None,
+        project_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
     ) -> MCPSandboxInstance:
         """
         Create a new MCP sandbox container.
@@ -243,17 +246,20 @@ class MCPSandboxAdapter(SandboxPort):
         Args:
             project_path: Path to mount as workspace
             config: Sandbox configuration
+            project_id: Optional project ID for labeling and identification
+            tenant_id: Optional tenant ID for labeling and identification
 
         Returns:
             MCPSandboxInstance with MCP endpoint
         """
         config = config or SandboxConfig()
         sandbox_id = f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
-        
-        # Allocate ports for all services
-        host_mcp_port = self._get_next_port()
-        host_desktop_port = self._get_next_desktop_port()
-        host_terminal_port = self._get_next_terminal_port()
+
+        # Allocate ports for all services with lock protection
+        async with self._lock:
+            host_mcp_port = self._get_next_port_unsafe()
+            host_desktop_port = self._get_next_desktop_port_unsafe()
+            host_terminal_port = self._get_next_terminal_port_unsafe()
 
         try:
             # Container configuration with all service ports
@@ -286,6 +292,20 @@ class MCPSandboxAdapter(SandboxPort):
                     "memstack.sandbox.mcp_port": str(host_mcp_port),
                     "memstack.sandbox.desktop_port": str(host_desktop_port),
                     "memstack.sandbox.terminal_port": str(host_terminal_port),
+                    **(
+                        {
+                            "memstack.project_id": project_id,
+                        }
+                        if project_id
+                        else {}
+                    ),
+                    **(
+                        {
+                            "memstack.tenant_id": tenant_id,
+                        }
+                        if tenant_id
+                        else {}
+                    ),
                 },
             }
 
@@ -326,6 +346,19 @@ class MCPSandboxAdapter(SandboxPort):
             desktop_url = urls.desktop_url
             terminal_url = urls.terminal_url
 
+            # Build labels dict for instance
+            instance_labels = {
+                "memstack.sandbox": "true",
+                "memstack.sandbox.id": sandbox_id,
+                "memstack.sandbox.mcp_port": str(host_mcp_port),
+                "memstack.sandbox.desktop_port": str(host_desktop_port),
+                "memstack.sandbox.terminal_port": str(host_terminal_port),
+            }
+            if project_id:
+                instance_labels["memstack.project_id"] = project_id
+            if tenant_id:
+                instance_labels["memstack.tenant_id"] = tenant_id
+
             # Create instance record with port information
             now = datetime.now()
             instance = MCPSandboxInstance(
@@ -343,9 +376,11 @@ class MCPSandboxAdapter(SandboxPort):
                 terminal_port=host_terminal_port,
                 desktop_url=desktop_url,
                 terminal_url=terminal_url,
+                labels=instance_labels,
             )
 
-            self._active_sandboxes[sandbox_id] = instance
+            async with self._lock:
+                self._active_sandboxes[sandbox_id] = instance
             logger.info(
                 f"Created MCP sandbox: {sandbox_id} "
                 f"(MCP: {host_mcp_port}, Desktop: {host_desktop_port}, Terminal: {host_terminal_port})"
@@ -354,6 +389,9 @@ class MCPSandboxAdapter(SandboxPort):
             return instance
 
         except ImageNotFound:
+            # Release allocated ports on failure
+            async with self._lock:
+                self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
             logger.error(f"MCP sandbox image not found: {self._mcp_image}")
             raise SandboxConnectionError(
                 message=f"Docker image not found: {self._mcp_image}. "
@@ -362,6 +400,9 @@ class MCPSandboxAdapter(SandboxPort):
                 operation="create",
             )
         except Exception as e:
+            # Release allocated ports on failure
+            async with self._lock:
+                self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
             logger.error(f"Failed to create MCP sandbox: {e}")
             raise SandboxConnectionError(
                 message=f"Failed to create sandbox: {e}",
@@ -417,7 +458,7 @@ class MCPSandboxAdapter(SandboxPort):
                     return True
             except Exception as e:
                 if attempt < max_retries - 1:
-                    wait_time = backoff_factor * (2 ** attempt)
+                    wait_time = backoff_factor * (2**attempt)
                     logger.warning(
                         f"MCP connection attempt {attempt + 1}/{max_retries} "
                         f"failed for {sandbox_id}: {e}. Retrying in {wait_time}s..."
@@ -506,7 +547,14 @@ class MCPSandboxAdapter(SandboxPort):
         return instance
 
     async def terminate_sandbox(self, sandbox_id: str) -> bool:
-        """Terminate a sandbox container."""
+        """Terminate a sandbox container with proper cleanup and locking."""
+        # Prevent double cleanup with lock
+        async with self._lock:
+            if sandbox_id in self._cleanup_in_progress:
+                logger.warning(f"Cleanup already in progress for sandbox: {sandbox_id}")
+                return False
+            self._cleanup_in_progress.add(sandbox_id)
+
         try:
             # Get instance before deletion to release ports
             instance = self._active_sandboxes.get(sandbox_id)
@@ -522,44 +570,72 @@ class MCPSandboxAdapter(SandboxPort):
             # Disconnect MCP client first
             await self.disconnect_mcp(sandbox_id)
 
-            # Stop and remove container
+            # Stop and remove container with timeout protection
             loop = asyncio.get_event_loop()
-            container = await loop.run_in_executor(
-                None,
-                lambda: self._docker.containers.get(sandbox_id),
-            )
+            try:
+                container = await loop.run_in_executor(
+                    None,
+                    lambda: self._docker.containers.get(sandbox_id),
+                )
 
-            await loop.run_in_executor(None, lambda: container.stop(timeout=5))
-            await loop.run_in_executor(None, container.remove)
+                # Stop container with timeout protection
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(None, lambda: container.stop(timeout=5)),
+                        timeout=15.0,  # Overall timeout for stop operation
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"Container stop timed out for {sandbox_id}, forcing kill")
+                    try:
+                        await loop.run_in_executor(None, container.kill)
+                    except Exception as kill_err:
+                        logger.warning(f"Force kill failed for {sandbox_id}: {kill_err}")
 
-            # Update tracking and release ports
-            if sandbox_id in self._active_sandboxes:
-                self._active_sandboxes[sandbox_id].status = SandboxStatus.TERMINATED
-                self._active_sandboxes[sandbox_id].terminated_at = datetime.now()
-                del self._active_sandboxes[sandbox_id]
+                # Remove container
+                try:
+                    await loop.run_in_executor(None, container.remove)
+                except Exception as rm_err:
+                    logger.warning(f"Container remove failed for {sandbox_id}: {rm_err}")
+                    # Try force remove
+                    try:
+                        await loop.run_in_executor(None, lambda: container.remove(force=True))
+                    except Exception:
+                        pass
 
-            # Release ports
-            self._release_ports(ports_to_release)
+            except NotFound:
+                logger.warning(f"Container not found for termination: {sandbox_id}")
+
+            # Always update tracking and release ports with lock
+            async with self._lock:
+                if sandbox_id in self._active_sandboxes:
+                    self._active_sandboxes[sandbox_id].status = SandboxStatus.TERMINATED
+                    self._active_sandboxes[sandbox_id].terminated_at = datetime.now()
+                    del self._active_sandboxes[sandbox_id]
+                # Release ports
+                self._release_ports_unsafe(ports_to_release)
 
             logger.info(f"Terminated MCP sandbox: {sandbox_id}")
             return True
 
-        except NotFound:
-            logger.warning(f"Sandbox not found for termination: {sandbox_id}")
-            if sandbox_id in self._active_sandboxes:
-                instance = self._active_sandboxes[sandbox_id]
-                ports_to_release = [
-                    instance.mcp_port,
-                    instance.desktop_port,
-                    instance.terminal_port,
-                ]
-                ports_to_release = [p for p in ports_to_release if p is not None]
-                self._release_ports(ports_to_release)
-                del self._active_sandboxes[sandbox_id]
-            return False
         except Exception as e:
             logger.error(f"Error terminating sandbox {sandbox_id}: {e}")
+            # Ensure cleanup even on error - release ports to prevent leak
+            async with self._lock:
+                instance = self._active_sandboxes.get(sandbox_id)
+                if instance:
+                    ports_to_release = [
+                        instance.mcp_port,
+                        instance.desktop_port,
+                        instance.terminal_port,
+                    ]
+                    ports_to_release = [p for p in ports_to_release if p is not None]
+                    self._release_ports_unsafe(ports_to_release)
+                    del self._active_sandboxes[sandbox_id]
             return False
+        finally:
+            # Always remove from cleanup tracking
+            async with self._lock:
+                self._cleanup_in_progress.discard(sandbox_id)
 
     async def execute_code(
         self,
@@ -642,12 +718,130 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         status: Optional[SandboxStatus] = None,
     ) -> List[MCPSandboxInstance]:
-        """List all sandbox instances."""
-        result = []
-        for instance in self._active_sandboxes.values():
-            if status is None or instance.status == status:
-                result.append(instance)
-        return result
+        """List all sandbox instances (thread-safe)."""
+        async with self._lock:
+            result = []
+            for instance in list(self._active_sandboxes.values()):
+                if status is None or instance.status == status:
+                    result.append(instance)
+            return result
+
+    async def sync_from_docker(self) -> int:
+        """
+        Discover existing sandbox containers from Docker and sync to internal state.
+
+        This method is called on startup to recover existing sandbox containers
+        that may have been created before the adapter was (re)initialized.
+        It queries Docker for containers with memstack.sandbox labels and
+        rebuilds the internal tracking state.
+
+        Returns:
+            Number of sandboxes discovered and synced
+        """
+        try:
+            loop = asyncio.get_event_loop()
+
+            # List all containers with memstack.sandbox label
+            containers = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(
+                    all=True,
+                    filters={"label": "memstack.sandbox=true"},
+                ),
+            )
+
+            count = 0
+            async with self._lock:
+                for container in containers:
+                    # Skip already tracked containers
+                    if container.name in self._active_sandboxes:
+                        continue
+
+                    # Skip non-running containers
+                    if container.status != "running":
+                        continue
+
+                    labels = container.labels or {}
+                    sandbox_id = labels.get("memstack.sandbox.id", container.name)
+
+                    # Extract port information from labels
+                    mcp_port_str = labels.get("memstack.sandbox.mcp_port", "")
+                    desktop_port_str = labels.get("memstack.sandbox.desktop_port", "")
+                    terminal_port_str = labels.get("memstack.sandbox.terminal_port", "")
+
+                    mcp_port = int(mcp_port_str) if mcp_port_str else None
+                    desktop_port = int(desktop_port_str) if desktop_port_str else None
+                    terminal_port = int(terminal_port_str) if terminal_port_str else None
+
+                    # Get project path from volume mounts
+                    project_path = ""
+                    mounts = container.attrs.get("Mounts", [])
+                    for mount in mounts:
+                        if mount.get("Destination") == "/workspace":
+                            project_path = mount.get("Source", "")
+                            break
+
+                    # Build URLs if ports are available
+                    websocket_url = None
+                    desktop_url = None
+                    terminal_url = None
+                    if mcp_port:
+                        instance_info = SandboxInstanceInfo(
+                            mcp_port=mcp_port,
+                            desktop_port=desktop_port or 0,
+                            terminal_port=terminal_port or 0,
+                            sandbox_id=sandbox_id,
+                            host="localhost",
+                        )
+                        urls = self._url_service.build_all_urls(instance_info)
+                        websocket_url = urls.mcp_url
+                        desktop_url = urls.desktop_url if desktop_port else None
+                        terminal_url = urls.terminal_url if terminal_port else None
+
+                    # Create instance record
+                    now = datetime.now()
+                    instance = MCPSandboxInstance(
+                        id=sandbox_id,
+                        status=SandboxStatus.RUNNING,
+                        config=SandboxConfig(),  # Default config for discovered containers
+                        project_path=project_path,
+                        endpoint=websocket_url,
+                        created_at=now,  # Approximation
+                        last_activity_at=now,
+                        websocket_url=websocket_url,
+                        mcp_client=None,  # Will connect on first use
+                        mcp_port=mcp_port,
+                        desktop_port=desktop_port,
+                        terminal_port=terminal_port,
+                        desktop_url=desktop_url,
+                        terminal_url=terminal_url,
+                        labels=labels,  # Full labels including project_id/tenant_id
+                    )
+
+                    self._active_sandboxes[sandbox_id] = instance
+
+                    # Track used ports
+                    if mcp_port:
+                        self._used_ports.add(mcp_port)
+                    if desktop_port:
+                        self._used_ports.add(desktop_port)
+                    if terminal_port:
+                        self._used_ports.add(terminal_port)
+
+                    count += 1
+                    logger.info(
+                        f"Discovered existing sandbox: {sandbox_id} "
+                        f"(project_id={labels.get('memstack.project_id', 'unknown')})"
+                    )
+
+            if count > 0:
+                logger.info(f"Synced {count} existing sandbox containers from Docker")
+
+            return count
+
+        except Exception as e:
+            logger.error(f"Error syncing sandboxes from Docker: {e}")
+            return 0
 
     async def get_output_files(
         self,
@@ -697,19 +891,24 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         max_age_seconds: int = 3600,
     ) -> int:
-        """Clean up expired sandbox instances."""
+        """Clean up expired sandbox instances (thread-safe)."""
         now = datetime.now()
         expired_ids = []
 
-        for sandbox_id, instance in self._active_sandboxes.items():
-            age = (now - instance.created_at).total_seconds()
-            if age > max_age_seconds:
-                expired_ids.append(sandbox_id)
+        # Get expired IDs with lock protection
+        async with self._lock:
+            for sandbox_id, instance in list(self._active_sandboxes.items()):
+                age = (now - instance.created_at).total_seconds()
+                if age > max_age_seconds:
+                    expired_ids.append(sandbox_id)
 
         count = 0
         for sandbox_id in expired_ids:
-            if await self.terminate_sandbox(sandbox_id):
-                count += 1
+            try:
+                if await self.terminate_sandbox(sandbox_id):
+                    count += 1
+            except Exception as e:
+                logger.error(f"Failed to cleanup expired sandbox {sandbox_id}: {e}")
 
         if count > 0:
             logger.info(f"Cleaned up {count} expired MCP sandboxes")
@@ -741,8 +940,7 @@ class MCPSandboxAdapter(SandboxPort):
                 - stats["precpu_stats"]["cpu_usage"]["total_usage"]
             )
             system_delta = (
-                stats["cpu_stats"]["system_cpu_usage"]
-                - stats["precpu_stats"]["system_cpu_usage"]
+                stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
             )
             cpu_percent = 0.0
             if system_delta > 0:
@@ -817,9 +1015,7 @@ class MCPSandboxAdapter(SandboxPort):
             loop = asyncio.get_event_loop()
             containers = await loop.run_in_executor(
                 None,
-                lambda: self._docker.containers.list(
-                    filters={"label": "memstack.sandbox=true"}
-                ),
+                lambda: self._docker.containers.list(filters={"label": "memstack.sandbox=true"}),
             )
 
             count = 0
@@ -827,9 +1023,7 @@ class MCPSandboxAdapter(SandboxPort):
                 if container.name not in self._active_sandboxes:
                     logger.warning(f"Found orphaned sandbox container: {container.name}")
                     try:
-                        await loop.run_in_executor(
-                            None, lambda: container.stop(timeout=5)
-                        )
+                        await loop.run_in_executor(None, lambda: container.stop(timeout=5))
                         await loop.run_in_executor(None, container.remove)
                         count += 1
                     except Exception as e:
@@ -864,12 +1058,14 @@ class MCPSandboxAdapter(SandboxPort):
     @property
     def active_count(self) -> int:
         """Current number of active (running) sandboxes."""
-        return sum(
-            1 for s in self._active_sandboxes.values()
-            if s.status == SandboxStatus.RUNNING
-        )
+        return sum(1 for s in self._active_sandboxes.values() if s.status == SandboxStatus.RUNNING)
 
     # === Concurrency Control ===
+
+    # Maximum pending queue size to prevent memory issues
+    MAX_PENDING_QUEUE_SIZE = 100
+    # Maximum age for pending requests in seconds
+    MAX_PENDING_REQUEST_AGE = 300  # 5 minutes
 
     def can_create_sandbox(self) -> bool:
         """Check if a new sandbox can be created without exceeding limits."""
@@ -878,17 +1074,46 @@ class MCPSandboxAdapter(SandboxPort):
     def queue_sandbox_request(
         self,
         request: Dict[str, Any],
-    ) -> None:
+    ) -> bool:
         """
-        Add a sandbox creation request to the pending queue.
+        Add a sandbox creation request to the pending queue with size limit.
 
         Args:
             request: Dict with 'project_path' and optional 'config'
+
+        Returns:
+            True if queued successfully, False if queue is full
         """
+        # Add timestamp to request for age tracking
+        request["_queued_at"] = datetime.now()
+
+        # Clean up old requests first
+        self._cleanup_pending_queue()
+
+        # Check queue size limit
+        if len(self._pending_queue) >= self.MAX_PENDING_QUEUE_SIZE:
+            logger.warning(f"Pending queue full ({self.MAX_PENDING_QUEUE_SIZE}), rejecting request")
+            return False
+
         self._pending_queue.append(request)
-        logger.info(
-            f"Queued sandbox request. Queue size: {len(self._pending_queue)}"
-        )
+        logger.info(f"Queued sandbox request. Queue size: {len(self._pending_queue)}")
+        return True
+
+    def _cleanup_pending_queue(self) -> int:
+        """Remove expired requests from pending queue."""
+        now = datetime.now()
+        original_size = len(self._pending_queue)
+
+        self._pending_queue = [
+            req
+            for req in self._pending_queue
+            if (now - req.get("_queued_at", now)).total_seconds() < self.MAX_PENDING_REQUEST_AGE
+        ]
+
+        removed = original_size - len(self._pending_queue)
+        if removed > 0:
+            logger.info(f"Removed {removed} expired requests from pending queue")
+        return removed
 
     def has_pending_requests(self) -> bool:
         """Check if there are pending sandbox creation requests."""
@@ -899,14 +1124,25 @@ class MCPSandboxAdapter(SandboxPort):
         Process pending sandbox creation requests.
 
         Creates sandboxes from the queue while slots are available.
+        Automatically cleans up expired requests.
         """
+        # Clean up old requests first
+        self._cleanup_pending_queue()
+
         while self._pending_queue and self.can_create_sandbox():
             request = self._pending_queue.pop(0)
             project_path = request.get("project_path")
             config = request.get("config")
+            project_id = request.get("project_id")
+            tenant_id = request.get("tenant_id")
 
             try:
-                await self.create_sandbox(project_path, config)
+                await self.create_sandbox(
+                    project_path=project_path,
+                    config=config,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                )
                 logger.info(f"Created queued sandbox for {project_path}")
             except Exception as e:
                 logger.error(f"Failed to create queued sandbox: {e}")
@@ -1171,7 +1407,6 @@ class MCPSandboxAdapter(SandboxPort):
                 operation="call_tool",
             )
 
-        last_error = None
         for attempt in range(max_retries):
             try:
                 # Auto-connect if needed
@@ -1199,7 +1434,6 @@ class MCPSandboxAdapter(SandboxPort):
                 }
 
             except (SandboxConnectionError, ConnectionError) as e:
-                last_error = e
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Tool call connection error (attempt {attempt + 1}/{max_retries}): {e}. "
@@ -1211,7 +1445,17 @@ class MCPSandboxAdapter(SandboxPort):
                         instance.mcp_client = None
                     await asyncio.sleep(1.0 * (attempt + 1))
                 else:
-                    break
+                    # Final attempt failed, return error
+                    logger.error(f"Tool call failed after {max_retries} attempts: {e}")
+                    return {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": f"Connection error after {max_retries} attempts: {str(e)}",
+                            }
+                        ],
+                        "is_error": True,
+                    }
             except Exception as e:
                 # Non-retryable error
                 logger.error(f"Tool call error: {e}")

@@ -6,7 +6,6 @@ TDD: Tests written first (RED phase).
 import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
-from dataclasses import dataclass
 
 import pytest
 
@@ -23,7 +22,9 @@ class TestSandboxConcurrencyLimit:
     @pytest.fixture
     def adapter(self):
         """Create adapter with concurrency limit."""
-        with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"):
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"
+        ):
             adapter = MCPSandboxAdapter(
                 max_concurrent_sandboxes=2,
             )
@@ -83,15 +84,18 @@ class TestSandboxConcurrencyLimit:
 
     def test_queue_sandbox_request_adds_to_queue(self, adapter):
         """Test that queue_sandbox_request adds to pending queue."""
-        request = Mock(
-            project_path="/test/path",
-            config=SandboxConfig(),
-        )
+        # Use a real dict instead of Mock since queue_sandbox_request modifies it
+        request = {
+            "project_path": "/test/path",
+            "config": SandboxConfig(),
+        }
 
-        adapter.queue_sandbox_request(request)
+        result = adapter.queue_sandbox_request(request)
 
+        assert result is True
         assert len(adapter._pending_queue) == 1
-        assert adapter._pending_queue[0] == request
+        assert adapter._pending_queue[0]["project_path"] == "/test/path"
+        assert "_queued_at" in adapter._pending_queue[0]  # Check timestamp added
 
     def test_has_pending_requests_returns_false_when_empty(self, adapter):
         """Test that has_pending_requests returns False when queue is empty."""
@@ -113,14 +117,18 @@ class TestSandboxConcurrencyLimit:
         request = {
             "project_path": "/test/path",
             "config": SandboxConfig(),
+            "project_id": "test-project",
+            "tenant_id": "test-tenant",
         }
         adapter._pending_queue.append(request)
 
         await adapter.process_pending_queue()
 
         adapter.create_sandbox.assert_called_once_with(
-            "/test/path",
-            SandboxConfig(),
+            project_path="/test/path",
+            config=SandboxConfig(),
+            project_id="test-project",
+            tenant_id="test-tenant",
         )
         assert len(adapter._pending_queue) == 0
 
@@ -131,7 +139,9 @@ class TestSandboxAutoCleanup:
     @pytest.fixture
     def adapter(self):
         """Create adapter for cleanup tests."""
-        with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"):
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"
+        ):
             adapter = MCPSandboxAdapter()
             return adapter
 
@@ -227,7 +237,9 @@ class TestSandboxResourceLimits:
     @pytest.fixture
     def adapter(self):
         """Create adapter for resource limit tests."""
-        with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"):
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"
+        ):
             adapter = MCPSandboxAdapter(
                 max_memory_mb=4096,
                 max_cpu_cores=4,
@@ -317,7 +329,9 @@ class TestSandboxActivityTracking:
     @pytest.fixture
     def adapter(self):
         """Create adapter for activity tracking tests."""
-        with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"):
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"
+        ):
             adapter = MCPSandboxAdapter()
             return adapter
 
@@ -418,7 +432,9 @@ class TestSandboxResourceMonitoring:
     @pytest.fixture
     def adapter(self):
         """Create adapter for monitoring tests."""
-        with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"):
+        with patch(
+            "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env"
+        ):
             adapter = MCPSandboxAdapter()
             return adapter
 

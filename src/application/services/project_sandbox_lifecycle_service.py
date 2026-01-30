@@ -13,26 +13,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from src.application.services.sandbox_profile import (
-    SandboxProfile,
-    SandboxProfileType,
-    get_profile as get_sandbox_profile,
-)
-from src.domain.model.sandbox.project_sandbox import (
-    ProjectSandbox,
-    ProjectSandboxStatus,
-)
-from src.domain.ports.repositories.project_sandbox_repository import (
-    ProjectSandboxRepository,
-)
+from src.application.services.sandbox_profile import SandboxProfileType
+from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
+from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
+from src.domain.ports.repositories.project_sandbox_repository import ProjectSandboxRepository
 from src.domain.ports.services.sandbox_port import (
     SandboxConfig,
     SandboxNotFoundError,
     SandboxStatus,
 )
-from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
-    MCPSandboxAdapter,
-)
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -504,10 +494,12 @@ class ProjectSandboxLifecycleService:
             # Resolve configuration
             config = self._resolve_config(profile, config_override)
 
-            # Create sandbox container
+            # Create sandbox container with project/tenant identification
             instance = await self._adapter.create_sandbox(
                 project_path=project_path,
                 config=config,
+                project_id=project_id,
+                tenant_id=tenant_id,
             )
 
             # Update association with success
@@ -558,11 +550,13 @@ class ProjectSandboxLifecycleService:
         await self._repository.save(association)
 
         try:
-            # Create new sandbox
+            # Create new sandbox with project/tenant identification
             config = self._resolve_config(self._default_profile, None)
             instance = await self._adapter.create_sandbox(
                 project_path=project_path,
                 config=config,
+                project_id=association.project_id,
+                tenant_id=association.tenant_id,
             )
 
             # Update with actual container ID
