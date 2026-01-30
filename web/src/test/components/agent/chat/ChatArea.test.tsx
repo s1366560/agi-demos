@@ -43,9 +43,23 @@ vi.mock('../../../../components/agent/execution/FollowUpPills', () => ({
 
 // Mock the VirtualTimelineEventList component
 vi.mock('../../../../components/agent/VirtualTimelineEventList', () => ({
-  VirtualTimelineEventList: ({ timeline, isStreaming }: { timeline: TimelineEvent[]; isStreaming: boolean }) => (
+  VirtualTimelineEventList: ({
+    timeline,
+    isStreaming,
+    hasEarlierMessages,
+    isLoadingEarlier,
+    onLoadEarlier,
+  }: {
+    timeline: TimelineEvent[];
+    isStreaming: boolean;
+    hasEarlierMessages?: boolean;
+    isLoadingEarlier?: boolean;
+    onLoadEarlier?: () => void;
+  }) => (
     <div data-testid="virtual-timeline-list" data-streaming={isStreaming}>
       Virtual Timeline ({timeline.length} events)
+      {hasEarlierMessages && <span data-testid="has-earlier">Has earlier</span>}
+      {isLoadingEarlier && <span data-testid="loading-earlier">Loading earlier</span>}
     </div>
   ),
 }));
@@ -75,6 +89,8 @@ describe('ChatArea', () => {
     onUpdatePlan: vi.fn(),
     onSend: vi.fn(),
     onTileClick: vi.fn(),
+    hasEarlierMessages: false,
+    onLoadEarlier: vi.fn(),
   };
 
   beforeEach(() => {
@@ -283,7 +299,7 @@ describe('ChatArea', () => {
         />
       );
 
-      expect(screen.getByText(/加载历史消息/)).toBeInTheDocument();
+      expect(screen.getByText(/加载中/)).toBeInTheDocument();
     });
   });
 

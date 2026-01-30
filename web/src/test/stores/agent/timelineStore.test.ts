@@ -384,7 +384,7 @@ describe('TimelineStore', () => {
 
     it('should not load if already loading', async () => {
       useTimelineStore.setState({
-        timelineLoading: true,
+        isLoadingEarlier: true,
         earliestLoadedSequence: 10,
       });
 
@@ -424,7 +424,8 @@ describe('TimelineStore', () => {
       expect(getConversationMessages).toHaveBeenCalledWith(
         'conv-1',
         'proj-1',
-        100, // limit
+        50, // limit (changed from 100 to 50)
+        undefined, // from_sequence
         10 // before_sequence
       );
     });
@@ -564,6 +565,7 @@ describe('TimelineStore', () => {
       useTimelineStore.setState({
         timeline: [{ id: '1', type: 'user_message', sequenceNumber: 1 }] as any,
         timelineLoading: true,
+        isLoadingEarlier: true,
         timelineError: 'Error',
         earliestLoadedSequence: 10,
         latestLoadedSequence: 20,
