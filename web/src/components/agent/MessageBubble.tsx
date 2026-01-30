@@ -250,7 +250,7 @@ const ToolExecution: React.FC<{
           }
         `} />
       </div>
-      <div className="flex-1 min-w-0 max-w-full">
+      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm max-w-full">
           {/* Header */}
           <button
