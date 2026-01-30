@@ -90,10 +90,10 @@ const findMatchingObserve = (actEvent: ActEvent, events: TimelineEvent[]): Obser
 const UserMessage: React.FC<{ content: string }> = ({ content }) => {
   if (!content) return null;
   return (
-    <div className="flex items-start justify-end gap-3 mb-6 animate-slide-up">
+    <div className="flex items-start justify-end gap-3 mb-4 animate-slide-up">
       <div className="max-w-[85%] md:max-w-[75%]">
-        <div className="bg-primary/10 border border-primary/20 rounded-2xl rounded-tr-sm px-5 py-3 shadow-sm">
-          <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-900 dark:text-slate-100">{content}</p>
+        <div className="bg-primary/10 border border-primary/20 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+          <p className="text-base leading-relaxed whitespace-pre-wrap break-words text-slate-900 dark:text-slate-100 font-sans">{content}</p>
         </div>
       </div>
       <Avatar className="w-8 h-8 bg-slate-200 dark:bg-slate-700 flex-shrink-0">
@@ -110,13 +110,13 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
 }) => {
   if (!content && !isStreaming) return null;
   return (
-    <div className="flex items-start gap-3 mb-6 animate-slide-up">
+    <div className="flex items-start gap-3 mb-4 animate-slide-up">
       <Avatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
         <Sparkles size={16} className="text-white" />
       </Avatar>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+          <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
             {content ? (
               <ReactMarkdown
                 components={{
@@ -132,10 +132,16 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                         {String(children).replace(/\n$/, '')}
                       </SyntaxHighlighter>
                     ) : (
-                      <code className={className} {...props}>
+                      <code className={`${className} font-mono text-sm`} {...props}>
                         {children}
                       </code>
                     );
+                  },
+                  p({ children }) {
+                    return <p className="text-base leading-relaxed break-words">{children}</p>;
+                  },
+                  pre({ children }) {
+                    return <pre className="overflow-x-auto max-w-full">{children}</pre>;
                   },
                 }}
               >
@@ -157,21 +163,21 @@ const TextDeltaBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
 }) => {
   if (!content) return null;
   return (
-    <div className="flex items-start gap-3 mb-6 animate-slide-up">
+    <div className="flex items-start gap-3 mb-4 animate-slide-up">
       <Avatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
         <Sparkles size={16} className="text-white" />
       </Avatar>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <p className="whitespace-pre-wrap">{content}</p>
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+          <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
+            <p className="whitespace-pre-wrap text-base leading-relaxed break-words">{content}</p>
             {isStreaming && <span className="typing-cursor" />}
           </div>
         </div>
       </div>
     </div>
   );
-};
+}
 
 // Thought/Reasoning Component
 const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({ 
@@ -182,21 +188,21 @@ const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
   const [expanded, setExpanded] = useState(isStreaming);
 
   return (
-    <div className="flex items-start gap-3 mb-4 opacity-80 animate-slide-up">
+    <div className="flex items-start gap-3 mb-3 opacity-80 animate-slide-up">
       <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
         <Sparkles size={14} className="text-amber-600 dark:text-amber-400" />
       </div>
       <div className="flex-1">
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         >
           {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           <span>Thinking...</span>
         </button>
         {expanded && (
           <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-900/30">
-            <p className="text-sm text-slate-700 dark:text-slate-300 italic">{content}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-300 italic font-sans break-words">{content}</p>
           </div>
         )}
       </div>
@@ -229,7 +235,7 @@ const ToolExecution: React.FC<{
     : 'Running';
 
   return (
-    <div className="flex items-start gap-3 mb-4 animate-slide-up">
+    <div className="flex items-start gap-3 mb-3 animate-slide-up">
       <div className={`
         w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
         ${observeEvent 
@@ -244,18 +250,19 @@ const ToolExecution: React.FC<{
           }
         `} />
       </div>
-      <div className="flex-1">
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+      <div className="flex-1 min-w-0 max-w-full">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm max-w-full">
           {/* Header */}
           <button
             onClick={() => setExpanded(!expanded)}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
           >
-            <div className="flex items-center gap-3">
-              <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <span className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
                 {event.toolName || 'Unknown Tool'}
               </span>
               <Tag className={`
+                flex-shrink-0
                 ${observeEvent 
                   ? (hasError ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200')
                   : 'bg-blue-50 text-primary border-blue-200'
@@ -267,7 +274,7 @@ const ToolExecution: React.FC<{
                 </span>
               </Tag>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
               {duration && duration > 0 && (
                 <span className="text-xs text-slate-400 flex items-center gap-1">
                   <Clock size={12} />
@@ -280,16 +287,16 @@ const ToolExecution: React.FC<{
 
           {/* Content */}
           {expanded && (
-            <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700">
+            <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700 max-w-full">
               {/* Input */}
-              <div className="mt-3">
+              <div className="mt-3 max-w-full">
                 <p className="text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Input</p>
-                <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 max-w-full">
                   <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
                     JSON
                   </div>
-                  <pre className="bg-slate-50 dark:bg-slate-900 p-3 text-xs overflow-x-auto">
-                    <code className="text-slate-700 dark:text-slate-300">
+                  <pre className="bg-slate-50 dark:bg-slate-900 p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words max-w-full">
+                    <code className="text-slate-700 dark:text-slate-300 font-mono">
                       {JSON.stringify(event.toolInput || {}, null, 2)}
                     </code>
                   </pre>
@@ -298,16 +305,16 @@ const ToolExecution: React.FC<{
 
               {/* Output */}
               {observeEvent && (
-                <div className="mt-3">
+                <div className="mt-3 max-w-full">
                   <p className="text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Output</p>
                   {(() => {
                     const formatted = formatToolOutput(observeEvent.toolOutput);
                     if (formatted.type === 'error') {
                       return (
-                        <div className="rounded-lg p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                        <div className="rounded-lg p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 max-w-full">
                           <div className="flex items-start gap-2">
                             <XCircle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
-                            <pre className="text-xs text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap">
+                            <pre className="text-xs text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap break-words max-w-full font-mono">
                               <code>{formatted.content}</code>
                             </pre>
                           </div>
@@ -316,18 +323,18 @@ const ToolExecution: React.FC<{
                     }
                     if (formatted.type === 'json') {
                       return (
-                        <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                        <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 max-w-full">
                           <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
                             JSON
                           </div>
-                          <pre className="bg-slate-50 dark:bg-slate-900 p-3 text-xs overflow-x-auto">
-                            <code className="text-slate-700 dark:text-slate-300">{formatted.content}</code>
+                          <pre className="bg-slate-50 dark:bg-slate-900 p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words max-w-full">
+                            <code className="text-slate-700 dark:text-slate-300 font-mono">{formatted.content}</code>
                           </pre>
                         </div>
                       );
                     }
                     return (
-                      <pre className="rounded-lg p-3 text-xs overflow-x-auto bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                      <pre className="rounded-lg p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words max-w-full bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-mono">
                         <code>{formatted.content}</code>
                       </pre>
                     );
@@ -350,7 +357,7 @@ const WorkPlanBubble: React.FC<{ event: any }> = ({ event }) => {
   if (!steps.length) return null;
 
   return (
-    <div className="flex items-start gap-3 mb-4 animate-slide-up">
+    <div className="flex items-start gap-3 mb-3 animate-slide-up">
       <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center flex-shrink-0">
         <Sparkles size={16} className="text-purple-600 dark:text-purple-400" />
       </div>
@@ -369,10 +376,10 @@ const WorkPlanBubble: React.FC<{ event: any }> = ({ event }) => {
                 key={index}
                 className="flex items-center gap-3 p-2 bg-purple-50 dark:bg-purple-900/10 rounded-lg"
               >
-                <span className="w-6 h-6 rounded-full bg-white dark:bg-slate-800 text-xs font-medium flex items-center justify-center text-purple-600">
+                <span className="w-6 h-6 rounded-full bg-white dark:bg-slate-800 text-xs font-medium flex items-center justify-center text-purple-600 flex-shrink-0">
                   {index + 1}
                 </span>
-                <span className="text-sm text-slate-700 dark:text-slate-300">{step.description || 'No description'}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-300 break-words">{step.description || 'No description'}</span>
               </div>
             ))}
           </div>
@@ -390,11 +397,11 @@ const StepStartBubble: React.FC<{ event: any }> = ({ event }) => {
   if (!stepDesc) return null;
 
   return (
-    <div className="flex items-start gap-3 my-3 opacity-70 animate-slide-up">
+    <div className="flex items-start gap-3 my-2 opacity-70 animate-slide-up">
       <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
         <span className="text-amber-600 text-xs">{stepIndex !== undefined ? stepIndex + 1 : '•'}</span>
       </div>
-      <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1">
+      <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1 break-words">
         {stepDesc}
       </div>
     </div>

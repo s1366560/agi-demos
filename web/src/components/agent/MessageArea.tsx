@@ -32,14 +32,14 @@ const isNearBottom = (element: HTMLElement, threshold = 100): boolean => {
 const StreamingThoughtBubble = memo<{ content: string; isStreaming: boolean }>(
   ({ content, isStreaming }) => {
     return (
-      <div className="flex items-start gap-3 mb-4 animate-slide-up">
+      <div className="flex items-start gap-3 mb-3 animate-slide-up">
         <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0">
           <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
         </div>
         <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl rounded-tl-sm px-5 py-3 shadow-sm">
+          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide">Thinking</span>
               {isStreaming && (
@@ -50,7 +50,7 @@ const StreamingThoughtBubble = memo<{ content: string; isStreaming: boolean }>(
                 </span>
               )}
             </div>
-            <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap italic">{content}</p>
+            <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap italic font-sans break-words">{content}</p>
             {isStreaming && <span className="typing-cursor" />}
           </div>
         </div>
@@ -180,7 +180,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6"
       >
-        <div className="max-w-3xl mx-auto space-y-4">
+        <div className="max-w-4xl mx-auto space-y-3">
           {timeline.map((event, index) => (
             <MessageBubble
               key={event.id || `event-${index}`}
@@ -206,9 +206,9 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
                 </svg>
               </div>
               <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">{streamingContent}</p>
+                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                  <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
+                    <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-200 text-base leading-relaxed break-words">{streamingContent}</p>
                     <span className="typing-cursor" />
                   </div>
                 </div>
@@ -232,7 +232,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
       )}
 
       {/* Message count badge */}
-      <div className="absolute top-4 right-4 pointer-events-none z-10">
+      <div className="absolute top-4 right-4 md:right-8 pointer-events-none z-10">
         <Badge
           count={timeline.length}
           showZero={false}

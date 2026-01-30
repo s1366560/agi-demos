@@ -54,25 +54,28 @@ export interface TokenUsageChartProps {
   warningThreshold?: number;
 }
 
-// Color scheme for token types
+// Color scheme for token types - aligned with design tokens
 const COLORS = {
   input: {
     bg: "bg-blue-500",
     bgLight: "bg-blue-100 dark:bg-blue-900/30",
     text: "text-blue-600 dark:text-blue-400",
     border: "border-blue-300 dark:border-blue-700",
+    hex: "#3b82f6", // Secondary color
   },
   output: {
     bg: "bg-emerald-500",
     bgLight: "bg-emerald-100 dark:bg-emerald-900/30",
     text: "text-emerald-600 dark:text-emerald-400",
     border: "border-emerald-300 dark:border-emerald-700",
+    hex: "#10b981", // Success color
   },
   reasoning: {
     bg: "bg-purple-500",
     bgLight: "bg-purple-100 dark:bg-purple-900/30",
     text: "text-purple-600 dark:text-purple-400",
     border: "border-purple-300 dark:border-purple-700",
+    hex: "#8b5cf6", // Purple for reasoning
   },
 };
 

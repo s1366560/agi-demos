@@ -62,7 +62,7 @@ export const InputBar: React.FC<InputBarProps> = ({
   return (
     <div className="px-4 py-4">
       <div className={`
-        max-w-3xl mx-auto
+        max-w-4xl mx-auto
         rounded-xl border bg-white dark:bg-slate-800
         transition-all duration-200
         ${isFocused 
@@ -188,7 +188,7 @@ export const InputBar: React.FC<InputBarProps> = ({
       </div>
 
       {/* Footer hint */}
-      <div className="max-w-3xl mx-auto mt-2 text-center">
+      <div className="max-w-4xl mx-auto mt-2 text-center">
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Press <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-400 font-sans">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-400 font-sans">Shift + Enter</kbd> for new line
         </p>

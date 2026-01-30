@@ -173,7 +173,9 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
         {/* Message Area */}
         <div className="flex-1 overflow-hidden relative">
-          {messageArea}
+          <div className="max-w-4xl mx-auto h-full">
+            {messageArea}
+          </div>
         </div>
 
         {/* Input Bar */}

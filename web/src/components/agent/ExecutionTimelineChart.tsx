@@ -61,22 +61,22 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
                     {/* Completed */}
                     {item.completed > 0 && (
                       <div
-                        className="bg-green-500 dark:bg-green-600 transition-all"
-                        style={{ height: `${completedHeight}px` }}
+                        className="bg-emerald-500 dark:bg-emerald-600 transition-all"
+                        style={{ height: `${completedHeight}px`, backgroundColor: '#10b981' }}
                       />
                     )}
                     {/* Failed */}
                     {item.failed > 0 && (
                       <div
                         className="bg-red-500 dark:bg-red-600 transition-all"
-                        style={{ height: `${failedHeight}px` }}
+                        style={{ height: `${failedHeight}px`, backgroundColor: '#ef4444' }}
                       />
                     )}
                     {/* Other statuses */}
                     {otherHeight > 0 && (
                       <div
-                        className="bg-blue-400 dark:bg-blue-500 transition-all"
-                        style={{ height: `${otherHeight}px` }}
+                        className="bg-blue-500 dark:bg-blue-600 transition-all"
+                        style={{ height: `${otherHeight}px`, backgroundColor: '#3b82f6' }}
                       />
                     )}
                   </div>
@@ -104,15 +104,15 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
       {/* Legend */}
       <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-green-500 dark:bg-green-600 rounded" />
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10b981' }} />
           <span className="text-sm text-slate-600 dark:text-slate-400">Completed</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-red-500 dark:bg-red-600 rounded" />
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: '#ef4444' }} />
           <span className="text-sm text-slate-600 dark:text-slate-400">Failed</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-blue-400 dark:bg-blue-500 rounded" />
+          <div className="w-4 h-4 rounded" style={{ backgroundColor: '#3b82f6' }} />
           <span className="text-sm text-slate-600 dark:text-slate-400">Other</span>
         </div>
       </div>
