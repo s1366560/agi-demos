@@ -132,7 +132,7 @@ export const AgentWorkspace: React.FC = () => {
   const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
 
   return (
-    <div className="max-w-full mx-auto w-full flex flex-col gap-6 h-full">
+    <div className="max-w-full mx-auto w-full flex flex-col gap-6" style={{ height: 'calc(100vh - 140px)' }}>
       {/* Header Area */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
