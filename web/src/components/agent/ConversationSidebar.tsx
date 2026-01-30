@@ -178,6 +178,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="font-semibold text-slate-900 dark:text-slate-100 truncate">Agent Chat</h2>
+                <p className="text-xs text-slate-500">{conversations.length} conversations</p>
               </div>
             </div>
             
