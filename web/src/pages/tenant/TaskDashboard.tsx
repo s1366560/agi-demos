@@ -193,7 +193,7 @@ export const TaskDashboard: React.FC = () => {
     }
 
     return (
-        <div className="mx-auto max-w-[1200px] flex flex-col gap-6">
+        <div className="mx-auto max-w-full flex flex-col gap-6">
             {/* Page Heading */}
             <div className="flex flex-wrap justify-between items-end gap-4 py-2">
                 <div className="flex flex-col gap-1">

@@ -58,7 +58,7 @@ export const UserList: React.FC = () => {
     }
 
     return (
-        <div className="max-w-[1400px] mx-auto w-full flex flex-col gap-8">
+        <div className="max-w-full mx-auto w-full flex flex-col gap-8">
             {/* Header Area */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>

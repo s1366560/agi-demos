@@ -233,8 +233,8 @@ export const TenantLayout: React.FC = () => {
           />
 
           {/* Page Content */}
-          <div className="flex-1 overflow-y-auto p-6 lg:p-8">
-            <div className="max-w-7xl mx-auto">
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="max-w-full">
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                 <Outlet />
               </RouteErrorBoundary>

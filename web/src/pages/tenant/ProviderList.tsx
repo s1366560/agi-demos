@@ -143,7 +143,7 @@ export const ProviderList: React.FC = () => {
     const defaultProvider = providers.find(p => p.is_default)
 
     return (
-        <div className="max-w-[1400px] mx-auto w-full flex flex-col gap-8">
+        <div className="max-w-full mx-auto w-full flex flex-col gap-8">
             {/* Header Area */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>

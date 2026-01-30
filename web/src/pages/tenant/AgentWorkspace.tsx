@@ -93,7 +93,7 @@ export const AgentWorkspace: React.FC = () => {
   // Show loading while initializing projects
   if (initializing) {
     return (
-      <div className="max-w-[1600px] mx-auto w-full p-8">
+      <div className="max-w-full mx-auto w-full">
         <div className="flex items-center justify-center h-64">
           <Spin size="large" tip={t('common.loading')} />
         </div>
@@ -103,7 +103,7 @@ export const AgentWorkspace: React.FC = () => {
 
   if (projects.length === 0) {
     return (
-      <div className="max-w-[1600px] mx-auto w-full p-8">
+      <div className="max-w-full mx-auto w-full">
         <div className="flex flex-col gap-8">
           {/* Header Area */}
           <div className="flex flex-col gap-1">
@@ -132,7 +132,7 @@ export const AgentWorkspace: React.FC = () => {
   const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
 
   return (
-    <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-6 h-full">
+    <div className="max-w-full mx-auto w-full flex flex-col gap-6 h-full">
       {/* Header Area */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-col gap-1">

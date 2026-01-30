@@ -25,7 +25,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-6 md:p-8 flex flex-col gap-8">
+        <div className="max-w-full mx-auto flex flex-col gap-8">
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{t('tenant.settings.title')}</h1>

@@ -186,7 +186,7 @@ export function WorkflowPatterns() {
   // Error state
   if (error && !loading) {
     return (
-      <div className="max-w-[1600px] mx-auto">
+      <div className="max-w-full mx-auto">
         <div className="flex flex-col items-center justify-center py-16">
           <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
             <MaterialIcon name="error" size={32} className="text-red-500" />
@@ -207,7 +207,7 @@ export function WorkflowPatterns() {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto">
+    <div className="max-w-full mx-auto">
       {/* Page Heading & Actions */}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
