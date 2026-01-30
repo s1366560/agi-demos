@@ -735,6 +735,50 @@ class SessionProcessor:
                         tool_name = event.data.get("name", "")
                         arguments = event.data.get("arguments", {})
 
+                        # === EARLY VALIDATION (P0-1) ===
+                        # Validate AgentActEvent schema BEFORE yielding to prevent
+                        # 3-minute delay on validation errors. Fast-fail here instead.
+                        try:
+                            # Validate that tool_name is a non-empty string
+                            if not isinstance(tool_name, str) or not tool_name.strip():
+                                raise ValueError(f"Invalid tool_name: {tool_name!r}")
+
+                            # Validate that arguments is a dict (Pydantic requirement)
+                            if not isinstance(arguments, dict):
+                                raise ValueError(
+                                    f"Invalid tool_input type: {type(arguments).__name__}, "
+                                    f"expected dict"
+                                )
+
+                            # Validate call_id is a non-empty string if provided
+                            if call_id and not isinstance(call_id, str):
+                                raise ValueError(f"Invalid call_id type: {type(call_id).__name__}")
+
+                            # Try to create AgentActEvent to catch any other validation errors
+                            # This validates the entire schema before we proceed
+                            _test_event = AgentActEvent(
+                                tool_name=tool_name,
+                                tool_input=arguments,
+                                call_id=call_id,
+                                status="running",
+                            )
+                            # Event validated successfully, don't use _test_event
+                            del _test_event
+
+                        except (ValueError, TypeError) as ve:
+                            # Early validation failed - log and emit error immediately
+                            logger.error(
+                                f"[Processor] Early validation failed for tool call: "
+                                f"tool_name={tool_name!r}, arguments={arguments!r}, "
+                                f"error={ve}"
+                            )
+                            # Emit error event and continue with next tool call
+                            yield AgentErrorEvent(
+                                message=f"Tool call validation failed: {ve}",
+                                code="VALIDATION_ERROR",
+                            )
+                            continue
+
                         # Update tool part
                         if call_id in self._pending_tool_calls:
                             tool_part = self._pending_tool_calls[call_id]

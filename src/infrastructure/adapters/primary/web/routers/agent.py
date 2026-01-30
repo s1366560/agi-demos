@@ -557,7 +557,7 @@ async def generate_conversation_title(
 async def get_conversation_messages(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
-    limit: int = Query(100, ge=1, le=500, description="Maximum events to return"),
+    limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
     from_sequence: int = Query(
         0, description="Starting sequence number (inclusive) for forward pagination"
     ),
@@ -630,9 +630,18 @@ async def get_conversation_messages(
             "step_end",
         }
 
+        # Calculate from_sequence for initial load (get the latest N events)
+        # When both from_sequence=0 and before_sequence=None, fetch the latest events
+        calculated_from_sequence = from_sequence
+        if from_sequence == 0 and before_sequence is None:
+            last_seq = await event_repo.get_last_sequence(conversation_id)
+            if last_seq >= limit:
+                # Start from (last_seq - limit + 1) to get the last `limit` events
+                calculated_from_sequence = max(0, last_seq - limit + 1)
+
         events = await event_repo.get_events(
             conversation_id=conversation_id,
-            from_sequence=from_sequence,
+            from_sequence=calculated_from_sequence,
             limit=limit,
             event_types=DISPLAYABLE_EVENTS,
             before_sequence=before_sequence,

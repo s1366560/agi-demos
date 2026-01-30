@@ -235,14 +235,27 @@ async def revoke_api_key(
 
 @router.get("/users/me", response_model=UserSchema)
 @router.get("/auth/me", response_model=UserSchema)
-async def read_users_me(current_user: DBUser = Depends(get_current_user)):
+async def read_users_me(
+    current_user: DBUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
     """Get current user information."""
     logger.info(f"Reading user info for: {current_user.id}")
+
+    # Eager load roles to avoid lazy loading in async mode
+    result = await db.execute(
+        select(DBUser)
+        .options(selectinload(DBUser.roles).selectinload(UserRole.role))
+        .where(DBUser.id == current_user.id)
+    )
+    user_with_roles = result.scalar_one_or_none()
+
+    role_names = [r.role.name for r in user_with_roles.roles] if user_with_roles else []
+
     return UserSchema(
         user_id=current_user.id,
         email=current_user.email,
         name=current_user.full_name,
-        roles=[r.role.name for r in current_user.roles],
+        roles=role_names,
         is_active=current_user.is_active,
         created_at=current_user.created_at,
         profile={},

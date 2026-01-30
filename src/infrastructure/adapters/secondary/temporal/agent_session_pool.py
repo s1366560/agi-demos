@@ -631,9 +631,30 @@ async def get_or_create_agent_session(
     # Create SkillExecutor (lightweight, doesn't need separate cache)
     skill_executor = None
     if skills:
-        from src.infrastructure.agent.core.skill_executor import SkillExecutor
+        import os
+        from pathlib import Path
 
-        skill_executor = SkillExecutor(tools)
+        from src.infrastructure.agent.core.skill_executor import SkillExecutor
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_mcp_sandbox_adapter
+        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
+        from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
+
+        # Get sandbox adapter for resource injection
+        sandbox_adapter = get_mcp_sandbox_adapter()
+
+        # Create resource injector if sandbox adapter is available
+        resource_injector = None
+        if sandbox_adapter:
+            # Use current working directory as project path for skill resources
+            project_path = Path(os.getcwd())
+            resource_loader = SkillResourceLoader(project_path)
+            resource_injector = SkillResourceInjector(resource_loader)
+
+        skill_executor = SkillExecutor(
+            tools=tools,
+            resource_injector=resource_injector,
+            sandbox_adapter=sandbox_adapter,
+        )
 
     # Get SystemPromptManager singleton
     system_prompt_manager = await get_system_prompt_manager()
@@ -934,9 +955,30 @@ async def get_or_create_agent_session(
     # Create SkillExecutor (lightweight, doesn't need separate cache)
     skill_executor = None
     if skills:
-        from src.infrastructure.agent.core.skill_executor import SkillExecutor
+        import os
+        from pathlib import Path
 
-        skill_executor = SkillExecutor(tools)
+        from src.infrastructure.agent.core.skill_executor import SkillExecutor
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_mcp_sandbox_adapter
+        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
+        from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
+
+        # Get sandbox adapter for resource injection
+        sandbox_adapter = get_mcp_sandbox_adapter()
+
+        # Create resource injector if sandbox adapter is available
+        resource_injector = None
+        if sandbox_adapter:
+            # Use current working directory as project path for skill resources
+            project_path = Path(os.getcwd())
+            resource_loader = SkillResourceLoader(project_path)
+            resource_injector = SkillResourceInjector(resource_loader)
+
+        skill_executor = SkillExecutor(
+            tools=tools,
+            resource_injector=resource_injector,
+            sandbox_adapter=sandbox_adapter,
+        )
 
     # Get SystemPromptManager singleton
     system_prompt_manager = await get_system_prompt_manager()

@@ -7,7 +7,7 @@ This executor handles the execution of matched skills within the ReAct agent loo
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.model.agent.skill import Skill
@@ -48,20 +48,27 @@ class SkillExecutor:
     def __init__(
         self,
         tools: Dict[str, Any],  # Tool name -> Tool definition with execute method
+        resource_injector: Optional["SkillResourceInjector"] = None,
+        sandbox_adapter: Optional["SandboxPort"] = None,
     ):
         """
         Initialize skill executor.
 
         Args:
             tools: Dictionary of available tools
+            resource_injector: Optional SKILL resource injector for Sandbox integration
+            sandbox_adapter: Optional Sandbox adapter for resource injection
         """
         self.tools = tools
+        self._resource_injector = resource_injector
+        self._sandbox_adapter = sandbox_adapter
 
     async def execute(
         self,
         skill: Skill,
         query: str,
         context: Optional[Dict[str, Any]] = None,
+        sandbox_id: Optional[str] = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
         Execute a skill by running its tool composition.
@@ -70,6 +77,7 @@ class SkillExecutor:
             skill: Skill to execute
             query: User query that triggered the skill
             context: Optional execution context
+            sandbox_id: Optional Sandbox ID for resource injection
 
         Yields:
             AgentDomainEvent objects for real-time updates
@@ -83,6 +91,18 @@ class SkillExecutor:
             content=f"Executing skill: {skill.name}",
             thought_level="skill",
         )
+
+        # Pre-inject SKILL resources if sandbox_id is provided
+        if (
+            sandbox_id
+            and self._resource_injector
+            and self._sandbox_adapter
+        ):
+            try:
+                await self._inject_skill_resources(skill, sandbox_id)
+            except Exception as e:
+                # Log error but continue execution - skill may still work
+                logger.warning(f"Resource injection failed for skill {skill.name}: {e}")
 
         # Execute each tool in the skill's tool list
         accumulated_context = {"query": query, **context}
@@ -181,6 +201,34 @@ class SkillExecutor:
             tool_results=tool_results,
             execution_time_ms=execution_time_ms,
             error=error_msg,
+        )
+
+    async def _inject_skill_resources(
+        self,
+        skill: Skill,
+        sandbox_id: str,
+    ) -> None:
+        """
+        Inject SKILL resources into Sandbox before execution.
+
+        Args:
+            skill: Skill whose resources to inject
+            sandbox_id: Target Sandbox ID
+
+        Raises:
+            Exception: Propagates injection errors for caller to handle
+        """
+        await self._resource_injector.inject_skill(
+            self._sandbox_adapter,
+            sandbox_id=sandbox_id,
+            skill_name=skill.name,
+            skill_content=skill.prompt_template,
+        )
+
+        await self._resource_injector.setup_skill_environment(
+            self._sandbox_adapter,
+            sandbox_id=sandbox_id,
+            skill_name=skill.name,
         )
 
     def get_skill_tools_description(self, skill: Skill) -> str:
