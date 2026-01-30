@@ -229,21 +229,6 @@ services:
       - CUA_MCP_PORT=18766
     restart: unless-stopped
 
-  # Codebox MCP Server (WebSocket)
-  codebox-mcp-server:
-    build:
-      context: ./sandbox-mcp-server
-      dockerfile: Dockerfile
-    container_name: memstack-codebox-mcp-server
-    ports:
-      - "8765:8765"
-    environment:
-      - MCP_HOST=0.0.0.0
-      - MCP_PORT=8765
-      - MCP_WORKSPACE=/workspace
-    volumes:
-      - ./:/workspace
-    restart: unless-stopped
 
   # Prometheus for metrics collection
   prometheus:
