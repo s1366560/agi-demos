@@ -72,6 +72,8 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
       const timer = setInterval(checkReady, 50);
       return () => clearInterval(timer);
     }
+    
+    return undefined;
   }, [i18n.isInitialized, isAuthLoading, isReady]);
 
   if (!isReady) {

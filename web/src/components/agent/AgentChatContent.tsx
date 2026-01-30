@@ -28,11 +28,13 @@ import { EmptyState } from './EmptyState';
 interface AgentChatContentProps {
   projectId: string;
   basePath?: string; // For navigation, defaults to current location
+  headerExtra?: React.ReactNode; // Extra content for sidebar header (e.g., project selector)
 }
 
 export const AgentChatContent: React.FC<AgentChatContentProps> = ({ 
   projectId,
-  basePath: customBasePath 
+  basePath: customBasePath,
+  headerExtra,
 }) => {
   const { conversation: conversationId } = useParams<{
     conversation?: string;
@@ -207,8 +209,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       onDelete={handleDeleteConversation}
       collapsed={sidebarCollapsed}
       onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      headerExtra={headerExtra}
     />
-  ), [conversations, activeConversationId, sidebarCollapsed, handleSelectConversation, handleNewConversation, handleDeleteConversation]);
+  ), [conversations, activeConversationId, sidebarCollapsed, handleSelectConversation, handleNewConversation, handleDeleteConversation, headerExtra]);
 
   const messageArea = useMemo(() => (
     timeline.length === 0 && !activeConversationId ? (

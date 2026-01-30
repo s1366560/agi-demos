@@ -19,6 +19,45 @@ import type { Project } from '../../types/memory';
 const { Option } = Select;
 
 /**
+ * ProjectSelector - Inline project selector for chat header
+ */
+const ProjectSelector: React.FC<{
+  projects: Project[];
+  selectedId: string | null;
+  onChange: (id: string) => void;
+}> = ({ projects, selectedId, onChange }) => {
+  const { t } = useTranslation();
+  
+  return (
+    <Select
+      value={selectedId}
+      onChange={onChange}
+      style={{ width: 200 }}
+      placeholder={t('agent.workspace.selectProject')}
+      showSearch
+      optionFilterProp="children"
+      filterOption={(input, option) =>
+        (option?.children as unknown as string)
+          ?.toLowerCase()
+          .includes(input.toLowerCase())
+      }
+      className="agent-project-select"
+      bordered={false}
+      dropdownMatchSelectWidth={false}
+    >
+      {projects.map((project: Project) => (
+        <Option key={project.id} value={project.id}>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary" />
+            {project.name}
+          </div>
+        </Option>
+      ))}
+    </Select>
+  );
+};
+
+/**
  * AgentWorkspace - Main component for tenant-level agent access
  */
 export const AgentWorkspace: React.FC = () => {
@@ -93,37 +132,24 @@ export const AgentWorkspace: React.FC = () => {
   // Show loading while initializing projects
   if (initializing) {
     return (
-      <div className="max-w-full mx-auto w-full">
-        <div className="flex items-center justify-center h-64">
-          <Spin size="large" tip={t('common.loading')} />
-        </div>
+      <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
+        <Spin size="large" tip={t('common.loading')} />
       </div>
     );
   }
 
   if (projects.length === 0) {
     return (
-      <div className="max-w-full mx-auto w-full">
-        <div className="flex flex-col gap-8">
-          {/* Header Area */}
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              {t('nav.agentWorkspace')}
-            </h1>
-            <p className="text-sm text-slate-500">{t('agent.workspace.subtitle')}</p>
-          </div>
-          
-          {/* Empty State */}
-          <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12">
-            <Empty
-              description={t('agent.workspace.noProjects')}
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            >
-              <Button type="primary" onClick={() => navigate('/tenant/projects/new')}>
-                {t('tenant.projects.create')}
-              </Button>
-            </Empty>
-          </div>
+      <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
+        <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12 max-w-lg">
+          <Empty
+            description={t('agent.workspace.noProjects')}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          >
+            <Button type="primary" onClick={() => navigate('/tenant/projects/new')}>
+              {t('tenant.projects.create')}
+            </Button>
+          </Empty>
         </div>
       </div>
     );
@@ -132,56 +158,25 @@ export const AgentWorkspace: React.FC = () => {
   const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
 
   return (
-    <div className="max-w-full mx-auto w-full flex flex-col gap-4" style={{ height: 'calc(100vh - 116px)' }}>
-      {/* Header Area */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {t('nav.agentWorkspace')}
-          </h1>
-          <p className="text-sm text-slate-500">{t('agent.workspace.subtitle')}</p>
-        </div>
-        
-        {/* Project Selector */}
-        <Select
-          value={selectedProjectId}
-          onChange={handleProjectChange}
-          style={{ width: 280 }}
-          placeholder={t('agent.workspace.selectProject')}
-          showSearch
-          optionFilterProp="children"
-          filterOption={(input, option) =>
-            (option?.children as unknown as string)
-              ?.toLowerCase()
-              .includes(input.toLowerCase())
+    <div className="max-w-full mx-auto w-full h-full" style={{ height: 'calc(100vh - 116px)' }}>
+      {effectiveProjectId ? (
+        <AgentChatContent 
+          projectId={effectiveProjectId} 
+          key={effectiveProjectId}
+          basePath={basePath}
+          headerExtra={
+            <ProjectSelector
+              projects={projects}
+              selectedId={selectedProjectId}
+              onChange={handleProjectChange}
+            />
           }
-          className="agent-project-select"
-        >
-          {projects.map((project: Project) => (
-            <Option key={project.id} value={project.id}>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-primary" />
-                {project.name}
-              </div>
-            </Option>
-          ))}
-        </Select>
-      </div>
-
-      {/* Main Content Area - Chat Interface */}
-      <div className="flex-1 min-h-0 bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {effectiveProjectId ? (
-          <AgentChatContent 
-            projectId={effectiveProjectId} 
-            key={effectiveProjectId}
-            basePath={basePath}
-          />
-        ) : (
-          <div className="h-full flex items-center justify-center">
-            <Empty description={t('agent.workspace.selectProjectToStart')} />
-          </div>
-        )}
-      </div>
+        />
+      ) : (
+        <div className="h-full flex items-center justify-center">
+          <Empty description={t('agent.workspace.selectProjectToStart')} />
+        </div>
+      )}
     </div>
   );
 };

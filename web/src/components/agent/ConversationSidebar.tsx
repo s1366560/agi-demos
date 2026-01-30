@@ -24,6 +24,7 @@ interface ConversationSidebarProps {
   onDelete: (id: string, e: React.MouseEvent) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  headerExtra?: React.ReactNode;
 }
 
 interface ConversationItemProps {
@@ -155,29 +156,39 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onNew,
   onDelete,
   collapsed,
+  headerExtra,
 }) => {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className={`
         p-4 border-b border-slate-200 dark:border-slate-800
-        flex items-center gap-3
-        ${collapsed ? 'justify-center' : ''}
+        ${collapsed ? 'flex items-center justify-center' : ''}
       `}>
         {collapsed ? (
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Bot className="text-primary" size={24} />
           </div>
         ) : (
-          <>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Bot className="text-white" size={24} />
+          <div className="space-y-3">
+            {/* Title Row */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-lg shadow-primary/20 shrink-0">
+                <Bot className="text-white" size={24} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-slate-900 dark:text-slate-100 truncate">Agent Chat</h2>
+                <p className="text-xs text-slate-500">{conversations.length} conversations</p>
+              </div>
             </div>
-            <div className="flex-1">
-              <h2 className="font-semibold text-slate-900 dark:text-slate-100">Agent Chat</h2>
-              <p className="text-xs text-slate-500">{conversations.length} conversations</p>
-            </div>
-          </>
+            
+            {/* Extra Header Content (e.g., Project Selector) */}
+            {headerExtra && (
+              <div className="flex items-center">
+                {headerExtra}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
