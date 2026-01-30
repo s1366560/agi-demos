@@ -92,8 +92,8 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => {
   return (
     <div className="flex items-start justify-end gap-3 mb-6 animate-slide-up">
       <div className="max-w-[85%] md:max-w-[75%]">
-        <div className="bg-primary text-white rounded-2xl rounded-tr-sm px-5 py-3 shadow-sm">
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+        <div className="bg-primary/10 border border-primary/20 rounded-2xl rounded-tr-sm px-5 py-3 shadow-sm">
+          <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-900 dark:text-slate-100">{content}</p>
         </div>
       </div>
       <Avatar className="w-8 h-8 bg-slate-200 dark:bg-slate-700 flex-shrink-0">

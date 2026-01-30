@@ -63,7 +63,7 @@ export const InputBar: React.FC<InputBarProps> = ({
     <div className="px-4 py-4">
       <div className={`
         max-w-3xl mx-auto
-        rounded-2xl border bg-white dark:bg-slate-800
+        rounded-xl border bg-white dark:bg-slate-800
         transition-all duration-200
         ${isFocused 
           ? 'border-primary shadow-lg shadow-primary/10' 
@@ -74,7 +74,7 @@ export const InputBar: React.FC<InputBarProps> = ({
         {/* Plan Mode Badge */}
         {isPlanMode && (
           <div className="px-4 pt-3">
-            <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-xs">
+            <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs">
               <span className="flex items-center gap-1">
                 <Wand2 size={12} />
                 Plan Mode Active
@@ -126,7 +126,7 @@ export const InputBar: React.FC<InputBarProps> = ({
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               />
             </Tooltip>
-            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1.5" />
             <Tooltip title={isPlanMode ? "Exit Plan Mode" : "Enter Plan Mode"}>
               <Button
                 type="text"
@@ -189,8 +189,8 @@ export const InputBar: React.FC<InputBarProps> = ({
 
       {/* Footer hint */}
       <div className="max-w-3xl mx-auto mt-2 text-center">
-        <p className="text-xs text-slate-400">
-          Press <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-400 font-sans">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-400 font-sans">Shift + Enter</kbd> for new line
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Press <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-400 font-sans">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-400 font-sans">Shift + Enter</kbd> for new line
         </p>
       </div>
     </div>

@@ -162,7 +162,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className={`
-        p-4 border-b border-slate-200 dark:border-slate-800
+        p-4 border-b border-slate-200 dark:border-slate-700
         ${collapsed ? 'flex items-center justify-center' : ''}
       `}>
         {collapsed ? (
@@ -173,7 +173,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           <div className="space-y-3">
             {/* Title Row */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center shadow-lg shadow-primary/20 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-sm shrink-0">
                 <Bot className="text-white" size={24} />
               </div>
               <div className="flex-1 min-w-0">
@@ -200,7 +200,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           onClick={onNew}
           className={`
             ${collapsed ? 'w-full aspect-square' : 'w-full'}
-            h-10 bg-primary hover:bg-primary-600 shadow-lg shadow-primary/20
+            h-10 bg-primary hover:bg-primary-600 shadow-sm
             rounded-xl flex items-center justify-center gap-2
           `}
         >
@@ -229,16 +229,16 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
       {/* Footer */}
       {!collapsed && (
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 h-[52px]">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center shadow-sm">
-              <span className="text-white text-xs font-bold">AI</span>
+        <div className="p-3 border-t border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 h-[52px]">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-light flex items-center justify-center shadow-sm">
+              <Bot size={16} className="text-white" />
             </div>
             <div className="flex flex-col overflow-hidden min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate leading-5">
+              <p className="text-sm font-medium text-slate-900 dark:text-white truncate leading-5">
                 AI Assistant
               </p>
-              <p className="text-xs text-emerald-500 truncate leading-4">
+              <p className="text-xs text-emerald-500 dark:text-emerald-400 truncate leading-4">
                 Online
               </p>
             </div>

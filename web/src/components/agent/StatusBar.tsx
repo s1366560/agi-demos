@@ -25,7 +25,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   sandboxConnected,
 }) => {
   return (
-    <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+    <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
       {/* Left: Status indicators */}
       <div className="flex items-center gap-4">
         {/* Agent Status */}
@@ -42,7 +42,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         </Tooltip>
 
         {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-700" />
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
         {/* Message Count */}
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -53,8 +53,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {/* Sandbox Status */}
         {sandboxConnected && (
           <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-700" />
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
               <Terminal size={12} />
               <span>Sandbox</span>
             </div>
@@ -64,8 +64,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         {/* Plan Mode */}
         {isPlanMode && (
           <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-700" />
-            <div className="flex items-center gap-1.5 text-xs text-blue-600">
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400">
               <Zap size={12} />
               <span>Plan Mode</span>
             </div>
