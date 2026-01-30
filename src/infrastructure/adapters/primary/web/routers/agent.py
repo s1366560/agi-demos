@@ -216,6 +216,14 @@ async def list_conversations(
         List of conversations
     """
     try:
+        # Log connection pool metrics for debugging
+        engine = db.get_bind()
+        pool = engine.pool
+        logger.debug(
+            f"[Connection Pool] size={pool.size()}, checked_out={pool.checkedout()}, "
+            f"overflow={pool.overflow()}, queue_size={pool.size() - pool.checkedout()}"
+        )
+
         container = get_container_with_db(request, db)
 
         llm = create_langchain_llm(tenant_id)
@@ -440,7 +448,11 @@ async def update_conversation_title(
         )
 
 
-@router.post("/conversations/{conversation_id}/generate-title", response_model=ConversationResponse, deprecated=True)
+@router.post(
+    "/conversations/{conversation_id}/generate-title",
+    response_model=ConversationResponse,
+    deprecated=True,
+)
 async def generate_conversation_title(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
@@ -546,8 +558,12 @@ async def get_conversation_messages(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(100, ge=1, le=500, description="Maximum events to return"),
-    from_sequence: int = Query(0, description="Starting sequence number (inclusive) for forward pagination"),
-    before_sequence: Optional[int] = Query(None, description="For backward pagination, get events before this sequence"),
+    from_sequence: int = Query(
+        0, description="Starting sequence number (inclusive) for forward pagination"
+    ),
+    before_sequence: Optional[int] = Query(
+        None, description="For backward pagination, get events before this sequence"
+    ),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
@@ -2431,18 +2447,6 @@ class WorkflowStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-class AgentSessionStatusResponse(BaseModel):
-    """Response with Agent Session status."""
-
-    is_initialized: bool
-    is_active: bool
-    total_chats: int
-    active_chats: int
-    tool_count: int
-    cached_since: Optional[str] = None
-    workflow_id: Optional[str] = None
-
-
 @router.get("/conversations/{conversation_id}/events", response_model=EventReplayResponse)
 async def get_conversation_events(
     conversation_id: str,
@@ -2709,83 +2713,3 @@ async def get_workflow_status(
         raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {str(e)}")
 
 
-@router.get(
-    "/projects/{project_id}/session-status",
-    response_model=AgentSessionStatusResponse,
-)
-async def get_agent_session_status(
-    project_id: str,
-    current_user: User = Depends(get_current_user),
-) -> AgentSessionStatusResponse:
-    """
-    Get the Agent Session status for a project.
-    
-    This endpoint queries the Temporal server for the current status of the
-    Agent Session Workflow (long-running workflow per project).
-    
-    Returns:
-        Session status including initialization state, tool count, etc.
-    """
-    try:
-        from temporalio.client import WorkflowExecutionStatus
-        
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
-        from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-            AgentSessionStatus,
-            get_agent_session_workflow_id,
-        )
-        
-        # Get Temporal client
-        temporal_client = await TemporalClientFactory.get_client()
-        if not temporal_client:
-            raise HTTPException(
-                status_code=501, 
-                detail="Temporal workflow engine not configured"
-            )
-        
-        # Generate workflow ID
-        workflow_id = get_agent_session_workflow_id(
-            tenant_id=str(current_user.tenant_id),
-            project_id=project_id,
-            agent_mode="default",
-        )
-        
-        try:
-            handle = temporal_client.get_workflow_handle(workflow_id)
-            
-            # Query the status
-            status: AgentSessionStatus = await handle.query("get_status")
-            
-            return AgentSessionStatusResponse(
-                is_initialized=status.is_initialized,
-                is_active=status.is_active,
-                total_chats=status.total_chats,
-                active_chats=status.active_chats,
-                tool_count=status.tool_count,
-                cached_since=status.cached_since,
-                workflow_id=workflow_id,
-            )
-            
-        except Exception as e:
-            if "not found" in str(e).lower() or "workflow not found" in str(e).lower():
-                # Session not initialized yet
-                return AgentSessionStatusResponse(
-                    is_initialized=False,
-                    is_active=False,
-                    total_chats=0,
-                    active_chats=0,
-                    tool_count=0,
-                    workflow_id=workflow_id,
-                )
-            raise
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting agent session status: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to get session status: {str(e)}"
-        )

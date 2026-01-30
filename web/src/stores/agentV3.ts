@@ -15,6 +15,7 @@ import {
   WorkPlanEventData,
   StepStartEventData,
   CompleteEventData,
+  TextEndEventData,
   ExecutionPlan,
   PlanExecutionStartEvent,
   PlanExecutionCompleteEvent,
@@ -355,6 +356,15 @@ export const useAgentV3Store = create<AgentV3State>()(
 
     loadConversations: async (projectId) => {
       console.log(`[agentV3] loadConversations called for project: ${projectId}`);
+      
+      // Prevent duplicate calls for the same project
+      const currentConvos = get().conversations;
+      const firstConvoProject = currentConvos[0]?.project_id;
+      if (currentConvos.length > 0 && firstConvoProject === projectId) {
+        console.log(`[agentV3] Conversations already loaded for project ${projectId}, skipping`);
+        return;
+      }
+      
       try {
         const conversations = await agentService.listConversations(projectId);
         console.log(`[agentV3] Loaded ${conversations.length} conversations`);
@@ -947,6 +957,10 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Call additional handler if provided
           additionalHandlers?.onObserve?.(event);
         },
+        onTextStart: () => {
+          // Text streaming started - reset stream status to streaming
+          set({ streamStatus: "streaming" });
+        },
         onTextDelta: (event) => {
           set((state) => {
             const newMessages = state.messages.map((m) => {
@@ -956,6 +970,22 @@ export const useAgentV3Store = create<AgentV3State>()(
               return m;
             });
             return { messages: newMessages, streamStatus: "streaming" };
+          });
+        },
+        onTextEnd: (event) => {
+          // Text streaming ended - optionally use full_text for final content
+          set((state) => {
+            const fullText = event.data.full_text;
+            if (fullText) {
+              const newMessages = state.messages.map((m) => {
+                if (m.id === assistantMsgId) {
+                  return { ...m, content: fullText };
+                }
+                return m;
+              });
+              return { messages: newMessages };
+            }
+            return state;
           });
         },
         onDecisionAsked: (event) => {

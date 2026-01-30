@@ -176,6 +176,18 @@ async def lifespan(app: FastAPI):
     app.state.workflow_engine = workflow_engine
     app.state.graph_service = graph_service
 
+    # Register WebSocket manager for lifecycle state notifications
+    from src.infrastructure.adapters.primary.web.routers.agent_websocket import (
+        get_connection_manager,
+    )
+    from src.infrastructure.agent.core.project_react_agent import (
+        register_websocket_manager,
+    )
+
+    ws_manager = get_connection_manager()
+    register_websocket_manager(ws_manager)
+    logger.info("WebSocket manager registered for lifecycle state notifications")
+
     yield
 
     # Shutdown

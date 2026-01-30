@@ -7,6 +7,8 @@
  * - Execution metrics (total/failed chats, active chats)
  * - Health status (uptime, last error)
  *
+ * This component now uses the unified agent status hook for consolidated state management.
+ *
  * @module components/agent/ProjectAgentStatusBar
  */
 
@@ -30,28 +32,15 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-react';
-import type {
-  AgentSessionStatus,
-  ProjectAgentLifecycleState,
-} from '../../services/agentStatusService';
+import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
 
 interface ProjectAgentStatusBarProps {
   /** Project ID */
   projectId: string;
-  /** Agent session status from API */
-  sessionStatus: AgentSessionStatus | null;
-  /** Whether data is loading */
-  isLoading?: boolean;
-  /** Error message if any */
-  error?: string | null;
-  /** Whether conversation is streaming */
-  isStreaming?: boolean;
+  /** Tenant ID */
+  tenantId: string;
   /** Number of messages */
   messageCount?: number;
-  /** Whether sandbox is connected */
-  sandboxConnected?: boolean;
-  /** Whether plan mode is active */
-  isPlanMode?: boolean;
 }
 
 /**
@@ -148,32 +137,35 @@ function formatLastActivity(timestamp: string): string {
 }
 
 /**
- * Get lifecycle state from session status
+ * ProjectAgentStatusBar - Refactored to use unified status hook
+ *
+ * This component now uses the useUnifiedAgentStatus hook which consolidates:
+ * - Lifecycle state (from useAgentLifecycleState via WebSocket)
+ * - Execution state (from agentV3 store)
+ * - Plan mode state (from planModeStore)
+ * - Streaming state (from streamingStore)
+ * - Sandbox connection (from sandboxStore)
  */
-function getLifecycleState(status: AgentSessionStatus | null): ProjectAgentLifecycleState {
-  if (!status) return 'uninitialized';
-  if (status.last_error && !status.is_active) return 'error';
-  if (status.is_executing) return 'executing';
-  if (status.is_active && status.is_initialized) return 'ready';
-  if (status.is_active && !status.is_initialized) return 'initializing';
-  if (!status.is_active && status.is_initialized) return 'paused';
-  return 'uninitialized';
-}
-
 export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
-  sessionStatus,
-  isLoading = false,
-  isStreaming = false,
+  projectId,
+  tenantId,
   messageCount = 0,
-  sandboxConnected = false,
-  isPlanMode = false,
 }) => {
-  const lifecycleState = useMemo(() => getLifecycleState(sessionStatus), [sessionStatus]);
+  // Use the unified status hook for consolidated state (WebSocket-based)
+  const { status, isLoading, error, isStreaming } = useUnifiedAgentStatus({
+    projectId,
+    tenantId,
+    enabled: !!projectId,
+  });
+
+  const lifecycleState = status.lifecycle;
   const config = lifecycleConfig[lifecycleState];
 
   const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
-  const hasDetails = !!sessionStatus;
+
+  // Determine if we have detailed session status to show resources
+  const hasSessionStatus = lifecycleState !== 'uninitialized';
 
   return (
     <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -185,14 +177,9 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
             <div className="space-y-2 max-w-xs">
               <div className="font-medium">{config.label}</div>
               <div className="text-xs opacity-80">{config.description}</div>
-              {sessionStatus?.last_error && (
+              {error && (
                 <div className="text-xs text-red-400 pt-1 border-t border-gray-600 mt-1">
-                  错误: {sessionStatus.last_error}
-                </div>
-              )}
-              {sessionStatus?.created_at && (
-                <div className="text-xs opacity-60 pt-1 border-t border-gray-600 mt-1">
-                  创建于: {new Date(sessionStatus.created_at).toLocaleString('zh-CN')}
+                  错误: {error}
                 </div>
               )}
             </div>
@@ -210,8 +197,8 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
               className={config.animate ? 'animate-spin' : ''}
             />
             <span>{config.label}</span>
-            {sessionStatus?.active_chats ? (
-              <span className="ml-0.5">({sessionStatus.active_chats})</span>
+            {status.resources.activeCalls > 0 ? (
+              <span className="ml-0.5">({status.resources.activeCalls})</span>
             ) : null}
           </div>
         </Tooltip>
@@ -220,47 +207,24 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
         {/* Resources: Tools */}
-        {hasDetails && (
-          <Tooltip title={`可用工具: ${sessionStatus?.tool_count || 0}`}>
+        {hasSessionStatus && (
+          <Tooltip title={`可用工具: ${status.resources.tools}`}>
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <Wrench size={11} />
-              <span>{sessionStatus?.tool_count || 0}</span>
+              <span>{status.resources.tools}</span>
             </div>
           </Tooltip>
         )}
 
         {/* Resources: Skills */}
-        {sessionStatus?.skill_count ? (
-          <Tooltip title={`已加载技能: ${sessionStatus.skill_count}`}>
+        {hasSessionStatus && status.resources.skills > 0 && (
+          <Tooltip title={`已加载技能: ${status.resources.skills}`}>
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <BrainCircuit size={11} />
-              <span>{sessionStatus.skill_count}</span>
+              <span>{status.resources.skills}</span>
             </div>
           </Tooltip>
-        ) : null}
-
-        {/* Resources: Subagents */}
-        {sessionStatus?.subagent_count ? (
-          <Tooltip title={`可用子代理: ${sessionStatus.subagent_count}`}>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <Bot size={11} />
-              <span>{sessionStatus.subagent_count}</span>
-            </div>
-          </Tooltip>
-        ) : null}
-
-        {/* Uptime */}
-        {sessionStatus?.uptime_seconds ? (
-          <Tooltip title="运行时间">
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <Clock size={11} />
-              <span>{formatUptime(sessionStatus.uptime_seconds)}</span>
-            </div>
-          </Tooltip>
-        ) : null}
-
-        {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+        )}
 
         {/* Message Count */}
         <Tooltip title="对话消息数">
@@ -271,7 +235,7 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
         </Tooltip>
 
         {/* Sandbox Status */}
-        {sandboxConnected && (
+        {status.connection.sandbox && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
             <Tooltip title="沙盒环境已连接">
@@ -284,13 +248,13 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
         )}
 
         {/* Plan Mode */}
-        {isPlanMode && (
+        {status.planMode.isActive && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-            <Tooltip title="计划模式 - Agent 正在创建详细计划">
+            <Tooltip title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}>
               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                 <Zap size={11} />
-                <span>计划模式</span>
+                <span>{status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}</span>
               </div>
             </Tooltip>
           </>
@@ -311,7 +275,7 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
         {isError && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-            <Tooltip title={sessionStatus?.last_error || 'Agent 错误'}>
+            <Tooltip title={error || 'Agent 错误'}>
               <div className="flex items-center gap-1 text-xs text-red-500">
                 <AlertTriangle size={11} />
                 <span>错误</span>
@@ -323,40 +287,31 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
 
       {/* Right: Connection & Metrics */}
       <div className="flex items-center gap-3 text-xs">
-        {/* Chats Stats */}
-        {sessionStatus?.total_chats ? (
-          <Tooltip
-            title={`总对话: ${sessionStatus.total_chats}, 失败: ${sessionStatus.failed_chats || 0}`}
-          >
+        {/* Active Calls */}
+        {status.resources.activeCalls > 0 && (
+          <Tooltip title={`活跃工具调用: ${status.resources.activeCalls}`}>
             <div className="flex items-center gap-1.5 text-slate-400">
               <Badge
-                count={sessionStatus.total_chats}
+                count={status.resources.activeCalls}
                 style={{ fontSize: '10px', height: '14px', lineHeight: '14px', minWidth: '14px' }}
-                color={sessionStatus.failed_chats ? 'warning' : 'success'}
+                color="blue"
               />
-              <span>对话</span>
+              <span>调用</span>
             </div>
-          </Tooltip>
-        ) : null}
-
-        {/* Last Activity */}
-        {sessionStatus?.last_activity_at && (
-          <Tooltip title={`最后活动: ${new Date(sessionStatus.last_activity_at).toLocaleString('zh-CN')}`}>
-            <span className="text-slate-400">
-              {formatLastActivity(sessionStatus.last_activity_at)}
-            </span>
           </Tooltip>
         )}
 
         {/* Connection Status */}
-        <Tooltip title={isLoading ? '加载中...' : '已连接'}>
+        <Tooltip title={isLoading ? '加载中...' : status.connection.websocket ? 'WebSocket 已连接' : '就绪'}>
           <div className="flex items-center gap-1 text-slate-400">
             {isLoading ? (
               <Loader2 size={12} className="animate-spin" />
+            ) : status.connection.websocket ? (
+              <Wifi size={12} />
             ) : (
               <Wifi size={12} />
             )}
-            <span>{isLoading ? '加载中' : '已连接'}</span>
+            <span>{isLoading ? '加载中' : status.connection.websocket ? '已连接' : '就绪'}</span>
           </div>
         </Tooltip>
       </div>

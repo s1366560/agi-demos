@@ -99,6 +99,13 @@ export const useConversationsStore = create<ConversationsState>()(
     status?: ConversationStatus,
     limit = 50
   ) => {
+    // Skip if already loading for the same project
+    const state = get();
+    if (state.conversationsLoading) {
+      console.log('[conversationsStore] Already loading conversations, skipping duplicate call');
+      return;
+    }
+    
     set({ conversationsLoading: true, conversationsError: null });
     try {
       const conversations = await agentService.listConversations(

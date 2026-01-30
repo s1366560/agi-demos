@@ -5,9 +5,9 @@
  * with project selector for choosing which project's context to use.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Select, Empty, Spin, Button } from 'antd';
+import { Empty, Spin, Button } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/project';
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -15,47 +15,6 @@ import { useAuthStore } from '../../stores/auth';
 import { useTenantStore } from '../../stores/tenant';
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import type { Project } from '../../types/memory';
-
-const { Option } = Select;
-
-/**
- * ProjectSelector - Inline project selector for chat header
- */
-const ProjectSelector: React.FC<{
-  projects: Project[];
-  selectedId: string | null;
-  onChange: (id: string) => void;
-}> = ({ projects, selectedId, onChange }) => {
-  const { t } = useTranslation();
-  
-  return (
-    <Select
-      value={selectedId}
-      onChange={onChange}
-      style={{ width: 200 }}
-      placeholder={t('agent.workspace.selectProject')}
-      showSearch
-      optionFilterProp="children"
-      filterOption={(input, option) =>
-        (option?.children as unknown as string)
-          ?.toLowerCase()
-          .includes(input.toLowerCase())
-      }
-      className="agent-project-select"
-      bordered={false}
-      dropdownMatchSelectWidth={false}
-    >
-      {projects.map((project: Project) => (
-        <Option key={project.id} value={project.id}>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary" />
-            {project.name}
-          </div>
-        </Option>
-      ))}
-    </Select>
-  );
-};
 
 /**
  * AgentWorkspace - Main component for tenant-level agent access
@@ -125,15 +84,11 @@ export const AgentWorkspace: React.FC = () => {
     }
   }, [selectedProjectId, loadConversations, projects, setCurrentProject]);
 
-  const handleProjectChange = useCallback((projectId: string) => {
-    setSelectedProjectId(projectId);
-  }, []);
-
   // Show loading while initializing projects
   if (initializing) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
-        <Spin size="large" tip={t('common.loading')} />
+        <Spin size="large" tip={t('agent.workspace.loading')} />
       </div>
     );
   }
@@ -147,7 +102,7 @@ export const AgentWorkspace: React.FC = () => {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           >
             <Button type="primary" onClick={() => navigate('/tenant/projects/new')}>
-              {t('tenant.projects.create')}
+              {t('agent.workspace.createProject')}
             </Button>
           </Empty>
         </div>
@@ -166,7 +121,10 @@ export const AgentWorkspace: React.FC = () => {
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty description={t('agent.workspace.selectProjectToStart')} />
+          <Empty 
+            description={t('agent.workspace.selectProjectToStart')}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         </div>
       )}
     </div>

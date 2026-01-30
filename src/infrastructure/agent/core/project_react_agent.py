@@ -8,6 +8,7 @@ Each project has its own persistent Temporal workflow instance with:
 - Project-scoped caching
 - Independent lifecycle management
 - Resource isolation
+- WebSocket notifications for lifecycle state changes
 
 Usage:
     # Get or create project agent instance
@@ -16,7 +17,7 @@ Usage:
         project_id="project-456",
         agent_mode="default"
     )
-    
+
     # Execute chat
     async for event in agent.execute_chat(
         conversation_id="conv-789",
@@ -24,10 +25,10 @@ Usage:
         user_id="user-abc"
     ):
         yield event
-    
+
     # Get project agent status
     status = await agent.get_status()
-    
+
     # Stop project agent
     await agent.stop()
 """
@@ -43,6 +44,44 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 
 logger = logging.getLogger(__name__)
+
+# Global reference to the WebSocket connection manager
+# Set by the web application on startup
+_websocket_manager: Optional[Any] = None
+
+
+def get_websocket_notifier() -> Optional[Any]:
+    """
+    Get the global WebSocket notifier.
+
+    Returns the WebSocketNotifier instance if the connection manager
+    has been registered, otherwise returns None.
+
+    Returns:
+        WebSocketNotifier instance or None
+    """
+    if _websocket_manager is None:
+        return None
+
+    from src.infrastructure.adapters.secondary.websocket_notifier import (
+        WebSocketNotifier,
+    )
+    return WebSocketNotifier(_websocket_manager)
+
+
+def register_websocket_manager(manager: Any) -> None:
+    """
+    Register the WebSocket connection manager globally.
+
+    This should be called during application startup to enable
+    lifecycle state notifications.
+
+    Args:
+        manager: ConnectionManager instance from agent_websocket.py
+    """
+    global _websocket_manager
+    _websocket_manager = manager
+    logger.info("[ProjectReActAgent] WebSocket manager registered for lifecycle notifications")
 
 
 @dataclass
@@ -208,11 +247,14 @@ class ProjectReActAgent:
         Initialize the project agent and warm up caches.
 
         This method:
-        1. Loads project-specific tools (including MCP tools)
-        2. Loads skills for the project
-        3. Creates SubAgentRouter if enabled
-        4. Pre-converts tool definitions
-        5. Initializes the ReActAgent instance
+        1. Sends 'initializing' lifecycle notification
+        2. Loads project-specific tools (including MCP tools)
+        3. Loads skills for the project
+        4. Creates SubAgentRouter if enabled
+        5. Pre-converts tool definitions
+        6. Initializes the ReActAgent instance
+        7. Sends 'ready' lifecycle notification on success
+        8. Sends 'error' lifecycle notification on failure
 
         Args:
             force_refresh: Force refresh of all caches
@@ -225,6 +267,14 @@ class ProjectReActAgent:
             return True
 
         start_time = time.time()
+        notifier = get_websocket_notifier()
+
+        # Notify initialization started
+        if notifier:
+            await notifier.notify_initializing(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+            )
 
         try:
             logger.info(f"ProjectReActAgent[{self.project_key}]: Initializing...")
@@ -333,14 +383,35 @@ class ProjectReActAgent:
                 f"tools={self._status.tool_count}, skills={self._status.skill_count}"
             )
 
+            # Notify ready state
+            if notifier:
+                await notifier.notify_ready(
+                    tenant_id=self.config.tenant_id,
+                    project_id=self.config.project_id,
+                    tool_count=self._status.tool_count,
+                    skill_count=self._status.skill_count,
+                    subagent_count=self._status.subagent_count,
+                )
+
             return True
 
         except Exception as e:
             self._status.last_error = str(e)
+            error_message = str(e)
+
             logger.error(
                 f"ProjectReActAgent[{self.project_key}]: Initialization failed: {e}",
                 exc_info=True
             )
+
+            # Notify error state
+            if notifier:
+                await notifier.notify_error(
+                    tenant_id=self.config.tenant_id,
+                    project_id=self.config.project_id,
+                    error_message=error_message,
+                )
+
             return False
 
     async def _check_and_refresh_sandbox_tools(self) -> bool:
@@ -422,10 +493,13 @@ class ProjectReActAgent:
 
         This method:
         1. Ensures agent is initialized
-        2. Acquires execution lock (respects max_concurrent_chats)
-        3. Executes the ReActAgent stream
-        4. Updates metrics and status
-        5. Yields events for streaming
+        2. Sends 'executing' lifecycle notification
+        3. Acquires execution lock (respects max_concurrent_chats)
+        4. Executes the ReActAgent stream
+        5. Updates metrics and status
+        6. Sends 'ready' lifecycle notification on completion
+        7. Sends 'error' lifecycle notification on failure
+        8. Yields events for streaming
 
         Args:
             conversation_id: Conversation ID
@@ -479,11 +553,20 @@ class ProjectReActAgent:
 
         start_time = time.time()
         effective_tenant_id = tenant_id or self.config.tenant_id
+        notifier = get_websocket_notifier()
 
         # Update status
         self._status.active_chats += 1
         self._status.is_executing = True
         self._status.last_activity_at = datetime.utcnow().isoformat()
+
+        # Notify executing state
+        if notifier:
+            await notifier.notify_executing(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+                conversation_id=conversation_id,
+            )
 
         final_content = ""
         is_error = False
@@ -561,9 +644,28 @@ class ProjectReActAgent:
             self._status.active_chats -= 1
             self._status.is_executing = self._status.active_chats > 0
 
+            # Notify ready state after completion (or error)
+            if notifier:
+                if is_error and error_message:
+                    await notifier.notify_error(
+                        tenant_id=self.config.tenant_id,
+                        project_id=self.config.project_id,
+                        error_message=error_message,
+                    )
+                else:
+                    await notifier.notify_ready(
+                        tenant_id=self.config.tenant_id,
+                        project_id=self.config.project_id,
+                        tool_count=self._status.tool_count,
+                        skill_count=self._status.skill_count,
+                        subagent_count=self._status.subagent_count,
+                    )
+
     async def pause(self) -> bool:
         """
         Pause the agent (prevents new chats but allows current to complete).
+
+        Sends 'paused' lifecycle notification via WebSocket.
 
         Returns:
             True if paused successfully
@@ -572,12 +674,23 @@ class ProjectReActAgent:
             return False
 
         self._status.is_active = False
+
+        # Notify paused state
+        notifier = get_websocket_notifier()
+        if notifier:
+            await notifier.notify_paused(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+            )
+
         logger.info(f"ProjectReActAgent[{self.project_key}]: Paused")
         return True
 
     async def resume(self) -> bool:
         """
         Resume a paused agent.
+
+        Sends 'ready' lifecycle notification via WebSocket.
 
         Returns:
             True if resumed successfully
@@ -586,6 +699,18 @@ class ProjectReActAgent:
             return await self.initialize()
 
         self._status.is_active = True
+
+        # Notify ready state
+        notifier = get_websocket_notifier()
+        if notifier:
+            await notifier.notify_ready(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+                tool_count=self._status.tool_count,
+                skill_count=self._status.skill_count,
+                subagent_count=self._status.subagent_count,
+            )
+
         logger.info(f"ProjectReActAgent[{self.project_key}]: Resumed")
         return True
 
@@ -594,10 +719,11 @@ class ProjectReActAgent:
         Stop the agent and clean up resources.
 
         This method:
-        1. Sets shutdown flag (prevents new chats)
-        2. Waits for current chats to complete (with timeout)
-        3. Clears caches
-        4. Updates status
+        1. Sends 'shutting_down' lifecycle notification
+        2. Sets shutdown flag (prevents new chats)
+        3. Waits for current chats to complete (with timeout)
+        4. Clears caches
+        5. Updates status
 
         Returns:
             True if stopped successfully
@@ -607,6 +733,14 @@ class ProjectReActAgent:
 
         logger.info(f"ProjectReActAgent[{self.project_key}]: Stopping...")
         self._is_shutting_down = True
+
+        # Notify shutting down state
+        notifier = get_websocket_notifier()
+        if notifier:
+            await notifier.notify_shutting_down(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+            )
 
         # Wait for current executions to complete
         wait_start = time.time()
@@ -731,8 +865,6 @@ class ProjectReActAgent:
             self._metrics.failed_requests += 1
         else:
             self._metrics.successful_requests += 1
-
-        self._metrics.total_execution_time_ms += execution_time_ms
 
     def _trim_latencies(self, max_size: int = 1000) -> None:
         """Trim latency history to prevent unbounded growth."""

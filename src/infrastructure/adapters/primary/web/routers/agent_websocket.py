@@ -46,6 +46,7 @@ class ConnectionManager:
     - User -> Sessions mapping for broadcasting
     - Subscription management (session -> conversation_ids)
     - Event routing by conversation_id
+    - Project-scoped lifecycle state subscriptions
     """
 
     def __init__(self):
@@ -65,6 +66,10 @@ class ConnectionManager:
         self.status_tasks: Dict[str, Dict[str, asyncio.Task]] = {}
         # session_id -> set of subscribed project_ids for status updates
         self.status_subscriptions: Dict[str, Set[str]] = {}
+        # tenant_id -> project_id -> set of session_ids (lifecycle state subscriptions)
+        self.project_subscriptions: Dict[str, Dict[str, Set[str]]] = {}
+        # session_id -> set of subscribed project_ids for lifecycle state
+        self.session_project_subscriptions: Dict[str, Set[str]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
@@ -224,12 +229,93 @@ class ConnectionManager:
         async with self._lock:
             if session_id in self.status_subscriptions:
                 self.status_subscriptions[session_id].discard(project_id)
-            
+
             if session_id in self.status_tasks and project_id in self.status_tasks[session_id]:
                 self.status_tasks[session_id][project_id].cancel()
                 del self.status_tasks[session_id][project_id]
-        
+
         logger.debug(f"[WS] Session {session_id[:8]}... unsubscribed from status for project {project_id}")
+
+    async def subscribe_lifecycle_state(
+        self, session_id: str, tenant_id: str, project_id: str
+    ) -> None:
+        """Subscribe a session to lifecycle state updates for a project."""
+        async with self._lock:
+            # Initialize tenant dict if needed
+            if tenant_id not in self.project_subscriptions:
+                self.project_subscriptions[tenant_id] = {}
+
+            # Initialize project set if needed
+            if project_id not in self.project_subscriptions[tenant_id]:
+                self.project_subscriptions[tenant_id][project_id] = set()
+
+            # Add session to project subscriptions
+            self.project_subscriptions[tenant_id][project_id].add(session_id)
+
+            # Track session's project subscriptions
+            if session_id not in self.session_project_subscriptions:
+                self.session_project_subscriptions[session_id] = set()
+            self.session_project_subscriptions[session_id].add((tenant_id, project_id))
+
+        logger.debug(
+            f"[WS] Session {session_id[:8]}... subscribed to lifecycle state "
+            f"for tenant {tenant_id}, project {project_id}"
+        )
+
+    async def unsubscribe_lifecycle_state(
+        self, session_id: str, tenant_id: str, project_id: str
+    ) -> None:
+        """Unsubscribe a session from lifecycle state updates for a project."""
+        async with self._lock:
+            # Remove from tenant/project subscriptions
+            if (
+                tenant_id in self.project_subscriptions
+                and project_id in self.project_subscriptions[tenant_id]
+            ):
+                self.project_subscriptions[tenant_id][project_id].discard(session_id)
+                if not self.project_subscriptions[tenant_id][project_id]:
+                    del self.project_subscriptions[tenant_id][project_id]
+                if not self.project_subscriptions[tenant_id]:
+                    del self.project_subscriptions[tenant_id]
+
+            # Remove from session's project subscriptions
+            if session_id in self.session_project_subscriptions:
+                self.session_project_subscriptions[session_id].discard(
+                    (tenant_id, project_id)
+                )
+                if not self.session_project_subscriptions[session_id]:
+                    del self.session_project_subscriptions[session_id]
+
+        logger.debug(
+            f"[WS] Session {session_id[:8]}... unsubscribed from lifecycle state "
+            f"for tenant {tenant_id}, project {project_id}"
+        )
+
+    async def broadcast_to_project(
+        self, tenant_id: str, project_id: str, message: Dict[str, Any]
+    ) -> int:
+        """
+        Broadcast a message to all sessions subscribed to a project's lifecycle state.
+
+        Args:
+            tenant_id: Tenant identifier
+            project_id: Project identifier
+            message: Message to broadcast
+
+        Returns:
+            Number of sessions notified
+        """
+        async with self._lock:
+            subscribers = self.project_subscriptions.get(tenant_id, {}).get(
+                project_id, set()
+            ).copy()
+
+        sent_count = 0
+        for session_id in subscribers:
+            if await self.send_to_session(session_id, message):
+                sent_count += 1
+
+        return sent_count
 
     async def disconnect(self, session_id: str) -> None:
         """Remove a WebSocket connection and clean up subscriptions for a session."""
@@ -247,10 +333,28 @@ class ConnectionManager:
                 for task in self.status_tasks[session_id].values():
                     task.cancel()
                 del self.status_tasks[session_id]
-            
+
             # Remove status subscriptions
             if session_id in self.status_subscriptions:
                 del self.status_subscriptions[session_id]
+
+            # Remove lifecycle state subscriptions
+            if session_id in self.session_project_subscriptions:
+                for tenant_id, project_id in self.session_project_subscriptions[
+                    session_id
+                ]:
+                    if (
+                        tenant_id in self.project_subscriptions
+                        and project_id in self.project_subscriptions[tenant_id]
+                    ):
+                        self.project_subscriptions[tenant_id][project_id].discard(
+                            session_id
+                        )
+                        if not self.project_subscriptions[tenant_id][project_id]:
+                            del self.project_subscriptions[tenant_id][project_id]
+                        if not self.project_subscriptions[tenant_id]:
+                            del self.project_subscriptions[tenant_id]
+                del self.session_project_subscriptions[session_id]
 
             # Remove from conversation subscribers
             if session_id in self.subscriptions:
@@ -474,6 +578,16 @@ async def handle_client_message(
 
     elif msg_type == "unsubscribe_status":
         await handle_unsubscribe_status(websocket, session_id, message)
+
+    elif msg_type == "subscribe_lifecycle_state":
+        await handle_subscribe_lifecycle_state(
+            websocket, user_id, tenant_id, session_id, message
+        )
+
+    elif msg_type == "unsubscribe_lifecycle_state":
+        await handle_unsubscribe_lifecycle_state(
+            websocket, tenant_id, session_id, message
+        )
 
     else:
         await websocket.send_json(
@@ -914,6 +1028,82 @@ async def handle_unsubscribe_status(
         {
             "type": "ack",
             "action": "unsubscribe_status",
+            "project_id": project_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    )
+
+
+async def handle_subscribe_lifecycle_state(
+    websocket: WebSocket,
+    user_id: str,
+    tenant_id: str,
+    session_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """
+    Handle subscribe_lifecycle_state: Subscribe to agent lifecycle state updates.
+
+    This enables real-time lifecycle state bar updates via WebSocket.
+    """
+    project_id = message.get("project_id")
+
+    if not project_id:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing project_id"},
+            }
+        )
+        return
+
+    try:
+        # Subscribe to lifecycle state updates for this project
+        await manager.subscribe_lifecycle_state(session_id, tenant_id, project_id)
+
+        await websocket.send_json(
+            {
+                "type": "ack",
+                "action": "subscribe_lifecycle_state",
+                "project_id": project_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"[WS] Error subscribing to lifecycle state: {e}", exc_info=True)
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": str(e)},
+            }
+        )
+
+
+async def handle_unsubscribe_lifecycle_state(
+    websocket: WebSocket,
+    tenant_id: str,
+    session_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """Handle unsubscribe_lifecycle_state: Stop receiving lifecycle state updates."""
+    project_id = message.get("project_id")
+
+    if not project_id:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing project_id"},
+            }
+        )
+        return
+
+    await manager.unsubscribe_lifecycle_state(session_id, tenant_id, project_id)
+
+    await websocket.send_json(
+        {
+            "type": "ack",
+            "action": "unsubscribe_lifecycle_state",
             "project_id": project_id,
             "timestamp": datetime.utcnow().isoformat(),
         }

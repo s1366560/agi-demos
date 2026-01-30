@@ -27,8 +27,8 @@ const client = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // Add timeout to prevent hanging requests
-  timeout: 30000,
+  // Reduced timeout for faster failure and retry
+  timeout: 15000, // 15 seconds
 });
 
 /**
@@ -105,53 +105,20 @@ client.interceptors.response.use(
   }
 );
 
-// Global request lock to prevent duplicate concurrent requests
-const pendingRequests = new Map<string, Promise<unknown>>();
-
-function getRequestKey(method: string, url: string, params?: unknown): string {
-  return `${method}-${url}-${JSON.stringify(params || {})}`;
-}
-
-// Deduplication timeout - clear pending requests after this time to prevent stalls
-const DEDUP_TIMEOUT = 10000; // 10 seconds
-
 /**
- * Simple HTTP client - direct axios calls with global deduplication
+ * Simple HTTP client - direct axios calls without request deduplication
+ * 
+ * Note: Request deduplication is intentionally removed from the HTTP client layer.
+ * It should be handled at the application/store layer where the context is better
+ * understood. HTTP-level deduplication can cause requests to hang indefinitely
+ * if the original request never completes.
  */
 export const httpClient = {
   /**
-   * GET request with global deduplication and timeout protection
+   * GET request - simple wrapper around axios
    */
   get: <T = unknown>(url: string, config?: HttpRequestConfig): Promise<T> => {
-    const key = getRequestKey('GET', url, config?.params);
-
-    // Return existing pending request if exists AND hasn't timed out
-    const existing = pendingRequests.get(key);
-    if (existing) {
-      console.log(`[httpClient] Deduplicating request: ${url}`);
-      return existing as Promise<T>;
-    }
-
-    // Create new request with timeout protection
-    const promise = client.get<T>(url, config)
-      .then((response) => response.data)
-      .finally(() => {
-        // Cleanup on completion or error
-        pendingRequests.delete(key);
-      });
-
-    // Track with timeout protection
-    pendingRequests.set(key, promise);
-
-    // Failsafe: remove from pending map after timeout to prevent permanent stalls
-    setTimeout(() => {
-      if (pendingRequests.has(key)) {
-        console.warn(`[httpClient] Request timeout after ${DEDUP_TIMEOUT}ms, removing from pending: ${url}`);
-        pendingRequests.delete(key);
-      }
-    }, DEDUP_TIMEOUT);
-
-    return promise;
+    return client.get<T>(url, config).then((response) => response.data);
   },
 
   /**

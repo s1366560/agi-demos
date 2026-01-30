@@ -14,7 +14,6 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from src.application.services.auth_service_v2 import AuthService
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
@@ -121,14 +120,10 @@ async def verify_api_key_dependency(
         domain_api_key = await auth_service.verify_api_key(api_key)
 
         # Convert to DB model for backward compatibility
+        # Note: We only need to read the key, not update it.
+        # last_used_at updates are disabled to prevent row-level lock contention.
         result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
         db_key = result.scalar_one_or_none()
-
-        if db_key:
-            # Update in DB to match domain model
-            db_key.last_used_at = domain_api_key.last_used_at
-            await db.commit()
-            await db.refresh(db_key)
 
         return db_key
 
@@ -164,11 +159,9 @@ async def get_current_user(
             )
 
         # Convert to DB model for backward compatibility
-        result = await db.execute(
-            select(DBUser)
-            .where(DBUser.id == domain_user.id)
-            .options(selectinload(DBUser.roles).selectinload(UserRole.role))
-        )
+        # Note: Removed selectinload for roles to reduce query overhead
+        # Roles should be loaded on-demand when needed
+        result = await db.execute(select(DBUser).where(DBUser.id == domain_user.id))
         db_user = result.scalar_one_or_none()
 
         if not db_user:

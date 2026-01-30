@@ -87,11 +87,19 @@ export function useBreadcrumbs(
     // Tenant-level breadcrumbs
     if (paths.length > 2) {
       const section = paths[2]
-      const label = getCustomLabel(section, customLabels) || formatBreadcrumbLabel(section)
-      breadcrumbs.push({
-        label,
-        path: location.pathname,
-      })
+      // Handle special case for agent-workspace - don't show conversation ID
+      if (section === 'agent-workspace') {
+        breadcrumbs.push({
+          label: 'Agent Workspace',
+          path: `/tenant/${tenantId}/agent-workspace`,
+        })
+      } else {
+        const label = getCustomLabel(section, customLabels) || formatBreadcrumbLabel(section)
+        breadcrumbs.push({
+          label,
+          path: location.pathname,
+        })
+      }
     } else if (paths.length === 2) {
       // Specific tenant view - might need project context
       if (paths[0] === 'tenant' && projectId) {

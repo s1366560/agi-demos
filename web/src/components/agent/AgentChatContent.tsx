@@ -13,10 +13,12 @@ import * as React from 'react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Modal, notification } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { PanelRight, GripHorizontal } from 'lucide-react';
 import { useAgentV3Store } from '@/stores/agentV3';
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
 import { useSandboxStore } from '@/stores/sandbox';
+import { useProjectStore } from '@/stores/project';
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 import { sandboxService } from '@/services/sandboxService';
 import { Resizer } from './Resizer';
@@ -28,7 +30,6 @@ import {
   RightPanel,
   ProjectAgentStatusBar,
 } from './index';
-import { useProjectAgentLifecycle } from '@/hooks/useProjectAgentLifecycle';
 import { EmptyState } from './EmptyState';
 
 interface AgentChatContentProps {
@@ -57,6 +58,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   basePath: customBasePath,
   headerExtra
 }) => {
+  const { t } = useTranslation();
   const { projectId: urlProjectId, conversation: conversationId } = useParams<{
     projectId: string;
     conversation?: string;
@@ -115,24 +117,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   const { streamingThought, isThinkingStreaming } = useAgentV3Store();
 
   const { planModeStatus, exitPlanMode } = usePlanModeStore();
-  const { 
-    activeSandboxId, 
-    toolExecutions, 
+  const {
+    activeSandboxId,
+    toolExecutions,
     currentTool,
-    setSandboxId 
+    setSandboxId
   } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
-  // ProjectReActAgent Lifecycle Status (for tenant-level agent workspace)
-  const {
-    sessionStatus,
-    isLoading: isStatusLoading,
-    error: statusError,
-  } = useProjectAgentLifecycle({
-    projectId: projectId || '',
-    pollingInterval: 10000,
-    enabled: !!projectId,
-  });
+  // Get tenant ID from current project
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const tenantId = currentProject?.tenant_id || 'default-tenant';
 
   // Local UI state
   const [panelCollapsed, setPanelCollapsed] = useState(!showPlanPanel);
@@ -200,33 +195,40 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Handle errors
   useEffect(() => {
     if (error) {
-      notification.error({ message: 'Agent Error', description: error, onClose: clearError });
+      notification.error({ 
+        message: t('agent.chat.errors.title'), 
+        description: error, 
+        onClose: clearError 
+      });
     }
-  }, [error, clearError]);
+  }, [error, clearError, t]);
 
   // Handle pending decisions
   useEffect(() => {
     if (pendingDecision) {
       Modal.confirm({
-        title: 'Agent Requests Decision',
+        title: t('agent.chat.decision.title'),
         content: pendingDecision.question,
-        okText: 'Confirm',
-        cancelText: 'Cancel',
+        okText: t('agent.chat.decision.confirm'),
+        cancelText: t('agent.chat.decision.cancel'),
         onOk: () => respondToDecision(pendingDecision.request_id, 'approved'),
         onCancel: () => respondToDecision(pendingDecision.request_id, 'rejected'),
       });
     }
-  }, [pendingDecision, respondToDecision]);
+  }, [pendingDecision, respondToDecision, t]);
 
   // Handle doom loop
   useEffect(() => {
     if (doomLoopDetected) {
       notification.warning({
-        message: 'Doom Loop Detected',
-        description: `Tool ${doomLoopDetected.tool_name} called ${doomLoopDetected.call_count} times repeatedly.`,
+        message: t('agent.chat.doomLoop.title'),
+        description: t('agent.chat.doomLoop.description', { 
+          tool: doomLoopDetected.tool_name, 
+          count: doomLoopDetected.call_count 
+        }),
       });
     }
-  }, [doomLoopDetected]);
+  }, [doomLoopDetected, t]);
 
   const handleNewConversation = useCallback(async () => {
     if (!projectId) return;
@@ -264,9 +266,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       await exitPlanMode(activeConversationId, planModeStatus.current_plan_id, false);
       togglePlanMode();
     } catch (error) {
-      notification.error({ message: 'Failed to exit Plan Mode', description: 'Please try again.' });
+      notification.error({ 
+        message: t('agent.notifications.planModeExitFailed.title'), 
+        description: t('agent.notifications.planModeExitFailed.description') 
+      });
     }
-  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode]);
+  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t]);
 
   // Memoized components
   const messageArea = useMemo(() => (
@@ -311,15 +316,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   const statusBar = useMemo(() => (
     <ProjectAgentStatusBar
       projectId={projectId || ''}
-      sessionStatus={sessionStatus}
-      isLoading={isStatusLoading}
-      error={statusError}
-      isStreaming={isStreaming}
+      tenantId={tenantId}
       messageCount={timeline.length}
-      sandboxConnected={!!activeSandboxId}
-      isPlanMode={isPlanMode}
     />
-  ), [projectId, sessionStatus, isStatusLoading, statusError, isStreaming, timeline.length, activeSandboxId, isPlanMode]);
+  ), [projectId, tenantId, timeline.length]);
 
   return (
     <div className={`flex h-full w-full overflow-hidden bg-slate-50 dark:bg-slate-950 ${className}`}>
@@ -376,12 +376,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           </div>
           <button
             type="button"
-            title={panelCollapsed ? "Show panel" : "Hide panel"}
+            title={panelCollapsed ? t('agent.chat.panel.show') : t('agent.chat.panel.hide')}
             onClick={() => {
               setPanelCollapsed(!panelCollapsed);
               togglePlanPanel();
             }}
             className="h-7 px-2 mr-2 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            aria-label={panelCollapsed ? t('agent.chat.panel.show') : t('agent.chat.panel.hide')}
           >
             {panelCollapsed ? <PanelRight size={14} /> : <PanelRight size={14} className="rotate-180" />}
           </button>

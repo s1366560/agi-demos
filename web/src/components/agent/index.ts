@@ -11,7 +11,6 @@ export { MessageArea } from './MessageArea';
 export { MessageBubble } from './MessageBubble';
 export { InputBar } from './InputBar';
 export { RightPanel } from './RightPanel';
-export { StatusBar } from './StatusBar';
 export { PlanModeBanner } from './PlanModeBanner';
 export { SandboxSection } from './SandboxSection';
 

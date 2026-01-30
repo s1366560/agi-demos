@@ -2240,3 +2240,42 @@ export type PlanModeEvent =
   | PlanRollbackEvent
   | ReflectionCompleteEvent
   | AdjustmentAppliedEvent;
+
+// ============================================
+// Lifecycle State Types (Agent Lifecycle Monitoring)
+// ============================================
+
+/**
+ * Lifecycle states for ProjectReActAgent
+ */
+export type LifecycleState =
+  | "initializing"
+  | "ready"
+  | "executing"
+  | "paused"
+  | "shutting_down"
+  | "error";
+
+/**
+ * Lifecycle state data from WebSocket
+ */
+export interface LifecycleStateData {
+  lifecycleState: LifecycleState | null;
+  isInitialized: boolean;
+  isActive: boolean;
+  toolCount?: number;
+  skillCount?: number;
+  subagentCount?: number;
+  conversationId?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Lifecycle status for UI display
+ */
+export interface LifecycleStatus {
+  label: string;
+  color: string;
+  icon: string;
+  description: string;
+}

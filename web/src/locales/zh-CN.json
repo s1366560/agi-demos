@@ -1480,6 +1480,116 @@
             }
         }
     },
+    "agent": {
+        "workspace": {
+            "title": "Agent 工作空间",
+            "selectProject": "选择项目",
+            "selectProjectToStart": "请选择一个项目以开始对话",
+            "noProjects": "您还没有创建任何项目",
+            "createProject": "创建项目",
+            "changeProject": "切换项目",
+            "currentProject": "当前项目",
+            "loading": "正在初始化 Agent 工作空间..."
+        },
+        "lifecycle": {
+            "states": {
+                "uninitialized": "未启动",
+                "initializing": "初始化中",
+                "ready": "就绪",
+                "executing": "执行中",
+                "paused": "已暂停",
+                "error": "错误",
+                "shutting_down": "关闭中"
+            },
+            "descriptions": {
+                "uninitialized": "Agent 尚未初始化，将在首次请求时自动启动",
+                "initializing": "正在加载工具、技能和配置",
+                "ready": "Agent 已就绪，可以接收请求",
+                "executing": "正在处理聊天请求",
+                "paused": "Agent 已暂停，不接收新请求",
+                "error": "Agent 遇到错误",
+                "shutting_down": "Agent 正在关闭"
+            },
+            "resources": {
+                "tools": "工具",
+                "skills": "技能",
+                "subagents": "子代理",
+                "uptime": "运行时间",
+                "lastActivity": "最后活动",
+                "chats": "对话"
+            },
+            "status": {
+                "connected": "已连接",
+                "connecting": "连接中",
+                "loading": "加载中",
+                "streaming": "流式响应中",
+                "error": "错误",
+                "sandbox": "沙盒",
+                "planMode": "计划模式"
+            }
+        },
+        "chat": {
+            "empty": {
+                "title": "开始对话",
+                "subtitle": "发送消息开始与 AI Agent 对话",
+                "suggestions": {
+                    "trends": "分析项目趋势",
+                    "reports": "总结季度报告",
+                    "audit": "审计记忆日志",
+                    "compare": "跨项目比较"
+                }
+            },
+            "input": {
+                "placeholder": "输入消息...",
+                "send": "发送",
+                "stop": "停止",
+                "thinking": "思考中...",
+                "planMode": "计划模式"
+            },
+            "errors": {
+                "title": "Agent 错误",
+                "connection": "连接错误",
+                "session": "会话初始化失败",
+                "shuttingDown": "Agent 正在关闭",
+                "maxConcurrent": "已达到最大并发对话数",
+                "unknown": "发生未知错误"
+            },
+            "decision": {
+                "title": "Agent 请求决策",
+                "confirm": "确认",
+                "cancel": "取消",
+                "approve": "批准",
+                "reject": "拒绝"
+            },
+            "doomLoop": {
+                "title": "检测到循环调用",
+                "description": "工具 {{tool}} 已被连续调用 {{count}} 次"
+            },
+            "planMode": {
+                "enter": "进入计划模式",
+                "exit": "退出计划模式",
+                "executing": "执行计划中",
+                "title": "计划",
+                "steps": "步骤"
+            },
+            "sandbox": {
+                "connected": "沙盒已连接",
+                "disconnected": "沙盒未连接",
+                "ensureFailed": "无法确保沙盒运行"
+            },
+            "panel": {
+                "show": "显示面板",
+                "hide": "隐藏面板",
+                "right": "右侧面板"
+            }
+        },
+        "notifications": {
+            "planModeExitFailed": {
+                "title": "退出计划模式失败",
+                "description": "请重试"
+            }
+        }
+    },
     "user_profile": {
         "title": "个人资料",
         "subtitle": "管理您的账户设置和偏好。",

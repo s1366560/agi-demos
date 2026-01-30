@@ -84,6 +84,8 @@ import type {
   PlanExecutionStartEvent,
   PlanExecutionCompleteEvent,
   ReflectionCompleteEvent,
+  LifecycleState,
+  LifecycleStateData,
 } from "../types/agent";
 
 // Use centralized HTTP client for REST API calls
@@ -190,6 +192,9 @@ class AgentServiceImpl implements AgentService {
 
   // Status subscription for Agent session monitoring
   private statusSubscriber: { projectId: string; callback: (status: unknown) => void } | null = null;
+
+  // Lifecycle state subscription for Agent lifecycle monitoring
+  private lifecycleStateSubscriber: { projectId: string; tenantId: string; callback: (state: LifecycleStateData) => void } | null = null;
 
   // Connection lock to prevent parallel connection attempts
   private connectingPromise: Promise<void> | null = null;
@@ -488,6 +493,15 @@ class AgentServiceImpl implements AgentService {
       return;
     }
 
+    // Handle lifecycle state changes
+    if (type === "lifecycle_state_change") {
+      const projectId = (message as { project_id?: string }).project_id;
+      if (this.lifecycleStateSubscriber && projectId === this.lifecycleStateSubscriber.projectId) {
+        this.lifecycleStateSubscriber.callback(this.parseLifecycleStateData(message));
+      }
+      return;
+    }
+
     // Route conversation-specific messages to handlers
     if (conversation_id) {
       const handler = this.handlers.get(conversation_id);
@@ -498,6 +512,24 @@ class AgentServiceImpl implements AgentService {
         logger.warn("[AgentWS] No handler found for conversation:", conversation_id);
       }
     }
+  }
+
+  /**
+   * Parse lifecycle state data from WebSocket message
+   * @private
+   */
+  private parseLifecycleStateData(message: ServerMessage): LifecycleStateData {
+    const data = (message as { data?: Record<string, unknown> }).data || {};
+    return {
+      lifecycleState: data.lifecycle_state as LifecycleState | null,
+      isInitialized: Boolean(data.is_initialized),
+      isActive: Boolean(data.is_active),
+      toolCount: typeof data.tool_count === "number" ? data.tool_count : undefined,
+      skillCount: typeof data.skill_count === "number" ? data.skill_count : undefined,
+      subagentCount: typeof data.subagent_count === "number" ? data.subagent_count : undefined,
+      conversationId: typeof data.conversation_id === "string" ? data.conversation_id : undefined,
+      errorMessage: typeof data.error_message === "string" ? data.error_message : undefined,
+    };
   }
 
   /**
@@ -675,6 +707,14 @@ class AgentServiceImpl implements AgentService {
         type: "subscribe_status",
         project_id: this.statusSubscriber.projectId,
         polling_interval: 3000,
+      });
+    }
+
+    // Resubscribe to lifecycle state updates if active
+    if (this.lifecycleStateSubscriber) {
+      this.send({
+        type: "subscribe_lifecycle_state",
+        project_id: this.lifecycleStateSubscriber.projectId,
       });
     }
   }
@@ -1435,6 +1475,68 @@ class AgentServiceImpl implements AgentService {
       logger.debug(`[AgentWS] Unsubscribed from status updates for project: ${this.statusSubscriber.projectId}`);
     }
     this.statusSubscriber = null;
+  }
+
+  /**
+   * Subscribe to Agent lifecycle state changes for a project
+   *
+   * Registers a callback to receive real-time lifecycle state updates for a project.
+   * Only one lifecycle subscription is active at a time (new subscription replaces old).
+   *
+   * @param projectId - The project ID to monitor
+   * @param tenantId - The tenant ID for the project
+   * @param callback - Function called when lifecycle state updates arrive
+   *
+   * @example
+   * ```typescript
+   * agentService.subscribeLifecycleState('proj-123', 'tenant-456', (state) => {
+   *   console.log('Agent lifecycle state:', state.lifecycleState);
+   *   console.log('Is initialized:', state.isInitialized);
+   *   console.log('Tool count:', state.toolCount);
+   * });
+   * ```
+   */
+  subscribeLifecycleState(
+    projectId: string,
+    tenantId: string,
+    callback: (state: LifecycleStateData) => void
+  ): void {
+    // Unsubscribe from previous project if different
+    if (this.lifecycleStateSubscriber && this.lifecycleStateSubscriber.projectId !== projectId) {
+      this.unsubscribeLifecycleState();
+    }
+
+    this.lifecycleStateSubscriber = { projectId, tenantId, callback };
+
+    if (this.isConnected()) {
+      this.send({
+        type: "subscribe_lifecycle_state",
+        project_id: projectId,
+      });
+      logger.debug(`[AgentWS] Subscribed to lifecycle state for project: ${projectId}`);
+    }
+  }
+
+  /**
+   * Unsubscribe from Agent lifecycle state changes
+   *
+   * Stops receiving lifecycle state updates and notifies the server.
+   *
+   * @example
+   * ```typescript
+   * agentService.unsubscribeLifecycleState();
+   * console.log('Lifecycle state updates stopped');
+   * ```
+   */
+  unsubscribeLifecycleState(): void {
+    if (this.lifecycleStateSubscriber && this.isConnected()) {
+      this.send({
+        type: "unsubscribe_lifecycle_state",
+        project_id: this.lifecycleStateSubscriber.projectId,
+      });
+      logger.debug(`[AgentWS] Unsubscribed from lifecycle state for project: ${this.lifecycleStateSubscriber.projectId}`);
+    }
+    this.lifecycleStateSubscriber = null;
   }
 }
 

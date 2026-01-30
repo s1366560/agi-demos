@@ -1310,6 +1310,116 @@
             }
         }
     },
+    "agent": {
+        "workspace": {
+            "title": "Agent Workspace",
+            "selectProject": "Select Project",
+            "selectProjectToStart": "Please select a project to start chatting",
+            "noProjects": "You haven't created any projects yet",
+            "createProject": "Create Project",
+            "changeProject": "Switch Project",
+            "currentProject": "Current Project",
+            "loading": "Initializing Agent workspace..."
+        },
+        "lifecycle": {
+            "states": {
+                "uninitialized": "Not Started",
+                "initializing": "Initializing",
+                "ready": "Ready",
+                "executing": "Executing",
+                "paused": "Paused",
+                "error": "Error",
+                "shutting_down": "Shutting Down"
+            },
+            "descriptions": {
+                "uninitialized": "Agent not initialized, will auto-start on first request",
+                "initializing": "Loading tools, skills and configuration",
+                "ready": "Agent is ready to receive requests",
+                "executing": "Processing chat request",
+                "paused": "Agent is paused, not accepting new requests",
+                "error": "Agent encountered an error",
+                "shutting_down": "Agent is shutting down"
+            },
+            "resources": {
+                "tools": "Tools",
+                "skills": "Skills",
+                "subagents": "SubAgents",
+                "uptime": "Uptime",
+                "lastActivity": "Last Activity",
+                "chats": "Chats"
+            },
+            "status": {
+                "connected": "Connected",
+                "connecting": "Connecting",
+                "loading": "Loading",
+                "streaming": "Streaming",
+                "error": "Error",
+                "sandbox": "Sandbox",
+                "planMode": "Plan Mode"
+            }
+        },
+        "chat": {
+            "empty": {
+                "title": "Start a Conversation",
+                "subtitle": "Send a message to start chatting with the AI Agent",
+                "suggestions": {
+                    "trends": "Analyze project trends",
+                    "reports": "Synthesize quarterly reports",
+                    "audit": "Audit memory logs",
+                    "compare": "Cross-project comparison"
+                }
+            },
+            "input": {
+                "placeholder": "Type a message...",
+                "send": "Send",
+                "stop": "Stop",
+                "thinking": "Thinking...",
+                "planMode": "Plan Mode"
+            },
+            "errors": {
+                "title": "Agent Error",
+                "connection": "Connection Error",
+                "session": "Session initialization failed",
+                "shuttingDown": "Agent is shutting down",
+                "maxConcurrent": "Maximum concurrent chats reached",
+                "unknown": "An unknown error occurred"
+            },
+            "decision": {
+                "title": "Agent Requests Decision",
+                "confirm": "Confirm",
+                "cancel": "Cancel",
+                "approve": "Approve",
+                "reject": "Reject"
+            },
+            "doomLoop": {
+                "title": "Doom Loop Detected",
+                "description": "Tool {{tool}} has been called {{count}} times repeatedly"
+            },
+            "planMode": {
+                "enter": "Enter Plan Mode",
+                "exit": "Exit Plan Mode",
+                "executing": "Executing Plan",
+                "title": "Plan",
+                "steps": "Steps"
+            },
+            "sandbox": {
+                "connected": "Sandbox Connected",
+                "disconnected": "Sandbox Disconnected",
+                "ensureFailed": "Failed to ensure sandbox is running"
+            },
+            "panel": {
+                "show": "Show Panel",
+                "hide": "Hide Panel",
+                "right": "Right Panel"
+            }
+        },
+        "notifications": {
+            "planModeExitFailed": {
+                "title": "Failed to exit Plan Mode",
+                "description": "Please try again"
+            }
+        }
+    },
     "user_profile": {
         "title": "Personal Profile",
         "subtitle": "Manage your account settings and preferences.",

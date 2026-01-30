@@ -75,6 +75,27 @@ describe('useBreadcrumbs', () => {
       // (it's the entry point, no need for breadcrumbs)
       expect(result.current.length).toBe(0)
     })
+
+    it('should generate breadcrumbs for agent-workspace with conversation ID', () => {
+      mockLocation.pathname = '/tenant/tenant-123/agent-workspace/f7bde02e-9637-4229-ba4c-e8feb33889ad'
+      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+
+      // Should show "Agent Workspace" instead of the conversation ID
+      expect(result.current).toEqual([
+        { label: 'Home', path: '/tenant' },
+        { label: 'Agent Workspace', path: '/tenant/tenant-123/agent-workspace' },
+      ])
+    })
+
+    it('should generate breadcrumbs for agent-workspace without conversation ID', () => {
+      mockLocation.pathname = '/tenant/tenant-123/agent-workspace'
+      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+
+      expect(result.current).toEqual([
+        { label: 'Home', path: '/tenant' },
+        { label: 'Agent Workspace', path: '/tenant/tenant-123/agent-workspace' },
+      ])
+    })
   })
 
   describe('project breadcrumbs', () => {
