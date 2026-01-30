@@ -24,7 +24,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 // Mock stores
-let mockCurrentTenant = { id: 'tenant-123', name: 'Test Tenant' }
+const mockCurrentTenant = { id: 'tenant-123', name: 'Test Tenant' }
 let mockCurrentProject = { id: 'proj-456', name: 'Test Project' }
 
 vi.mock('@/stores/tenant', () => ({

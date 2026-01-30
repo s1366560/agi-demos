@@ -673,12 +673,16 @@ async def get_conversation_messages(
             }
 
             if event_type == "user_message":
-                item["id"] = data.get("message_id", item["id"])
+                # Keep the unique id generated above, don't override with message_id
+                # This prevents React key conflicts when user_message and assistant_message
+                # have the same message_id (they are separate events and should render separately)
+                item["message_id"] = data.get("message_id")  # Store separately if needed
                 item["content"] = data.get("content", "")
                 item["role"] = "user"
 
             elif event_type == "assistant_message":
-                item["id"] = data.get("message_id", item["id"])
+                # Keep the unique id generated above, don't override with message_id
+                item["message_id"] = data.get("message_id")  # Store separately if needed
                 item["content"] = data.get("content", "")
                 item["role"] = "assistant"
 

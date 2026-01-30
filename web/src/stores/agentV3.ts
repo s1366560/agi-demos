@@ -239,6 +239,21 @@ const processHistory = (messages: Message[]): Message[] => {
       }
       processed.push(msg);
     } else {
+      // Check if this is a complete assistant message from timelineToMessages
+      // These have: role="assistant", message_type="text", and their own content
+      // They should NOT be merged - each represents a separate agent response
+      const isCompleteAssistantMessage =
+        msg.role === "assistant" &&
+        msg.message_type === "text" &&
+        msg.content &&
+        msg.id;
+
+      // If we have a pending message and this is a new complete message, flush the pending one
+      if (isCompleteAssistantMessage && currentAssistantMsg && currentAssistantMsg.content) {
+        processed.push(currentAssistantMsg);
+        currentAssistantMsg = null;
+      }
+
       // It's an assistant or system message, or a special type
       if (!currentAssistantMsg) {
         // Create new assistant message container
@@ -255,8 +270,9 @@ const processHistory = (messages: Message[]): Message[] => {
           },
         };
       } else {
-        // Merge into current
-        if (msg.message_type === "text") {
+        // Merge into current - only for sub-messages (thought, tool_call types)
+        // Complete assistant messages with message_type="text" are handled above (they trigger a flush)
+        if (msg.message_type === "text" && !isCompleteAssistantMessage) {
           currentAssistantMsg.content += msg.content;
         }
         if (msg.tool_calls) {
