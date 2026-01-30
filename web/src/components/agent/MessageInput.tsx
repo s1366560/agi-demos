@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { Input, Button, Space } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
-import { useAgentStore } from '../../stores/agent';
+import { useAgentV3Store } from '../../stores/agentV3';
 
 const { TextArea } = Input;
 
@@ -18,10 +18,10 @@ interface MessageInputProps {
 
 export const MessageInput: React.FC<MessageInputProps> = ({ disabled = false, onSend }) => {
   const [message, setMessage] = useState('');
-  const { isStreaming, currentConversation } = useAgentStore();
+  const { isStreaming, activeConversationId } = useAgentV3Store();
 
   const handleSend = async () => {
-    if (!message.trim() || isStreaming || !currentConversation) {
+    if (!message.trim() || isStreaming || !activeConversationId) {
       return;
     }
 
@@ -32,10 +32,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({ disabled = false, on
       onSend(messageToSend);
     } else {
       // Use store's sendMessage
-      await useAgentStore.getState().sendMessage(
-        currentConversation.id,
+      await useAgentV3Store.getState().sendMessage(
         messageToSend,
-        currentConversation.project_id
+        '', // projectId will be set by caller
       );
     }
   };

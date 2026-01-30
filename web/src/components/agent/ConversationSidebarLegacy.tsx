@@ -21,7 +21,7 @@ import {
   MessageOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
-import { useAgentStore } from '../../stores/agent';
+import { useAgentV3Store } from '../../stores/agentV3';
 import type { Conversation } from '../../types/agent';
 
 const { Text } = Typography;
@@ -39,43 +39,46 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 }) => {
   const {
     conversations,
-    currentConversation,
-    conversationsLoading,
-    listConversations,
-    createConversation,
+    activeConversationId,
+    isLoadingHistory,
+    loadConversations,
+    createNewConversation,
     deleteConversation,
-    setCurrentConversation,
-  } = useAgentStore();
+    setActiveConversation,
+  } = useAgentV3Store();
+
+
 
   // Use ref to prevent duplicate calls from StrictMode
   const loadedProjectIdRef = useRef<string | null>(null);
-  const listConversationsRef = useRef(listConversations);
-  listConversationsRef.current = listConversations;
+  const loadConversationsRef = useRef(loadConversations);
+  loadConversationsRef.current = loadConversations;
   
   useEffect(() => {
     if (projectId && loadedProjectIdRef.current !== projectId) {
       loadedProjectIdRef.current = projectId;
-      listConversationsRef.current(projectId);
+      loadConversationsRef.current(projectId);
     }
   }, [projectId]);
 
   const handleCreate = async () => {
     try {
-      const newConversation = await createConversation(projectId);
-      if (onCreateConversation) {
+      const newId = await createNewConversation(projectId);
+      if (newId && onCreateConversation) {
         onCreateConversation();
       }
-      if (onSelectConversation) {
+      // Find the newly created conversation
+      const newConversation = conversations.find(c => c.id === newId);
+      if (newConversation && onSelectConversation) {
         onSelectConversation(newConversation);
       }
-      setCurrentConversation(newConversation);
     } catch (error) {
       console.error('Failed to create conversation:', error);
     }
   };
 
   const handleSelect = (conversation: Conversation) => {
-    setCurrentConversation(conversation);
+    setActiveConversation(conversation.id);
     if (onSelectConversation) {
       onSelectConversation(conversation);
     }
@@ -124,7 +127,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
       {/* Conversation list */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {conversationsLoading ? (
+        {isLoadingHistory ? (
           <div style={{ padding: 24, textAlign: 'center' }}>
             <Spin />
           </div>
@@ -147,7 +150,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                   cursor: 'pointer',
                   borderBottom: '1px solid #f0f0f0',
                   backgroundColor:
-                    currentConversation?.id === conversation.id ? '#e6f7ff' : 'transparent',
+                    activeConversationId === conversation.id ? '#e6f7ff' : 'transparent',
                 }}
               >
                 <div style={{ width: '100%' }}>
@@ -164,7 +167,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
                       style={{
                         flex: 1,
                         fontWeight:
-                          currentConversation?.id === conversation.id ? 600 : 400,
+                          activeConversationId === conversation.id ? 600 : 400,
                       }}
                     >
                       {conversation.title}

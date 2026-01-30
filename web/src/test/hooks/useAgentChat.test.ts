@@ -3,7 +3,10 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAgentChat } from '../../hooks/useAgentChat';
 import { useProjectStore } from '../../stores/project';
-import { useAgentStore } from '../../stores/agent';
+// FIXME: This test was written for the old agent store (agent.ts).
+// The new agentV3 store has a different API. This test needs to be migrated.
+// For now, we mock the new store but the test structure may need updates.
+import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
 import { useParams, useNavigate } from 'react-router-dom';
 
 // Mock selector functions
@@ -21,8 +24,8 @@ vi.mock('../../stores/project', () => ({
   useProjectStore: vi.fn(),
 }));
 
-vi.mock('../../stores/agent', () => ({
-  useAgentStore: vi.fn(),
+vi.mock('../../stores/agentV3', () => ({
+  useAgentV3Store: vi.fn(),
   useTimelineEvents: () => mockUseTimelineEvents(),
   useMessagesLoading: () => mockUseMessagesLoading(),
   useHasEarlierMessages: () => mockUseHasEarlierMessages(),

@@ -6,7 +6,9 @@
 
 import { act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useAgentStore } from '../../stores/agent';
+// FIXME: This test was written for the old agent store (agent.ts).
+// The new agentV3 store has a different API. This test needs to be migrated.
+import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
 import type { TimelineEvent } from '../../types/agent';
 
 // Mock agent service

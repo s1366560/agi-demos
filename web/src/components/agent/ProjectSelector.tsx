@@ -16,7 +16,7 @@ import React, { useState, useMemo } from 'react';
 import { Select, Modal, Spin, Alert } from 'antd';
 import { ExclamationCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useProjectStore } from '../../stores/project';
-import { useAgentStore } from '../../stores/agent';
+import { useAgentV3Store } from '../../stores/agentV3';
 import { useTenantStore } from '../../stores/tenant';
 
 const { Option } = Select;
@@ -54,7 +54,14 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   className,
 }) => {
   const { projects, currentProject, isLoading: projectsLoading } = useProjectStore();
-  const { currentConversation, clearTimeline, setCurrentConversation, listConversations, conversationsLoading, conversationsError } = useAgentStore();
+  const { 
+    activeConversationId, 
+    conversations,
+    isLoadingHistory,
+    error,
+    setActiveConversation, 
+    loadConversations 
+  } = useAgentV3Store();
   const { currentTenant } = useTenantStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -76,6 +83,11 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     return new Set(names).size !== names.length;
   }, [projectOptions]);
 
+  // Derive current conversation from activeConversationId
+  const currentConversation = useMemo(() => {
+    return conversations.find(c => c.id === activeConversationId) || null;
+  }, [conversations, activeConversationId]);
+
   // Handle project selection with confirmation for active conversation
   const handleProjectSelect = (projectId: string) => {
     if (projectId === currentProjectId) return;
@@ -93,11 +105,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const executeProjectSwitch = async (projectId: string) => {
     try {
       // Clear current conversation state
-      clearTimeline();
-      setCurrentConversation(null);
+      setActiveConversation(null);
 
       // Load conversations for the new project
-      await listConversations(projectId);
+      await loadConversations(projectId);
 
       // Trigger the callback
       onProjectChange(projectId);
@@ -123,7 +134,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   };
 
   // Loading state indicator
-  if (conversationsLoading) {
+  if (isLoadingHistory) {
     return (
       <div className={className} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <Spin indicator={<LoadingOutlined spin />} size="small" />
@@ -202,10 +213,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       </Modal>
 
       {/* Error display */}
-      {conversationsError && (
+      {error && (
         <Alert
           message="Failed to load conversations"
-          description={conversationsError}
+          description={error}
           type="error"
           closable
           style={{ marginTop: 8 }}

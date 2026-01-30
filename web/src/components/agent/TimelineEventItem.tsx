@@ -4,6 +4,10 @@
  * Renders individual TimelineEvents in chronological order with
  * improved visual hierarchy and spacing.
  *
+ * Features:
+ * - Natural time rendering for each event (不分组)
+ * - Tool status tracking with act/observe matching
+ *
  * @module components/agent/TimelineEventItem
  */
 
@@ -15,7 +19,26 @@ import {
 } from "./chat/MessageStream";
 import { AssistantMessage } from "./chat/AssistantMessage";
 import { ReasoningLogCard } from "./chat/MessageStream";
+import { formatDistanceToNowCN, formatReadableTime } from "../../utils/date";
 import type { TimelineEvent, ActEvent, ObserveEvent } from "../../types/agent";
+
+/**
+ * TimeBadge - Natural time display component
+ * 自然时间标签组件
+ */
+function TimeBadge({ timestamp }: { timestamp: number }) {
+  const naturalTime = formatDistanceToNowCN(timestamp);
+  const readableTime = formatReadableTime(timestamp);
+  
+  return (
+    <span 
+      className="text-[10px] text-slate-400 dark:text-slate-500 select-none"
+      title={new Date(timestamp).toLocaleString('zh-CN')}
+    >
+      {naturalTime} · {readableTime}
+    </span>
+  );
+}
 
 export interface TimelineEventItemProps {
   /** The timeline event to render */
@@ -68,19 +91,25 @@ function ThoughtItem({
   if (event.type !== "thought") return null;
 
   return (
-    <AgentSection icon="psychology" opacity={!isStreaming}>
-      <ReasoningLogCard
-        steps={[event.content]}
-        summary="Thinking..."
-        completed={!isStreaming}
-        expanded={isStreaming}
-      />
-    </AgentSection>
+    <div className="flex flex-col gap-1">
+      <AgentSection icon="psychology" opacity={!isStreaming}>
+        <ReasoningLogCard
+          steps={[event.content]}
+          summary="Thinking..."
+          completed={!isStreaming}
+          expanded={isStreaming}
+        />
+      </AgentSection>
+      <div className="pl-12">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
   );
 }
 
 /**
  * Render act (tool call) event
+ * 工具调用事件渲染 - 带状态跟踪
  */
 function ActItem({
   event,
@@ -94,27 +123,23 @@ function ActItem({
   const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
   const hasCompleted = !!observeEvent;
 
-  if (hasCompleted && observeEvent) {
-    return (
-      <AgentSection
-        icon="construction"
-        iconBg="bg-slate-100 dark:bg-slate-800"
-        opacity={true}
-      >
-        <ToolExecutionCardDisplay
-          toolName={event.toolName}
-          status={observeEvent.isError ? "error" : "success"}
-          parameters={event.toolInput}
-          result={observeEvent.isError ? undefined : observeEvent.toolOutput}
-          error={observeEvent.isError ? observeEvent.toolOutput : undefined}
-          duration={observeEvent.timestamp - event.timestamp}
-          defaultExpanded={false}
-        />
-      </AgentSection>
-    );
-  }
-
-  return (
+  const ToolCard = hasCompleted && observeEvent ? (
+    <AgentSection
+      icon="construction"
+      iconBg="bg-slate-100 dark:bg-slate-800"
+      opacity={true}
+    >
+      <ToolExecutionCardDisplay
+        toolName={event.toolName}
+        status={observeEvent.isError ? "error" : "success"}
+        parameters={event.toolInput}
+        result={observeEvent.isError ? undefined : observeEvent.toolOutput}
+        error={observeEvent.isError ? observeEvent.toolOutput : undefined}
+        duration={observeEvent.timestamp - event.timestamp}
+        defaultExpanded={false}
+      />
+    </AgentSection>
+  ) : (
     <AgentSection
       icon="construction"
       iconBg="bg-slate-100 dark:bg-slate-800"
@@ -127,10 +152,20 @@ function ActItem({
       />
     </AgentSection>
   );
+
+  return (
+    <div className="flex flex-col gap-1">
+      {ToolCard}
+      <div className="pl-12">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
 }
 
 /**
  * Render observe (tool result) event
+ * 工具结果事件渲染 - 孤儿observe（无对应act）时显示
  */
 function ObserveItem({
   event,
@@ -156,19 +191,24 @@ function ObserveItem({
   }
 
   return (
-    <AgentSection
-      icon="construction"
-      iconBg="bg-slate-100 dark:bg-slate-800"
-      opacity={true}
-    >
-      <ToolExecutionCardDisplay
-        toolName={event.toolName}
-        status={event.isError ? "error" : "success"}
-        result={event.toolOutput}
-        error={event.isError ? event.toolOutput : undefined}
-        defaultExpanded={false}
-      />
-    </AgentSection>
+    <div className="flex flex-col gap-1">
+      <AgentSection
+        icon="construction"
+        iconBg="bg-slate-100 dark:bg-slate-800"
+        opacity={true}
+      >
+        <ToolExecutionCardDisplay
+          toolName={event.toolName}
+          status={event.isError ? "error" : "success"}
+          result={event.toolOutput}
+          error={event.isError ? event.toolOutput : undefined}
+          defaultExpanded={false}
+        />
+      </AgentSection>
+      <div className="pl-12">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
   );
 }
 
@@ -179,14 +219,19 @@ function WorkPlanItem({ event }: { event: TimelineEvent }) {
   if (event.type !== "work_plan") return null;
 
   return (
-    <AgentSection icon="psychology">
-      <ReasoningLogCard
-        steps={event.steps.map((s) => s.description)}
-        summary={`Work Plan: ${event.steps.length} steps`}
-        completed={event.status === "completed"}
-        expanded={event.status !== "completed"}
-      />
-    </AgentSection>
+    <div className="flex flex-col gap-1">
+      <AgentSection icon="psychology">
+        <ReasoningLogCard
+          steps={event.steps.map((s) => s.description)}
+          summary={`Work Plan: ${event.steps.length} steps`}
+          completed={event.status === "completed"}
+          expanded={event.status !== "completed"}
+        />
+      </AgentSection>
+      <div className="pl-12">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
   );
 }
 
@@ -204,15 +249,20 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
   const stepIndex = event.stepIndex;
 
   return (
-    <div className="flex items-start gap-3 my-3 opacity-70">
-      <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
-        <span className="material-symbols-outlined text-amber-600 text-xs">
-          play_arrow
-        </span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-3 opacity-70">
+        <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-amber-600 text-xs">
+            play_arrow
+          </span>
+        </div>
+        <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1">
+          {stepIndex !== undefined ? `Step ${stepIndex}: ` : ""}
+          {stepDesc}
+        </div>
       </div>
-      <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1">
-        {stepIndex !== undefined ? `Step ${stepIndex}: ` : ""}
-        {stepDesc}
+      <div className="pl-10">
+        <TimeBadge timestamp={event.timestamp} />
       </div>
     </div>
   );
@@ -231,18 +281,23 @@ function TextDeltaItem({
   if (event.type !== "text_delta") return null;
 
   return (
-    <div className="flex items-start gap-3 my-4">
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-        <span className="material-symbols-outlined text-primary text-lg">
-          smart_toy
-        </span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-4">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+          <span className="material-symbols-outlined text-primary text-lg">
+            smart_toy
+          </span>
+        </div>
+        <div
+          className={`flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none ${
+            isStreaming ? "typing-cursor" : ""
+          }`}
+        >
+          {event.content}
+        </div>
       </div>
-      <div
-        className={`flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none ${
-          isStreaming ? "typing-cursor" : ""
-        }`}
-      >
-        {event.content}
+      <div className="pl-11">
+        <TimeBadge timestamp={event.timestamp} />
       </div>
     </div>
   );
@@ -259,18 +314,30 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       case "user_message":
         return (
           <div className="my-4 animate-slide-up">
-            <UserMessage content={event.content} />
+            <div className="flex items-start justify-end gap-3">
+              <div className="flex flex-col items-end gap-1 max-w-[80%]">
+                <UserMessage content={event.content} />
+                <TimeBadge timestamp={event.timestamp} />
+              </div>
+            </div>
           </div>
         );
 
       case "assistant_message":
         return (
           <div className="my-4 animate-slide-up">
-            <AssistantMessage
-              content={event.content}
-              isStreaming={isStreaming}
-              generatedAt={new Date(event.timestamp).toISOString()}
-            />
+            <div className="flex items-start gap-3">
+              <div className="flex flex-col gap-1 flex-1">
+                <AssistantMessage
+                  content={event.content}
+                  isStreaming={isStreaming}
+                  generatedAt={new Date(event.timestamp).toISOString()}
+                />
+                <div className="pl-11">
+                  <TimeBadge timestamp={event.timestamp} />
+                </div>
+              </div>
+            </div>
           </div>
         );
 

@@ -10,7 +10,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { ProjectSelector } from '../../../components/agent/ProjectSelector'
 import { useProjectStore } from '../../../stores/project'
-import { useAgentStore } from '../../../stores/agent'
+// FIXME: This test was written for the old agent store (agent.ts).
+// The new agentV3 store has a different API. This test needs to be migrated.
+import { useAgentV3Store as useAgentStore } from '../../../stores/agentV3'
 import { useTenantStore } from '../../../stores/tenant'
 
 // Mock stores

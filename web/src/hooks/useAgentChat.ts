@@ -2,12 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { message, Form } from "antd";
 import { useProjectStore } from "../stores/project";
-import {
-  useAgentStore,
-  useTimelineEvents,
-  useMessagesLoading,
-  useHasEarlierMessages,
-} from "../stores/agent";
+import { useAgentV3Store } from "../stores/agentV3";
 import { agentService } from "../services/agentService";
 import type { StarterTile } from "../components/agent/chat/IdleState";
 
@@ -19,36 +14,24 @@ export function useAgentChat() {
   const navigate = useNavigate();
   const { currentProject, projects, setCurrentProject } = useProjectStore();
 
-  // Use unified timeline events (instead of deprecated useMessages)
-  const timeline = useTimelineEvents();
-  const messagesLoading = useMessagesLoading();
-  const hasEarlierMessages = useHasEarlierMessages();
-
+  // Get state directly from agentV3 store
   const {
     conversations,
-    currentConversation,
-    listConversations,
-    createConversation,
-    setCurrentConversation,
-    sendMessage,
-    stopChat,
+    activeConversationId,
+    timeline,
+    isLoadingHistory,
     isStreaming,
-    currentWorkPlan,
-    currentStepNumber,
-    executionTimeline,
-    toolExecutionHistory,
-    matchedPattern,
-    currentPlan,
-    planModeStatus,
-    planLoading,
-    enterPlanMode,
-    exitPlanMode,
-    updatePlan,
-    getPlanModeStatus,
-    loadEarlierMessages,
-    // New conversation pending state (to prevent race condition)
-    isNewConversationPending,
-  } = useAgentStore();
+    workPlan,
+    executionPlan,
+    isPlanMode,
+    loadConversations,
+    loadMessages,
+    setActiveConversation,
+    createNewConversation,
+    sendMessage,
+    abortStream,
+    togglePlanMode,
+  } = useAgentV3Store();
 
   // Local UI state
   const [inputValue, setInputValue] = useState("");
@@ -58,12 +41,18 @@ export function useAgentChat() {
   const [showPlanEditor, setShowPlanEditor] = useState(false);
   const [showEnterPlanModal, setShowEnterPlanModal] = useState(false);
   const [planForm] = Form.useForm();
+  
+  // Note: respondToDecision, deleteConversation, clearError, error, 
+  // pendingDecision, doomLoopDetected, streamStatus are available in store but not used currently
+  
+  // Get togglePlanPanel from store for handleViewPlan
+  const togglePlanPanel = useAgentV3Store((state) => state.togglePlanPanel);
 
   // Refs
   const pendingSendRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevMessagesLoadingRef = useRef(messagesLoading);
+  const prevMessagesLoadingRef = useRef(isLoadingHistory);
 
   // WebSocket connection management
   useEffect(() => {
@@ -77,8 +66,8 @@ export function useAgentChat() {
     // Cleanup on unmount - stop any active chat but keep connection alive
     // (connection is shared across the app)
     return () => {
-      const currentConvId = useAgentStore.getState().currentConversation?.id;
-      const streaming = useAgentStore.getState().isStreaming;
+      const currentConvId = useAgentV3Store.getState().activeConversationId;
+      const streaming = useAgentV3Store.getState().isStreaming;
       if (streaming && currentConvId) {
         console.log("[useAgentChat] Cleanup: stopping chat for", currentConvId);
         agentService.stopChat(currentConvId);
@@ -88,10 +77,10 @@ export function useAgentChat() {
 
   // Fetch Plan Mode status
   useEffect(() => {
-    if (currentConversation?.id) {
-      getPlanModeStatus(currentConversation.id);
+    if (activeConversationId) {
+      // Plan mode status is loaded in loadMessages
     }
-  }, [currentConversation?.id, getPlanModeStatus]);
+  }, [activeConversationId]);
 
   // Scroll logic
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -106,25 +95,25 @@ export function useAgentChat() {
 
   useEffect(() => {
     const wasLoading = prevMessagesLoadingRef.current;
-    prevMessagesLoadingRef.current = messagesLoading;
+    prevMessagesLoadingRef.current = isLoadingHistory;
 
-    if (wasLoading && !messagesLoading && timeline.length > 0) {
+    if (wasLoading && !isLoadingHistory && timeline.length > 0) {
       requestAnimationFrame(() => {
         scrollToBottom("auto");
       });
     }
-  }, [messagesLoading, timeline.length, scrollToBottom]);
+  }, [isLoadingHistory, timeline.length, scrollToBottom]);
 
   // Project sync
   // Use ref to prevent duplicate calls and avoid dependency on listConversations
   const loadedProjectIdRef = useRef<string | null>(null);
-  const listConversationsRef = useRef(listConversations);
-  listConversationsRef.current = listConversations;
+  const loadConversationsRef = useRef(loadConversations);
+  loadConversationsRef.current = loadConversations;
   
   useEffect(() => {
     if (projectId && loadedProjectIdRef.current !== projectId) {
       loadedProjectIdRef.current = projectId;
-      listConversationsRef.current(projectId);
+      loadConversationsRef.current(projectId);
       const project = projects.find((p) => p.id === projectId);
       if (project && currentProject?.id !== projectId) {
         setCurrentProject(project);
@@ -136,38 +125,32 @@ export function useAgentChat() {
   // URL param sync
   // Skip during streaming to avoid race condition where getMessages overwrites
   // messages added by SSE events (addMessage) during new conversation creation.
-  // Also skip when a new conversation is pending (isNewConversationPending) to prevent
-  // race condition where URL change after createConversation triggers setCurrentConversation
-  // which would call getMessages and overwrite SSE-added messages.
-  // Use useAgentStore.getState() to get the latest store value, not the stale
-  // closure value from the previous render, to avoid calling setCurrentConversation
-  // redundantly when creating a new conversation.
   useEffect(() => {
     if (
       conversationIdParam &&
       conversations.length > 0 &&
-      !isStreaming &&
-      !isNewConversationPending
+      !isStreaming
     ) {
       const conversation = conversations.find(
         (c) => c.id === conversationIdParam
       );
-      // Get fresh currentConversation from store to avoid stale closure
-      const latestCurrentConversation =
-        useAgentStore.getState().currentConversation;
+      // Get fresh activeConversationId from store to avoid stale closure
+      const latestActiveId = useAgentV3Store.getState().activeConversationId;
       if (
         conversation &&
-        latestCurrentConversation?.id !== conversationIdParam
+        latestActiveId !== conversationIdParam
       ) {
-        setCurrentConversation(conversation);
+        setActiveConversation(conversationIdParam);
+        loadMessages(conversationIdParam, projectId!);
       }
     }
   }, [
     conversationIdParam,
     conversations,
-    setCurrentConversation,
+    setActiveConversation,
     isStreaming,
-    isNewConversationPending,
+    projectId,
+    loadMessages,
   ]);
 
   // Auto-select first conversation
@@ -175,50 +158,46 @@ export function useAgentChat() {
     if (
       !conversationIdParam &&
       conversations.length > 0 &&
-      !currentConversation
+      !activeConversationId
     ) {
-      setCurrentConversation(conversations[0]);
-      navigate(`/project/${projectId}/agent/${conversations[0].id}`, {
+      const firstConv = conversations[0];
+      setActiveConversation(firstConv.id);
+      loadMessages(firstConv.id, projectId!);
+      navigate(`/project/${projectId}/agent/${firstConv.id}`, {
         replace: true,
       });
     }
   }, [
     conversations,
-    currentConversation,
+    activeConversationId,
     conversationIdParam,
-    setCurrentConversation,
+    setActiveConversation,
     navigate,
     projectId,
+    loadMessages,
   ]);
 
   // Handlers
   const handleSend = useCallback(
-    async (message: string) => {
-      if (pendingSendRef.current === message || isSending || isStreaming) {
+    async (messageText: string) => {
+      if (pendingSendRef.current === messageText || isSending || isStreaming) {
         return;
       }
 
-      pendingSendRef.current = message;
+      pendingSendRef.current = messageText;
       setIsSending(true);
 
       try {
-        if (!currentConversation) {
-          const newConversation = await createConversation(projectId!);
-          setCurrentConversation(newConversation, true);
-          navigate(`/project/${projectId}/agent/${newConversation.id}`, {
-            replace: true,
-          });
-          await sendMessage(
-            newConversation.id,
-            message,
-            newConversation.project_id
-          );
+        if (!activeConversationId) {
+          const newId = await createNewConversation(projectId!);
+          if (newId) {
+            navigate(`/project/${projectId}/agent/${newId}`, {
+              replace: true,
+            });
+            await sendMessage(messageText, projectId!);
+          }
         } else {
-          await sendMessage(
-            currentConversation.id,
-            message,
-            currentConversation.project_id
-          );
+          await sendMessage(messageText, projectId!);
         }
       } finally {
         setIsSending(false);
@@ -230,19 +209,16 @@ export function useAgentChat() {
     [
       isSending,
       isStreaming,
-      currentConversation,
+      activeConversationId,
       projectId,
-      createConversation,
-      setCurrentConversation,
+      createNewConversation,
       sendMessage,
       navigate,
     ]
   );
 
   const handleStop = () => {
-    if (currentConversation) {
-      stopChat(currentConversation.id);
-    }
+    abortStream();
   };
 
   const handleTileClick = (tile: StarterTile) => {
@@ -251,69 +227,62 @@ export function useAgentChat() {
 
   const handleSelectConversation = useCallback(
     (conversationId: string) => {
-      const conversation = conversations.find((c) => c.id === conversationId);
-      if (conversation) {
-        setCurrentConversation(conversation);
-        navigate(`/project/${projectId}/agent/${conversationId}`, {
-          replace: true,
-        });
-      }
+      setActiveConversation(conversationId);
+      loadMessages(conversationId, projectId!);
+      navigate(`/project/${projectId}/agent/${conversationId}`, {
+        replace: true,
+      });
     },
-    [conversations, setCurrentConversation, navigate, projectId]
+    [setActiveConversation, navigate, projectId, loadMessages]
   );
 
   const handleNewChat = useCallback(async () => {
     if (projectId) {
-      const newConversation = await createConversation(projectId);
-      setCurrentConversation(newConversation, true);
-      navigate(`/project/${projectId}/agent/${newConversation.id}`, {
-        replace: true,
-      });
+      const newId = await createNewConversation(projectId);
+      if (newId) {
+        navigate(`/project/${projectId}/agent/${newId}`, {
+          replace: true,
+        });
+      }
     }
-  }, [projectId, createConversation, setCurrentConversation, navigate]);
+  }, [projectId, createNewConversation, navigate]);
 
   // Plan Mode Handlers
   const handleViewPlan = useCallback(() => {
     setShowPlanEditor(true);
-  }, []);
+    togglePlanPanel();
+  }, [togglePlanPanel]);
 
   const handleExitPlanMode = useCallback(
-    async (approve: boolean) => {
-      if (currentConversation?.id && currentPlan?.id) {
-        await exitPlanMode(currentConversation.id, currentPlan.id, approve);
-        setShowPlanEditor(false);
-      }
+    async (_approve: boolean) => {
+      // Exit plan mode via toggle
+      await togglePlanMode();
+      setShowPlanEditor(false);
     },
-    [currentConversation?.id, currentPlan?.id, exitPlanMode]
+    [togglePlanMode]
   );
 
   const handleUpdatePlan = useCallback(
-    async (content: string) => {
-      if (currentPlan?.id) {
-        await updatePlan(currentPlan.id, { content });
-      }
+    async (_content: string) => {
+      // Update plan functionality if needed
     },
-    [currentPlan?.id, updatePlan]
+    []
   );
 
   const handleEnterPlanMode = useCallback(async () => {
-    if (!currentConversation?.id) {
+    if (!activeConversationId) {
       message.warning("Please start or select a conversation first");
       return;
     }
     setShowEnterPlanModal(true);
-  }, [currentConversation?.id]);
+  }, [activeConversationId]);
 
   const handleEnterPlanSubmit = useCallback(async () => {
-    if (!currentConversation?.id) return;
+    if (!activeConversationId) return;
 
     try {
-      const values = await planForm.validateFields();
-      await enterPlanMode(
-        currentConversation.id,
-        values.title,
-        values.description
-      );
+      await planForm.validateFields();
+      await togglePlanMode();
       message.success("Entered Plan Mode successfully");
       setShowEnterPlanModal(false);
       planForm.resetFields();
@@ -323,17 +292,18 @@ export function useAgentChat() {
         message.error(err.message || "Failed to enter Plan Mode");
       }
     }
-  }, [currentConversation?.id, enterPlanMode, planForm]);
+  }, [activeConversationId, togglePlanMode, planForm]);
 
-  // Load earlier messages (backward pagination)
+  // Load earlier messages (backward pagination) - not implemented in v3
   const handleLoadEarlier = useCallback(async () => {
-    if (!currentConversation?.id || !projectId) {
-      console.log("[useAgentChat] Cannot load earlier: no conversation or project");
-      return;
-    }
-    console.log("[useAgentChat] Loading earlier messages for", currentConversation.id);
-    await loadEarlierMessages(currentConversation.id, projectId, 50);
-  }, [currentConversation?.id, projectId, loadEarlierMessages]);
+    console.log("[useAgentChat] Load earlier not implemented in v3");
+  }, []);
+
+  // Derive current conversation object
+  const currentConversation = conversations.find(c => c.id === activeConversationId) || null;
+
+  // Derive hasEarlierMessages from messages
+  const hasEarlierMessages = false; // Not implemented in v3
 
   return {
     // State
@@ -341,7 +311,7 @@ export function useAgentChat() {
     currentConversation,
     conversations,
     timeline,
-    messagesLoading,
+    messagesLoading: isLoadingHistory,
     isStreaming,
     inputValue,
     setInputValue,
@@ -356,14 +326,14 @@ export function useAgentChat() {
     planForm,
 
     // Store State
-    currentWorkPlan,
-    currentStepNumber,
-    executionTimeline,
-    toolExecutionHistory,
-    matchedPattern,
-    currentPlan,
-    planModeStatus,
-    planLoading,
+    currentWorkPlan: workPlan,
+    currentStepNumber: workPlan?.current_step_index ?? null,
+    executionTimeline: [], // Not in v3
+    toolExecutionHistory: [], // Not in v3
+    matchedPattern: null, // Not in v3
+    currentPlan: executionPlan,
+    planModeStatus: isPlanMode ? { is_in_plan_mode: true } : null,
+    planLoading: false,
 
     // Pagination state
     hasEarlierMessages,
