@@ -218,8 +218,8 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
 
       {/* Footer */}
       {!collapsed && (
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center">
               <span className="text-white text-xs font-bold">AI</span>
             </div>
