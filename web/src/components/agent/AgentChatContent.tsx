@@ -153,13 +153,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
 
   // Event handlers
   const handleSelectConversation = useCallback((id: string) => {
-    navigate(`${basePath}/conversation/${id}`);
+    navigate(`${basePath}/${id}`);
   }, [navigate, basePath]);
 
   const handleNewConversation = useCallback(async () => {
     if (!projectId) return;
     const newId = await createNewConversation(projectId);
-    if (newId) navigate(`${basePath}/conversation/${newId}`);
+    if (newId) navigate(`${basePath}/${newId}`);
   }, [projectId, createNewConversation, navigate, basePath]);
 
   const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
@@ -181,7 +181,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     if (!projectId) return;
     await ensureSandbox();
     const newId = await sendMessage(content, projectId, { onAct, onObserve });
-    if (!conversationId && newId) navigate(`${basePath}/conversation/${newId}`);
+    if (!conversationId && newId) navigate(`${basePath}/${newId}`);
   }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox, basePath]);
 
   const handleViewPlan = useCallback(() => {

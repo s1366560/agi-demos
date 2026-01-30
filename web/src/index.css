@@ -3,6 +3,28 @@
 @variant dark (&:where(.dark, .dark *));
 
 /* ============================================================================
+ * INITIALIZATION ANTI-FLASH
+ * Prevents FOUC (Flash of Unstyled Content) and FOUT (Flash of Untranslated Text)
+ * ============================================================================ */
+
+/* Hide content until app is initialized */
+html:not(.app-ready) body {
+  visibility: hidden;
+  opacity: 0;
+}
+
+html.app-ready body {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 0.15s ease-out;
+}
+
+/* Prevent text rendering before fonts/i18n load */
+html:not(.app-ready) * {
+  text-rendering: optimizeSpeed;
+}
+
+/* ============================================================================
  * DESIGN SYSTEM TOKENS
  * 
  * MemStack Enterprise AI Memory Platform
