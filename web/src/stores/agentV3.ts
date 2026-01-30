@@ -165,7 +165,10 @@ interface AgentV3State {
 
   // Messages State (Derived from timeline for backward compatibility)
   messages: Message[];
-  isLoadingHistory: boolean;
+  isLoadingHistory: boolean;  // For initial message load (shows loading in sidebar)
+  isLoadingEarlier: boolean;  // For pagination (does NOT show loading in sidebar)
+  hasEarlier: boolean;  // Whether there are earlier messages to load
+  earliestLoadedSequence: number | null;  // For pagination
 
   // Stream State
   isStreaming: boolean;
@@ -202,6 +205,7 @@ interface AgentV3State {
   setActiveConversation: (id: string | null) => void;
   loadConversations: (projectId: string) => Promise<void>;
   loadMessages: (conversationId: string, projectId: string) => Promise<void>;
+  loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;
   createNewConversation: (projectId: string) => Promise<string | null>;
   sendMessage: (
     content: string,
@@ -329,6 +333,9 @@ export const useAgentV3Store = create<AgentV3State>()(
         // Messages: Derived from timeline (for backward compatibility)
         messages: [],
         isLoadingHistory: false,
+        isLoadingEarlier: false,
+        hasEarlier: false,
+        earliestLoadedSequence: null,
 
         isStreaming: false,
         streamStatus: "idle",
@@ -441,24 +448,31 @@ export const useAgentV3Store = create<AgentV3State>()(
         workPlan: null,
         executionPlan: null,
         agentState: "idle",
+        hasEarlier: false,
+        earliestLoadedSequence: null,
       });
       try {
         const response = await agentService.getConversationMessages(
           conversationId,
-          projectId
-        );
+          projectId,
+          50  // Load latest 50 messages
+        ) as any;
 
         if (get().activeConversationId !== conversationId) {
           console.log("Conversation changed during load, ignoring result");
           return;
         }
 
-        // Store the raw timeline (NEW)
+        // Store the raw timeline and pagination metadata
         const processedMessages = processHistory(timelineToMessages(response.timeline));
+        const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
+
         set({
           timeline: response.timeline,
           messages: processedMessages,
           isLoadingHistory: false,
+          hasEarlier: response.has_more ?? false,
+          earliestLoadedSequence: firstSequence,
         });
 
         try {
@@ -596,6 +610,56 @@ export const useAgentV3Store = create<AgentV3State>()(
         if (get().activeConversationId !== conversationId) return;
         console.error("Failed to load messages", error);
         set({ isLoadingHistory: false });
+      }
+    },
+
+    loadEarlierMessages: async (conversationId, projectId) => {
+      const { earliestLoadedSequence, timeline, isLoadingEarlier, activeConversationId } = get();
+
+      // Guard: Don't load if already loading or no pagination point exists
+      if (activeConversationId !== conversationId) return false;
+      if (!earliestLoadedSequence || isLoadingEarlier) {
+        console.log('[AgentV3] Cannot load earlier messages: no pagination point or already loading');
+        return false;
+      }
+
+      console.log('[AgentV3] Loading earlier messages before sequence:', earliestLoadedSequence);
+      set({ isLoadingEarlier: true });
+
+      try {
+        const response = await agentService.getConversationMessages(
+          conversationId,
+          projectId,
+          50,  // Load 50 more messages
+          undefined,  // from_sequence
+          earliestLoadedSequence  // before_sequence
+        ) as any;
+
+        // Check if conversation is still active
+        if (get().activeConversationId !== conversationId) {
+          console.log('[AgentV3] Conversation changed during load earlier messages, ignoring result');
+          return false;
+        }
+
+        // Prepend new events to existing timeline
+        const newTimeline = [...response.timeline, ...timeline];
+        const newMessages = processHistory(timelineToMessages(newTimeline));
+        const newFirstSequence = response.timeline[0]?.sequenceNumber ?? null;
+
+        set({
+          timeline: newTimeline,
+          messages: newMessages,
+          isLoadingEarlier: false,
+          hasEarlier: response.has_more ?? false,
+          earliestLoadedSequence: newFirstSequence,
+        });
+
+        console.log('[AgentV3] Loaded earlier messages, total timeline length:', newTimeline.length);
+        return true;
+      } catch (error) {
+        console.error('[AgentV3] Failed to load earlier messages:', error);
+        set({ isLoadingEarlier: false });
+        return false;
       }
     },
 

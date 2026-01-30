@@ -176,7 +176,7 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   onSend,
   onTileClick,
   hasEarlierMessages,
-  onLoadEarlier: _onLoadEarlier,
+  onLoadEarlier,
 }) => {
   // Memoize sorted timeline events (they should already be sorted by sequence)
   const sortedTimeline = useMemo(
@@ -249,11 +249,13 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Loading indicator for earlier messages */}
+      {/* Loading indicator for earlier messages - 更加低调的样式 */}
       {messagesLoading && hasEarlierMessages && (
-        <div className="flex justify-center py-2 bg-white dark:bg-slate-900">
-          <Spin size="small" />
-          <span className="ml-2 text-sm text-slate-500">加载历史消息...</span>
+        <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
+          <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
+            <Spin size="small" />
+            <span className="ml-2 text-xs text-slate-500">加载中...</span>
+          </div>
         </div>
       )}
 
@@ -309,6 +311,9 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
                 timeline={sortedTimeline}
                 isStreaming={isStreaming}
                 className="chat-messages"
+                hasEarlierMessages={hasEarlierMessages}
+                isLoadingEarlier={messagesLoading && hasEarlierMessages}
+                onLoadEarlier={onLoadEarlier}
               />
             </div>
 

@@ -1,10 +1,17 @@
 /**
  * VirtualTimelineEventList - Optimized virtualized timeline event list
+ *
+ * Features:
+ * - Virtual scrolling for performance with large conversation histories
+ * - Aggressive preloading for seamless backward pagination (用户几乎感知不到加载)
+ * - Auto-scroll to bottom for new messages
+ * - Scroll position restoration after loading earlier messages
+ * - No scroll jumping or flickering during pagination
  */
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Button } from "antd";
+import { Button, Spin } from "antd";
 import { DownOutlined, MessageOutlined } from "@ant-design/icons";
 import { TimelineEventItem } from "./TimelineEventItem";
 import { MessageStream } from "./chat/MessageStream";
@@ -15,6 +22,12 @@ interface VirtualTimelineEventListProps {
   isStreaming?: boolean;
   className?: string;
   height?: number;
+  // Pagination props
+  hasEarlierMessages?: boolean;
+  isLoadingEarlier?: boolean;
+  onLoadEarlier?: () => void;
+  // Preload configuration
+  preloadThreshold?: number; // Number of items before end to trigger preload
 }
 
 function estimateEventHeight(event: TimelineEvent): number {
@@ -88,14 +101,26 @@ export const VirtualTimelineEventList: React.FC<
   isStreaming = false,
   className = "",
   height: propHeight,
+  hasEarlierMessages = false,
+  isLoadingEarlier = false,
+  onLoadEarlier,
+  preloadThreshold = 8, // 当用户看到前8条消息时就开始加载更多
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
-  const prevTimelineLengthRef = useRef(timeline.length);
-  const isUserScrollingRef = useRef(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Virtual list setup
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+  
+  // Pagination state refs
+  const isLoadingEarlierRef = useRef(false);
+  const previousTimelineLengthRef = useRef(0);
+  const firstVisibleItemIndexRef = useRef(0);
+  const firstVisibleItemOffsetRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
+  const hasScrolledInitiallyRef = useRef(false);
+  const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLoadTimeRef = useRef(0);
+  
+  // Virtual list setup - 增加 overscan 预渲染更多项目
   const estimateEventHeightCallback = useCallback(
     (index: number) => estimateEventHeight(timeline[index]),
     [timeline]
@@ -105,71 +130,167 @@ export const VirtualTimelineEventList: React.FC<
     count: timeline.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: estimateEventHeightCallback,
-    overscan: 5,
+    overscan: 10, // 增加预渲染数量，让滚动更平滑
+    scrollPaddingEnd: 0,
   });
+
+  const virtualItems = eventVirtualizer.getVirtualItems();
+  const totalHeight = eventVirtualizer.getTotalSize();
+
+  // Save current scroll state for pagination
+  const saveScrollState = useCallback(() => {
+    if (virtualItems.length > 0) {
+      const firstItem = virtualItems[0];
+      firstVisibleItemIndexRef.current = firstItem.index;
+      firstVisibleItemOffsetRef.current = firstItem.start - (scrollContainerRef.current?.scrollTop || 0);
+    }
+  }, [virtualItems]);
+
+  // Restore scroll position after loading earlier messages
+  const restoreScrollPosition = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const previousLength = previousTimelineLengthRef.current;
+    const currentLength = timeline.length;
+    const itemsAdded = currentLength - previousLength;
+
+    if (itemsAdded <= 0) return;
+
+    // Calculate the new scroll position
+    const newScrollTop = eventVirtualizer.getOffsetForIndex(itemsAdded)?.[0] || 0;
+    const targetScrollTop = newScrollTop + firstVisibleItemOffsetRef.current;
+
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      container.scrollTop = targetScrollTop;
+      
+      // Reset refs
+      firstVisibleItemIndexRef.current = 0;
+      firstVisibleItemOffsetRef.current = 0;
+    });
+  }, [timeline.length, eventVirtualizer]);
+
+  // 核心优化：激进的预加载逻辑
+  const checkAndPreload = useCallback(() => {
+    if (
+      !isLoadingEarlierRef.current &&
+      !isLoadingEarlier &&
+      hasEarlierMessages &&
+      onLoadEarlier &&
+      virtualItems.length > 0
+    ) {
+      const firstVisibleIndex = virtualItems[0].index;
+      
+      // 当第一个可见项目索引小于阈值时，触发预加载
+      // 这意味着用户还没滚动到顶部，但已经"接近"顶部了
+      if (firstVisibleIndex < preloadThreshold) {
+        // 防抖动：确保两次加载之间至少有 300ms 间隔
+        const now = Date.now();
+        if (now - lastLoadTimeRef.current < 300) return;
+        
+        // Save current scroll state before loading
+        saveScrollState();
+        previousTimelineLengthRef.current = timeline.length;
+        
+        isLoadingEarlierRef.current = true;
+        lastLoadTimeRef.current = now;
+
+        // 延迟显示 loading 指示器，如果加载很快用户就看不到
+        loadingIndicatorTimeoutRef.current = setTimeout(() => {
+          setShowLoadingIndicator(true);
+        }, 300);
+
+        onLoadEarlier();
+
+        // Reset loading flag after a delay
+        setTimeout(() => {
+          isLoadingEarlierRef.current = false;
+        }, 500);
+      }
+    }
+  }, [virtualItems, isLoadingEarlier, hasEarlierMessages, onLoadEarlier, timeline.length, preloadThreshold, saveScrollState]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    // Mark that user is scrolling
-    isUserScrollingRef.current = true;
-
-    // Clear existing timeout
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    // Set new timeout to detect when scrolling stops
-    scrollTimeoutRef.current = setTimeout(() => {
-      isUserScrollingRef.current = false;
-    }, 150);
+    // 检查是否需要预加载
+    checkAndPreload();
 
     // Update button visibility based on scroll position
-    const nearBottom = isNearBottom(container, 100);
+    const nearBottom = isNearBottom(container, 150);
     setShowScrollButton(!nearBottom && timeline.length > 0);
-  }, [timeline.length]);
+  }, [timeline.length, checkAndPreload]);
 
-  // Auto-scroll to bottom when new messages arrive (only if already near bottom)
+  // Initial scroll to bottom on first load
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const hasNewMessages = timeline.length > prevTimelineLengthRef.current;
-    prevTimelineLengthRef.current = timeline.length;
-
-    if (!hasNewMessages) return;
-
-    // If streaming or user is near bottom, auto scroll
-    if (isStreaming || isNearBottom(container, 200)) {
-      // Use requestAnimationFrame for smoother scroll
+    // Only scroll on initial load when we first get messages
+    if (timeline.length > 0 && isInitialLoadRef.current && !hasScrolledInitiallyRef.current) {
+      hasScrolledInitiallyRef.current = true;
+      isInitialLoadRef.current = false;
+      
+      // Scroll to bottom after a short delay to ensure rendering is complete
       requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
+        eventVirtualizer.scrollToIndex(timeline.length - 1, { align: 'end' });
       });
-      setShowScrollButton(false);
-    } else {
-      // User is scrolled up and new messages arrived - show button
-      setShowScrollButton(true);
     }
-  }, [timeline.length, isStreaming]);
+  }, [timeline.length, eventVirtualizer]);
 
-  // Initial scroll to bottom
+  // Handle timeline changes - restore scroll position after loading earlier messages
+  useEffect(() => {
+    const previousLength = previousTimelineLengthRef.current;
+    const currentLength = timeline.length;
+
+    // If we loaded earlier messages (timeline grew from the beginning)
+    if (currentLength > previousLength && previousLength > 0 && !isLoadingEarlier) {
+      restoreScrollPosition();
+      previousTimelineLengthRef.current = currentLength;
+      
+      // 隐藏 loading 指示器
+      setShowLoadingIndicator(false);
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
+        loadingIndicatorTimeoutRef.current = null;
+      }
+    } else if (currentLength !== previousLength) {
+      // Update the ref for next comparison
+      previousTimelineLengthRef.current = currentLength;
+    }
+  }, [timeline.length, isLoadingEarlier, restoreScrollPosition]);
+
+  // Auto-scroll to bottom when streaming new messages (only if user is near bottom)
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    
-    // Only scroll on initial load if there are messages
-    if (timeline.length > 0 && prevTimelineLengthRef.current === 0) {
-      container.scrollTop = container.scrollHeight;
+
+    const previousLength = previousTimelineLengthRef.current;
+    const currentLength = timeline.length;
+
+    // Check if new messages were added at the end
+    if (currentLength > previousLength) {
+      // Only auto-scroll if streaming or user is near bottom
+      if (isStreaming || isNearBottom(container, 200)) {
+        requestAnimationFrame(() => {
+          eventVirtualizer.scrollToIndex(currentLength - 1, { align: 'end' });
+        });
+        setShowScrollButton(false);
+      } else {
+        // User is scrolled up - show the scroll button
+        setShowScrollButton(true);
+      }
     }
-  }, []);
+  }, [timeline.length, isStreaming, eventVirtualizer]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
       }
     };
   }, []);
@@ -179,15 +300,12 @@ export const VirtualTimelineEventList: React.FC<
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth',
+    eventVirtualizer.scrollToIndex(timeline.length - 1, { 
+      align: 'end',
+      behavior: 'smooth'
     });
     setShowScrollButton(false);
-  }, []);
-
-  const virtualItems = eventVirtualizer.getVirtualItems();
-  const totalHeight = eventVirtualizer.getTotalSize();
+  }, [timeline.length, eventVirtualizer]);
 
   // Empty state
   if (timeline.length === 0) {
@@ -203,8 +321,21 @@ export const VirtualTimelineEventList: React.FC<
     );
   }
 
+  // 判断是否应该显示 loading 指示器
+  const shouldShowLoading = (isLoadingEarlier || showLoadingIndicator) && hasEarlierMessages;
+
   return (
     <div className="relative flex-1 overflow-hidden">
+      {/* Loading indicator for earlier messages - 更加低调的样式 */}
+      {shouldShowLoading && (
+        <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
+          <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
+            <Spin size="small" />
+            <span className="ml-2 text-xs text-slate-500">加载中...</span>
+          </div>
+        </div>
+      )}
+
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -259,8 +390,6 @@ export const VirtualTimelineEventList: React.FC<
         onClick={scrollToBottom}
         show={showScrollButton}
       />
-
-
     </div>
   );
 };

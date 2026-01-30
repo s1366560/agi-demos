@@ -1,11 +1,16 @@
 /**
- * MessageArea - Modern message display area
+ * MessageArea - Modern message display area with aggressive preloading
+ *
+ * Features:
+ * - Aggressive preloading for seamless backward pagination (用户几乎感知不到加载)
+ * - Scroll position restoration without jumping
+ * - Auto-scroll to bottom for new messages
+ * - Scroll to bottom button when user scrolls up
  */
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Button } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
@@ -18,10 +23,16 @@ interface MessageAreaProps {
   streamingThought?: string;
   isStreaming: boolean;
   isThinkingStreaming?: boolean;
-  isLoading: boolean;
+  isLoading: boolean;  // 初始加载状态（显示 loading spinner）
   planModeStatus: PlanModeStatus | null;
   onViewPlan: () => void;
   onExitPlanMode: () => void;
+  // Pagination props
+  hasEarlierMessages?: boolean;
+  onLoadEarlier?: () => void;
+  isLoadingEarlier?: boolean;  // 分页加载状态（不影响初始 loading）
+  // Preload configuration
+  preloadItemCount?: number; // 当剩余消息数少于此值时触发预加载
 }
 
 // Check if scroll is near bottom
@@ -40,57 +51,173 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
   planModeStatus,
   onViewPlan,
   onExitPlanMode,
+  hasEarlierMessages = false,
+  onLoadEarlier,
+  isLoadingEarlier: propIsLoadingEarlier = false,
+  preloadItemCount = 10, // 当用户看到前10条消息时就开始加载更多
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+  
+  // Pagination state refs
   const prevTimelineLengthRef = useRef(timeline.length);
-  const isAtBottomRef = useRef(true);
+  const previousScrollHeightRef = useRef(0);
+  const previousScrollTopRef = useRef(0);
+  const isLoadingEarlierRef = useRef(false);
+  const isInitialLoadRef = useRef(true);
+  const hasScrolledInitiallyRef = useRef(false);
+  const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLoadTimeRef = useRef(0);
+
+  // Save scroll position before loading earlier messages
+  const saveScrollPosition = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    previousScrollHeightRef.current = container.scrollHeight;
+    previousScrollTopRef.current = container.scrollTop;
+  }, []);
+
+  // Restore scroll position after loading earlier messages
+  const restoreScrollPosition = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const newScrollHeight = container.scrollHeight;
+    const heightDifference = newScrollHeight - previousScrollHeightRef.current;
+    
+    // Restore scroll position: new position = old position + height of new content
+    const targetScrollTop = previousScrollTopRef.current + heightDifference;
+    
+    container.scrollTop = targetScrollTop;
+    
+    // Clear saved values
+    previousScrollHeightRef.current = 0;
+    previousScrollTopRef.current = 0;
+  }, []);
+
+  // 核心优化：激进的预加载逻辑
+  const checkAndPreload = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (
+      !isLoadingEarlierRef.current &&
+      !propIsLoadingEarlier &&
+      hasEarlierMessages &&
+      onLoadEarlier
+    ) {
+      const { scrollTop } = container;
+      
+      // 计算平均消息高度（估算）
+      const avgMessageHeight = 100; // 平均每条消息约100px
+      const visibleItemsFromTop = Math.ceil(scrollTop / avgMessageHeight);
+      
+      // 当从顶部可见的消息数少于阈值时，触发预加载
+      // 这意味着用户还没滚动到顶部，但已经"接近"顶部了
+      if (visibleItemsFromTop < preloadItemCount) {
+        // 防抖动：确保两次加载之间至少有 300ms 间隔
+        const now = Date.now();
+        if (now - lastLoadTimeRef.current < 300) return;
+        
+        // Save current scroll position BEFORE new content loads
+        saveScrollPosition();
+        
+        isLoadingEarlierRef.current = true;
+        lastLoadTimeRef.current = now;
+
+        // 延迟显示 loading 指示器，如果加载很快用户就看不到
+        loadingIndicatorTimeoutRef.current = setTimeout(() => {
+          setShowLoadingIndicator(true);
+        }, 300);
+
+        onLoadEarlier();
+
+        // Reset loading flag after a delay
+        setTimeout(() => {
+          isLoadingEarlierRef.current = false;
+        }, 500);
+      }
+    }
+  }, [isLoading, hasEarlierMessages, onLoadEarlier, preloadItemCount, saveScrollPosition]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || isLoading) return;
+
+    // 检查是否需要预加载
+    checkAndPreload();
 
     const atBottom = isNearBottom(container, 100);
-    isAtBottomRef.current = atBottom;
     setShowScrollButton(!atBottom && timeline.length > 0);
-  }, [timeline.length]);
+  }, [isLoading, timeline.length, checkAndPreload]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Handle timeline changes
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const hasNewMessages = timeline.length > prevTimelineLengthRef.current;
-    prevTimelineLengthRef.current = timeline.length;
+    const currentTimelineLength = timeline.length;
+    const previousTimelineLength = prevTimelineLengthRef.current;
+    const hasNewMessages = currentTimelineLength > previousTimelineLength;
+    const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
 
-    if (!hasNewMessages) return;
-
-    // If streaming or user was at bottom, auto scroll
-    if (isStreaming || isAtBottomRef.current) {
-      // Use setTimeout to ensure DOM has updated
-      setTimeout(() => {
+    // Initial load - scroll to bottom once
+    if (isInitialLoad && !hasScrolledInitiallyRef.current) {
+      hasScrolledInitiallyRef.current = true;
+      isInitialLoadRef.current = false;
+      
+      requestAnimationFrame(() => {
         if (containerRef.current) {
           containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
-      }, 0);
-      setShowScrollButton(false);
-    } else {
-      // User is scrolled up and new messages arrived - show button
-      setShowScrollButton(true);
+      });
+      prevTimelineLengthRef.current = currentTimelineLength;
+      return;
     }
-  }, [timeline, isStreaming]);
 
-  // Initial scroll to bottom when first messages load
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    
-    if (timeline.length > 0 && prevTimelineLengthRef.current === 0) {
-      container.scrollTop = container.scrollHeight;
-      isAtBottomRef.current = true;
+    // Loading earlier messages - restore scroll position
+    if (hasNewMessages && !isLoading && previousScrollHeightRef.current > 0) {
+      restoreScrollPosition();
+      prevTimelineLengthRef.current = currentTimelineLength;
+      
+      // 隐藏 loading 指示器
+      setShowLoadingIndicator(false);
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
+        loadingIndicatorTimeoutRef.current = null;
+      }
+      return;
     }
-  }, [timeline.length]);
+
+    // New messages arriving while streaming or user is at bottom - auto scroll
+    if (hasNewMessages) {
+      if (isStreaming || isNearBottom(container, 200)) {
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop = containerRef.current.scrollHeight;
+          }
+        });
+        setShowScrollButton(false);
+      } else {
+        // User is scrolled up and new messages arrived - show button
+        setShowScrollButton(true);
+      }
+    }
+
+    prevTimelineLengthRef.current = currentTimelineLength;
+  }, [timeline.length, isStreaming, isLoading, restoreScrollPosition]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Scroll to bottom handler
   const scrollToBottom = useCallback(() => {
@@ -101,12 +228,11 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
       top: container.scrollHeight,
       behavior: 'smooth',
     });
-    isAtBottomRef.current = true;
     setShowScrollButton(false);
   }, []);
 
   // Loading state
-  if (isLoading) {
+  if (isLoading && timeline.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
@@ -129,6 +255,9 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
     );
   }
 
+  // 判断是否应该显示 loading 指示器
+  const shouldShowLoading = (propIsLoadingEarlier && hasEarlierMessages) || (showLoadingIndicator && hasEarlierMessages);
+
   return (
     <div className="h-full w-full relative flex flex-col overflow-hidden">
       {/* Plan Mode Banner */}
@@ -139,6 +268,16 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
             onViewPlan={onViewPlan}
             onExit={onExitPlanMode}
           />
+        </div>
+      )}
+
+      {/* Loading indicator for earlier messages - 更加低调的样式 */}
+      {shouldShowLoading && (
+        <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
+          <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
+            <LoadingOutlined className="text-primary mr-2" spin />
+            <span className="text-xs text-slate-500">加载中...</span>
+          </div>
         </div>
       )}
 
@@ -170,7 +309,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
             <div className="flex items-start gap-3 animate-slide-up">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <path strokeLinecap="round" strokeLinecap="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
               <div className="flex-1 max-w-[85%] md:max-w-[75%]">
@@ -199,8 +338,6 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
           </svg>
         </button>
       )}
-
-
     </div>
   );
 };

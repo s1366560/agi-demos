@@ -7,7 +7,8 @@
  *
  * State managed:
  * - timeline: Array of TimelineEvent (unified event stream)
- * - timelineLoading: Loading state for timeline fetch
+ * - timelineLoading: Loading state for initial timeline fetch
+ * - isLoadingEarlier: Loading state for backward pagination (separate from timelineLoading)
  * - timelineError: Error message if timeline fetch fails
  * - earliestLoadedSequence: Pagination pointer for backward loading
  * - latestLoadedSequence: Pagination pointer for forward loading
@@ -32,9 +33,11 @@ interface TimelineState {
   // State
   timeline: TimelineEvent[];
   timelineLoading: boolean;
+  isLoadingEarlier: boolean;  // Separate loading state for pagination
   timelineError: string | null;
   earliestLoadedSequence: number | null;
   latestLoadedSequence: number | null;
+  hasEarlier: boolean;  // Whether there are earlier messages to load
 
   // Actions
   getTimeline: (conversationId: string, projectId: string) => Promise<void>;
@@ -51,9 +54,11 @@ interface TimelineState {
 export const initialState = {
   timeline: [],
   timelineLoading: false,
+  isLoadingEarlier: false,
   timelineError: null,
   earliestLoadedSequence: null,
   latestLoadedSequence: null,
+  hasEarlier: false,
 };
 
 /**
@@ -82,7 +87,7 @@ export const useTimelineStore = create<TimelineState>()(
       const response = await agentService.getConversationMessages(
         conversationId,
         projectId,
-        100
+        50  // Changed from 100 to 50
       ) as any; // Type cast to access pagination metadata
       console.log('[TimelineStore] getTimeline response:', response.timeline.length, 'events');
 
@@ -95,6 +100,7 @@ export const useTimelineStore = create<TimelineState>()(
         timelineLoading: false,
         earliestLoadedSequence: firstSequence,
         latestLoadedSequence: lastSequence,
+        hasEarlier: response.has_more ?? false,
       });
     } catch (error: unknown) {
     const err = error as { response?: { data?: { detail?: string } }; message?: string };
@@ -155,28 +161,31 @@ export const useTimelineStore = create<TimelineState>()(
    * Load earlier messages
    *
    * Loads messages before the earliest loaded sequence (backward pagination).
+   * Uses separate isLoadingEarlier state to avoid affecting UI loading indicators.
    *
    * @param conversationId - The conversation ID
    * @param projectId - The project ID
    * @returns Promise<boolean> - True if load was initiated, false if skipped
    */
   loadEarlierMessages: async (conversationId: string, projectId: string) => {
-    const { earliestLoadedSequence, timelineLoading } = get();
+    const { earliestLoadedSequence, isLoadingEarlier } = get();
 
     // Guard: Don't load if already loading or no pagination point exists
-    if (!earliestLoadedSequence || timelineLoading) {
+    if (!earliestLoadedSequence || isLoadingEarlier) {
       console.log('[TimelineStore] Cannot load earlier messages: no pagination point or already loading');
       return false;
     }
 
     console.log('[TimelineStore] Loading earlier messages before sequence:', earliestLoadedSequence);
-    set({ timelineLoading: true, timelineError: null });
+    // 使用独立的 isLoadingEarlier 状态，不影响 timelineLoading
+    set({ isLoadingEarlier: true, timelineError: null });
 
     try {
       const response = await agentService.getConversationMessages(
         conversationId,
         projectId,
-        100,
+        50,  // Changed from 100 to 50
+        undefined,  // from_sequence
         earliestLoadedSequence // before_sequence
       ) as any;
 
@@ -186,8 +195,9 @@ export const useTimelineStore = create<TimelineState>()(
 
       set({
         timeline: newTimeline,
-        timelineLoading: false,
+        isLoadingEarlier: false,
         earliestLoadedSequence: response.timeline[0]?.sequenceNumber ?? null,
+        hasEarlier: response.has_more ?? false,
       });
 
       return true;
@@ -196,7 +206,7 @@ export const useTimelineStore = create<TimelineState>()(
       console.error('[TimelineStore] loadEarlierMessages error:', error);
       set({
         timelineError: err?.response?.data?.detail || 'Failed to load earlier messages',
-        timelineLoading: false,
+        isLoadingEarlier: false,
       });
       throw error;
     }
@@ -226,11 +236,18 @@ export const useTimelineStore = create<TimelineState>()(
 export const useTimeline = () => useTimelineStore((state) => state.timeline);
 
 /**
- * Derived selector: Get timeline loading state
+ * Derived selector: Get timeline loading state (for initial load)
  *
  * @returns Boolean indicating if timeline is loading
  */
 export const useTimelineLoading = () => useTimelineStore((state) => state.timelineLoading);
+
+/**
+ * Derived selector: Get isLoadingEarlier state (for pagination)
+ *
+ * @returns Boolean indicating if earlier messages are loading
+ */
+export const useIsLoadingEarlier = () => useTimelineStore((state) => state.isLoadingEarlier);
 
 /**
  * Derived selector: Get timeline error
@@ -252,6 +269,13 @@ export const useEarliestLoadedSequence = () => useTimelineStore((state) => state
  * @returns Latest sequence number or null
  */
 export const useLatestLoadedSequence = () => useTimelineStore((state) => state.latestLoadedSequence);
+
+/**
+ * Derived selector: Get hasEarlier state
+ *
+ * @returns Whether there are earlier messages to load
+ */
+export const useHasEarlier = () => useTimelineStore((state) => state.hasEarlier);
 
 /**
  * Derived selector: Get timeline with chat-specific fields

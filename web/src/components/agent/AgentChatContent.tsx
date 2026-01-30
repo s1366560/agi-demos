@@ -83,6 +83,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     timeline,
     messages,
     isLoadingHistory,
+    isLoadingEarlier,
     isStreaming,
     workPlan,
     executionPlan,
@@ -90,8 +91,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     showPlanPanel,
     pendingDecision,
     doomLoopDetected,
+    hasEarlier,
     loadConversations,
     loadMessages,
+    loadEarlierMessages,
     setActiveConversation,
     createNewConversation,
     sendMessage,
@@ -288,9 +291,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         planModeStatus={planModeStatus}
         onViewPlan={handleViewPlan}
         onExitPlanMode={handleExitPlanMode}
+        hasEarlierMessages={hasEarlier}
+        onLoadEarlier={() => {
+          if (activeConversationId && projectId) {
+            loadEarlierMessages(activeConversationId, projectId);
+          }
+        }}
+        isLoadingEarlier={isLoadingEarlier}
       />
     )
-  ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation]);
+  ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, isLoadingEarlier, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation, hasEarlier, loadEarlierMessages, projectId]);
 
 
 
