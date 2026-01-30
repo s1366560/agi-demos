@@ -219,16 +219,15 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
       {/* Footer */}
       {!collapsed && (
         <div className="p-3 border-t border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center">
+          <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 h-[52px]">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 flex items-center justify-center shadow-sm">
               <span className="text-white text-xs font-bold">AI</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+            <div className="flex flex-col overflow-hidden min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate leading-5">
                 AI Assistant
               </p>
-              <p className="text-xs text-emerald-500 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-xs text-emerald-500 truncate leading-4">
                 Online
               </p>
             </div>
