@@ -84,6 +84,11 @@ const McpServerList = lazy(() =>
         default: m.McpServerList,
     }))
 );
+const AgentWorkspace = lazy(() =>
+    import("./pages/tenant/AgentWorkspace").then((m) => ({
+        default: m.AgentWorkspace,
+    }))
+);
 
 // Project pages
 const ProjectOverview = lazy(() =>
@@ -309,6 +314,22 @@ function App() {
                             }
                         />
                         <Route
+                            path="agent-workspace"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path="agent-workspace/:conversation"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
                             path="subagents"
                             element={
                                 <Suspense fallback={<PageLoader />}>
@@ -355,6 +376,22 @@ function App() {
                             element={
                                 <Suspense fallback={<PageLoader />}>
                                     <AgentDashboard />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path=":tenantId/agent-workspace"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path=":tenantId/agent-workspace/:conversation"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
                                 </Suspense>
                             }
                         />

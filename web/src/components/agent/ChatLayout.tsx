@@ -123,7 +123,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   const effectivePanelWidth = panelCollapsed ? PANEL_COLLAPSED : panelWidth;
 
   return (
-    <div className="h-screen w-full flex overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="h-full w-full flex overflow-hidden bg-slate-50 dark:bg-slate-950">
       {/* Left Sidebar */}
       <aside
         className={`

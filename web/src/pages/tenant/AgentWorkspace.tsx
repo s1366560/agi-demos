@@ -7,43 +7,59 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Select, Empty, Spin } from 'antd';
+import { Select, Empty, Spin, Button } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/project';
 import { useAgentV3Store } from '../../stores/agentV3';
+import { useAuthStore } from '../../stores/auth';
+import { useTenantStore } from '../../stores/tenant';
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
-import type { Project } from '../../types/project';
+import type { Project } from '../../types/memory';
 
 const { Option } = Select;
 
 /**
  * AgentWorkspace - Main component for tenant-level agent access
- * 
- * Features:
- * - Project selector for choosing context
- * - Persist last selected project in localStorage
- * - Show all conversations across projects (optional enhancement)
- * - Or show conversations for selected project only
  */
 export const AgentWorkspace: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { tenantId } = useParams<{ tenantId: string }>();
-  const { projects, currentProject, setCurrentProject, fetchProjects } = useProjectStore();
-  const { conversations, loadConversations } = useAgentV3Store();
+  const { tenantId: urlTenantId } = useParams<{ tenantId?: string }>();
+  const { user } = useAuthStore();
+  const { currentTenant } = useTenantStore();
+  const { projects, currentProject, setCurrentProject, listProjects } = useProjectStore();
+  const { loadConversations } = useAgentV3Store();
   
   // Track selected project for this session
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
+
+  // Get effective tenant ID
+  const tenantId = urlTenantId || currentTenant?.id || user?.tenant_id;
+
+  // Calculate base path for conversation navigation
+  const basePath = tenantId 
+    ? `/tenant/${tenantId}/agent-workspace`
+    : '/tenant/agent-workspace';
 
   // Load projects on mount
   useEffect(() => {
-    const init = async () => {
-      if (projects.length === 0) {
-        await fetchProjects();
+    const loadProjects = async () => {
+      if (tenantId && projects.length === 0) {
+        await listProjects(tenantId);
       }
-      
+    };
+    loadProjects();
+  }, [tenantId, listProjects, projects.length]);
+
+  // Initialize selected project after projects are loaded
+  useEffect(() => {
+    if (!projects.length) return;
+
+    const init = () => {
       // Try to restore last selected project from localStorage
       const lastProjectId = localStorage.getItem('agent:lastProjectId');
-      if (lastProjectId && projects.find(p => p.id === lastProjectId)) {
+      if (lastProjectId && projects.find((p: Project) => p.id === lastProjectId)) {
         setSelectedProjectId(lastProjectId);
       } else if (currentProject) {
         setSelectedProjectId(currentProject.id);
@@ -51,10 +67,10 @@ export const AgentWorkspace: React.FC = () => {
         setSelectedProjectId(projects[0].id);
       }
       
-      setLoading(false);
+      setInitializing(false);
     };
     init();
-  }, [projects.length, currentProject, fetchProjects]);
+  }, [projects, currentProject]);
 
   // Load conversations when project changes
   useEffect(() => {
@@ -63,7 +79,7 @@ export const AgentWorkspace: React.FC = () => {
       // Persist selection
       localStorage.setItem('agent:lastProjectId', selectedProjectId);
       // Update global current project for consistency
-      const project = projects.find(p => p.id === selectedProjectId);
+      const project = projects.find((p: Project) => p.id === selectedProjectId);
       if (project) {
         setCurrentProject(project);
       }
@@ -74,84 +90,95 @@ export const AgentWorkspace: React.FC = () => {
     setSelectedProjectId(projectId);
   }, []);
 
-  if (loading) {
+  // Show loading while initializing projects
+  if (initializing) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Spin size="large" tip="Loading..." />
+      <div className="max-w-[1600px] mx-auto w-full p-8">
+        <div className="flex items-center justify-center h-64">
+          <Spin size="large" tip={t('common.loading')} />
+        </div>
       </div>
     );
   }
 
   if (projects.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center p-8">
-        <Empty
-          description="No projects available"
-          buttonProps={{
-            children: 'Create Project',
-            onClick: () => navigate('/projects/new'),
-          }}
-        />
+      <div className="max-w-[1600px] mx-auto w-full p-8">
+        <div className="flex flex-col gap-8">
+          {/* Header Area */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+              {t('nav.agentWorkspace')}
+            </h1>
+            <p className="text-sm text-slate-500">{t('agent.workspace.subtitle')}</p>
+          </div>
+          
+          {/* Empty State */}
+          <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12">
+            <Empty
+              description={t('agent.workspace.noProjects')}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              <Button type="primary" onClick={() => navigate('/tenant/projects/new')}>
+                {t('tenant.projects.create')}
+              </Button>
+            </Empty>
+          </div>
+        </div>
       </div>
     );
   }
 
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-900">
-      {/* Header with Project Selector */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
-            AI Agent Workspace
+    <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-6 h-full">
+      {/* Header Area */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            {t('nav.agentWorkspace')}
           </h1>
-          
-          {/* Project Selector */}
-          <Select
-            value={selectedProjectId}
-            onChange={handleProjectChange}
-            style={{ width: 240 }}
-            placeholder="Select a project"
-            showSearch
-            optionFilterProp="children"
-            filterOption={(input, option) =>
-              (option?.children as unknown as string)
-                ?.toLowerCase()
-                .includes(input.toLowerCase())
-            }
-          >
-            {projects.map(project => (
-              <Option key={project.id} value={project.id}>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" 
-                    style={{ backgroundColor: project.color || '#1890ff' }} 
-                  />
-                  {project.name}
-                </div>
-              </Option>
-            ))}
-          </Select>
+          <p className="text-sm text-slate-500">{t('agent.workspace.subtitle')}</p>
         </div>
-
-        {/* Quick Actions */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">
-            {selectedProject && `Context: ${selectedProject.name}`}
-          </span>
-        </div>
+        
+        {/* Project Selector */}
+        <Select
+          value={selectedProjectId}
+          onChange={handleProjectChange}
+          style={{ width: 280 }}
+          placeholder={t('agent.workspace.selectProject')}
+          showSearch
+          optionFilterProp="children"
+          filterOption={(input, option) =>
+            (option?.children as unknown as string)
+              ?.toLowerCase()
+              .includes(input.toLowerCase())
+          }
+          className="agent-project-select"
+        >
+          {projects.map((project: Project) => (
+            <Option key={project.id} value={project.id}>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-primary" />
+                {project.name}
+              </div>
+            </Option>
+          ))}
+        </Select>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden">
-        {selectedProjectId ? (
+      {/* Main Content Area - Chat Interface */}
+      <div className="flex-1 min-h-0 bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        {effectiveProjectId ? (
           <AgentChatContent 
-            projectId={selectedProjectId} 
-            key={selectedProjectId} // Force re-mount on project change
+            projectId={effectiveProjectId} 
+            key={effectiveProjectId}
+            basePath={basePath}
           />
         ) : (
           <div className="h-full flex items-center justify-center">
-            <Empty description="Please select a project to start" />
+            <Empty description={t('agent.workspace.selectProjectToStart')} />
           </div>
         )}
       </div>
