@@ -4,7 +4,7 @@
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Button, Badge } from "antd";
+import { Button } from "antd";
 import { DownOutlined, MessageOutlined } from "@ant-design/icons";
 import { TimelineEventItem } from "./TimelineEventItem";
 import { MessageStream } from "./chat/MessageStream";
@@ -260,19 +260,7 @@ export const VirtualTimelineEventList: React.FC<
         show={showScrollButton}
       />
 
-      {/* Message Count Badge */}
-      <div className="absolute top-4 right-4 z-10 pointer-events-none">
-        <Badge
-          count={timeline.length}
-          showZero={false}
-          style={{
-            backgroundColor: "#f1f5f9",
-            color: "#64748b",
-            fontSize: "11px",
-            fontWeight: 500,
-          }}
-        />
-      </div>
+
     </div>
   );
 };
