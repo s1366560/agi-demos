@@ -4,7 +4,7 @@
 
 import React, { useRef, useEffect, useCallback, useState, memo } from 'react';
 import { Button } from 'antd';
-import { DownOutlined, LoadingOutlined } from '@ant-design/icons';
+import { LoadingOutlined } from '@ant-design/icons';
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
 import type { TimelineEvent, PlanModeStatus } from '../../types/agent';
@@ -220,15 +220,15 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
 
       {/* Scroll to bottom button */}
       {showScrollButton && (
-        <Button
-          type="primary"
-          shape="round"
-          icon={<DownOutlined />}
+        <button
           onClick={scrollToBottom}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 shadow-lg animate-fade-in z-10"
+          className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-all animate-fade-in"
+          title="Scroll to bottom"
         >
-          Scroll to bottom
-        </Button>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </button>
       )}
 
 

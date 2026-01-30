@@ -148,25 +148,27 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 h-full relative">
-        {/* Floating Toggle Buttons */}
-        <div className="absolute top-4 left-4 right-4 z-30 flex justify-between pointer-events-none">
+        {/* Floating Toggle Buttons - positioned at top corners to avoid blocking content */}
+        <div className="absolute top-3 left-3 z-30 pointer-events-none">
           {/* Sidebar Toggle */}
           <Tooltip title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
             <Button
               type="text"
-              icon={sidebarCollapsed ? <PanelLeft size={18} /> : <PanelLeft size={18} className="rotate-180" />}
+              icon={sidebarCollapsed ? <PanelLeft size={16} /> : <PanelLeft size={16} className="rotate-180" />}
               onClick={onToggleSidebar}
-              className="pointer-events-auto bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm shadow-sm border border-slate-200 dark:border-slate-700 hover:border-primary/50 transition-all rounded-lg h-9 w-9 flex items-center justify-center"
+              className="pointer-events-auto bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all rounded-md h-7 w-7 flex items-center justify-center text-slate-500"
             />
           </Tooltip>
-
+        </div>
+        
+        <div className="absolute top-3 right-3 z-30 pointer-events-none">
           {/* Panel Toggle */}
           <Tooltip title={panelCollapsed ? "Show panel" : "Hide panel"}>
             <Button
               type="text"
-              icon={panelCollapsed ? <PanelRight size={18} /> : <PanelRight size={18} className="rotate-180" />}
+              icon={panelCollapsed ? <PanelRight size={16} /> : <PanelRight size={16} className="rotate-180" />}
               onClick={onTogglePanel}
-              className="pointer-events-auto bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm shadow-sm border border-slate-200 dark:border-slate-700 hover:border-primary/50 transition-all rounded-lg h-9 w-9 flex items-center justify-center"
+              className="pointer-events-auto bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all rounded-md h-7 w-7 flex items-center justify-center text-slate-500"
             />
           </Tooltip>
         </div>
