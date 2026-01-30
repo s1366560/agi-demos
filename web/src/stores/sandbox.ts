@@ -2,7 +2,9 @@
  * Sandbox Store - State management for sandbox terminal and tool execution
  *
  * Manages sandbox connection state, tool execution history, and panel visibility.
- * Extended to support desktop (noVNC) and terminal (ttyd) status management.
+ * Updated to use project-scoped sandbox API (v2).
+ *
+ * @packageDocumentation
  */
 
 import { create } from "zustand";
@@ -10,8 +12,9 @@ import { devtools } from "zustand/middleware";
 
 import type { ToolExecution } from "../components/agent/sandbox/SandboxOutputViewer";
 import type { DesktopStatus, TerminalStatus } from "../types/agent";
-import { sandboxService } from "../services/sandboxService";
+import { projectSandboxService } from "../services/projectSandboxService";
 import { sandboxSSEService } from "../services/sandboxSSEService";
+import { logger } from "../utils/logger";
 
 // Sandbox tools that should trigger panel opening
 export const SANDBOX_TOOLS = [
@@ -42,14 +45,14 @@ export interface SandboxState {
   panelMode: PanelMode;
   activeTab: "terminal" | "output" | "desktop" | "control";
 
-  // Sandbox connection
+  // Sandbox connection - supports both v1 (sandboxId) and v2 (projectId)
   activeSandboxId: string | null;
   activeProjectId: string | null;
   connectionStatus: ConnectionStatus;
   terminalSessionId: string | null;
   sseUnsubscribe: (() => void) | null;
 
-  // Desktop and Terminal status (extended)
+  // Desktop and Terminal status
   desktopStatus: DesktopStatus | null;
   terminalStatus: TerminalStatus | null;
   isDesktopLoading: boolean;
@@ -77,13 +80,21 @@ export interface SandboxState {
   setDesktopLoading: (loading: boolean) => void;
   setTerminalLoading: (loading: boolean) => void;
 
-  // SSE subscription actions
+  // Project-scoped actions (v2 API)
   setProjectId: (projectId: string | null) => void;
+  ensureSandbox: () => Promise<string | null>;
+  executeTool: (
+    toolName: string,
+    args: Record<string, unknown>,
+    timeout?: number
+  ) => Promise<{ success: boolean; content: string; isError: boolean }>;
+
+  // SSE subscription actions
   subscribeSSE: (projectId: string) => void;
   unsubscribeSSE: () => void;
 
-  // Desktop and Terminal control actions
-  startDesktop: () => Promise<void>;
+  // Desktop and Terminal control actions (project-scoped)
+  startDesktop: (resolution?: string) => Promise<void>;
   stopDesktop: () => Promise<void>;
   startTerminal: () => Promise<void>;
   stopTerminal: () => Promise<void>;
@@ -164,10 +175,8 @@ export const useSandboxStore = create<SandboxState>()(
       setSandboxId: (sandboxId) => {
         set({
           activeSandboxId: sandboxId,
-          // Reset connection state when sandbox changes
           connectionStatus: sandboxId ? "idle" : "idle",
           terminalSessionId: null,
-          // Reset desktop/terminal status when sandbox changes
           desktopStatus: null,
           terminalStatus: null,
         });
@@ -203,6 +212,103 @@ export const useSandboxStore = create<SandboxState>()(
         set({ activeProjectId: projectId });
       },
 
+      // Ensure sandbox exists (v2 API)
+      ensureSandbox: async () => {
+        const { activeProjectId, activeSandboxId } = get();
+
+        // Return existing sandboxId if available
+        if (activeSandboxId) {
+          return activeSandboxId;
+        }
+
+        if (!activeProjectId) {
+          logger.warn("[SandboxStore] Cannot ensure sandbox: no active project");
+          return null;
+        }
+
+        try {
+          set({ connectionStatus: "connecting" });
+          const sandbox = await projectSandboxService.ensureSandbox(
+            activeProjectId
+          );
+
+          set({
+            activeSandboxId: sandbox.sandbox_id,
+            connectionStatus: sandbox.is_healthy ? "connected" : "error",
+            desktopStatus: sandbox.desktop_url
+              ? {
+                  running: true,
+                  url: sandbox.desktop_url,
+                  display: ":1",
+                  resolution: "1280x720",
+                  port: sandbox.desktop_port || 6080,
+                }
+              : null,
+            terminalStatus: sandbox.terminal_url
+              ? {
+                  running: true,
+                  url: sandbox.terminal_url,
+                  port: sandbox.terminal_port || 7681,
+                  sessionId: null,
+                  pid: null,
+                }
+              : null,
+          });
+
+          logger.info(
+            `[SandboxStore] Sandbox ensured: ${sandbox.sandbox_id} (${sandbox.status})`
+          );
+          return sandbox.sandbox_id;
+        } catch (error) {
+          logger.error("[SandboxStore] Failed to ensure sandbox:", error);
+          set({ connectionStatus: "error" });
+          return null;
+        }
+      },
+
+      // Execute tool directly (v2 API)
+      executeTool: async (toolName, args, timeout = 30) => {
+        const { activeProjectId } = get();
+
+        if (!activeProjectId) {
+          logger.warn("[SandboxStore] Cannot execute tool: no active project");
+          return { success: false, content: "No active project", isError: true };
+        }
+
+        try {
+          const result = await projectSandboxService.executeTool(
+            activeProjectId,
+            {
+              tool_name: toolName,
+              arguments: args,
+              timeout,
+            }
+          );
+
+          // Extract text content from result
+          let content = "";
+          if (result.content && result.content.length > 0) {
+            content = result.content
+              .map((c) => c.text || "")
+              .filter(Boolean)
+              .join("\n");
+          }
+
+          return {
+            success: !result.is_error,
+            content,
+            isError: result.is_error,
+          };
+        } catch (error) {
+          logger.error("[SandboxStore] Tool execution failed:", error);
+          return {
+            success: false,
+            content: String(error),
+            isError: true,
+          };
+        }
+      },
+
       // SSE subscription methods
       subscribeSSE: (projectId) => {
         // Unsubscribe from previous subscription if exists
@@ -219,7 +325,7 @@ export const useSandboxStore = create<SandboxState>()(
           onTerminalStopped: get().handleSSEEvent,
           onStatusUpdate: get().handleSSEEvent,
           onError: (error) => {
-            console.error("[SandboxSSE] Error:", error);
+            logger.error("[SandboxSSE] Error:", error);
           },
         });
 
@@ -234,37 +340,44 @@ export const useSandboxStore = create<SandboxState>()(
         }
       },
 
-      // Desktop control actions
-      startDesktop: async () => {
-        const { activeSandboxId } = get();
-        if (!activeSandboxId) {
-          console.warn("Cannot start desktop: no active sandbox");
+      // Desktop control actions (project-scoped v2 API)
+      startDesktop: async (resolution = "1280x720") => {
+        const { activeProjectId } = get();
+
+        if (!activeProjectId) {
+          logger.warn("[SandboxStore] Cannot start desktop: no active project");
           return;
         }
 
         set({ isDesktopLoading: true });
 
         try {
-          const status = await sandboxService.startDesktop(activeSandboxId);
+          // Use v2 API (project-scoped)
+          const status = await projectSandboxService.startDesktop(
+            activeProjectId,
+            resolution
+          );
           set({ desktopStatus: status, isDesktopLoading: false });
+          logger.info(`[SandboxStore] Desktop started for project ${activeProjectId}`);
         } catch (error) {
-          console.error("Failed to start desktop:", error);
+          logger.error("[SandboxStore] Failed to start desktop:", error);
           set({ isDesktopLoading: false });
           throw error;
         }
       },
 
       stopDesktop: async () => {
-        const { activeSandboxId } = get();
-        if (!activeSandboxId) {
-          console.warn("Cannot stop desktop: no active sandbox");
+        const { activeProjectId } = get();
+
+        if (!activeProjectId) {
+          logger.warn("[SandboxStore] Cannot stop desktop: no active project");
           return;
         }
 
         set({ isDesktopLoading: true });
 
         try {
-          await sandboxService.stopDesktop(activeSandboxId);
+          await projectSandboxService.stopDesktop(activeProjectId);
           set({
             desktopStatus: {
               running: false,
@@ -275,44 +388,50 @@ export const useSandboxStore = create<SandboxState>()(
             },
             isDesktopLoading: false,
           });
+          logger.info(`[SandboxStore] Desktop stopped for project ${activeProjectId}`);
         } catch (error) {
-          console.error("Failed to stop desktop:", error);
+          logger.error("[SandboxStore] Failed to stop desktop:", error);
           set({ isDesktopLoading: false });
           throw error;
         }
       },
 
-      // Terminal control actions
+      // Terminal control actions (project-scoped v2 API)
       startTerminal: async () => {
-        const { activeSandboxId } = get();
-        if (!activeSandboxId) {
-          console.warn("Cannot start terminal: no active sandbox");
+        const { activeProjectId } = get();
+
+        if (!activeProjectId) {
+          logger.warn("[SandboxStore] Cannot start terminal: no active project");
           return;
         }
 
         set({ isTerminalLoading: true });
 
         try {
-          const status = await sandboxService.startTerminal(activeSandboxId);
+          const status = await projectSandboxService.startTerminal(
+            activeProjectId
+          );
           set({ terminalStatus: status, isTerminalLoading: false });
+          logger.info(`[SandboxStore] Terminal started for project ${activeProjectId}`);
         } catch (error) {
-          console.error("Failed to start terminal:", error);
+          logger.error("[SandboxStore] Failed to start terminal:", error);
           set({ isTerminalLoading: false });
           throw error;
         }
       },
 
       stopTerminal: async () => {
-        const { activeSandboxId } = get();
-        if (!activeSandboxId) {
-          console.warn("Cannot stop terminal: no active sandbox");
+        const { activeProjectId } = get();
+
+        if (!activeProjectId) {
+          logger.warn("[SandboxStore] Cannot stop terminal: no active project");
           return;
         }
 
         set({ isTerminalLoading: true });
 
         try {
-          await sandboxService.stopTerminal(activeSandboxId);
+          await projectSandboxService.stopTerminal(activeProjectId);
           set({
             terminalStatus: {
               running: false,
@@ -323,8 +442,9 @@ export const useSandboxStore = create<SandboxState>()(
             },
             isTerminalLoading: false,
           });
+          logger.info(`[SandboxStore] Terminal stopped for project ${activeProjectId}`);
         } catch (error) {
-          console.error("Failed to stop terminal:", error);
+          logger.error("[SandboxStore] Failed to stop terminal:", error);
           set({ isTerminalLoading: false });
           throw error;
         }
@@ -390,6 +510,8 @@ export const useSandboxStore = create<SandboxState>()(
                 running: false,
                 url: null,
                 port: 0,
+                sessionId: null,
+                pid: null,
               },
             });
             break;
@@ -452,8 +574,8 @@ export const useSandboxStore = create<SandboxState>()(
 
           set(() => ({
             currentTool: tool,
-            panelVisible: true, // Auto-open panel
-            activeTab: "output", // Switch to output tab
+            panelVisible: true,
+            activeTab: "output",
           }));
 
           // Add to executions (pending state)
@@ -498,7 +620,7 @@ export const useSandboxStore = create<SandboxState>()(
       },
     }),
     {
-      name: "sandbox-store",
+      name: "sandbox-store-v2",
     }
   )
 );
@@ -528,6 +650,16 @@ export const useDesktopStatus = () =>
 
 export const useTerminalStatus = () =>
   useSandboxStore((state) => state.terminalStatus);
+
+// Project-scoped selectors
+export const useActiveProjectId = () =>
+  useSandboxStore((state) => state.activeProjectId);
+
+export const useEnsureSandbox = () =>
+  useSandboxStore((state) => state.ensureSandbox);
+
+export const useExecuteTool = () =>
+  useSandboxStore((state) => state.executeTool);
 
 // Helper to check if a tool is a sandbox tool
 export function isSandboxTool(toolName: string): boolean {

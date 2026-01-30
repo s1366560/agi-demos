@@ -28,8 +28,11 @@ import { useTenantStore } from "@/stores/tenant"
  */
 export const ProjectLayout: React.FC = () => {
   const { projectId } = useParams()
-  const { currentProject, setCurrentProject, getProject } = useProjectStore()
-  const { currentTenant, setCurrentTenant } = useTenantStore()
+  const currentProject = useProjectStore((state) => state.currentProject)
+  const setCurrentProject = useProjectStore((state) => state.setCurrentProject)
+  const getProject = useProjectStore((state) => state.getProject)
+  const currentTenant = useTenantStore((state) => state.currentTenant)
+  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant)
 
   // Sync project and tenant data
   useEffect(() => {

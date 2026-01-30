@@ -5,10 +5,21 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AppHeader } from '@/components/layout/AppHeader'
 import type { Breadcrumb } from '@/components/layout/AppHeader'
+
+// Import useUser after mock is defined
+const { useUser } = await import('@/stores/auth')
+
+// Mock i18n
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, defaultValue?: string) => defaultValue || key,
+    i18n: { language: 'zh-CN', changeLanguage: vi.fn() },
+  }),
+}))
 
 // Mock dependencies
 vi.mock('@/components/shared/ui/ThemeToggle', () => ({
@@ -30,6 +41,13 @@ vi.mock('@/hooks/useBreadcrumbs', () => ({
     { label: 'Home', path: '/tenant' },
     { label: 'Projects', path: '/tenant/projects' },
   ],
+}))
+
+// Mock auth store
+const mockLogout = vi.fn()
+vi.mock('@/stores/auth', () => ({
+  useUser: vi.fn(),
+  useAuthActions: () => ({ logout: mockLogout }),
 }))
 
 function renderHeader(props: Partial<React.ComponentProps<typeof AppHeader>> = {}) {
@@ -332,6 +350,104 @@ describe('AppHeader', () => {
       const header = container.querySelector('header')
 
       expect(header?.className).toContain('border-b')
+    })
+  })
+
+  describe('User Status', () => {
+    const mockUser = {
+      id: '1',
+      email: 'test@example.com',
+      name: 'Test User',
+      roles: ['admin'],
+      is_active: true,
+      created_at: '2024-01-01',
+      profile: {
+        avatar_url: null,
+      },
+    }
+
+    beforeEach(() => {
+      vi.mocked(useUser).mockReturnValue(mockUser)
+    })
+
+    it('should render user status when user is logged in', () => {
+      renderHeader()
+      
+      // Should show user avatar button
+      const userButton = screen.getByLabelText('User menu')
+      expect(userButton).toBeInTheDocument()
+      
+      // Should show user name (use flexible matcher)
+      expect(screen.getByText((content) => content.includes('Test User'))).toBeInTheDocument()
+      
+      // Click to open dropdown to verify all user info is present
+      fireEvent.click(userButton)
+      
+      // Should show user email in dropdown
+      expect(screen.getByText('test@example.com')).toBeInTheDocument()
+    })
+
+    it('should not render user status when showUserStatus is false', () => {
+      renderHeader({ showUserStatus: false })
+      
+      expect(screen.queryByText('TE')).not.toBeInTheDocument()
+      expect(screen.queryByText('Test User')).not.toBeInTheDocument()
+    })
+
+    it('should not render user status when user is null', () => {
+      vi.mocked(useUser).mockReturnValue(null)
+      renderHeader()
+      
+      expect(screen.queryByText('TE')).not.toBeInTheDocument()
+    })
+
+    it('should use email prefix as display name when name is not available', () => {
+      vi.mocked(useUser).mockReturnValue({
+        ...mockUser,
+        name: '',
+      })
+      renderHeader()
+      
+      expect(screen.getByText('test')).toBeInTheDocument()
+    })
+
+    it('should show dropdown menu when user status is clicked', () => {
+      renderHeader()
+      
+      const userButton = screen.getByLabelText('User menu')
+      fireEvent.click(userButton)
+      
+      // Should show dropdown items
+      expect(screen.getByText('个人资料')).toBeInTheDocument()
+      expect(screen.getByText('设置')).toBeInTheDocument()
+      expect(screen.getByText('登出')).toBeInTheDocument()
+    })
+
+    it('should close dropdown when clicking outside', () => {
+      renderHeader()
+      
+      const userButton = screen.getByLabelText('User menu')
+      fireEvent.click(userButton)
+      
+      expect(screen.getByText('个人资料')).toBeInTheDocument()
+      
+      // Click outside
+      fireEvent.mouseDown(document.body)
+      
+      // Dropdown should be closed
+      expect(screen.queryByText('个人资料')).not.toBeInTheDocument()
+    })
+
+    it('should call logout and navigate when logout is clicked', () => {
+      renderHeader()
+      
+      const userButton = screen.getByLabelText('User menu')
+      fireEvent.click(userButton)
+      
+      const logoutButton = screen.getByText('登出')
+      fireEvent.click(logoutButton)
+      
+      expect(mockLogout).toHaveBeenCalledTimes(1)
     })
   })
 })

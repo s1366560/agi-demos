@@ -357,8 +357,9 @@ export function SandboxTerminal({
       {/* Terminal */}
       <div className="flex-1 relative">
         {status === "connecting" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] z-10">
-            <Spin tip="Connecting to terminal..." />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#1e1e1e] z-10">
+            <Spin />
+            <span className="text-slate-400">Connecting to terminal...</span>
           </div>
         )}
 

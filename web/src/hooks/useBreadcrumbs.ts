@@ -55,8 +55,9 @@ export function useBreadcrumbs(
 ): Breadcrumb[] {
   const params = useParams()
   const location = useLocation()
-  const { currentTenant } = useTenantStore()
-  const { currentProject } = useProjectStore()
+  // Use selective selectors to prevent unnecessary re-renders
+  const currentTenant = useTenantStore((state) => state.currentTenant)
+  const currentProject = useProjectStore((state) => state.currentProject)
 
   const {
     labels: customLabels = {},

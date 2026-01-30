@@ -28,15 +28,17 @@ let mockCurrentTenant = { id: 'tenant-123', name: 'Test Tenant' }
 let mockCurrentProject = { id: 'proj-456', name: 'Test Project' }
 
 vi.mock('@/stores/tenant', () => ({
-  useTenantStore: () => ({
-    currentTenant: mockCurrentTenant,
-  }),
+  useTenantStore: (selector?: (state: { currentTenant: typeof mockCurrentTenant }) => unknown) => {
+    const state = { currentTenant: mockCurrentTenant }
+    return selector ? selector(state) : state
+  },
 }))
 
 vi.mock('@/stores/project', () => ({
-  useProjectStore: () => ({
-    currentProject: mockCurrentProject,
-  }),
+  useProjectStore: (selector?: (state: { currentProject: typeof mockCurrentProject }) => unknown) => {
+    const state = { currentProject: mockCurrentProject }
+    return selector ? selector(state) : state
+  },
 }))
 
 describe('useBreadcrumbs', () => {

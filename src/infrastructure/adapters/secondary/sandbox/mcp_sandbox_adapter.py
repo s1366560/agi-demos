@@ -6,10 +6,11 @@ enabling file system operations via the MCP protocol over WebSocket.
 
 import asyncio
 import logging
+import socket
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
 import docker
 from docker.errors import ImageNotFound, NotFound
@@ -141,12 +142,53 @@ class MCPSandboxAdapter(SandboxPort):
                 operation="init",
             )
 
+    def _is_port_available(self, port: int) -> bool:
+        """Check if a port is available on the host.
+        
+        Performs two checks:
+        1. Checks if port is already in use by existing Docker containers
+        2. Attempts to bind to the port to verify it's free
+        
+        Args:
+            port: The port number to check
+            
+        Returns:
+            True if port is available, False otherwise
+        """
+        # Check if port is in our tracking set
+        if port in self._used_ports:
+            return False
+        
+        # Check if port is used by existing Docker containers
+        try:
+            containers = self._docker.containers.list(all=True)
+            for container in containers:
+                # Check container port mappings
+                ports = container.ports or {}
+                for port_mappings in ports.values():
+                    if port_mappings:
+                        for mapping in port_mappings:
+                            host_port = mapping.get('HostPort')
+                            if host_port and int(host_port) == port:
+                                return False
+        except Exception as e:
+            logger.warning(f"Error checking Docker container ports: {e}")
+        
+        # Try to bind to the port to verify it's free
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(('0.0.0.0', port))
+                return True
+        except OSError:
+            return False
+
     def _get_next_port(self) -> int:
         """Get next available host port for MCP."""
         for _ in range(1000):
             port = self._host_port_start + self._port_counter
             self._port_counter = (self._port_counter + 1) % 1000
-            if port not in self._used_ports:
+            if self._is_port_available(port):
                 self._used_ports.add(port)
                 return port
         raise RuntimeError("No available ports for MCP")
@@ -156,7 +198,7 @@ class MCPSandboxAdapter(SandboxPort):
         for _ in range(1000):
             port = self._desktop_port_start + self._desktop_port_counter
             self._desktop_port_counter = (self._desktop_port_counter + 1) % 1000
-            if port not in self._used_ports:
+            if self._is_port_available(port):
                 self._used_ports.add(port)
                 return port
         raise RuntimeError("No available ports for desktop")
@@ -166,7 +208,7 @@ class MCPSandboxAdapter(SandboxPort):
         for _ in range(1000):
             port = self._terminal_port_start + self._terminal_port_counter
             self._terminal_port_counter = (self._terminal_port_counter + 1) % 1000
-            if port not in self._used_ports:
+            if self._is_port_available(port):
                 self._used_ports.add(port)
                 return port
         raise RuntimeError("No available ports for terminal")

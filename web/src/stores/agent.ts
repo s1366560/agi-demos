@@ -41,6 +41,7 @@
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 import { logger } from "../utils/logger";
 import { agentService } from "../services/agentService";
 import { planService } from "../services/planService";
@@ -2616,7 +2617,7 @@ export const useConversationState = (conversationId: string) =>
  * const { sendMessage, createConversation, stopChat } = useAgentActions();
  */
 export const useAgentActions = () =>
-  useAgentStore((state) => ({
+  useAgentStore(useShallow((state) => ({
     listConversations: state.listConversations,
     createConversation: state.createConversation,
     getConversation: state.getConversation,
@@ -2648,4 +2649,4 @@ export const useAgentActions = () =>
     clearExecutionPlanState: state.clearExecutionPlanState,
     clearErrors: state.clearErrors,
     reset: state.reset,
-  }));
+  })));

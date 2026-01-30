@@ -259,6 +259,7 @@ export const AgentLogs: React.FC = () => {
   const [toolFilter, setToolFilter] = useState<string | undefined>(undefined);
 
   // Load conversations on mount
+  // Separate function from auto-selection logic to prevent infinite loop
   const loadConversations = useCallback(async () => {
     if (!projectId) return;
 
@@ -266,22 +267,25 @@ export const AgentLogs: React.FC = () => {
     try {
       const convs = await agentService.listConversations(projectId);
       setConversations(convs);
-
-      // Auto-select first conversation
-      if (convs.length > 0 && !selectedConversationId) {
-        setSelectedConversationId(convs[0].id);
-      }
+      return convs;
     } catch (err) {
       message.error('Failed to load conversations');
       console.error(err);
+      return [];
     } finally {
       setLoading(false);
     }
-  }, [projectId, selectedConversationId]);
+  }, [projectId]);
 
+  // Load conversations when project changes
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+    loadConversations().then((convs) => {
+      // Auto-select first conversation only if none is selected
+      if (convs.length > 0 && !selectedConversationId) {
+        setSelectedConversationId(convs[0].id);
+      }
+    });
+  }, [projectId, loadConversations]);
 
   // Load execution history when conversation changes
   useEffect(() => {

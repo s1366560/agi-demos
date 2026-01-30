@@ -65,7 +65,12 @@ export interface SandboxDetectionResult {
  *
  *   return (
  *     <div>
- *       {isExecuting && <Spin tip="Executing sandbox tool..." />}
+ *       {isExecuting && (
+ *         <div className="flex flex-col items-center gap-2">
+ *           <Spin />
+ *           <span>Executing sandbox tool...</span>
+ *         </div>
+ *       )}
  *     </div>
  *   );
  * }

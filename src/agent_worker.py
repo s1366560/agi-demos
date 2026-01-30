@@ -289,6 +289,26 @@ async def main():
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to initialize MCP adapter (MCP tools disabled): {e}")
 
+    # Initialize MCP Sandbox Adapter for Project Sandbox tool loading
+    try:
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            set_mcp_sandbox_adapter,
+        )
+        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+            MCPSandboxAdapter,
+        )
+
+        mcp_sandbox_adapter = MCPSandboxAdapter(
+            mcp_image=settings.sandbox_default_image,
+            default_timeout=settings.sandbox_timeout_seconds,
+            default_memory_limit=settings.sandbox_memory_limit,
+            default_cpu_limit=settings.sandbox_cpu_limit,
+        )
+        set_mcp_sandbox_adapter(mcp_sandbox_adapter)
+        logger.info("Agent Worker: MCP Sandbox Adapter initialized")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to initialize MCP Sandbox adapter (Sandbox tools disabled): {e}")
+
     # Optional: Prewarm agent session caches to reduce first-request latency
     if settings.agent_session_prewarm_enabled:
         asyncio.create_task(prewarm_agent_sessions())
@@ -309,11 +329,19 @@ async def main():
         execute_chat_activity,
         initialize_agent_session_activity,
     )
+    from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
+        cleanup_project_agent_activity,
+        execute_project_chat_activity,
+        initialize_project_agent_activity,
+    )
     from src.infrastructure.adapters.secondary.temporal.workflows.agent import (
         AgentExecutionWorkflow,
     )
     from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
         AgentSessionWorkflow,
+    )
+    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+        ProjectAgentWorkflow,
     )
 
     # Create worker with agent-specific configuration
@@ -321,9 +349,10 @@ async def main():
         temporal_client,
         task_queue=AGENT_TASK_QUEUE,
         workflows=[
-            # Agent workflows only
+            # Agent workflows
             AgentExecutionWorkflow,  # Legacy: per-request workflow
-            AgentSessionWorkflow,  # New: long-running session workflow
+            AgentSessionWorkflow,  # Long-running session workflow
+            ProjectAgentWorkflow,  # New: project-level persistent workflow
         ],
         activities=[
             # Legacy agent activities
@@ -334,10 +363,14 @@ async def main():
             set_agent_running,
             clear_agent_running,
             refresh_agent_running_ttl,
-            # New: Agent Session activities
+            # Agent Session activities
             initialize_agent_session_activity,
             execute_chat_activity,
             cleanup_agent_session_activity,
+            # Project Agent activities (new)
+            initialize_project_agent_activity,
+            execute_project_chat_activity,
+            cleanup_project_agent_activity,
         ],
         max_concurrent_activities=AGENT_WORKER_CONCURRENCY,
         max_concurrent_workflow_tasks=AGENT_WORKER_CONCURRENCY,
@@ -346,7 +379,8 @@ async def main():
     logger.info(
         f"Agent Worker: Configured with "
         f"{AGENT_WORKER_CONCURRENCY} concurrent activities, "
-        f"{AGENT_WORKER_CONCURRENCY} concurrent workflows"
+        f"{AGENT_WORKER_CONCURRENCY} concurrent workflows, "
+        f"3 workflow types (AgentExecution, AgentSession, ProjectAgent)"
     )
 
     # Install signal handlers

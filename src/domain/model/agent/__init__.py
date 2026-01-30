@@ -50,6 +50,13 @@ from src.domain.model.agent.execution_plan import (
     ExecutionStep,
     ExecutionStepStatus,
 )
+from src.domain.model.agent.plan_execution import (
+    ExecutionMode,
+    ExecutionStatus as PlanExecutionStatus,
+    ExecutionStep as PlanExecutionStep,
+    PlanExecution,
+    StepStatus,
+)
 from src.domain.model.agent.plan_snapshot import PlanSnapshot, StepState
 from src.domain.model.agent.reflection_result import (
     AdjustmentType,
@@ -98,4 +105,10 @@ __all__ = [
     "PlanNotFoundError",
     "AlreadyInPlanModeError",
     "NotInPlanModeError",
+    # Unified Plan Execution (New - replaces WorkPlan + ExecutionPlan)
+    "PlanExecution",
+    "PlanExecutionStep",
+    "PlanExecutionStatus",
+    "ExecutionMode",
+    "StepStatus",
 ]

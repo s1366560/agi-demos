@@ -68,6 +68,12 @@ __all__ = [
     "get_mcp_tools_from_cache",
     "update_mcp_tools_cache",
     "invalidate_mcp_tools_cache",
+    # MCP Temporal Adapter
+    "set_mcp_temporal_adapter",
+    "get_mcp_temporal_adapter",
+    # MCP Sandbox Adapter
+    "set_mcp_sandbox_adapter",
+    "get_mcp_sandbox_adapter",
     # SubAgentRouter
     "get_or_create_subagent_router",
     "invalidate_subagent_router_cache",
@@ -88,6 +94,7 @@ __all__ = [
 _agent_graph_service: Optional[Any] = None
 _redis_pool: Optional[redis.ConnectionPool] = None
 _mcp_temporal_adapter: Optional[Any] = None
+_mcp_sandbox_adapter: Optional[Any] = None
 
 # LLM client cache (by provider:model key)
 _llm_client_cache: Dict[str, Any] = {}
@@ -161,6 +168,29 @@ def get_mcp_temporal_adapter() -> Optional[Any]:
         The MCPTemporalAdapter instance or None if not initialized
     """
     return _mcp_temporal_adapter
+
+
+def set_mcp_sandbox_adapter(adapter: Any) -> None:
+    """Set the global MCP Sandbox Adapter instance for agent worker.
+
+    Called during Agent Worker initialization to make MCPSandboxAdapter
+    available to all Agent Activities for loading Project Sandbox MCP tools.
+
+    Args:
+        adapter: The MCPSandboxAdapter instance
+    """
+    global _mcp_sandbox_adapter
+    _mcp_sandbox_adapter = adapter
+    logger.info("Agent Worker: MCP Sandbox Adapter registered for Activities")
+
+
+def get_mcp_sandbox_adapter() -> Optional[Any]:
+    """Get the global MCP Sandbox Adapter instance for agent worker.
+
+    Returns:
+        The MCPSandboxAdapter instance or None if not initialized
+    """
+    return _mcp_sandbox_adapter
 
 
 async def get_redis_pool() -> redis.ConnectionPool:
@@ -400,7 +430,25 @@ async def get_or_create_tools(
         except Exception as e:
             logger.warning(f"Agent Worker: Failed to load MCP tools for tenant {tenant_id}: {e}")
 
-    # 4. Add SkillLoaderTool (initialized with skill list in description)
+    # 4. Load Project Sandbox MCP tools (if sandbox exists for project)
+    if _mcp_sandbox_adapter is not None:
+        try:
+            sandbox_tools = await _load_project_sandbox_tools(
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+            if sandbox_tools:
+                tools.update(sandbox_tools)
+                logger.info(
+                    f"Agent Worker: Loaded {len(sandbox_tools)} Project Sandbox tools "
+                    f"for project {project_id}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
+            )
+
+    # 5. Add SkillLoaderTool (initialized with skill list in description)
     # This enables LLM to see available skills and make autonomous decisions
     try:
         skill_loader = await get_or_create_skill_loader_tool(
@@ -414,6 +462,86 @@ async def get_or_create_tools(
         )
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillLoaderTool: {e}")
+
+    return tools
+
+
+async def _load_project_sandbox_tools(
+    project_id: str,
+    tenant_id: str,
+) -> Dict[str, Any]:
+    """Load MCP tools from project's sandbox.
+
+    This function checks if the project has an active sandbox, and if so,
+    loads its MCP tools (bash, read, write, edit, glob, grep, etc.) as
+    AgentTool instances using SandboxMCPToolWrapper.
+
+    Args:
+        project_id: Project ID
+        tenant_id: Tenant ID
+
+    Returns:
+        Dictionary of tool name -> SandboxMCPToolWrapper instances
+    """
+    from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
+
+    tools: Dict[str, Any] = {}
+
+    if _mcp_sandbox_adapter is None:
+        return tools
+
+    try:
+        # Check if there's an active sandbox for this project
+        # First, try to find by listing all sandboxes and checking labels
+        all_sandboxes = await _mcp_sandbox_adapter.list_sandboxes()
+
+        project_sandbox_id = None
+        for sandbox in all_sandboxes:
+            # Check if sandbox belongs to this project by checking the project_path
+            project_path = getattr(sandbox, 'project_path', '') or ''
+            if project_path and f"memstack_{project_id}" in project_path:
+                project_sandbox_id = sandbox.id
+                break
+
+            # Also check labels if available
+            labels = getattr(sandbox, 'labels', {}) or {}
+            if labels.get('memstack.project_id') == project_id:
+                project_sandbox_id = sandbox.id
+                break
+
+        if not project_sandbox_id:
+            logger.debug(f"No active sandbox found for project {project_id}")
+            return tools
+
+        # Connect to MCP if not already connected
+        await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
+
+        # List tools from the sandbox
+        tool_list = await _mcp_sandbox_adapter.list_tools(project_sandbox_id)
+
+        # Wrap each tool with SandboxMCPToolWrapper
+        for tool_info in tool_list:
+            tool_name = tool_info.get("name", "")
+            if not tool_name:
+                continue
+
+            wrapper = SandboxMCPToolWrapper(
+                sandbox_id=project_sandbox_id,
+                tool_name=tool_name,
+                tool_schema=tool_info,
+                sandbox_adapter=_mcp_sandbox_adapter,
+            )
+
+            # Use namespaced name as the key
+            tools[wrapper.name] = wrapper
+
+        logger.info(
+            f"Loaded {len(tools)} tools from sandbox {project_sandbox_id} "
+            f"for project {project_id}"
+        )
+
+    except Exception as e:
+        logger.warning(f"Failed to load project sandbox tools: {e}")
 
     return tools
 

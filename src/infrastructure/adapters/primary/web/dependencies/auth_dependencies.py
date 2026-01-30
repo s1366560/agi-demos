@@ -598,62 +598,6 @@ async def initialize_default_credentials():
                         )
                         db.add(user_tenant_membership)
 
-            # 5. Optional: Register CUA/Codebox MCP servers for default tenant
-            try:
-                from src.configuration.config import get_settings
-                from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-                    SQLMCPServerRepository,
-                )
-
-                settings = get_settings()
-                if settings.cua_enabled and default_tenant:
-                    mcp_repo = SQLMCPServerRepository(db)
-                    existing = await mcp_repo.get_by_name(
-                        tenant_id=default_tenant.id,
-                        name="cua",
-                    )
-                    if not existing:
-                        await mcp_repo.create(
-                            tenant_id=default_tenant.id,
-                            name="cua",
-                            description="CUA MCP server (websocket)",
-                            server_type="websocket",
-                            transport_config={
-                                "url": settings.cua_mcp_url,
-                                "headers": {},
-                                "timeout": 30000,
-                            },
-                            enabled=True,
-                        )
-                        logger.info(
-                            "🧩 CUA MCP server registered for Default Tenant (name=cua, websocket)"
-                        )
-
-                if default_tenant:
-                    mcp_repo = SQLMCPServerRepository(db)
-                    existing = await mcp_repo.get_by_name(
-                        tenant_id=default_tenant.id,
-                        name="codebox",
-                    )
-                    if not existing:
-                        await mcp_repo.create(
-                            tenant_id=default_tenant.id,
-                            name="codebox",
-                            description="Codebox MCP server (websocket)",
-                            server_type="websocket",
-                            transport_config={
-                                "url": settings.codebox_mcp_url,
-                                "headers": {},
-                                "timeout": 30000,
-                            },
-                            enabled=True,
-                        )
-                        logger.info(
-                            "🧩 Codebox MCP server registered for Default Tenant (name=codebox, websocket)"
-                        )
-            except Exception as e:
-                logger.warning(f"Failed to register default MCP servers (CUA/codebox): {e}")
-
             await db.commit()
 
         except Exception as e:

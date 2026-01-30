@@ -92,8 +92,9 @@ export function TenantAgentConfigView({
   // Loading state
   if (loading) {
     return (
-      <div className={`flex justify-center items-center p-8 ${className || ''}`}>
-        <Spin size="large" tip="Loading configuration..." />
+      <div className={`flex flex-col justify-center items-center gap-3 p-8 ${className || ''}`}>
+        <Spin size="large" />
+        <span className="text-slate-500 dark:text-slate-400">Loading configuration...</span>
       </div>
     );
   }

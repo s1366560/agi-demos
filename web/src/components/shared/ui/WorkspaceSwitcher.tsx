@@ -17,9 +17,15 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
     const triggerButtonRef = useRef<HTMLButtonElement>(null)
     const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([])
 
-    // Stores
-    const { tenants, currentTenant, setCurrentTenant, listTenants } = useTenantStore()
-    const { projects, listProjects, currentProject: storeProject } = useProjectStore()
+    // Stores - use selective selectors to prevent unnecessary re-renders
+    const tenants = useTenantStore((state) => state.tenants)
+    const currentTenant = useTenantStore((state) => state.currentTenant)
+    const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant)
+    const listTenants = useTenantStore((state) => state.listTenants)
+    
+    const projects = useProjectStore((state) => state.projects)
+    const listProjects = useProjectStore((state) => state.listProjects)
+    const storeProject = useProjectStore((state) => state.currentProject)
 
     // Load data if missing
     useEffect(() => {

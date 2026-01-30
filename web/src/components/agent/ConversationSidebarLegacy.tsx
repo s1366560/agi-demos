@@ -5,7 +5,7 @@
  * select, and delete conversations.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   List,
   Button,
@@ -47,11 +47,17 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
     setCurrentConversation,
   } = useAgentStore();
 
+  // Use ref to prevent duplicate calls from StrictMode
+  const loadedProjectIdRef = useRef<string | null>(null);
+  const listConversationsRef = useRef(listConversations);
+  listConversationsRef.current = listConversations;
+  
   useEffect(() => {
-    if (projectId) {
-      listConversations(projectId);
+    if (projectId && loadedProjectIdRef.current !== projectId) {
+      loadedProjectIdRef.current = projectId;
+      listConversationsRef.current(projectId);
     }
-  }, [projectId, listConversations]);
+  }, [projectId]);
 
   const handleCreate = async () => {
     try {

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { memoryAPI } from '../services/api';
 import type {
   Memory,
@@ -266,7 +267,7 @@ export const useRelationships = () => useMemoryStore((state) => state.relationsh
 
 // Action selectors
 export const useMemoryActions = () =>
-  useMemoryStore((state) => ({
+  useMemoryStore(useShallow((state) => ({
     listMemories: state.listMemories,
     createMemory: state.createMemory,
     updateMemory: state.updateMemory,
@@ -278,4 +279,4 @@ export const useMemoryActions = () =>
     extractRelationships: state.extractRelationships,
     clearError: state.clearError,
     setCurrentMemory: state.setCurrentMemory,
-  }));
+  })));

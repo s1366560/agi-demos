@@ -164,16 +164,12 @@
         "administration": "Administration",
         "billing": "Billing",
         "profile": "Profile",
-        "mcpServers": "MCP Servers",
-        "agentWorkspace": "AI Agent"
+        "mcpServers": "MCP Servers"
     },
-    "agent": {
-        "workspace": {
-            "subtitle": "Chat with AI assistant across your projects",
-            "selectProject": "Select a project",
-            "selectProjectToStart": "Please select a project to start chatting",
-            "noProjects": "No projects available. Create a project first to use the AI agent."
-        }
+    "user": {
+        "profile": "Profile",
+        "settings": "Settings",
+        "logout": "Logout"
     },
     "tenant": {
         "welcome": "Welcome to MemStack",

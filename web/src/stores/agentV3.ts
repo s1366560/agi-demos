@@ -354,11 +354,13 @@ export const useAgentV3Store = create<AgentV3State>()(
     setActiveConversation: (id) => set({ activeConversationId: id }),
 
     loadConversations: async (projectId) => {
+      console.log(`[agentV3] loadConversations called for project: ${projectId}`);
       try {
         const conversations = await agentService.listConversations(projectId);
+        console.log(`[agentV3] Loaded ${conversations.length} conversations`);
         set({ conversations });
       } catch (error) {
-        console.error("Failed to list conversations", error);
+        console.error("[agentV3] Failed to list conversations", error);
       }
     },
 

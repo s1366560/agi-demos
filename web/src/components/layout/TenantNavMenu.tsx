@@ -181,7 +181,7 @@ export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({
       placement="bottomLeft"
       onOpenChange={setOpen}
       open={open}
-      dropdownRender={(menu) => (
+      popupRender={(menu) => (
         <div className="bg-white dark:bg-surface-dark rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 min-w-[220px]">
           {menu}
         </div>

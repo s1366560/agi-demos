@@ -61,6 +61,10 @@ class ConnectionManager:
         self.conversation_subscribers: Dict[str, Set[str]] = {}
         # session_id -> {conversation_id -> asyncio.Task} (bridge tasks)
         self.bridge_tasks: Dict[str, Dict[str, asyncio.Task]] = {}
+        # session_id -> {project_id -> asyncio.Task} (status monitoring tasks)
+        self.status_tasks: Dict[str, Dict[str, asyncio.Task]] = {}
+        # session_id -> set of subscribed project_ids for status updates
+        self.status_subscriptions: Dict[str, Set[str]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
@@ -201,6 +205,74 @@ class ConnectionManager:
     def get_user_id(self, session_id: str) -> Optional[str]:
         """Get the user_id for a session."""
         return self.session_users.get(session_id)
+
+    async def subscribe_status(self, session_id: str, project_id: str, task: asyncio.Task) -> None:
+        """Subscribe a session to status updates for a project."""
+        async with self._lock:
+            if session_id not in self.status_subscriptions:
+                self.status_subscriptions[session_id] = set()
+            self.status_subscriptions[session_id].add(project_id)
+            
+            if session_id not in self.status_tasks:
+                self.status_tasks[session_id] = {}
+            self.status_tasks[session_id][project_id] = task
+        
+        logger.debug(f"[WS] Session {session_id[:8]}... subscribed to status for project {project_id}")
+
+    async def unsubscribe_status(self, session_id: str, project_id: str) -> None:
+        """Unsubscribe a session from status updates for a project."""
+        async with self._lock:
+            if session_id in self.status_subscriptions:
+                self.status_subscriptions[session_id].discard(project_id)
+            
+            if session_id in self.status_tasks and project_id in self.status_tasks[session_id]:
+                self.status_tasks[session_id][project_id].cancel()
+                del self.status_tasks[session_id][project_id]
+        
+        logger.debug(f"[WS] Session {session_id[:8]}... unsubscribed from status for project {project_id}")
+
+    async def disconnect(self, session_id: str) -> None:
+        """Remove a WebSocket connection and clean up subscriptions for a session."""
+        async with self._lock:
+            user_id = self.session_users.get(session_id)
+
+            # Cancel all bridge tasks for this session
+            if session_id in self.bridge_tasks:
+                for task in self.bridge_tasks[session_id].values():
+                    task.cancel()
+                del self.bridge_tasks[session_id]
+
+            # Cancel all status monitoring tasks for this session
+            if session_id in self.status_tasks:
+                for task in self.status_tasks[session_id].values():
+                    task.cancel()
+                del self.status_tasks[session_id]
+            
+            # Remove status subscriptions
+            if session_id in self.status_subscriptions:
+                del self.status_subscriptions[session_id]
+
+            # Remove from conversation subscribers
+            if session_id in self.subscriptions:
+                for conv_id in self.subscriptions[session_id]:
+                    if conv_id in self.conversation_subscribers:
+                        self.conversation_subscribers[conv_id].discard(session_id)
+                        if not self.conversation_subscribers[conv_id]:
+                            del self.conversation_subscribers[conv_id]
+                del self.subscriptions[session_id]
+
+            # Remove session from user's session set
+            if user_id and user_id in self.user_sessions:
+                self.user_sessions[user_id].discard(session_id)
+                if not self.user_sessions[user_id]:
+                    del self.user_sessions[user_id]
+
+            # Remove connection and session mappings
+            self.active_connections.pop(session_id, None)
+            self.session_users.pop(session_id, None)
+
+        total_sessions = len(self.active_connections)
+        logger.info(f"[WS] Session {session_id[:8]}... disconnected. Total: {total_sessions}")
 
 
 # Global connection manager instance
@@ -396,6 +468,12 @@ async def handle_client_message(
 
     elif msg_type == "unsubscribe":
         await handle_unsubscribe(websocket, user_id, session_id, message)
+
+    elif msg_type == "subscribe_status":
+        await handle_subscribe_status(websocket, user_id, tenant_id, session_id, message)
+
+    elif msg_type == "unsubscribe_status":
+        await handle_unsubscribe_status(websocket, session_id, message)
 
     else:
         await websocket.send_json(
@@ -754,3 +832,182 @@ async def handle_unsubscribe(
 def get_connection_manager() -> ConnectionManager:
     """Get the global connection manager instance."""
     return manager
+
+
+async def handle_subscribe_status(
+    websocket: WebSocket,
+    user_id: str,
+    tenant_id: str,
+    session_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """
+    Handle subscribe_status: Subscribe to Agent Session status updates.
+    
+    This enables real-time status bar updates via WebSocket.
+    """
+    project_id = message.get("project_id")
+    polling_interval = message.get("polling_interval", 3000)  # Default 3 seconds
+
+    if not project_id:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing project_id"},
+            }
+        )
+        return
+
+    try:
+        # Start status monitoring task
+        task = asyncio.create_task(
+            monitor_agent_status(
+                session_id=session_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                polling_interval_ms=polling_interval,
+            )
+        )
+        
+        await manager.subscribe_status(session_id, project_id, task)
+
+        await websocket.send_json(
+            {
+                "type": "ack",
+                "action": "subscribe_status",
+                "project_id": project_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"[WS] Error subscribing to status: {e}", exc_info=True)
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": str(e)},
+            }
+        )
+
+
+async def handle_unsubscribe_status(
+    websocket: WebSocket,
+    session_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """Handle unsubscribe_status: Stop receiving status updates for a project."""
+    project_id = message.get("project_id")
+
+    if not project_id:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing project_id"},
+            }
+        )
+        return
+
+    await manager.unsubscribe_status(session_id, project_id)
+
+    await websocket.send_json(
+        {
+            "type": "ack",
+            "action": "unsubscribe_status",
+            "project_id": project_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    )
+
+
+async def monitor_agent_status(
+    session_id: str,
+    user_id: str,
+    tenant_id: str,
+    project_id: str,
+    polling_interval_ms: int = 3000,
+) -> None:
+    """
+    Monitor Agent Session status and push updates via WebSocket.
+    
+    This runs as a background task and periodically queries the Temporal
+    workflow status, sending updates to the client when status changes.
+    """
+    from src.infrastructure.adapters.secondary.temporal.client import (
+        TemporalClientFactory,
+    )
+    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
+        AgentSessionStatus,
+        get_agent_session_workflow_id,
+    )
+
+    workflow_id = get_agent_session_workflow_id(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        agent_mode="default",
+    )
+
+    last_status = None
+    
+    try:
+        while True:
+            try:
+                # Check if still subscribed
+                if session_id not in manager.status_subscriptions:
+                    logger.debug(f"[WS Status] Session {session_id[:8]}... not in status_subscriptions")
+                    break
+                if project_id not in manager.status_subscriptions.get(session_id, set()):
+                    logger.debug(f"[WS Status] Project {project_id} not in session {session_id[:8]}... subscriptions")
+                    break
+
+                # Query Temporal for status
+                temporal_client = await TemporalClientFactory.get_client()
+                status_data = {
+                    "is_initialized": False,
+                    "is_active": False,
+                    "total_chats": 0,
+                    "active_chats": 0,
+                    "tool_count": 0,
+                    "workflow_id": workflow_id,
+                }
+
+                if temporal_client:
+                    try:
+                        handle = temporal_client.get_workflow_handle(workflow_id)
+                        status: AgentSessionStatus = await handle.query("get_status")
+                        status_data = {
+                            "is_initialized": status.is_initialized,
+                            "is_active": status.is_active,
+                            "total_chats": status.total_chats,
+                            "active_chats": status.active_chats,
+                            "tool_count": status.tool_count,
+                            "cached_since": status.cached_since,
+                            "workflow_id": workflow_id,
+                        }
+                    except Exception:
+                        # Workflow not found, return default (uninitialized) status
+                        pass
+
+                # Only send if status changed
+                if status_data != last_status:
+                    await manager.send_to_session(
+                        session_id,
+                        {
+                            "type": "status_update",
+                            "project_id": project_id,
+                            "data": status_data,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    )
+                    last_status = status_data
+
+            except Exception as e:
+                logger.warning(f"[WS Status] Error monitoring status: {e}")
+
+            # Wait before next poll
+            await asyncio.sleep(polling_interval_ms / 1000)
+
+    except asyncio.CancelledError:
+        logger.debug(f"[WS Status] Monitor cancelled for project {project_id}")
+    except Exception as e:
+        logger.error(f"[WS Status] Unexpected error: {e}", exc_info=True)

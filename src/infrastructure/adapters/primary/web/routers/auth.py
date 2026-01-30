@@ -4,6 +4,7 @@ Authentication router.
 
 import logging
 from typing import List
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -27,12 +28,82 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import APIKey as DBAPIKey
+from src.infrastructure.adapters.secondary.persistence.models import Project as DBProject
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Tenant,
+    UserProject,
+    UserTenant,
+)
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.adapters.secondary.persistence.models import UserRole
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Authentication"])
+
+
+async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
+    """
+    Ensure user has a default project.
+    
+    If user has no projects, create a default project in their first tenant.
+    This is called after successful login to ensure first-time users have a project.
+    """
+    # Check if user already has any projects
+    result = await db.execute(
+        select(UserProject).where(UserProject.user_id == user.id).limit(1)
+    )
+    existing_project = result.scalar_one_or_none()
+    
+    if existing_project:
+        # User already has a project, no need to create default
+        return
+    
+    # Get user's first tenant (should exist from initialization)
+    result = await db.execute(
+        select(UserTenant).where(UserTenant.user_id == user.id).limit(1)
+    )
+    user_tenant = result.scalar_one_or_none()
+    
+    if not user_tenant:
+        logger.warning(f"User {user.id} has no tenant, cannot create default project")
+        return
+    
+    # Get tenant details
+    result = await db.execute(
+        select(Tenant).where(Tenant.id == user_tenant.tenant_id)
+    )
+    tenant = result.scalar_one_or_none()
+    
+    if not tenant:
+        logger.warning(f"Tenant {user_tenant.tenant_id} not found for user {user.id}")
+        return
+    
+    # Create default project
+    default_project = DBProject(
+        id=str(uuid4()),
+        tenant_id=tenant.id,
+        name="默认项目",
+        description=f"{user.full_name or user.email} 的默认项目",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+        is_public=False,
+    )
+    db.add(default_project)
+    await db.flush()  # Flush to get the project ID
+    
+    # Create user-project relationship with owner role
+    user_project = UserProject(
+        id=str(uuid4()),
+        user_id=user.id,
+        project_id=default_project.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True, "delete": True},
+    )
+    db.add(user_project)
+    
+    logger.info(f"Created default project '{default_project.name}' ({default_project.id}) for user {user.id}")
 
 
 @router.post("/auth/token", response_model=Token)
@@ -88,7 +159,10 @@ async def login_for_access_token(
         expires_in_days=1,  # Short lived token
     )
 
-    # Commit the transaction to persist the API key
+    # Ensure user has a default project (first-time login)
+    await _ensure_default_project(db, user)
+
+    # Commit the transaction to persist the API key and default project (if created)
     await db.commit()
 
     return {"access_token": plain_key, "token_type": "bearer"}

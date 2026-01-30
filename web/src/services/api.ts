@@ -67,14 +67,35 @@ export const authAPI = {
         const token = tokenResponse.access_token;
 
         // Fetch user details
-        const user = await api.get<User>('/auth/me', {
+        const userResponse = await api.get<any>('/auth/me', {
             headers: { Authorization: `Bearer ${token}` }
         });
+
+        // Map backend response (user_id) to frontend format (id)
+        const user: User = {
+            id: userResponse.user_id,
+            email: userResponse.email,
+            name: userResponse.name,
+            roles: userResponse.roles,
+            is_active: userResponse.is_active,
+            created_at: userResponse.created_at,
+            profile: userResponse.profile,
+        };
 
         return { token, user };
     },
     verifyToken: async (_token: string): Promise<User> => {
-        return await api.get('/auth/me');
+        const userResponse = await api.get<any>('/auth/me');
+        // Map backend response (user_id) to frontend format (id)
+        return {
+            id: userResponse.user_id,
+            email: userResponse.email,
+            name: userResponse.name,
+            roles: userResponse.roles,
+            is_active: userResponse.is_active,
+            created_at: userResponse.created_at,
+            profile: userResponse.profile,
+        };
     },
     updateProfile: async (data: Partial<UserProfile>): Promise<User> => {
         return await api.put('/users/me', data);

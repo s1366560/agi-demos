@@ -182,8 +182,9 @@ export function RemoteDesktopViewer({
         ) : (
           <>
             {viewerStatus === "loading" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                <Spin tip="Connecting to desktop..." size="large" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10">
+                <Spin size="large" />
+                <span className="text-white">Connecting to desktop...</span>
               </div>
             )}
 

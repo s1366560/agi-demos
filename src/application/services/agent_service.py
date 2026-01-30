@@ -432,10 +432,33 @@ class AgentService(AgentServicePort):
             # Get handle to the new workflow
             handle = client.get_workflow_handle(workflow_id)
 
-            # Wait a moment for workflow to initialize
+            # Wait for workflow to initialize (poll with timeout)
+            # Workflow initialization includes loading tools, skills, etc.
             import asyncio
 
-            await asyncio.sleep(0.1)
+            max_wait_seconds = 30
+            poll_interval = 0.5
+            waited = 0
+
+            while waited < max_wait_seconds:
+                try:
+                    status = await handle.query("get_status")
+                    if status and getattr(status, "is_initialized", False):
+                        logger.info(
+                            f"Agent Session Workflow initialized after {waited:.1f}s: "
+                            f"{workflow_id}"
+                        )
+                        break
+                except Exception:
+                    # Workflow might not be ready yet, continue waiting
+                    pass
+
+                await asyncio.sleep(poll_interval)
+                waited += poll_interval
+            else:
+                logger.warning(
+                    f"Timeout waiting for Agent Session Workflow initialization: {workflow_id}"
+                )
 
         # Send chat request via Temporal update
         chat_request = AgentChatRequest(

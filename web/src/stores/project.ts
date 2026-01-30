@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { projectAPI } from '../services/api';
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
@@ -301,7 +302,7 @@ export const useProjectError = () => useProjectStore((state) => state.error);
  * const { listProjects, createProject, updateProject } = useProjectActions();
  */
 export const useProjectActions = () =>
-  useProjectStore((state) => ({
+  useProjectStore(useShallow((state) => ({
     listProjects: state.listProjects,
     createProject: state.createProject,
     updateProject: state.updateProject,
@@ -309,4 +310,4 @@ export const useProjectActions = () =>
     setCurrentProject: state.setCurrentProject,
     getProject: state.getProject,
     clearError: state.clearError,
-  }));
+  })));

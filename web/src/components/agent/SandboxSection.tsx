@@ -99,7 +99,7 @@ const DesktopTab: React.FC<{
               <Button
                 type="primary"
                 icon={<Play size={16} />}
-                onClick={startDesktop}
+                onClick={() => startDesktop()}
                 loading={isDesktopLoading}
               >
                 Start Desktop

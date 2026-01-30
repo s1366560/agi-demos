@@ -108,12 +108,16 @@ async function fetchWithRetry<T>(
 }
 
 /**
- * Get the base API URL from environment or use relative path
+ * Get the base API URL - always use relative path for Vite proxy
  *
- * @returns The base URL (e.g., 'http://api.example.com' or '' for relative)
+ * @returns Empty string for relative URLs (ensures requests go through Vite proxy)
+ * 
+ * NOTE: VITE_API_URL is intentionally NOT used here to ensure all HTTP requests
+ * go through the Vite dev server proxy. This avoids CORS issues and ensures
+ * consistent behavior between development and production.
  */
 function getBaseUrl(): string {
-  return import.meta.env.VITE_API_URL || '';
+  return '';
 }
 
 /**
@@ -199,6 +203,9 @@ export function createWebSocketUrl(
   if (import.meta.env.VITE_API_URL) {
     // Extract host from VITE_API_URL
     host = new URL(import.meta.env.VITE_API_URL).host;
+  } else if (window.location.host.includes(':3000')) {
+    // Development: Vite dev server on port 3000, backend on port 8000
+    host = 'localhost:8000';
   } else {
     host = window.location.host;
   }

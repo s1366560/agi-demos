@@ -188,6 +188,12 @@ class AgentServiceImpl implements AgentService {
   // Pending subscriptions (to restore after reconnect)
   private subscriptions: Set<string> = new Set();
 
+  // Status subscription for Agent session monitoring
+  private statusSubscriber: { projectId: string; callback: (status: unknown) => void } | null = null;
+
+  // Connection lock to prevent parallel connection attempts
+  private connectingPromise: Promise<void> | null = null;
+
   // Performance tracking: Track event receive times for diagnostics
   private performanceMetrics: Map<string, number[]> = new Map();
   private readonly MAX_METRICS_SAMPLES = 100;
@@ -226,15 +232,28 @@ class AgentServiceImpl implements AgentService {
    * ```
    */
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        logger.debug("[AgentWS] Already connected");
-        resolve();
-        return;
-      }
+    // Return existing connecting promise if already connecting
+    if (this.connectingPromise) {
+      logger.debug("[AgentWS] Connection already in progress, returning existing promise");
+      return this.connectingPromise;
+    }
 
-      this.isManualClose = false;
-      this.setStatus("connecting");
+    // Already connected
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      logger.debug("[AgentWS] Already connected");
+      return Promise.resolve();
+    }
+
+    this.isManualClose = false;
+    this.setStatus("connecting");
+
+    // Create and store the connecting promise
+    this.connectingPromise = this.doConnect();
+    return this.connectingPromise;
+  }
+
+  private doConnect(): Promise<void> {
+    return new Promise((resolve, reject) => {
 
       const token = getAuthToken();
       if (!token) {
@@ -257,6 +276,7 @@ class AgentServiceImpl implements AgentService {
           this.setStatus("connected");
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
+          this.connectingPromise = null; // Clear lock
 
           // Start heartbeat to keep connection alive
           this.startHeartbeat();
@@ -291,11 +311,13 @@ class AgentServiceImpl implements AgentService {
           logger.error("[AgentWS] Error:", error);
           this.setStatus("error");
           this.stopHeartbeat();
+          this.connectingPromise = null; // Clear lock on error
           reject(error);
         };
       } catch (err) {
         logger.error("[AgentWS] Connection error:", err);
         this.setStatus("error");
+        this.connectingPromise = null; // Clear lock on error
         this.scheduleReconnect();
         reject(err);
       }
@@ -455,6 +477,14 @@ class AgentServiceImpl implements AgentService {
 
     if (type === "ack") {
       logger.debug(`[AgentWS] Ack for ${message.action} on ${conversation_id}`);
+      return;
+    }
+
+    // Handle status updates for session monitoring
+    if (type === "status_update") {
+      if (this.statusSubscriber && (data as { project_id?: string })?.project_id === this.statusSubscriber.projectId) {
+        this.statusSubscriber.callback(data);
+      }
       return;
     }
 
@@ -631,12 +661,22 @@ class AgentServiceImpl implements AgentService {
   }
 
   private resubscribe(): void {
+    // Resubscribe to conversation streams
     this.subscriptions.forEach((conversationId) => {
       this.send({
         type: "subscribe",
         conversation_id: conversationId,
       });
     });
+
+    // Resubscribe to status updates if active
+    if (this.statusSubscriber) {
+      this.send({
+        type: "subscribe_status",
+        project_id: this.statusSubscriber.projectId,
+        polling_interval: 3000,
+      });
+    }
   }
 
   private startHeartbeat(): void {
@@ -1338,6 +1378,63 @@ class AgentServiceImpl implements AgentService {
    */
   clearPerformanceMetrics(): void {
     this.performanceMetrics.clear();
+  }
+
+  /**
+   * Subscribe to Agent session status updates
+   *
+   * Registers a callback to receive real-time status updates for a project.
+   * Only one status subscription is active at a time (new subscription replaces old).
+   *
+   * @param projectId - The project ID to monitor
+   * @param callback - Function called when status updates arrive
+   *
+   * @example
+   * ```typescript
+   * agentService.subscribeStatus('proj-123', (status) => {
+   *   console.log('Agent initialized:', status.is_initialized);
+   *   console.log('Active chats:', status.active_chats);
+   * });
+   * ```
+   */
+  subscribeStatus(projectId: string, callback: (status: unknown) => void): void {
+    // Unsubscribe from previous project if different
+    if (this.statusSubscriber && this.statusSubscriber.projectId !== projectId) {
+      this.unsubscribeStatus();
+    }
+
+    this.statusSubscriber = { projectId, callback };
+
+    if (this.isConnected()) {
+      this.send({
+        type: "subscribe_status",
+        project_id: projectId,
+        polling_interval: 3000,
+      });
+      logger.debug(`[AgentWS] Subscribed to status updates for project: ${projectId}`);
+    }
+  }
+
+  /**
+   * Unsubscribe from Agent session status updates
+   *
+   * Stops receiving status updates and notifies the server.
+   *
+   * @example
+   * ```typescript
+   * agentService.unsubscribeStatus();
+   * console.log('Status updates stopped');
+   * ```
+   */
+  unsubscribeStatus(): void {
+    if (this.statusSubscriber && this.isConnected()) {
+      this.send({
+        type: "unsubscribe_status",
+        project_id: this.statusSubscriber.projectId,
+      });
+      logger.debug(`[AgentWS] Unsubscribed from status updates for project: ${this.statusSubscriber.projectId}`);
+    }
+    this.statusSubscriber = null;
   }
 }
 

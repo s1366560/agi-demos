@@ -250,11 +250,20 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   }, [projects, currentProject, selectedProjectId, setCurrentProject]);
 
   // Load conversations when selected project changes
+  // NOTE: Use ref pattern to avoid dependency on loadConversations function
+  // which gets recreated on every store update, causing infinite loops
+  const loadedProjectIdRef = useRef<string | null>(null);
+  const loadConversationsRef = useRef(loadConversations);
+  loadConversationsRef.current = loadConversations;
+  
   useEffect(() => {
-    if (selectedProjectId) {
-      loadConversations(selectedProjectId);
+    if (selectedProjectId && loadedProjectIdRef.current !== selectedProjectId) {
+      loadedProjectIdRef.current = selectedProjectId;
+      // Use ref to call latest function without triggering effect re-run
+      loadConversationsRef.current(selectedProjectId);
     }
-  }, [selectedProjectId, loadConversations]);
+    // ONLY depend on selectedProjectId, NOT loadConversations
+  }, [selectedProjectId]);
 
   // Enrich conversations with project info
   const enrichedConversations: ConversationWithProject[] = useMemo(() => {
@@ -313,8 +322,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (project) {
       setCurrentProject(project);
     }
-    loadConversations(projectId);
-  }, [projects, setCurrentProject, loadConversations]);
+    // NOTE: loadConversations is called by useEffect when selectedProjectId changes
+    // Do NOT call it here to avoid duplicate requests
+  }, [projects, setCurrentProject]);
 
   // Optimized drag handlers using RAF
   const handleResizeStart = useCallback((e: React.MouseEvent) => {

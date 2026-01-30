@@ -73,6 +73,7 @@ class RequestDeduplicatorImpl {
    * Otherwise, execute the provided function and track its promise.
    *
    * The promise is automatically removed from tracking when it settles.
+   * Includes timeout to prevent zombie promises from blocking future requests.
    */
   async deduplicate<T>(
     key: string,
@@ -99,6 +100,14 @@ class RequestDeduplicatorImpl {
     };
 
     promise.then(cleanup).catch(cleanup);
+
+    // SAFETY: Force cleanup after 30s to prevent zombie promises
+    setTimeout(() => {
+      if (this.pendingRequests.has(key)) {
+        console.warn(`[Deduplicator] Force cleanup zombie promise for key: ${key}`);
+        this.pendingRequests.delete(key);
+      }
+    }, 30000);
 
     return promise;
   }

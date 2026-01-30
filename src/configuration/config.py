@@ -228,42 +228,9 @@ class Settings(BaseSettings):
     sandbox_memory_limit: str = Field(default="2G", alias="SANDBOX_MEMORY_LIMIT")
     sandbox_cpu_limit: str = Field(default="2", alias="SANDBOX_CPU_LIMIT")
     sandbox_network_isolated: bool = Field(default=True, alias="SANDBOX_NETWORK_ISOLATED")
-
-    # CUA (Computer Use Agent) Integration Settings
-    cua_enabled: bool = Field(default=False, alias="CUA_ENABLED")
-    cua_model: str = Field(default="anthropic/claude-sonnet-4-20250514", alias="CUA_MODEL")
-    cua_temperature: float = Field(default=0.0, alias="CUA_TEMPERATURE")
-    cua_max_steps: int = Field(default=20, alias="CUA_MAX_STEPS")
-    cua_screenshot_delay: float = Field(default=0.5, alias="CUA_SCREENSHOT_DELAY")
-    cua_max_retries: int = Field(default=3, alias="CUA_MAX_RETRIES")
-    cua_telemetry_enabled: bool = Field(default=False, alias="CUA_TELEMETRY_ENABLED")
-
-    # CUA Provider Settings (Docker for isolation)
-    cua_provider: str = Field(default="docker", alias="CUA_PROVIDER")  # docker, local, cloud
-    cua_docker_image: str = Field(
-        default="ghcr.io/trycua/cua-desktop:latest", alias="CUA_DOCKER_IMAGE"
-    )
-    cua_docker_display: str = Field(default="1920x1080", alias="CUA_DOCKER_DISPLAY")
-    cua_docker_memory: str = Field(default="4GB", alias="CUA_DOCKER_MEMORY")
-    cua_docker_cpu: str = Field(default="2", alias="CUA_DOCKER_CPU")
-
-    # CUA Permission Settings (Docker environment allows more permissive defaults)
-    cua_allow_screenshot: bool = Field(default=True, alias="CUA_ALLOW_SCREENSHOT")
-    cua_allow_mouse_click: bool = Field(default=True, alias="CUA_ALLOW_MOUSE_CLICK")
-    cua_allow_keyboard_input: bool = Field(default=True, alias="CUA_ALLOW_KEYBOARD_INPUT")
-    cua_allow_browser_navigation: bool = Field(default=True, alias="CUA_ALLOW_BROWSER_NAVIGATION")
-
-    # CUA SubAgent/Skill Settings
-    cua_subagent_enabled: bool = Field(default=True, alias="CUA_SUBAGENT_ENABLED")
-    cua_skill_enabled: bool = Field(default=True, alias="CUA_SKILL_ENABLED")
-    cua_subagent_match_threshold: float = Field(default=0.7, alias="CUA_SUBAGENT_MATCH_THRESHOLD")
-    cua_skill_match_threshold: float = Field(default=0.8, alias="CUA_SKILL_MATCH_THRESHOLD")
-
-    # CUA MCP Server Settings (WebSocket)
-    cua_mcp_url: str = Field(default="ws://localhost:18766", alias="CUA_MCP_URL")
-
-    # Codebox MCP Server Settings (WebSocket)
-    codebox_mcp_url: str = Field(default="ws://localhost:8765", alias="CODEBOX_MCP_URL")
+    sandbox_profile_type: str = Field(default="standard", alias="SANDBOX_PROFILE_TYPE")
+    sandbox_auto_recover: bool = Field(default=True, alias="SANDBOX_AUTO_RECOVER")
+    sandbox_health_check_interval: int = Field(default=60, alias="SANDBOX_HEALTH_CHECK_INTERVAL")
 
     # Agent Skill System (L2 Layer) Settings
     # Threshold for skill prompt injection (0.5 = medium match score)

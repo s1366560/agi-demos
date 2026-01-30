@@ -114,6 +114,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_user_repository impor
 from src.infrastructure.adapters.secondary.persistence.sql_work_plan_repository import (
     SQLWorkPlanRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+    SqlAlchemyProjectSandboxRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SQLWorkflowPatternRepository,
 )
@@ -243,6 +246,9 @@ class DIContainer:
     def workflow_pattern_repository(self) -> SQLWorkflowPatternRepository:
         return SQLWorkflowPatternRepository(self._db)
 
+    def project_sandbox_repository(self) -> SqlAlchemyProjectSandboxRepository:
+        return SqlAlchemyProjectSandboxRepository(self._db)
+
     def tool_composition_repository(self) -> SQLToolCompositionRepository:
         return SQLToolCompositionRepository(self._db)
 
@@ -272,6 +278,22 @@ class DIContainer:
         )
 
         return SqlPlanRepository(self._db)
+
+    def plan_execution_repository(self):
+        """Get SQLPlanExecutionRepository for unified plan execution persistence."""
+        from src.infrastructure.adapters.secondary.persistence.sql_plan_execution_repository import (
+            SQLPlanExecutionRepository,
+        )
+
+        return SQLPlanExecutionRepository(self._db)
+
+    def plan_snapshot_repository(self):
+        """Get SQLPlanSnapshotRepository for plan snapshot persistence."""
+        from src.infrastructure.adapters.secondary.persistence.sql_plan_snapshot_repository import (
+            SQLPlanSnapshotRepository,
+        )
+
+        return SQLPlanSnapshotRepository(self._db)
 
     # === Infrastructure ===
 
@@ -439,6 +461,24 @@ class DIContainer:
             mcp_adapter=self.sandbox_adapter(),
         )
 
+    def project_sandbox_lifecycle_service(self):
+        """Get ProjectSandboxLifecycleService for project-dedicated sandbox management.
+
+        This service manages persistent sandboxes for projects, ensuring each
+        project has exactly one long-running sandbox instance.
+        """
+        from src.application.services.project_sandbox_lifecycle_service import (
+            ProjectSandboxLifecycleService,
+        )
+
+        return ProjectSandboxLifecycleService(
+            repository=self.project_sandbox_repository(),
+            sandbox_adapter=self.sandbox_adapter(),
+            default_profile=self._settings.sandbox_profile_type,
+            health_check_interval_seconds=60,
+            auto_recover=True,
+        )
+
     def agent_service(self, llm) -> AgentService:
         """Get AgentService with dependencies injected."""
         if not self._graph_service:
@@ -578,6 +618,33 @@ class DIContainer:
 
         return GetPlanUseCase(plan_repository=self.plan_repository())
 
+    def generate_plan_execution_use_case(self, llm):
+        """Get GeneratePlanExecutionUseCase for unified plan execution generation."""
+        from src.application.use_cases.agent.generate_plan_execution import (
+            GeneratePlanExecutionUseCase,
+        )
+        from src.infrastructure.agent.planning.plan_generator import PlanGenerator
+
+        plan_generator = PlanGenerator(
+            llm_client=llm,
+            available_tools=[],  # Will be set at runtime
+        )
+
+        return GeneratePlanExecutionUseCase(
+            plan_execution_repository=self.plan_execution_repository(),
+            plan_generator=plan_generator,
+        )
+
+    def execute_plan_use_case(self, llm):
+        """Get ExecutePlanUseCase for unified plan execution."""
+        from src.application.use_cases.agent.execute_plan import ExecutePlanUseCase
+
+        return ExecutePlanUseCase(
+            plan_execution_repository=self.plan_execution_repository(),
+            plan_snapshot_repository=self.plan_snapshot_repository(),
+            plan_mode_orchestrator=self.plan_mode_orchestrator(llm),
+        )
+
     # === Plan Mode Detection ===
 
     def plan_mode_cache(self):
@@ -620,6 +687,50 @@ class DIContainer:
             llm_classifier=self.llm_classifier(llm),
             cache=self.plan_mode_cache(),
             enabled=self._settings.plan_mode_enabled,
+        )
+
+    def plan_mode_orchestrator(self, llm):
+        """Get PlanModeOrchestrator for plan execution workflow."""
+        from src.infrastructure.agent.planning.plan_mode_orchestrator import (
+            PlanModeOrchestrator,
+        )
+        from src.infrastructure.agent.planning.plan_generator import PlanGenerator
+        from src.infrastructure.agent.planning.plan_executor import PlanExecutor
+        from src.infrastructure.agent.planning.plan_reflector import PlanReflector
+        from src.infrastructure.agent.planning.plan_adjuster import PlanAdjuster
+
+        plan_generator = PlanGenerator(
+            llm_client=llm,
+            available_tools=[],  # Will be set at runtime
+        )
+
+        # Create a basic session processor wrapper
+        # Note: The actual session processor should be provided at runtime
+        class DummySessionProcessor:
+            async def execute_tool(self, tool_name: str, tool_input: dict, conversation_id: str) -> str:
+                return f"Executed {tool_name}"
+
+        plan_executor = PlanExecutor(
+            session_processor=DummySessionProcessor(),
+            event_emitter=None,  # Will be set at runtime
+            parallel_execution=False,
+            max_parallel_steps=3,
+        )
+
+        plan_reflector = PlanReflector(
+            llm_client=llm,
+            max_tokens=2048,
+        )
+
+        plan_adjuster = PlanAdjuster()
+
+        return PlanModeOrchestrator(
+            plan_generator=plan_generator,
+            plan_executor=plan_executor,
+            plan_reflector=plan_reflector,
+            plan_adjuster=plan_adjuster,
+            event_emitter=None,  # Will be set at runtime
+            max_reflection_cycles=3,
         )
 
     # === Memory Use Cases ===

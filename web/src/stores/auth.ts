@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { authAPI } from '../services/api';
 import type { User } from '../types/memory';
 
@@ -227,10 +228,10 @@ export const useAuthError = () => useAuthStore((state) => state.error);
  * const { login, logout } = useAuthActions();
  */
 export const useAuthActions = () =>
-  useAuthStore((state) => ({
+  useAuthStore(useShallow((state) => ({
     login: state.login,
     logout: state.logout,
     checkAuth: state.checkAuth,
     clearError: state.clearError,
     setUser: state.setUser,
-  }));
+  })));

@@ -1,23 +1,56 @@
-"""Temporal Activities for MemStack.
+"""
+Temporal Activities for MemStack.
 
-This package provides Activity implementations that wrap existing TaskHandlers,
-enabling zero-code-change migration from Redis queue to Temporal.
+This module provides Temporal activity definitions for workflow execution.
 """
 
-from src.infrastructure.adapters.secondary.temporal.activities.community import (
-    rebuild_communities_activity,
+# Agent activities
+from .agent import (
+    clear_agent_running,
+    execute_react_agent_activity,
+    execute_react_step_activity,
+    refresh_agent_running_ttl,
+    save_checkpoint_activity,
+    save_event_activity,
+    set_agent_running,
 )
-from src.infrastructure.adapters.secondary.temporal.activities.entity import (
-    deduplicate_entities_activity,
+from .agent_session import (
+    cleanup_agent_session_activity,
+    execute_chat_activity,
+    initialize_agent_session_activity,
 )
-from src.infrastructure.adapters.secondary.temporal.activities.episode import (
+from .episode import (
     add_episode_activity,
+    extract_entities_activity,
+    extract_relationships_activity,
     incremental_refresh_activity,
+)
+from .project_agent import (
+    cleanup_project_agent_activity,
+    execute_project_chat_activity,
+    initialize_project_agent_activity,
 )
 
 __all__ = [
+    # Agent activities
+    "execute_react_step_activity",
+    "execute_react_agent_activity",
+    "save_event_activity",
+    "save_checkpoint_activity",
+    "set_agent_running",
+    "clear_agent_running",
+    "refresh_agent_running_ttl",
+    # Agent Session activities
+    "initialize_agent_session_activity",
+    "execute_chat_activity",
+    "cleanup_agent_session_activity",
+    # Project Agent activities (new)
+    "initialize_project_agent_activity",
+    "execute_project_chat_activity",
+    "cleanup_project_agent_activity",
+    # Episode activities
     "add_episode_activity",
+    "extract_entities_activity",
+    "extract_relationships_activity",
     "incremental_refresh_activity",
-    "rebuild_communities_activity",
-    "deduplicate_entities_activity",
 ]

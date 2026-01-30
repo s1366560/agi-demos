@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import { tenantAPI } from '../services/api';
 import type { Tenant, TenantCreate, TenantUpdate, TenantListResponse, UserTenant } from '../types/memory';
 
@@ -375,7 +376,7 @@ export const useTenantError = () => useTenantStore((state) => state.error);
  * const { listTenants, createTenant, addMember } = useTenantActions();
  */
 export const useTenantActions = () =>
-  useTenantStore((state) => ({
+  useTenantStore(useShallow((state) => ({
     listTenants: state.listTenants,
     getTenant: state.getTenant,
     createTenant: state.createTenant,
@@ -386,4 +387,4 @@ export const useTenantActions = () =>
     removeMember: state.removeMember,
     listMembers: state.listMembers,
     clearError: state.clearError,
-  }));
+  })));

@@ -31,9 +31,9 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   
-  const { logout } = useAuthStore();
-  const { currentTenant } = useTenantStore();
-  const { currentProject } = useProjectStore();
+  const logout = useAuthStore((state) => state.logout);
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const currentProject = useProjectStore((state) => state.currentProject);
 
   const navigationItems = [
     { id: 'overview', label: '概览', icon: LayoutDashboard },

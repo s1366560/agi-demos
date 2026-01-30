@@ -27,6 +27,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     mcp,
     memories,
     notifications,
+    project_sandbox,
     projects,
     recall,
     sandbox,
@@ -329,6 +330,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Sandbox (MCP-enabled Docker containers)
     app.include_router(sandbox.router)
+
+    # Project Sandbox (Project-dedicated persistent sandboxes)
+    app.include_router(project_sandbox.router)
 
     # Terminal (Interactive shell via WebSocket)
     app.include_router(terminal.router)

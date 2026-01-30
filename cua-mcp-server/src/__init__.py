@@ -1,1 +1,0 @@
-"""CUA MCP Server package."""

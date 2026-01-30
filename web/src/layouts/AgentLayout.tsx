@@ -36,9 +36,13 @@ const TOP_TABS = [
 
 export const AgentLayout: React.FC = () => {
     const { projectId, conversationId } = useParams<{ projectId: string; conversationId?: string }>()
-    const { currentProject, setCurrentProject, projects, getProject } = useProjectStore()
-    const { currentTenant } = useTenantStore()
-    const { user, logout } = useAuthStore()
+    const currentProject = useProjectStore((state) => state.currentProject)
+    const setCurrentProject = useProjectStore((state) => state.setCurrentProject)
+    const projects = useProjectStore((state) => state.projects)
+    const getProject = useProjectStore((state) => state.getProject)
+    const currentTenant = useTenantStore((state) => state.currentTenant)
+    const user = useAuthStore((state) => state.user)
+    const logout = useAuthStore((state) => state.logout)
     const navigate = useNavigate()
     const location = useLocation()
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)

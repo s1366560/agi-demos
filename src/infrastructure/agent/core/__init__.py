@@ -1,69 +1,40 @@
-"""Core agent module - Self-developed ReAct agent replacing LangGraph."""
+"""
+ReAct Agent Core Module.
 
-from .llm_stream import (
-    LLMStream,
-    StreamConfig,
-    StreamEvent,
-    StreamEventType,
-    ToolCallChunk,
-    create_stream,
-)
-from .message import (
-    Message,
-    MessagePart,
-    MessageRole,
-    ReasoningPart,
-    StepFinishPart,
-    StepStartPart,
-    TextPart,
-    ToolPart,
-    ToolState,
-)
-from .processor import (
-    ProcessorConfig,
-    ProcessorResult,
-    ProcessorState,
-    SessionProcessor,
-    ToolDefinition,
-    create_processor,
+This module provides the core ReAct agent implementation including:
+- ReActAgent: Main agent class with streaming support
+- ProjectReActAgent: Project-scoped agent with lifecycle management
+- ProjectAgentManager: Manager for multiple project agents
+- SessionProcessor: Low-level session processing
+- ToolDefinition: Tool interface definitions
+"""
+
+from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
+from .project_react_agent import (
+    ProjectAgentConfig,
+    ProjectAgentManager,
+    ProjectAgentMetrics,
+    ProjectAgentStatus,
+    ProjectReActAgent,
+    get_project_agent_manager,
+    stop_project_agent_manager,
 )
 from .react_agent import ReActAgent, create_react_agent
-from .skill_executor import SkillExecutionResult, SkillExecutor
-from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
 
 __all__ = [
-    # Message
-    "Message",
-    "MessageRole",
-    "MessagePart",
-    "ToolPart",
-    "TextPart",
-    "ReasoningPart",
-    "StepStartPart",
-    "StepFinishPart",
-    "ToolState",
-    # LLM Stream
-    "LLMStream",
-    "StreamEvent",
-    "StreamEventType",
-    "StreamConfig",
-    "ToolCallChunk",
-    "create_stream",
-    # Processor
-    "SessionProcessor",
-    "ProcessorState",
-    "ProcessorResult",
-    "ProcessorConfig",
-    "ToolDefinition",
-    "create_processor",
-    # ReAct Agent
+    # Core agent
     "ReActAgent",
     "create_react_agent",
-    # Skill System (L2)
-    "SkillExecutor",
-    "SkillExecutionResult",
-    # SubAgent System (L3)
-    "SubAgentRouter",
-    "SubAgentExecutor",
-    "SubAgentMatch",
+    # Project-level agent
+    "ProjectReActAgent",
+    "ProjectAgentConfig",
+    "ProjectAgentStatus",
+    "ProjectAgentMetrics",
+    "ProjectAgentManager",
+    "get_project_agent_manager",
+    "stop_project_agent_manager",
+    # Session processing
+    "SessionProcessor",
+    "ProcessorConfig",
+    "ToolDefinition",
 ]

@@ -1,11 +1,20 @@
 /**
- * Sandbox Service - Sandbox container management API
+ * Sandbox Service - Sandbox container management API (DEPRECATED)
  *
- * Provides methods for managing sandbox containers including:
- * - Creating and deleting sandboxes
- * - Starting/stopping desktop (noVNC) and terminal (ttyd) services
- * - Querying sandbox status
+ * ⚠️ DEPRECATED: This service uses the old sandbox ID-based API.
+ * Please use `projectSandboxService` from `./projectSandboxService` instead.
  *
+ * The new API provides:
+ * - Project-scoped sandbox management (one sandbox per project)
+ * - Automatic health monitoring and recovery
+ * - Simplified API (no need to manage sandbox IDs)
+ *
+ * Migration guide:
+ * - Replace `sandboxService.createSandbox({project_id})` with `projectSandboxService.ensureSandbox(projectId)`
+ * - Replace `sandboxService.startDesktop(sandboxId)` with `projectSandboxService.startDesktop(projectId)`
+ * - Replace `sandboxService.startTerminal(sandboxId)` with `projectSandboxService.startTerminal(projectId)`
+ *
+ * @deprecated Use projectSandboxService instead
  * @packageDocumentation
  */
 

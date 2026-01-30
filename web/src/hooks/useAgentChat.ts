@@ -116,14 +116,21 @@ export function useAgentChat() {
   }, [messagesLoading, timeline.length, scrollToBottom]);
 
   // Project sync
+  // Use ref to prevent duplicate calls and avoid dependency on listConversations
+  const loadedProjectIdRef = useRef<string | null>(null);
+  const listConversationsRef = useRef(listConversations);
+  listConversationsRef.current = listConversations;
+  
   useEffect(() => {
-    if (projectId) {
-      listConversations(projectId);
+    if (projectId && loadedProjectIdRef.current !== projectId) {
+      loadedProjectIdRef.current = projectId;
+      listConversationsRef.current(projectId);
       const project = projects.find((p) => p.id === projectId);
       if (project && currentProject?.id !== projectId) {
         setCurrentProject(project);
       }
     }
+  // ONLY depend on projectId, NOT listConversations
   }, [projectId]);
 
   // URL param sync

@@ -17,14 +17,15 @@ from typing import Any, Dict, List, Optional
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
-# Import activity definitions (but call via workflow.execute_activity)
-from src.infrastructure.adapters.secondary.temporal.activities.agent import (
-    clear_agent_running,
-    execute_react_agent_activity,  # New: uses ReActAgent (recommended)
-    execute_react_step_activity,  # Legacy: hardcoded logic
-    save_checkpoint_activity,
-    set_agent_running,
-)
+# Import activity definitions using workflow-safe imports
+with workflow.unsafe.imports_passed_through():
+    from src.infrastructure.adapters.secondary.temporal.activities.agent import (
+        clear_agent_running,
+        execute_react_agent_activity,  # New: uses ReActAgent (recommended)
+        execute_react_step_activity,  # Legacy: hardcoded logic
+        save_checkpoint_activity,
+        set_agent_running,
+    )
 
 logger = logging.getLogger(__name__)
 

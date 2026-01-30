@@ -1,38 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import istanbul from "vite-plugin-istanbul";
-import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    istanbul({
-      include: "src/*",
-      exclude: ["node_modules", "test/"],
-      extension: [".js", ".ts", ".tsx", ".jsx"],
-      requireEnv: false,
-    }),
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": "/Users/tiejun.sun/Documents/github/vip-memory/web/src",
     },
   },
   server: {
     host: "0.0.0.0",
     port: 3000,
-    strictPort: true, // Fail if port 3000 is already in use
+    strictPort: true,
+    hmr: false, // 禁用 HMR
     proxy: {
       "/api": {
-        target: process.env.VITE_API_URL || "http://localhost:8000",
+        target: "http://localhost:8000",
         changeOrigin: true,
-        ws: true, // Enable WebSocket proxy
+        ws: true,
       },
     },
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
   },
 });
