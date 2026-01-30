@@ -26,8 +26,9 @@ import {
   MessageArea,
   InputBar,
   RightPanel,
-  StatusBar,
+  ProjectAgentStatusBar,
 } from './index';
+import { useProjectAgentLifecycle } from '@/hooks/useProjectAgentLifecycle';
 import { EmptyState } from './EmptyState';
 
 interface AgentChatContentProps {
@@ -121,6 +122,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     setSandboxId 
   } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
+
+  // ProjectReActAgent Lifecycle Status (for tenant-level agent workspace)
+  const {
+    sessionStatus,
+    isLoading: isStatusLoading,
+    error: statusError,
+  } = useProjectAgentLifecycle({
+    projectId: projectId || '',
+    pollingInterval: 10000,
+    enabled: !!projectId,
+  });
 
   // Local UI state
   const [panelCollapsed, setPanelCollapsed] = useState(!showPlanPanel);
@@ -297,13 +309,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, panelWidth, togglePlanPanel, maxPanelWidth]);
 
   const statusBar = useMemo(() => (
-    <StatusBar
+    <ProjectAgentStatusBar
+      projectId={projectId || ''}
+      sessionStatus={sessionStatus}
+      isLoading={isStatusLoading}
+      error={statusError}
       isStreaming={isStreaming}
-      isPlanMode={isPlanMode}
       messageCount={timeline.length}
       sandboxConnected={!!activeSandboxId}
+      isPlanMode={isPlanMode}
     />
-  ), [isStreaming, isPlanMode, timeline.length, activeSandboxId]);
+  ), [projectId, sessionStatus, isStatusLoading, statusError, isStreaming, timeline.length, activeSandboxId, isPlanMode]);
 
   return (
     <div className={`flex h-full w-full overflow-hidden bg-slate-50 dark:bg-slate-950 ${className}`}>

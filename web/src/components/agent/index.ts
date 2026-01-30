@@ -15,6 +15,9 @@ export { StatusBar } from './StatusBar';
 export { PlanModeBanner } from './PlanModeBanner';
 export { SandboxSection } from './SandboxSection';
 
+// ProjectReActAgent Lifecycle Status Bar
+export { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
+
 // Content-only component for use in ProjectLayout
 export { AgentChatContent } from './AgentChatContent';
 
