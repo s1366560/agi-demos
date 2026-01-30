@@ -13,3 +13,6 @@
 [submodule "vendor/browser-use"]
 	path = vendor/browser-use
 	url = https://github.com/browser-use/browser-use.git
+[submodule "vendor/moltbot"]
+	path = vendor/moltbot
+	url = https://github.com/moltbot/moltbot.git

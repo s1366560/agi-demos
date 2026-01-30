@@ -201,7 +201,6 @@ const PROJECT_SIDEBAR_CONFIG: SidebarConfig = {
       defaultOpen: true,
       items: [
         { id: 'overview', icon: 'dashboard', label: 'nav.overview', path: '', exact: true },
-        { id: 'agent', icon: 'smart_toy', label: 'Agent V3', path: '/agent' },
       ],
     },
     {

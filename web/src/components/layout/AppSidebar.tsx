@@ -5,8 +5,8 @@
  * and renders a collapsible sidebar with navigation groups.
  */
 
-import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import * as React from 'react'
+import { useState } from 'react'
 import { Collapse } from 'antd'
 import { ChevronDown } from 'lucide-react'
 import { SidebarNavItem } from './SidebarNavItem'
@@ -42,7 +42,7 @@ export interface AppSidebarProps {
 /**
  * Get default brand element
  */
-function getDefaultBrand(context?: string): React.ReactNode {
+function getDefaultBrand(_context?: string): React.ReactNode {
   return (
     <div className="flex items-center gap-3 px-2">
       <div className="bg-primary/10 p-2 rounded-lg border border-primary/20">

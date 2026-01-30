@@ -77,16 +77,16 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           onClick={onSelect}
           className={`
             w-full p-3 rounded-xl mb-1 transition-all duration-200
-            flex items-center justify-center
+            flex items-center justify-center relative
             ${isActive 
-              ? 'bg-primary/10 text-primary' 
-              : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200' 
+              : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }
           `}
         >
           <MessageSquare size={20} />
           {isActive && (
-            <span className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />
+            <span className="absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full" />
           )}
         </button>
       </Tooltip>
@@ -100,8 +100,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         group relative p-3 rounded-xl mb-1 cursor-pointer
         transition-all duration-200 border
         ${isActive 
-          ? 'bg-primary/5 border-primary/20 text-slate-900 dark:text-slate-100' 
-          : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'
+          ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100' 
+          : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
         }
       `}
     >
@@ -110,7 +110,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         <div className={`
           w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
           ${isActive 
-            ? 'bg-primary/10 text-primary' 
+            ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' 
             : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
           }
         `}>

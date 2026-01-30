@@ -78,18 +78,22 @@ const Resizer: React.FC<{
     <div
       onMouseDown={handleMouseDown}
       className={`
-        absolute top-0 bottom-0 w-1 cursor-ew-resize z-50
-        transition-colors duration-150 group
+        absolute top-0 bottom-0 w-1.5 cursor-ew-resize z-50
+        transition-all duration-150 group
         ${direction === 'left' ? 'right-0' : 'left-0'}
-        ${isDragging ? 'bg-primary' : 'bg-transparent hover:bg-slate-300 dark:hover:bg-slate-600'}
+        bg-transparent
+        hover:bg-slate-200/50 dark:hover:bg-slate-700/50
+        ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
       `}
     >
-      {/* Visual indicator */}
+      {/* Visual indicator - subtle dots */}
       <div className={`
         absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-        w-0.5 h-8 rounded-full bg-slate-300 dark:bg-slate-600
-        group-hover:bg-primary/50 transition-colors
-        ${isDragging ? 'bg-primary' : ''}
+        w-0.5 h-6 rounded-full
+        bg-slate-400/50 dark:bg-slate-500/50
+        opacity-0 group-hover:opacity-100
+        ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
+        transition-all duration-150
       `} />
     </div>
   );

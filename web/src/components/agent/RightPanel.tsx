@@ -6,10 +6,11 @@
  * - PlanEditor integration for Plan Mode
  * - Integrated Terminal and Remote Desktop
  * - Tool execution output viewer
+ * - Draggable resize support
  * - Modern, clean design
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Tabs, Button, Empty, Badge, Alert, Spin } from 'antd';
 import {
   X,
@@ -37,7 +38,80 @@ export interface RightPanelProps {
   onClose?: () => void;
   onFileClick?: (filePath: string) => void;
   collapsed?: boolean;
+  /** Width of the panel (controlled by parent) */
+  width?: number;
+  /** Callback when width changes during resize */
+  onWidthChange?: (width: number) => void;
+  /** Minimum width */
+  minWidth?: number;
+  /** Maximum width */
+  maxWidth?: number;
 }
+
+// Resize Handle Component
+const ResizeHandle: React.FC<{
+  onResize: (delta: number) => void;
+}> = ({ onResize }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef(0);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    startXRef.current = e.clientX;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ew-resize';
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - startXRef.current;
+      startXRef.current = e.clientX;
+      onResize(delta);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, onResize]);
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className={`
+        absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-50
+        flex items-center justify-center
+        bg-transparent
+        hover:bg-slate-200/50 dark:hover:bg-slate-700/50
+        ${isDragging ? 'bg-slate-300/70 dark:bg-slate-600/70' : ''}
+        transition-all duration-150
+        group
+      `}
+    >
+      {/* Visual indicator - subtle dots */}
+      <div className={`
+        w-0.5 h-6 rounded-full
+        bg-slate-400/50 dark:bg-slate-500/50
+        opacity-0 group-hover:opacity-100
+        ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
+        transition-all duration-150
+      `} />
+    </div>
+  );
+};
 
 // Plan Tab Content
 const PlanContent: React.FC<{
@@ -76,8 +150,6 @@ const PlanContent: React.FC<{
           await submitPlanForReview(currentPlan.id);
         }}
         onExit={async (approve: boolean, summary?: string) => {
-          // Get conversation ID from planModeStatus or parent context
-          // For now, we'll need to pass this down or get it from route
           const conversationId = currentPlan.metadata?.conversation_id as string;
           const { exitPlanMode } = usePlanModeStore.getState();
           await exitPlanMode(conversationId, currentPlan.id, approve, summary);
@@ -230,11 +302,22 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   currentTool,
   onClose,
   collapsed,
+  width = 360,
+  onWidthChange,
+  minWidth = 280,
+  maxWidth = 600,
 }) => {
   const [activeTab, setActiveTab] = useState<RightPanelTab>('plan');
 
   const hasPlan = !!(workPlan || executionPlan);
   const hasSandbox = !!sandboxId;
+
+  // Handle resize
+  const handleResize = useCallback((delta: number) => {
+    if (!onWidthChange) return;
+    const newWidth = Math.max(minWidth, Math.min(maxWidth, width - delta));
+    onWidthChange(newWidth);
+  }, [width, onWidthChange, minWidth, maxWidth]);
 
   const tabItems = [
     {
@@ -277,69 +360,81 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-slate-900">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-2">
-          {activeTab === 'plan' ? (
-            <ListTodo size={18} className="text-slate-500" />
-          ) : (
-            <Terminal size={18} className="text-slate-500" />
-          )}
-          <h2 className="font-semibold text-slate-900 dark:text-slate-100">
-            {activeTab === 'plan' ? 'Work Plan' : 'Sandbox'}
-          </h2>
+    <div 
+      className="h-full flex bg-white dark:bg-slate-900 relative"
+      style={{ width }}
+    >
+      {/* Resize Handle - only show if onWidthChange is provided */}
+      {onWidthChange && (
+        <ResizeHandle onResize={handleResize} />
+      )}
+
+      {/* Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            {activeTab === 'plan' ? (
+              <ListTodo size={18} className="text-slate-500" />
+            ) : (
+              <Terminal size={18} className="text-slate-500" />
+            )}
+            <h2 className="font-semibold text-slate-900 dark:text-slate-100">
+              {activeTab === 'plan' ? 'Work Plan' : 'Sandbox'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-1">
+            {onClose && (
+              <Button
+                type="text"
+                size="small"
+                icon={<X size={18} />}
+                onClick={onClose}
+                className="text-slate-400 hover:text-slate-600"
+              />
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
-          {onClose && (
-            <Button
-              type="text"
-              size="small"
-              icon={<X size={18} />}
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600"
-            />
-          )}
-        </div>
+
+        {/* Tabs */}
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as RightPanelTab)}
+          items={tabItems}
+          className="flex-1 right-panel-tabs"
+          tabBarStyle={{ 
+            margin: 0, 
+            paddingLeft: 16,
+            paddingRight: 16,
+            borderBottom: '1px solid #e2e8f0',
+          }}
+        />
+
+        {/* Styles */}
+        <style>{`
+          .right-panel-tabs {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+          }
+          .right-panel-tabs .ant-tabs-content {
+            flex: 1;
+            height: 0;
+          }
+          .right-panel-tabs .ant-tabs-content-holder {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+          }
+          .right-panel-tabs .ant-tabs-tabpane {
+            height: 100%;
+            overflow-y: auto;
+          }
+          .right-panel-tabs .ant-tabs-nav {
+            margin-bottom: 0;
+          }
+        `}</style>
       </div>
-
-      {/* Tabs */}
-      <Tabs
-        activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as RightPanelTab)}
-        items={tabItems}
-        className="flex-1 right-panel-tabs"
-        tabBarStyle={{ 
-          margin: 0, 
-          paddingLeft: 16,
-          paddingRight: 16,
-          borderBottom: '1px solid #e2e8f0',
-        }}
-      />
-
-      {/* Styles */}
-      <style>{`
-        .right-panel-tabs {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-        }
-        .right-panel-tabs .ant-tabs-content {
-          flex: 1;
-          height: 0;
-        }
-        .right-panel-tabs .ant-tabs-content-holder {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-        .right-panel-tabs .ant-tabs-tabpane {
-          height: 100%;
-        }
-        .right-panel-tabs .ant-tabs-nav {
-          margin-bottom: 0;
-        }
-      `}</style>
     </div>
   );
 };

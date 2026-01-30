@@ -39,7 +39,7 @@ const suggestionCards = [
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ onNewConversation }) => {
   return (
-    <div className="h-full flex flex-col items-center justify-center p-8">
+    <div className="h-full w-full flex flex-col items-center justify-center p-8 overflow-y-auto">
       {/* Main Content */}
       <div className="text-center mb-12">
         {/* Logo/Icon */}

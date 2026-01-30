@@ -6,9 +6,9 @@
  * notifications, and action buttons.
  */
 
-import React from 'react'
+import * as React from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Bell, Menu } from 'lucide-react'
+import { Search, Bell, Menu, PanelLeft, PanelRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from '@/components/shared/ui/ThemeToggle'
 import { LanguageSwitcher } from '@/components/shared/ui/LanguageSwitcher'
@@ -27,6 +27,12 @@ export interface AppHeaderProps {
   basePath: string
   /** Current project/tenant name for context */
   contextName?: string
+  /** Show sidebar toggle button */
+  showSidebarToggle?: boolean
+  /** Sidebar collapsed state */
+  sidebarCollapsed?: boolean
+  /** Callback when sidebar toggle is clicked */
+  onSidebarToggle?: () => void
   /** Show mobile menu button */
   showMobileMenu?: boolean
   /** Callback when mobile menu is toggled */
@@ -105,6 +111,9 @@ export function AppHeader({
   context = 'tenant',
   basePath,
   contextName,
+  showSidebarToggle = false,
+  sidebarCollapsed = false,
+  onSidebarToggle,
   showMobileMenu = false,
   onMobileMenuToggle,
   showSearch = true,
@@ -142,8 +151,24 @@ export function AppHeader({
 
   return (
     <header className="h-16 flex items-center justify-between px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex-none shrink-0">
-      {/* Left: Mobile menu + Breadcrumbs */}
-      <div className="flex items-center gap-4">
+      {/* Left: Sidebar toggle + Mobile menu + Breadcrumbs */}
+      <div className="flex items-center gap-3">
+        {/* Sidebar Toggle Button */}
+        {showSidebarToggle && onSidebarToggle && (
+          <button
+            onClick={onSidebarToggle}
+            className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? (
+              <PanelRight className="w-5 h-5" />
+            ) : (
+              <PanelLeft className="w-5 h-5" />
+            )}
+          </button>
+        )}
+
         {showMobileMenu && onMobileMenuToggle && (
           <button
             onClick={onMobileMenuToggle}
@@ -154,7 +179,9 @@ export function AppHeader({
           </button>
         )}
 
-        <DefaultBreadcrumbs crumbs={breadcrumbs} />
+        <div className="ml-1">
+          <DefaultBreadcrumbs crumbs={breadcrumbs} />
+        </div>
       </div>
 
       {/* Right: Actions */}

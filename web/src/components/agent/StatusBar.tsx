@@ -25,7 +25,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   sandboxConnected,
 }) => {
   return (
-    <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+    <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
       {/* Left: Status indicators */}
       <div className="flex items-center gap-4">
         {/* Agent Status */}

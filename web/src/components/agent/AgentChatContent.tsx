@@ -1,23 +1,28 @@
 /**
- * AgentChatContent - Reusable Agent Chat Component
+ * AgentChatContent - Agent Chat content for use in layouts
  * 
- * This component can be used in both project-level and tenant-level contexts.
- * It receives projectId as a prop instead of extracting it from URL params.
+ * This version is designed to work inside layouts that already have
+ * a conversation sidebar as the primary navigation.
+ * 
+ * Features:
+ * - Draggable resize for right panel (horizontal)
+ * - Draggable resize for input area (vertical)
  */
 
-import React, { useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Modal } from 'antd';
-import { useAgentV3Store } from '../../stores/agentV3';
-import { usePlanModeStore } from '../../stores/agent/planModeStore';
-import { useSandboxStore } from '../../stores/sandbox';
-import { useSandboxAgentHandlers } from '../../hooks/useSandboxDetection';
-import { sandboxService } from '../../services/sandboxService';
+import * as React from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Modal, notification } from 'antd';
+import { PanelRight, GripHorizontal } from 'lucide-react';
+import { useAgentV3Store } from '@/stores/agentV3';
+import { usePlanModeStore } from '@/stores/agent/planModeStore';
+import { useSandboxStore } from '@/stores/sandbox';
+import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
+import { sandboxService } from '@/services/sandboxService';
+import { Resizer } from './Resizer';
 
 // Import design components
 import {
-  ChatLayout,
-  ConversationSidebar,
   MessageArea,
   InputBar,
   RightPanel,
@@ -26,28 +31,51 @@ import {
 import { EmptyState } from './EmptyState';
 
 interface AgentChatContentProps {
-  projectId: string;
-  basePath?: string; // For navigation, defaults to current location
-  headerExtra?: React.ReactNode; // Extra content for sidebar header (e.g., project selector)
+  /** Optional className for styling */
+  className?: string;
+  /** External project ID (overrides URL param) */
+  externalProjectId?: string;
+  /** Base path for navigation (default: /project/{projectId}/agent) */
+  basePath?: string;
+  /** Extra content to show in header area */
+  headerExtra?: React.ReactNode;
 }
 
-export const AgentChatContent: React.FC<AgentChatContentProps> = ({ 
-  projectId,
+// Constants for resize constraints
+const PANEL_MIN_WIDTH = 280;
+const PANEL_DEFAULT_WIDTH = 360;
+const PANEL_MAX_PERCENT = 0.9; // 90% of viewport width
+
+const INPUT_MIN_HEIGHT = 120;
+const INPUT_MAX_HEIGHT = 400;
+const INPUT_DEFAULT_HEIGHT = 160;
+
+export const AgentChatContent: React.FC<AgentChatContentProps> = ({
+  className = '',
+  externalProjectId,
   basePath: customBasePath,
-  headerExtra,
+  headerExtra
 }) => {
-  const { conversation: conversationId } = useParams<{
+  const { projectId: urlProjectId, conversation: conversationId } = useParams<{
+    projectId: string;
     conversation?: string;
   }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = window.location;
-  
+
+  // Use external project ID if provided, otherwise fall back to URL param
+  const queryProjectId = searchParams.get('projectId');
+  const projectId = externalProjectId || queryProjectId || urlProjectId;
+
   // Determine base path for navigation
-  const basePath = customBasePath || location.pathname.split('/conversation/')[0];
+  const basePath = useMemo(() => {
+    if (customBasePath) return customBasePath;
+    if (urlProjectId) return `/project/${urlProjectId}/agent`;
+    return `/project/${projectId}/agent`;
+  }, [customBasePath, urlProjectId, projectId]);
 
   // Store state
   const {
-    conversations,
     activeConversationId,
     timeline,
     messages,
@@ -58,12 +86,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     isPlanMode,
     showPlanPanel,
     pendingDecision,
+    doomLoopDetected,
     loadConversations,
     loadMessages,
     setActiveConversation,
     createNewConversation,
     sendMessage,
-    deleteConversation,
     abortStream,
     togglePlanMode,
     togglePlanPanel,
@@ -95,8 +123,32 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
   // Local UI state
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
-  const [panelCollapsed, setPanelCollapsed] = React.useState(!showPlanPanel);
+  const [panelCollapsed, setPanelCollapsed] = useState(!showPlanPanel);
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
+  const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
+
+  // Calculate max width based on viewport (90%)
+  const [maxPanelWidth, setMaxPanelWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth * PANEL_MAX_PERCENT : 1200
+  );
+
+  // Update max width on window resize
+  useEffect(() => {
+    const updateMaxWidth = () => {
+      setMaxPanelWidth(window.innerWidth * PANEL_MAX_PERCENT);
+    };
+
+    updateMaxWidth();
+    window.addEventListener('resize', updateMaxWidth);
+    return () => window.removeEventListener('resize', updateMaxWidth);
+  }, []);
+
+  // Clamp panel width when max changes
+  useEffect(() => {
+    if (panelWidth > maxPanelWidth) {
+      setPanelWidth(maxPanelWidth);
+    }
+  }, [maxPanelWidth, panelWidth]);
 
   // Ensure sandbox exists
   const ensureSandbox = useCallback(async () => {
@@ -113,7 +165,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       setSandboxId(sandbox.id);
       return sandbox.id;
     } catch (error) {
-      console.error('[AgentChat] Failed to ensure sandbox:', error);
+      console.error('[AgentChatContent] Failed to ensure sandbox:', error);
       return null;
     }
   }, [activeSandboxId, projectId, setSandboxId]);
@@ -133,86 +185,78 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     }
   }, [conversationId, projectId, setActiveConversation, loadMessages]);
 
-  // Error handling
+  // Handle errors
   useEffect(() => {
     if (error) {
-      console.error('Agent Chat Error:', error);
-      clearError();
+      notification.error({ message: 'Agent Error', description: error, onClose: clearError });
     }
   }, [error, clearError]);
 
-  // Decision handling
+  // Handle pending decisions
   useEffect(() => {
     if (pendingDecision) {
       Modal.confirm({
-        title: pendingDecision.title,
-        content: pendingDecision.message,
-        onOk: () => respondToDecision(pendingDecision.request_id, 'confirmed'),
-        onCancel: () => respondToDecision(pendingDecision.request_id, 'cancelled'),
+        title: 'Agent Requests Decision',
+        content: pendingDecision.question,
+        okText: 'Confirm',
+        cancelText: 'Cancel',
+        onOk: () => respondToDecision(pendingDecision.request_id, 'approved'),
+        onCancel: () => respondToDecision(pendingDecision.request_id, 'rejected'),
       });
     }
   }, [pendingDecision, respondToDecision]);
 
-  // Event handlers
-  const handleSelectConversation = useCallback((id: string) => {
-    navigate(`${basePath}/${id}`);
-  }, [navigate, basePath]);
+  // Handle doom loop
+  useEffect(() => {
+    if (doomLoopDetected) {
+      notification.warning({
+        message: 'Doom Loop Detected',
+        description: `Tool ${doomLoopDetected.tool_name} called ${doomLoopDetected.call_count} times repeatedly.`,
+      });
+    }
+  }, [doomLoopDetected]);
 
   const handleNewConversation = useCallback(async () => {
     if (!projectId) return;
     const newId = await createNewConversation(projectId);
-    if (newId) navigate(`${basePath}/${newId}`);
-  }, [projectId, createNewConversation, navigate, basePath]);
-
-  const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!projectId) return;
-    Modal.confirm({
-      title: 'Delete Conversation',
-      content: 'Are you sure? This action cannot be undone.',
-      okText: 'Delete',
-      okType: 'danger',
-      onOk: async () => {
-        await deleteConversation(id, projectId);
-        if (activeConversationId === id) navigate(basePath);
-      },
-    });
-  }, [projectId, activeConversationId, deleteConversation, navigate, basePath]);
+    if (newId) {
+      if (customBasePath) {
+        navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+      } else {
+        navigate(`${basePath}/${newId}`);
+      }
+    }
+  }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
 
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
     await ensureSandbox();
     const newId = await sendMessage(content, projectId, { onAct, onObserve });
-    if (!conversationId && newId) navigate(`${basePath}/${newId}`);
-  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox, basePath]);
+    if (!conversationId && newId) {
+      if (customBasePath) {
+        navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+      } else {
+        navigate(`${basePath}/${newId}`);
+      }
+    }
+  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox, basePath, customBasePath, queryProjectId]);
 
   const handleViewPlan = useCallback(() => {
-    if (!panelCollapsed) {
-      setPanelCollapsed(true);
-    }
+    setPanelCollapsed(false);
     togglePlanPanel();
-  }, [panelCollapsed, togglePlanPanel]);
+  }, [togglePlanPanel]);
 
   const handleExitPlanMode = useCallback(async () => {
-    if (activeConversationId && planModeStatus?.current_plan_id) {
-      await exitPlanMode(activeConversationId, planModeStatus.current_plan_id, true);
+    if (!activeConversationId || !planModeStatus?.current_plan_id) return;
+    try {
+      await exitPlanMode(activeConversationId, planModeStatus.current_plan_id, false);
+      togglePlanMode();
+    } catch (error) {
+      notification.error({ message: 'Failed to exit Plan Mode', description: 'Please try again.' });
     }
-  }, [exitPlanMode, activeConversationId, planModeStatus]);
+  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode]);
 
-  // Render components
-  const sidebar = useMemo(() => (
-    <ConversationSidebar
-      conversations={conversations}
-      activeId={activeConversationId}
-      onSelect={handleSelectConversation}
-      onNew={handleNewConversation}
-      onDelete={handleDeleteConversation}
-      collapsed={sidebarCollapsed}
-      onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      headerExtra={headerExtra}
-    />
-  ), [conversations, activeConversationId, sidebarCollapsed, handleSelectConversation, handleNewConversation, handleDeleteConversation, headerExtra]);
-
+  // Memoized components
   const messageArea = useMemo(() => (
     timeline.length === 0 && !activeConversationId ? (
       <EmptyState onNewConversation={handleNewConversation} />
@@ -231,16 +275,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     )
   ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation]);
 
-  const inputBar = useMemo(() => (
-    <InputBar
-      onSend={handleSend}
-      onAbort={abortStream}
-      isStreaming={isStreaming}
-      isPlanMode={isPlanMode}
-      onTogglePlanMode={togglePlanMode}
-      disabled={isLoadingHistory}
-    />
-  ), [handleSend, abortStream, isStreaming, isPlanMode, togglePlanMode, isLoadingHistory]);
+
 
   const rightPanel = useMemo(() => (
     <RightPanel
@@ -254,8 +289,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         togglePlanPanel();
       }}
       collapsed={panelCollapsed}
+      width={panelWidth}
+      onWidthChange={setPanelWidth}
+      minWidth={PANEL_MIN_WIDTH}
+      maxWidth={maxPanelWidth}
     />
-  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, togglePlanPanel]);
+  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, panelWidth, togglePlanPanel, maxPanelWidth]);
 
   const statusBar = useMemo(() => (
     <StatusBar
@@ -267,20 +306,85 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   ), [isStreaming, isPlanMode, timeline.length, activeSandboxId]);
 
   return (
-    <ChatLayout
-      sidebar={sidebar}
-      messageArea={messageArea}
-      inputBar={inputBar}
-      rightPanel={rightPanel}
-      statusBar={statusBar}
-      sidebarCollapsed={sidebarCollapsed}
-      panelCollapsed={panelCollapsed}
-      onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-      onTogglePanel={() => {
-        setPanelCollapsed(!panelCollapsed);
-        togglePlanPanel();
-      }}
-    />
+    <div className={`flex h-full w-full overflow-hidden bg-slate-50 dark:bg-slate-950 ${className}`}>
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+        {/* Header Extra Content (if provided) */}
+        {headerExtra && (
+          <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2">
+            {headerExtra}
+          </div>
+        )}
+
+
+
+        {/* Message Area - Takes remaining space */}
+        <div className="flex-1 overflow-hidden relative">
+          {messageArea}
+        </div>
+
+        {/* Resizable Input Area */}
+        <div 
+          className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 relative flex flex-col"
+          style={{ height: inputHeight }}
+        >
+          {/* Resize handle for input area (at top) */}
+          <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
+            <Resizer
+              direction="vertical"
+              currentSize={inputHeight}
+              minSize={INPUT_MIN_HEIGHT}
+              maxSize={INPUT_MAX_HEIGHT}
+              onResize={setInputHeight}
+              position="top"
+            />
+            <div className="pointer-events-none absolute top-1 flex items-center gap-1 text-slate-400">
+              <GripHorizontal size={12} />
+            </div>
+          </div>
+          
+          <InputBar
+            onSend={handleSend}
+            onAbort={abortStream}
+            isStreaming={isStreaming}
+            isPlanMode={isPlanMode}
+            onTogglePlanMode={togglePlanMode}
+            disabled={isLoadingHistory}
+          />
+        </div>
+
+        {/* Status Bar with Panel Toggle */}
+        <div className="flex-shrink-0 flex items-center border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <div className="flex-1">
+            {statusBar}
+          </div>
+          <button
+            type="button"
+            title={panelCollapsed ? "Show panel" : "Hide panel"}
+            onClick={() => {
+              setPanelCollapsed(!panelCollapsed);
+              togglePlanPanel();
+            }}
+            className="h-7 px-2 mr-2 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          >
+            {panelCollapsed ? <PanelRight size={14} /> : <PanelRight size={14} className="rotate-180" />}
+          </button>
+        </div>
+      </main>
+
+      {/* Right Panel with built-in resize handle */}
+      <aside
+        className={`
+          flex-shrink-0 h-full
+          border-l border-slate-200 dark:border-slate-800
+          transition-opacity duration-300 ease-out overflow-hidden
+          ${panelCollapsed ? 'w-0 opacity-0' : 'opacity-100'}
+        `}
+        style={{ width: panelCollapsed ? 0 : panelWidth }}
+      >
+        {!panelCollapsed && rightPanel}
+      </aside>
+    </div>
   );
 };
 

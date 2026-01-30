@@ -164,21 +164,23 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
   }
 
   return (
-    <div className="h-full relative flex flex-col">
+    <div className="h-full w-full relative flex flex-col overflow-hidden">
       {/* Plan Mode Banner */}
       {planModeStatus?.is_in_plan_mode && (
-        <PlanModeBanner
-          status={planModeStatus}
-          onViewPlan={onViewPlan}
-          onExit={onExitPlanMode}
-        />
+        <div className="flex-shrink-0">
+          <PlanModeBanner
+            status={planModeStatus}
+            onViewPlan={onViewPlan}
+            onExit={onExitPlanMode}
+          />
+        </div>
       )}
 
       {/* Message List */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6"
+        className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 min-h-0"
       >
         <div className="w-full space-y-3">
           {timeline.map((event, index) => (

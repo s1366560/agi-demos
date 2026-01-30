@@ -52,7 +52,7 @@ export const InputBar: React.FC<InputBarProps> = ({
   const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const target = e.currentTarget;
     target.style.height = 'auto';
-    target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+    target.style.height = `${Math.min(target.scrollHeight, 400)}px`;
     setContent(target.value);
   }, []);
 
@@ -60,9 +60,10 @@ export const InputBar: React.FC<InputBarProps> = ({
   const showCharCount = charCount > 0;
 
   return (
-    <div className="px-4 py-4">
+    <div className="h-full flex flex-col p-3">
+      {/* Main input card */}
       <div className={`
-        w-full rounded-xl border bg-white dark:bg-slate-800
+        flex-1 flex flex-col min-h-0 rounded-xl border bg-white dark:bg-slate-800
         transition-all duration-200
         ${isFocused 
           ? 'border-primary shadow-lg shadow-primary/10' 
@@ -72,7 +73,7 @@ export const InputBar: React.FC<InputBarProps> = ({
       `}>
         {/* Plan Mode Badge */}
         {isPlanMode && (
-          <div className="px-4 pt-3">
+          <div className="px-3 pt-2 flex-shrink-0">
             <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs">
               <span className="flex items-center gap-1">
                 <Wand2 size={12} />
@@ -82,8 +83,8 @@ export const InputBar: React.FC<InputBarProps> = ({
           </div>
         )}
 
-        {/* Text Area */}
-        <div className="px-4 py-3">
+        {/* Text Area - fills available space */}
+        <div className="flex-1 min-h-0 px-3 py-2">
           <textarea
             ref={textareaRef}
             value={content}
@@ -95,50 +96,51 @@ export const InputBar: React.FC<InputBarProps> = ({
               ? "Describe what you want to plan..." 
               : "Message the AI or type '/' for commands..."
             }
-            rows={1}
             className="
-              w-full resize-none bg-transparent
+              w-full h-full resize-none bg-transparent
               text-slate-900 dark:text-slate-100
               placeholder:text-slate-400
               focus:outline-none
               text-sm leading-relaxed
             "
-            style={{ minHeight: '24px', maxHeight: '200px' }}
           />
         </div>
 
         {/* Toolbar */}
-        <div className="px-3 pb-3 flex items-center justify-between">
+        <div className="flex-shrink-0 px-2 pb-2 flex items-center justify-between">
           {/* Left Actions */}
           <div className="flex items-center gap-1">
             <Tooltip title="Attach file">
               <Button
                 type="text"
-                icon={<Paperclip size={18} />}
+                size="small"
+                icon={<Paperclip size={16} />}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               />
             </Tooltip>
             <Tooltip title="Voice input">
               <Button
                 type="text"
-                icon={<Mic size={18} />}
+                size="small"
+                icon={<Mic size={16} />}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               />
             </Tooltip>
-            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1.5" />
+            <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
             <Tooltip title={isPlanMode ? "Exit Plan Mode" : "Enter Plan Mode"}>
               <Button
                 type="text"
+                size="small"
                 onClick={onTogglePlanMode}
                 className={`
-                  flex items-center gap-1.5
+                  flex items-center gap-1
                   ${isPlanMode 
                     ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' 
                     : 'text-slate-400 hover:text-slate-600'
                   }
                 `}
               >
-                <Wand2 size={16} />
+                <Wand2 size={14} />
                 <span className="text-xs font-medium">Plan</span>
               </Button>
             </Tooltip>
@@ -161,20 +163,22 @@ export const InputBar: React.FC<InputBarProps> = ({
               <Button
                 type="primary"
                 danger
-                icon={<Square size={16} />}
+                size="small"
+                icon={<Square size={14} />}
                 onClick={onAbort}
-                className="rounded-xl flex items-center gap-2"
+                className="rounded-lg flex items-center gap-1"
               >
                 Stop
               </Button>
             ) : (
               <Button
                 type="primary"
-                icon={<Send size={16} />}
+                size="small"
+                icon={<Send size={14} />}
                 onClick={handleSend}
                 disabled={!content.trim()}
                 className="
-                  rounded-xl flex items-center gap-2
+                  rounded-lg flex items-center gap-1
                   bg-primary hover:bg-primary-600
                   disabled:opacity-40 disabled:cursor-not-allowed
                 "
@@ -186,12 +190,14 @@ export const InputBar: React.FC<InputBarProps> = ({
         </div>
       </div>
 
-      {/* Footer hint */}
-      <div className="w-full mt-2 text-center">
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Press <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-400 font-sans">Enter</kbd> to send, <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-600 dark:text-slate-400 font-sans">Shift + Enter</kbd> for new line
+      {/* Footer hint - outside card, below it */}
+      <div className="flex-shrink-0 mt-1.5 text-center">
+        <p className="text-[10px] text-slate-400 dark:text-slate-500">
+          <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans">Enter</kbd> to send, <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans">Shift + Enter</kbd> for new line
         </p>
       </div>
     </div>
   );
 };
+
+export default InputBar;

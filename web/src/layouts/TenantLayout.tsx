@@ -4,11 +4,13 @@
  * Design Reference: design-prototype/tenant_console_-_overview_1/
  *
  * Layout Structure:
- * - Left sidebar: Brand, navigation, user profile (256px / 80px collapsed)
- * - Main area: Header with breadcrumbs/search, scrollable content
+ * - Left sidebar: Agent conversation history (primary navigation)
+ * - Main area: Header with breadcrumbs/search/tenant navigation, scrollable content
  *
  * Features:
- * - Collapsible sidebar
+ * - Agent-centric primary navigation (conversation history)
+ * - Tenant pages moved to secondary navigation (header dropdown)
+ * - Sidebar collapse toggle in header
  * - Responsive design
  * - Theme toggle
  * - Language switcher
@@ -16,9 +18,11 @@
  */
 
 import React, { useEffect, useState } from "react"
-import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom"
+import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { TenantSidebar } from "@/components/layout/TenantSidebar"
+
+import { TenantChatSidebar } from "@/components/layout/TenantChatSidebar"
+import { TenantNavMenu } from "@/components/layout/TenantNavMenu"
 import { AppHeader } from "@/components/layout/AppHeader"
 import { TenantCreateModal } from "@/pages/tenant/TenantCreate"
 import { RouteErrorBoundary } from "@/components/common/RouteErrorBoundary"
@@ -37,14 +41,15 @@ const HTTP_STATUS = {
  */
 export const TenantLayout: React.FC = () => {
   const { t } = useTranslation()
-  const location = useLocation()
   const navigate = useNavigate()
+  const location = useLocation()
   const { tenantId, projectId } = useParams()
   const { currentTenant, setCurrentTenant, getTenant, listTenants } = useTenantStore()
   const { currentProject } = useProjectStore()
   const { logout, user } = useAuthStore()
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [noTenants, setNoTenants] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -211,18 +216,28 @@ export const TenantLayout: React.FC = () => {
 
   const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant'
 
+  // Sidebar toggle button
+
+
   return (
     <>
       <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark">
-        {/* Sidebar - using new component */}
-        <TenantSidebar tenantId={tenantId} />
+        {/* Sidebar - Agent Conversation History (Primary Navigation) */}
+        <TenantChatSidebar 
+          tenantId={tenantId} 
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
+        />
 
         {/* Main Content */}
         <main className="flex flex-col flex-1 h-full overflow-hidden relative">
-          {/* Header - using new component */}
+          {/* Header - with Tenant Navigation Menu and Sidebar Toggle */}
           <AppHeader
             context="tenant"
             basePath={basePath}
+            showSidebarToggle={true}
+            sidebarCollapsed={sidebarCollapsed}
+            onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
             showMobileMenu={false}
             showSearch={true}
             showNotifications={true}
@@ -230,11 +245,20 @@ export const TenantLayout: React.FC = () => {
             showLanguageSwitcher={true}
             showWorkspaceSwitcher={true}
             workspaceMode="tenant"
+            extraActions={
+              <TenantNavMenu tenantId={tenantId} mode="dropdown" />
+            }
           />
 
           {/* Page Content */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="max-w-full">
+          <div 
+            className={`flex-1 relative ${
+              location.pathname.includes("/agent-workspace")
+                ? "overflow-hidden h-full"
+                : "overflow-y-auto p-4"
+            }`}
+          >
+            <div className={`${location.pathname.includes("/agent-workspace") ? 'h-full' : 'max-w-full'}`}>
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                 <Outlet />
               </RouteErrorBoundary>

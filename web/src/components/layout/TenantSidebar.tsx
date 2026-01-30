@@ -5,6 +5,7 @@
  * and state management for the tenant console layout.
  */
 
+import * as React from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'

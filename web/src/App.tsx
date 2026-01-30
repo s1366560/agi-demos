@@ -7,7 +7,6 @@ import { Login } from "./pages/Login";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { TenantLayout } from "./layouts/TenantLayout";
 import { ProjectLayout } from "./layouts/ProjectLayout";
-import { AgentLayout } from "./layouts/AgentLayout";
 import { SchemaLayout } from "./layouts/SchemaLayout";
 import { useAuthStore } from "./stores/auth";
 import "./App.css";
@@ -154,10 +153,7 @@ const EntityTypeList = lazy(
 const EdgeTypeList = lazy(() => import("./pages/project/schema/EdgeTypeList"));
 const EdgeMapList = lazy(() => import("./pages/project/schema/EdgeMapList"));
 
-// Agent pages
-const AgentChat = lazy(() => import("./pages/project/AgentChat"));
-const AgentLogs = lazy(() => import("./pages/project/agent/AgentLogs"));
-const AgentPatterns = lazy(() => import("./pages/project/agent/AgentPatterns"));
+
 
 // Loading fallback for lazy-loaded components
 const PageLoader = () => (
@@ -668,51 +664,6 @@ function App() {
                             element={
                                 <Suspense fallback={<PageLoader />}>
                                     <Support />
-                                </Suspense>
-                            }
-                        />
-                    </Route>
-
-                    {/* Agent Workspace - Full screen layout with sub-routes */}
-                    <Route
-                        path="/project/:projectId/agent"
-                        element={
-                            isAuthenticated ? (
-                                <AgentLayout />
-                            ) : (
-                                <Navigate to="/login" replace />
-                            )
-                        }
-                    >
-                        <Route
-                            index
-                            element={
-                                <Suspense fallback={<PageLoader />}>
-                                    <AgentChat />
-                                </Suspense>
-                            }
-                        />
-                        <Route
-                            path=":conversation"
-                            element={
-                                <Suspense fallback={<PageLoader />}>
-                                    <AgentChat />
-                                </Suspense>
-                            }
-                        />
-                        <Route
-                            path="logs"
-                            element={
-                                <Suspense fallback={<PageLoader />}>
-                                    <AgentLogs />
-                                </Suspense>
-                            }
-                        />
-                        <Route
-                            path="patterns"
-                            element={
-                                <Suspense fallback={<PageLoader />}>
-                                    <AgentPatterns />
                                 </Suspense>
                             }
                         />

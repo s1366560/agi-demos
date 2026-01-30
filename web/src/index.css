@@ -295,7 +295,7 @@ body {
 
 /* Thin scrollbar variant */
 .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
+    width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -303,12 +303,21 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--color-border-dark);
-    border-radius: 10px;
+    background: var(--color-border-light);
+    border-radius: 3px;
+    transition: background 0.2s ease;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #3a4566;
+    background: var(--color-border-dark);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-border-dark);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #475569;
 }
 
 /* Hide scrollbar but keep functionality */
@@ -1083,4 +1092,79 @@ body {
 
 .animate-scale-in {
     animation: scale-in 0.2s ease-out;
+}
+
+/* Scale in animation */
+@keyframes scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+}
+
+/* ============================================================================
+ * AGENT CHAT LAYOUT UTILITIES
+ * ============================================================================ */
+
+/* Ensure proper height inheritance for agent chat layouts */
+.agent-chat-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.agent-chat-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.agent-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.agent-chat-input {
+    flex-shrink: 0;
+}
+
+.agent-chat-panel {
+    flex-shrink: 0;
+    transition: width 0.3s ease-out;
+}
+
+/* Ensure content areas fill available space */
+.fill-available {
+    height: 100%;
+    min-height: 0;
+}
+
+/* Flex column with proper overflow handling */
+.flex-col-scroll {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.flex-col-scroll > .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.flex-col-scroll > .fixed-area {
+    flex-shrink: 0;
 }

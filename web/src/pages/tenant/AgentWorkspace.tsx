@@ -1,13 +1,14 @@
 /**
  * AgentWorkspace - Tenant-level AI Agent Workspace
  * 
- * Allows users to access Agent Chat from tenant main menu,
- * with project selector for choosing which project's context to use.
+ * Now integrated into TenantLayout which provides the primary navigation sidebar.
+ * Project selection is handled by TenantChatSidebar, this component just renders
+ * the chat content for the currently selected project.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Select, Empty, Spin, Button } from 'antd';
+import { Empty, Spin, Button } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/project';
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -16,60 +17,25 @@ import { useTenantStore } from '../../stores/tenant';
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import type { Project } from '../../types/memory';
 
-const { Option } = Select;
-
-/**
- * ProjectSelector - Inline project selector for chat header
- */
-const ProjectSelector: React.FC<{
-  projects: Project[];
-  selectedId: string | null;
-  onChange: (id: string) => void;
-}> = ({ projects, selectedId, onChange }) => {
-  const { t } = useTranslation();
-  
-  return (
-    <Select
-      value={selectedId}
-      onChange={onChange}
-      style={{ width: 200 }}
-      placeholder={t('agent.workspace.selectProject')}
-      showSearch
-      optionFilterProp="children"
-      filterOption={(input, option) =>
-        (option?.children as unknown as string)
-          ?.toLowerCase()
-          .includes(input.toLowerCase())
-      }
-      className="agent-project-select"
-      bordered={false}
-      dropdownMatchSelectWidth={false}
-    >
-      {projects.map((project: Project) => (
-        <Option key={project.id} value={project.id}>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary" />
-            {project.name}
-          </div>
-        </Option>
-      ))}
-    </Select>
-  );
-};
-
 /**
  * AgentWorkspace - Main component for tenant-level agent access
+ * 
+ * Project selection is handled by TenantChatSidebar.
+ * This component renders the chat content for the selected project.
  */
 export const AgentWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { tenantId: urlTenantId } = useParams<{ tenantId?: string }>();
+  const { tenantId: urlTenantId } = useParams<{ 
+    tenantId?: string;
+    conversation?: string;
+  }>();
   const { user } = useAuthStore();
   const { currentTenant } = useTenantStore();
   const { projects, currentProject, setCurrentProject, listProjects } = useProjectStore();
   const { loadConversations } = useAgentV3Store();
   
-  // Track selected project for this session
+  // Track selected project for this session (synced with TenantChatSidebar via localStorage)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
 
@@ -96,7 +62,7 @@ export const AgentWorkspace: React.FC = () => {
     if (!projects.length) return;
 
     const init = () => {
-      // Try to restore last selected project from localStorage
+      // Try to restore last selected project from localStorage (synced with TenantChatSidebar)
       const lastProjectId = localStorage.getItem('agent:lastProjectId');
       if (lastProjectId && projects.find((p: Project) => p.id === lastProjectId)) {
         setSelectedProjectId(lastProjectId);
@@ -111,12 +77,23 @@ export const AgentWorkspace: React.FC = () => {
     init();
   }, [projects, currentProject]);
 
+  // Listen for project changes from TenantChatSidebar
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const lastProjectId = localStorage.getItem('agent:lastProjectId');
+      if (lastProjectId && lastProjectId !== selectedProjectId) {
+        setSelectedProjectId(lastProjectId);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [selectedProjectId]);
+
   // Load conversations when project changes
   useEffect(() => {
     if (selectedProjectId) {
       loadConversations(selectedProjectId);
-      // Persist selection
-      localStorage.setItem('agent:lastProjectId', selectedProjectId);
       // Update global current project for consistency
       const project = projects.find((p: Project) => p.id === selectedProjectId);
       if (project) {
@@ -125,14 +102,10 @@ export const AgentWorkspace: React.FC = () => {
     }
   }, [selectedProjectId, loadConversations, projects, setCurrentProject]);
 
-  const handleProjectChange = useCallback((projectId: string) => {
-    setSelectedProjectId(projectId);
-  }, []);
-
   // Show loading while initializing projects
   if (initializing) {
     return (
-      <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
+      <div className="w-full h-full flex items-center justify-center">
         <Spin size="large" tip={t('common.loading')} />
       </div>
     );
@@ -140,7 +113,7 @@ export const AgentWorkspace: React.FC = () => {
 
   if (projects.length === 0) {
     return (
-      <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
+      <div className="w-full h-full flex items-center justify-center">
         <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12 max-w-lg">
           <Empty
             description={t('agent.workspace.noProjects')}
@@ -158,19 +131,11 @@ export const AgentWorkspace: React.FC = () => {
   const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
 
   return (
-    <div className="max-w-full mx-auto w-full h-full bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 116px)' }}>
+    <div className="w-full h-full">
       {effectiveProjectId ? (
         <AgentChatContent 
-          projectId={effectiveProjectId} 
-          key={effectiveProjectId}
+          externalProjectId={effectiveProjectId}
           basePath={basePath}
-          headerExtra={
-            <ProjectSelector
-              projects={projects}
-              selectedId={selectedProjectId}
-              onChange={handleProjectChange}
-            />
-          }
         />
       ) : (
         <div className="h-full flex items-center justify-center">

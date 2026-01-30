@@ -15,6 +15,12 @@ export { StatusBar } from './StatusBar';
 export { PlanModeBanner } from './PlanModeBanner';
 export { SandboxSection } from './SandboxSection';
 
+// Content-only component for use in ProjectLayout
+export { AgentChatContent } from './AgentChatContent';
+
+// Resizer component for draggable panels
+export { Resizer } from './Resizer';
+
 // Utility Components
 export { ProjectSelector } from './ProjectSelector';
 export { TenantAgentConfigEditor } from './TenantAgentConfigEditor';
