@@ -7,8 +7,66 @@
  * @module services/sse
  */
 
-import { EventEmitter } from 'events';
 import type { AgentEvent } from '../types/agent';
+
+/**
+ * Browser-compatible EventEmitter implementation
+ */
+class BrowserEventEmitter {
+  private listeners: Map<string, Set<(...args: any[]) => void>> = new Map();
+  private maxListeners: number = 10;
+
+  setMaxListeners(n: number): void {
+    this.maxListeners = n;
+  }
+
+  on(event: string, listener: (...args: any[]) => void): this {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    const eventListeners = this.listeners.get(event)!;
+    
+    if (eventListeners.size >= this.maxListeners) {
+      console.warn(`MaxListenersExceededWarning: Possible memory leak. ${eventListeners.size + 1} listeners added for event "${event}". Use setMaxListeners() to increase limit.`);
+    }
+    
+    eventListeners.add(listener);
+    return this;
+  }
+
+  off(event: string, listener: (...args: any[]) => void): this {
+    const eventListeners = this.listeners.get(event);
+    if (eventListeners) {
+      eventListeners.delete(listener);
+    }
+    return this;
+  }
+
+  emit(event: string, ...args: any[]): boolean {
+    const eventListeners = this.listeners.get(event);
+    if (!eventListeners || eventListeners.size === 0) {
+      return false;
+    }
+    
+    eventListeners.forEach(listener => {
+      try {
+        listener(...args);
+      } catch (error) {
+        console.error('Error in event listener:', error);
+      }
+    });
+    return true;
+  }
+
+  removeAllListeners(event?: string): this {
+    if (event) {
+      this.listeners.delete(event);
+    } else {
+      this.listeners.clear();
+    }
+    return this;
+  }
+}
 
 /**
  * SSE Event Emitter singleton
@@ -16,7 +74,7 @@ import type { AgentEvent } from '../types/agent';
  * Emits events received from SSE connections.
  * Components can register listeners for specific event types.
  */
-class SSEEmitter extends EventEmitter {
+class SSEEmitter extends BrowserEventEmitter {
   constructor() {
     super();
     // Increase max listeners to support multiple components
