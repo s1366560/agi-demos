@@ -3,7 +3,7 @@
  */
 
 import React, { useRef, useEffect, useCallback, useState, memo } from 'react';
-import { Button, Badge } from 'antd';
+import { Button } from 'antd';
 import { DownOutlined, LoadingOutlined } from '@ant-design/icons';
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
@@ -231,17 +231,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
         </Button>
       )}
 
-      {/* Message count badge */}
-      <div className="absolute top-4 right-4 md:right-8 pointer-events-none z-10">
-        <Badge
-          count={timeline.length}
-          showZero={false}
-          style={{
-            backgroundColor: 'rgba(148, 163, 184, 0.2)',
-            color: '#64748b',
-          }}
-        />
-      </div>
+
     </div>
   );
 };
