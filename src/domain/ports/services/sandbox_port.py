@@ -57,6 +57,7 @@ class SandboxInstance:
     created_at: datetime = field(default_factory=datetime.now)
     terminated_at: Optional[datetime] = None
     error_message: Optional[str] = None
+    last_activity_at: Optional[datetime] = None  # Last tool execution/activity time
 
 
 @dataclass

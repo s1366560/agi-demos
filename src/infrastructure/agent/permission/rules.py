@@ -220,6 +220,7 @@ def explore_mode_ruleset() -> List[PermissionRule]:
     - Pure read-only access
     - No plan editing capability
     - No file modification capability
+    - No sandbox access (pure codebase exploration)
 
     Returns:
         List of permission rules for Explore Mode
@@ -253,4 +254,143 @@ def explore_mode_ruleset() -> List[PermissionRule]:
         # Deny human interaction tools (SubAgent cannot ask user)
         PermissionRule("ask_clarification", "*", PermissionAction.DENY),
         PermissionRule("ask_decision", "*", PermissionAction.DENY),
+        # Deny all sandbox tools in explore mode (must come AFTER read allow rule)
+        # Using wild permission to match all types for sandbox tools
+        PermissionRule("*", "sandbox_*_*", PermissionAction.DENY),
+    ]
+
+
+# === Sandbox MCP Tool Permission Rules ===
+
+
+def classify_sandbox_tool_permission(tool_name: str) -> str:
+    """
+    Classify a sandbox MCP tool by its permission type.
+
+    This function determines which permission category a tool belongs to
+    based on its name. The permission type controls how the tool is
+    handled by the permission system.
+
+    Args:
+        tool_name: The name of the MCP tool (e.g., "bash", "file_read")
+
+    Returns:
+        Permission type: "read", "write", "bash", or "ask"
+
+    Examples:
+        >>> classify_sandbox_tool_permission("file_read")
+        'read'
+        >>> classify_sandbox_tool_permission("bash")
+        'bash'
+        >>> classify_sandbox_tool_permission("unknown")
+        'ask'
+    """
+    # Read-type tools - allow by default
+    read_tools = {
+        "file_read",
+        "read_file",
+        "list_files",
+        "cat",
+        "grep",
+        "glob",
+        "find",
+        "ls",
+        "dir",
+    }
+
+    # Write-type tools - require user confirmation
+    write_tools = {
+        "file_write",
+        "write_file",
+        "create_file",
+        "edit_file",
+        "delete_file",
+        "remove",
+        "rm",
+        "mv",
+        "rename",
+        "mkdir",
+        "touch",
+    }
+
+    # Execute/bash tools - require user confirmation
+    execute_tools = {
+        "bash",
+        "execute",
+        "run_command",
+        "python",
+        "node",
+        "sh",
+        "shell",
+    }
+
+    tool_lower = tool_name.lower()
+
+    if tool_lower in read_tools:
+        return "read"
+    elif tool_lower in write_tools:
+        return "write"
+    elif tool_lower in execute_tools:
+        return "bash"
+    else:
+        # Unknown tools default to ASK for safety
+        return "ask"
+
+
+def sandbox_mcp_ruleset() -> List[PermissionRule]:
+    """
+    Get the permission ruleset for Sandbox MCP tools.
+
+    This ruleset provides fine-grained permission control for MCP tools
+    exposed through sandbox instances. Tools are namespaced with the
+    pattern: `sandbox_{sandbox_id}_{tool_name}`.
+
+    Permission Strategy:
+    - Read tools (file_read, list_files, etc): ALLOW by default
+    - Write tools (file_write, create_file, etc): ASK for confirmation
+    - Execute tools (bash, execute, etc): ASK for confirmation
+
+    The rules are designed to:
+    1. Allow safe read operations without interruption
+    2. Require confirmation for potentially destructive write operations
+    3. Require confirmation for code execution
+    4. Work with the agent's permission modes (BUILD/PLAN/EXPLORE)
+
+    Returns:
+        List of permission rules for sandbox MCP tools
+
+    Note:
+        In PLAN mode, all sandbox tools are still subject to plan_mode_ruleset
+        which denies write and bash operations. In EXPLORE mode, all sandbox
+        tools are denied for pure read-only access.
+    """
+    return [
+        # Read-type tools: allow by default
+        PermissionRule("read", "sandbox_*_*_read", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_*_list", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_file_read", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_list_files", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_cat", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_grep", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_glob", PermissionAction.ALLOW),
+        PermissionRule("read", "sandbox_*_find", PermissionAction.ALLOW),
+        # Write-type tools: ask for confirmation
+        PermissionRule("write", "sandbox_*_*_write", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_*_create", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_*_edit", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_*_delete", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_file_write", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_write_file", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_create_file", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_edit_file", PermissionAction.ASK),
+        PermissionRule("write", "sandbox_*_delete_file", PermissionAction.ASK),
+        # Execute/bash tools: ask for confirmation
+        PermissionRule("bash", "sandbox_*_bash", PermissionAction.ASK),
+        PermissionRule("bash", "sandbox_*_execute", PermissionAction.ASK),
+        PermissionRule("bash", "sandbox_*_run", PermissionAction.ASK),
+        PermissionRule("bash", "sandbox_*_python", PermissionAction.ASK),
+        PermissionRule("bash", "sandbox_*_sh", PermissionAction.ASK),
+        PermissionRule("bash", "sandbox_*_shell", PermissionAction.ASK),
+        # Default rule: ask for unknown sandbox tools
+        PermissionRule("sandbox_*_*", "*", PermissionAction.ASK),
     ]

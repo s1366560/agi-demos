@@ -9,7 +9,7 @@ import logging
 import socket
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
 import docker
@@ -100,6 +100,9 @@ class MCPSandboxAdapter(SandboxPort):
         host_port_start: int = 18765,
         desktop_port_start: int = 16080,
         terminal_port_start: int = 17681,
+        max_concurrent_sandboxes: int = 10,
+        max_memory_mb: int = 16384,  # 16GB default
+        max_cpu_cores: int = 16,
     ):
         """
         Initialize MCP sandbox adapter.
@@ -112,6 +115,9 @@ class MCPSandboxAdapter(SandboxPort):
             host_port_start: Starting port for host port mapping
             desktop_port_start: Starting port for desktop (noVNC) service
             terminal_port_start: Starting port for terminal (ttyd) service
+            max_concurrent_sandboxes: Maximum number of concurrent sandboxes
+            max_memory_mb: Maximum total memory allocation across all sandboxes
+            max_cpu_cores: Maximum total CPU cores across all sandboxes
         """
         self._mcp_image = mcp_image
         self._default_timeout = default_timeout
@@ -121,12 +127,20 @@ class MCPSandboxAdapter(SandboxPort):
         self._desktop_port_start = desktop_port_start
         self._terminal_port_start = terminal_port_start
 
+        # Resource limits
+        self._max_concurrent_sandboxes = max_concurrent_sandboxes
+        self._max_memory_mb = max_memory_mb
+        self._max_cpu_cores = max_cpu_cores
+
         # Track active sandboxes and port allocation
         self._active_sandboxes: Dict[str, MCPSandboxInstance] = {}
         self._port_counter = 0
         self._desktop_port_counter = 0
         self._terminal_port_counter = 0
         self._used_ports: set = set()
+
+        # Pending queue for sandbox creation requests
+        self._pending_queue: List[Dict[str, Any]] = []
 
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
@@ -313,13 +327,15 @@ class MCPSandboxAdapter(SandboxPort):
             terminal_url = urls.terminal_url
 
             # Create instance record with port information
+            now = datetime.now()
             instance = MCPSandboxInstance(
                 id=sandbox_id,
                 status=SandboxStatus.RUNNING,
                 config=config,
                 project_path=project_path,
                 endpoint=websocket_url,
-                created_at=datetime.now(),
+                created_at=now,
+                last_activity_at=now,  # Initialize activity time
                 websocket_url=websocket_url,
                 mcp_client=None,
                 mcp_port=host_mcp_port,
@@ -422,81 +438,6 @@ class MCPSandboxAdapter(SandboxPort):
             await instance.mcp_client.disconnect()
             instance.mcp_client = None
             logger.info(f"MCP client disconnected: {sandbox_id}")
-
-    async def call_tool(
-        self,
-        sandbox_id: str,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        timeout: float = 30.0,
-        max_retries: int = 2,
-    ) -> Dict[str, Any]:
-        """
-        Call an MCP tool on the sandbox with retry on connection errors.
-
-        Args:
-            sandbox_id: Sandbox identifier
-            tool_name: Name of the tool (read, write, edit, glob, grep, bash)
-            arguments: Tool arguments
-            timeout: Execution timeout
-            max_retries: Maximum retry attempts for connection errors
-
-        Returns:
-            Tool execution result
-        """
-        instance = self._active_sandboxes.get(sandbox_id)
-        if not instance:
-            raise SandboxNotFoundError(
-                message=f"Sandbox not found: {sandbox_id}",
-                sandbox_id=sandbox_id,
-                operation="call_tool",
-            )
-
-        last_error = None
-        for attempt in range(max_retries):
-            try:
-                # Auto-connect if needed
-                if not instance.mcp_client or not instance.mcp_client.is_connected:
-                    connected = await self.connect_mcp(sandbox_id)
-                    if not connected:
-                        raise SandboxConnectionError(
-                            message="Failed to connect MCP client",
-                            sandbox_id=sandbox_id,
-                            operation="call_tool",
-                        )
-
-                result = await instance.mcp_client.call_tool(
-                    tool_name,
-                    arguments,
-                    timeout=timeout,
-                )
-
-                return {
-                    "content": result.content,
-                    "is_error": result.isError,
-                }
-
-            except (SandboxConnectionError, ConnectionError) as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        f"Tool call connection error (attempt {attempt + 1}/{max_retries}): {e}. "
-                        f"Retrying..."
-                    )
-                    # Force reconnect on next attempt
-                    if instance.mcp_client:
-                        await instance.mcp_client.disconnect()
-                        instance.mcp_client = None
-                    await asyncio.sleep(1.0 * (attempt + 1))
-                else:
-                    break
-            except Exception as e:
-                # Non-retryable error
-                logger.error(f"Tool call error: {e}")
-                return {
-                    "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-                    "is_error": True,
-            }
 
     async def list_tools(self, sandbox_id: str) -> List[Dict[str, Any]]:
         """
@@ -902,3 +843,379 @@ class MCPSandboxAdapter(SandboxPort):
         except Exception as e:
             logger.error(f"Error cleaning up orphaned containers: {e}")
             return 0
+
+    # === Resource Management Properties ===
+
+    @property
+    def max_concurrent(self) -> int:
+        """Maximum number of concurrent sandboxes allowed."""
+        return self._max_concurrent_sandboxes
+
+    @property
+    def max_memory_mb(self) -> int:
+        """Maximum total memory in MB across all sandboxes."""
+        return self._max_memory_mb
+
+    @property
+    def max_cpu_cores(self) -> int:
+        """Maximum total CPU cores across all sandboxes."""
+        return self._max_cpu_cores
+
+    @property
+    def active_count(self) -> int:
+        """Current number of active (running) sandboxes."""
+        return sum(
+            1 for s in self._active_sandboxes.values()
+            if s.status == SandboxStatus.RUNNING
+        )
+
+    # === Concurrency Control ===
+
+    def can_create_sandbox(self) -> bool:
+        """Check if a new sandbox can be created without exceeding limits."""
+        return self.active_count < self._max_concurrent_sandboxes
+
+    def queue_sandbox_request(
+        self,
+        request: Dict[str, Any],
+    ) -> None:
+        """
+        Add a sandbox creation request to the pending queue.
+
+        Args:
+            request: Dict with 'project_path' and optional 'config'
+        """
+        self._pending_queue.append(request)
+        logger.info(
+            f"Queued sandbox request. Queue size: {len(self._pending_queue)}"
+        )
+
+    def has_pending_requests(self) -> bool:
+        """Check if there are pending sandbox creation requests."""
+        return len(self._pending_queue) > 0
+
+    async def process_pending_queue(self) -> None:
+        """
+        Process pending sandbox creation requests.
+
+        Creates sandboxes from the queue while slots are available.
+        """
+        while self._pending_queue and self.can_create_sandbox():
+            request = self._pending_queue.pop(0)
+            project_path = request.get("project_path")
+            config = request.get("config")
+
+            try:
+                await self.create_sandbox(project_path, config)
+                logger.info(f"Created queued sandbox for {project_path}")
+            except Exception as e:
+                logger.error(f"Failed to create queued sandbox: {e}")
+
+    # === Activity Tracking ===
+
+    async def update_activity(self, sandbox_id: str) -> None:
+        """
+        Update the last activity timestamp for a sandbox.
+
+        Args:
+            sandbox_id: Sandbox identifier
+        """
+        instance = self._active_sandboxes.get(sandbox_id)
+        if instance:
+            instance.last_activity_at = datetime.now()
+
+    def get_idle_time(self, sandbox_id: str) -> timedelta:
+        """
+        Get the idle time for a sandbox.
+
+        Args:
+            sandbox_id: Sandbox identifier
+
+        Returns:
+            timedelta since last activity (0 if never active)
+        """
+        instance = self._active_sandboxes.get(sandbox_id)
+        if not instance or not instance.last_activity_at:
+            return timedelta(0)
+
+        return datetime.now() - instance.last_activity_at
+
+    # === Enhanced Cleanup ===
+
+    async def cleanup_idle_sandboxes(
+        self,
+        max_idle_minutes: int = 30,
+        min_age_minutes: int = 10,
+    ) -> int:
+        """
+        Clean up sandboxes that have been idle for too long.
+
+        Args:
+            max_idle_minutes: Maximum idle time before cleanup
+            min_age_minutes: Minimum age before considering for cleanup
+                           (prevents cleaning up very new sandboxes)
+
+        Returns:
+            Number of sandboxes cleaned up
+        """
+        now = datetime.now()
+        cleanup_ids = []
+
+        for sandbox_id, instance in self._active_sandboxes.items():
+            # Check age
+            age = (now - instance.created_at).total_seconds() / 60
+            if age < min_age_minutes:
+                continue
+
+            # Check idle time
+            idle_time = self.get_idle_time(sandbox_id)
+            idle_minutes = idle_time.total_seconds() / 60
+
+            # Update activity for healthy sandboxes via health check
+            if instance.status == SandboxStatus.RUNNING:
+                try:
+                    is_healthy = await self.health_check(sandbox_id)
+                    if is_healthy:
+                        # Health check passes, update activity
+                        await self.update_activity(sandbox_id)
+                    elif idle_minutes >= max_idle_minutes:
+                        # Unhealthy and idle
+                        cleanup_ids.append(sandbox_id)
+                except Exception as e:
+                    logger.warning(f"Health check failed for {sandbox_id}: {e}")
+                    if idle_minutes >= max_idle_minutes:
+                        cleanup_ids.append(sandbox_id)
+            elif idle_minutes >= max_idle_minutes:
+                cleanup_ids.append(sandbox_id)
+
+        count = 0
+        for sandbox_id in cleanup_ids:
+            if await self.terminate_sandbox(sandbox_id):
+                count += 1
+
+        if count > 0:
+            logger.info(f"Cleaned up {count} idle sandboxes")
+
+        return count
+
+    # === Resource Limit Validation ===
+
+    def validate_resource_config(
+        self,
+        config: SandboxConfig,
+    ) -> tuple[bool, List[str]]:
+        """
+        Validate a sandbox configuration against resource limits.
+
+        Args:
+            config: Sandbox configuration to validate
+
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+
+        # Parse memory limit
+        try:
+            config_memory_mb = self._parse_memory_limit(config.memory_limit)
+            if config_memory_mb > self._max_memory_mb:
+                errors.append(
+                    f"Memory limit {config.memory_limit} ({config_memory_mb}MB) "
+                    f"exceeds maximum {self._max_memory_mb}MB"
+                )
+        except ValueError as e:
+            errors.append(f"Invalid memory limit format: {e}")
+
+        # Parse CPU limit
+        try:
+            config_cpu = float(config.cpu_limit)
+            if config_cpu > self._max_cpu_cores:
+                errors.append(
+                    f"CPU limit {config.cpu_limit} cores "
+                    f"exceeds maximum {self._max_cpu_cores} cores"
+                )
+        except ValueError as e:
+            errors.append(f"Invalid CPU limit format: {e}")
+
+        return (len(errors) == 0, errors)
+
+    def _parse_memory_limit(self, limit: str) -> int:
+        """Parse memory limit string to MB."""
+        limit = limit.lower().strip()
+
+        if limit.endswith("g") or limit.endswith("gb"):
+            return int(float(limit[:-1].replace("gb", "")) * 1024)
+        if limit.endswith("m") or limit.endswith("mb"):
+            return int(float(limit[:-1].replace("mb", "")))
+        if limit.endswith("k") or limit.endswith("kb"):
+            return int(float(limit[:-1].replace("kb", "")) / 1024)
+
+        # Assume bytes if no suffix
+        return int(limit) // (1024 * 1024)
+
+    # === Resource Monitoring ===
+
+    async def get_total_resource_usage(self) -> Dict[str, Any]:
+        """
+        Get total resource usage across all active sandboxes.
+
+        Returns:
+            Dict with total_memory_mb, total_cpu_percent, sandbox_count
+        """
+        total_memory = 0
+        total_cpu = 0.0
+        count = 0
+
+        for sandbox_id, instance in self._active_sandboxes.items():
+            if instance.status != SandboxStatus.RUNNING:
+                continue
+
+            try:
+                stats = await self.get_sandbox_stats(sandbox_id)
+                total_memory += stats.get("memory_usage", 0) // (1024 * 1024)
+                total_cpu += stats.get("cpu_percent", 0.0)
+                count += 1
+            except Exception as e:
+                logger.warning(f"Failed to get stats for {sandbox_id}: {e}")
+
+        return {
+            "total_memory_mb": total_memory,
+            "total_cpu_percent": round(total_cpu, 2),
+            "sandbox_count": count,
+        }
+
+    async def get_resource_summary(self) -> Dict[str, Any]:
+        """
+        Get comprehensive resource summary.
+
+        Returns:
+            Dict with total_sandboxes, total_memory_mb, total_cpu_percent,
+            max_concurrent, pending_requests
+        """
+        usage = await self.get_total_resource_usage()
+
+        return {
+            "total_sandboxes": self.active_count,
+            "total_memory_mb": usage["total_memory_mb"],
+            "total_cpu_percent": usage["total_cpu_percent"],
+            "max_concurrent": self._max_concurrent_sandboxes,
+            "pending_requests": len(self._pending_queue),
+            "max_memory_mb": self._max_memory_mb,
+            "max_cpu_cores": self._max_cpu_cores,
+        }
+
+    async def health_check_all(self) -> Dict[str, int]:
+        """
+        Perform health check on all running sandboxes.
+
+        Returns:
+            Dict with healthy, unhealthy, total counts
+        """
+        healthy = 0
+        unhealthy = 0
+        total = 0
+
+        for sandbox_id in list(self._active_sandboxes.keys()):
+            if self._active_sandboxes[sandbox_id].status != SandboxStatus.RUNNING:
+                continue
+
+            total += 1
+            try:
+                if await self.health_check(sandbox_id):
+                    healthy += 1
+                    # Update activity for healthy sandboxes
+                    await self.update_activity(sandbox_id)
+                else:
+                    unhealthy += 1
+            except Exception as e:
+                logger.warning(f"Health check failed for {sandbox_id}: {e}")
+                unhealthy += 1
+
+        return {
+            "healthy": healthy,
+            "unhealthy": unhealthy,
+            "total": total,
+        }
+
+    # === Tool Call Activity Update ===
+
+    async def call_tool(
+        self,
+        sandbox_id: str,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        timeout: float = 30.0,
+        max_retries: int = 2,
+    ) -> Dict[str, Any]:
+        """
+        Call an MCP tool on the sandbox with retry on connection errors.
+
+        Args:
+            sandbox_id: Sandbox identifier
+            tool_name: Name of the tool (read, write, edit, glob, grep, bash)
+            arguments: Tool arguments
+            timeout: Execution timeout
+            max_retries: Maximum retry attempts for connection errors
+
+        Returns:
+            Tool execution result
+        """
+        # Update activity before tool call
+        await self.update_activity(sandbox_id)
+
+        instance = self._active_sandboxes.get(sandbox_id)
+        if not instance:
+            raise SandboxNotFoundError(
+                message=f"Sandbox not found: {sandbox_id}",
+                sandbox_id=sandbox_id,
+                operation="call_tool",
+            )
+
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                # Auto-connect if needed
+                if not instance.mcp_client or not instance.mcp_client.is_connected:
+                    connected = await self.connect_mcp(sandbox_id)
+                    if not connected:
+                        raise SandboxConnectionError(
+                            message="Failed to connect MCP client",
+                            sandbox_id=sandbox_id,
+                            operation="call_tool",
+                        )
+
+                result = await instance.mcp_client.call_tool(
+                    tool_name,
+                    arguments,
+                    timeout=timeout,
+                )
+
+                # Update activity after successful call
+                await self.update_activity(sandbox_id)
+
+                return {
+                    "content": result.content,
+                    "is_error": result.isError,
+                }
+
+            except (SandboxConnectionError, ConnectionError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Tool call connection error (attempt {attempt + 1}/{max_retries}): {e}. "
+                        f"Retrying..."
+                    )
+                    # Force reconnect on next attempt
+                    if instance.mcp_client:
+                        await instance.mcp_client.disconnect()
+                        instance.mcp_client = None
+                    await asyncio.sleep(1.0 * (attempt + 1))
+                else:
+                    break
+            except Exception as e:
+                # Non-retryable error
+                logger.error(f"Tool call error: {e}")
+                return {
+                    "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+                    "is_error": True,
+                }
