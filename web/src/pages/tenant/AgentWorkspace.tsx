@@ -158,7 +158,7 @@ export const AgentWorkspace: React.FC = () => {
   const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
 
   return (
-    <div className="max-w-full mx-auto w-full h-full" style={{ height: 'calc(100vh - 116px)' }}>
+    <div className="max-w-full mx-auto w-full h-full bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 116px)' }}>
       {effectiveProjectId ? (
         <AgentChatContent 
           projectId={effectiveProjectId} 
