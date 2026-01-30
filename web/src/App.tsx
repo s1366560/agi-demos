@@ -227,6 +227,22 @@ function App() {
                             index
                             element={
                                 <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path=":conversation"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path="overview"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
                                     <TenantOverview />
                                 </Suspense>
                             }
@@ -357,6 +373,22 @@ function App() {
                         {/* Tenant specific routes */}
                         <Route
                             path=":tenantId"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path=":tenantId/:conversation"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <AgentWorkspace />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path=":tenantId/overview"
                             element={
                                 <Suspense fallback={<PageLoader />}>
                                     <TenantOverview />
