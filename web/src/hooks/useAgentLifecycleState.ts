@@ -119,68 +119,76 @@ export function useAgentLifecycleState({
   const status = useMemo<LifecycleStatus>(() => {
     if (!lifecycleState) {
       return {
-        label: "Unknown",
-        color: "text-gray-500",
-        icon: "HelpCircle",
-        description: "Agent state unknown",
+        label: "未启动",
+        color: "text-slate-500",
+        icon: "Power",
+        description: "Agent 尚未初始化，将在首次请求时自动启动",
       };
     }
 
     switch (lifecycleState.lifecycleState) {
+      case "uninitialized":
+        return {
+          label: "未启动",
+          color: "text-slate-500",
+          icon: "Power",
+          description: "Agent 尚未初始化，将在首次请求时自动启动",
+        };
+
       case "initializing":
         return {
-          label: "Initializing",
-          color: "text-amber-500",
+          label: "初始化中",
+          color: "text-blue-500",
           icon: "Loader2",
-          description: "Agent session is starting up...",
+          description: "正在加载工具、技能和配置",
         };
 
       case "ready":
         return {
-          label: "Ready",
+          label: "就绪",
           color: "text-emerald-500",
           icon: "CheckCircle",
-          description: `Agent ready with ${lifecycleState.toolCount || 0} tools`,
+          description: `Agent 已就绪，${lifecycleState.toolCount || 0} 个工具`,
         };
 
       case "executing":
         return {
-          label: "Executing",
-          color: "text-blue-500",
-          icon: "Play",
-          description: "Agent is processing a request",
+          label: "执行中",
+          color: "text-amber-500",
+          icon: "Cpu",
+          description: "正在处理聊天请求",
         };
 
       case "paused":
         return {
-          label: "Paused",
-          color: "text-yellow-500",
+          label: "已暂停",
+          color: "text-orange-500",
           icon: "Pause",
-          description: "Agent is paused",
+          description: "Agent 已暂停，不接收新请求",
         };
 
       case "shutting_down":
         return {
-          label: "Shutting Down",
-          color: "text-orange-500",
+          label: "关闭中",
+          color: "text-slate-500",
           icon: "Power",
-          description: "Agent is shutting down...",
+          description: "Agent 正在关闭",
         };
 
       case "error":
         return {
-          label: "Error",
+          label: "错误",
           color: "text-red-500",
           icon: "AlertCircle",
-          description: lifecycleState.errorMessage || "Agent encountered an error",
+          description: lifecycleState.errorMessage || "Agent 遇到错误",
         };
 
       default:
         return {
-          label: "Unknown",
+          label: "未知",
           color: "text-gray-500",
           icon: "HelpCircle",
-          description: "Agent state unknown",
+          description: "Agent 状态未知",
         };
     }
   }, [lifecycleState]);

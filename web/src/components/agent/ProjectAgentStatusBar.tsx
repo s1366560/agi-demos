@@ -164,9 +164,6 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
   const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
 
-  // Determine if we have detailed session status to show resources
-  const hasSessionStatus = lifecycleState !== 'uninitialized';
-
   return (
     <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
       {/* Left: Lifecycle Status & Resources */}
@@ -206,8 +203,8 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
         {/* Separator */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
-        {/* Resources: Tools */}
-        {hasSessionStatus && (
+        {/* Resources: Tools - always show if we have data */}
+        {status.resources.tools > 0 && (
           <Tooltip title={`可用工具: ${status.resources.tools}`}>
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <Wrench size={11} />
@@ -216,8 +213,8 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
           </Tooltip>
         )}
 
-        {/* Resources: Skills */}
-        {hasSessionStatus && status.resources.skills > 0 && (
+        {/* Resources: Skills - always show if we have data */}
+        {status.resources.skills > 0 && (
           <Tooltip title={`已加载技能: ${status.resources.skills}`}>
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <BrainCircuit size={11} />

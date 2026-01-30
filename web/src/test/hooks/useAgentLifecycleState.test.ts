@@ -156,7 +156,7 @@ describe("useAgentLifecycleState", () => {
     });
 
     // Check derived status
-    expect(result.current.status.label).toBe("Initializing");
+    expect(result.current.status.label).toBe("初始化中");
     expect(result.current.status.icon).toBe("Loader2");
   });
 
@@ -203,7 +203,7 @@ describe("useAgentLifecycleState", () => {
     });
 
     // Check derived status
-    expect(result.current.status.label).toBe("Ready");
+    expect(result.current.status.label).toBe("就绪");
     expect(result.current.status.icon).toBe("CheckCircle");
   });
 
@@ -247,8 +247,8 @@ describe("useAgentLifecycleState", () => {
       isActive: true,
     });
 
-    expect(result.current.status.label).toBe("Executing");
-    expect(result.current.status.icon).toBe("Play");
+    expect(result.current.status.label).toBe("执行中");
+    expect(result.current.status.icon).toBe("Cpu");
   });
 
   it("should handle paused state", async () => {
@@ -289,7 +289,7 @@ describe("useAgentLifecycleState", () => {
       isActive: false,
     });
 
-    expect(result.current.status.label).toBe("Paused");
+    expect(result.current.status.label).toBe("已暂停");
     expect(result.current.status.icon).toBe("Pause");
   });
 
@@ -331,7 +331,7 @@ describe("useAgentLifecycleState", () => {
       isActive: false,
     });
 
-    expect(result.current.status.label).toBe("Shutting Down");
+    expect(result.current.status.label).toBe("关闭中");
     expect(result.current.status.icon).toBe("Power");
   });
 
@@ -375,7 +375,7 @@ describe("useAgentLifecycleState", () => {
       isActive: false,
     });
 
-    expect(result.current.status.label).toBe("Error");
+    expect(result.current.status.label).toBe("错误");
     expect(result.current.status.icon).toBe("AlertCircle");
   });
 
