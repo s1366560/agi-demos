@@ -17,13 +17,22 @@ This module contains domain entities for:
 - AgentMode: Agent operation modes (BUILD/PLAN/EXPLORE)
 """
 
+from src.domain.events.agent_events import AgentEventType
 from src.domain.model.agent.agent_execution import AgentExecution, ExecutionStatus
+
 # AgentEventType is imported from domain.events.agent_events (unified event types)
 from src.domain.model.agent.agent_execution_event import AgentExecutionEvent
-from src.domain.events.agent_events import AgentEventType
 from src.domain.model.agent.agent_mode import AgentMode
 from src.domain.model.agent.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.execution_checkpoint import CheckpointType, ExecutionCheckpoint
+
+# Plan Mode Execution Models (Enhanced execution tracking)
+from src.domain.model.agent.execution_plan import (
+    ExecutionPlan,
+    ExecutionPlanStatus,
+    ExecutionStep,
+    ExecutionStepStatus,
+)
 from src.domain.model.agent.message import Message, MessageRole, MessageType, ToolCall, ToolResult
 from src.domain.model.agent.plan import (
     AlreadyInPlanModeError,
@@ -33,38 +42,39 @@ from src.domain.model.agent.plan import (
     PlanDocumentStatus,
     PlanNotFoundError,
 )
-from src.domain.model.agent.plan_status import PlanStatus
-from src.domain.model.agent.plan_step import PlanStep
-from src.domain.model.agent.skill import Skill, SkillStatus, TriggerPattern, TriggerType
-from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
-from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-from src.domain.model.agent.thought_level import ThoughtLevel
-from src.domain.model.agent.tool_composition import ToolComposition
-from src.domain.model.agent.tool_execution_record import ToolExecutionRecord
-from src.domain.model.agent.work_plan import WorkPlan
-from src.domain.model.agent.workflow_pattern import WorkflowPattern
-# Plan Mode Execution Models (Enhanced execution tracking)
-from src.domain.model.agent.execution_plan import (
-    ExecutionPlan,
-    ExecutionPlanStatus,
-    ExecutionStep,
-    ExecutionStepStatus,
-)
 from src.domain.model.agent.plan_execution import (
     ExecutionMode,
-    ExecutionStatus as PlanExecutionStatus,
-    ExecutionStep as PlanExecutionStep,
     PlanExecution,
     StepStatus,
 )
+from src.domain.model.agent.plan_execution import (
+    ExecutionStatus as PlanExecutionStatus,
+)
+from src.domain.model.agent.plan_execution import (
+    ExecutionStep as PlanExecutionStep,
+)
 from src.domain.model.agent.plan_snapshot import PlanSnapshot, StepState
+from src.domain.model.agent.plan_status import PlanStatus
+from src.domain.model.agent.plan_step import PlanStep
 from src.domain.model.agent.reflection_result import (
     AdjustmentType,
     ReflectionAssessment,
     ReflectionResult,
     StepAdjustment,
 )
+from src.domain.model.agent.skill import Skill, SkillStatus, TriggerPattern, TriggerType
 from src.domain.model.agent.step_result import StepOutcome, StepResult
+from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
+from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.domain.model.agent.thought_level import ThoughtLevel
+from src.domain.model.agent.tool_composition import ToolComposition
+from src.domain.model.agent.tool_environment_variable import (
+    EnvVarScope,
+    ToolEnvironmentVariable,
+)
+from src.domain.model.agent.tool_execution_record import ToolExecutionRecord
+from src.domain.model.agent.work_plan import WorkPlan
+from src.domain.model.agent.workflow_pattern import WorkflowPattern
 
 __all__ = [
     "Conversation",
@@ -111,4 +121,7 @@ __all__ = [
     "PlanExecutionStatus",
     "ExecutionMode",
     "StepStatus",
+    # Tool Environment Variables
+    "ToolEnvironmentVariable",
+    "EnvVarScope",
 ]

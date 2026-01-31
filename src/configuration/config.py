@@ -202,6 +202,12 @@ class Settings(BaseSettings):
         default=4, alias="AGENT_SESSION_PREWARM_CONCURRENCY"
     )
 
+    # Agent Session Pool TTL (cleanup after inactivity)
+    agent_session_ttl_seconds: int = Field(
+        default=86400,
+        alias="AGENT_SESSION_TTL_SECONDS",  # 24 hours default
+    )
+
     # Agent Execution Limits
     agent_max_steps: int = Field(
         default=5000, alias="AGENT_MAX_STEPS"
@@ -221,7 +227,9 @@ class Settings(BaseSettings):
 
     # Sandbox Settings
     sandbox_default_provider: str = Field(default="docker", alias="SANDBOX_DEFAULT_PROVIDER")
-    sandbox_default_image: str = Field(default="sandbox-mcp-server:latest", alias="SANDBOX_DEFAULT_IMAGE")
+    sandbox_default_image: str = Field(
+        default="sandbox-mcp-server:latest", alias="SANDBOX_DEFAULT_IMAGE"
+    )
     sandbox_timeout_seconds: int = Field(
         default=300, alias="SANDBOX_TIMEOUT_SECONDS"
     )  # Increased from 60 to 300 (5 minutes)

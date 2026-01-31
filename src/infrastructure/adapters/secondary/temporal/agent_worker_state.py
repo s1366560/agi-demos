@@ -484,6 +484,20 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillLoaderTool: {e}")
 
+    # 6. Add SkillInstallerTool for installing skills from skills.sh
+    try:
+        from pathlib import Path
+
+        from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
+
+        # Use the project path from config or fallback to current working directory
+        project_path = Path.cwd()
+        skill_installer = SkillInstallerTool(project_path=project_path)
+        tools["skill_installer"] = skill_installer
+        logger.info(f"Agent Worker: SkillInstallerTool added for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create SkillInstallerTool: {e}")
+
     return tools
 
 
@@ -505,6 +519,7 @@ async def _load_project_sandbox_tools(
     """
     import asyncio
     import tempfile
+
     from src.domain.ports.services.sandbox_port import SandboxConfig
     from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 
@@ -555,15 +570,12 @@ async def _load_project_sandbox_tools(
 
         # If no sandbox exists, create one automatically
         if not project_sandbox_id:
-            logger.info(
-                f"No sandbox found for project {project_id}, creating one automatically..."
-            )
+            logger.info(f"No sandbox found for project {project_id}, creating one automatically...")
 
             # Create a temporary workspace directory for the project
             import os
-            workspace_dir = os.path.join(
-                tempfile.gettempdir(), f"memstack_{project_id}"
-            )
+
+            workspace_dir = os.path.join(tempfile.gettempdir(), f"memstack_{project_id}")
             os.makedirs(workspace_dir, exist_ok=True)
 
             # Create sandbox with project_id and tenant_id labels
@@ -574,15 +586,11 @@ async def _load_project_sandbox_tools(
                 tenant_id=tenant_id,
             )
             project_sandbox_id = instance.id
-            logger.info(
-                f"Created new sandbox {project_sandbox_id} for project {project_id}"
-            )
+            logger.info(f"Created new sandbox {project_sandbox_id} for project {project_id}")
 
         # Sync the sandbox to adapter's internal tracking if not already tracked
         if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
-            logger.info(
-                f"Syncing sandbox {project_sandbox_id} to adapter's internal state"
-            )
+            logger.info(f"Syncing sandbox {project_sandbox_id} to adapter's internal state")
             await _mcp_sandbox_adapter.sync_from_docker()
 
         # Connect to MCP

@@ -7,14 +7,30 @@ to interact with the knowledge graph and memory systems.
 from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.agent.tools.clarification import ClarificationTool
 from src.infrastructure.agent.tools.decision import DecisionTool
-from src.infrastructure.agent.tools.desktop_tool import DesktopTool, DesktopStatus
+from src.infrastructure.agent.tools.desktop_tool import DesktopStatus, DesktopTool
+from src.infrastructure.agent.tools.env_var_tools import (
+    CheckEnvVarsTool,
+    EnvVarField,
+    EnvVarInputType,
+    EnvVarManager,
+    EnvVarRequest,
+    GetEnvVarTool,
+    RequestEnvVarTool,
+    get_env_var_manager,
+)
 from src.infrastructure.agent.tools.plan_enter import PlanEnterTool
 from src.infrastructure.agent.tools.plan_exit import PlanExitTool
 from src.infrastructure.agent.tools.plan_update import PlanUpdateTool
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
+from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
 from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
-from src.infrastructure.agent.tools.terminal_tool import TerminalTool, TerminalStatus
-from src.infrastructure.agent.tools.todo_tools import TodoReadTool, TodoWriteTool, create_todoread_tool, create_todowrite_tool
+from src.infrastructure.agent.tools.terminal_tool import TerminalStatus, TerminalTool
+from src.infrastructure.agent.tools.todo_tools import (
+    TodoReadTool,
+    TodoWriteTool,
+    create_todoread_tool,
+    create_todowrite_tool,
+)
 from src.infrastructure.agent.tools.web_scrape import WebScrapeTool
 from src.infrastructure.agent.tools.web_search import WebSearchTool
 
@@ -24,10 +40,21 @@ __all__ = [
     "DecisionTool",
     "DesktopTool",
     "DesktopStatus",
+    # Environment Variable Tools
+    "CheckEnvVarsTool",
+    "EnvVarField",
+    "EnvVarInputType",
+    "EnvVarManager",
+    "EnvVarRequest",
+    "GetEnvVarTool",
+    "RequestEnvVarTool",
+    "get_env_var_manager",
+    # Plan Tools
     "PlanEnterTool",
     "PlanExitTool",
     "PlanUpdateTool",
     "SandboxMCPToolWrapper",
+    "SkillInstallerTool",
     "SkillLoaderTool",
     "TerminalTool",
     "TerminalStatus",

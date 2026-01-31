@@ -1,0 +1,9 @@
+{
+  "source": "varghq/skills",
+  "skill_name": "varg-video-generation",
+  "branch": "main",
+  "source_path": "skills/varg-video-generation/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

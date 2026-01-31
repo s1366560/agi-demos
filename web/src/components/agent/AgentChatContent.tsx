@@ -29,6 +29,7 @@ import {
   InputBar,
   RightPanel,
   ProjectAgentStatusBar,
+  EnvVarInputModal,
 } from './index';
 import { EmptyState } from './EmptyState';
 
@@ -90,6 +91,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     showPlanPanel,
     pendingDecision,
     doomLoopDetected,
+    pendingEnvVarRequest,
     hasEarlier,
     loadConversations,
     loadMessages,
@@ -101,6 +103,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     togglePlanMode,
     togglePlanPanel,
     respondToDecision,
+    respondToEnvVar,
     clearError,
     error,
     streamingAssistantContent,
@@ -403,6 +406,18 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       >
         {!panelCollapsed && rightPanel}
       </aside>
+
+      {/* Environment Variable Input Modal */}
+      {pendingEnvVarRequest && (
+        <EnvVarInputModal
+          data={pendingEnvVarRequest}
+          onSubmit={respondToEnvVar}
+          onCancel={() => {
+            // Cancel the env var request by sending empty values
+            respondToEnvVar(pendingEnvVarRequest.request_id, {});
+          }}
+        />
+      )}
     </div>
   );
 };

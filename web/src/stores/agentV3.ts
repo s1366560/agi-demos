@@ -134,6 +134,7 @@ interface AgentV3State {
     // Interactivity
     pendingDecision: any; // Using any for brevity in this update
     doomLoopDetected: any;
+    pendingEnvVarRequest: any; // Pending environment variable request from agent
 
     // Actions
     setActiveConversation: (id: string | null) => void;
@@ -161,6 +162,7 @@ interface AgentV3State {
     setLeftSidebarWidth: (width: number) => void;
     setRightPanelWidth: (width: number) => void;
     respondToDecision: (requestId: string, decision: string) => Promise<void>;
+    respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
     togglePlanMode: () => Promise<void>;
     clearError: () => void;
 }
@@ -205,6 +207,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                 pendingDecision: null,
                 doomLoopDetected: null,
+                pendingEnvVarRequest: null,
 
                 setActiveConversation: (id) => set({ activeConversationId: id }),
 
@@ -335,9 +338,6 @@ export const useAgentV3Store = create<AgentV3State>()(
                         }
 
                         // Store the raw timeline and derive messages (no merging)
-                        console.log('[AgentV3] Raw timeline from API:', response.timeline);
-                        console.log('[AgentV3] Timeline assistant_message events:', 
-                            response.timeline.filter((e: any) => e.type === 'assistant_message'));
                         const messages = timelineToMessages(response.timeline);
                         const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
 
@@ -832,6 +832,9 @@ export const useAgentV3Store = create<AgentV3State>()(
                         onDoomLoopDetected: (event) => {
                             set({ doomLoopDetected: event.data });
                         },
+                        onEnvVarRequested: (event) => {
+                            set({ pendingEnvVarRequest: event.data, agentState: "awaiting_input" });
+                        },
                         onTitleGenerated: (event) => {
                             const data = event.data as {
                                 conversation_id: string;
@@ -851,7 +854,6 @@ export const useAgentV3Store = create<AgentV3State>()(
                             });
                         },
                         onComplete: (event) => {
-                            console.log('[AgentV3] onComplete event received:', event);
                             // Clear all delta buffers on completion
                             if (textDeltaFlushTimer) {
                                 clearTimeout(textDeltaFlushTimer);
@@ -869,9 +871,6 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 // This adds the assistant_message to timeline
                                 const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
                                 const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
-                                console.log('[AgentV3] Timeline after onComplete:', updatedTimeline);
-                                console.log('[AgentV3] Timeline assistant_message events after complete:', 
-                                    updatedTimeline.filter(e => e.type === 'assistant_message'));
 
                                 // Derive messages from updated timeline (no merging)
                                 const newMessages = timelineToMessages(updatedTimeline);
@@ -978,6 +977,17 @@ export const useAgentV3Store = create<AgentV3State>()(
                 respondToDecision: async (requestId, decision) => {
                     console.log("Responding to decision", requestId, decision);
                     set({ pendingDecision: null, agentState: "thinking" });
+                },
+
+                respondToEnvVar: async (requestId, values) => {
+                    console.log("Responding to env var request", requestId, values);
+                    try {
+                        await agentService.respondToEnvVar(requestId, values);
+                        set({ pendingEnvVarRequest: null, agentState: "thinking" });
+                    } catch (error) {
+                        console.error("Failed to respond to env var request:", error);
+                        set({ agentState: "error" });
+                    }
                 },
 
                 togglePlanPanel: () =>

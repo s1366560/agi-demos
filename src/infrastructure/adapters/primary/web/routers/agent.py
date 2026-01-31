@@ -1850,6 +1850,13 @@ class DoomLoopResponseRequest(BaseModel):
     action: str  # "continue" or "stop"
 
 
+class EnvVarResponseRequest(BaseModel):
+    """Request to respond to an environment variable request."""
+
+    request_id: str
+    values: dict[str, str]  # variable_name -> value mapping
+
+
 class HumanInteractionResponse(BaseModel):
     """Response for human interaction endpoints."""
 
@@ -1954,6 +1961,60 @@ async def respond_to_decision(
     except Exception as e:
         logger.error(f"Error responding to decision: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to respond to decision: {str(e)}")
+
+
+@router.post("/env-var/respond", response_model=HumanInteractionResponse)
+async def respond_to_env_var_request(
+    request: EnvVarResponseRequest,
+    current_user: User = Depends(get_current_user),
+) -> HumanInteractionResponse:
+    """
+    Respond to a pending environment variable request.
+
+    This endpoint allows users to provide environment variable values
+    requested by the agent for tool configuration.
+
+    Args:
+        request: Env var response with request_id and values mapping
+        current_user: Authenticated user
+
+    Returns:
+        Success status
+
+    Raises:
+        404: If env var request not found
+        500: For server errors
+    """
+    try:
+        from src.infrastructure.agent.tools.env_var_tools import get_env_var_manager
+
+        manager = get_env_var_manager()
+        success = await manager.respond(request.request_id, request.values)
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Environment variable request {request.request_id} not found or already answered",
+            )
+
+        logger.info(
+            f"User {current_user.id} provided env vars for request {request.request_id}: "
+            f"{list(request.values.keys())}"
+        )
+
+        return HumanInteractionResponse(
+            success=True,
+            request_id=request.request_id,
+            message="Environment variables received and saved",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error responding to env var request: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to respond to env var request: {str(e)}"
+        )
 
 
 @router.post("/doom-loop/respond", response_model=HumanInteractionResponse)
@@ -2724,5 +2785,3 @@ async def get_workflow_status(
     except Exception as e:
         logger.error(f"Error getting workflow status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {str(e)}")
-
-

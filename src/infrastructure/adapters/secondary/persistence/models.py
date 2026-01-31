@@ -1075,9 +1075,7 @@ class PlanExecutionRecord(Base):
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     conversation: Mapped["Conversation"] = relationship(
@@ -1133,9 +1131,7 @@ class PlanSnapshotRecord(Base):
     )
 
     # Indexes
-    __table_args__ = (
-        Index("ix_plan_snapshots_execution_created", "execution_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_plan_snapshots_execution_created", "execution_id", "created_at"),)
 
 
 class ProjectSandbox(Base):
@@ -1155,23 +1151,23 @@ class ProjectSandbox(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True, unique=True
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        unique=True,
     )
     tenant_id: Mapped[str] = mapped_column(
         String, ForeignKey("tenants.id"), nullable=False, index=True
     )
-    sandbox_id: Mapped[str] = mapped_column(
-        String, nullable=False, index=True, unique=True
-    )
+    sandbox_id: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False, index=True
     )  # pending, creating, running, unhealthy, stopped, terminated, error
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    started_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -1194,4 +1190,62 @@ class ProjectSandbox(Base):
     __table_args__ = (
         Index("ix_project_sandboxes_status_accessed", "status", "last_accessed_at"),
         Index("ix_project_sandboxes_tenant_status", "tenant_id", "status"),
+    )
+
+
+class ToolEnvironmentVariableRecord(IdGeneratorMixin, Base):
+    """
+    Tool Environment Variable storage for agent tools.
+
+    Stores encrypted environment variables needed by agent tools,
+    scoped by tenant and optionally by project for multi-tenant isolation.
+
+    Key design considerations:
+    1. Tenant-level isolation: Variables are always scoped to a tenant
+    2. Tool namespacing: Different tools can have same-named variables
+    3. Project override: Project-level variables override tenant-level
+    4. Encrypted storage: Values are AES-256-GCM encrypted at rest
+    """
+
+    __tablename__ = "tool_environment_variables"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    variable_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    encrypted_value: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_secret: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    scope: Mapped[str] = mapped_column(
+        String(20), default="tenant", nullable=False
+    )  # tenant | project
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+    project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
+
+    # Unique constraint: tenant + project + tool + variable name
+    # Note: project_id can be NULL for tenant-level variables
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "project_id",
+            "tool_name",
+            "variable_name",
+            name="uq_tool_env_var_tenant_project_tool_name",
+        ),
+        Index("ix_tool_env_var_tenant_tool", "tenant_id", "tool_name"),
+        Index("ix_tool_env_var_project_tool", "project_id", "tool_name"),
     )

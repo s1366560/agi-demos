@@ -71,7 +71,7 @@ class AgentSessionContext:
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
     use_count: int = 0
-    ttl_seconds: int = 1800  # 30 minutes default TTL
+    ttl_seconds: int = 86400  # 24 hours default TTL (cleanup after 24h of inactivity)
 
     def is_expired(self) -> bool:
         """Check if this session context has expired."""
@@ -634,10 +634,12 @@ async def get_or_create_agent_session(
         import os
         from pathlib import Path
 
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_mcp_sandbox_adapter,
+        )
         from src.infrastructure.agent.core.skill_executor import SkillExecutor
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_mcp_sandbox_adapter
-        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
         from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
+        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
 
         # Get sandbox adapter for resource injection
         sandbox_adapter = get_mcp_sandbox_adapter()
@@ -958,10 +960,12 @@ async def get_or_create_agent_session(
         import os
         from pathlib import Path
 
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_mcp_sandbox_adapter,
+        )
         from src.infrastructure.agent.core.skill_executor import SkillExecutor
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_mcp_sandbox_adapter
-        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
         from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
+        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
 
         # Get sandbox adapter for resource injection
         sandbox_adapter = get_mcp_sandbox_adapter()
@@ -1044,26 +1048,26 @@ def clear_all_caches() -> Dict[str, int]:
 # Project-Level Session Management (Added for ProjectReActAgent)
 # ============================================================================
 
+
 def get_project_session_stats(
     tenant_id: str,
     project_id: str,
 ) -> Dict[str, Any]:
     """Get session statistics for a specific project.
-    
+
     Args:
         tenant_id: Tenant identifier
         project_id: Project identifier
-        
+
     Returns:
         Dictionary with project session statistics
     """
     prefix = f"{tenant_id}:{project_id}:"
-    
+
     project_sessions = [
-        session for key, session in _agent_session_pool.items()
-        if key.startswith(prefix)
+        session for key, session in _agent_session_pool.items() if key.startswith(prefix)
     ]
-    
+
     if not project_sessions:
         return {
             "tenant_id": tenant_id,
@@ -1072,11 +1076,11 @@ def get_project_session_stats(
             "total_use_count": 0,
             "avg_session_age_seconds": 0,
         }
-    
+
     now = time.time()
     total_use_count = sum(s.use_count for s in project_sessions)
     avg_age = sum(now - s.created_at for s in project_sessions) / len(project_sessions)
-    
+
     return {
         "tenant_id": tenant_id,
         "project_id": project_id,
@@ -1094,36 +1098,38 @@ def list_project_sessions(
     project_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List all sessions matching the criteria.
-    
+
     Args:
         tenant_id: Optional tenant filter
         project_id: Optional project filter (requires tenant_id)
-        
+
     Returns:
         List of session info dictionaries
     """
     results = []
-    
+
     for key, session in _agent_session_pool.items():
         # Apply filters
         if tenant_id and not key.startswith(f"{tenant_id}:"):
             continue
         if project_id and not key.startswith(f"{tenant_id}:{project_id}:"):
             continue
-            
-        results.append({
-            "session_key": key,
-            "tenant_id": session.tenant_id,
-            "project_id": session.project_id,
-            "agent_mode": session.agent_mode,
-            "use_count": session.use_count,
-            "created_at": session.created_at,
-            "last_used_at": session.last_used_at,
-            "is_expired": session.is_expired(),
-            "tools_hash": session.tools_hash,
-            "skills_hash": session.skills_hash,
-        })
-    
+
+        results.append(
+            {
+                "session_key": key,
+                "tenant_id": session.tenant_id,
+                "project_id": session.project_id,
+                "agent_mode": session.agent_mode,
+                "use_count": session.use_count,
+                "created_at": session.created_at,
+                "last_used_at": session.last_used_at,
+                "is_expired": session.is_expired(),
+                "tools_hash": session.tools_hash,
+                "skills_hash": session.skills_hash,
+            }
+        )
+
     return results
 
 
@@ -1133,15 +1139,15 @@ async def invalidate_project_sessions(
     agent_mode: Optional[str] = None,
 ) -> int:
     """Invalidate all sessions for a project.
-    
+
     This is useful when project configuration changes or when
     explicitly cleaning up project resources.
-    
+
     Args:
         tenant_id: Tenant identifier
         project_id: Project identifier
         agent_mode: Optional specific agent mode to invalidate
-        
+
     Returns:
         Number of sessions invalidated
     """
@@ -1165,10 +1171,10 @@ async def get_or_create_project_session(
     project_config: Optional[Dict[str, Any]] = None,
 ) -> AgentSessionContext:
     """Get or create an agent session specifically for a project.
-    
+
     This is a convenience wrapper around get_or_create_agent_session
     with additional project-specific handling.
-    
+
     Args:
         tenant_id: Tenant identifier
         project_id: Project identifier
@@ -1179,22 +1185,20 @@ async def get_or_create_project_session(
         processor_config: Optional processor config
         subagent_match_threshold: SubAgent match threshold
         project_config: Optional project-specific configuration
-        
+
     Returns:
         AgentSessionContext for the project
     """
     # Check if there's a grace period deletion marker to clear
     session_key = generate_session_key(tenant_id, project_id, agent_mode)
-    
+
     async with _agent_session_pool_lock:
         existing = _agent_session_pool.get(session_key)
         if existing and hasattr(existing, "_marked_for_deletion_at"):
             # Clear deletion marker - project is active again
             delattr(existing, "_marked_for_deletion_at")
-            logger.info(
-                f"Agent Session Pool: Project session {session_key} reactivated"
-            )
-    
+            logger.info(f"Agent Session Pool: Project session {session_key} reactivated")
+
     # Create or get session
     return await get_or_create_agent_session(
         tenant_id=tenant_id,
@@ -1210,22 +1214,22 @@ async def get_or_create_project_session(
 
 def get_project_isolation_info() -> Dict[str, Any]:
     """Get information about project-level cache isolation.
-    
+
     Returns:
         Dictionary with isolation statistics
     """
     tenant_projects: Dict[str, set] = {}
-    
+
     for key in _agent_session_pool.keys():
         parts = key.split(":")
         if len(parts) >= 2:
             tenant_id = parts[0]
             project_id = parts[1]
-            
+
             if tenant_id not in tenant_projects:
                 tenant_projects[tenant_id] = set()
             tenant_projects[tenant_id].add(project_id)
-    
+
     return {
         "total_tenants": len(tenant_projects),
         "total_projects": sum(len(projects) for projects in tenant_projects.values()),

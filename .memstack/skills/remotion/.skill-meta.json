@@ -1,0 +1,9 @@
+{
+  "source": "remotion-dev/skills",
+  "skill_name": "remotion",
+  "branch": "main",
+  "source_path": "skills/remotion/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

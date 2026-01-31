@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
 
-from src.domain.events.agent_events import AgentMessageEvent, AgentEventType
+from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.llm_providers.llm_types import Message as LLMMessage
 from src.domain.model.agent import (
@@ -39,6 +39,7 @@ from src.domain.ports.repositories.agent_repository import (
 from src.domain.ports.services.agent_service_port import AgentServicePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.infrastructure.agent.tools import (
+    SkillInstallerTool,
     SkillLoaderTool,
     WebScrapeTool,
     WebSearchTool,
@@ -445,8 +446,7 @@ class AgentService(AgentServicePort):
                     status = await handle.query("get_status")
                     if status and getattr(status, "is_initialized", False):
                         logger.info(
-                            f"Agent Session Workflow initialized after {waited:.1f}s: "
-                            f"{workflow_id}"
+                            f"Agent Session Workflow initialized after {waited:.1f}s: {workflow_id}"
                         )
                         break
                 except Exception:
@@ -820,7 +820,10 @@ class AgentService(AgentServicePort):
                                 event_conversation_id = delayed_data.get("conversation_id")
 
                                 # Skip events for different conversations
-                                if event_conversation_id and event_conversation_id != conversation_id:
+                                if (
+                                    event_conversation_id
+                                    and event_conversation_id != conversation_id
+                                ):
                                     continue
 
                                 # Skip message events for different messages
@@ -846,7 +849,9 @@ class AgentService(AgentServicePort):
                                 if time_module.time() - delayed_start > max_delay:
                                     break
                         except Exception as delay_err:
-                            logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
+                            logger.warning(
+                                f"[AgentService] Error reading delayed events: {delay_err}"
+                            )
 
                         logger.info("[AgentService] Stream ended (after delayed event window)")
                         return
@@ -1103,7 +1108,7 @@ Title:"""
 
                 # If not the last attempt, wait with exponential backoff
                 if attempt < max_retries - 1:
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.info(f"Retrying in {delay}s...")
                     await asyncio.sleep(delay)
                 else:
@@ -1306,6 +1311,10 @@ Title:"""
             {
                 "name": "web_scrape",
                 "description": WebScrapeTool().description,
+            },
+            {
+                "name": "skill_installer",
+                "description": SkillInstallerTool().description,
             },
         ]
 

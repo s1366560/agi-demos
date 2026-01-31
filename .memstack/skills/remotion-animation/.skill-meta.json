@@ -1,0 +1,9 @@
+{
+  "source": "ncklrs/startup-os-skills",
+  "skill_name": "remotion-animation",
+  "branch": "main",
+  "source_path": "skills/remotion-animation/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

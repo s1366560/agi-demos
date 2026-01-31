@@ -54,23 +54,28 @@ async def periodic_session_cleanup():
     """Background task to periodically clean up expired Agent Session Pool entries.
 
     This prevents memory leaks from unused cached sessions.
-    Default interval: every 10 minutes.
+    Sessions are cleaned up after 24 hours of inactivity (configurable via AGENT_SESSION_TTL_SECONDS).
+    Cleanup interval: every 10 minutes (configurable via AGENT_SESSION_CLEANUP_INTERVAL).
     """
     from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
         cleanup_expired_sessions,
         get_pool_stats,
     )
 
+    # Use configured TTL (default 24 hours)
+    session_ttl_seconds = settings.agent_session_ttl_seconds
+
     logger.info(
-        f"Agent Worker: Session cleanup task started (interval: {AGENT_SESSION_CLEANUP_INTERVAL}s)"
+        f"Agent Worker: Session cleanup task started "
+        f"(check_interval={AGENT_SESSION_CLEANUP_INTERVAL}s, ttl={session_ttl_seconds}s/{session_ttl_seconds // 3600}h)"
     )
 
     while True:
         try:
             await asyncio.sleep(AGENT_SESSION_CLEANUP_INTERVAL)
 
-            # Clean up expired sessions
-            cleaned = await cleanup_expired_sessions()
+            # Clean up sessions that have been inactive for longer than TTL
+            cleaned = await cleanup_expired_sessions(ttl_seconds=session_ttl_seconds)
 
             # Log pool stats
             stats = get_pool_stats()

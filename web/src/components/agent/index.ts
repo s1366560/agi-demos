@@ -32,6 +32,7 @@ export { TableView } from './TableView';
 export { ClarificationDialog } from './ClarificationDialog';
 export { DecisionModal } from './DecisionModal';
 export { DoomLoopInterventionModal } from './DoomLoopInterventionModal';
+export { EnvVarInputModal } from './EnvVarInputModal';
 export { ExecutionStatsCard } from './ExecutionStatsCard';
 export { ExecutionTimelineChart } from './ExecutionTimelineChart';
 export { AgentProgressBar } from './AgentProgressBar';
@@ -53,11 +54,11 @@ export { IdleState, FloatingInputBar } from './chat';
 export { VirtualTimelineEventList } from './VirtualTimelineEventList';
 export { TimelineEventItem } from './TimelineEventItem';
 export {
-  WorkPlanProgress,
-  ToolExecutionLive,
-  ReasoningLog,
-  FinalReport,
-  FollowUpPills,
+    WorkPlanProgress,
+    ToolExecutionLive,
+    ReasoningLog,
+    FinalReport,
+    FollowUpPills,
 } from './execution';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
 export { MaterialIcon } from './shared';

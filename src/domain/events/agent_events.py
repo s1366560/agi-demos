@@ -6,7 +6,8 @@ These events are decoupled from infrastructure concerns (like SSE or Database st
 
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -56,6 +57,12 @@ class AgentEventType(str, Enum):
     CLARIFICATION_ANSWERED = "clarification_answered"
     DECISION_ASKED = "decision_asked"
     DECISION_ANSWERED = "decision_answered"
+
+    # Environment variable events
+    ENV_VAR_REQUESTED = "env_var_requested"
+    ENV_VAR_PROVIDED = "env_var_provided"
+    ENV_VAR_BATCH_REQUESTED = "env_var_batch_requested"
+    ENV_VAR_BATCH_PROVIDED = "env_var_batch_provided"
 
     # Cost events
     COST_UPDATE = "cost_update"
@@ -211,6 +218,7 @@ class AgentActEvent(AgentDomainEvent):
     The tool_execution_id uniquely identifies this tool execution and
     is used to match with the corresponding AgentObserveEvent.
     """
+
     event_type: AgentEventType = AgentEventType.ACT
     tool_name: str
     tool_input: Optional[Dict[str, Any]] = None
@@ -225,6 +233,7 @@ class AgentObserveEvent(AgentDomainEvent):
     The tool_execution_id must match the corresponding AgentActEvent
     for reliable act/observe pairing in the frontend.
     """
+
     event_type: AgentEventType = AgentEventType.OBSERVE
     tool_name: str
     result: Optional[Any] = None
@@ -339,6 +348,45 @@ class AgentDecisionAnsweredEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DECISION_ANSWERED
     request_id: str
     decision: str
+
+
+# === Environment Variable Events ===
+
+
+class AgentEnvVarRequestedEvent(AgentDomainEvent):
+    """Event: Agent requests environment variables from user."""
+
+    event_type: AgentEventType = AgentEventType.ENV_VAR_REQUESTED
+    request_id: str
+    tool_name: str
+    fields: List[Dict[str, Any]]  # List of EnvVarField dicts
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentEnvVarProvidedEvent(AgentDomainEvent):
+    """Event: User provided environment variable values."""
+
+    event_type: AgentEventType = AgentEventType.ENV_VAR_PROVIDED
+    request_id: str
+    tool_name: str
+    saved_variables: List[str]
+
+
+class AgentEnvVarBatchRequestedEvent(AgentDomainEvent):
+    """Event: Agent requests multiple env vars from multiple tools."""
+
+    event_type: AgentEventType = AgentEventType.ENV_VAR_BATCH_REQUESTED
+    request_id: str
+    requests: List[Dict[str, Any]]  # List of {tool_name, fields}
+    context: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentEnvVarBatchProvidedEvent(AgentDomainEvent):
+    """Event: User provided multiple env var values."""
+
+    event_type: AgentEventType = AgentEventType.ENV_VAR_BATCH_PROVIDED
+    request_id: str
+    results: List[Dict[str, Any]]  # List of {tool_name, saved_variables}
 
 
 # === Cost Events ===
@@ -468,6 +516,7 @@ class AgentPlanStatusChangedEvent(AgentDomainEvent):
 
 class AgentPlanExecutionStartEvent(AgentDomainEvent):
     """Event emitted when plan execution starts."""
+
     event_type: AgentEventType = AgentEventType.PLAN_EXECUTION_START
     plan_id: str
     total_steps: int
@@ -476,6 +525,7 @@ class AgentPlanExecutionStartEvent(AgentDomainEvent):
 
 class AgentPlanExecutionCompleteEvent(AgentDomainEvent):
     """Event emitted when plan execution completes."""
+
     event_type: AgentEventType = AgentEventType.PLAN_EXECUTION_COMPLETE
     plan_id: str
     total_duration_ms: int
@@ -486,6 +536,7 @@ class AgentPlanExecutionCompleteEvent(AgentDomainEvent):
 
 class AgentPlanStepReadyEvent(AgentDomainEvent):
     """Event emitted when a step is ready to execute."""
+
     event_type: AgentEventType = AgentEventType.PLAN_STEP_READY
     plan_id: str
     step_id: str
@@ -496,6 +547,7 @@ class AgentPlanStepReadyEvent(AgentDomainEvent):
 
 class AgentPlanStepCompleteEvent(AgentDomainEvent):
     """Event emitted when a step completes."""
+
     event_type: AgentEventType = AgentEventType.PLAN_STEP_COMPLETE
     plan_id: str
     step_id: str
@@ -506,6 +558,7 @@ class AgentPlanStepCompleteEvent(AgentDomainEvent):
 
 class AgentPlanStepSkippedEvent(AgentDomainEvent):
     """Event emitted when a step is skipped."""
+
     event_type: AgentEventType = AgentEventType.PLAN_STEP_SKIPPED
     plan_id: str
     step_id: str
@@ -514,6 +567,7 @@ class AgentPlanStepSkippedEvent(AgentDomainEvent):
 
 class AgentPlanSnapshotCreatedEvent(AgentDomainEvent):
     """Event emitted when a plan snapshot is created."""
+
     event_type: AgentEventType = AgentEventType.PLAN_SNAPSHOT_CREATED
     plan_id: str
     snapshot_id: str
@@ -523,6 +577,7 @@ class AgentPlanSnapshotCreatedEvent(AgentDomainEvent):
 
 class AgentPlanRollbackEvent(AgentDomainEvent):
     """Event emitted when a plan is rolled back to a snapshot."""
+
     event_type: AgentEventType = AgentEventType.PLAN_ROLLBACK
     plan_id: str
     snapshot_id: str
@@ -531,6 +586,7 @@ class AgentPlanRollbackEvent(AgentDomainEvent):
 
 class AgentReflectionCompleteEvent(AgentDomainEvent):
     """Event emitted when reflection completes."""
+
     event_type: AgentEventType = AgentEventType.REFLECTION_COMPLETE
     reflection_id: str
     plan_id: str
@@ -543,6 +599,7 @@ class AgentReflectionCompleteEvent(AgentDomainEvent):
 
 class AgentAdjustmentAppliedEvent(AgentDomainEvent):
     """Event emitted when adjustments are applied to a plan."""
+
     event_type: AgentEventType = AgentEventType.ADJUSTMENT_APPLIED
     plan_id: str
     adjustment_count: int
@@ -558,6 +615,7 @@ class AgentTitleGeneratedEvent(AgentDomainEvent):
     This event is published after the chat completes and a title
     is generated for the conversation (either by LLM or fallback).
     """
+
     event_type: AgentEventType = AgentEventType.TITLE_GENERATED
     conversation_id: str
     title: str
@@ -570,6 +628,7 @@ class AgentTitleGeneratedEvent(AgentDomainEvent):
 
 class AgentSandboxCreatedEvent(AgentDomainEvent):
     """Event emitted when a sandbox is created."""
+
     event_type: AgentEventType = AgentEventType.SANDBOX_CREATED
     sandbox_id: str
     project_id: str
@@ -580,12 +639,14 @@ class AgentSandboxCreatedEvent(AgentDomainEvent):
 
 class AgentSandboxTerminatedEvent(AgentDomainEvent):
     """Event emitted when a sandbox is terminated."""
+
     event_type: AgentEventType = AgentEventType.SANDBOX_TERMINATED
     sandbox_id: str
 
 
 class AgentSandboxStatusEvent(AgentDomainEvent):
     """Event emitted when sandbox status changes."""
+
     event_type: AgentEventType = AgentEventType.SANDBOX_STATUS
     sandbox_id: str
     status: str
@@ -593,6 +654,7 @@ class AgentSandboxStatusEvent(AgentDomainEvent):
 
 class AgentDesktopStartedEvent(AgentDomainEvent):
     """Event emitted when remote desktop service is started."""
+
     event_type: AgentEventType = AgentEventType.DESKTOP_STARTED
     sandbox_id: str
     url: Optional[str] = None
@@ -603,12 +665,14 @@ class AgentDesktopStartedEvent(AgentDomainEvent):
 
 class AgentDesktopStoppedEvent(AgentDomainEvent):
     """Event emitted when remote desktop service is stopped."""
+
     event_type: AgentEventType = AgentEventType.DESKTOP_STOPPED
     sandbox_id: str
 
 
 class AgentDesktopStatusEvent(AgentDomainEvent):
     """Event emitted with current desktop status."""
+
     event_type: AgentEventType = AgentEventType.DESKTOP_STATUS
     sandbox_id: str
     running: bool
@@ -620,6 +684,7 @@ class AgentDesktopStatusEvent(AgentDomainEvent):
 
 class AgentTerminalStartedEvent(AgentDomainEvent):
     """Event emitted when terminal service is started."""
+
     event_type: AgentEventType = AgentEventType.TERMINAL_STARTED
     sandbox_id: str
     url: Optional[str] = None
@@ -630,6 +695,7 @@ class AgentTerminalStartedEvent(AgentDomainEvent):
 
 class AgentTerminalStoppedEvent(AgentDomainEvent):
     """Event emitted when terminal service is stopped."""
+
     event_type: AgentEventType = AgentEventType.TERMINAL_STOPPED
     sandbox_id: str
     session_id: Optional[str] = None
@@ -637,6 +703,7 @@ class AgentTerminalStoppedEvent(AgentDomainEvent):
 
 class AgentTerminalStatusEvent(AgentDomainEvent):
     """Event emitted with current terminal status."""
+
     event_type: AgentEventType = AgentEventType.TERMINAL_STATUS
     sandbox_id: str
     running: bool

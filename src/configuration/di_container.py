@@ -8,15 +8,11 @@ if TYPE_CHECKING:
 
 # Application Services
 from src.application.services.agent_service import AgentService
-from src.application.services.sandbox_orchestrator import (
-    DesktopConfig,
-    DesktopStatus,
-    SandboxOrchestrator,
-    TerminalConfig,
-    TerminalStatus,
-)
 from src.application.services.memory_service import MemoryService
 from src.application.services.project_service import ProjectService
+from src.application.services.sandbox_orchestrator import (
+    SandboxOrchestrator,
+)
 from src.application.services.search_service import SearchService
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
@@ -87,6 +83,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_memory_repository imp
 from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
     SqlAlchemyProjectRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+    SqlAlchemyProjectSandboxRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
     SQLSkillRepository,
 )
@@ -105,6 +104,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_tenant_repository imp
 from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
     SQLToolCompositionRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+    SQLToolEnvironmentVariableRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlAlchemyToolExecutionRecordRepository,
 )
@@ -113,9 +115,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_user_repository impor
 )
 from src.infrastructure.adapters.secondary.persistence.sql_work_plan_repository import (
     SQLWorkPlanRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-    SqlAlchemyProjectSandboxRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SQLWorkflowPatternRepository,
@@ -190,10 +189,10 @@ class DIContainer:
 
     def sandbox_adapter(self):
         """Get the MCP Sandbox adapter for desktop and terminal management."""
+        from src.configuration.config import get_settings
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
             MCPSandboxAdapter,
         )
-        from src.configuration.config import get_settings
 
         settings = get_settings()
         return MCPSandboxAdapter(
@@ -251,6 +250,10 @@ class DIContainer:
 
     def tool_composition_repository(self) -> SQLToolCompositionRepository:
         return SQLToolCompositionRepository(self._db)
+
+    def tool_environment_variable_repository(self) -> SQLToolEnvironmentVariableRepository:
+        """Get SQLToolEnvironmentVariableRepository for tool env var persistence."""
+        return SQLToolEnvironmentVariableRepository(self._db)
 
     def tenant_agent_config_repository(self) -> SQLTenantAgentConfigRepository:
         return SQLTenantAgentConfigRepository(self._db)
@@ -437,9 +440,11 @@ class DIContainer:
                 from src.infrastructure.adapters.secondary.event.redis_event_bus import (
                     RedisEventBusAdapter,
                 )
+
                 event_bus = RedisEventBusAdapter(self._redis_client)
             except Exception as e:
                 import logging
+
                 logging.getLogger(__name__).warning(f"Could not create event bus: {e}")
 
         return SandboxEventPublisher(event_bus=event_bus)
@@ -691,13 +696,13 @@ class DIContainer:
 
     def plan_mode_orchestrator(self, llm):
         """Get PlanModeOrchestrator for plan execution workflow."""
+        from src.infrastructure.agent.planning.plan_adjuster import PlanAdjuster
+        from src.infrastructure.agent.planning.plan_executor import PlanExecutor
+        from src.infrastructure.agent.planning.plan_generator import PlanGenerator
         from src.infrastructure.agent.planning.plan_mode_orchestrator import (
             PlanModeOrchestrator,
         )
-        from src.infrastructure.agent.planning.plan_generator import PlanGenerator
-        from src.infrastructure.agent.planning.plan_executor import PlanExecutor
         from src.infrastructure.agent.planning.plan_reflector import PlanReflector
-        from src.infrastructure.agent.planning.plan_adjuster import PlanAdjuster
 
         plan_generator = PlanGenerator(
             llm_client=llm,
@@ -707,7 +712,9 @@ class DIContainer:
         # Create a basic session processor wrapper
         # Note: The actual session processor should be provided at runtime
         class DummySessionProcessor:
-            async def execute_tool(self, tool_name: str, tool_input: dict, conversation_id: str) -> str:
+            async def execute_tool(
+                self, tool_name: str, tool_input: dict, conversation_id: str
+            ) -> str:
                 return f"Executed {tool_name}"
 
         plan_executor = PlanExecutor(

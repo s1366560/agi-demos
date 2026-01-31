@@ -1,0 +1,9 @@
+{
+  "source": "vercel-labs/skill-remotion-geist",
+  "skill_name": "create-remotion-geist",
+  "branch": "main",
+  "source_path": "skills/create-remotion-geist/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

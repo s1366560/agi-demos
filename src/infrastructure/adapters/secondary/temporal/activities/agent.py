@@ -16,9 +16,7 @@ from typing import Any, Dict, List, Optional
 from temporalio import activity
 
 from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-    get_agent_graph_service,
-    get_redis_client,
-)
+    get_agent_graph_service, get_redis_client)
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +31,8 @@ async def _get_artifact_storage_adapter():
 
     try:
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import (
-            S3StorageAdapter,
-        )
+        from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import \
+            S3StorageAdapter
 
         settings = get_settings()
         _ARTIFACT_STORAGE_ADAPTER = S3StorageAdapter(
@@ -216,11 +213,12 @@ async def execute_react_step_activity(
     try:
         # Import dependencies here to avoid import issues in worker
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-            get_or_create_provider_config,
-        )
-        from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
+        from src.infrastructure.adapters.secondary.event.redis_event_bus import \
+            RedisEventBusAdapter
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import \
+            get_or_create_provider_config
+        from src.infrastructure.llm.litellm.litellm_client import \
+            create_litellm_client
 
         settings = get_settings()
 
@@ -409,6 +407,25 @@ async def execute_react_step_activity(
             sequence_number,
         )
 
+        # Save intermediate assistant_message if content exists (even with tool calls)
+        # This ensures text responses in ReAct loop are saved separately
+        intermediate_assistant_message_id = None
+        if content and content.strip():
+            sequence_number += 1
+            intermediate_assistant_message_id = str(uuid.uuid4())
+            await _save_assistant_message_event(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                content=content,
+                assistant_message_id=intermediate_assistant_message_id,
+                artifacts=None,  # Artifacts attached at complete event
+                sequence_number=sequence_number,
+            )
+            logger.info(
+                f"Saved intermediate assistant_message {intermediate_assistant_message_id} "
+                f"for conversation {conversation_id}"
+            )
+
         # Assemble accumulated tool calls from buffer
         if tool_calls_buffer:
             tool_calls = list(tool_calls_buffer.values())
@@ -594,21 +611,34 @@ async def execute_react_step_activity(
 
         # Send complete event to Redis when finished
         if result_type == "complete":
-            # Save assistant_message event to unified event timeline
-            sequence_number += 1
-            assistant_message_id = await _save_assistant_message_event(
-                conversation_id=conversation_id,
-                message_id=message_id,
-                content=content,
-                assistant_message_id=assistant_message_id,
-                artifacts=collected_artifacts or None,
-                sequence_number=sequence_number,
-            )
+            # Use intermediate assistant_message_id if content was already saved,
+            # otherwise save it now
+            final_message_id = intermediate_assistant_message_id
+            if not final_message_id and content and content.strip():
+                # Content not saved yet, save it now
+                sequence_number += 1
+                final_message_id = await _save_assistant_message_event(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    content=content,
+                    assistant_message_id=assistant_message_id,
+                    artifacts=collected_artifacts or None,
+                    sequence_number=sequence_number,
+                )
+            elif final_message_id:
+                # Content already saved, just log
+                logger.info(
+                    f"Using previously saved assistant_message {final_message_id} "
+                    f"for complete event"
+                )
+
+            # Use the final message ID (either intermediate or new)
+            complete_message_id = final_message_id or assistant_message_id
 
             sequence_number += 1
             complete_data = {
-                "id": assistant_message_id,  # Use the saved message ID
-                "assistant_message_id": assistant_message_id,
+                "id": complete_message_id,
+                "assistant_message_id": complete_message_id,
                 "content": content,
                 "message_id": message_id,  # Original user message ID for reference
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -631,7 +661,7 @@ async def execute_react_step_activity(
 
             logger.info(
                 f"Published complete event for conversation {conversation_id}, "
-                f"assistant message {assistant_message_id}"
+                f"assistant message {complete_message_id}"
             )
 
         return {
@@ -683,8 +713,10 @@ async def _sync_sequence_number_from_db(
     """
     from sqlalchemy import func, select
 
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
+    from src.infrastructure.adapters.secondary.persistence.database import \
+        async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import \
+        AgentExecutionEvent
 
     try:
         async with async_session_factory() as session:
@@ -761,8 +793,10 @@ async def _save_event_to_db(
     from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy.exc import IntegrityError
 
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
+    from src.infrastructure.adapters.secondary.persistence.database import \
+        async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import \
+        AgentExecutionEvent
 
     try:
         async with async_session_factory() as session:
@@ -816,8 +850,10 @@ async def _save_assistant_message_event(
     from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy.exc import IntegrityError
 
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
+    from src.infrastructure.adapters.secondary.persistence.database import \
+        async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import \
+        AgentExecutionEvent
 
     assistant_msg_id = assistant_message_id or str(uuid.uuid4())
     event_data = {
@@ -883,8 +919,10 @@ async def save_checkpoint_activity(
     Returns:
         Created checkpoint ID
     """
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import ExecutionCheckpoint
+    from src.infrastructure.adapters.secondary.persistence.database import \
+        async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import \
+        ExecutionCheckpoint
 
     async with async_session_factory() as session:
         async with session.begin():
@@ -1088,7 +1126,8 @@ async def _execute_entity_lookup(
     """Execute entity lookup tool."""
     entity_name = tool_args.get("name", "")
 
-    from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
+    from src.infrastructure.graph.native_graph_adapter import \
+        NativeGraphAdapter
 
     if not isinstance(graph_service, NativeGraphAdapter):
         return {"error": "Graph service not available"}
@@ -1124,7 +1163,8 @@ async def _execute_graph_query(
     query = tool_args.get("query", "")
     params = tool_args.get("params", {})
 
-    from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
+    from src.infrastructure.graph.native_graph_adapter import \
+        NativeGraphAdapter
 
     if not isinstance(graph_service, NativeGraphAdapter):
         return {"error": "Graph service not available"}
@@ -1261,8 +1301,10 @@ async def _save_tool_execution_record(
     """
     import json
 
-    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import ToolExecutionRecord
+    from src.infrastructure.adapters.secondary.persistence.database import \
+        async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import \
+        ToolExecutionRecord
 
     # Convert tool_output to JSON string if it's a dict
     output_str = None
@@ -1346,18 +1388,15 @@ async def execute_react_agent_activity(
     import time as time_module
 
     from src.configuration.config import get_settings
-    from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
+    from src.infrastructure.adapters.secondary.event.redis_event_bus import \
+        RedisEventBusAdapter
     from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-        get_agent_graph_service,
-        get_or_create_agent_session,
-        get_or_create_llm_client,
-        get_or_create_provider_config,
-        get_or_create_skills,
-        get_or_create_tools,
-        get_redis_client,
-    )
+        get_agent_graph_service, get_or_create_agent_session,
+        get_or_create_llm_client, get_or_create_provider_config,
+        get_or_create_skills, get_or_create_tools, get_redis_client)
     from src.infrastructure.agent.core.react_agent import ReActAgent
-    from src.infrastructure.security.encryption_service import get_encryption_service
+    from src.infrastructure.security.encryption_service import \
+        get_encryption_service
 
     redis_client = None
     start_time = time_module.time()
@@ -1583,10 +1622,33 @@ async def execute_react_agent_activity(
                 if collected_artifacts:
                     event_data_with_message_id["artifacts"] = collected_artifacts
 
-            # Track content for text_delta events
+            # Track content for text_delta events - accumulate within current segment
             if event_type == "text_delta":
                 final_content += event_data_with_message_id.get("delta", "")
+            elif event_type == "text_end":
+                # When a text segment ends, save it as an independent assistant_message
+                # This ensures multiple LLM responses in a ReAct loop are rendered separately
+                segment_content = event_data_with_message_id.get("full_text", final_content)
+                if segment_content and segment_content.strip():
+                    # Increment sequence for the assistant_message event
+                    sequence_number += 1
+                    segment_message_id = str(uuid.uuid4())
+                    await _save_assistant_message_event(
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        content=segment_content,
+                        assistant_message_id=segment_message_id,
+                        artifacts=None,  # Artifacts attached at complete event
+                        sequence_number=sequence_number,
+                    )
+                    logger.info(
+                        f"[ReActAgentActivity] Saved intermediate assistant_message {segment_message_id} "
+                        f"for conversation {conversation_id}"
+                    )
+                # Reset content accumulator for next segment
+                final_content = ""
             elif event_type == "complete":
+                # Complete event may have final content if there was no text_end
                 final_content = event_data_with_message_id.get("content", final_content)
 
             # Publish to Redis (real-time streaming)
@@ -1615,8 +1677,9 @@ async def execute_react_agent_activity(
             elif event_type == "complete":
                 result_type = "complete"
 
-        # Save assistant_message event if completed successfully
-        if result_type == "complete" and final_content:
+        # Save final assistant_message event only if there's remaining content
+        # (content not already saved in text_end handler)
+        if result_type == "complete" and final_content and final_content.strip():
             sequence_number += 1
             assistant_message_id = await _save_assistant_message_event(
                 conversation_id=conversation_id,
@@ -1630,7 +1693,13 @@ async def execute_react_agent_activity(
             total_time_ms = (time_module.time() - start_time) * 1000
             logger.info(
                 f"[ReActAgentActivity] Completed for conversation {conversation_id}, "
-                f"assistant message {assistant_message_id}, total time: {total_time_ms:.1f}ms"
+                f"final assistant message {assistant_message_id}, total time: {total_time_ms:.1f}ms"
+            )
+        else:
+            total_time_ms = (time_module.time() - start_time) * 1000
+            logger.info(
+                f"[ReActAgentActivity] Completed for conversation {conversation_id}, "
+                f"no final content (already saved via text_end), total time: {total_time_ms:.1f}ms"
             )
 
         return {
