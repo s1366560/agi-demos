@@ -1,0 +1,891 @@
+src/components/index.ts:18 - ErrorBoundary
+src/components/index.ts:19 - SkeletonLoader
+src/components/index.ts:20 - EmptyState
+src/components/index.ts:21 - EmptyStateProps
+src/components/index.ts:22 - SkeletonLoaderProps
+src/components/index.ts:27 - ChatLayout
+src/components/index.ts:28 - ConversationSidebar
+src/components/index.ts:29 - MessageArea
+src/components/index.ts:30 - MessageBubble
+src/components/index.ts:31 - InputBar
+src/components/index.ts:32 - RightPanel
+src/components/index.ts:33 - StatusBar
+src/components/index.ts:34 - PlanModeBanner
+src/components/index.ts:35 - SandboxSection
+src/components/index.ts:40 - AppLayout
+src/components/index.ts:41 - ResponsiveLayout
+src/components/index.ts:42 - Layout
+src/components/index.ts:43 - DeleteConfirmationModal
+src/components/index.ts:44 - LanguageSwitcher
+src/components/index.ts:45 - NotificationPanel
+src/components/index.ts:46 - ThemeToggle
+src/components/index.ts:47 - WorkspaceSwitcher
+src/components/index.ts:52 - GraphVisualization
+src/components/index.ts:53 - CytoscapeGraph
+src/components/index.ts:54 - EntityCard
+src/components/index.ts:55 - getEntityTypeColor
+src/components/index.ts:56 - Entity
+src/components/index.ts:57 - EntityCardProps
+src/config/navigation.ts:302 - getNavigationConfig
+src/config/navigation.ts:338 - getSchemaTabs
+src/config/navigation.ts:67 - TabItem (used in module)
+src/config/navigation.ts:105 - LayoutType
+src/config/navigation.ts:110 - NavConfig (used in module)
+src/config/navigation.ts:129 - NavigationState (used in module)
+src/config/navigation.ts:137 - NavigationContextValue
+src/contexts/DarkModeProvider.tsx:106 - default
+src/contexts/index.ts:1 - DarkModeProvider
+src/contexts/index.ts:1 - useDarkMode
+src/hooks/useAgentLifecycleState.ts:34 - UseAgentLifecycleStateOptions (used in module)
+src/hooks/useAgentLifecycleState.ts:40 - UseAgentLifecycleStateResult (used in module)
+src/hooks/useBreadcrumbs.ts:30 - BreadcrumbContext (used in module)
+src/hooks/useBreadcrumbs.ts:35 - BreadcrumbOptions (used in module)
+src/hooks/useDebounce.ts:25 - useDebounce
+src/hooks/useLocalStorage.ts:26 - useLocalStorage
+src/hooks/useLocalStorage.ts:20 - UseLocalStorageReturn (used in module)
+src/hooks/useMediaQuery.ts:19 - useMediaQuery
+src/hooks/useNavigation.ts:10 - UseNavigationOptions
+src/hooks/useNavigation.ts:17 - UseNavigationReturn (used in module)
+src/hooks/usePagination.ts:38 - usePagination
+src/hooks/usePagination.ts:19 - UsePaginationOptions (used in module)
+src/hooks/usePagination.ts:26 - UsePaginationReturn (used in module)
+src/hooks/useSandboxDetection.ts:79 - useSandboxDetection (used in module)
+src/hooks/useSandboxDetection.ts:11 - UseSandboxDetectionOptions (used in module)
+src/hooks/useSandboxDetection.ts:20 - SandboxDetectionResult (used in module)
+src/hooks/useSandboxDetection.ts:212 - default
+src/hooks/useTaskSSE.ts:63 - useTaskSSE
+src/hooks/useUnifiedAgentStatus.ts:42 - UnifiedAgentStatus (used in module)
+src/hooks/useUnifiedAgentStatus.ts:73 - UseUnifiedAgentStatusOptions (used in module)
+src/hooks/useUnifiedAgentStatus.ts:85 - UseUnifiedAgentStatusReturn (used in module)
+src/hooks/useUnifiedAgentStatus.ts:269 - default
+src/hooks/useWebSocket.ts:55 - useWebSocket
+src/hooks/useWebSocket.ts:18 - WebSocketStatus (used in module)
+src/hooks/useWebSocket.ts:20 - UseWebSocketOptions (used in module)
+src/hooks/useWebSocket.ts:31 - UseWebSocketReturn (used in module)
+src/layouts/AgentLayout.tsx:37 - AgentLayout (used in module)
+src/layouts/AgentLayout.tsx:199 - default
+src/layouts/ProjectLayout.tsx:117 - default
+src/pages/ProjectDashboard.tsx:18 - ProjectDashboard
+src/pages/SpaceDashboard.tsx:29 - SpaceDashboard
+src/pages/SpaceListPage.tsx:10 - SpaceListPage
+src/services/agentConfigService.ts:170 - default
+src/services/agentEventReplayService.ts:46 - AgentEventReplayService (used in module)
+src/services/agentService.ts:129 - WebSocketStatus (used in module)
+src/services/agentService.ts:1548 - AgentService (used in module)
+src/services/graphService.ts:7 - GraphNode (used in module)
+src/services/graphService.ts:21 - GraphEdge (used in module)
+src/services/graphService.ts:30 - GraphData (used in module)
+src/services/graphService.ts:37 - Entity (used in module)
+src/services/graphService.ts:47 - Community (used in module)
+src/services/graphService.ts:58 - PaginatedResponse (used in module)
+src/services/graphService.ts:66 - EntityTypeStats (used in module)
+src/services/graphService.ts:71 - EntityRelationships (used in module)
+src/services/graphService.ts:82 - CommunityMembers (used in module)
+src/services/graphService.ts:87 - TaskStatus (used in module)
+src/services/graphService.ts:93 - TaskList (used in module)
+src/services/graphService.ts:103 - TaskCancel (used in module)
+src/services/graphService.ts:109 - SearchResults (used in module)
+src/services/graphService.ts:118 - GraphStats (used in module)
+src/services/graphService.ts:125 - EpisodeData (used in module)
+src/services/graphService.ts:136 - EpisodeListData (used in module)
+src/services/graphService.ts:144 - DeleteResult (used in module)
+src/services/graphService.ts:149 - MaintenanceStatus (used in module)
+src/services/graphService.ts:164 - RefreshResult (used in module)
+src/services/graphService.ts:171 - DeduplicateResult (used in module)
+src/services/graphService.ts:181 - InvalidateEdgesResult (used in module)
+src/services/graphService.ts:190 - OptimizeResult (used in module)
+src/services/graphService.ts:199 - EmbeddingStatus (used in module)
+src/services/graphService.ts:207 - RebuildEmbeddingsResult (used in module)
+src/services/graphService.ts:215 - OptimizeContentResult (used in module)
+src/services/graphService.ts:524 - graphitiService
+src/services/graphService.ts:526 - default
+src/services/mcpService.ts:22 - MCPServerListParams (used in module)
+src/services/mcpService.ts:111 - default
+src/services/patternService.ts:28 - ListPatternsOptions (used in module)
+src/services/patternService.ts:51 - PatternService (used in module)
+src/services/patternService.ts:187 - default
+src/services/planService.ts:23 - PlanService (used in module)
+src/services/projectSandboxService.ts:24 - ProjectSandboxStatus (used in module)
+src/services/projectSandboxService.ts:36 - ProjectSandbox (used in module)
+src/services/projectSandboxService.ts:72 - EnsureSandboxRequest (used in module)
+src/services/projectSandboxService.ts:82 - ExecuteToolRequest (used in module)
+src/services/projectSandboxService.ts:94 - ExecuteToolResponse (used in module)
+src/services/projectSandboxService.ts:108 - HealthCheckResponse (used in module)
+src/services/projectSandboxService.ts:119 - SandboxActionResponse (used in module)
+src/services/projectSandboxService.ts:128 - DesktopStatus (used in module)
+src/services/projectSandboxService.ts:139 - TerminalStatus (used in module)
+src/services/projectSandboxService.ts:150 - ProjectSandboxService (used in module)
+src/services/projectSandboxService.ts:378 - ProjectSandboxServiceInterface
+src/services/sandboxService.ts:32 - SandboxStatus (used in module)
+src/services/sandboxService.ts:37 - Sandbox (used in module)
+src/services/sandboxService.ts:65 - DesktopStatus (used in module)
+src/services/sandboxService.ts:81 - TerminalStatus (used in module)
+src/services/sandboxService.ts:97 - CreateSandboxRequest (used in module)
+src/services/sandboxService.ts:112 - CreateSandboxResponse (used in module)
+src/services/sandboxService.ts:125 - ListSandboxesResponse (used in module)
+src/services/sandboxService.ts:135 - SandboxService (used in module)
+src/services/sandboxService.ts:431 - SandboxServiceInterface
+src/services/sandboxSSEService.ts:17 - SandboxEventType (used in module)
+src/services/sandboxSSEService.ts:31 - BaseSandboxSSEEvent (used in module)
+src/services/sandboxSSEService.ts:40 - SandboxEventHandler (used in module)
+src/services/sandboxSSEService.ts:54 - SSEStatus (used in module)
+src/services/sandboxWebSocketUtils.ts:18 - getWebSocketProtocol (used in module)
+src/services/sandboxWebSocketUtils.ts:34 - getApiBasePath (used in module)
+src/services/sandboxWebSocketUtils.ts:54 - buildWebSocketUrl (used in module)
+src/services/sandboxWebSocketUtils.ts:103 - buildDesktopUrl (used in module)
+src/services/sandboxWebSocketUtils.ts:150 - isDevelopment (used in module)
+src/services/sandboxWebSocketUtils.ts:157 - isProduction
+src/services/sandboxWebSocketUtils.ts:164 - getWebSocketConfig
+src/services/sandboxWebSocketUtils.ts:194 - isValidWebSocketUrl
+src/services/sandboxWebSocketUtils.ts:209 - parseSandboxConnection
+src/services/sandboxWebSocketUtils.ts:13 - WebSocketServiceType (used in module)
+src/services/skillService.ts:24 - SkillListParams (used in module)
+src/services/skillService.ts:32 - SkillMatchParams (used in module)
+src/services/skillService.ts:201 - default
+src/services/sse.ts:150 - AgentEvent (used in module)
+src/services/subagentService.ts:22 - SubAgentListParams (used in module)
+src/services/subagentService.ts:104 - default
+src/services/websocketService.ts:301 - useWebSocket
+src/services/websocketService.ts:11 - WebSocketStatus (used in module)
+src/services/websocketService.ts:13 - WebSocketEventType (used in module)
+src/services/websocketService.ts:23 - WebSocketMessage (used in module)
+src/services/websocketService.ts:29 - GraphUpdateData
+src/services/websocketService.ts:36 - EpisodeCreatedData
+src/services/websocketService.ts:42 - EntityUpdatedData
+src/services/websocketService.ts:48 - CommunityRebuiltData
+src/services/websocketService.ts:53 - MaintenanceProgressData
+src/services/websocketService.ts:296 - websocketService (used in module)
+src/services/websocketService.ts:322 - default
+src/stores/agentV3.ts:35 - AdditionalAgentHandlers (used in module)
+src/stores/agentV3.ts:1243 - useStreamingThought
+src/stores/agentV3.ts:1244 - useIsThinkingStreaming
+src/stores/auth.ts:194 - useIsAuthenticated
+src/stores/auth.ts:203 - useToken
+src/stores/auth.ts:212 - useAuthLoading
+src/stores/auth.ts:221 - useAuthError
+src/stores/mcp.ts:333 - useMCPServers
+src/stores/mcp.ts:338 - useFilteredMCPServers
+src/stores/mcp.ts:371 - useCurrentMCPServer
+src/stores/mcp.ts:377 - useMCPLoading
+src/stores/mcp.ts:382 - useMCPSubmitting
+src/stores/mcp.ts:388 - useMCPError
+src/stores/mcp.ts:393 - useMCPTotal
+src/stores/mcp.ts:398 - useMCPFilters
+src/stores/mcp.ts:403 - useEnabledMCPServersCount
+src/stores/mcp.ts:409 - useTotalMCPToolsCount
+src/stores/mcp.ts:418 - useMCPServersByType
+src/stores/mcp.ts:435 - useIsMCPServerSyncing
+src/stores/mcp.ts:441 - useIsMCPServerTesting
+src/stores/mcp.ts:447 - useAllMCPTools
+src/stores/mcp.ts:449 - default
+src/stores/memory.ts:253 - useMemories
+src/stores/memory.ts:254 - useCurrentMemory
+src/stores/memory.ts:255 - useMemoryTotal
+src/stores/memory.ts:256 - useMemoryPage
+src/stores/memory.ts:257 - useMemoryPageSize
+src/stores/memory.ts:260 - useMemoryLoading
+src/stores/memory.ts:261 - useMemoryError
+src/stores/memory.ts:264 - useGraphData
+src/stores/memory.ts:265 - useEntities
+src/stores/memory.ts:266 - useRelationships
+src/stores/memory.ts:269 - useMemoryActions
+src/stores/project.ts:237 - useProjects
+src/stores/project.ts:246 - useCurrentProject
+src/stores/project.ts:255 - useProjectTotal
+src/stores/project.ts:264 - useProjectPage
+src/stores/project.ts:273 - useProjectPageSize
+src/stores/project.ts:284 - useProjectLoading
+src/stores/project.ts:293 - useProjectError
+src/stores/project.ts:304 - useProjectActions
+src/stores/sandbox.ts:20 - SANDBOX_TOOLS (used in module)
+src/stores/sandbox.ts:29 - SandboxToolName (used in module)
+src/stores/sandbox.ts:31 - ConnectionStatus (used in module)
+src/stores/sandbox.ts:33 - PanelMode (used in module)
+src/stores/sandbox.ts:35 - CurrentTool (used in module)
+src/stores/sandbox.ts:42 - SandboxState (used in module)
+src/stores/sandbox.ts:629 - useSandboxPanelVisible
+src/stores/sandbox.ts:632 - useActiveSandboxId
+src/stores/sandbox.ts:635 - useSandboxConnectionStatus
+src/stores/sandbox.ts:638 - useCurrentTool
+src/stores/sandbox.ts:641 - useToolExecutions
+src/stores/sandbox.ts:644 - useSandboxActiveTab
+src/stores/sandbox.ts:648 - useDesktopStatus
+src/stores/sandbox.ts:651 - useTerminalStatus
+src/stores/sandbox.ts:655 - useActiveProjectId
+src/stores/sandbox.ts:658 - useEnsureSandbox
+src/stores/sandbox.ts:661 - useExecuteTool
+src/stores/skill.ts:418 - useSkills
+src/stores/skill.ts:423 - useFilteredSkills
+src/stores/skill.ts:461 - useSystemSkills
+src/stores/skill.ts:467 - useTenantConfigs
+src/stores/skill.ts:473 - useTenantConfigForSkill
+src/stores/skill.ts:481 - useCurrentSkill
+src/stores/skill.ts:508 - useSkillFilters
+src/stores/skill.ts:537 - default
+src/stores/subagent.ts:312 - useSubAgents
+src/stores/subagent.ts:313 - useCurrentSubAgent
+src/stores/subagent.ts:317 - useSubAgentTotal
+src/stores/subagent.ts:320 - useSubAgentFilters
+src/stores/subagent.ts:391 - useGetSubAgent
+src/stores/subagent.ts:393 - useCreateSubAgent
+src/stores/subagent.ts:395 - useUpdateSubAgent
+src/stores/subagent.ts:401 - useSetCurrentSubAgent
+src/stores/subagent.ts:409 - useResetSubAgentFilters
+src/stores/subagent.ts:413 - useResetSubAgentStore
+src/theme/antdTheme.ts:421 - default
+src/theme/index.ts:5 - ThemeProvider
+src/theme/index.ts:5 - useTheme
+src/theme/index.ts:6 - lightTheme
+src/theme/index.ts:6 - darkTheme
+src/theme/index.ts:6 - colors
+src/theme/ThemeProvider.tsx:46 - default
+src/types/index.ts:16 - ConversationStatus
+src/types/index.ts:21 - MessageRole
+src/types/index.ts:26 - MessageType
+src/types/index.ts:39 - ExecutionStatus
+src/types/index.ts:52 - ThoughtLevel
+src/types/index.ts:57 - PlanStatus
+src/types/index.ts:62 - PlanStep
+src/types/index.ts:74 - WorkPlan
+src/types/index.ts:88 - ToolCall
+src/types/index.ts:97 - ToolResult
+src/types/index.ts:106 - ArtifactReference
+src/types/index.ts:117 - Message
+src/types/index.ts:134 - Conversation
+src/types/index.ts:151 - AgentExecution
+src/types/index.ts:170 - AgentEventType
+src/types/index.ts:239 - AgentEvent
+src/types/index.ts:247 - MessageEventData
+src/types/index.ts:258 - ThoughtEventData
+src/types/index.ts:267 - WorkPlanEventData
+src/types/index.ts:285 - StepStartEventData
+src/types/index.ts:297 - StepEndEventData
+src/types/index.ts:310 - ActEventData
+src/types/index.ts:320 - ObserveEventData
+src/types/index.ts:329 - CompleteEventData
+src/types/index.ts:341 - ErrorEventData
+src/types/index.ts:350 - TitleGeneratedEventData
+src/types/index.ts:361 - ClarificationType
+src/types/index.ts:371 - ClarificationOption
+src/types/index.ts:381 - ClarificationAskedEventData
+src/types/index.ts:393 - ClarificationAnsweredEventData
+src/types/index.ts:401 - DecisionType
+src/types/index.ts:411 - DecisionOption
+src/types/index.ts:424 - DecisionAskedEventData
+src/types/index.ts:437 - DecisionAnsweredEventData
+src/types/index.ts:445 - DoomLoopDetectedEventData
+src/types/index.ts:460 - DoomLoopIntervenedEventData
+src/types/index.ts:468 - ThoughtDeltaEventData
+src/types/index.ts:477 - TextDeltaEventData
+src/types/index.ts:484 - TextEndEventData
+src/types/index.ts:491 - CreateConversationRequest
+src/types/index.ts:500 - CreateConversationResponse
+src/types/index.ts:505 - ChatRequest
+src/types/index.ts:514 - ToolInfo
+src/types/index.ts:522 - ToolsListResponse
+src/types/index.ts:529 - ConversationMessagesResponse
+src/types/index.ts:542 - AgentExecutionWithDetails
+src/types/index.ts:568 - ExecutionHistoryResponse
+src/types/index.ts:577 - ExecutionStatsResponse
+src/types/index.ts:595 - ToolExecutionRecord
+src/types/index.ts:615 - ToolExecutionsResponse
+src/types/index.ts:624 - AgentStreamHandler
+src/types/index.ts:681 - AgentService
+src/types/index.ts:729 - PatternStep
+src/types/index.ts:744 - WorkflowPattern
+src/types/index.ts:760 - PatternMatchEventData
+src/types/index.ts:769 - PatternsListResponse
+src/types/index.ts:779 - ResetPatternsResponse
+src/types/index.ts:791 - ConfigType
+src/types/index.ts:803 - TenantAgentConfig
+src/types/index.ts:825 - UpdateTenantAgentConfigRequest
+src/types/index.ts:839 - TenantAgentConfigService
+src/types/index.ts:871 - ToolCompositionTemplate
+src/types/index.ts:884 - ToolComposition
+src/types/index.ts:901 - ToolCompositionsListResponse
+src/types/index.ts:913 - SubAgentTrigger
+src/types/index.ts:922 - SubAgentResponse
+src/types/index.ts:950 - SubAgentCreate
+src/types/index.ts:972 - SubAgentUpdate
+src/types/index.ts:993 - SubAgentTemplate
+src/types/index.ts:1003 - SubAgentTemplatesResponse
+src/types/index.ts:1010 - SubAgentsListResponse
+src/types/index.ts:1018 - SubAgentStatsResponse
+src/types/index.ts:1029 - SubAgentMatchResponse
+src/types/index.ts:1041 - TriggerPattern
+src/types/index.ts:1050 - SkillResponse
+src/types/index.ts:1076 - SkillCreate
+src/types/index.ts:1092 - SkillUpdate
+src/types/index.ts:1107 - SkillsListResponse
+src/types/index.ts:1115 - SkillMatchResponse
+src/types/index.ts:1122 - SkillContentResponse
+src/types/index.ts:1133 - TenantSkillConfigResponse
+src/types/index.ts:1146 - TenantSkillConfigListResponse
+src/types/index.ts:1154 - SystemSkillStatus
+src/types/index.ts:1168 - SkillExecutionMode
+src/types/index.ts:1173 - SkillMatchedEventData
+src/types/index.ts:1184 - SkillExecutionStartEventData
+src/types/index.ts:1194 - SkillToolStartEventData
+src/types/index.ts:1207 - SkillToolResultEventData
+src/types/index.ts:1222 - SkillToolExecution
+src/types/index.ts:1235 - SkillExecutionCompleteEventData
+src/types/index.ts:1248 - SkillFallbackEventData
+src/types/index.ts:1258 - ContextCompressedEventData
+src/types/index.ts:1272 - SkillExecutionState
+src/types/index.ts:1296 - ToolExecutionStatus
+src/types/index.ts:1301 - TimelineStepStatus
+src/types/index.ts:1306 - ToolExecution
+src/types/index.ts:1322 - TimelineStep
+src/types/index.ts:1336 - DisplayMode
+src/types/index.ts:1345 - MCPServerType
+src/types/index.ts:1350 - MCPToolInfo
+src/types/index.ts:1359 - MCPServerResponse
+src/types/index.ts:1376 - MCPServerCreate
+src/types/index.ts:1387 - MCPServerUpdate
+src/types/index.ts:1398 - MCPServersListResponse
+src/types/index.ts:1406 - MCPServerSyncResponse
+src/types/index.ts:1415 - MCPServerTestResponse
+src/types/index.ts:1424 - MCPToolCallRequest
+src/types/index.ts:1433 - MCPToolCallResponse
+src/types/index.ts:1443 - StdioTransportConfig
+src/types/index.ts:1452 - HttpTransportConfig
+src/types/index.ts:1460 - WebSocketTransportConfig
+src/types/index.ts:1471 - PlanDocumentStatus
+src/types/index.ts:1480 - AgentMode
+src/types/index.ts:1485 - PlanDocument
+src/types/index.ts:1500 - PlanModeStatus
+src/types/index.ts:1510 - EnterPlanModeRequest
+src/types/index.ts:1519 - ExitPlanModeRequest
+src/types/index.ts:1529 - UpdatePlanRequest
+src/types/index.ts:1543 - PlanModeEnterEventData
+src/types/index.ts:1549 - PlanModeExitEventData
+src/types/index.ts:1556 - PlanCreatedEventData
+src/types/index.ts:1562 - PlanUpdatedEventData
+src/types/index.ts:1568 - PlanStatusChangedEventData
+src/types/index.ts:1581 - TimelineEventType
+src/types/index.ts:1607 - BaseTimelineEvent
+src/types/index.ts:1618 - UserMessageEvent
+src/types/index.ts:1627 - AssistantMessageEvent
+src/types/index.ts:1637 - ThoughtEvent
+src/types/index.ts:1645 - ActEvent
+src/types/index.ts:1660 - ObserveEvent
+src/types/index.ts:1671 - WorkPlanTimelineEvent
+src/types/index.ts:1684 - StepStartEvent
+src/types/index.ts:1693 - StepEndEvent
+src/types/index.ts:1702 - TextDeltaEvent
+src/types/index.ts:1710 - TextStartEvent
+src/types/index.ts:1717 - TextEndEvent
+src/types/index.ts:1725 - TimelineEvent
+src/types/index.ts:1751 - TimelineResponse
+src/types/index.ts:1764 - DesktopStatus
+src/types/index.ts:1777 - TerminalStatus
+src/types/index.ts:1788 - DesktopStartedEventData
+src/types/index.ts:1799 - DesktopStoppedEventData
+src/types/index.ts:1806 - DesktopStatusEventData
+src/types/index.ts:1813 - TerminalStartedEventData
+src/types/index.ts:1823 - TerminalStoppedEventData
+src/types/index.ts:1831 - TerminalStatusEventData
+src/types/index.ts:1838 - ScreenshotUpdateEventData
+src/types/index.ts:1847 - SandboxCreatedEventData
+src/types/index.ts:1858 - SandboxTerminatedEventData
+src/types/index.ts:1865 - SandboxStatusEventData
+src/types/index.ts:1873 - DesktopStartedEvent
+src/types/index.ts:1885 - DesktopStoppedEvent
+src/types/index.ts:1893 - DesktopStatusEvent
+src/types/index.ts:1906 - TerminalStartedEvent
+src/types/index.ts:1917 - TerminalStoppedEvent
+src/types/index.ts:1926 - TerminalStatusEvent
+src/types/index.ts:1938 - ScreenshotUpdateEvent
+src/types/index.ts:1947 - SandboxCreatedEvent
+src/types/index.ts:1959 - SandboxTerminatedEvent
+src/types/index.ts:1967 - SandboxStatusEvent
+src/types/index.ts:1980 - ExecutionStepStatus
+src/types/index.ts:1991 - ExecutionPlanStatus
+src/types/index.ts:2003 - ReflectionAssessment
+src/types/index.ts:2013 - AdjustmentType
+src/types/index.ts:2024 - ExecutionStep
+src/types/index.ts:2040 - StepAdjustment
+src/types/index.ts:2052 - ReflectionResult
+src/types/index.ts:2067 - StepState
+src/types/index.ts:2080 - PlanSnapshot
+src/types/index.ts:2094 - ExecutionPlan
+src/types/index.ts:2119 - PlanExecutionStartEvent
+src/types/index.ts:2132 - PlanExecutionCompleteEvent
+src/types/index.ts:2146 - PlanStepReadyEvent
+src/types/index.ts:2161 - PlanStepCompleteEvent
+src/types/index.ts:2175 - PlanStepSkippedEvent
+src/types/index.ts:2188 - PlanSnapshotCreatedEvent
+src/types/index.ts:2202 - PlanRollbackEvent
+src/types/index.ts:2215 - ReflectionCompleteEvent
+src/types/index.ts:2230 - AdjustmentAppliedEvent
+src/types/index.ts:2243 - PlanModeEvent
+src/types/index.ts:2261 - LifecycleState
+src/types/index.ts:2272 - LifecycleStateData
+src/types/index.ts:2286 - LifecycleStatus
+src/types/index.ts:1 - MemoryRulesConfig
+src/types/index.ts:8 - GraphConfig
+src/types/index.ts:15 - ProcessingStatus
+src/types/index.ts:16 - DataStatus
+src/types/index.ts:18 - Entity
+src/types/index.ts:26 - Relationship
+src/types/index.ts:35 - GraphData
+src/types/index.ts:40 - Tenant
+src/types/index.ts:53 - ProjectStats
+src/types/index.ts:61 - Project
+src/types/index.ts:76 - Memory
+src/types/index.ts:97 - MemoryCreate
+src/types/index.ts:110 - MemoryUpdate
+src/types/index.ts:122 - MemoryQuery
+src/types/index.ts:137 - MemoryItem
+src/types/index.ts:157 - MemorySearchResponse
+src/types/index.ts:165 - MemoryListResponse
+src/types/index.ts:172 - TenantCreate
+src/types/index.ts:181 - TenantUpdate
+src/types/index.ts:190 - TenantListResponse
+src/types/index.ts:197 - ProjectCreate
+src/types/index.ts:206 - ProjectUpdate
+src/types/index.ts:214 - ProjectListResponse
+src/types/index.ts:221 - UserProfile
+src/types/index.ts:232 - UserUpdate
+src/types/index.ts:237 - User
+src/types/index.ts:248 - UserTenant
+src/types/index.ts:257 - UserProject
+src/types/index.ts:267 - ProviderType
+src/types/index.ts:268 - ProviderStatus
+src/types/index.ts:270 - ProviderConfig
+src/types/index.ts:291 - ProviderCreate
+src/types/index.ts:305 - ProviderUpdate
+src/types/index.ts:319 - ProviderListResponse
+src/types/index.ts:324 - ProviderUsageStats
+src/types/index.ts:338 - TenantProviderMapping
+src/types/index.ts:347 - TaskStats
+src/types/index.ts:355 - QueueDepth
+src/types/index.ts:360 - RecentTask
+src/types/index.ts:367 - StatusBreakdown
+src/types/index.ts:373 - SchemaEntityType
+src/types/index.ts:382 - SchemaEdgeType
+src/types/index.ts:392 - EdgeMapping
+src/types/index.ts:29 - isUnknownError
+src/types/index.ts:39 - getErrorMessage
+src/types/index.ts:8 - ApiErrorResponse
+src/types/index.ts:18 - UnknownError
+src/types/sandbox.ts:207 - isSandboxEventType
+src/types/sandbox.ts:217 - isSandboxCreatedEvent
+src/types/sandbox.ts:226 - isDesktopStartedEvent
+src/types/sandbox.ts:235 - isTerminalStartedEvent
+src/types/sandbox.ts:11 - SandboxEventType (used in module)
+src/types/sandbox.ts:25 - BaseSandboxSSEEvent (used in module)
+src/types/sandbox.ts:34 - SandboxCreatedEventData (used in module)
+src/types/sandbox.ts:45 - SandboxCreatedSSEEvent (used in module)
+src/types/sandbox.ts:53 - SandboxTerminatedEventData (used in module)
+src/types/sandbox.ts:60 - SandboxTerminatedSSEEvent (used in module)
+src/types/sandbox.ts:68 - SandboxStatusEventData (used in module)
+src/types/sandbox.ts:76 - SandboxStatusSSEEvent (used in module)
+src/types/sandbox.ts:84 - DesktopStartedEventData (used in module)
+src/types/sandbox.ts:95 - DesktopStartedSSEEvent (used in module)
+src/types/sandbox.ts:103 - DesktopStoppedEventData (used in module)
+src/types/sandbox.ts:110 - DesktopStoppedSSEEvent (used in module)
+src/types/sandbox.ts:118 - DesktopStatusEventData (used in module)
+src/types/sandbox.ts:130 - DesktopStatusSSEEvent (used in module)
+src/types/sandbox.ts:138 - TerminalStartedEventData (used in module)
+src/types/sandbox.ts:149 - TerminalStartedSSEEvent (used in module)
+src/types/sandbox.ts:157 - TerminalStoppedEventData (used in module)
+src/types/sandbox.ts:165 - TerminalStoppedSSEEvent (used in module)
+src/types/sandbox.ts:173 - TerminalStatusEventData (used in module)
+src/types/sandbox.ts:185 - TerminalStatusSSEEvent (used in module)
+src/types/sandbox.ts:193 - SandboxSSEEvent (used in module)
+src/types/sandbox.ts:248 - ProjectSandboxStatus (used in module)
+src/types/sandbox.ts:260 - ProjectSandbox
+src/types/sandbox.ts:296 - ExecuteToolRequest
+src/types/sandbox.ts:308 - ExecuteToolResponse
+src/types/sandbox.ts:322 - HealthCheckResponse
+src/utils/date.ts:70 - formatDate
+src/utils/date.ts:78 - formatTime
+src/utils/logger.ts:19 - Logger (used in module)
+src/utils/logger.ts:92 - LogMethod (used in module)
+src/utils/logger.ts:97 - default
+src/utils/planModeSSEAdapter.ts:117 - planModeSSEAdapter
+src/utils/planModeSSEAdapter.ts:262 - appendPlanModeEventToTimeline
+src/utils/planModeSSEAdapter.ts:24 - PlanModeAction (used in module)
+src/utils/planModeSSEAdapter.ts:37 - EnterPlanModePayload (used in module)
+src/utils/planModeSSEAdapter.ts:46 - ExitPlanModePayload (used in module)
+src/utils/planModeSSEAdapter.ts:56 - LoadPlanPayload (used in module)
+src/utils/planModeSSEAdapter.ts:63 - UpdatePlanPayload (used in module)
+src/utils/planModeSSEAdapter.ts:75 - CriticalFile (used in module)
+src/utils/planModeSSEAdapter.ts:83 - ExecutionStartPayload (used in module)
+src/utils/planModeSSEAdapter.ts:92 - StepCompletePayload (used in module)
+src/utils/planModeSSEAdapter.ts:103 - ReflectionCompletePayload (used in module)
+src/utils/retry.ts:116 - retryWithBackoff
+src/utils/retry.ts:5 - RetryOptions (used in module)
+src/utils/sseEventAdapter.ts:52 - resetSequenceCounter (used in module)
+src/utils/sseEventAdapter.ts:60 - getSequenceCounter
+src/utils/sseEventAdapter.ts:70 - getNextSequenceNumber (used in module)
+src/utils/sseEventAdapter.ts:86 - generateTimelineEventId (used in module)
+src/utils/sseEventAdapter.ts:106 - sseEventToTimeline (used in module)
+src/utils/sseEventAdapter.ts:456 - batchConvertSSEEvents
+src/utils/sseEventAdapter.ts:510 - isSupportedEventType
+src/components/agent/AgentChatContent.tsx:427 - default
+src/components/agent/ClarificationDialog.tsx:173 - default
+src/components/agent/CodeExecutorResultCard.tsx:239 - default
+src/components/agent/ConversationSidebarLegacy.tsx:35 - ConversationSidebar
+src/components/agent/DecisionModal.tsx:275 - default
+src/components/agent/DoomLoopInterventionModal.tsx:21 - DoomLoopDetectedEventData (used in module)
+src/components/agent/DoomLoopInterventionModal.tsx:245 - default
+src/components/agent/ExecutionDetailsPanel.tsx:70 - ViewType (used in module)
+src/components/agent/ExecutionDetailsPanel.tsx:75 - ExecutionDetailsPanelProps (used in module)
+src/components/agent/ExecutionDetailsPanel.tsx:101 - ExecutionDetailsPanel (used in module)
+src/components/agent/ExecutionDetailsPanel.tsx:288 - default
+src/components/agent/ExecutionPlanProgress.tsx:136 - default
+src/components/agent/ExecutionPlanViewer.tsx:470 - default
+src/components/agent/FileDownloadButton.tsx:66 - default
+src/components/agent/index.ts:8 - ChatLayout
+src/components/agent/index.ts:9 - ConversationSidebar
+src/components/agent/index.ts:11 - MessageBubble
+src/components/agent/index.ts:14 - PlanModeBanner
+src/components/agent/index.ts:15 - SandboxSection
+src/components/agent/index.ts:21 - AgentChatContent
+src/components/agent/index.ts:24 - Resizer
+src/components/agent/index.ts:27 - ProjectSelector
+src/components/agent/index.ts:28 - TenantAgentConfigEditor
+src/components/agent/index.ts:29 - TenantAgentConfigView
+src/components/agent/index.ts:30 - ReportViewer
+src/components/agent/index.ts:31 - TableView
+src/components/agent/index.ts:32 - ClarificationDialog
+src/components/agent/index.ts:33 - DecisionModal
+src/components/agent/index.ts:34 - DoomLoopInterventionModal
+src/components/agent/index.ts:35 - ExecutionStatsCard
+src/components/agent/index.ts:36 - ExecutionTimelineChart
+src/components/agent/index.ts:37 - AgentProgressBar
+src/components/agent/index.ts:38 - PlanEditor
+src/components/agent/index.ts:39 - PlanModeIndicator
+src/components/agent/index.ts:40 - PlanModeViewer
+src/components/agent/index.ts:41 - ExecutionPlanProgress
+src/components/agent/index.ts:42 - ExecutionPlanViewer
+src/components/agent/index.ts:43 - StepAdjustmentModal
+src/components/agent/index.ts:44 - CodeExecutorResultCard
+src/components/agent/index.ts:45 - FileDownloadButton
+src/components/agent/index.ts:46 - WebScrapeResultCard
+src/components/agent/index.ts:47 - WebSearchResultCard
+src/components/agent/index.ts:48 - SkillExecutionCard
+src/components/agent/index.ts:51 - WorkspaceSidebar
+src/components/agent/index.ts:51 - TopNavigation
+src/components/agent/index.ts:51 - ChatHistorySidebar
+src/components/agent/index.ts:52 - IdleState
+src/components/agent/index.ts:52 - FloatingInputBar
+src/components/agent/index.ts:53 - VirtualTimelineEventList
+src/components/agent/index.ts:54 - TimelineEventItem
+src/components/agent/index.ts:56 - WorkPlanProgress
+src/components/agent/index.ts:57 - ToolExecutionLive
+src/components/agent/index.ts:58 - ReasoningLog
+src/components/agent/index.ts:59 - FinalReport
+src/components/agent/index.ts:60 - FollowUpPills
+src/components/agent/index.ts:62 - PatternStats
+src/components/agent/index.ts:62 - PatternList
+src/components/agent/index.ts:62 - PatternInspector
+src/components/agent/index.ts:63 - MaterialIcon
+src/components/agent/index.ts:66 - StarterTile
+src/components/agent/index.ts:67 - StepStatus
+src/components/agent/index.ts:67 - WorkPlanStep
+src/components/agent/index.ts:68 - SidebarConversationStatus
+src/components/agent/index.ts:68 - Conversation
+src/components/agent/index.ts:69 - PatternStatus
+src/components/agent/index.ts:69 - WorkflowPattern
+src/components/agent/InputArea.tsx:35 - InputArea (used in module)
+src/components/agent/InputArea.tsx:266 - default
+src/components/agent/InputBar.tsx:203 - default
+src/components/agent/MessageBubbleLegacy.tsx:576 - MessageBubble (used in module)
+src/components/agent/MessageInput.tsx:19 - MessageInput
+src/components/agent/MessageList.tsx:70 - MessageList
+src/components/agent/PlanEditor.tsx:351 - default
+src/components/agent/PlanModeIndicator.tsx:167 - default
+src/components/agent/PlanModeViewer.tsx:322 - default
+src/components/agent/PlanViewer.tsx:12 - PlanViewer
+src/components/agent/ProjectAgentStatusBar.tsx:319 - default
+src/components/agent/ProjectSelector.tsx:232 - ProjectSelectorLoading
+src/components/agent/ProjectSelector.tsx:242 - ProjectSelectorEmpty
+src/components/agent/ReportViewer.tsx:170 - default
+src/components/agent/Resizer.tsx:143 - default
+src/components/agent/RightPanel.tsx:30 - RightPanelTab (used in module)
+src/components/agent/RightPanel.tsx:32 - RightPanelProps (used in module)
+src/components/agent/RightPanel.tsx:442 - default
+src/components/agent/SandboxSection.tsx:332 - default
+src/components/agent/SkillExecutionCard.tsx:290 - default
+src/components/agent/StepAdjustmentModal.tsx:28 - StepAdjustmentModalProps (used in module)
+src/components/agent/StepAdjustmentModal.tsx:238 - default
+src/components/agent/TableView.tsx:179 - default
+src/components/agent/TenantAgentConfigEditor.tsx:451 - default
+src/components/agent/TenantAgentConfigView.tsx:252 - default
+src/components/agent/ThinkingChain.tsx:270 - default
+src/components/agent/ThoughtBubble.tsx:150 - default
+src/components/agent/TimelineEventItem.tsx:45 - TimelineEventItemProps (used in module)
+src/components/agent/TimelineEventItem.tsx:411 - default
+src/components/agent/ToolCard.tsx:123 - default
+src/components/agent/ToolExecutionCard.tsx:545 - default
+src/components/agent/VirtualTimelineEventList.tsx:399 - default
+src/components/agent/WebScrapeResultCard.tsx:9 - WebScrapeResultCardProps (used in module)
+src/components/agent/WebScrapeResultCard.tsx:91 - default
+src/components/agent/WebSearchResultCard.tsx:18 - WebSearchResultCardProps (used in module)
+src/components/agent/WebSearchResultCard.tsx:145 - default
+src/components/agent/WorkPlanCard.tsx:271 - default
+src/components/common/AppInitializer.tsx:86 - default
+src/components/common/EmptyState.tsx:138 - default
+src/components/common/ErrorBoundary.tsx:207 - default
+src/components/common/index.ts:1 - ErrorBoundary
+src/components/common/index.ts:2 - RouteErrorBoundary
+src/components/common/index.ts:3 - SkeletonLoader
+src/components/common/index.ts:4 - EmptyState
+src/components/common/index.ts:5 - VirtualGrid
+src/components/common/index.ts:6 - ResizableHandle
+src/components/common/index.ts:7 - EmptyStateProps
+src/components/common/index.ts:8 - SkeletonLoaderProps
+src/components/common/index.ts:9 - VirtualGridProps
+src/components/common/index.ts:10 - RouteErrorBoundaryProps
+src/components/common/RouteErrorBoundary.tsx:146 - default
+src/components/common/SkeletonLoader.tsx:172 - default
+src/components/graph/CytoscapeGraph.tsx:465 - default (used in module)
+src/components/graph/index.ts:10 - GraphVisualization
+src/components/graph/index.ts:11 - CytoscapeGraph
+src/components/graph/index.ts:12 - EntityCard
+src/components/graph/index.ts:12 - getEntityTypeColor
+src/components/graph/index.ts:13 - Entity
+src/components/graph/index.ts:13 - EntityCardProps
+src/components/layout/AgentSidebar.tsx:16 - AgentSidebarProps (used in module)
+src/components/layout/AgentSidebar.tsx:78 - default
+src/components/layout/AppHeader.tsx:19 - Breadcrumb (used in module)
+src/components/layout/AppHeader.tsx:24 - AppHeaderProps (used in module)
+src/components/layout/AppHeader.tsx:404 - default
+src/components/layout/AppSidebar.tsx:15 - AppSidebarProps (used in module)
+src/components/layout/AppSidebar.tsx:306 - default
+src/components/layout/ProjectSidebar.tsx:17 - ProjectSidebarProps (used in module)
+src/components/layout/ProjectSidebar.tsx:77 - default
+src/components/layout/SidebarNavItem.tsx:14 - SidebarNavItemProps (used in module)
+src/components/layout/SidebarNavItem.tsx:133 - default
+src/components/layout/TenantChatSidebar.tsx:182 - TenantChatSidebarProps (used in module)
+src/components/layout/TenantChatSidebar.tsx:561 - default
+src/components/layout/TenantNavMenu.tsx:207 - default
+src/components/layout/TenantSidebar.tsx:27 - TenantSidebar (used in module)
+src/components/layout/TenantSidebar.tsx:17 - TenantSidebarProps (used in module)
+src/components/layout/TenantSidebar.tsx:73 - default
+src/components/mcp/McpServerModal.tsx:278 - default
+src/components/project/index.ts:11 - MemoryManager
+src/components/project/index.ts:12 - MemoryDetailModal
+src/components/project/index.ts:13 - EditMemoryModal
+src/components/project/index.ts:14 - ShareMemoryModal
+src/components/shared/index.ts:15 - AppLayout
+src/components/shared/index.ts:16 - ResponsiveLayout
+src/components/shared/index.ts:17 - Layout
+src/components/shared/index.ts:22 - DeleteConfirmationModal
+src/components/shared/index.ts:27 - LanguageSwitcher
+src/components/shared/index.ts:28 - NotificationPanel
+src/components/shared/index.ts:29 - ThemeToggle
+src/components/shared/index.ts:30 - WorkspaceSwitcher
+src/components/skill/SkillModal.tsx:502 - default
+src/components/subagent/SubAgentModal.tsx:493 - default
+src/components/tenant/index.ts:11 - UserManager
+src/components/tenant/index.ts:12 - EditUserModal
+src/components/tenant/index.ts:13 - TenantSelector
+src/components/tenant/index.ts:14 - ProjectManager
+src/components/tenant/index.ts:15 - ProjectSettingsModal
+src/components/tenant/index.ts:16 - ProjectCreateModal
+src/components/tenant/index.ts:17 - TenantCreateModal
+src/components/tenant/index.ts:18 - ProviderModal
+src/services/client/ApiError.ts:286 - parseAxiosError
+src/services/client/ApiError.ts:363 - parseError
+src/services/client/httpClient.ts:15 - HttpRequestConfig (used in module)
+src/services/client/requestCache.ts:25 - CacheStats (used in module)
+src/services/client/requestCache.ts:157 - requestCache
+src/services/client/requestCache.ts:160 - CacheEntry (used in module)
+src/services/client/requestDeduplicator.ts:17 - DeduplicationStats (used in module)
+src/services/client/requestDeduplicator.ts:158 - requestDeduplicator
+src/services/client/retry.ts:60 - calculateDelay (used in module)
+src/services/client/retry.ts:91 - isRetryableError (used in module)
+src/services/client/retry.ts:118 - retryWithBackoff
+src/services/client/retry.ts:16 - RetryConfig (used in module)
+src/services/client/retry.ts:42 - DEFAULT_RETRY_CONFIG (used in module)
+src/services/client/urlUtils.ts:174 - handleUnauthorized (used in module)
+src/services/client/urlUtils.ts:21 - FetchRetryConfig (used in module)
+src/services/client/urlUtils.ts:229 - FetchOptions (used in module)
+src/services/client/urlUtils.ts:347 - ApiError
+src/services/client/urlUtils.ts:347 - ApiErrorType
+src/stores/agent/conversationState.ts:13 - ConversationStreamingState (used in module)
+src/stores/agent/conversationState.ts:22 - ConversationExecutionState (used in module)
+src/stores/agent/index.ts:21 - useConversationsStore
+src/stores/agent/index.ts:22 - useConversations
+src/stores/agent/index.ts:23 - useCurrentConversation
+src/stores/agent/index.ts:24 - useConversationsLoading
+src/stores/agent/index.ts:25 - useConversationsError
+src/stores/agent/index.ts:26 - useIsNewConversationPending
+src/stores/agent/index.ts:27 - conversationsInitialState
+src/stores/agent/index.ts:29 - ConversationsStore
+src/stores/agent/index.ts:33 - usePlanModeStore
+src/stores/agent/index.ts:34 - useIsInPlanMode
+src/stores/agent/index.ts:35 - planModeInitialState
+src/stores/agent/index.ts:40 - useStreamingStore
+src/stores/agent/index.ts:41 - useIsActiveStreaming
+src/stores/agent/index.ts:42 - useDraftContentLength
+src/stores/agent/index.ts:43 - streamingInitialState
+src/stores/agent/index.ts:45 - StreamStatus
+src/stores/agent/index.ts:45 - StreamingStore
+src/stores/agent/index.ts:49 - useTimelineStore
+src/stores/agent/index.ts:50 - useTimeline
+src/stores/agent/index.ts:51 - useTimelineLoading
+src/stores/agent/index.ts:52 - useTimelineError
+src/stores/agent/index.ts:53 - useEarliestLoadedSequence
+src/stores/agent/index.ts:54 - useLatestLoadedSequence
+src/stores/agent/index.ts:55 - useTimelineWithChatFields
+src/stores/agent/index.ts:56 - timelineInitialState
+src/stores/agent/index.ts:58 - TimelineStore
+src/stores/agent/index.ts:62 - useExecutionStore
+src/stores/agent/index.ts:63 - useCurrentWorkPlan
+src/stores/agent/index.ts:64 - useCurrentStepNumber
+src/stores/agent/index.ts:65 - useCurrentStepStatus
+src/stores/agent/index.ts:66 - useExecutionTimeline
+src/stores/agent/index.ts:67 - useCurrentToolExecution
+src/stores/agent/index.ts:68 - useToolExecutionHistory
+src/stores/agent/index.ts:69 - useMatchedPattern
+src/stores/agent/index.ts:70 - executionInitialState
+src/stores/agent/index.ts:73 - ExecutionStore
+src/stores/agent/index.ts:74 - ExecutionState
+src/stores/agent/index.ts:75 - StepStatus
+src/stores/agent/index.ts:76 - MatchedPattern
+src/stores/agent/index.ts:77 - CurrentToolExecution
+src/stores/agent/index.ts:82 - createEmptyConversationState
+src/stores/agent/index.ts:83 - updateConversationState
+src/stores/agent/index.ts:84 - isConversationLocked
+src/stores/agent/index.ts:85 - setConversationLock
+src/stores/agent/index.ts:88 - ConversationState
+src/stores/agent/index.ts:89 - ConversationLocks
+src/stores/agent/index.ts:93 - PlanDocument
+src/stores/agent/index.ts:93 - PlanModeStatus
+src/stores/agent/planModeStore.ts:325 - PlanModeStore
+src/stores/agent/timelineStore.ts:250 - useIsLoadingEarlier
+src/stores/agent/timelineStore.ts:278 - useHasEarlier
+src/components/agent/chat/AssistantMessage.tsx:17 - AssistantMessageProps (used in module)
+src/components/agent/chat/AssistantMessage.tsx:84 - default
+src/components/agent/chat/ChatArea.tsx:157 - ChatArea (used in module)
+src/components/agent/chat/FinalResponseDisplay.tsx:13 - FinalResponseDisplayProps (used in module)
+src/components/agent/chat/FinalResponseDisplay.tsx:150 - default
+src/components/agent/chat/FloatingInputBar.tsx:248 - default
+src/components/agent/chat/IdleState.tsx:146 - default
+src/components/agent/chat/index.ts:1 - IdleState
+src/components/agent/chat/index.ts:2 - FloatingInputBar
+src/components/agent/chat/index.ts:3 - MarkdownContent
+src/components/agent/chat/index.ts:4 - TimelineEventRenderer
+src/components/agent/chat/index.ts:5 - StarterTile
+src/components/agent/chat/index.ts:5 - IdleStateProps
+src/components/agent/chat/index.ts:6 - FloatingInputBarProps
+src/components/agent/chat/index.ts:7 - MarkdownContentProps
+src/components/agent/chat/MarkdownContent.tsx:57 - default
+src/components/agent/chat/MessageStream.tsx:145 - formatToolResult (used in module)
+src/components/agent/chat/MessageStream.tsx:11 - MessageStreamProps (used in module)
+src/components/agent/chat/MessageStream.tsx:41 - UserMessageProps (used in module)
+src/components/agent/chat/MessageStream.tsx:59 - AgentSectionProps (used in module)
+src/components/agent/chat/MessageStream.tsx:95 - ReasoningLogCardProps (used in module)
+src/components/agent/chat/MessageStream.tsx:159 - ToolExecutionCardDisplayProps (used in module)
+src/components/agent/chat/MessageStream.tsx:351 - default
+src/components/agent/chat/TimelineEventRenderer.tsx:82 - default
+src/components/agent/execution/ActivityTimeline.tsx:529 - default
+src/components/agent/execution/ExecutionTimeline.tsx:437 - default
+src/components/agent/execution/FinalReport.tsx:190 - default
+src/components/agent/execution/FollowUpPills.tsx:65 - default
+src/components/agent/execution/index.ts:1 - WorkPlanProgress
+src/components/agent/execution/index.ts:2 - ToolExecutionLive
+src/components/agent/execution/index.ts:3 - ReasoningLog
+src/components/agent/execution/index.ts:4 - FinalReport
+src/components/agent/execution/index.ts:5 - ExportActions
+src/components/agent/execution/index.ts:6 - FollowUpPills
+src/components/agent/execution/index.ts:7 - ExecutionTimeline
+src/components/agent/execution/index.ts:8 - TimelineNode
+src/components/agent/execution/index.ts:9 - ToolExecutionDetail
+src/components/agent/execution/index.ts:10 - SimpleExecutionView
+src/components/agent/execution/index.ts:11 - ActivityTimeline
+src/components/agent/execution/index.ts:12 - TokenUsageChart
+src/components/agent/execution/index.ts:13 - ToolCallVisualization
+src/components/agent/execution/index.ts:15 - StepStatus
+src/components/agent/execution/index.ts:16 - WorkPlanStep
+src/components/agent/execution/index.ts:17 - WorkPlanProgressProps
+src/components/agent/execution/index.ts:20 - ToolExecutionStatus
+src/components/agent/execution/index.ts:21 - ToolExecutionLiveProps
+src/components/agent/execution/index.ts:23 - ReasoningStep
+src/components/agent/execution/index.ts:23 - ReasoningLogProps
+src/components/agent/execution/index.ts:24 - FinalReportProps
+src/components/agent/execution/index.ts:25 - ExportActionsProps
+src/components/agent/execution/index.ts:26 - FollowUpPillsProps
+src/components/agent/execution/index.ts:27 - ExecutionTimelineProps
+src/components/agent/execution/index.ts:27 - DisplayMode
+src/components/agent/execution/index.ts:28 - TimelineNodeProps
+src/components/agent/execution/index.ts:29 - ToolExecutionDetailProps
+src/components/agent/execution/index.ts:30 - SimpleExecutionViewProps
+src/components/agent/execution/index.ts:32 - ActivityTimelineProps
+src/components/agent/execution/index.ts:33 - TimelineItem
+src/components/agent/execution/index.ts:34 - ToolExecutionInfo
+src/components/agent/execution/index.ts:37 - TokenUsageChartProps
+src/components/agent/execution/index.ts:38 - TokenData
+src/components/agent/execution/index.ts:39 - CostData
+src/components/agent/execution/index.ts:42 - ToolCallVisualizationProps
+src/components/agent/execution/index.ts:43 - ToolExecutionItem
+src/components/agent/execution/ReasoningLog.tsx:111 - default
+src/components/agent/execution/SimpleExecutionView.tsx:103 - default
+src/components/agent/execution/TimelineNode.tsx:246 - default
+src/components/agent/execution/TokenUsageChart.tsx:384 - default
+src/components/agent/execution/ToolCallVisualization.tsx:549 - default (used in module)
+src/components/agent/execution/ToolExecutionDetail.tsx:435 - default
+src/components/agent/execution/ToolExecutionLive.tsx:184 - default
+src/components/agent/execution/WorkPlanProgress.tsx:219 - default
+src/components/agent/layout/AgentWorkspace.tsx:70 - AgentWorkspace (used in module)
+src/components/agent/layout/AgentWorkspace.tsx:17 - AgentWorkspaceProps (used in module)
+src/components/agent/layout/AgentWorkspace.tsx:200 - default
+src/components/agent/layout/ChatHistorySidebar.tsx:20 - ChatHistorySidebarProps (used in module)
+src/components/agent/layout/ChatHistorySidebar.tsx:237 - default
+src/components/agent/layout/index.ts:1 - WorkspaceSidebar
+src/components/agent/layout/index.ts:2 - TopNavigation
+src/components/agent/layout/index.ts:3 - ChatHistorySidebar
+src/components/agent/layout/index.ts:4 - SidebarConversationStatus
+src/components/agent/layout/index.ts:4 - Conversation
+src/components/agent/layout/TopNavigation.tsx:9 - TopNavigationProps (used in module)
+src/components/agent/layout/TopNavigation.tsx:146 - default
+src/components/agent/layout/WorkspaceSidebar.tsx:12 - WorkspaceSidebarProps (used in module)
+src/components/agent/layout/WorkspaceSidebar.tsx:159 - default
+src/components/agent/patterns/index.ts:1 - PatternStats
+src/components/agent/patterns/index.ts:2 - PatternList
+src/components/agent/patterns/index.ts:3 - PatternInspector
+src/components/agent/patterns/index.ts:4 - PatternStatus
+src/components/agent/patterns/index.ts:4 - PatternDefinition
+src/components/agent/patterns/index.ts:4 - WorkflowPattern
+src/components/agent/patterns/index.ts:4 - PatternListProps
+src/components/agent/patterns/index.ts:5 - PatternInspectorProps
+src/components/agent/patterns/PatternInspector.tsx:229 - default
+src/components/agent/patterns/PatternList.tsx:208 - default
+src/components/agent/patterns/PatternStats.tsx:9 - PatternStatsProps (used in module)
+src/components/agent/patterns/PatternStats.tsx:139 - default
+src/components/agent/sandbox/index.ts:7 - SandboxTerminal
+src/components/agent/sandbox/index.ts:8 - SandboxTerminalProps
+src/components/agent/sandbox/index.ts:10 - SandboxOutputViewer
+src/components/agent/sandbox/index.ts:12 - SandboxOutputViewerProps
+src/components/agent/sandbox/index.ts:13 - ToolExecution
+src/components/agent/sandbox/index.ts:16 - SandboxPanel
+src/components/agent/sandbox/index.ts:17 - SandboxPanelProps
+src/components/agent/sandbox/index.ts:19 - RemoteDesktopViewer
+src/components/agent/sandbox/index.ts:20 - RemoteDesktopViewerProps
+src/components/agent/sandbox/index.ts:22 - SandboxControlPanel
+src/components/agent/sandbox/index.ts:23 - SandboxControlPanelProps
+src/components/agent/sandbox/RemoteDesktopViewer.tsx:224 - default
+src/components/agent/sandbox/SandboxControlPanel.tsx:209 - default
+src/components/agent/sandbox/SandboxOutputViewer.tsx:256 - default
+src/components/agent/sandbox/SandboxPanel.tsx:271 - default
+src/components/agent/sandbox/SandboxTerminal.tsx:391 - default
+src/components/agent/shared/index.ts:1 - MaterialIcon
+src/components/agent/shared/index.ts:2 - MaterialIconProps
+src/components/agent/shared/MaterialIcon.tsx:70 - default
+src/components/shared/layouts/index.ts:10 - AppLayout
+src/components/shared/layouts/index.ts:11 - ResponsiveLayout
+src/components/shared/layouts/index.ts:12 - Layout
+src/components/shared/modals/index.ts:7 - DeleteConfirmationModal
+src/components/shared/ui/index.ts:7 - LanguageSwitcher
+src/components/shared/ui/index.ts:8 - NotificationPanel
+src/components/shared/ui/index.ts:9 - ThemeToggle
+src/components/shared/ui/index.ts:10 - WorkspaceSwitcher
+src/pages/project/agent/AgentLogs.tsx:553 - default
+src/pages/project/agent/AgentPatterns.tsx:299 - default
+src/pages/project/agent/index.ts:5 - AgentLogs
+src/pages/project/agent/index.ts:6 - AgentPatterns
