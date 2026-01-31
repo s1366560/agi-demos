@@ -500,7 +500,9 @@ async def get_or_create_tools(
 
     # 7. Add Environment Variable Tools (GetEnvVarTool, RequestEnvVarTool, CheckEnvVarsTool)
     try:
-        from src.configuration.di_container import DIContainer
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
         from src.infrastructure.agent.tools.env_var_tools import (
             CheckEnvVarsTool,
             GetEnvVarTool,
@@ -508,29 +510,30 @@ async def get_or_create_tools(
         )
         from src.infrastructure.security.encryption_service import get_encryption_service
 
-        # Get repository from DI container
-        container = DIContainer()
-        env_var_repository = container.tool_environment_variable_repository()
         encryption_service = get_encryption_service()
 
-        # Create env var tools with tenant/project context
+        # Create env var tools with session_factory for worker context
+        # Each tool will create its own session when execute() is called
         get_env_var_tool = GetEnvVarTool(
-            repository=env_var_repository,
+            repository=None,  # Will use session_factory instead
             encryption_service=encryption_service,
             tenant_id=tenant_id,
             project_id=project_id,
+            session_factory=async_session_factory,
         )
         request_env_var_tool = RequestEnvVarTool(
-            repository=env_var_repository,
+            repository=None,  # Will use session_factory instead
             encryption_service=encryption_service,
             tenant_id=tenant_id,
             project_id=project_id,
+            session_factory=async_session_factory,
         )
         check_env_vars_tool = CheckEnvVarsTool(
-            repository=env_var_repository,
+            repository=None,  # Will use session_factory instead
             encryption_service=encryption_service,
             tenant_id=tenant_id,
             project_id=project_id,
+            session_factory=async_session_factory,
         )
 
         tools["get_env_var"] = get_env_var_tool

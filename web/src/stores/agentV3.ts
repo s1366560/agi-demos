@@ -168,6 +168,7 @@ interface AgentV3State {
     respondToClarification: (requestId: string, answer: string) => Promise<void>;
     respondToDecision: (requestId: string, decision: string) => Promise<void>;
     respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
+    loadPendingHITL: (conversationId: string) => Promise<void>;
     togglePlanMode: () => Promise<void>;
     clearError: () => void;
 }
@@ -1021,34 +1022,486 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                 respondToClarification: async (requestId, answer) => {
                     console.log("Responding to clarification", requestId, answer);
+                    const { activeConversationId } = get();
+
                     try {
+                        // Ensure WebSocket is connected before responding
+                        // This is critical for receiving agent responses after page refresh
+                        if (!agentService.isConnected()) {
+                            console.log("[agentV3] Connecting WebSocket before HITL response...");
+                            await agentService.connect();
+                        }
+
+                        // Subscribe to the conversation to receive responses
+                        if (activeConversationId) {
+                            const simpleHandler: AgentStreamHandler = {
+                                onTextDelta: (event) => {
+                                    const delta = event.data.delta;
+                                    if (delta) {
+                                        set((state) => ({
+                                            streamingAssistantContent: state.streamingAssistantContent + delta,
+                                            streamStatus: "streaming"
+                                        }));
+                                    }
+                                },
+                                onTextEnd: (event) => {
+                                    const fullText = event.data.full_text;
+                                    if (fullText) {
+                                        set({ streamingAssistantContent: fullText });
+                                    }
+                                },
+                                onComplete: (event) => {
+                                    set((state) => {
+                                        const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            messages: timelineToMessages(updatedTimeline),
+                                            isStreaming: false,
+                                            streamStatus: "idle",
+                                            agentState: "idle",
+                                        };
+                                    });
+                                },
+                                onError: (event) => {
+                                    console.error("[agentV3] HITL response error:", event.data);
+                                    set({
+                                        error: event.data.message || "Agent error",
+                                        isStreaming: false,
+                                        streamStatus: "error",
+                                        agentState: "idle",
+                                    });
+                                },
+                                onThought: (event) => {
+                                    set((state) => {
+                                        const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
+                                        return {
+                                            currentThought: event.data.thought || "",
+                                            timeline: updatedTimeline,
+                                            agentState: "thinking",
+                                        };
+                                    });
+                                },
+                                onAct: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "acting",
+                                        };
+                                    });
+                                },
+                                onObserve: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "observing",
+                                        };
+                                    });
+                                },
+                                // HITL event handlers for nested requests
+                                onClarificationAsked: (event) => {
+                                    const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
+                                        type: "clarification_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingClarification: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onDecisionAsked: (event) => {
+                                    const decisionEvent: AgentEvent<DecisionAskedEventData> = {
+                                        type: "decision_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingDecision: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onEnvVarRequested: (event) => {
+                                    const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
+                                        type: "env_var_requested",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingEnvVarRequest: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                            };
+                            agentService.subscribe(activeConversationId, simpleHandler);
+                            console.log("[agentV3] Subscribed to conversation:", activeConversationId);
+                        }
+
                         await agentService.respondToClarification(requestId, answer);
-                        set({ pendingClarification: null, agentState: "thinking" });
+                        set({ pendingClarification: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
                     } catch (error) {
                         console.error("Failed to respond to clarification:", error);
-                        set({ agentState: "idle" });
+                        set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
                     }
                 },
 
                 respondToDecision: async (requestId, decision) => {
                     console.log("Responding to decision", requestId, decision);
+                    const { activeConversationId } = get();
+
                     try {
+                        // Ensure WebSocket is connected before responding
+                        if (!agentService.isConnected()) {
+                            console.log("[agentV3] Connecting WebSocket before HITL response...");
+                            await agentService.connect();
+                        }
+
+                        // Subscribe to the conversation to receive responses
+                        if (activeConversationId) {
+                            const simpleHandler: AgentStreamHandler = {
+                                onTextDelta: (event) => {
+                                    const delta = event.data.delta;
+                                    if (delta) {
+                                        set((state) => ({
+                                            streamingAssistantContent: state.streamingAssistantContent + delta,
+                                            streamStatus: "streaming"
+                                        }));
+                                    }
+                                },
+                                onTextEnd: (event) => {
+                                    const fullText = event.data.full_text;
+                                    if (fullText) {
+                                        set({ streamingAssistantContent: fullText });
+                                    }
+                                },
+                                onComplete: (event) => {
+                                    set((state) => {
+                                        const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            messages: timelineToMessages(updatedTimeline),
+                                            isStreaming: false,
+                                            streamStatus: "idle",
+                                            agentState: "idle",
+                                        };
+                                    });
+                                },
+                                onError: (event) => {
+                                    console.error("[agentV3] HITL response error:", event.data);
+                                    set({
+                                        error: event.data.message || "Agent error",
+                                        isStreaming: false,
+                                        streamStatus: "error",
+                                        agentState: "idle",
+                                    });
+                                },
+                                onThought: (event) => {
+                                    set((state) => {
+                                        const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
+                                        return {
+                                            currentThought: event.data.thought || "",
+                                            timeline: updatedTimeline,
+                                            agentState: "thinking",
+                                        };
+                                    });
+                                },
+                                onAct: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "acting",
+                                        };
+                                    });
+                                },
+                                onObserve: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "observing",
+                                        };
+                                    });
+                                },
+                                // HITL event handlers for nested requests
+                                onClarificationAsked: (event) => {
+                                    const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
+                                        type: "clarification_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingClarification: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onDecisionAsked: (event) => {
+                                    const decisionEvent: AgentEvent<DecisionAskedEventData> = {
+                                        type: "decision_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingDecision: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onEnvVarRequested: (event) => {
+                                    const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
+                                        type: "env_var_requested",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingEnvVarRequest: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                            };
+                            agentService.subscribe(activeConversationId, simpleHandler);
+                            console.log("[agentV3] Subscribed to conversation:", activeConversationId);
+                        }
+
                         await agentService.respondToDecision(requestId, decision);
-                        set({ pendingDecision: null, agentState: "thinking" });
+                        set({ pendingDecision: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
                     } catch (error) {
                         console.error("Failed to respond to decision:", error);
-                        set({ agentState: "idle" });
+                        set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
                     }
                 },
 
                 respondToEnvVar: async (requestId, values) => {
                     console.log("Responding to env var request", requestId, values);
+                    const { activeConversationId } = get();
+
                     try {
+                        // Ensure WebSocket is connected before responding
+                        if (!agentService.isConnected()) {
+                            console.log("[agentV3] Connecting WebSocket before HITL response...");
+                            await agentService.connect();
+                        }
+
+                        // Subscribe to the conversation to receive responses
+                        if (activeConversationId) {
+                            const simpleHandler: AgentStreamHandler = {
+                                onTextDelta: (event) => {
+                                    const delta = event.data.delta;
+                                    if (delta) {
+                                        set((state) => ({
+                                            streamingAssistantContent: state.streamingAssistantContent + delta,
+                                            streamStatus: "streaming"
+                                        }));
+                                    }
+                                },
+                                onTextEnd: (event) => {
+                                    const fullText = event.data.full_text;
+                                    if (fullText) {
+                                        set({ streamingAssistantContent: fullText });
+                                    }
+                                },
+                                onComplete: (event) => {
+                                    set((state) => {
+                                        const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            messages: timelineToMessages(updatedTimeline),
+                                            isStreaming: false,
+                                            streamStatus: "idle",
+                                            agentState: "idle",
+                                        };
+                                    });
+                                },
+                                onError: (event) => {
+                                    console.error("[agentV3] HITL response error:", event.data);
+                                    set({
+                                        error: event.data.message || "Agent error",
+                                        isStreaming: false,
+                                        streamStatus: "error",
+                                        agentState: "idle",
+                                    });
+                                },
+                                onThought: (event) => {
+                                    set((state) => {
+                                        const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
+                                        return {
+                                            currentThought: event.data.thought || "",
+                                            timeline: updatedTimeline,
+                                            agentState: "thinking",
+                                        };
+                                    });
+                                },
+                                onAct: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "acting",
+                                        };
+                                    });
+                                },
+                                onObserve: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "observing",
+                                        };
+                                    });
+                                },
+                                // HITL event handlers for nested requests
+                                onClarificationAsked: (event) => {
+                                    const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
+                                        type: "clarification_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingClarification: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onDecisionAsked: (event) => {
+                                    const decisionEvent: AgentEvent<DecisionAskedEventData> = {
+                                        type: "decision_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingDecision: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onEnvVarRequested: (event) => {
+                                    const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
+                                        type: "env_var_requested",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingEnvVarRequest: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                            };
+                            agentService.subscribe(activeConversationId, simpleHandler);
+                            console.log("[agentV3] Subscribed to conversation:", activeConversationId);
+                        }
+
                         await agentService.respondToEnvVar(requestId, values);
-                        set({ pendingEnvVarRequest: null, agentState: "thinking" });
+                        set({ pendingEnvVarRequest: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
                     } catch (error) {
                         console.error("Failed to respond to env var request:", error);
-                        set({ agentState: "idle" });
+                        set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
+                    }
+                },
+
+                /**
+                 * Load pending HITL (Human-In-The-Loop) requests for a conversation
+                 * This is used to restore dialog state after page refresh
+                 */
+                loadPendingHITL: async (conversationId) => {
+                    console.log("[agentV3] Loading pending HITL requests for conversation:", conversationId);
+                    try {
+                        const response = await agentService.getPendingHITLRequests(conversationId);
+                        console.log("[agentV3] Pending HITL response:", response);
+
+                        if (response.requests.length === 0) {
+                            console.log("[agentV3] No pending HITL requests");
+                            return;
+                        }
+
+                        // Process each pending request and restore dialog state
+                        for (const request of response.requests) {
+                            console.log("[agentV3] Restoring pending HITL request:", request.request_type, request.id);
+
+                            switch (request.request_type) {
+                                case "clarification":
+                                    set({
+                                        pendingClarification: {
+                                            request_id: request.id,
+                                            question: request.question,
+                                            clarification_type: request.metadata?.clarification_type || "custom",
+                                            options: request.options || [],
+                                            allow_custom: request.metadata?.allow_custom ?? true,
+                                            context: request.context || {},
+                                        },
+                                        agentState: "awaiting_input",
+                                    });
+                                    break;
+
+                                case "decision":
+                                    set({
+                                        pendingDecision: {
+                                            request_id: request.id,
+                                            question: request.question,
+                                            decision_type: request.metadata?.decision_type || "custom",
+                                            options: request.options || [],
+                                            allow_custom: request.metadata?.allow_custom ?? true,
+                                            context: request.context || {},
+                                        },
+                                        agentState: "awaiting_input",
+                                    });
+                                    break;
+
+                                case "env_var":
+                                    // Use new format directly: name, label, required
+                                    // Data comes from request.options (stored in DB)
+                                    const fields = request.options || [];
+
+                                    set({
+                                        pendingEnvVarRequest: {
+                                            request_id: request.id,
+                                            tool_name: request.metadata?.tool_name || "unknown",
+                                            fields: fields,
+                                            message: request.question,
+                                            context: request.context || {},
+                                        },
+                                        agentState: "awaiting_input",
+                                    });
+                                    break;
+                            }
+
+                            // Only restore the first pending request
+                            // (user should answer one at a time)
+                            break;
+                        }
+                    } catch (error) {
+                        console.error("[agentV3] Failed to load pending HITL requests:", error);
+                        // Don't throw - this is a recovery mechanism, not critical
                     }
                 },
 

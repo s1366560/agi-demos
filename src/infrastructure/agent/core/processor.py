@@ -1281,8 +1281,16 @@ class SessionProcessor:
                 context=context,
             )
 
-            # Register request with manager
-            await manager.register_request(request)
+            # Register request with manager (including persistence context)
+            ctx = getattr(self, "_langfuse_context", {}) or {}
+            await manager.register_request(
+                request,
+                tenant_id=ctx.get("tenant_id"),
+                project_id=ctx.get("project_id"),
+                conversation_id=ctx.get("conversation_id"),
+                message_id=ctx.get("message_id"),
+                timeout=timeout,
+            )
 
             # Emit clarification_asked event BEFORE blocking
             yield AgentClarificationAskedEvent(
@@ -1448,8 +1456,16 @@ class SessionProcessor:
                 context=context,
             )
 
-            # Register request with manager
-            await manager.register_request(request)
+            # Register request with manager (including persistence context)
+            ctx = getattr(self, "_langfuse_context", {}) or {}
+            await manager.register_request(
+                request,
+                tenant_id=ctx.get("tenant_id"),
+                project_id=ctx.get("project_id"),
+                conversation_id=ctx.get("conversation_id"),
+                message_id=ctx.get("message_id"),
+                timeout=timeout,
+            )
 
             # Emit decision_asked event BEFORE blocking
             yield AgentDecisionAskedEvent(
@@ -1612,8 +1628,16 @@ class SessionProcessor:
                 context=context or {},
             )
 
-            # Register request with manager
-            await manager.register_request(request)
+            # Register request with manager (including persistence context)
+            ctx = getattr(self, "_langfuse_context", {}) or {}
+            await manager.register_request(
+                request,
+                tenant_id=ctx.get("tenant_id"),
+                project_id=ctx.get("project_id"),
+                conversation_id=ctx.get("conversation_id"),
+                message_id=ctx.get("message_id"),
+                timeout=timeout,
+            )
 
             # Emit env_var_requested event BEFORE blocking
             yield AgentEnvVarRequestedEvent(
@@ -1631,7 +1655,71 @@ class SessionProcessor:
                 end_time = time.time()
 
                 # values is a Dict[str, str] of variable_name -> value
-                saved_variables = list(values.keys()) if values else []
+                saved_variables = []
+
+                # Save environment variables to database
+                ctx = getattr(self, "_langfuse_context", {}) or {}
+                tenant_id = ctx.get("tenant_id")
+                project_id = ctx.get("project_id")
+                save_to_project = arguments.get("save_to_project", False)
+
+                if tenant_id and values:
+                    try:
+                        from src.domain.model.agent.tool_environment_variable import (
+                            EnvVarScope,
+                            ToolEnvironmentVariable,
+                        )
+                        from src.infrastructure.adapters.secondary.persistence.database import (
+                            async_session_factory,
+                        )
+                        from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+                            SQLToolEnvironmentVariableRepository,
+                        )
+                        from src.infrastructure.security.encryption_service import (
+                            get_encryption_service,
+                        )
+
+                        encryption_service = get_encryption_service()
+                        scope = (
+                            EnvVarScope.PROJECT
+                            if save_to_project and project_id
+                            else EnvVarScope.TENANT
+                        )
+                        effective_project_id = project_id if save_to_project else None
+
+                        async with async_session_factory() as db_session:
+                            repository = SQLToolEnvironmentVariableRepository(db_session)
+                            for field_spec in env_var_fields:
+                                var_name = field_spec.variable_name
+                                if var_name in values and values[var_name]:
+                                    # Encrypt the value
+                                    encrypted_value = encryption_service.encrypt(values[var_name])
+
+                                    # Create domain entity
+                                    env_var = ToolEnvironmentVariable(
+                                        tenant_id=tenant_id,
+                                        project_id=effective_project_id,
+                                        tool_name=target_tool_name,
+                                        variable_name=var_name,
+                                        encrypted_value=encrypted_value,
+                                        description=field_spec.description,
+                                        is_required=field_spec.is_required,
+                                        is_secret=getattr(field_spec, "is_secret", True),
+                                        scope=scope,
+                                    )
+
+                                    # Upsert to database
+                                    await repository.upsert(env_var)
+                                    saved_variables.append(var_name)
+
+                                    logger.info(f"Saved env var: {target_tool_name}/{var_name}")
+                            await db_session.commit()
+                    except Exception as e:
+                        logger.error(f"Error saving env vars to database: {e}")
+                        # Even if save fails, include the variable names
+                        saved_variables = list(values.keys()) if values else []
+                else:
+                    saved_variables = list(values.keys()) if values else []
 
                 # Emit provided event
                 yield AgentEnvVarProvidedEvent(

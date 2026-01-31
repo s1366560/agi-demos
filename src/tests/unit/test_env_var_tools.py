@@ -52,11 +52,13 @@ class TestEnvVarField:
         )
         result = field.to_dict()
 
-        assert result["variable_name"] == "SECRET_TOKEN"
-        assert result["display_name"] == "Secret Token"
+        # Field names are mapped to frontend format:
+        # variable_name -> name, display_name -> label, is_required -> required
+        assert result["name"] == "SECRET_TOKEN"
+        assert result["label"] == "Secret Token"
         assert result["description"] == "Your secret API token"
         assert result["input_type"] == "password"
-        assert result["is_required"] is True
+        assert result["required"] is True
         assert result["is_secret"] is True
 
 
@@ -69,8 +71,11 @@ class TestEnvVarManager:
         return EnvVarManager()
 
     @pytest.mark.asyncio
-    async def test_respond_to_request(self, manager):
+    async def test_respond_to_request(self, manager, mocker):
         """Test responding to an env var request."""
+        # Mock database update to return True (simulating successful DB update)
+        mocker.patch.object(manager, "_update_db_response", return_value=True)
+
         # Create a request
         request_id = "test-123"
         request = EnvVarRequest(
@@ -316,8 +321,11 @@ class TestRequestEnvVarTool:
         mock_event_publisher,
         mock_repository,
         mock_encryption_service,
+        mocker,
     ):
         """Test that executing the tool emits an SSE event."""
+        # Mock database update to return True (simulating successful DB update)
+        mocker.patch.object(request_env_tool._manager, "_update_db_response", return_value=True)
 
         # Create a background task that will respond after a short delay
         async def respond_later():

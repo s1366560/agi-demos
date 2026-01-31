@@ -1829,6 +1829,170 @@ async def get_execution_stats(
 # === Human-in-the-Loop Response Endpoints ===
 
 
+class HITLRequestResponse(BaseModel):
+    """Response model for a pending HITL request."""
+
+    id: str
+    request_type: str  # clarification | decision | env_var
+    conversation_id: str
+    message_id: Optional[str] = None
+    question: str
+    options: Optional[list] = None
+    context: Optional[dict] = None
+    metadata: Optional[dict] = None
+    status: str
+    created_at: str
+    expires_at: str
+
+
+class PendingHITLResponse(BaseModel):
+    """Response for pending HITL requests query."""
+
+    requests: list[HITLRequestResponse]
+    total: int
+
+
+@router.get(
+    "/conversations/{conversation_id}/hitl/pending",
+    response_model=PendingHITLResponse,
+)
+async def get_pending_hitl_requests(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> PendingHITLResponse:
+    """
+    Get all pending HITL requests for a conversation.
+
+    This endpoint allows the frontend to query for pending HITL requests
+    after a page refresh, enabling recovery of the conversation state.
+
+    Args:
+        conversation_id: The conversation ID to query
+
+    Returns:
+        List of pending HITL requests for the conversation
+    """
+    try:
+        # Get tenant_id and project_id from conversation
+        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+            SqlAlchemyConversationRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+            SQLHITLRequestRepository,
+        )
+
+        conv_repo = SqlAlchemyConversationRepository(db)
+        conversation = await conv_repo.find_by_id(conversation_id)
+
+        if not conversation:
+            raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+
+        # Verify user has access (same tenant)
+        if conversation.tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail="Access denied to this conversation")
+
+        # Query pending requests
+        repo = SQLHITLRequestRepository(db)
+        pending = await repo.get_pending_by_conversation(
+            conversation_id=conversation_id,
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+        )
+
+        requests = [
+            HITLRequestResponse(
+                id=r.id,
+                request_type=r.request_type.value,
+                conversation_id=r.conversation_id,
+                message_id=r.message_id,
+                question=r.question,
+                options=r.options,
+                context=r.context,
+                metadata=r.metadata,
+                status=r.status.value,
+                created_at=r.created_at.isoformat() if r.created_at else "",
+                expires_at=r.expires_at.isoformat() if r.expires_at else "",
+            )
+            for r in pending
+        ]
+
+        return PendingHITLResponse(
+            requests=requests,
+            total=len(requests),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting pending HITL requests: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get pending HITL requests: {str(e)}"
+        )
+
+
+@router.get("/projects/{project_id}/hitl/pending", response_model=PendingHITLResponse)
+async def get_project_pending_hitl_requests(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 50,
+) -> PendingHITLResponse:
+    """
+    Get all pending HITL requests for a project.
+
+    This endpoint allows querying all pending HITL requests across all
+    conversations in a project.
+
+    Args:
+        project_id: The project ID to query
+        limit: Maximum number of results (default 50)
+
+    Returns:
+        List of pending HITL requests for the project
+    """
+    try:
+        from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+            SQLHITLRequestRepository,
+        )
+
+        repo = SQLHITLRequestRepository(db)
+        pending = await repo.get_pending_by_project(
+            tenant_id=current_user.tenant_id,
+            project_id=project_id,
+            limit=limit,
+        )
+
+        requests = [
+            HITLRequestResponse(
+                id=r.id,
+                request_type=r.request_type.value,
+                conversation_id=r.conversation_id,
+                message_id=r.message_id,
+                question=r.question,
+                options=r.options,
+                context=r.context,
+                metadata=r.metadata,
+                status=r.status.value,
+                created_at=r.created_at.isoformat() if r.created_at else "",
+                expires_at=r.expires_at.isoformat() if r.expires_at else "",
+            )
+            for r in pending
+        ]
+
+        return PendingHITLResponse(
+            requests=requests,
+            total=len(requests),
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting project pending HITL requests: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get pending HITL requests: {str(e)}"
+        )
+
+
 class ClarificationResponseRequest(BaseModel):
     """Request to respond to a clarification."""
 

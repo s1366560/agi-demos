@@ -8,15 +8,26 @@ Cross-Process Communication:
 - Uses Redis Pub/Sub for cross-process HITL responses
 - Worker process subscribes to Redis channel for responses
 - API process publishes responses to Redis channel
+
+Database Persistence:
+- Stores HITL requests in database for recovery after page refresh
+- Enables frontend to query pending requests on reconnection
 """
 
 import asyncio
 import json
 import logging
 import uuid
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.domain.model.agent.hitl_request import (
+    HITLRequest as HITLRequestEntity,
+)
+from src.domain.model.agent.hitl_request import (
+    HITLRequestType,
+)
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
@@ -120,10 +131,11 @@ class ClarificationManager:
 
     Thread-safe manager for handling multiple clarification requests.
     Uses Redis Pub/Sub for cross-process communication.
+    Uses database persistence for recovery after page refresh.
 
     Architecture:
-    - Worker process: Creates request, subscribes to Redis channel, waits for response
-    - API process: Receives WebSocket message, publishes to Redis channel
+    - Worker process: Creates request, persists to DB, subscribes to Redis channel, waits for response
+    - API process: Receives WebSocket message, updates DB, publishes to Redis channel
     - Worker process: Receives Redis message, resolves the future
     """
 
@@ -167,6 +179,111 @@ class ClarificationManager:
         except Exception as e:
             logger.warning(f"Failed to get Redis client: {e}")
             return None
+
+    async def _get_db_session(self):
+        """Get database session for persistence."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            return async_session_factory()
+        except Exception as e:
+            logger.warning(f"Failed to get DB session: {e}")
+            return None
+
+    async def _persist_request(
+        self,
+        request: ClarificationRequest,
+        tenant_id: str,
+        project_id: str,
+        conversation_id: str,
+        message_id: Optional[str] = None,
+        timeout: float = 300.0,
+    ) -> bool:
+        """Persist request to database."""
+        session = await self._get_db_session()
+        if not session:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+                SQLHITLRequestRepository,
+            )
+
+            repo = SQLHITLRequestRepository(session)
+
+            entity = HITLRequestEntity(
+                id=request.request_id,
+                request_type=HITLRequestType.CLARIFICATION,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                question=request.question,
+                options=[opt.to_dict() for opt in request.options],
+                context=request.context,
+                metadata={
+                    "clarification_type": request.clarification_type.value,
+                    "allow_custom": request.allow_custom,
+                },
+                expires_at=datetime.utcnow() + timedelta(seconds=timeout),
+            )
+
+            await repo.create(entity)
+            await session.commit()
+            logger.info(f"Persisted clarification request {request.request_id} to database")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to persist clarification request: {e}")
+            await session.rollback()
+            return False
+        finally:
+            await session.close()
+
+    async def _update_db_response(self, request_id: str, answer: str) -> bool:
+        """Update database with response."""
+        session = await self._get_db_session()
+        if not session:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+                SQLHITLRequestRepository,
+            )
+
+            repo = SQLHITLRequestRepository(session)
+            result = await repo.update_response(request_id, answer)
+            await session.commit()
+            return result is not None
+        except Exception as e:
+            logger.error(f"Failed to update DB response: {e}")
+            await session.rollback()
+            return False
+        finally:
+            await session.close()
+
+    async def _mark_db_timeout(self, request_id: str) -> bool:
+        """Mark request as timed out in database."""
+        session = await self._get_db_session()
+        if not session:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+                SQLHITLRequestRepository,
+            )
+
+            repo = SQLHITLRequestRepository(session)
+            result = await repo.mark_timeout(request_id)
+            await session.commit()
+            return result is not None
+        except Exception as e:
+            logger.error(f"Failed to mark DB timeout: {e}")
+            await session.rollback()
+            return False
+        finally:
+            await session.close()
 
     async def _listen_for_response(self, request_id: str, request: ClarificationRequest):
         """Listen for response on Redis channel."""
@@ -267,20 +384,44 @@ class ClarificationManager:
                 if listener_task and not listener_task.done():
                     listener_task.cancel()
 
-    async def register_request(self, request: "ClarificationRequest") -> None:
+    async def register_request(
+        self,
+        request: "ClarificationRequest",
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        timeout: float = 300.0,
+    ) -> None:
         """
-        Register an existing request.
+        Register an existing request with optional database persistence.
 
         This is used by processor.py which creates the request object directly
         instead of using create_request().
 
         Args:
             request: The ClarificationRequest to register
+            tenant_id: Optional tenant ID for persistence
+            project_id: Optional project ID for persistence
+            conversation_id: Optional conversation ID for persistence
+            message_id: Optional message ID for persistence
+            timeout: Timeout for the request (used for expiration)
         """
         async with self._lock:
             self._pending_requests[request.request_id] = request
 
         logger.info(f"Registered clarification request {request.request_id}")
+
+        # Persist to database if context is provided
+        if tenant_id and project_id and conversation_id:
+            await self._persist_request(
+                request=request,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                timeout=timeout,
+            )
 
     async def wait_for_response(self, request_id: str, timeout: float = 300.0) -> str:
         """
@@ -342,6 +483,10 @@ class ClarificationManager:
         try:
             answer = await asyncio.wait_for(request.future, timeout=timeout)
             return answer
+        except asyncio.TimeoutError:
+            # Mark request as timed out in database
+            await self._mark_db_timeout(request_id)
+            raise
         finally:
             redis_task.cancel()
             try:
@@ -369,7 +514,7 @@ class ClarificationManager:
         Respond to a clarification request.
 
         This method first tries to resolve locally, then publishes to Redis
-        for cross-process communication.
+        for cross-process communication. Also updates the database.
 
         Args:
             request_id: ID of the clarification request
@@ -378,6 +523,14 @@ class ClarificationManager:
         Returns:
             True if request was found and resolved, False otherwise
         """
+        # Update database first - this returns False if already answered
+        db_updated = await self._update_db_response(request_id, answer)
+        if not db_updated:
+            logger.warning(
+                f"Clarification request {request_id} not found or already answered in DB"
+            )
+            return False
+
         # First try local resolution (same process)
         async with self._lock:
             request = self._pending_requests.get(request_id)
@@ -399,11 +552,16 @@ class ClarificationManager:
                 )
                 return True
             else:
-                logger.warning(f"No subscribers for clarification {request_id} on Redis channel")
-                return False
+                # DB was updated but no Redis subscriber - agent may have timed out
+                logger.warning(
+                    f"No subscribers for clarification {request_id} on Redis channel, "
+                    "but DB was updated"
+                )
+                return True
         else:
-            logger.warning(f"Clarification request {request_id} not found (no Redis)")
-            return False
+            # No Redis available but DB was updated
+            logger.warning(f"No Redis client, but DB was updated for {request_id}")
+            return True
 
     async def cancel_request(self, request_id: str) -> bool:
         """

@@ -573,13 +573,13 @@ async def handle_client_message(
 
     # Human-in-the-loop response handlers
     elif msg_type == "clarification_respond":
-        await handle_clarification_respond(websocket, user_id, message)
+        await handle_clarification_respond(websocket, user_id, tenant_id, session_id, message, db)
 
     elif msg_type == "decision_respond":
-        await handle_decision_respond(websocket, user_id, message)
+        await handle_decision_respond(websocket, user_id, tenant_id, session_id, message, db)
 
     elif msg_type == "env_var_respond":
-        await handle_env_var_respond(websocket, user_id, message)
+        await handle_env_var_respond(websocket, user_id, tenant_id, session_id, message, db)
 
     else:
         await websocket.send_json(
@@ -749,6 +749,86 @@ async def stream_agent_to_websocket(
     except Exception as e:
         logger.error(f"[WS] Error streaming to websocket: {e}", exc_info=True)
         # Send error only to the initiating session
+        await manager.send_to_session(
+            session_id,
+            {
+                "type": "error",
+                "conversation_id": conversation_id,
+                "data": {"message": str(e)},
+            },
+        )
+
+
+async def stream_hitl_response_to_websocket(
+    agent_service,
+    session_id: str,
+    conversation_id: str,
+    message_id: str,
+) -> None:
+    """
+    Stream agent events after HITL response to WebSocket.
+
+    This is called after a HITL response (clarification, decision, env_var)
+    to continue streaming agent events to the frontend.
+
+    The agent continues executing in the Temporal Worker process after receiving
+    the HITL response via Redis Pub/Sub. Events are published to Redis Stream
+    and need to be forwarded to WebSocket subscribers.
+
+    Args:
+        agent_service: The agent service instance
+        session_id: Client session ID for unsubscribe check
+        conversation_id: Conversation ID to monitor
+        message_id: Message ID to filter events for
+    """
+    event_count = 0
+    try:
+        logger.info(
+            f"[WS HITL Bridge] Starting stream for conversation {conversation_id}, "
+            f"message_id={message_id}"
+        )
+
+        async for event in agent_service.connect_chat_stream(
+            conversation_id=conversation_id,
+            message_id=message_id,
+        ):
+            event_count += 1
+            event_type = event.get("type", "unknown")
+            event_data = event.get("data", {})
+
+            # DEBUG: Log events
+            if event_count <= 20:
+                logger.warning(
+                    f"[WS HITL Bridge] Event #{event_count}: type={event_type}, "
+                    f"conv={conversation_id}"
+                )
+
+            # Check if session is still subscribed
+            if not manager.is_subscribed(session_id, conversation_id):
+                logger.info(f"[WS HITL] Session {session_id[:8]}... unsubscribed, stopping stream")
+                break
+
+            # Add conversation_id to event for routing
+            ws_event = {
+                "type": event_type,
+                "conversation_id": conversation_id,
+                "data": event_data,
+                "seq": event.get("id"),
+                "timestamp": event.get("timestamp", datetime.utcnow().isoformat()),
+            }
+
+            # Broadcast to ALL sessions subscribed to this conversation
+            await manager.broadcast_to_conversation(conversation_id, ws_event)
+
+            # Stop after completion
+            if event_type in ("complete", "error"):
+                logger.info(f"[WS HITL Bridge] Stream completed: type={event_type}")
+                break
+
+    except asyncio.CancelledError:
+        logger.info(f"[WS HITL] Stream cancelled for conversation {conversation_id}")
+    except Exception as e:
+        logger.error(f"[WS HITL] Error streaming to websocket: {e}", exc_info=True)
         await manager.send_to_session(
             session_id,
             {
@@ -1204,18 +1284,99 @@ async def monitor_agent_status(
 # ============================================================================
 
 
+async def _start_hitl_stream_bridge(
+    websocket: WebSocket,
+    session_id: str,
+    tenant_id: str,
+    request_id: str,
+    db: AsyncSession,
+) -> None:
+    """
+    Start streaming agent events after HITL response.
+
+    This helper function:
+    1. Queries the HITL request from database to get conversation_id and message_id
+    2. Creates agent service and starts streaming
+    3. Subscribes session to conversation and starts bridge task
+
+    Args:
+        websocket: The WebSocket connection
+        session_id: Client session ID
+        tenant_id: User's tenant ID
+        request_id: HITL request ID
+        db: Database session
+    """
+    try:
+        from src.configuration.factories import create_langchain_llm
+        from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+            SQLHITLRequestRepository,
+        )
+
+        # Get HITL request from database
+        hitl_repo = SQLHITLRequestRepository(db)
+        hitl_request = await hitl_repo.get_by_id(request_id)
+
+        if not hitl_request:
+            logger.warning(f"[WS HITL] Request {request_id} not found in database")
+            return
+
+        conversation_id = hitl_request.conversation_id
+        message_id = hitl_request.message_id
+
+        if not conversation_id or not message_id:
+            logger.warning(f"[WS HITL] Request {request_id} missing conversation_id or message_id")
+            return
+
+        logger.info(
+            f"[WS HITL] Starting stream bridge for request {request_id}, "
+            f"conversation={conversation_id}, message={message_id}"
+        )
+
+        # Auto-subscribe session to conversation
+        await manager.subscribe(session_id, conversation_id)
+
+        # Create agent service
+        base_container = get_container_from_app(websocket)
+        container = base_container.with_db(db)
+        llm = create_langchain_llm(tenant_id)
+        agent_service = container.agent_service(llm)
+
+        # Start streaming in background task
+        task = asyncio.create_task(
+            stream_hitl_response_to_websocket(
+                agent_service=agent_service,
+                session_id=session_id,
+                conversation_id=conversation_id,
+                message_id=message_id,
+            )
+        )
+        manager.add_bridge_task(session_id, conversation_id, task)
+
+    except Exception as e:
+        logger.error(f"[WS HITL] Failed to start stream bridge: {e}", exc_info=True)
+
+
 async def handle_clarification_respond(
     websocket: WebSocket,
     user_id: str,
+    tenant_id: str,
+    session_id: str,
     message: Dict[str, Any],
+    db: AsyncSession,
 ) -> None:
     """
     Handle clarification response via WebSocket.
 
+    After sending the response to the agent (via Redis Pub/Sub),
+    this also starts a stream bridge to forward agent events to WebSocket.
+
     Args:
         websocket: The WebSocket connection
         user_id: Authenticated user ID
+        tenant_id: User's tenant ID
+        session_id: Client session ID
         message: The message containing request_id and answer
+        db: Database session
     """
     request_id = message.get("request_id")
     answer = message.get("answer")
@@ -1232,8 +1393,8 @@ async def handle_clarification_respond(
     try:
         from src.infrastructure.agent.tools.clarification import get_clarification_manager
 
-        manager = get_clarification_manager()
-        success = await manager.respond(request_id, answer)
+        clarification_manager = get_clarification_manager()
+        success = await clarification_manager.respond(request_id, answer)
 
         if success:
             logger.info(f"[WS HITL] User {user_id} responded to clarification {request_id}")
@@ -1244,6 +1405,15 @@ async def handle_clarification_respond(
                     "success": True,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
+            )
+
+            # Start streaming agent events after HITL response
+            await _start_hitl_stream_bridge(
+                websocket=websocket,
+                session_id=session_id,
+                tenant_id=tenant_id,
+                request_id=request_id,
+                db=db,
             )
         else:
             await websocket.send_json(
@@ -1268,15 +1438,24 @@ async def handle_clarification_respond(
 async def handle_decision_respond(
     websocket: WebSocket,
     user_id: str,
+    tenant_id: str,
+    session_id: str,
     message: Dict[str, Any],
+    db: AsyncSession,
 ) -> None:
     """
     Handle decision response via WebSocket.
 
+    After sending the response to the agent (via Redis Pub/Sub),
+    this also starts a stream bridge to forward agent events to WebSocket.
+
     Args:
         websocket: The WebSocket connection
         user_id: Authenticated user ID
+        tenant_id: User's tenant ID
+        session_id: Client session ID
         message: The message containing request_id and decision
+        db: Database session
     """
     request_id = message.get("request_id")
     decision = message.get("decision")
@@ -1293,8 +1472,8 @@ async def handle_decision_respond(
     try:
         from src.infrastructure.agent.tools.decision import get_decision_manager
 
-        manager = get_decision_manager()
-        success = await manager.respond(request_id, decision)
+        decision_manager = get_decision_manager()
+        success = await decision_manager.respond(request_id, decision)
 
         if success:
             logger.info(f"[WS HITL] User {user_id} responded to decision {request_id}")
@@ -1305,6 +1484,15 @@ async def handle_decision_respond(
                     "success": True,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
+            )
+
+            # Start streaming agent events after HITL response
+            await _start_hitl_stream_bridge(
+                websocket=websocket,
+                session_id=session_id,
+                tenant_id=tenant_id,
+                request_id=request_id,
+                db=db,
             )
         else:
             await websocket.send_json(
@@ -1329,15 +1517,24 @@ async def handle_decision_respond(
 async def handle_env_var_respond(
     websocket: WebSocket,
     user_id: str,
+    tenant_id: str,
+    session_id: str,
     message: Dict[str, Any],
+    db: AsyncSession,
 ) -> None:
     """
     Handle environment variable response via WebSocket.
 
+    After sending the response to the agent (via Redis Pub/Sub),
+    this also starts a stream bridge to forward agent events to WebSocket.
+
     Args:
         websocket: The WebSocket connection
         user_id: Authenticated user ID
+        tenant_id: User's tenant ID
+        session_id: Client session ID
         message: The message containing request_id and values
+        db: Database session
     """
     request_id = message.get("request_id")
     values = message.get("values")
@@ -1354,8 +1551,8 @@ async def handle_env_var_respond(
     try:
         from src.infrastructure.agent.tools.env_var_tools import get_env_var_manager
 
-        manager = get_env_var_manager()
-        success = await manager.respond(request_id, values)
+        env_var_manager = get_env_var_manager()
+        success = await env_var_manager.respond(request_id, values)
 
         if success:
             logger.info(
@@ -1370,6 +1567,15 @@ async def handle_env_var_respond(
                     "variable_names": list(values.keys()),
                     "timestamp": datetime.utcnow().isoformat(),
                 }
+            )
+
+            # Start streaming agent events after HITL response
+            await _start_hitl_stream_bridge(
+                websocket=websocket,
+                session_id=session_id,
+                tenant_id=tenant_id,
+                request_id=request_id,
+                db=db,
             )
         else:
             await websocket.send_json(

@@ -77,6 +77,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_conversation_reposito
 from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
     SqlAlchemyExecutionCheckpointRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+    SQLHITLRequestRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
     SqlAlchemyMemoryRepository,
 )
@@ -254,6 +257,10 @@ class DIContainer:
     def tool_environment_variable_repository(self) -> SQLToolEnvironmentVariableRepository:
         """Get SQLToolEnvironmentVariableRepository for tool env var persistence."""
         return SQLToolEnvironmentVariableRepository(self._db)
+
+    def hitl_request_repository(self) -> SQLHITLRequestRepository:
+        """Get SQLHITLRequestRepository for HITL request persistence."""
+        return SQLHITLRequestRepository(self._db)
 
     def tenant_agent_config_repository(self) -> SQLTenantAgentConfigRepository:
         return SQLTenantAgentConfigRepository(self._db)

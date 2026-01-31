@@ -40,16 +40,19 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
 
+  // Safely get fields array with fallback
+  const fields = data.fields || [];
+
   // Initialize form with default values
   useEffect(() => {
     const initialValues: Record<string, string> = {};
-    data.fields.forEach((field) => {
+    fields.forEach((field) => {
       if (field.default_value) {
         initialValues[field.name] = field.default_value;
       }
     });
     form.setFieldsValue(initialValues);
-  }, [data.fields, form]);
+  }, [fields, form]);
 
   const handleSubmit = useCallback(async () => {
     try {
@@ -152,7 +155,7 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
           layout="vertical"
           className="mt-4"
         >
-          {data.fields.map((field) => (
+          {fields.map((field) => (
             <Form.Item
               key={field.name}
               name={field.name}

@@ -33,6 +33,11 @@ from src.domain.model.agent.execution_plan import (
     ExecutionStep,
     ExecutionStepStatus,
 )
+from src.domain.model.agent.hitl_request import (
+    HITLRequest,
+    HITLRequestStatus,
+    HITLRequestType,
+)
 from src.domain.model.agent.message import Message, MessageRole, MessageType, ToolCall, ToolResult
 from src.domain.model.agent.plan import (
     AlreadyInPlanModeError,
@@ -124,4 +129,8 @@ __all__ = [
     # Tool Environment Variables
     "ToolEnvironmentVariable",
     "EnvVarScope",
+    # HITL Requests
+    "HITLRequest",
+    "HITLRequestStatus",
+    "HITLRequestType",
 ]

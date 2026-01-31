@@ -21,31 +21,24 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional
 
+# Plan Mode detection
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+
+from src.domain.events.agent_events import (
+    AgentActEvent,
+    AgentDomainEvent,
+    AgentErrorEvent,
+    AgentEventType,
+    AgentObserveEvent,
+    AgentSkillExecutionCompleteEvent,
+    AgentStepEndEvent,
+    AgentStepStartEvent,
+    AgentThoughtEvent,
+    AgentWorkPlanEvent,
+)
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
-from src.domain.events.agent_events import (
-    AgentDomainEvent,
-    AgentEventType,
-    AgentThoughtEvent,
-    AgentThoughtDeltaEvent,
-    AgentActEvent,
-    AgentObserveEvent,
-    AgentTextStartEvent,
-    AgentTextDeltaEvent,
-    AgentTextEndEvent,
-    AgentStepStartEvent,
-    AgentStepEndEvent,
-    AgentStepFinishEvent,
-    AgentWorkPlanEvent,
-    AgentCostUpdateEvent,
-    AgentErrorEvent,
-    AgentRetryEvent,
-    AgentDoomLoopDetectedEvent,
-    AgentPermissionAskedEvent,
-    AgentSkillExecutionCompleteEvent,
-)
 
 from ..context import ContextWindowConfig, ContextWindowManager
 from ..permission import PermissionManager
@@ -53,9 +46,6 @@ from ..prompts import PromptContext, PromptMode, SystemPromptManager
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
-
-# Plan Mode detection
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..planning import HybridPlanModeDetector
@@ -806,11 +796,20 @@ class ReActAgent:
         final_content = ""
         success = True
 
+        # Build langfuse context for persistence (HITL requests need this)
+        langfuse_context = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "project_id": project_id,
+        }
+
         try:
             # Process and convert Domain events to legacy format
             async for domain_event in processor.process(
                 session_id=conversation_id,
                 messages=messages,
+                langfuse_context=langfuse_context,
             ):
                 # Convert AgentDomainEvent to legacy event format
                 event = self._convert_domain_event(domain_event)
@@ -929,7 +928,9 @@ class ReActAgent:
         current_step = 0
 
         # Execute skill and convert events (pass sandbox_id if available)
-        async for domain_event in self.skill_executor.execute(skill, query, context, sandbox_id=sandbox_id):
+        async for domain_event in self.skill_executor.execute(
+            skill, query, context, sandbox_id=sandbox_id
+        ):
             # Convert SkillExecutor Domain events to our format
             converted_event = self._convert_skill_domain_event(domain_event, skill, current_step)
 
@@ -1162,7 +1163,9 @@ class ReActAgent:
             event_dict["data"] = domain_event.plan
 
         # STEP_START: rename step_index to step_number
-        if event_type == AgentEventType.STEP_START and isinstance(domain_event, AgentStepStartEvent):
+        if event_type == AgentEventType.STEP_START and isinstance(
+            domain_event, AgentStepStartEvent
+        ):
             event_dict["data"] = {
                 "step_number": domain_event.step_index,
                 "description": domain_event.description,
@@ -1228,14 +1231,14 @@ class ReActAgent:
         Yields:
             Event dictionaries for Plan Mode execution
         """
-        from ..planning.plan_mode_orchestrator import PlanModeOrchestrator
-        from ..planning.plan_generator import PlanGenerator
-        from ..planning.plan_executor import PlanExecutor
-        from ..planning.plan_reflector import PlanReflector
-        from ..planning.plan_adjuster import PlanAdjuster
-        from src.domain.model.agent.execution_plan import ExecutionPlan
-        from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
         from src.configuration.config import get_settings
+        from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
+
+        from ..planning.plan_adjuster import PlanAdjuster
+        from ..planning.plan_executor import PlanExecutor
+        from ..planning.plan_generator import PlanGenerator
+        from ..planning.plan_mode_orchestrator import PlanModeOrchestrator
+        from ..planning.plan_reflector import PlanReflector
 
         logger.info("[ReActAgent] Executing Plan Mode workflow")
 
@@ -1270,7 +1273,9 @@ class ReActAgent:
                 wrapper_self.tools = tools
                 wrapper_self.permission_manager = permission_manager
 
-            async def execute_tool(wrapper_self, tool_name: str, tool_input: Dict, conversation_id: str) -> str:
+            async def execute_tool(
+                wrapper_self, tool_name: str, tool_input: Dict, conversation_id: str
+            ) -> str:
                 """Execute a tool by name."""
                 if tool_name == "__think__":
                     return f"Thought: {tool_input.get('thought', '')}"
@@ -1293,13 +1298,11 @@ class ReActAgent:
                     return f"Error executing {tool_name}: {str(e)}"
 
         # Create wrapper instance
-        session_processor = SessionProcessorWrapper(
-            self.tool_definitions,
-            self.permission_manager
-        )
+        session_processor = SessionProcessorWrapper(self.tool_definitions, self.permission_manager)
 
         # Event emitter for Plan Mode events
         plan_events = []
+
         def event_emitter(event):
             plan_events.append(event)
             logger.debug(f"[PlanMode] Event emitted: {event['type']}")
@@ -1394,14 +1397,8 @@ class ReActAgent:
                 yield self._convert_plan_event(event)
 
             # Emit plan_complete event
-            completed_steps = sum(
-                1 for s in final_plan.steps
-                if s.status.value == "completed"
-            )
-            failed_steps = sum(
-                1 for s in final_plan.steps
-                if s.status.value == "failed"
-            )
+            completed_steps = sum(1 for s in final_plan.steps if s.status.value == "completed")
+            failed_steps = sum(1 for s in final_plan.steps if s.status.value == "failed")
 
             yield {
                 "type": "plan_complete",
@@ -1409,7 +1406,7 @@ class ReActAgent:
                     "plan_id": final_plan.id,
                     "status": final_plan.status.value,
                     "summary": f"Plan execution completed. "
-                               f"Completed: {completed_steps}, Failed: {failed_steps}",
+                    f"Completed: {completed_steps}, Failed: {failed_steps}",
                     "completed_steps": completed_steps,
                     "failed_steps": failed_steps,
                     "total_steps": len(final_plan.steps),

@@ -89,6 +89,7 @@ import type {
     ReflectionCompleteEvent,
     LifecycleState,
     LifecycleStateData,
+    PendingHITLResponse,
 } from "../types/agent";
 
 // Use centralized HTTP client for REST API calls
@@ -1323,6 +1324,43 @@ class AgentServiceImpl implements AgentService {
             request_id: requestId,
             decision,
         });
+    }
+
+    /**
+     * Get pending HITL (Human-In-The-Loop) requests for a conversation
+     *
+     * Retrieves any pending clarification, decision, or environment variable
+     * requests that haven't been answered yet. This is useful for recovering
+     * dialog state after page refresh.
+     *
+     * @param conversationId - The conversation ID
+     * @param requestType - Optional filter by request type
+     * @returns Promise resolving to pending HITL requests
+     * @throws {ApiError} If conversation doesn't exist or user lacks access
+     *
+     * @example
+     * ```typescript
+     * // Get all pending requests
+     * const pending = await agentService.getPendingHITLRequests('conv-123');
+     *
+     * // Get only clarification requests
+     * const clarifications = await agentService.getPendingHITLRequests(
+     *   'conv-123',
+     *   'clarification'
+     * );
+     * ```
+     */
+    async getPendingHITLRequests(
+        conversationId: string,
+        requestType?: "clarification" | "decision" | "env_var"
+    ): Promise<PendingHITLResponse> {
+        const params = new URLSearchParams();
+        if (requestType) {
+            params.append("request_type", requestType);
+        }
+        const queryString = params.toString();
+        const url = `/agent/conversations/${conversationId}/hitl/pending${queryString ? `?${queryString}` : ""}`;
+        return await api.get<PendingHITLResponse>(url);
     }
 
     /**

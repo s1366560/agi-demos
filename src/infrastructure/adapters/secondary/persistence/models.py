@@ -1289,7 +1289,9 @@ class HITLRequest(IdGeneratorMixin, Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     options: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # List of options
     context: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Additional context
-    metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Tool-specific metadata
+    request_metadata: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True
+    )  # Tool-specific metadata
 
     # Response
     status: Mapped[str] = mapped_column(
@@ -1302,12 +1304,8 @@ class HITLRequest(IdGeneratorMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    answered_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
@@ -1319,4 +1317,3 @@ class HITLRequest(IdGeneratorMixin, Base):
         Index("ix_hitl_requests_tenant_project_status", "tenant_id", "project_id", "status"),
         Index("ix_hitl_requests_expires_at", "expires_at"),
     )
-

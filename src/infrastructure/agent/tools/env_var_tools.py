@@ -11,6 +11,10 @@ Cross-Process Communication:
 - Uses Redis Pub/Sub for cross-process HITL responses
 - Worker process subscribes to Redis channel for responses
 - API process publishes responses to Redis channel
+
+Database Persistence:
+- Stores HITL requests in database for recovery after page refresh
+- Enables frontend to query pending requests on reconnection
 """
 
 import asyncio
@@ -18,9 +22,16 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
+from src.domain.model.agent.hitl_request import (
+    HITLRequest as HITLRequestEntity,
+)
+from src.domain.model.agent.hitl_request import (
+    HITLRequestType,
+)
 from src.domain.model.agent.tool_environment_variable import (
     EnvVarScope,
     ToolEnvironmentVariable,
@@ -72,16 +83,22 @@ class EnvVarField:
     options: Optional[List[str]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for SSE event."""
+        """Convert to dictionary for SSE event.
+
+        Field mapping to match frontend EnvVarField interface:
+        - variable_name -> name (used as form field key)
+        - display_name -> label (shown to user)
+        - is_required -> required
+        """
         return {
-            "variable_name": self.variable_name,
-            "display_name": self.display_name,
+            "name": self.variable_name,  # Frontend uses 'name' as form field key
+            "label": self.display_name,  # Frontend uses 'label' for display
             "description": self.description,
             "input_type": self.input_type.value,
-            "is_required": self.is_required,
+            "required": self.is_required,  # Frontend uses 'required'
             "is_secret": self.is_secret,
             "default_value": self.default_value,
-            "options": self.options,
+            "placeholder": f"请输入 {self.display_name}",  # Frontend expects placeholder
         }
 
 
@@ -130,10 +147,11 @@ class EnvVarManager:
 
     Thread-safe manager for handling multiple env var requests.
     Uses Redis Pub/Sub for cross-process communication.
+    Uses database persistence for recovery after page refresh.
 
     Architecture:
-    - Worker process: Creates request, subscribes to Redis channel, waits for response
-    - API process: Receives WebSocket message, publishes to Redis channel
+    - Worker process: Creates request, persists to DB, subscribes to Redis channel, waits for response
+    - API process: Receives WebSocket message, updates DB, publishes to Redis channel
     - Worker process: Receives Redis message, resolves the future
     """
 
@@ -177,6 +195,113 @@ class EnvVarManager:
         except Exception as e:
             logger.warning(f"Failed to get Redis client: {e}")
             return None
+
+    async def _get_db_session(self):
+        """Get database session for persistence."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            return async_session_factory()
+        except Exception as e:
+            logger.warning(f"Failed to get DB session: {e}")
+            return None
+
+    async def _persist_request(
+        self,
+        request: EnvVarRequest,
+        tenant_id: str,
+        project_id: str,
+        conversation_id: str,
+        message_id: Optional[str] = None,
+        timeout: float = 600.0,
+    ) -> bool:
+        """Persist request to database."""
+        session = await self._get_db_session()
+        if not session:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+                SQLHITLRequestRepository,
+            )
+
+            repo = SQLHITLRequestRepository(session)
+
+            entity = HITLRequestEntity(
+                id=request.request_id,
+                request_type=HITLRequestType.ENV_VAR,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                question=f"Environment variables needed for {request.tool_name}",
+                options=[f.to_dict() for f in request.fields],
+                context=request.context,
+                metadata={
+                    "tool_name": request.tool_name,
+                },
+                expires_at=datetime.utcnow() + timedelta(seconds=timeout),
+            )
+
+            await repo.create(entity)
+            await session.commit()
+            logger.info(f"Persisted env var request {request.request_id} to database")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to persist env var request: {e}")
+            await session.rollback()
+            return False
+        finally:
+            await session.close()
+
+    async def _update_db_response(self, request_id: str, values: Dict[str, str]) -> bool:
+        """Update database with response."""
+        session = await self._get_db_session()
+        if not session:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+                SQLHITLRequestRepository,
+            )
+
+            repo = SQLHITLRequestRepository(session)
+            # Store values as JSON string response
+            result = await repo.update_response(
+                request_id, json.dumps(values), {"values_count": len(values)}
+            )
+            await session.commit()
+            return result is not None
+        except Exception as e:
+            logger.error(f"Failed to update DB response: {e}")
+            await session.rollback()
+            return False
+        finally:
+            await session.close()
+
+    async def _mark_db_timeout(self, request_id: str) -> bool:
+        """Mark request as timed out in database."""
+        session = await self._get_db_session()
+        if not session:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+                SQLHITLRequestRepository,
+            )
+
+            repo = SQLHITLRequestRepository(session)
+            result = await repo.mark_timeout(request_id)
+            await session.commit()
+            return result is not None
+        except Exception as e:
+            logger.error(f"Failed to mark DB timeout: {e}")
+            await session.rollback()
+            return False
+        finally:
+            await session.close()
 
     async def _listen_for_response(self, request_id: str, request: EnvVarRequest):
         """Listen for response on Redis channel."""
@@ -274,20 +399,44 @@ class EnvVarManager:
                 if listener_task and not listener_task.done():
                     listener_task.cancel()
 
-    async def register_request(self, request: "EnvVarRequest") -> None:
+    async def register_request(
+        self,
+        request: "EnvVarRequest",
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        timeout: float = 600.0,
+    ) -> None:
         """
-        Register an existing request.
+        Register an existing request with optional database persistence.
 
         This is used by processor.py which creates the request object directly
         instead of using create_request().
 
         Args:
             request: The EnvVarRequest to register
+            tenant_id: Optional tenant ID for persistence
+            project_id: Optional project ID for persistence
+            conversation_id: Optional conversation ID for persistence
+            message_id: Optional message ID for persistence
+            timeout: Timeout for the request (used for expiration)
         """
         async with self._lock:
             self._pending_requests[request.request_id] = request
 
         logger.info(f"Registered env var request {request.request_id}")
+
+        # Persist to database if context is provided
+        if tenant_id and project_id and conversation_id:
+            await self._persist_request(
+                request=request,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                timeout=timeout,
+            )
 
     async def wait_for_response(self, request_id: str, timeout: float = 600.0) -> Dict[str, str]:
         """
@@ -350,6 +499,8 @@ class EnvVarManager:
             values = await asyncio.wait_for(request.future, timeout=timeout)
             return values
         except asyncio.TimeoutError:
+            # Mark as timed out in database
+            await self._mark_db_timeout(request_id)
             logger.warning(f"Env var request {request_id} timed out")
             raise
         finally:
@@ -376,7 +527,7 @@ class EnvVarManager:
         Respond to an env var request.
 
         This method first tries to resolve locally, then publishes to Redis
-        for cross-process communication.
+        for cross-process communication. Also updates the database.
 
         Args:
             request_id: ID of the request
@@ -385,6 +536,12 @@ class EnvVarManager:
         Returns:
             True if request was found and resolved, False otherwise
         """
+        # Update database first - this returns False if already answered
+        db_updated = await self._update_db_response(request_id, values)
+        if not db_updated:
+            logger.warning(f"Env var request {request_id} not found or already answered in DB")
+            return False
+
         # First try local resolution (same process)
         async with self._lock:
             request = self._pending_requests.get(request_id)
@@ -405,11 +562,16 @@ class EnvVarManager:
                 )
                 return True
             else:
-                logger.warning(f"No subscribers for env var {request_id} on Redis channel")
-                return False
+                # DB was updated but no Redis subscriber - this means agent may have timed out
+                # Return True since DB was updated successfully
+                logger.warning(
+                    f"No subscribers for env var {request_id} on Redis channel, but DB was updated"
+                )
+                return True
         else:
-            logger.warning(f"Env var request {request_id} not found (no Redis)")
-            return False
+            # No Redis available but DB was updated
+            logger.warning(f"No Redis client, but DB was updated for {request_id}")
+            return True
 
     async def cancel_request(self, request_id: str) -> bool:
         """
@@ -470,19 +632,21 @@ class GetEnvVarTool(AgentTool):
 
     def __init__(
         self,
-        repository: ToolEnvironmentVariableRepositoryPort,
+        repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
         encryption_service: Optional[EncryptionService] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        session_factory: Optional[Any] = None,
     ):
         """
         Initialize the get env var tool.
 
         Args:
-            repository: Repository for env var persistence
+            repository: Repository for env var persistence (optional if session_factory provided)
             encryption_service: Service for decryption (defaults to singleton)
             tenant_id: Current tenant ID (can be set later via context)
             project_id: Current project ID (can be set later via context)
+            session_factory: Async session factory for creating database sessions
         """
         super().__init__(
             name="get_env_var",
@@ -495,6 +659,7 @@ class GetEnvVarTool(AgentTool):
         self._encryption_service = encryption_service or get_encryption_service()
         self._tenant_id = tenant_id
         self._project_id = project_id
+        self._session_factory = session_factory
 
     def set_context(self, tenant_id: str, project_id: Optional[str] = None):
         """Set the tenant and project context."""
@@ -540,12 +705,27 @@ class GetEnvVarTool(AgentTool):
             )
 
         try:
-            env_var = await self._repository.get(
-                tenant_id=self._tenant_id,
-                tool_name=tool_name,
-                variable_name=variable_name,
-                project_id=self._project_id,
-            )
+            # If we have a session_factory, create a new session for this operation
+            if self._session_factory:
+                from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+                    SQLToolEnvironmentVariableRepository,
+                )
+
+                async with self._session_factory() as db_session:
+                    repository = SQLToolEnvironmentVariableRepository(db_session)
+                    env_var = await repository.get(
+                        tenant_id=self._tenant_id,
+                        tool_name=tool_name,
+                        variable_name=variable_name,
+                        project_id=self._project_id,
+                    )
+            else:
+                env_var = await self._repository.get(
+                    tenant_id=self._tenant_id,
+                    tool_name=tool_name,
+                    variable_name=variable_name,
+                    project_id=self._project_id,
+                )
 
             if env_var:
                 # Decrypt the value
@@ -596,11 +776,25 @@ class GetEnvVarTool(AgentTool):
         if not self._tenant_id:
             raise ValueError("tenant_id not set")
 
-        env_vars = await self._repository.get_for_tool(
-            tenant_id=self._tenant_id,
-            tool_name=tool_name,
-            project_id=self._project_id,
-        )
+        # If we have a session_factory, create a new session for this operation
+        if self._session_factory:
+            from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+                SQLToolEnvironmentVariableRepository,
+            )
+
+            async with self._session_factory() as db_session:
+                repository = SQLToolEnvironmentVariableRepository(db_session)
+                env_vars = await repository.get_for_tool(
+                    tenant_id=self._tenant_id,
+                    tool_name=tool_name,
+                    project_id=self._project_id,
+                )
+        else:
+            env_vars = await self._repository.get_for_tool(
+                tenant_id=self._tenant_id,
+                tool_name=tool_name,
+                project_id=self._project_id,
+            )
 
         result = {}
         for env_var in env_vars:
@@ -621,6 +815,23 @@ class GetEnvVarTool(AgentTool):
                 "scope": {"type": "string"},
                 "message": {"type": "string"},
             },
+        }
+
+    def get_parameters_schema(self) -> Dict[str, Any]:
+        """Get the parameters schema for LLM function calling."""
+        return {
+            "type": "object",
+            "properties": {
+                "tool_name": {
+                    "type": "string",
+                    "description": "Name of the tool that needs the environment variable",
+                },
+                "variable_name": {
+                    "type": "string",
+                    "description": "Name of the environment variable to retrieve",
+                },
+            },
+            "required": ["tool_name", "variable_name"],
         }
 
 
@@ -650,23 +861,25 @@ class RequestEnvVarTool(AgentTool):
 
     def __init__(
         self,
-        repository: ToolEnvironmentVariableRepositoryPort,
+        repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
         encryption_service: Optional[EncryptionService] = None,
         manager: Optional[EnvVarManager] = None,
         event_publisher: Optional[Callable[[Dict[str, Any]], None]] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        session_factory: Optional[Any] = None,
     ):
         """
         Initialize the request env var tool.
 
         Args:
-            repository: Repository for env var persistence
+            repository: Repository for env var persistence (optional if session_factory provided)
             encryption_service: Service for encryption (defaults to singleton)
             manager: EnvVar manager (defaults to global instance)
             event_publisher: Function to publish SSE events
             tenant_id: Current tenant ID (can be set later via context)
             project_id: Current project ID (can be set later via context)
+            session_factory: Async session factory for creating database sessions
         """
         super().__init__(
             name="request_env_var",
@@ -682,6 +895,7 @@ class RequestEnvVarTool(AgentTool):
         self._event_publisher = event_publisher
         self._tenant_id = tenant_id
         self._project_id = project_id
+        self._session_factory = session_factory
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
@@ -857,30 +1071,64 @@ class RequestEnvVarTool(AgentTool):
             )
             project_id = self._project_id if save_to_project else None
 
-            for field_spec in env_var_fields:
-                var_name = field_spec.variable_name
-                if var_name in values and values[var_name]:
-                    # Encrypt the value
-                    encrypted_value = self._encryption_service.encrypt(values[var_name])
+            # If we have a session_factory, create a new session for database operations
+            if self._session_factory:
+                from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+                    SQLToolEnvironmentVariableRepository,
+                )
 
-                    # Create domain entity
-                    env_var = ToolEnvironmentVariable(
-                        tenant_id=self._tenant_id,
-                        project_id=project_id,
-                        tool_name=tool_name,
-                        variable_name=var_name,
-                        encrypted_value=encrypted_value,
-                        description=field_spec.description,
-                        is_required=field_spec.is_required,
-                        is_secret=field_spec.is_secret,
-                        scope=scope,
-                    )
+                async with self._session_factory() as db_session:
+                    repository = SQLToolEnvironmentVariableRepository(db_session)
+                    for field_spec in env_var_fields:
+                        var_name = field_spec.variable_name
+                        if var_name in values and values[var_name]:
+                            # Encrypt the value
+                            encrypted_value = self._encryption_service.encrypt(values[var_name])
 
-                    # Upsert to database
-                    await self._repository.upsert(env_var)
-                    saved_vars.append(var_name)
+                            # Create domain entity
+                            env_var = ToolEnvironmentVariable(
+                                tenant_id=self._tenant_id,
+                                project_id=project_id,
+                                tool_name=tool_name,
+                                variable_name=var_name,
+                                encrypted_value=encrypted_value,
+                                description=field_spec.description,
+                                is_required=field_spec.is_required,
+                                is_secret=field_spec.is_secret,
+                                scope=scope,
+                            )
 
-                    logger.info(f"Saved env var: {tool_name}/{var_name}")
+                            # Upsert to database
+                            await repository.upsert(env_var)
+                            saved_vars.append(var_name)
+
+                            logger.info(f"Saved env var: {tool_name}/{var_name}")
+                    await db_session.commit()
+            else:
+                for field_spec in env_var_fields:
+                    var_name = field_spec.variable_name
+                    if var_name in values and values[var_name]:
+                        # Encrypt the value
+                        encrypted_value = self._encryption_service.encrypt(values[var_name])
+
+                        # Create domain entity
+                        env_var = ToolEnvironmentVariable(
+                            tenant_id=self._tenant_id,
+                            project_id=project_id,
+                            tool_name=tool_name,
+                            variable_name=var_name,
+                            encrypted_value=encrypted_value,
+                            description=field_spec.description,
+                            is_required=field_spec.is_required,
+                            is_secret=field_spec.is_secret,
+                            scope=scope,
+                        )
+
+                        # Upsert to database
+                        await self._repository.upsert(env_var)
+                        saved_vars.append(var_name)
+
+                        logger.info(f"Saved env var: {tool_name}/{var_name}")
 
             # Publish success event
             if self._event_publisher:
@@ -973,19 +1221,21 @@ class CheckEnvVarsTool(AgentTool):
 
     def __init__(
         self,
-        repository: ToolEnvironmentVariableRepositoryPort,
+        repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
         encryption_service: Optional[EncryptionService] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        session_factory: Optional[Any] = None,
     ):
         """
         Initialize the check env vars tool.
 
         Args:
-            repository: Repository for env var persistence
+            repository: Repository for env var persistence (optional if session_factory provided)
             encryption_service: Service for decryption (defaults to singleton)
             tenant_id: Current tenant ID (can be set later via context)
             project_id: Current project ID (can be set later via context)
+            session_factory: Async session factory for creating database sessions
         """
         super().__init__(
             name="check_env_vars",
@@ -998,6 +1248,7 @@ class CheckEnvVarsTool(AgentTool):
         self._encryption_service = encryption_service or get_encryption_service()
         self._tenant_id = tenant_id
         self._project_id = project_id
+        self._session_factory = session_factory
 
     def set_context(self, tenant_id: str, project_id: Optional[str] = None):
         """Set the tenant and project context."""
@@ -1043,12 +1294,27 @@ class CheckEnvVarsTool(AgentTool):
             )
 
         try:
-            # Get all configured vars for the tool
-            env_vars = await self._repository.get_for_tool(
-                tenant_id=self._tenant_id,
-                tool_name=tool_name,
-                project_id=self._project_id,
-            )
+            # If we have a session_factory, create a new session for this operation
+            # This is needed when running in worker context where sessions aren't managed externally
+            if self._session_factory:
+                from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+                    SQLToolEnvironmentVariableRepository,
+                )
+
+                async with self._session_factory() as db_session:
+                    repository = SQLToolEnvironmentVariableRepository(db_session)
+                    env_vars = await repository.get_for_tool(
+                        tenant_id=self._tenant_id,
+                        tool_name=tool_name,
+                        project_id=self._project_id,
+                    )
+            else:
+                # Use injected repository (for API context with managed sessions)
+                env_vars = await self._repository.get_for_tool(
+                    tenant_id=self._tenant_id,
+                    tool_name=tool_name,
+                    project_id=self._project_id,
+                )
 
             configured_vars = {ev.variable_name for ev in env_vars}
             available = [v for v in required_vars if v in configured_vars]
@@ -1085,4 +1351,22 @@ class CheckEnvVarsTool(AgentTool):
                 "all_available": {"type": "boolean"},
                 "message": {"type": "string"},
             },
+        }
+
+    def get_parameters_schema(self) -> Dict[str, Any]:
+        """Get the parameters schema for LLM function calling."""
+        return {
+            "type": "object",
+            "properties": {
+                "tool_name": {
+                    "type": "string",
+                    "description": "Name of the tool to check environment variables for",
+                },
+                "required_vars": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of required variable names to check",
+                },
+            },
+            "required": ["tool_name", "required_vars"],
         }

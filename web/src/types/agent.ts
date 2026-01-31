@@ -11,6 +11,41 @@
  */
 
 /**
+ * HITL request type
+ */
+export type HITLRequestType = "clarification" | "decision" | "env_var";
+
+/**
+ * HITL request status
+ */
+export type HITLRequestStatus = "pending" | "answered" | "timeout" | "cancelled";
+
+/**
+ * Pending HITL request from backend
+ */
+export interface PendingHITLRequest {
+    id: string;
+    request_type: HITLRequestType;
+    conversation_id: string;
+    message_id?: string;
+    question: string;
+    options?: Array<Record<string, unknown>>;
+    context?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    status: HITLRequestStatus;
+    created_at: string;
+    expires_at: string;
+}
+
+/**
+ * Response for pending HITL requests query
+ */
+export interface PendingHITLResponse {
+    requests: PendingHITLRequest[];
+    total: number;
+}
+
+/**
  * Conversation status
  */
 export type ConversationStatus = "active" | "archived" | "deleted";

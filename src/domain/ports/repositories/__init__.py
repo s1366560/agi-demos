@@ -6,6 +6,7 @@ from src.domain.ports.repositories.agent_repository import (
     MessageRepository,
 )
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
+from src.domain.ports.repositories.hitl_request_repository import HITLRequestRepositoryPort
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.repositories.plan_repository import PlanRepository
 from src.domain.ports.repositories.project_repository import ProjectRepository
@@ -38,4 +39,5 @@ __all__ = [
     "SubAgentRepositoryPort",
     "PlanRepository",
     "ToolEnvironmentVariableRepositoryPort",
+    "HITLRequestRepositoryPort",
 ]

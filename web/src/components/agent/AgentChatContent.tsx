@@ -108,6 +108,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     respondToClarification,
     respondToDecision,
     respondToEnvVar,
+    loadPendingHITL,
     clearError,
     error,
     streamingAssistantContent,
@@ -188,10 +189,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     if (projectId && conversationId) {
       setActiveConversation(conversationId);
       loadMessages(conversationId, projectId);
+      // Load any pending HITL requests to restore dialog state after refresh
+      loadPendingHITL(conversationId);
     } else if (projectId && !conversationId) {
       setActiveConversation(null);
     }
-  }, [conversationId, projectId, setActiveConversation, loadMessages]);
+  }, [conversationId, projectId, setActiveConversation, loadMessages, loadPendingHITL]);
 
   // Handle errors
   useEffect(() => {
