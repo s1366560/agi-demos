@@ -10,7 +10,7 @@
  * - Modern, clean design
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { Tabs, Button, Empty, Badge, Alert, Spin } from 'antd';
 import {
   X,
@@ -294,7 +294,8 @@ const PlanContent: React.FC<{
   );
 };
 
-export const RightPanel: React.FC<RightPanelProps> = ({
+// Memoized RightPanel to prevent unnecessary re-renders (rerender-memo)
+export const RightPanel = memo<RightPanelProps>(({
   workPlan,
   executionPlan,
   sandboxId,
@@ -437,6 +438,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
       </div>
     </div>
   );
-};
+});
+
+RightPanel.displayName = 'RightPanel';
 
 export default RightPanel;

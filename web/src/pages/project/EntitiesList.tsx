@@ -116,13 +116,16 @@ const EntitiesListInternal: React.FC = () => {
         }
     }
 
+    // Load entity types and entities in parallel (async-parallel)
     useEffect(() => {
-        loadEntityTypes()
-    }, [loadEntityTypes])
-
-    useEffect(() => {
-        loadEntities()
-    }, [loadEntities])
+        const loadInitialData = async () => {
+            await Promise.all([
+                loadEntityTypes(),
+                loadEntities(),
+            ])
+        }
+        loadInitialData()
+    }, [loadEntityTypes, loadEntities])
 
     // Filter entities by search query
     const filteredEntities = entities.filter(entity =>
@@ -131,7 +134,8 @@ const EntitiesListInternal: React.FC = () => {
         (entity.summary && entity.summary.toLowerCase().includes(searchQuery.toLowerCase()))
     )
 
-    // Sort entities
+    // Sort entities - use spread for immutable sorting (js-tosorted-immutable)
+    // Note: toSorted() requires ES2023+, using spread + sort for compatibility
     const sortedEntities = [...filteredEntities].sort((a, b) => {
         if (sortBy === 'name') {
             return a.name.localeCompare(b.name)

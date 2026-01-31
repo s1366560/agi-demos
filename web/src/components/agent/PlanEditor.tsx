@@ -5,7 +5,7 @@
  * plan documents during the planning phase.
  */
 
-import React, { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import {
   Card,
   Button,
@@ -58,7 +58,8 @@ const statusLabels: Record<PlanDocumentStatus, string> = {
   archived: "Archived",
 };
 
-export const PlanEditor: React.FC<PlanEditorProps> = ({
+// Memoized PlanEditor to prevent unnecessary re-renders (rerender-memo)
+export const PlanEditor = memo<PlanEditorProps>(({
   plan,
   isLoading = false,
   onUpdate,
@@ -346,6 +347,8 @@ export const PlanEditor: React.FC<PlanEditorProps> = ({
       </Space>
     </Card>
   );
-};
+});
+
+PlanEditor.displayName = 'PlanEditor';
 
 export default PlanEditor;

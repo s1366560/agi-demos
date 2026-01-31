@@ -2,12 +2,12 @@
  * InputBar - Modern floating input bar
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, memo } from 'react';
 import { Button, Tooltip, Badge } from 'antd';
-import { 
-  Send, 
-  Square, 
-  Paperclip, 
+import {
+  Send,
+  Square,
+  Paperclip,
   Mic,
   Wand2
 } from 'lucide-react';
@@ -21,7 +21,8 @@ interface InputBarProps {
   disabled?: boolean;
 }
 
-export const InputBar: React.FC<InputBarProps> = ({
+// Memoized InputBar to prevent unnecessary re-renders (rerender-memo)
+export const InputBar = memo<InputBarProps>(({
   onSend,
   onAbort,
   isStreaming,
@@ -43,7 +44,7 @@ export const InputBar: React.FC<InputBarProps> = ({
   }, [content, isStreaming, onSend]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -198,6 +199,8 @@ export const InputBar: React.FC<InputBarProps> = ({
       </div>
     </div>
   );
-};
+});
+
+InputBar.displayName = 'InputBar';
 
 export default InputBar;

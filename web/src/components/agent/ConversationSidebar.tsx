@@ -2,7 +2,7 @@
  * ConversationSidebar - Modern conversation list sidebar
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, memo } from 'react';
 import { Button, Badge, Tooltip, Dropdown, Modal, Input } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -37,7 +37,8 @@ interface ConversationItemProps {
   compact?: boolean;
 }
 
-const ConversationItem: React.FC<ConversationItemProps> = ({
+// Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
+const ConversationItem = memo<ConversationItemProps>(({
   conversation,
   isActive,
   onSelect,
@@ -154,7 +155,9 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ConversationItem.displayName = 'ConversationItem';
 
 export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   conversations,

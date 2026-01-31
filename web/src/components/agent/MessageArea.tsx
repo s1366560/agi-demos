@@ -8,7 +8,7 @@
  * - Scroll to bottom button when user scrolls up
  */
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { LoadingOutlined } from '@ant-design/icons';
@@ -43,7 +43,8 @@ const isNearBottom = (element: HTMLElement, threshold = 100): boolean => {
   return scrollHeight - scrollTop - clientHeight < threshold;
 };
 
-export const MessageArea: React.FC<MessageAreaProps> = ({
+// Memoized MessageArea to prevent unnecessary re-renders (rerender-memo)
+export const MessageArea = memo<MessageAreaProps>(({
   timeline,
   streamingContent,
   streamingThought,
@@ -379,4 +380,6 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
       )}
     </div>
   );
-};
+});
+
+MessageArea.displayName = 'MessageArea';
