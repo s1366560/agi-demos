@@ -112,7 +112,7 @@ class TestSandboxAutoRebuild:
         instance = MCPSandboxInstance(
             id=sandbox_id,
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path=project_path,
             endpoint="ws://localhost:18765",
             websocket_url="ws://localhost:18765",
@@ -177,7 +177,7 @@ class TestSandboxAutoRebuild:
         instance = MCPSandboxInstance(
             id=sandbox_id,
             status=SandboxStatus.STOPPED,  # Container was stopped
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path=project_path,
             endpoint="ws://localhost:18765",
             websocket_url="ws://localhost:18765",
@@ -194,7 +194,7 @@ class TestSandboxAutoRebuild:
             new_instance = MCPSandboxInstance(
                 id=sandbox_id,
                 status=SandboxStatus.RUNNING,
-                config=SandboxConfig(),
+                config=SandboxConfig(image="sandbox-mcp-server:latest"),
                 project_path=project_path,
                 endpoint="ws://localhost:18765",
                 websocket_url="ws://localhost:18765",
@@ -238,7 +238,7 @@ class TestSandboxAutoRebuild:
         instance = MCPSandboxInstance(
             id=sandbox_id,
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path=project_path,
             endpoint="ws://localhost:18765",
             websocket_url="ws://localhost:18765",
@@ -270,7 +270,7 @@ class TestSandboxAutoRebuild:
         instance = MCPSandboxInstance(
             id=sandbox_id,
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path=project_path,
             endpoint="ws://localhost:18765",
             websocket_url="ws://localhost:18765",
@@ -309,7 +309,7 @@ class TestSandboxAutoRebuild:
         instance = MCPSandboxInstance(
             id=sandbox_id,
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path=project_path,
             endpoint="ws://localhost:18765",
             websocket_url="ws://localhost:18765",
@@ -385,7 +385,7 @@ class TestSandboxAutoRebuildIntegration:
         instance = MCPSandboxInstance(
             id=sandbox_id,
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path=project_path,
             endpoint="ws://localhost:18765",
             websocket_url="ws://localhost:18765",

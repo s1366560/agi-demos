@@ -28,10 +28,14 @@ class SandboxStatus(Enum):
 
 @dataclass
 class SandboxConfig:
-    """Configuration for creating a sandbox instance."""
+    """Configuration for creating a sandbox instance.
 
+    The default image should be read from configuration settings
+    (settings.sandbox_default_image) to maintain a single source of truth.
+    """
+
+    image: str  # Required - no default, must be provided by caller
     provider: SandboxProvider = SandboxProvider.DOCKER
-    image: str = "sandbox-mcp-server:latest"
     cpu_limit: str = "2"
     memory_limit: str = "2G"
     timeout_seconds: int = 60

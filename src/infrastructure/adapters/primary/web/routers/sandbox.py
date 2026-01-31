@@ -405,8 +405,14 @@ async def create_sandbox(
             else profile.timeout_seconds
         )
 
+        # Determine image: request > profile > settings default
+        image = request.image or profile.image_name
+        if not image:
+            from src.configuration.config import get_settings
+            image = get_settings().sandbox_default_image
+
         config = SandboxConfig(
-            image=request.image,
+            image=image,
             memory_limit=memory_limit,
             cpu_limit=cpu_limit,
             timeout_seconds=timeout_seconds,

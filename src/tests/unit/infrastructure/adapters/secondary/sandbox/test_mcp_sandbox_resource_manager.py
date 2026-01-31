@@ -87,7 +87,7 @@ class TestSandboxConcurrencyLimit:
         # Use a real dict instead of Mock since queue_sandbox_request modifies it
         request = {
             "project_path": "/test/path",
-            "config": SandboxConfig(),
+            "config": SandboxConfig(image="sandbox-mcp-server:latest"),
         }
 
         result = adapter.queue_sandbox_request(request)
@@ -116,7 +116,7 @@ class TestSandboxConcurrencyLimit:
         # Use a dict as request (as expected by implementation)
         request = {
             "project_path": "/test/path",
-            "config": SandboxConfig(),
+            "config": SandboxConfig(image="sandbox-mcp-server:latest"),
             "project_id": "test-project",
             "tenant_id": "test-tenant",
         }
@@ -126,7 +126,7 @@ class TestSandboxConcurrencyLimit:
 
         adapter.create_sandbox.assert_called_once_with(
             project_path="/test/path",
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_id="test-project",
             tenant_id="test-tenant",
         )
@@ -153,7 +153,7 @@ class TestSandboxAutoCleanup:
         adapter._active_sandboxes["active-1"] = MCPSandboxInstance(
             id="active-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/active",
             endpoint="ws://localhost:8765",
             created_at=now - timedelta(minutes=10),
@@ -163,7 +163,7 @@ class TestSandboxAutoCleanup:
         adapter._active_sandboxes["idle-1"] = MCPSandboxInstance(
             id="idle-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/idle",
             endpoint="ws://localhost:8766",
             created_at=now - timedelta(minutes=30),
@@ -187,7 +187,7 @@ class TestSandboxAutoCleanup:
         adapter._active_sandboxes["young-idle"] = MCPSandboxInstance(
             id="young-idle",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/young",
             endpoint="ws://localhost:8767",
             created_at=now - timedelta(minutes=5),  # Only 5 minutes old
@@ -215,7 +215,7 @@ class TestSandboxAutoCleanup:
         adapter._active_sandboxes["active-1"] = MCPSandboxInstance(
             id="active-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/active",
             endpoint="ws://localhost:8765",
             created_at=now - timedelta(minutes=10),
@@ -257,6 +257,7 @@ class TestSandboxResourceLimits:
     def test_validate_config_within_limits(self, adapter):
         """Test that validate_config passes for valid config."""
         config = SandboxConfig(
+            image="sandbox-mcp-server:latest",
             memory_limit="1g",
             cpu_limit="1",
         )
@@ -269,6 +270,7 @@ class TestSandboxResourceLimits:
     def test_validate_config_memory_exceeds_limit(self, adapter):
         """Test that validate_config fails when memory exceeds limit."""
         config = SandboxConfig(
+            image="sandbox-mcp-server:latest",
             memory_limit="8g",  # Exceeds 4096MB limit
             cpu_limit="1",
         )
@@ -281,6 +283,7 @@ class TestSandboxResourceLimits:
     def test_validate_config_cpu_exceeds_limit(self, adapter):
         """Test that validate_config fails when CPU exceeds limit."""
         config = SandboxConfig(
+            image="sandbox-mcp-server:latest",
             memory_limit="1g",
             cpu_limit="8",  # Exceeds 4 core limit
         )
@@ -293,6 +296,7 @@ class TestSandboxResourceLimits:
     def test_validate_config_both_exceed_limits(self, adapter):
         """Test that validate_config fails when both exceed limits."""
         config = SandboxConfig(
+            image="sandbox-mcp-server:latest",
             memory_limit="8g",
             cpu_limit="8",
         )
@@ -341,7 +345,7 @@ class TestSandboxActivityTracking:
         instance = MCPSandboxInstance(
             id="test-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/test",
             endpoint="ws://localhost:8765",
             created_at=now - timedelta(minutes=10),
@@ -362,7 +366,7 @@ class TestSandboxActivityTracking:
         instance = MCPSandboxInstance(
             id="test-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/test",
             endpoint="ws://localhost:8765",
             created_at=now,
@@ -390,7 +394,7 @@ class TestSandboxActivityTracking:
         instance = MCPSandboxInstance(
             id="test-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/test",
             endpoint="ws://localhost:8765",
             created_at=now,
@@ -411,7 +415,7 @@ class TestSandboxActivityTracking:
         instance = MCPSandboxInstance(
             id="test-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(),
+            config=SandboxConfig(image="sandbox-mcp-server:latest"),
             project_path="/test",
             endpoint="ws://localhost:8765",
             created_at=now - timedelta(hours=1),
@@ -446,7 +450,7 @@ class TestSandboxResourceMonitoring:
         adapter._active_sandboxes["test-1"] = MCPSandboxInstance(
             id="test-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(memory_limit="1g", cpu_limit="1"),
+            config=SandboxConfig(image="sandbox-mcp-server:latest", memory_limit="1g", cpu_limit="1"),
             project_path="/test1",
             endpoint="ws://localhost:8765",
             created_at=now,
@@ -455,7 +459,7 @@ class TestSandboxResourceMonitoring:
         adapter._active_sandboxes["test-2"] = MCPSandboxInstance(
             id="test-2",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(memory_limit="2g", cpu_limit="2"),
+            config=SandboxConfig(image="sandbox-mcp-server:latest", memory_limit="2g", cpu_limit="2"),
             project_path="/test2",
             endpoint="ws://localhost:8766",
             created_at=now,

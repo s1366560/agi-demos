@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus, Building2, ArrowRight } from 'lucide-react';
@@ -6,12 +6,13 @@ import { AppLayout, NavigationItem } from '@/components/shared/layouts/AppLayout
 import { useTenantStore } from '../stores/tenant';
 import { TenantCreateModal } from '@/components/tenant/TenantCreateModal';
 import { Tenant } from '../types/memory';
+import { useModal } from '@/hooks/useModal';
 
 export const SpaceListPage: React.FC = () => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const { tenants, listTenants, setCurrentTenant } = useTenantStore();
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const createModal = useModal();
 
     useEffect(() => {
         listTenants();
@@ -40,7 +41,7 @@ export const SpaceListPage: React.FC = () => {
                         <p className="mt-1 text-gray-500">{t('space.list.welcome.subtitle')}</p>
                     </div>
                     <button
-                        onClick={() => setIsCreateModalOpen(true)}
+                        onClick={() => createModal.open()}
                         className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                     >
                         <Plus className="h-5 w-5" />
@@ -92,7 +93,7 @@ export const SpaceListPage: React.FC = () => {
                     {/* Empty State Create Card */}
                     {tenants.length === 0 && (
                         <div
-                            onClick={() => setIsCreateModalOpen(true)}
+                            onClick={() => createModal.open()}
                             className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer h-full min-h-[240px]"
                         >
                             <div className="p-4 bg-gray-100 rounded-full mb-4">
@@ -105,8 +106,8 @@ export const SpaceListPage: React.FC = () => {
                 </div>
 
                 <TenantCreateModal
-                    isOpen={isCreateModalOpen}
-                    onClose={() => setIsCreateModalOpen(false)}
+                    isOpen={createModal.isOpen}
+                    onClose={() => createModal.close()}
                     onSuccess={() => listTenants()}
                 />
             </div>

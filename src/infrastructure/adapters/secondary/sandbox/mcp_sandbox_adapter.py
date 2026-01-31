@@ -27,17 +27,15 @@ from src.domain.ports.services.sandbox_port import (
     SandboxStatus,
 )
 from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
-
 logger = logging.getLogger(__name__)
 
-
-# Default sandbox MCP server image
-DEFAULT_MCP_IMAGE = "sandbox-mcp-server:latest"
-
-# WebSocket port inside container
-MCP_WEBSOCKET_PORT = 8765
-DESKTOP_PORT = 6080  # noVNC
-TERMINAL_PORT = 7681  # ttyd
+# Import sandbox constants (single source of truth from config)
+from src.infrastructure.adapters.secondary.sandbox.constants import (
+    DEFAULT_SANDBOX_IMAGE,
+    DESKTOP_PORT,
+    MCP_WEBSOCKET_PORT,
+    TERMINAL_PORT,
+)
 
 
 @dataclass
@@ -88,7 +86,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     def __init__(
         self,
-        mcp_image: str = DEFAULT_MCP_IMAGE,
+        mcp_image: str = DEFAULT_SANDBOX_IMAGE,
         default_timeout: int = 60,
         default_memory_limit: str = "2g",
         default_cpu_limit: str = "2",
@@ -256,7 +254,7 @@ class MCPSandboxAdapter(SandboxPort):
         Returns:
             MCPSandboxInstance with MCP endpoint
         """
-        config = config or SandboxConfig()
+        config = config or SandboxConfig(image=self._mcp_image)
         sandbox_id = f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
 
         # Allocate ports for all services with lock protection
@@ -834,7 +832,7 @@ class MCPSandboxAdapter(SandboxPort):
                     instance = MCPSandboxInstance(
                         id=sandbox_id,
                         status=SandboxStatus.RUNNING,
-                        config=SandboxConfig(),  # Default config for discovered containers
+                        config=SandboxConfig(image=self._mcp_image),  # Default config for discovered containers
                         project_path=project_path,
                         endpoint=websocket_url,
                         created_at=now,  # Approximation
@@ -1460,7 +1458,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         # Create new container with the original ID directly
         try:
-            config = original_config or SandboxConfig()
+            config = original_config or SandboxConfig(image=self._mcp_image)
 
             # Build service URLs
             from src.application.services.sandbox_url_service import (

@@ -29,7 +29,7 @@ def create_mock_sandbox_instance(sandbox_id: str):
     mock_instance = Mock()
     mock_instance.id = sandbox_id
     mock_instance.status = SandboxStatus.RUNNING
-    mock_instance.config = SandboxConfig()
+    mock_instance.config = SandboxConfig(image="sandbox-mcp-server:latest")
     mock_instance.project_path = f"/tmp/{sandbox_id}"
     mock_instance.endpoint = f"ws://localhost:8765"
     mock_instance.created_at = datetime.now()
