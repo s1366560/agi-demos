@@ -36,6 +36,12 @@ import type {
     SandboxCreatedEventData,
     SandboxTerminatedEventData,
     SandboxStatusEventData,
+    ClarificationAskedEventData,
+    ClarificationAnsweredEventData,
+    DecisionAskedEventData,
+    DecisionAnsweredEventData,
+    EnvVarRequestedEventData,
+    EnvVarProvidedEventData,
 } from '../types/agent';
 
 /**
@@ -404,6 +410,95 @@ export function sseEventToTimeline(
             };
         }
 
+        // Human-in-the-loop event types
+        case 'clarification_asked': {
+            const data = event.data as unknown as ClarificationAskedEventData;
+            return {
+                id: generateTimelineEventId('clarification_asked'),
+                type: 'clarification_asked',
+                sequenceNumber,
+                timestamp,
+                requestId: data.request_id,
+                question: data.question,
+                clarificationType: data.clarification_type,
+                options: data.options,
+                allowCustom: data.allow_custom,
+                context: data.context,
+                answered: false,
+            };
+        }
+
+        case 'clarification_answered': {
+            const data = event.data as unknown as ClarificationAnsweredEventData;
+            return {
+                id: generateTimelineEventId('clarification_answered'),
+                type: 'clarification_answered',
+                sequenceNumber,
+                timestamp,
+                requestId: data.request_id,
+                answer: data.answer,
+            };
+        }
+
+        case 'decision_asked': {
+            const data = event.data as unknown as DecisionAskedEventData;
+            return {
+                id: generateTimelineEventId('decision_asked'),
+                type: 'decision_asked',
+                sequenceNumber,
+                timestamp,
+                requestId: data.request_id,
+                question: data.question,
+                decisionType: data.decision_type,
+                options: data.options,
+                allowCustom: data.allow_custom,
+                context: data.context,
+                defaultOption: data.default_option,
+                answered: false,
+            };
+        }
+
+        case 'decision_answered': {
+            const data = event.data as unknown as DecisionAnsweredEventData;
+            return {
+                id: generateTimelineEventId('decision_answered'),
+                type: 'decision_answered',
+                sequenceNumber,
+                timestamp,
+                requestId: data.request_id,
+                decision: data.decision,
+            };
+        }
+
+        case 'env_var_requested': {
+            const data = event.data as unknown as EnvVarRequestedEventData;
+            return {
+                id: generateTimelineEventId('env_var_requested'),
+                type: 'env_var_requested',
+                sequenceNumber,
+                timestamp,
+                requestId: data.request_id,
+                toolName: data.tool_name,
+                fields: data.fields,
+                message: data.message,
+                context: data.context,
+                answered: false,
+            };
+        }
+
+        case 'env_var_provided': {
+            const data = event.data as unknown as EnvVarProvidedEventData;
+            return {
+                id: generateTimelineEventId('env_var_provided'),
+                type: 'env_var_provided',
+                sequenceNumber,
+                timestamp,
+                requestId: data.request_id,
+                toolName: data.tool_name,
+                variableNames: data.variable_names,
+            };
+        }
+
         // Unsupported event types - return null
         case 'start':
         case 'status':
@@ -413,12 +508,6 @@ export function sseEventToTimeline(
         case 'error':
         case 'doom_loop_detected':
         case 'doom_loop_intervened':
-        case 'clarification_asked':
-        case 'clarification_answered':
-        case 'decision_asked':
-        case 'decision_answered':
-        case 'env_var_requested':
-        case 'env_var_provided':
         case 'permission_asked':
         case 'permission_replied':
         case 'skill_matched':

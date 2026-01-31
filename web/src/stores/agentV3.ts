@@ -19,6 +19,9 @@ import {
     PlanExecutionStartEvent,
     PlanExecutionCompleteEvent,
     ReflectionCompleteEvent,
+    ClarificationAskedEventData,
+    DecisionAskedEventData,
+    EnvVarRequestedEventData,
 } from "../types/agent";
 import { agentService } from "../services/agentService";
 import { agentEventReplayService } from "../services/agentEventReplayService";
@@ -132,6 +135,7 @@ interface AgentV3State {
     rightPanelWidth: number;
 
     // Interactivity
+    pendingClarification: any; // Pending clarification request from agent
     pendingDecision: any; // Using any for brevity in this update
     doomLoopDetected: any;
     pendingEnvVarRequest: any; // Pending environment variable request from agent
@@ -161,6 +165,7 @@ interface AgentV3State {
     toggleHistorySidebar: () => void;
     setLeftSidebarWidth: (width: number) => void;
     setRightPanelWidth: (width: number) => void;
+    respondToClarification: (requestId: string, answer: string) => Promise<void>;
     respondToDecision: (requestId: string, decision: string) => Promise<void>;
     respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
     togglePlanMode: () => Promise<void>;
@@ -205,6 +210,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 leftSidebarWidth: 280,
                 rightPanelWidth: 400,
 
+                pendingClarification: null,
                 pendingDecision: null,
                 doomLoopDetected: null,
                 pendingEnvVarRequest: null,
@@ -826,14 +832,53 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 return { streamingAssistantContent: finalContent };
                             });
                         },
+                        onClarificationAsked: (event) => {
+                            // Add to timeline for inline rendering
+                            const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
+                                type: "clarification_asked",
+                                data: event.data,
+                            };
+                            set((state) => {
+                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
+                                return {
+                                    timeline: updatedTimeline,
+                                    pendingClarification: event.data,
+                                    agentState: "awaiting_input",
+                                };
+                            });
+                        },
                         onDecisionAsked: (event) => {
-                            set({ pendingDecision: event.data, agentState: "awaiting_input" });
+                            // Add to timeline for inline rendering
+                            const decisionEvent: AgentEvent<DecisionAskedEventData> = {
+                                type: "decision_asked",
+                                data: event.data,
+                            };
+                            set((state) => {
+                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
+                                return {
+                                    timeline: updatedTimeline,
+                                    pendingDecision: event.data,
+                                    agentState: "awaiting_input",
+                                };
+                            });
                         },
                         onDoomLoopDetected: (event) => {
                             set({ doomLoopDetected: event.data });
                         },
                         onEnvVarRequested: (event) => {
-                            set({ pendingEnvVarRequest: event.data, agentState: "awaiting_input" });
+                            // Add to timeline for inline rendering
+                            const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
+                                type: "env_var_requested",
+                                data: event.data,
+                            };
+                            set((state) => {
+                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
+                                return {
+                                    timeline: updatedTimeline,
+                                    pendingEnvVarRequest: event.data,
+                                    agentState: "awaiting_input",
+                                };
+                            });
                         },
                         onTitleGenerated: (event) => {
                             const data = event.data as {
@@ -974,9 +1019,26 @@ export const useAgentV3Store = create<AgentV3State>()(
                     }
                 },
 
+                respondToClarification: async (requestId, answer) => {
+                    console.log("Responding to clarification", requestId, answer);
+                    try {
+                        await agentService.respondToClarification(requestId, answer);
+                        set({ pendingClarification: null, agentState: "thinking" });
+                    } catch (error) {
+                        console.error("Failed to respond to clarification:", error);
+                        set({ agentState: "idle" });
+                    }
+                },
+
                 respondToDecision: async (requestId, decision) => {
                     console.log("Responding to decision", requestId, decision);
-                    set({ pendingDecision: null, agentState: "thinking" });
+                    try {
+                        await agentService.respondToDecision(requestId, decision);
+                        set({ pendingDecision: null, agentState: "thinking" });
+                    } catch (error) {
+                        console.error("Failed to respond to decision:", error);
+                        set({ agentState: "idle" });
+                    }
                 },
 
                 respondToEnvVar: async (requestId, values) => {
@@ -986,7 +1048,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                         set({ pendingEnvVarRequest: null, agentState: "thinking" });
                     } catch (error) {
                         console.error("Failed to respond to env var request:", error);
-                        set({ agentState: "error" });
+                        set({ agentState: "idle" });
                     }
                 },
 

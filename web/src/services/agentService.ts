@@ -1208,7 +1208,8 @@ class AgentServiceImpl implements AgentService {
      * Respond to an environment variable request from the Agent
      *
      * Submits user-provided environment variable values in response to an
-     * env_var_requested event. The values are stored encrypted for future use.
+     * env_var_requested event. Uses WebSocket when connected for lower latency,
+     * with HTTP fallback. The values are stored encrypted for future use.
      *
      * @param requestId - The request ID from the env_var_requested event
      * @param values - Key-value pairs of environment variable names and their values
@@ -1227,9 +1228,100 @@ class AgentServiceImpl implements AgentService {
         requestId: string,
         values: Record<string, string>
     ): Promise<void> {
+        // Try WebSocket first for lower latency
+        if (this.isConnected()) {
+            const sent = this.send({
+                type: "env_var_respond",
+                request_id: requestId,
+                values,
+            });
+            if (sent) {
+                logger.debug("[AgentWS] Sent env_var_respond via WebSocket");
+                return;
+            }
+        }
+        // Fallback to HTTP
         await api.post<{ status: string }>("/agent/env-var/respond", {
             request_id: requestId,
             values,
+        });
+    }
+
+    /**
+     * Respond to a clarification request from the Agent
+     *
+     * Submits user's answer to a clarification question during planning phase.
+     * Uses WebSocket when connected for lower latency, with HTTP fallback.
+     *
+     * @param requestId - The request ID from the clarification_asked event
+     * @param answer - The user's answer (option ID or custom text)
+     * @returns Promise resolving when the response is submitted
+     * @throws {ApiError} If the request fails or request_id is invalid
+     *
+     * @example
+     * ```typescript
+     * await agentService.respondToClarification('req-123', 'option_a');
+     * ```
+     */
+    async respondToClarification(
+        requestId: string,
+        answer: string
+    ): Promise<void> {
+        // Try WebSocket first for lower latency
+        if (this.isConnected()) {
+            const sent = this.send({
+                type: "clarification_respond",
+                request_id: requestId,
+                answer,
+            });
+            if (sent) {
+                logger.debug("[AgentWS] Sent clarification_respond via WebSocket");
+                return;
+            }
+        }
+        // Fallback to HTTP
+        await api.post<{ status: string }>("/agent/clarification/respond", {
+            request_id: requestId,
+            response: answer,
+        });
+    }
+
+    /**
+     * Respond to a decision request from the Agent
+     *
+     * Submits user's decision at critical execution points.
+     * Uses WebSocket when connected for lower latency, with HTTP fallback.
+     *
+     * @param requestId - The request ID from the decision_asked event
+     * @param decision - The user's decision (option ID or custom text)
+     * @returns Promise resolving when the response is submitted
+     * @throws {ApiError} If the request fails or request_id is invalid
+     *
+     * @example
+     * ```typescript
+     * await agentService.respondToDecision('req-123', 'approved');
+     * ```
+     */
+    async respondToDecision(
+        requestId: string,
+        decision: string
+    ): Promise<void> {
+        // Try WebSocket first for lower latency
+        if (this.isConnected()) {
+            const sent = this.send({
+                type: "decision_respond",
+                request_id: requestId,
+                decision,
+            });
+            if (sent) {
+                logger.debug("[AgentWS] Sent decision_respond via WebSocket");
+                return;
+            }
+        }
+        // Fallback to HTTP
+        await api.post<{ status: string }>("/agent/decision/respond", {
+            request_id: requestId,
+            decision,
         });
     }
 

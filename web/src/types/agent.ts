@@ -1634,6 +1634,14 @@ export type TimelineEventType =
     | "text_delta"
     | "text_start"
     | "text_end"
+    // Human-in-the-loop event types
+    | "clarification_asked"
+    | "clarification_answered"
+    | "decision_asked"
+    | "decision_answered"
+    | "env_var_requested"
+    | "env_var_provided"
+    // Sandbox event types
     | "sandbox_created"
     | "sandbox_terminated"
     | "sandbox_status"
@@ -1763,6 +1771,83 @@ export interface TextEndEvent extends BaseTimelineEvent {
     fullText?: string;
 }
 
+// ============================================
+// Human-in-the-Loop Timeline Event Types
+// ============================================
+
+/**
+ * Clarification asked event (agent asks user for clarification)
+ */
+export interface ClarificationAskedTimelineEvent extends BaseTimelineEvent {
+    type: "clarification_asked";
+    requestId: string;
+    question: string;
+    clarificationType: ClarificationType;
+    options: ClarificationOption[];
+    allowCustom: boolean;
+    context?: Record<string, unknown>;
+    answered?: boolean;
+    answer?: string;
+}
+
+/**
+ * Clarification answered event (user responded to clarification)
+ */
+export interface ClarificationAnsweredTimelineEvent extends BaseTimelineEvent {
+    type: "clarification_answered";
+    requestId: string;
+    answer: string;
+}
+
+/**
+ * Decision asked event (agent asks user for decision)
+ */
+export interface DecisionAskedTimelineEvent extends BaseTimelineEvent {
+    type: "decision_asked";
+    requestId: string;
+    question: string;
+    decisionType: DecisionType;
+    options: DecisionOption[];
+    allowCustom: boolean;
+    context?: Record<string, unknown>;
+    defaultOption?: string;
+    answered?: boolean;
+    decision?: string;
+}
+
+/**
+ * Decision answered event (user made a decision)
+ */
+export interface DecisionAnsweredTimelineEvent extends BaseTimelineEvent {
+    type: "decision_answered";
+    requestId: string;
+    decision: string;
+}
+
+/**
+ * Environment variable requested event (agent requests env vars from user)
+ */
+export interface EnvVarRequestedTimelineEvent extends BaseTimelineEvent {
+    type: "env_var_requested";
+    requestId: string;
+    toolName: string;
+    fields: EnvVarField[];
+    message?: string;
+    context?: Record<string, unknown>;
+    answered?: boolean;
+    providedVariables?: string[];
+}
+
+/**
+ * Environment variable provided event (user provided env vars)
+ */
+export interface EnvVarProvidedTimelineEvent extends BaseTimelineEvent {
+    type: "env_var_provided";
+    requestId: string;
+    toolName: string;
+    variableNames: string[];
+}
+
 /**
  * Union type for all timeline events
  */
@@ -1778,6 +1863,14 @@ export type TimelineEvent =
     | TextDeltaEvent
     | TextStartEvent
     | TextEndEvent
+    // Human-in-the-loop events
+    | ClarificationAskedTimelineEvent
+    | ClarificationAnsweredTimelineEvent
+    | DecisionAskedTimelineEvent
+    | DecisionAnsweredTimelineEvent
+    | EnvVarRequestedTimelineEvent
+    | EnvVarProvidedTimelineEvent
+    // Sandbox events
     | DesktopStartedEvent
     | DesktopStoppedEvent
     | DesktopStatusEvent

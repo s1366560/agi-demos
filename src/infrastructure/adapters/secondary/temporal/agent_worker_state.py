@@ -498,6 +498,68 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillInstallerTool: {e}")
 
+    # 7. Add Environment Variable Tools (GetEnvVarTool, RequestEnvVarTool, CheckEnvVarsTool)
+    try:
+        from src.configuration.di_container import DIContainer
+        from src.infrastructure.agent.tools.env_var_tools import (
+            CheckEnvVarsTool,
+            GetEnvVarTool,
+            RequestEnvVarTool,
+        )
+        from src.infrastructure.security.encryption_service import get_encryption_service
+
+        # Get repository from DI container
+        container = DIContainer()
+        env_var_repository = container.tool_environment_variable_repository()
+        encryption_service = get_encryption_service()
+
+        # Create env var tools with tenant/project context
+        get_env_var_tool = GetEnvVarTool(
+            repository=env_var_repository,
+            encryption_service=encryption_service,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        request_env_var_tool = RequestEnvVarTool(
+            repository=env_var_repository,
+            encryption_service=encryption_service,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        check_env_vars_tool = CheckEnvVarsTool(
+            repository=env_var_repository,
+            encryption_service=encryption_service,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+
+        tools["get_env_var"] = get_env_var_tool
+        tools["request_env_var"] = request_env_var_tool
+        tools["check_env_vars"] = check_env_vars_tool
+        logger.info(
+            f"Agent Worker: Environment variable tools added for tenant {tenant_id}, "
+            f"project {project_id}"
+        )
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create environment variable tools: {e}")
+
+    # 8. Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)
+    try:
+        from src.infrastructure.agent.tools.clarification import ClarificationTool
+        from src.infrastructure.agent.tools.decision import DecisionTool
+
+        clarification_tool = ClarificationTool()
+        decision_tool = DecisionTool()
+
+        tools["ask_clarification"] = clarification_tool
+        tools["request_decision"] = decision_tool
+        logger.info(
+            f"Agent Worker: Human-in-the-loop tools (ask_clarification, request_decision) "
+            f"added for project {project_id}"
+        )
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create HITL tools: {e}")
+
     return tools
 
 

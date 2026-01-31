@@ -12,7 +12,7 @@
 import * as React from 'react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Modal, notification } from 'antd';
+import { notification } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { PanelRight, GripHorizontal } from 'lucide-react';
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -30,6 +30,8 @@ import {
   RightPanel,
   ProjectAgentStatusBar,
   EnvVarInputModal,
+  ClarificationDialog,
+  DecisionModal,
 } from './index';
 import { EmptyState } from './EmptyState';
 
@@ -89,6 +91,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     executionPlan,
     isPlanMode,
     showPlanPanel,
+    pendingClarification,
     pendingDecision,
     doomLoopDetected,
     pendingEnvVarRequest,
@@ -102,6 +105,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     abortStream,
     togglePlanMode,
     togglePlanPanel,
+    respondToClarification,
     respondToDecision,
     respondToEnvVar,
     clearError,
@@ -199,20 +203,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       });
     }
   }, [error, clearError, t]);
-
-  // Handle pending decisions
-  useEffect(() => {
-    if (pendingDecision) {
-      Modal.confirm({
-        title: t('agent.chat.decision.title'),
-        content: pendingDecision.question,
-        okText: t('agent.chat.decision.confirm'),
-        cancelText: t('agent.chat.decision.cancel'),
-        onOk: () => respondToDecision(pendingDecision.request_id, 'approved'),
-        onCancel: () => respondToDecision(pendingDecision.request_id, 'rejected'),
-      });
-    }
-  }, [pendingDecision, respondToDecision, t]);
 
   // Handle doom loop
   useEffect(() => {
@@ -406,6 +396,30 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       >
         {!panelCollapsed && rightPanel}
       </aside>
+
+      {/* Clarification Dialog */}
+      {pendingClarification && (
+        <ClarificationDialog
+          data={pendingClarification}
+          onRespond={respondToClarification}
+          onCancel={() => {
+            // Cancel clarification by sending empty answer
+            respondToClarification(pendingClarification.request_id, '');
+          }}
+        />
+      )}
+
+      {/* Decision Modal */}
+      {pendingDecision && (
+        <DecisionModal
+          data={pendingDecision}
+          onRespond={respondToDecision}
+          onCancel={() => {
+            // Cancel decision by sending 'rejected'
+            respondToDecision(pendingDecision.request_id, 'rejected');
+          }}
+        />
+      )}
 
       {/* Environment Variable Input Modal */}
       {pendingEnvVarRequest && (

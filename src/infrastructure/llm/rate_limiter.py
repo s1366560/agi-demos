@@ -12,7 +12,7 @@ Features:
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional
 
@@ -21,12 +21,14 @@ logger = logging.getLogger(__name__)
 
 class RateLimitStrategy(str, Enum):
     """Rate limiting strategy when limit is reached."""
+
     REJECT = "reject"  # Immediately reject with RateLimitError
-    QUEUE = "queue"    # Wait in queue until slot available
+    QUEUE = "queue"  # Wait in queue until slot available
 
 
 class ProviderType(str, Enum):
     """LLM provider types."""
+
     QWEN = "qwen"
     OPENAI = "openai"
     GEMINI = "gemini"
@@ -38,24 +40,26 @@ class ProviderType(str, Enum):
 @dataclass
 class ProviderConfig:
     """Rate limit configuration for a provider."""
+
     max_concurrent: int  # Maximum concurrent requests
     timeout: float = 300.0  # Max wait time in queue (seconds)
 
 
 # Default provider limits (can be overridden via environment)
 DEFAULT_PROVIDER_LIMITS: Dict[ProviderType, ProviderConfig] = {
-    ProviderType.QWEN: ProviderConfig(max_concurrent=1, timeout=300.0),
-    ProviderType.OPENAI: ProviderConfig(max_concurrent=5, timeout=300.0),
-    ProviderType.GEMINI: ProviderConfig(max_concurrent=5, timeout=300.0),
-    ProviderType.DEEPSEEK: ProviderConfig(max_concurrent=2, timeout=300.0),
-    ProviderType.ZHIPU: ProviderConfig(max_concurrent=2, timeout=300.0),
-    ProviderType.LITELLM: ProviderConfig(max_concurrent=1, timeout=300.0),
+    ProviderType.QWEN: ProviderConfig(max_concurrent=10, timeout=300.0),  # Increased for HITL
+    ProviderType.OPENAI: ProviderConfig(max_concurrent=10, timeout=300.0),
+    ProviderType.GEMINI: ProviderConfig(max_concurrent=10, timeout=300.0),
+    ProviderType.DEEPSEEK: ProviderConfig(max_concurrent=10, timeout=300.0),
+    ProviderType.ZHIPU: ProviderConfig(max_concurrent=10, timeout=300.0),
+    ProviderType.LITELLM: ProviderConfig(max_concurrent=10, timeout=300.0),  # Increased for HITL
 }
 
 
 @dataclass
 class RateLimiterMetrics:
     """Metrics for rate limiter monitoring."""
+
     active_requests: int = 0
     queued_requests: int = 0
     total_accepted: int = 0
@@ -65,6 +69,7 @@ class RateLimiterMetrics:
 
 class RateLimitError(Exception):
     """Raised when request is rejected due to rate limit."""
+
     def __init__(self, provider: ProviderType, message: str):
         self.provider = provider
         super().__init__(message)
@@ -197,7 +202,7 @@ class RateLimiterToken:
                 raise RateLimitError(
                     self._provider,
                     f"Rate limit exceeded for {self._provider.value}. "
-                    f"Max concurrent: {config.max_concurrent}"
+                    f"Max concurrent: {config.max_concurrent}",
                 )
             else:  # QUEUE strategy
                 # Wait with timeout
@@ -206,10 +211,7 @@ class RateLimiterToken:
                     self._limiter._update_queued_metrics()
 
                 try:
-                    await asyncio.wait_for(
-                        semaphore.acquire(),
-                        timeout=config.timeout
-                    )
+                    await asyncio.wait_for(semaphore.acquire(), timeout=config.timeout)
                 except asyncio.TimeoutError:
                     metrics.total_rejected += 1
                     raise

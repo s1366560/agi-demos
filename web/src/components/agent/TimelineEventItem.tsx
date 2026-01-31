@@ -7,11 +7,12 @@
  * Features:
  * - Natural time rendering for each event (不分组)
  * - Tool status tracking with act/observe matching
+ * - Human-in-the-loop (HITL) interaction support
  *
  * @module components/agent/TimelineEventItem
  */
 
-import { memo, lazy, Suspense } from "react";
+import { memo, lazy, Suspense, useState } from "react";
 import {
   UserMessage,
   AgentSection,
@@ -20,7 +21,18 @@ import {
 import { AssistantMessage } from "./chat/AssistantMessage";
 import { ReasoningLogCard } from "./chat/MessageStream";
 import { formatDistanceToNowCN, formatReadableTime } from "../../utils/date";
-import type { TimelineEvent, ActEvent, ObserveEvent } from "../../types/agent";
+import type { 
+  TimelineEvent, 
+  ActEvent, 
+  ObserveEvent,
+  ClarificationAskedTimelineEvent,
+  DecisionAskedTimelineEvent,
+  EnvVarRequestedTimelineEvent,
+  ClarificationOption,
+  DecisionOption,
+  EnvVarField,
+} from "../../types/agent";
+import { useAgentV3Store } from "../../stores/agentV3";
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
 // Using dynamic import with a wrapper to handle type issues
@@ -320,6 +332,381 @@ function TextDeltaItem({
   );
 }
 
+// ============================================
+// Human-in-the-Loop Event Components
+// ============================================
+
+/**
+ * Option button component for HITL events
+ */
+function OptionButton({
+  option,
+  isSelected,
+  isRecommended,
+  onClick,
+  disabled,
+}: {
+  option: { id: string; label: string; description?: string };
+  isSelected?: boolean;
+  isRecommended?: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`
+        w-full text-left p-3 rounded-lg border transition-all
+        ${isSelected
+          ? "border-primary bg-primary/10 dark:bg-primary/20"
+          : "border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-800"
+        }
+        ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+      `}
+    >
+      <div className="flex items-center gap-2">
+        <span className="font-medium text-sm">{option.label}</span>
+        {isRecommended && (
+          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
+            推荐
+          </span>
+        )}
+      </div>
+      {option.description && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          {option.description}
+        </p>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Render clarification_asked event (inline in timeline)
+ */
+function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEvent }) {
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [customAnswer, setCustomAnswer] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { respondToClarification } = useAgentV3Store();
+  const isAnswered = event.answered || false;
+
+  const handleSubmit = async () => {
+    const answer = selectedOption || customAnswer;
+    if (!answer) return;
+
+    setIsSubmitting(true);
+    try {
+      await respondToClarification(event.requestId, answer);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-3">
+        <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg">
+            help_outline
+          </span>
+        </div>
+        <div className="flex-1 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/50 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+              需要澄清
+            </span>
+            {isAnswered && (
+              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
+                已回答
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
+            {event.question}
+          </p>
+
+          {!isAnswered ? (
+            <>
+              <div className="space-y-2 mb-3">
+                {event.options.map((option: ClarificationOption) => (
+                  <OptionButton
+                    key={option.id}
+                    option={option}
+                    isSelected={selectedOption === option.id}
+                    isRecommended={option.recommended}
+                    onClick={() => {
+                      setSelectedOption(option.id);
+                      setCustomAnswer("");
+                    }}
+                    disabled={isSubmitting}
+                  />
+                ))}
+              </div>
+
+              {event.allowCustom && (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    placeholder="或输入自定义答案..."
+                    value={customAnswer}
+                    onChange={(e) => {
+                      setCustomAnswer(e.target.value);
+                      setSelectedOption(null);
+                    }}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || (!selectedOption && !customAnswer)}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSubmitting ? "提交中..." : "确认"}
+              </button>
+            </>
+          ) : (
+            <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
+              <span className="font-medium">已选择:</span> {event.answer}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="pl-11">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Render decision_asked event (inline in timeline)
+ */
+function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
+  const [selectedOption, setSelectedOption] = useState<string | null>(event.defaultOption || null);
+  const [customDecision, setCustomDecision] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { respondToDecision } = useAgentV3Store();
+  const isAnswered = event.answered || false;
+
+  const handleSubmit = async () => {
+    const decision = selectedOption || customDecision;
+    if (!decision) return;
+
+    setIsSubmitting(true);
+    try {
+      await respondToDecision(event.requestId, decision);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-3">
+        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-lg">
+            rule
+          </span>
+        </div>
+        <div className="flex-1 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wider">
+              需要决策
+            </span>
+            {isAnswered && (
+              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
+                已决定
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
+            {event.question}
+          </p>
+
+          {!isAnswered ? (
+            <>
+              <div className="space-y-2 mb-3">
+                {event.options.map((option: DecisionOption) => (
+                  <OptionButton
+                    key={option.id}
+                    option={option}
+                    isSelected={selectedOption === option.id}
+                    isRecommended={option.recommended}
+                    onClick={() => {
+                      setSelectedOption(option.id);
+                      setCustomDecision("");
+                    }}
+                    disabled={isSubmitting}
+                  />
+                ))}
+              </div>
+
+              {event.allowCustom && (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    placeholder="或输入自定义决策..."
+                    value={customDecision}
+                    onChange={(e) => {
+                      setCustomDecision(e.target.value);
+                      setSelectedOption(null);
+                    }}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || (!selectedOption && !customDecision)}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSubmitting ? "提交中..." : "确认决策"}
+              </button>
+            </>
+          ) : (
+            <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
+              <span className="font-medium">已决定:</span> {event.decision}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="pl-11">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Render env_var_requested event (inline in timeline)
+ */
+function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent }) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { respondToEnvVar } = useAgentV3Store();
+  const isAnswered = event.answered || false;
+
+  const handleChange = (name: string, value: string) => {
+    setValues((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async () => {
+    // Check required fields
+    const missingRequired = event.fields.filter(
+      (f: EnvVarField) => f.required && !values[f.name]
+    );
+    if (missingRequired.length > 0) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await respondToEnvVar(event.requestId, values);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const requiredFilled = event.fields
+    .filter((f: EnvVarField) => f.required)
+    .every((f: EnvVarField) => values[f.name]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-3">
+        <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-purple-600 dark:text-purple-400 text-lg">
+            key
+          </span>
+        </div>
+        <div className="flex-1 bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-medium text-purple-700 dark:text-purple-400 uppercase tracking-wider">
+              需要配置
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {event.toolName}
+            </span>
+            {isAnswered && (
+              <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
+                已提供
+              </span>
+            )}
+          </div>
+          {event.message && (
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
+              {event.message}
+            </p>
+          )}
+
+          {!isAnswered ? (
+            <>
+              <div className="space-y-3 mb-3">
+                {event.fields.map((field: EnvVarField) => (
+                  <div key={field.name}>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      {field.label}
+                      {field.required && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                    </label>
+                    {field.description && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                        {field.description}
+                      </p>
+                    )}
+                    {field.input_type === "textarea" ? (
+                      <textarea
+                        placeholder={field.placeholder || `请输入 ${field.label}`}
+                        value={values[field.name] || field.default_value || ""}
+                        onChange={(e) => handleChange(field.name, e.target.value)}
+                        disabled={isSubmitting}
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                    ) : (
+                      <input
+                        type={field.input_type === "password" ? "password" : "text"}
+                        placeholder={field.placeholder || `请输入 ${field.label}`}
+                        value={values[field.name] || field.default_value || ""}
+                        onChange={(e) => handleChange(field.name, e.target.value)}
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || !requiredFilled}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSubmitting ? "保存中..." : "保存配置"}
+              </button>
+            </>
+          ) : (
+            <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
+              <span className="font-medium">已配置:</span> {event.providedVariables?.join(", ")}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="pl-11">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
+}
+
 /**
  * TimelineEventItem component
  */
@@ -408,6 +795,40 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
 
       case "text_start":
       case "text_end":
+        return null;
+
+      // Human-in-the-loop events
+      case "clarification_asked":
+        return (
+          <div className="my-3 animate-slide-up">
+            <ClarificationAskedItem event={event} />
+          </div>
+        );
+
+      case "clarification_answered":
+        // Already shown as part of clarification_asked when answered
+        return null;
+
+      case "decision_asked":
+        return (
+          <div className="my-3 animate-slide-up">
+            <DecisionAskedItem event={event} />
+          </div>
+        );
+
+      case "decision_answered":
+        // Already shown as part of decision_asked when answered
+        return null;
+
+      case "env_var_requested":
+        return (
+          <div className="my-3 animate-slide-up">
+            <EnvVarRequestedItem event={event} />
+          </div>
+        );
+
+      case "env_var_provided":
+        // Already shown as part of env_var_requested when answered
         return null;
 
       default:

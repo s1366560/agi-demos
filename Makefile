@@ -254,7 +254,7 @@ dev-all: dev-infra db-init
 	@echo "   Agent Worker: running in background (logs: logs/agent-worker.log)"
 	@echo "   MCP Worker: running in background (logs: logs/mcp-worker.log)"
 	@mkdir -p logs
-	@nohup uv run uvicorn src.infrastructure.adapters.primary.web.main:app --reload --host 0.0.0.0 --port 8000 > logs/api.log 2>&1 & echo $$! > logs/api.pid
+	@nohup uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 > logs/api.log 2>&1 & echo $$! > logs/api.pid
 	@nohup uv run python src/worker_temporal.py > logs/worker.log 2>&1 & echo $$! > logs/worker.pid
 	@nohup uv run python src/agent_worker.py > logs/agent-worker.log 2>&1 & echo $$! > logs/agent-worker.pid
 	@nohup uv run python src/worker_mcp.py > logs/mcp-worker.log 2>&1 & echo $$! > logs/mcp-worker.pid
@@ -334,12 +334,12 @@ dev-logs: ## Show all service logs (follow mode)
 	@echo "📋 Showing logs (Ctrl+C to exit)..."
 	@tail -f logs/api.log logs/web.log logs/worker.log logs/agent-worker.log logs/mcp-worker.log
 
-dev-backend: ## Start backend development server with hot reload (API only, foreground)
+dev-backend: ## Start backend development server  (API only, foreground)
 	@echo "🚀 Starting backend API server..."
-	uv run uvicorn src.infrastructure.adapters.primary.web.main:app --reload --host 0.0.0.0 --port 8000
+	uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000
 
 dev-worker: ## Start worker service only (foreground)
-	@echo "🔧 Starting data processing worker service with hot reload..."
+	@echo "🔧 Starting data processing worker service..."
 	uv run watchmedo auto-restart --directory src --pattern "*.py" --recursive -- python src/worker_temporal.py
 
 dev-agent-worker: ## Start agent worker service only (foreground)

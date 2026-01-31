@@ -101,42 +101,6 @@ class ConnectionManager:
             f"User sessions: {user_session_count}, Total: {total_sessions}"
         )
 
-    async def disconnect(self, session_id: str) -> None:
-        """Remove a WebSocket connection and clean up subscriptions for a session."""
-        async with self._lock:
-            user_id = self.session_users.get(session_id)
-
-            # Cancel all bridge tasks for this session
-            if session_id in self.bridge_tasks:
-                for task in self.bridge_tasks[session_id].values():
-                    task.cancel()
-                del self.bridge_tasks[session_id]
-
-            # Remove from conversation subscribers
-            if session_id in self.subscriptions:
-                for conv_id in self.subscriptions[session_id]:
-                    if conv_id in self.conversation_subscribers:
-                        self.conversation_subscribers[conv_id].discard(session_id)
-                        if not self.conversation_subscribers[conv_id]:
-                            del self.conversation_subscribers[conv_id]
-                del self.subscriptions[session_id]
-
-            # Remove session from user's session set
-            if user_id and user_id in self.user_sessions:
-                self.user_sessions[user_id].discard(session_id)
-                if not self.user_sessions[user_id]:
-                    del self.user_sessions[user_id]
-
-            # Remove connection and session mappings
-            self.active_connections.pop(session_id, None)
-            self.session_users.pop(session_id, None)
-
-        # Clean up event dispatcher (outside lock to avoid deadlock)
-        await self.dispatcher_manager.cleanup_session(session_id)
-
-        total_sessions = len(self.active_connections)
-        logger.info(f"[WS] Session {session_id[:8]}... disconnected. Total: {total_sessions}")
-
     async def subscribe(self, session_id: str, conversation_id: str) -> None:
         """Subscribe a session to a conversation's events."""
         async with self._lock:
@@ -238,12 +202,14 @@ class ConnectionManager:
             if session_id not in self.status_subscriptions:
                 self.status_subscriptions[session_id] = set()
             self.status_subscriptions[session_id].add(project_id)
-            
+
             if session_id not in self.status_tasks:
                 self.status_tasks[session_id] = {}
             self.status_tasks[session_id][project_id] = task
-        
-        logger.debug(f"[WS] Session {session_id[:8]}... subscribed to status for project {project_id}")
+
+        logger.debug(
+            f"[WS] Session {session_id[:8]}... subscribed to status for project {project_id}"
+        )
 
     async def unsubscribe_status(self, session_id: str, project_id: str) -> None:
         """Unsubscribe a session from status updates for a project."""
@@ -255,7 +221,9 @@ class ConnectionManager:
                 self.status_tasks[session_id][project_id].cancel()
                 del self.status_tasks[session_id][project_id]
 
-        logger.debug(f"[WS] Session {session_id[:8]}... unsubscribed from status for project {project_id}")
+        logger.debug(
+            f"[WS] Session {session_id[:8]}... unsubscribed from status for project {project_id}"
+        )
 
     async def subscribe_lifecycle_state(
         self, session_id: str, tenant_id: str, project_id: str
@@ -301,9 +269,7 @@ class ConnectionManager:
 
             # Remove from session's project subscriptions
             if session_id in self.session_project_subscriptions:
-                self.session_project_subscriptions[session_id].discard(
-                    (tenant_id, project_id)
-                )
+                self.session_project_subscriptions[session_id].discard((tenant_id, project_id))
                 if not self.session_project_subscriptions[session_id]:
                     del self.session_project_subscriptions[session_id]
 
@@ -327,9 +293,9 @@ class ConnectionManager:
             Number of sessions notified
         """
         async with self._lock:
-            subscribers = self.project_subscriptions.get(tenant_id, {}).get(
-                project_id, set()
-            ).copy()
+            subscribers = (
+                self.project_subscriptions.get(tenant_id, {}).get(project_id, set()).copy()
+            )
 
         sent_count = 0
         for session_id in subscribers:
@@ -361,16 +327,12 @@ class ConnectionManager:
 
             # Remove lifecycle state subscriptions
             if session_id in self.session_project_subscriptions:
-                for tenant_id, project_id in self.session_project_subscriptions[
-                    session_id
-                ]:
+                for tenant_id, project_id in self.session_project_subscriptions[session_id]:
                     if (
                         tenant_id in self.project_subscriptions
                         and project_id in self.project_subscriptions[tenant_id]
                     ):
-                        self.project_subscriptions[tenant_id][project_id].discard(
-                            session_id
-                        )
+                        self.project_subscriptions[tenant_id][project_id].discard(session_id)
                         if not self.project_subscriptions[tenant_id][project_id]:
                             del self.project_subscriptions[tenant_id][project_id]
                         if not self.project_subscriptions[tenant_id]:
@@ -395,6 +357,9 @@ class ConnectionManager:
             # Remove connection and session mappings
             self.active_connections.pop(session_id, None)
             self.session_users.pop(session_id, None)
+
+        # Clean up event dispatcher (outside lock to avoid deadlock)
+        await self.dispatcher_manager.cleanup_session(session_id)
 
         total_sessions = len(self.active_connections)
         logger.info(f"[WS] Session {session_id[:8]}... disconnected. Total: {total_sessions}")
@@ -601,14 +566,20 @@ async def handle_client_message(
         await handle_unsubscribe_status(websocket, session_id, message)
 
     elif msg_type == "subscribe_lifecycle_state":
-        await handle_subscribe_lifecycle_state(
-            websocket, user_id, tenant_id, session_id, message
-        )
+        await handle_subscribe_lifecycle_state(websocket, user_id, tenant_id, session_id, message)
 
     elif msg_type == "unsubscribe_lifecycle_state":
-        await handle_unsubscribe_lifecycle_state(
-            websocket, tenant_id, session_id, message
-        )
+        await handle_unsubscribe_lifecycle_state(websocket, tenant_id, session_id, message)
+
+    # Human-in-the-loop response handlers
+    elif msg_type == "clarification_respond":
+        await handle_clarification_respond(websocket, user_id, message)
+
+    elif msg_type == "decision_respond":
+        await handle_decision_respond(websocket, user_id, message)
+
+    elif msg_type == "env_var_respond":
+        await handle_env_var_respond(websocket, user_id, message)
 
     else:
         await websocket.send_json(
@@ -978,7 +949,7 @@ async def handle_subscribe_status(
 ) -> None:
     """
     Handle subscribe_status: Subscribe to Agent Session status updates.
-    
+
     This enables real-time status bar updates via WebSocket.
     """
     project_id = message.get("project_id")
@@ -1004,7 +975,7 @@ async def handle_subscribe_status(
                 polling_interval_ms=polling_interval,
             )
         )
-        
+
         await manager.subscribe_status(session_id, project_id, task)
 
         await websocket.send_json(
@@ -1140,7 +1111,7 @@ async def monitor_agent_status(
 ) -> None:
     """
     Monitor Agent Session status and push updates via WebSocket.
-    
+
     This runs as a background task and periodically queries the Temporal
     workflow status, sending updates to the client when status changes.
     """
@@ -1159,16 +1130,20 @@ async def monitor_agent_status(
     )
 
     last_status = None
-    
+
     try:
         while True:
             try:
                 # Check if still subscribed
                 if session_id not in manager.status_subscriptions:
-                    logger.debug(f"[WS Status] Session {session_id[:8]}... not in status_subscriptions")
+                    logger.debug(
+                        f"[WS Status] Session {session_id[:8]}... not in status_subscriptions"
+                    )
                     break
                 if project_id not in manager.status_subscriptions.get(session_id, set()):
-                    logger.debug(f"[WS Status] Project {project_id} not in session {session_id[:8]}... subscriptions")
+                    logger.debug(
+                        f"[WS Status] Project {project_id} not in session {session_id[:8]}... subscriptions"
+                    )
                     break
 
                 # Query Temporal for status
@@ -1208,7 +1183,7 @@ async def monitor_agent_status(
                             "project_id": project_id,
                             "data": status_data,
                             "timestamp": datetime.utcnow().isoformat(),
-                        }
+                        },
                     )
                     last_status = status_data
 
@@ -1224,7 +1199,198 @@ async def monitor_agent_status(
         logger.error(f"[WS Status] Unexpected error: {e}", exc_info=True)
 
 
-@router.get("/dispatcher-stats")
+# ============================================================================
+# Human-in-the-Loop (HITL) Response Handlers
+# ============================================================================
+
+
+async def handle_clarification_respond(
+    websocket: WebSocket,
+    user_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """
+    Handle clarification response via WebSocket.
+
+    Args:
+        websocket: The WebSocket connection
+        user_id: Authenticated user ID
+        message: The message containing request_id and answer
+    """
+    request_id = message.get("request_id")
+    answer = message.get("answer")
+
+    if not request_id or answer is None:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing required fields: request_id, answer"},
+            }
+        )
+        return
+
+    try:
+        from src.infrastructure.agent.tools.clarification import get_clarification_manager
+
+        manager = get_clarification_manager()
+        success = await manager.respond(request_id, answer)
+
+        if success:
+            logger.info(f"[WS HITL] User {user_id} responded to clarification {request_id}")
+            await websocket.send_json(
+                {
+                    "type": "clarification_response_ack",
+                    "request_id": request_id,
+                    "success": True,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        else:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {
+                        "message": f"Clarification request {request_id} not found or already answered"
+                    },
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"[WS HITL] Error handling clarification response: {e}", exc_info=True)
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": f"Failed to process clarification response: {str(e)}"},
+            }
+        )
+
+
+async def handle_decision_respond(
+    websocket: WebSocket,
+    user_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """
+    Handle decision response via WebSocket.
+
+    Args:
+        websocket: The WebSocket connection
+        user_id: Authenticated user ID
+        message: The message containing request_id and decision
+    """
+    request_id = message.get("request_id")
+    decision = message.get("decision")
+
+    if not request_id or decision is None:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing required fields: request_id, decision"},
+            }
+        )
+        return
+
+    try:
+        from src.infrastructure.agent.tools.decision import get_decision_manager
+
+        manager = get_decision_manager()
+        success = await manager.respond(request_id, decision)
+
+        if success:
+            logger.info(f"[WS HITL] User {user_id} responded to decision {request_id}")
+            await websocket.send_json(
+                {
+                    "type": "decision_response_ack",
+                    "request_id": request_id,
+                    "success": True,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        else:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {
+                        "message": f"Decision request {request_id} not found or already answered"
+                    },
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"[WS HITL] Error handling decision response: {e}", exc_info=True)
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": f"Failed to process decision response: {str(e)}"},
+            }
+        )
+
+
+async def handle_env_var_respond(
+    websocket: WebSocket,
+    user_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """
+    Handle environment variable response via WebSocket.
+
+    Args:
+        websocket: The WebSocket connection
+        user_id: Authenticated user ID
+        message: The message containing request_id and values
+    """
+    request_id = message.get("request_id")
+    values = message.get("values")
+
+    if not request_id or not isinstance(values, dict):
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": "Missing required fields: request_id, values (object)"},
+            }
+        )
+        return
+
+    try:
+        from src.infrastructure.agent.tools.env_var_tools import get_env_var_manager
+
+        manager = get_env_var_manager()
+        success = await manager.respond(request_id, values)
+
+        if success:
+            logger.info(
+                f"[WS HITL] User {user_id} provided env vars for request {request_id}: "
+                f"{list(values.keys())}"
+            )
+            await websocket.send_json(
+                {
+                    "type": "env_var_response_ack",
+                    "request_id": request_id,
+                    "success": True,
+                    "variable_names": list(values.keys()),
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+        else:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "data": {
+                        "message": f"Env var request {request_id} not found or already answered"
+                    },
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"[WS HITL] Error handling env var response: {e}", exc_info=True)
+        await websocket.send_json(
+            {
+                "type": "error",
+                "data": {"message": f"Failed to process env var response: {str(e)}"},
+            }
+        ) @ router.get("/dispatcher-stats")
+
+
 async def get_dispatcher_stats() -> Dict[str, Any]:
     """
     Get event dispatcher statistics.

@@ -1249,3 +1249,74 @@ class ToolEnvironmentVariableRecord(IdGeneratorMixin, Base):
         Index("ix_tool_env_var_tenant_tool", "tenant_id", "tool_name"),
         Index("ix_tool_env_var_project_tool", "project_id", "tool_name"),
     )
+
+
+class HITLRequest(IdGeneratorMixin, Base):
+    """
+    Human-in-the-Loop Request storage for agent interactions.
+
+    Stores pending HITL requests (clarification, decision, env_var) to enable:
+    1. Recovery after page refresh - users can see pending requests
+    2. Cross-process communication - API can find requests from Worker
+    3. Audit trail - track all HITL interactions
+
+    Request lifecycle:
+    - pending: Waiting for user response
+    - answered: User provided response
+    - timeout: Request expired without response
+    - cancelled: Request was cancelled
+    """
+
+    __tablename__ = "hitl_requests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    request_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
+    )  # clarification | decision | env_var
+    conversation_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Request content (JSON)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    options: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # List of options
+    context: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Additional context
+    metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Tool-specific metadata
+
+    # Response
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True
+    )  # pending | answered | timeout | cancelled
+    response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    response_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    answered_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+    user: Mapped[Optional["User"]] = relationship(foreign_keys=[user_id])
+
+    __table_args__ = (
+        Index("ix_hitl_requests_conversation_status", "conversation_id", "status"),
+        Index("ix_hitl_requests_tenant_project_status", "tenant_id", "project_id", "status"),
+        Index("ix_hitl_requests_expires_at", "expires_at"),
+    )
+

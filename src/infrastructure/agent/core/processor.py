@@ -27,40 +27,41 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
+from src.domain.events.agent_events import (
+    AgentActEvent,
+    AgentClarificationAnsweredEvent,
+    AgentClarificationAskedEvent,
+    AgentCompactNeededEvent,
+    AgentCompleteEvent,
+    AgentCostUpdateEvent,
+    AgentDecisionAnsweredEvent,
+    AgentDecisionAskedEvent,
+    AgentDomainEvent,
+    AgentDoomLoopDetectedEvent,
+    AgentEnvVarProvidedEvent,
+    AgentEnvVarRequestedEvent,
+    AgentErrorEvent,
+    AgentEventType,
+    AgentObserveEvent,
+    AgentPermissionAskedEvent,
+    AgentRetryEvent,
+    AgentStartEvent,
+    AgentStatusEvent,
+    AgentStepEndEvent,
+    AgentStepFinishEvent,
+    AgentStepStartEvent,
+    AgentTextDeltaEvent,
+    AgentTextEndEvent,
+    AgentTextStartEvent,
+    AgentThoughtDeltaEvent,
+    AgentThoughtEvent,
+    AgentWorkPlanEvent,
+)
+
 from ..cost import CostTracker, TokenUsage
 from ..doom_loop import DoomLoopDetector
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
-from src.domain.events.agent_events import (
-    AgentDomainEvent,
-    AgentEventType,
-    AgentStartEvent,
-    AgentErrorEvent,
-    AgentWorkPlanEvent,
-    AgentStatusEvent,
-    AgentCompleteEvent,
-    AgentStepStartEvent,
-    AgentStepEndEvent,
-    AgentStepFinishEvent,
-    AgentTextStartEvent,
-    AgentTextDeltaEvent,
-    AgentTextEndEvent,
-    AgentThoughtEvent,
-    AgentThoughtDeltaEvent,
-    AgentActEvent,
-    AgentObserveEvent,
-    AgentCostUpdateEvent,
-    AgentRetryEvent,
-    AgentCompactNeededEvent,
-    AgentDoomLoopDetectedEvent,
-    AgentDoomLoopIntervenedEvent,
-    AgentPermissionAskedEvent,
-    AgentPermissionRepliedEvent,
-    AgentClarificationAskedEvent,
-    AgentClarificationAnsweredEvent,
-    AgentDecisionAskedEvent,
-    AgentDecisionAnsweredEvent,
-)
 from .llm_stream import LLMStream, StreamConfig, StreamEventType
 from .message import Message, MessageRole, ToolPart, ToolState
 
@@ -77,6 +78,7 @@ class ProcessorState(str, Enum):
     WAITING_PERMISSION = "waiting_permission"
     WAITING_CLARIFICATION = "waiting_clarification"  # Waiting for user clarification
     WAITING_DECISION = "waiting_decision"  # Waiting for user decision
+    WAITING_ENV_VAR = "waiting_env_var"  # Waiting for user to provide env vars
     RETRYING = "retrying"
     COMPLETED = "completed"
     ERROR = "error"
@@ -622,18 +624,23 @@ class SessionProcessor:
 
         # Emit step start with meaningful description
         yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
+        logger.warning(f"[Processor] After yield step_start, step={self._step_count}")
 
         # Create new assistant message
         self._current_message = Message(
             session_id=session_id,
             role=MessageRole.ASSISTANT,
         )
+        logger.warning(f"[Processor] Created assistant message, step={self._step_count}")
 
         # Reset pending tool calls
         self._pending_tool_calls = {}
 
         # Prepare tools for LLM
         tools_for_llm = [t.to_openai_format() for t in self.tools.values()]
+        logger.warning(
+            f"[Processor] Prepared {len(tools_for_llm)} tools for LLM, step={self._step_count}"
+        )
 
         # Create stream config
         stream_config = StreamConfig(
@@ -644,9 +651,13 @@ class SessionProcessor:
             max_tokens=self.config.max_tokens,
             tools=tools_for_llm if tools_for_llm else None,
         )
+        logger.warning(
+            f"[Processor] Created StreamConfig, model={self.config.model}, step={self._step_count}"
+        )
 
         # Create LLM stream
         llm_stream = LLMStream(stream_config)
+        logger.warning(f"[Processor] Created LLMStream, step={self._step_count}")
 
         # Track state for this step
         text_buffer = ""
@@ -658,6 +669,7 @@ class SessionProcessor:
 
         # Process LLM stream with retry
         attempt = 0
+        logger.warning(f"[Processor] Starting LLM stream retry loop, step={self._step_count}")
         while True:
             try:
                 # Build step-specific langfuse context
@@ -672,6 +684,9 @@ class SessionProcessor:
                         },
                     }
 
+                logger.warning(
+                    f"[Processor] About to call llm_stream.generate(), step={self._step_count}"
+                )
                 async for event in llm_stream.generate(
                     messages, langfuse_context=step_langfuse_context
                 ):
@@ -1031,6 +1046,13 @@ class SessionProcessor:
                 yield event
             return
 
+        if tool_name == "request_env_var":
+            async for event in self._handle_env_var_tool(
+                session_id, call_id, tool_name, arguments, tool_part
+            ):
+                yield event
+            return
+
         # Check tool permission
         if tool_def.permission:
             permission_rule = self.permission_manager.evaluate(
@@ -1208,8 +1230,16 @@ class SessionProcessor:
             clarification_type = arguments.get("clarification_type", "custom")
             options_raw = arguments.get("options", [])
             allow_custom = arguments.get("allow_custom", True)
-            context = arguments.get("context", {})
+            context_raw = arguments.get("context", {})
             timeout = arguments.get("timeout", 300.0)
+
+            # Ensure context is a dictionary (LLM might pass a string)
+            if isinstance(context_raw, str):
+                context = {"description": context_raw} if context_raw else {}
+            elif isinstance(context_raw, dict):
+                context = context_raw
+            else:
+                context = {}
 
             # Create request ID
             request_id = f"clarif_{uuid.uuid4().hex[:8]}"
@@ -1252,8 +1282,7 @@ class SessionProcessor:
             )
 
             # Register request with manager
-            async with manager._lock:
-                manager._pending_requests[request_id] = request
+            await manager.register_request(request)
 
             # Emit clarification_asked event BEFORE blocking
             yield AgentClarificationAskedEvent(
@@ -1265,10 +1294,10 @@ class SessionProcessor:
                 context=context,
             )
 
-            # Wait for user response
+            # Wait for user response (with Redis cross-process support)
             start_time = time.time()
             try:
-                answer = await asyncio.wait_for(request.future, timeout=timeout)
+                answer = await manager.wait_for_response(request_id, timeout=timeout)
                 end_time = time.time()
 
                 # Emit answered event
@@ -1302,9 +1331,8 @@ class SessionProcessor:
                     tool_execution_id=tool_part.tool_execution_id,
                 )
             finally:
-                # Clean up request
-                async with manager._lock:
-                    manager._pending_requests.pop(request_id, None)
+                # Clean up request (stops Redis listener)
+                await manager.unregister_request(request_id)
 
         except Exception as e:
             logger.error(f"Clarification tool error: {e}", exc_info=True)
@@ -1362,8 +1390,16 @@ class SessionProcessor:
             options_raw = arguments.get("options", [])
             allow_custom = arguments.get("allow_custom", False)
             default_option = arguments.get("default_option")
-            context = arguments.get("context", {})
+            context_raw = arguments.get("context", {})
             timeout = arguments.get("timeout", 300.0)
+
+            # Ensure context is a dictionary (LLM might pass a string)
+            if isinstance(context_raw, str):
+                context = {"description": context_raw} if context_raw else {}
+            elif isinstance(context_raw, dict):
+                context = context_raw
+            else:
+                context = {}
 
             # Create request ID
             request_id = f"decision_{uuid.uuid4().hex[:8]}"
@@ -1413,8 +1449,7 @@ class SessionProcessor:
             )
 
             # Register request with manager
-            async with manager._lock:
-                manager._pending_requests[request_id] = request
+            await manager.register_request(request)
 
             # Emit decision_asked event BEFORE blocking
             yield AgentDecisionAskedEvent(
@@ -1427,10 +1462,13 @@ class SessionProcessor:
                 context=context,
             )
 
-            # Wait for user response
+            # Wait for user response using manager's wait_for_response
+            # This handles both local and Redis cross-process responses
             start_time = time.time()
             try:
-                decision = await asyncio.wait_for(request.future, timeout=timeout)
+                decision = await manager.wait_for_response(
+                    request_id, timeout=timeout, default_option=default_option
+                )
                 end_time = time.time()
 
                 # Emit answered event
@@ -1453,44 +1491,191 @@ class SessionProcessor:
                 )
 
             except asyncio.TimeoutError:
-                # Use default option if provided, otherwise error
-                if default_option:
-                    end_time = time.time()
+                # Timeout without default option (wait_for_response handles default internally)
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Decision request timed out"
+                tool_part.end_time = time.time()
 
-                    yield AgentDecisionAnsweredEvent(
-                        request_id=request_id,
-                        decision=default_option,
-                    )
-
-                    tool_part.status = ToolState.COMPLETED
-                    tool_part.output = f"Timeout - used default: {default_option}"
-                    tool_part.end_time = end_time
-
-                    yield AgentObserveEvent(
-                        tool_name=tool_name,
-                        result=f"Timeout - used default: {default_option}",
-                        duration_ms=int((end_time - start_time) * 1000),
-                        call_id=call_id,
-                        tool_execution_id=tool_part.tool_execution_id,
-                    )
-                else:
-                    tool_part.status = ToolState.ERROR
-                    tool_part.error = "Decision request timed out"
-                    tool_part.end_time = time.time()
-
-                    yield AgentObserveEvent(
-                        tool_name=tool_name,
-                        error="Decision request timed out",
-                        call_id=call_id,
-                        tool_execution_id=tool_part.tool_execution_id,
-                    )
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Decision request timed out",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
             finally:
                 # Clean up request
-                async with manager._lock:
-                    manager._pending_requests.pop(request_id, None)
+                await manager.unregister_request(request_id)
 
         except Exception as e:
             logger.error(f"Decision tool error: {e}", exc_info=True)
+            tool_part.status = ToolState.ERROR
+            tool_part.error = str(e)
+            tool_part.end_time = time.time()
+
+            yield AgentObserveEvent(
+                tool_name=tool_name,
+                error=str(e),
+                call_id=call_id,
+                tool_execution_id=tool_part.tool_execution_id,
+            )
+
+        self._state = ProcessorState.OBSERVING
+
+    async def _handle_env_var_tool(
+        self,
+        session_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        tool_part: ToolPart,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """
+        Handle environment variable request tool with SSE event emission.
+
+        Emits env_var_requested event before blocking on user response,
+        allowing frontend to display input form immediately.
+
+        Args:
+            session_id: Session identifier
+            call_id: Tool call ID
+            tool_name: Tool name (request_env_var)
+            arguments: Tool arguments
+            tool_part: Tool part for tracking state
+
+        Yields:
+            AgentDomainEvent objects for env var request flow
+        """
+        from ..tools.env_var_tools import (
+            EnvVarField,
+            EnvVarInputType,
+            EnvVarRequest,
+            get_env_var_manager,
+        )
+
+        self._state = ProcessorState.WAITING_ENV_VAR
+        manager = get_env_var_manager()
+
+        try:
+            # Parse arguments
+            target_tool_name = arguments.get("tool_name", "")
+            fields_raw = arguments.get("fields", [])
+            message = arguments.get("message")
+            context = arguments.get("context", {})
+            timeout = arguments.get("timeout", 300.0)
+
+            # Create request ID
+            request_id = f"envvar_{uuid.uuid4().hex[:8]}"
+
+            # Convert fields to proper format for SSE and manager
+            fields_for_sse = []
+            env_var_fields = []
+            for field in fields_raw:
+                # Map from agent tool schema to internal format
+                var_name = field.get("variable_name", field.get("name", ""))
+                display_name = field.get("display_name", field.get("label", var_name))
+                input_type_str = field.get("input_type", "text")
+
+                # Create field dict for SSE (frontend format)
+                field_dict = {
+                    "name": var_name,
+                    "label": display_name,
+                    "description": field.get("description"),
+                    "required": field.get("is_required", field.get("required", True)),
+                    "input_type": input_type_str,
+                    "default_value": field.get("default_value"),
+                    "placeholder": field.get("placeholder"),
+                }
+                fields_for_sse.append(field_dict)
+
+                # Create EnvVarField for manager
+                try:
+                    input_type = EnvVarInputType(input_type_str)
+                except ValueError:
+                    input_type = EnvVarInputType.TEXT
+
+                env_var_fields.append(
+                    EnvVarField(
+                        variable_name=var_name,
+                        display_name=display_name,
+                        description=field.get("description"),
+                        input_type=input_type,
+                        is_required=field.get("is_required", field.get("required", True)),
+                        default_value=field.get("default_value"),
+                    )
+                )
+
+            # Create the request object and register with manager
+            request = EnvVarRequest(
+                request_id=request_id,
+                tool_name=target_tool_name,
+                fields=env_var_fields,
+                context=context or {},
+            )
+
+            # Register request with manager
+            await manager.register_request(request)
+
+            # Emit env_var_requested event BEFORE blocking
+            yield AgentEnvVarRequestedEvent(
+                request_id=request_id,
+                tool_name=target_tool_name,
+                fields=fields_for_sse,
+                context=context if context else {},
+            )
+
+            # Wait for user response using manager's wait_for_response
+            # This handles both local and Redis cross-process responses
+            start_time = time.time()
+            try:
+                values = await manager.wait_for_response(request_id, timeout=timeout)
+                end_time = time.time()
+
+                # values is a Dict[str, str] of variable_name -> value
+                saved_variables = list(values.keys()) if values else []
+
+                # Emit provided event
+                yield AgentEnvVarProvidedEvent(
+                    request_id=request_id,
+                    tool_name=target_tool_name,
+                    saved_variables=saved_variables,
+                )
+
+                # Update tool part
+                tool_part.status = ToolState.COMPLETED
+                result = {
+                    "success": True,
+                    "tool_name": target_tool_name,
+                    "saved_variables": saved_variables,
+                    "message": f"Successfully saved {len(saved_variables)} environment variable(s)",
+                }
+                tool_part.output = json.dumps(result)
+                tool_part.end_time = end_time
+
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    result=result,
+                    duration_ms=int((end_time - start_time) * 1000),
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+
+            except asyncio.TimeoutError:
+                tool_part.status = ToolState.ERROR
+                tool_part.error = "Environment variable request timed out"
+                tool_part.end_time = time.time()
+
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error="Environment variable request timed out",
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+            finally:
+                # Clean up request
+                await manager.unregister_request(request_id)
+
+        except Exception as e:
+            logger.error(f"Environment variable tool error: {e}", exc_info=True)
             tool_part.status = ToolState.ERROR
             tool_part.error = str(e)
             tool_part.end_time = time.time()

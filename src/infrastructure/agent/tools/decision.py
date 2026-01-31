@@ -3,9 +3,15 @@ Decision Tool for Human-in-the-Loop Interaction.
 
 This tool allows the agent to request user decisions at critical execution points
 when multiple approaches exist or confirmation is needed for risky operations.
+
+Cross-Process Communication:
+- Uses Redis Pub/Sub for cross-process HITL responses
+- Worker process subscribes to Redis channel for responses
+- API process publishes responses to Redis channel
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from enum import Enum
@@ -133,11 +139,88 @@ class DecisionManager:
     Manager for pending decision requests.
 
     Thread-safe manager for handling multiple decision requests.
+    Uses Redis Pub/Sub for cross-process communication.
+
+    Architecture:
+    - Worker process: Creates request, subscribes to Redis channel, waits for response
+    - API process: Receives WebSocket message, publishes to Redis channel
+    - Worker process: Receives Redis message, resolves the future
     """
+
+    # Redis channel prefix for HITL responses
+    REDIS_CHANNEL_PREFIX = "hitl:decision:"
 
     def __init__(self):
         self._pending_requests: Dict[str, DecisionRequest] = {}
         self._lock = asyncio.Lock()
+        self._redis_listeners: Dict[str, asyncio.Task] = {}
+
+    async def _get_redis_client(self):
+        """Get Redis client for Pub/Sub.
+
+        Tries multiple sources:
+        1. Agent Worker process: via get_redis_client from agent_worker_state
+        2. Direct connection using settings (for API process)
+        """
+        # Try Agent Worker's Redis client first (Worker process)
+        try:
+            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                get_redis_client,
+            )
+
+            return await get_redis_client()
+        except Exception:
+            pass
+
+        # Direct connection as fallback (API process)
+        try:
+            import redis.asyncio as redis_lib
+
+            from src.configuration.config import get_settings
+
+            settings = get_settings()
+            return redis_lib.from_url(
+                settings.redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to get Redis client: {e}")
+            return None
+
+    async def _listen_for_response(self, request_id: str, request: DecisionRequest):
+        """Listen for response on Redis channel."""
+        redis_client = await self._get_redis_client()
+        if not redis_client:
+            logger.warning(f"No Redis client available for decision request {request_id}")
+            return
+
+        channel = f"{self.REDIS_CHANNEL_PREFIX}{request_id}"
+        pubsub = redis_client.pubsub()
+
+        try:
+            await pubsub.subscribe(channel)
+            logger.info(f"Subscribed to Redis channel: {channel}")
+
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    try:
+                        data = json.loads(message["data"])
+                        decision = data.get("decision", "")
+                        logger.info(f"Received Redis decision for {request_id}: {decision}")
+                        request.resolve(decision)
+                        break
+                    except json.JSONDecodeError:
+                        logger.warning(f"Invalid JSON in Redis message for {request_id}")
+                    except Exception as e:
+                        logger.error(f"Error processing Redis message for {request_id}: {e}")
+        except asyncio.CancelledError:
+            logger.info(f"Redis listener cancelled for decision {request_id}")
+        except Exception as e:
+            logger.error(f"Redis listener error for decision {request_id}: {e}")
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.close()
 
     async def create_request(
         self,
@@ -182,6 +265,10 @@ class DecisionManager:
             )
             self._pending_requests[request_id] = request
 
+            # Start Redis listener for cross-process responses
+            listener_task = asyncio.create_task(self._listen_for_response(request_id, request))
+            self._redis_listeners[request_id] = listener_task
+
         logger.info(f"Created decision request {request_id}: {question}")
 
         try:
@@ -206,10 +293,118 @@ class DecisionManager:
             # Clean up
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
+                listener_task = self._redis_listeners.pop(request_id, None)
+                if listener_task and not listener_task.done():
+                    listener_task.cancel()
+
+    async def register_request(self, request: "DecisionRequest") -> None:
+        """
+        Register an existing request.
+
+        This is used by processor.py which creates the request object directly
+        instead of using create_request().
+
+        Args:
+            request: The DecisionRequest to register
+        """
+        async with self._lock:
+            self._pending_requests[request.request_id] = request
+
+        logger.info(f"Registered decision request {request.request_id}")
+
+    async def wait_for_response(
+        self, request_id: str, timeout: float = 300.0, default_option: Optional[str] = None
+    ) -> str:
+        """
+        Wait for user response with Redis cross-process support.
+
+        This method waits for either:
+        1. Local response via future (same process)
+        2. Redis pub/sub response (cross-process)
+
+        Args:
+            request_id: The request ID to wait for
+            timeout: Maximum time to wait (seconds)
+            default_option: Default option to use on timeout
+
+        Returns:
+            User's decision
+
+        Raises:
+            asyncio.TimeoutError: If no response within timeout and no default
+            ValueError: If request not found
+        """
+        async with self._lock:
+            request = self._pending_requests.get(request_id)
+
+        if not request:
+            raise ValueError(f"Decision request {request_id} not found")
+
+        # Start Redis listener task
+        async def listen_redis():
+            redis_client = await self._get_redis_client()
+            if not redis_client:
+                return
+
+            channel = f"{self.REDIS_CHANNEL_PREFIX}{request_id}"
+            pubsub = redis_client.pubsub()
+
+            try:
+                await pubsub.subscribe(channel)
+                logger.info(f"Subscribed to Redis channel: {channel}")
+
+                async for message in pubsub.listen():
+                    if message["type"] == "message":
+                        try:
+                            data = json.loads(message["data"])
+                            decision = data.get("decision", "")
+                            logger.info(f"Received Redis response for {request_id}: {decision}")
+                            request.resolve(decision)
+                            break
+                        except Exception as e:
+                            logger.error(f"Error processing Redis message: {e}")
+            except asyncio.CancelledError:
+                pass
+            finally:
+                await pubsub.unsubscribe(channel)
+                await pubsub.close()
+
+        # Run Redis listener concurrently with future wait
+        redis_task = asyncio.create_task(listen_redis())
+
+        try:
+            decision = await asyncio.wait_for(request.future, timeout=timeout)
+            return decision
+        except asyncio.TimeoutError:
+            if default_option:
+                logger.warning(f"Decision {request_id} timed out, using default: {default_option}")
+                return default_option
+            raise
+        finally:
+            redis_task.cancel()
+            try:
+                await redis_task
+            except asyncio.CancelledError:
+                pass
+
+    async def unregister_request(self, request_id: str) -> None:
+        """
+        Unregister a request.
+
+        Args:
+            request_id: ID of the request to unregister
+        """
+        async with self._lock:
+            self._pending_requests.pop(request_id, None)
+
+        logger.info(f"Unregistered decision request {request_id}")
 
     async def respond(self, request_id: str, decision: str) -> bool:
         """
         Respond to a decision request.
+
+        This method first tries to resolve locally, then publishes to Redis
+        for cross-process communication.
 
         Args:
             request_id: ID of the decision request
@@ -218,15 +413,31 @@ class DecisionManager:
         Returns:
             True if request was found and resolved, False otherwise
         """
+        # First try local resolution (same process)
         async with self._lock:
             request = self._pending_requests.get(request_id)
             if request:
                 request.resolve(decision)
-                logger.info(f"Responded to decision {request_id}")
+                logger.info(f"Responded to decision {request_id} (local)")
+                return True
+
+        # If not found locally, publish to Redis (cross-process)
+        redis_client = await self._get_redis_client()
+        if redis_client:
+            channel = f"{self.REDIS_CHANNEL_PREFIX}{request_id}"
+            message = json.dumps({"request_id": request_id, "decision": decision})
+            subscribers = await redis_client.publish(channel, message)
+            if subscribers > 0:
+                logger.info(
+                    f"Published decision response to Redis: {request_id}, subscribers={subscribers}"
+                )
                 return True
             else:
-                logger.warning(f"Decision request {request_id} not found")
+                logger.warning(f"No subscribers for decision {request_id} on Redis channel")
                 return False
+        else:
+            logger.warning(f"Decision request {request_id} not found (no Redis)")
+            return False
 
     async def cancel_request(self, request_id: str) -> bool:
         """
@@ -243,6 +454,9 @@ class DecisionManager:
             if request:
                 request.cancel()
                 self._pending_requests.pop(request_id, None)
+                listener_task = self._redis_listeners.pop(request_id, None)
+                if listener_task and not listener_task.done():
+                    listener_task.cancel()
                 logger.info(f"Cancelled decision {request_id}")
                 return True
             else:
@@ -311,6 +525,76 @@ class DecisionTool(AgentTool):
             ),
         )
         self.manager = manager or get_decision_manager()
+
+    def get_parameters_schema(self) -> Dict[str, Any]:
+        """Get the parameters schema for LLM function calling."""
+        return {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The decision question to ask the user",
+                },
+                "decision_type": {
+                    "type": "string",
+                    "enum": ["branch", "method", "confirmation", "risk", "custom"],
+                    "description": "Type of decision: branch (choose execution path), method (choose approach), confirmation (approve/reject action), risk (accept/avoid risk), or custom",
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "Unique identifier for the option",
+                            },
+                            "label": {
+                                "type": "string",
+                                "description": "Display label for the option",
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Optional detailed description",
+                            },
+                            "recommended": {
+                                "type": "boolean",
+                                "description": "Whether this is the recommended option",
+                            },
+                            "estimated_time": {
+                                "type": "string",
+                                "description": "Estimated time for this option",
+                            },
+                            "estimated_cost": {
+                                "type": "string",
+                                "description": "Estimated cost for this option",
+                            },
+                            "risks": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of potential risks with this option",
+                            },
+                        },
+                        "required": ["id", "label"],
+                    },
+                    "description": "List of options for the user to choose from",
+                },
+                "allow_custom": {
+                    "type": "boolean",
+                    "description": "Whether the user can provide a custom decision instead of choosing an option",
+                    "default": False,
+                },
+                "default_option": {
+                    "type": "string",
+                    "description": "Default option ID to use if user doesn't respond within timeout",
+                },
+                "context": {
+                    "type": "object",
+                    "description": "Additional context information to show the user",
+                },
+            },
+            "required": ["question", "decision_type", "options"],
+        }
 
     def validate_args(self, **kwargs: Any) -> bool:
         """Validate decision arguments."""
