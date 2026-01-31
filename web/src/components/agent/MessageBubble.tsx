@@ -2,13 +2,13 @@
  * MessageBubble - Modern message bubble component
  */
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import { Avatar, Tag } from 'antd';
-import { 
-  User, 
-  Sparkles, 
-  Wrench, 
-  CheckCircle2, 
+import {
+  User,
+  Sparkles,
+  Wrench,
+  CheckCircle2,
   XCircle,
   Loader2,
   ChevronDown,
@@ -17,9 +17,67 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+// Lazy load syntax highlighter to reduce initial bundle size (bundle-dynamic-imports)
+// ~400KB savings - only loaded when code blocks are actually rendered
 import type { TimelineEvent, ActEvent, ObserveEvent } from '../../types/agent';
+
+// Dynamic import hook for syntax highlighter
+const useSyntaxHighlighter = () => {
+  const [SyntaxHighlighter, setSyntaxHighlighter] = useState<any>(null);
+  const [vscDarkPlus, setVscDarkPlus] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadHighlighter = async () => {
+      if (isLoading || SyntaxHighlighter) return;
+
+      setIsLoading(true);
+      try {
+        const [{ Prism }, { vscDarkPlus: styles }] = await Promise.all([
+          import('react-syntax-highlighter'),
+          import('react-syntax-highlighter/dist/esm/styles/prism')
+        ]);
+        if (mounted) {
+          setSyntaxHighlighter(() => Prism);
+          setVscDarkPlus(() => styles);
+        }
+      } catch (error) {
+        console.warn('Failed to load syntax highlighter:', error);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    loadHighlighter();
+    return () => { mounted = false; };
+  }, [isLoading, SyntaxHighlighter]);
+
+  return { SyntaxHighlighter, vscDarkPlus, isLoading };
+};
+
+// Code block component with lazy loading
+const CodeBlock: React.FC<{ language: string; children: string }> = ({ language, children }) => {
+  const { SyntaxHighlighter, vscDarkPlus } = useSyntaxHighlighter();
+
+  if (!SyntaxHighlighter || !vscDarkPlus) {
+    return (
+      <code className="font-mono text-sm bg-slate-100 dark:bg-slate-800 p-3 rounded block overflow-x-auto">
+        {children}
+      </code>
+    );
+  }
+
+  return (
+    <SyntaxHighlighter
+      style={vscDarkPlus}
+      language={language}
+      PreTag="div"
+    >
+      {String(children).replace(/\n$/, '')}
+    </SyntaxHighlighter>
+  );
+};
 
 interface MessageBubbleProps {
   event: TimelineEvent;
@@ -36,7 +94,7 @@ const getContent = (event: any): string => {
 // Format tool output for display
 const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; content: string } => {
   if (!output) return { type: 'text', content: 'No output' };
-  
+
   // Handle string output
   if (typeof output === 'string') {
     // Check if it's an error message
@@ -45,7 +103,7 @@ const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; conte
     }
     return { type: 'text', content: output };
   }
-  
+
   // Handle object output
   if (typeof output === 'object') {
     // Check if it's an error response
@@ -55,7 +113,7 @@ const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; conte
         return { type: 'error', content: errorContent };
       }
     }
-    
+
     // Pretty print JSON
     try {
       return { type: 'json', content: JSON.stringify(output, null, 2) };
@@ -63,7 +121,7 @@ const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; conte
       return { type: 'text', content: String(output) };
     }
   }
-  
+
   return { type: 'text', content: String(output) };
 };
 
@@ -72,7 +130,7 @@ const findMatchingObserve = (actEvent: ActEvent, events: TimelineEvent[]): Obser
   if (!events || !actEvent) return undefined;
   const actIndex = events.indexOf(actEvent as unknown as TimelineEvent);
   if (actIndex === -1) return undefined;
-  
+
   for (let i = actIndex + 1; i < events.length; i++) {
     const event = events[i];
     if (event.type === 'observe') {
@@ -105,9 +163,9 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => {
 };
 
 // Assistant Message Component
-const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ 
-  content, 
-  isStreaming 
+const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({
+  content,
+  isStreaming
 }) => {
   if (!content && !isStreaming) return null;
   return (
@@ -124,14 +182,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                   code({ node, inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
                     return !inline && match ? (
-                      <SyntaxHighlighter
-                        style={vscDarkPlus}
-                        language={match[1]}
-                        PreTag="div"
-                        {...props}
-                      >
-                        {String(children).replace(/\n$/, '')}
-                      </SyntaxHighlighter>
+                      <CodeBlock language={match[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>
                     ) : (
                       <code className={`${className} font-mono text-sm`} {...props}>
                         {children}
@@ -206,8 +257,8 @@ const ThoughtBubble: React.FC<{ content: string }> = ({
 };
 
 // Tool Execution Component
-const ToolExecution: React.FC<{ 
-  event: ActEvent; 
+const ToolExecution: React.FC<{
+  event: ActEvent;
   observeEvent?: ObserveEvent;
   allEvents?: TimelineEvent[];
 }> = ({ event, observeEvent }) => {
@@ -215,7 +266,7 @@ const ToolExecution: React.FC<{
   if (!event) return null;
 
   const hasError = observeEvent?.isError;
-  const duration = observeEvent && event 
+  const duration = observeEvent && event
     ? (observeEvent.timestamp || 0) - (event.timestamp || 0)
     : null;
 
@@ -225,21 +276,21 @@ const ToolExecution: React.FC<{
     <Loader2 size={16} className="text-primary animate-spin" />
   );
 
-  const statusText = observeEvent 
-    ? (hasError ? 'Failed' : 'Success') 
+  const statusText = observeEvent
+    ? (hasError ? 'Failed' : 'Success')
     : 'Running';
 
   return (
     <div className="flex items-start gap-3 mb-3 animate-slide-up">
       <div className={`
         w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
-        ${observeEvent 
+        ${observeEvent
           ? (hasError ? 'bg-red-50 dark:bg-red-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20')
           : 'bg-blue-50 dark:bg-blue-900/20'
         }
       `}>
         <Wrench size={16} className={`
-          ${observeEvent 
+          ${observeEvent
             ? (hasError ? 'text-red-500' : 'text-emerald-500')
             : 'text-primary'
           }
@@ -258,7 +309,7 @@ const ToolExecution: React.FC<{
               </span>
               <Tag className={`
                 flex-shrink-0
-                ${observeEvent 
+                ${observeEvent
                   ? (hasError ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200')
                   : 'bg-blue-50 text-primary border-blue-200'
                 }
@@ -367,7 +418,7 @@ const WorkPlanBubble: React.FC<{ event: any }> = ({ event }) => {
         {expanded && (
           <div className="mt-2 space-y-2">
             {steps.map((step: any, index: number) => (
-              <div 
+              <div
                 key={index}
                 className="flex items-center gap-3 p-2 bg-purple-50 dark:bg-purple-900/10 rounded-lg"
               >
@@ -388,7 +439,7 @@ const WorkPlanBubble: React.FC<{ event: any }> = ({ event }) => {
 const StepStartBubble: React.FC<{ event: any }> = ({ event }) => {
   const stepDesc = event?.stepDescription || event?.description;
   const stepIndex = event?.stepIndex ?? event?.step_index;
-  
+
   if (!stepDesc) return null;
 
   return (
@@ -417,8 +468,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
 
     case 'assistant_message':
       return (
-        <AssistantMessage 
-          content={getContent(event)} 
+        <AssistantMessage
+          content={getContent(event)}
           isStreaming={isStreaming}
         />
       );
@@ -440,8 +491,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
     case 'act': {
       const observeEvent = allEvents ? findMatchingObserve(event as ActEvent, allEvents) : undefined;
       return (
-        <ToolExecution 
-          event={event as ActEvent} 
+        <ToolExecution
+          event={event as ActEvent}
           observeEvent={observeEvent}
           allEvents={allEvents}
         />

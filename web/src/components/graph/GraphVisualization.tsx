@@ -282,7 +282,11 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
     setSelectedNode(null);
   };
 
-  const availableTypes = Array.from(new Set(nodes.map(node => node.type)));
+  // Memoize availableTypes to avoid recalculating on every render (rerender-memo)
+  const availableTypes = useMemo(() =>
+    Array.from(new Set(nodes.map(node => node.type))),
+    [nodes]
+  );
 
   if (!currentProject) {
     return (
