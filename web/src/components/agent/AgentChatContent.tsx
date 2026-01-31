@@ -81,7 +81,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   const {
     activeConversationId,
     timeline,
-    messages,
     isLoadingHistory,
     isLoadingEarlier,
     isStreaming,
@@ -104,17 +103,11 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     respondToDecision,
     clearError,
     error,
+    streamingAssistantContent,
   } = useAgentV3Store();
 
-  // Get streaming content from the last assistant message
-  const streamingContent = React.useMemo(() => {
-    if (!isStreaming || messages.length === 0) return '';
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === 'assistant') {
-      return lastMessage.content || '';
-    }
-    return '';
-  }, [messages, isStreaming]);
+  // Get streaming content directly from store
+  const streamingContent = isStreaming ? streamingAssistantContent : '';
 
   // Get streaming thought from store
   const { streamingThought, isThinkingStreaming } = useAgentV3Store();
@@ -275,17 +268,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t]);
 
   // Memoized components
-  // DEBUG: Log timeline events before rendering (only in development)
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      const events = timeline.filter((e: any) => e.type === 'assistant_message');
-      console.log('[AgentChatContent] Rendering - assistant_message events in timeline:', events.length);
-      events.forEach((e: any, i: number) => {
-        console.log(`  [${i}] id=${e.id}, seq=${e.sequenceNumber}, content="${((e as any).content || '').slice(0, 50)}..."`);
-      });
-    }
-  }, [timeline]);
-
   const messageArea = useMemo(() => (
     timeline.length === 0 && !activeConversationId ? (
       <EmptyState onNewConversation={handleNewConversation} />

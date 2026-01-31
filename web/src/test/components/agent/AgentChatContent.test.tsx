@@ -171,7 +171,7 @@ describe('AgentChatInputArea (Extracted Component)', () => {
 
 // Helper function to test hooks
 function renderHook<T>(hook: () => T): { result: { current: T } } {
-  let result: { current: T } = { current: null as any }
+  const result: { current: T } = { current: null as any }
 
   function TestComponent() {
     result.current = hook()
