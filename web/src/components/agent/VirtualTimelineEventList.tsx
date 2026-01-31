@@ -395,6 +395,8 @@ export const VirtualTimelineEventList: React.FC<
                         left: 0,
                         width: "100%",
                         transform: `translateY(${virtualItem.start}px)`,
+                        // Use content-visibility for off-screen items (rendering-content-visibility)
+                        contentVisibility: virtualItem.index >= virtualItems[0].index && virtualItem.index <= virtualItems[virtualItems.length - 1].index ? 'visible' : 'auto',
                       }}
                     >
                       <TimelineEventItem

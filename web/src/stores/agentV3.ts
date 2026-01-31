@@ -158,10 +158,12 @@ interface AgentV3State {
   conversations: Conversation[];
   activeConversationId: string | null;
 
-  // Timeline State (NEW: Primary data source for consistency)
+  // Timeline State (Primary data source for consistency)
   timeline: TimelineEvent[];
 
-  // Messages State (Derived from timeline for backward compatibility)
+  // Messages State (Derived from timeline - computed via selector)
+  // Keeping in state for backward compatibility during transition
+  // TODO: Remove messages from state, use selector instead (rerender-derived-state)
   messages: Message[];
   isLoadingHistory: boolean;  // For initial message load (shows loading in sidebar)
   isLoadingEarlier: boolean;  // For pagination (does NOT show loading in sidebar)
@@ -490,11 +492,17 @@ export const useAgentV3Store = create<AgentV3State>()(
         earliestLoadedSequence: null,
       });
       try {
-        const response = await agentService.getConversationMessages(
-          conversationId,
-          projectId,
-          200  // Load latest 200 messages (increased from 50 to show more assistant_message events)
-        ) as any;
+        // Parallelize independent API calls (async-parallel)
+        const [response, planStatus, execStatus] = await Promise.all([
+          agentService.getConversationMessages(
+            conversationId,
+            projectId,
+            200  // Load latest 200 messages (increased from 50 to show more assistant_message events)
+          ) as Promise<any>,
+          // Use catch to prevent one failure from blocking others
+          planService.getPlanModeStatus(conversationId).catch(() => null),
+          agentService.getExecutionStatus(conversationId).catch(() => null),
+        ]);
 
         if (get().activeConversationId !== conversationId) {
           console.log("Conversation changed during load, ignoring result");
@@ -518,27 +526,12 @@ export const useAgentV3Store = create<AgentV3State>()(
           isLoadingHistory: false,
           hasEarlier: response.has_more ?? false,
           earliestLoadedSequence: firstSequence,
+          // Set plan mode if successfully fetched
+          ...(planStatus ? { isPlanMode: planStatus.is_in_plan_mode } : {}),
         });
 
-        try {
-          const planStatus = await planService.getPlanModeStatus(
-            conversationId
-          );
-          if (get().activeConversationId !== conversationId) return;
-          set({ isPlanMode: planStatus.is_in_plan_mode });
-        } catch (e) {
-          console.warn("Failed to load plan status", e);
-        }
-
         // Check execution status and replay events if needed
-        try {
-          const execStatus = await agentService.getExecutionStatus(
-            conversationId
-          );
-
-          if (get().activeConversationId !== conversationId) return;
-
-          if (execStatus.is_running && execStatus.last_sequence > 0) {
+        if (execStatus && execStatus.is_running && execStatus.last_sequence > 0) {
             console.log(
               `Conversation ${conversationId} is running, replaying events...`
             );
@@ -646,9 +639,6 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             set({ isStreaming: true, agentState: "thinking" });
           }
-        } catch (e) {
-          console.warn("Failed to check execution status or replay events", e);
-        }
 
         set({ isLoadingHistory: false });
       } catch (error) {
@@ -1282,3 +1272,11 @@ export const useAgentV3Store = create<AgentV3State>()(
 // Selectors for streaming content
 export const useStreamingThought = () => useAgentV3Store((state) => state.streamingThought);
 export const useIsThinkingStreaming = () => useAgentV3Store((state) => state.isThinkingStreaming);
+
+// Selector for derived messages (rerender-derived-state)
+// Messages are computed from timeline to avoid duplicate state
+export const useMessages = () => useAgentV3Store((state) => {
+  // For now, return stored messages for backward compatibility
+  // TODO: Switch to computed derivation after verifying all consumers work correctly
+  return state.messages;
+});

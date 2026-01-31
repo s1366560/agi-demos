@@ -11,9 +11,7 @@
  * @module components/agent/TimelineEventItem
  */
 
-import { memo } from "react";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { memo, lazy, Suspense } from "react";
 import {
   UserMessage,
   AgentSection,
@@ -23,6 +21,22 @@ import { AssistantMessage } from "./chat/AssistantMessage";
 import { ReasoningLogCard } from "./chat/MessageStream";
 import { formatDistanceToNowCN, formatReadableTime } from "../../utils/date";
 import type { TimelineEvent, ActEvent, ObserveEvent } from "../../types/agent";
+
+// Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
+// Using dynamic import with a wrapper to handle type issues
+const MarkdownRenderer = lazy(async () => {
+  const { default: ReactMarkdown } = await import('react-markdown');
+  const { default: remarkGfm } = await import('remark-gfm');
+
+  // Create a wrapper component that uses the plugins
+  const MarkdownWrapper = ({ children }: { children: string }) => (
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      {children}
+    </ReactMarkdown>
+  );
+
+  return { default: MarkdownWrapper };
+});
 
 /**
  * TimeBadge - Natural time display component
@@ -292,9 +306,11 @@ function TextDeltaItem({
         <div
           className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed"
         >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {event.content}
-          </ReactMarkdown>
+          <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
+            <MarkdownRenderer>
+              {event.content}
+            </MarkdownRenderer>
+          </Suspense>
         </div>
       </div>
       <div className="pl-11">

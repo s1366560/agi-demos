@@ -5,7 +5,7 @@
  * Matches the design from docs/statics/project workbench/agent/
  */
 
-import { ReactNode } from "react";
+import { ReactNode, memo } from "react";
 import { MarkdownContent } from "./MarkdownContent";
 
 export interface MessageStreamProps {
@@ -26,14 +26,14 @@ export interface MessageStreamProps {
  *   <FinalResponse content="# Analysis Report..." />
  * </MessageStream>
  */
-export function MessageStream({
+export const MessageStream = memo(function MessageStream({
     children,
     className = "",
 }: MessageStreamProps) {
     return (
         <div className={`w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto space-y-10 ${className}`}>{children}</div>
     );
-}
+});
 
 /**
  * UserMessage - User's message bubble (right-aligned, primary color)

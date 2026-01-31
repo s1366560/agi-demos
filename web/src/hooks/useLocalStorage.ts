@@ -45,22 +45,25 @@ export function useLocalStorage<T>(
   const [storedValue, setStoredValue] = useState<T>(readValue);
 
   // Set value to localStorage and state
+  // Use functional setState to avoid depending on storedValue
+  // This prevents callback recreation on every state change (rerender-functional-setstate)
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
-      try {
-        const valueToStore =
-          value instanceof Function ? value(storedValue) : value;
+      setStoredValue((prevValue) => {
+        try {
+          const valueToStore = value instanceof Function ? value(prevValue) : value;
 
-        setStoredValue(valueToStore);
-
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(key, JSON.stringify(valueToStore));
+          }
+          return valueToStore;
+        } catch (error) {
+          console.warn(`Error setting localStorage key "${key}":`, error);
+          return prevValue;
         }
-      } catch (error) {
-        console.warn(`Error setting localStorage key "${key}":`, error);
-      }
+      });
     },
-    [key, storedValue]
+    [key]
   );
 
   // Remove value from localStorage and reset to initial

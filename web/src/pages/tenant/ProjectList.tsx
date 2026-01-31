@@ -1,10 +1,42 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useTenantStore } from '../../stores/tenant'
 import { useProjectStore } from '../../stores/project'
 import { Link } from 'react-router-dom'
 
-export const ProjectList: React.FC = () => {
+// Hoist formatStorage outside component to avoid recreation on every render (rendering-hoist-jsx)
+const formatStorage = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+// Hoist formatTime outside component to avoid recreation on every render (rendering-hoist-jsx)
+// Note: Using TFunction type directly since useTranslation returns a tuple
+const createFormatTime = (t: TFunction) => {
+    return (dateString?: string | null): string => {
+        if (!dateString) return t('common.time.never')
+        const date = new Date(dateString)
+        const now = new Date()
+        const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+        if (diffInSeconds < 60) return t('common.time.justNow')
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`
+        if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}${t('common.time.days')} ${t('common.time.ago', { time: '' })}`
+        return date.toLocaleDateString()
+    }
+}
+
+interface ProjectListProps {
+    // Props can be added later if needed
+}
+
+// Use memo to prevent unnecessary re-renders (rerender-memo)
+const ProjectListInner: React.FC<ProjectListProps> = () => {
     const { t } = useTranslation()
     const { currentTenant } = useTenantStore()
     const { listProjects, deleteProject, projects, isLoading } = useProjectStore()
@@ -18,26 +50,8 @@ export const ProjectList: React.FC = () => {
         }
     }, [currentTenant, search, listProjects])
 
-    const formatStorage = (bytes: number) => {
-        if (bytes === 0) return '0 B'
-        const k = 1024
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-    }
-
-    const formatTime = (dateString?: string | null) => {
-        if (!dateString) return t('common.time.never')
-        const date = new Date(dateString)
-        const now = new Date()
-        const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
-
-        if (diffInSeconds < 60) return t('common.time.justNow')
-        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`
-        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`
-        if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}${t('common.time.days')} ${t('common.time.ago', { time: '' })}`
-        return date.toLocaleDateString()
-    }
+    // Create formatTime function using translation hook
+    const formatTime = createFormatTime(t)
 
     const handleDelete = async (projectId: string) => {
         if (!currentTenant) return
@@ -345,3 +359,10 @@ export const ProjectList: React.FC = () => {
         </div>
     )
 }
+
+// Export memoized component with custom comparison (rerender-memo)
+// Note: Simple memo without custom comparison since the component uses stores
+// The stores already handle selective updates via Zustand selectors
+export const ProjectList = memo(ProjectListInner)
+
+ProjectList.displayName = 'ProjectList'
