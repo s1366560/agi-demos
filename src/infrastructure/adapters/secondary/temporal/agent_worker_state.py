@@ -493,9 +493,8 @@ async def _load_project_sandbox_tools(
 ) -> Dict[str, Any]:
     """Load MCP tools from project's sandbox.
 
-    This function checks if the project has an active sandbox, and if so,
-    loads its MCP tools (bash, read, write, edit, glob, grep, etc.) as
-    AgentTool instances using SandboxMCPToolWrapper.
+    This function checks if the project has an active sandbox by querying Docker
+    directly. If no sandbox exists, it creates one automatically.
 
     Args:
         project_id: Project ID
@@ -504,6 +503,9 @@ async def _load_project_sandbox_tools(
     Returns:
         Dictionary of tool name -> SandboxMCPToolWrapper instances
     """
+    import asyncio
+    import tempfile
+    from src.domain.ports.services.sandbox_port import SandboxConfig
     from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 
     tools: Dict[str, Any] = {}
@@ -511,30 +513,79 @@ async def _load_project_sandbox_tools(
     if _mcp_sandbox_adapter is None:
         return tools
 
+    project_sandbox_id = None
+
     try:
-        # Check if there's an active sandbox for this project
-        # First, try to find by listing all sandboxes and checking labels
-        all_sandboxes = await _mcp_sandbox_adapter.list_sandboxes()
+        # Query Docker directly to find sandbox containers for this project
+        loop = asyncio.get_event_loop()
 
-        project_sandbox_id = None
-        for sandbox in all_sandboxes:
-            # Check if sandbox belongs to this project by checking the project_path
-            project_path = getattr(sandbox, "project_path", "") or ""
-            if project_path and f"memstack_{project_id}" in project_path:
-                project_sandbox_id = sandbox.id
-                break
+        # List all containers with memstack.sandbox label
+        containers = await loop.run_in_executor(
+            None,
+            lambda: _mcp_sandbox_adapter._docker.containers.list(
+                all=True,
+                filters={"label": "memstack.sandbox=true"},
+            ),
+        )
 
-            # Also check labels if available
-            labels = getattr(sandbox, "labels", {}) or {}
+        for container in containers:
+            # Check if this container belongs to the project
+            labels = container.labels or {}
             if labels.get("memstack.project_id") == project_id:
-                project_sandbox_id = sandbox.id
+                project_sandbox_id = container.name
+                # If container exists but is not running, try to start it
+                if container.status != "running":
+                    logger.info(
+                        f"Starting existing sandbox {project_sandbox_id} for project {project_id}"
+                    )
+                    await loop.run_in_executor(None, lambda: container.start())
+                    # Wait for container to be ready
+                    await asyncio.sleep(2)
                 break
 
-        if not project_sandbox_id:
-            logger.debug(f"No active sandbox found for project {project_id}")
-            return tools
+            # Also check by project path
+            mounts = container.attrs.get("Mounts", [])
+            for mount in mounts:
+                source = mount.get("Source", "")
+                if source and f"memstack_{project_id}" in source:
+                    project_sandbox_id = container.name
+                    break
+            if project_sandbox_id:
+                break
 
-        # Connect to MCP if not already connected
+        # If no sandbox exists, create one automatically
+        if not project_sandbox_id:
+            logger.info(
+                f"No sandbox found for project {project_id}, creating one automatically..."
+            )
+
+            # Create a temporary workspace directory for the project
+            import os
+            workspace_dir = os.path.join(
+                tempfile.gettempdir(), f"memstack_{project_id}"
+            )
+            os.makedirs(workspace_dir, exist_ok=True)
+
+            # Create sandbox with project_id and tenant_id labels
+            instance = await _mcp_sandbox_adapter.create_sandbox(
+                project_path=workspace_dir,
+                config=SandboxConfig(timeout_seconds=3600),
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+            project_sandbox_id = instance.id
+            logger.info(
+                f"Created new sandbox {project_sandbox_id} for project {project_id}"
+            )
+
+        # Sync the sandbox to adapter's internal tracking if not already tracked
+        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+            logger.info(
+                f"Syncing sandbox {project_sandbox_id} to adapter's internal state"
+            )
+            await _mcp_sandbox_adapter.sync_from_docker()
+
+        # Connect to MCP
         await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
 
         # List tools from the sandbox

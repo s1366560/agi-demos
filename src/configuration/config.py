@@ -221,7 +221,7 @@ class Settings(BaseSettings):
 
     # Sandbox Settings
     sandbox_default_provider: str = Field(default="docker", alias="SANDBOX_DEFAULT_PROVIDER")
-    sandbox_default_image: str = Field(default="python:3.12-slim", alias="SANDBOX_DEFAULT_IMAGE")
+    sandbox_default_image: str = Field(default="sandbox-mcp-server:latest", alias="SANDBOX_DEFAULT_IMAGE")
     sandbox_timeout_seconds: int = Field(
         default=300, alias="SANDBOX_TIMEOUT_SECONDS"
     )  # Increased from 60 to 300 (5 minutes)

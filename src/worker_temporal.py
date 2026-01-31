@@ -154,11 +154,10 @@ async def main():
     # Import workflows and activities (data processing only - agent workflows moved to agent_worker.py)
     from src.infrastructure.adapters.secondary.temporal.activities import (
         add_episode_activity,
-        deduplicate_entities_activity,
         incremental_refresh_activity,
-        rebuild_communities_activity,
     )
     from src.infrastructure.adapters.secondary.temporal.activities.community import (
+        rebuild_communities_activity,
         detect_communities_activity,
         update_communities_for_entities_activity,
     )
@@ -170,6 +169,7 @@ async def main():
         extract_entities_activity,
         extract_relationships_activity,
     )
+    # Note: deduplicate_entities_activity is deprecated, using merge activities instead
     from src.infrastructure.adapters.secondary.temporal.workflows import (
         DeduplicateEntitiesWorkflow,
         EpisodeProcessingWorkflow,
@@ -219,7 +219,6 @@ async def main():
             update_communities_for_entities_activity,
             detect_communities_activity,
             # Entity activities
-            deduplicate_entities_activity,
             merge_entities_activity,
             find_duplicate_entities_activity,
         ],
