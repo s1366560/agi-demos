@@ -7,6 +7,7 @@ Provides unified streaming interface for LLM responses with support for:
 - Reasoning/thinking tokens (o1/Claude style)
 - Token usage tracking
 - Provider-specific metadata handling
+- Rate limiting to prevent API provider concurrent limits
 
 P0-2 Optimization: Batch logging and token delta sampling to reduce I/O overhead.
 
@@ -23,6 +24,50 @@ from enum import Enum
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Model to Provider Mapping
+# ============================================================================
+
+# Model name prefixes that map to specific providers
+MODEL_PROVIDER_MAP: Dict[str, str] = {
+    # Qwen/Dashscope models
+    "qwen-": "qwen",
+    "qwq-": "qwen",
+    # OpenAI models
+    "gpt-": "openai",
+    "o1-": "openai",
+    # Gemini models
+    "gemini-": "gemini",
+    # Deepseek models
+    "deepseek-": "deepseek",
+    "deepseek-r1": "deepseek",
+    # Zhipu AI models
+    "glm-": "zhipu",
+    # Claude models (via Anthropic/OpenAI)
+    "claude-": "openai",
+}
+
+
+def infer_provider_from_model(model: str) -> str:
+    """
+    Infer provider type from model name.
+
+    Args:
+        model: Model name (e.g., "qwen-turbo", "gpt-4", "gemini-pro")
+
+    Returns:
+        Provider type: "qwen", "openai", "gemini", "deepseek", "zhipu"
+    """
+    model_lower = model.lower()
+
+    for prefix, provider in MODEL_PROVIDER_MAP.items():
+        if model_lower.startswith(prefix):
+            return provider
+
+    # Default to qwen for unknown models (most restrictive)
+    return "qwen"
 
 
 # ============================================================================
@@ -416,8 +461,17 @@ class StreamConfig:
     # Provider-specific options
     provider_options: Dict[str, Any] = field(default_factory=dict)
 
+    # Provider for rate limiting (inferred from model if not set)
+    provider: Optional[str] = None
+
     # Request metadata (increased from 300 to 600 seconds for long-running agents)
     timeout: int = 600  # seconds (10 minutes)
+
+    def get_provider(self) -> str:
+        """Get the provider type, inferring from model if not set."""
+        if self.provider:
+            return self.provider
+        return infer_provider_from_model(self.model)
 
     def to_litellm_kwargs(self) -> Dict[str, Any]:
         """
@@ -534,6 +588,13 @@ class LLMStream:
         """
         import litellm
 
+        # Import rate limiter for concurrency control
+        from src.infrastructure.llm.rate_limiter import (
+            get_rate_limiter,
+            ProviderType,
+            RateLimitError,
+        )
+
         request_id = request_id or str(uuid.uuid4())
 
         # Reset state
@@ -562,22 +623,36 @@ class LLMStream:
 
         start_time = time.time()
 
+        # Get rate limiter and provider type
+        rate_limiter = get_rate_limiter()
+        provider_name = self.config.get_provider()
+        provider_type = ProviderType(provider_name)
+
         try:
-            # Call LiteLLM streaming
-            response = await litellm.acompletion(**kwargs)
+            # Acquire rate limit slot before calling LLM
+            # This blocks if we've exceeded the provider's concurrent request limit
+            async with rate_limiter.acquire(provider_type):
+                # Call LiteLLM streaming (now that we have a slot)
+                response = await litellm.acompletion(**kwargs)
 
-            async for chunk in response:
-                # Process each chunk and yield events
-                async for event in self._process_chunk(chunk):
+                async for chunk in response:
+                    # Process each chunk and yield events
+                    async for event in self._process_chunk(chunk):
+                        yield event
+
+                # Finalize any pending state
+                async for event in self._finalize():
                     yield event
-
-            # Finalize any pending state
-            async for event in self._finalize():
-                yield event
 
             elapsed = time.time() - start_time
             logger.debug(f"LLM stream completed: request_id={request_id}, elapsed={elapsed:.2f}s")
 
+        except RateLimitError as e:
+            logger.warning(f"Rate limit exceeded for {provider_name}: {e}")
+            yield StreamEvent.error(
+                f"Rate limit exceeded. Please wait a moment and try again.",
+                code="RATE_LIMIT"
+            )
         except Exception as e:
             logger.error(f"LLM stream error: {e}", exc_info=True)
             yield StreamEvent.error(str(e), code=type(e).__name__)
