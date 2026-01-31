@@ -12,104 +12,12 @@
 import { useState } from "react";
 import type { ToolExecution } from "../../../types/agent";
 import { MaterialIcon } from "../shared";
-
-export interface ToolExecutionDetailProps {
-  /** Tool execution data */
-  execution: ToolExecution;
-  /** Whether to show compact version */
-  compact?: boolean;
-}
-
-/**
- * Check if a string is an image URL
- */
-function isImageUrl(str: string): boolean {
-  if (!str) return false;
-  const trimmed = str.trim();
-  // Check for common image URL patterns
-  const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i;
-  const imageHosts = [
-    "mdn.alipayobjects.com",
-    "img.alicdn.com",
-    "cdn.jsdelivr.net",
-    "i.imgur.com",
-    "images.unsplash.com",
-  ];
-
-  try {
-    const url = new URL(trimmed);
-    // Check by extension
-    if (imageExtensions.test(url.pathname)) return true;
-    // Check by known image hosts
-    if (imageHosts.some((host) => url.hostname.includes(host))) return true;
-    // Check for /original suffix (common in CDN image URLs)
-    if (url.pathname.endsWith("/original")) return true;
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-/**
- * Parse base64 image data from tool result
- */
-function parseBase64Image(
-  result: string
-): { data: string; format: string } | null {
-  try {
-    // Try to parse as JSON first (e.g., {'data': 'base64...'})
-    const jsonMatch = result.match(
-      /\{[\s\S]*['"]data['"]:\s*['"]([A-Za-z0-9+/=]+)['"][\s\S]*\}/
-    );
-    if (jsonMatch) {
-      const base64Data = jsonMatch[1];
-      // Detect image format from base64 header
-      if (base64Data.startsWith("iVBORw0KGgo"))
-        return { data: base64Data, format: "png" };
-      if (base64Data.startsWith("/9j/"))
-        return { data: base64Data, format: "jpeg" };
-      if (base64Data.startsWith("R0lGOD"))
-        return { data: base64Data, format: "gif" };
-      if (base64Data.startsWith("UklGR"))
-        return { data: base64Data, format: "webp" };
-      // Default to PNG
-      return { data: base64Data, format: "png" };
-    }
-
-    // Check if result itself is base64 (no JSON wrapper)
-    const base64Only = result.trim();
-    if (/^[A-Za-z0-9+/=]+$/.test(base64Only) && base64Only.length > 100) {
-      if (base64Only.startsWith("iVBORw0KGgo"))
-        return { data: base64Only, format: "png" };
-      if (base64Only.startsWith("/9j/"))
-        return { data: base64Only, format: "jpeg" };
-      return { data: base64Only, format: "png" };
-    }
-  } catch {
-    // Fall through
-  }
-  return null;
-}
-
-/**
- * Extract image URL from result text
- */
-function extractImageUrl(result: string): string | null {
-  if (!result) return null;
-  const trimmed = result.trim();
-
-  // If the entire result is an image URL
-  if (isImageUrl(trimmed)) return trimmed;
-
-  // Try to extract URL from text
-  const urlMatch = trimmed.match(/https?:\/\/[^\s<>"']+/g);
-  if (urlMatch) {
-    for (const url of urlMatch) {
-      if (isImageUrl(url)) return url;
-    }
-  }
-  return null;
-}
+import {
+  isImageUrl,
+  parseBase64Image,
+  extractImageUrl,
+  foldTextWithMetadata,
+} from "../../../utils/toolResultUtils";
 
 export interface ToolExecutionDetailProps {
   /** Tool execution data */
@@ -168,19 +76,6 @@ function formatTime(isoString: string | undefined): string {
 }
 
 /**
- * Truncate long text
- */
-function truncateText(
-  text: string,
-  maxLength: number = 200
-): { text: string; truncated: boolean } {
-  if (text.length <= maxLength) {
-    return { text, truncated: false };
-  }
-  return { text: text.slice(0, maxLength) + "...", truncated: true };
-}
-
-/**
  * ToolExecutionDetail component
  */
 export function ToolExecutionDetail({
@@ -192,10 +87,7 @@ export function ToolExecutionDetail({
 
   const inputJson = JSON.stringify(execution.input, null, 2);
   const resultText = execution.result || execution.error || "";
-  const { text: truncatedResult, truncated: isResultTruncated } = truncateText(
-    resultText,
-    200
-  );
+  const { text: foldedResult, folded: isResultFolded } = foldTextWithMetadata(resultText, 5);
 
   // Detect image content in result
   const imageUrl =
@@ -342,7 +234,7 @@ export function ToolExecutionDetail({
                   ? "Image Result"
                   : "Result"}
               </h6>
-              {!hasImageResult && isResultTruncated && (
+              {!hasImageResult && isResultFolded && (
                 <button
                   onClick={() => setShowFullResult(!showFullResult)}
                   className="text-xs text-primary hover:underline"
@@ -410,7 +302,7 @@ export function ToolExecutionDetail({
                     : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                 }`}
               >
-                {showFullResult ? resultText : truncatedResult}
+                {showFullResult ? resultText : foldedResult}
               </div>
             )}
           </div>

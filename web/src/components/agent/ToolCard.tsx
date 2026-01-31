@@ -9,6 +9,7 @@
 
 import React, { memo, useMemo } from "react";
 import { Card, Tag, Collapse, Typography } from "antd";
+import { foldText } from "../../utils/toolResultUtils";
 import { CheckCircleOutlined, SyncOutlined, CloseCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
 
 const { Panel } = Collapse;
@@ -97,7 +98,7 @@ export const ToolCard: React.FC<ToolCardProps> = memo(({
                             <pre className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
                                 embedded ? 'bg-white/80 border-slate-200 max-h-40' : 'bg-white border-slate-100 max-h-60'
                             }`}>
-                                {result}
+                                {foldText(result, 5)}
                             </pre>
                         </div>
                     )}
