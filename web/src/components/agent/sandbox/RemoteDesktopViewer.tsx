@@ -45,24 +45,30 @@ export function RemoteDesktopViewer({
   height = "100%",
   showToolbar = true,
 }: RemoteDesktopViewerProps) {
-  const [viewerStatus, setViewerStatus] = useState<ViewerStatus>("loading");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [iframeKey, setIframeKey] = useState(0);
-
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Determine desktop URL from status
   const desktopUrl = desktopStatus?.url ?? null;
 
-  // Reset viewer when desktop URL changes
+  // Track previous URL to detect changes
+  const prevDesktopUrlRef = useRef<string | null>(null);
+
+  // Initialize state based on desktopUrl
+  const [viewerStatus, setViewerStatus] = useState<ViewerStatus>("loading");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
+
+  // When desktopUrl changes, reset state in next tick
   useEffect(() => {
-    if (desktopUrl) {
-      setViewerStatus("loading");
-      setErrorMessage(null);
-      setIframeKey((prev) => prev + 1);
-    } else {
-      setViewerStatus("loading");
+    if (prevDesktopUrlRef.current !== desktopUrl) {
+      prevDesktopUrlRef.current = desktopUrl;
+      // Use setTimeout to defer setState and avoid synchronous setState in effect
+      setTimeout(() => {
+        setIframeKey((prev) => prev + 1);
+        setErrorMessage(null);
+        setViewerStatus("loading");
+      }, 0);
     }
   }, [desktopUrl]);
 

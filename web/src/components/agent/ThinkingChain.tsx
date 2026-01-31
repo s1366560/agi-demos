@@ -122,9 +122,9 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(({
     // But store now provides timeline, so we prefer that.
 
     const hasContent = timeline.length > 0 || thoughts.length > 0 || toolCalls.length > 0;
-    if (!hasContent && !isThinking) return null;
 
     // Memoize header to avoid re-creation on every render
+    // Must be before any early returns to follow rules of hooks
     const header = useMemo(() => (
         <div className="flex items-center gap-2 text-slate-500">
             <BulbOutlined className={isThinking ? "animate-pulse text-amber-500" : ""} />
@@ -135,6 +135,7 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(({
     ), [isThinking]);
 
     // Memoize timeline items to avoid re-creation on every render
+    // Must be before any early returns to follow rules of hooks
     const timelineItems = useMemo(() => {
         const items: React.ReactNode[] = [];
 
@@ -187,13 +188,14 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(({
             const fallbackItems: Array<{ type: 'thought' | 'tool_call', content?: string, toolName?: string, toolInput?: any, timestamp: number }> = [];
 
             // Add thoughts first
+            // Use 0 as timestamp for fallback items (they're just placeholders, not real data)
             thoughts.forEach((thought) => {
-                fallbackItems.push({ type: 'thought', content: thought, timestamp: Date.now() });
+                fallbackItems.push({ type: 'thought', content: thought, timestamp: 0 });
             });
 
             // Then add tools
             toolCalls.forEach((call) => {
-                fallbackItems.push({ type: 'tool_call', toolName: call.name, toolInput: call.arguments, timestamp: Date.now() });
+                fallbackItems.push({ type: 'tool_call', toolName: call.name, toolInput: call.arguments, timestamp: 0 });
             });
 
             fallbackItems.forEach((item, index) => {
@@ -243,6 +245,9 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(({
 
         return items;
     }, [timeline, thoughts, toolCalls, toolResults, toolExecutions]);
+
+    // Early return after all hooks
+    if (!hasContent && !isThinking) return null;
 
     return (
         <Collapse

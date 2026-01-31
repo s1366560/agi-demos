@@ -35,7 +35,7 @@
  * ```
  */
 
-import React, { useRef, memo } from 'react'
+import React, { useRef, memo, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 export interface VirtualGridProps<T> {
@@ -82,8 +82,8 @@ function VirtualGridInternal<T>({
     // For small item counts or test environment, render all items
     const shouldRenderAll = items.length <= 10 || isTestEnvironment
 
-    // Determine grid columns classes
-    const getGridClasses = (): string => {
+    // Determine grid columns classes - use useMemo for derived state
+    const gridClasses = useMemo(() => {
         const base = 'grid gap-4'
         switch (columns) {
             case 1:
@@ -94,7 +94,20 @@ function VirtualGridInternal<T>({
             default:
                 return `${base} grid-cols-1 md:grid-cols-2`
         }
-    }
+    }, [columns])
+
+    // Set up virtual row virtualizer - MUST be before any early returns
+    // This ensures hooks are called in consistent order
+    const rowVirtualizer = useVirtualizer({
+        count: items.length,
+        getScrollElement: () => parentRef.current,
+        estimateSize,
+        overscan,
+    })
+
+    // Get virtual rows
+    const virtualRows = rowVirtualizer.getVirtualItems()
+    const totalSize = rowVirtualizer.getTotalSize()
 
     // Handle empty state
     if (items.length === 0) {
@@ -119,7 +132,7 @@ function VirtualGridInternal<T>({
         return (
             <div
                 data-testid="virtual-grid"
-                className={getGridClasses()}
+                className={gridClasses}
                 style={{ padding: '1rem' }}
             >
                 {items.map((item, index) => (
@@ -131,18 +144,6 @@ function VirtualGridInternal<T>({
         )
     }
 
-    // Set up virtual row virtualizer
-    const rowVirtualizer = useVirtualizer({
-        count: items.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize,
-        overscan,
-    })
-
-    // Get virtual rows
-    const virtualRows = rowVirtualizer.getVirtualItems()
-    const totalSize = rowVirtualizer.getTotalSize()
-
     return (
         <div
             ref={parentRef}
@@ -152,7 +153,7 @@ function VirtualGridInternal<T>({
         >
             <div
                 data-testid="virtual-grid"
-                className={getGridClasses()}
+                className={gridClasses}
                 style={{
                     position: 'relative',
                     height: `${totalSize}px`,

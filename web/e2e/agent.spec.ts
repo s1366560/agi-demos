@@ -28,7 +28,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     projectId = match[1];
                 }
@@ -47,7 +47,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
             const newProjectCard = page.locator('a[href^="/project/"]').first();
             const href = await newProjectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     projectId = match[1];
                 }
@@ -414,7 +414,7 @@ test.describe('Agent V3 Tools and Streaming', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     projectId = match[1];
                 }
@@ -508,7 +508,7 @@ test.describe('Agent V3 Event Persistence', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     projectId = match[1];
                 }
@@ -743,7 +743,7 @@ test.describe('Agent V3 Tools API', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     projectId = match[1];
                 }
@@ -901,7 +901,7 @@ test.describe('Agent V3 Human Interaction', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     projectId = match[1];
                 }

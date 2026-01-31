@@ -4,7 +4,7 @@
  * Modal for creating and editing SubAgents with tabbed form layout.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Modal,
@@ -83,9 +83,16 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
   const isEditMode = !!subagent;
 
+  // Track previous state to only update when values actually change
+  const prevSubagentRef = useRef<SubAgentResponse | null>(null);
+  const prevIsOpenRef = useRef(false);
+
   // Reset form when modal opens/closes or subagent changes
   useEffect(() => {
-    if (isOpen) {
+    const subagentChanged = prevSubagentRef.current?.id !== subagent?.id;
+    const openStateChanged = prevIsOpenRef.current !== isOpen;
+
+    if (isOpen && (subagentChanged || openStateChanged)) {
       if (subagent) {
         // Edit mode - populate form
         form.setFieldsValue({
@@ -100,19 +107,39 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           allowed_tools: subagent.allowed_tools.join(", "),
           allowed_skills: subagent.allowed_skills.join(", "),
         });
-        setKeywords(subagent.trigger.keywords);
-        setExamples(subagent.trigger.examples);
-        setSelectedColor(subagent.color);
       } else {
         // Create mode - reset form
         form.resetFields();
+      }
+      // Defer tab update to avoid synchronous setState in effect
+      if (openStateChanged) {
+        setTimeout(() => setActiveTab("basic"), 0);
+      }
+    }
+
+    prevSubagentRef.current = subagent || null;
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, subagent, form]);
+
+  // Update keywords, examples, and color when subagent changes (separate effect)
+  useEffect(() => {
+    const subagentChanged = prevSubagentRef.current?.id !== subagent?.id;
+
+    if (isOpen && subagent && subagentChanged) {
+      // Defer all state updates to avoid synchronous setState in effect
+      setTimeout(() => {
+        setKeywords(subagent.trigger.keywords);
+        setExamples(subagent.trigger.examples);
+        setSelectedColor(subagent.color);
+      }, 0);
+    } else if (isOpen && !subagent && subagentChanged) {
+      setTimeout(() => {
         setKeywords([]);
         setExamples([]);
         setSelectedColor("#3B82F6");
-      }
-      setActiveTab("basic");
+      }, 0);
     }
-  }, [isOpen, subagent, form]);
+  }, [isOpen, subagent]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {

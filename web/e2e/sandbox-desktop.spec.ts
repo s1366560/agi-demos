@@ -35,7 +35,7 @@ test.describe('Sandbox Desktop and Terminal Integration', () => {
     if (await projectCard.isVisible({ timeout: 5000 })) {
       const href = await projectCard.getAttribute('href');
       if (href) {
-        const match = href.match(/\/project\/([^\/]+)/);
+        const match = href.match(/\/project\/([^/]+)/);
         if (match) {
           projectId = match[1];
         }
@@ -54,7 +54,7 @@ test.describe('Sandbox Desktop and Terminal Integration', () => {
       const newProjectCard = page.locator('a[href^="/project/"]').first();
       const href = await newProjectCard.getAttribute('href');
       if (href) {
-        const match = href.match(/\/project\/([^\/]+)/);
+        const match = href.match(/\/project\/([^/]+)/);
         if (match) {
           projectId = match[1];
         }
@@ -152,7 +152,7 @@ test.describe('Sandbox Component Structure', () => {
     if (await projectCard.isVisible({ timeout: 5000 })) {
       const href = await projectCard.getAttribute('href');
       if (href) {
-        const match = href.match(/\/project\/([^\/]+)/);
+        const match = href.match(/\/project\/([^/]+)/);
         if (match) {
           projectId = match[1];
         }
@@ -171,7 +171,7 @@ test.describe('Sandbox Component Structure', () => {
       const newProjectCard = page.locator('a[href^="/project/"]').first();
       const href = await newProjectCard.getAttribute('href');
       if (href) {
-        const match = href.match(/\/project\/([^\/]+)/);
+        const match = href.match(/\/project\/([^/]+)/);
         if (match) {
           projectId = match[1];
         }

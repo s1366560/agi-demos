@@ -67,20 +67,6 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
     }
   }, [conversation.created_at]);
 
-  const items: MenuProps['items'] = [
-    {
-      key: 'rename',
-      icon: <Edit3 size={14} />,
-      label: 'Rename',
-    },
-    {
-      key: 'delete',
-      icon: <Trash2 size={14} />,
-      label: 'Delete',
-      danger: true,
-    },
-  ];
-
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     if (key === 'delete') {
       onDelete({} as React.MouseEvent);
@@ -88,6 +74,22 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       onRename?.({} as React.MouseEvent);
     }
   };
+
+  const items: MenuProps['items'] = React.useMemo(() => [
+    {
+      key: 'rename',
+      icon: <Edit3 size={14} />,
+      label: 'Rename',
+      onClick: () => onRename?.({} as React.MouseEvent),
+    },
+    {
+      key: 'delete',
+      icon: <Trash2 size={14} />,
+      label: 'Delete',
+      danger: true,
+      onClick: (e) => onDelete(e.domEvent as React.MouseEvent),
+    },
+  ], [onDelete, onRename]);
 
   if (compact) {
     return (

@@ -153,12 +153,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     return () => window.removeEventListener('resize', updateMaxWidth);
   }, []);
 
-  // Clamp panel width when max changes
-  useEffect(() => {
-    if (panelWidth > maxPanelWidth) {
-      setPanelWidth(maxPanelWidth);
-    }
-  }, [maxPanelWidth, panelWidth]);
+  // Clamp panel width when max changes - use useMemo for derived state
+  const clampedPanelWidth = useMemo(() => {
+    return panelWidth > maxPanelWidth ? maxPanelWidth : panelWidth;
+  }, [panelWidth, maxPanelWidth]);
 
   // Ensure sandbox exists
   const ensureSandbox = useCallback(async () => {
@@ -326,12 +324,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         togglePlanPanel();
       }}
       collapsed={panelCollapsed}
-      width={panelWidth}
+      width={clampedPanelWidth}
       onWidthChange={setPanelWidth}
       minWidth={PANEL_MIN_WIDTH}
       maxWidth={maxPanelWidth}
     />
-  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, panelWidth, togglePlanPanel, maxPanelWidth]);
+  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, clampedPanelWidth, togglePlanPanel, maxPanelWidth]);
 
   const statusBar = useMemo(() => (
     <ProjectAgentStatusBar
@@ -417,7 +415,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           transition-opacity duration-300 ease-out overflow-hidden
           ${panelCollapsed ? 'w-0 opacity-0' : 'opacity-100'}
         `}
-        style={{ width: panelCollapsed ? 0 : panelWidth }}
+        style={{ width: panelCollapsed ? 0 : clampedPanelWidth }}
       >
         {!panelCollapsed && rightPanel}
       </aside>

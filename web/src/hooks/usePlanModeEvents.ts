@@ -62,9 +62,10 @@ export interface PlanAdjustment {
 export function usePlanModeEvents(handlers: PlanModeEventHandlers): void {
   // Use ref to store the latest handlers without causing re-renders
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
 
   useEffect(() => {
+    // Update ref inside effect to avoid accessing during render
+    handlersRef.current = handlers;
     /**
      * Handle incoming plan mode events from SSE
      *

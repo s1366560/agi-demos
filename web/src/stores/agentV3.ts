@@ -785,11 +785,20 @@ export const useAgentV3Store = create<AgentV3State>()(
           const delta = event.data.delta;
           if (!delta) return;
           
-          set((state) => ({
-            streamingThought: state.streamingThought + delta,
-            isThinkingStreaming: true,
-            agentState: "thinking",
-          }));
+          // Use requestAnimationFrame to batch rapid updates and prevent infinite loops
+          const updateStreamingThought = () => {
+            set((state) => ({
+              streamingThought: state.streamingThought + delta,
+              isThinkingStreaming: true,
+              agentState: "thinking",
+            }));
+          };
+          
+          if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+            window.requestAnimationFrame(updateStreamingThought);
+          } else {
+            updateStreamingThought();
+          }
         },
         onThought: (event) => {
           const newThought = event.data.thought;
@@ -1066,15 +1075,24 @@ export const useAgentV3Store = create<AgentV3State>()(
           set({ streamStatus: "streaming" });
         },
         onTextDelta: (event) => {
-          set((state) => {
-            const newMessages = state.messages.map((m) => {
-              if (m.id === assistantMsgId) {
-                return { ...m, content: m.content + event.data.delta };
-              }
-              return m;
+          // Batch rapid updates using requestAnimationFrame to prevent infinite loops
+          const updateText = () => {
+            set((state) => {
+              const newMessages = state.messages.map((m) => {
+                if (m.id === assistantMsgId) {
+                  return { ...m, content: m.content + event.data.delta };
+                }
+                return m;
+              });
+              return { messages: newMessages, streamStatus: "streaming" };
             });
-            return { messages: newMessages, streamStatus: "streaming" };
-          });
+          };
+          
+          if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+            window.requestAnimationFrame(updateText);
+          } else {
+            updateText();
+          }
         },
         onTextEnd: (event) => {
           // Text streaming ended - optionally use full_text for final content

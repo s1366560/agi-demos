@@ -103,6 +103,9 @@ export function useWebSocket({
     setStatus('closed');
   }, [cleanup, updateWsState]);
 
+  // Use a ref for the connect function to allow recursive calls
+  const connectRef = useRef<(() => void) | null>(null);
+
   const connect = useCallback(() => {
     // Don't connect if already connecting or connected
     if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
@@ -155,7 +158,7 @@ export function useWebSocket({
           reconnectAttemptsRef.current += 1;
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isMountedRef.current && !isManualCloseRef.current) {
-              connect();
+              connectRef.current?.();
             }
           }, reconnectInterval);
         }
@@ -166,6 +169,11 @@ export function useWebSocket({
       setStatus('closed');
     }
   }, [getUrl, onMessage, onError, onOpen, onClose, reconnect, reconnectInterval, maxReconnectAttempts, cleanup, updateWsState]);
+
+  // Store the latest connect function in the ref
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const send = useCallback((data: string | object) => {
     const currentWs = wsRef.current;

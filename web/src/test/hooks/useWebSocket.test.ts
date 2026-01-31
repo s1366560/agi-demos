@@ -40,7 +40,8 @@ class MockWebSocket {
 
   constructor(url: string) {
     this.url = url;
-    // Track this instance globally
+    // Track instance globally
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastCreatedWebSocket = this;
     allCreatedWebSockets.push(this);
 

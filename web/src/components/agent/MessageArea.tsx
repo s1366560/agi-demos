@@ -143,7 +143,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
         }, 500);
       }
     }
-  }, [isLoading, hasEarlierMessages, onLoadEarlier, preloadItemCount, saveScrollPosition]);
+  }, [isLoading, hasEarlierMessages, onLoadEarlier, preloadItemCount, saveScrollPosition, propIsLoadingEarlier]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
@@ -185,13 +185,14 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
     if (hasNewMessages && !isLoading && previousScrollHeightRef.current > 0) {
       restoreScrollPosition();
       prevTimelineLengthRef.current = currentTimelineLength;
-      
-      // 隐藏 loading 指示器
-      setShowLoadingIndicator(false);
+
+      // 隐藏 loading 指示器 - use timeout to avoid sync setState
       if (loadingIndicatorTimeoutRef.current) {
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;
       }
+      // Queue state update to avoid synchronous setState in effect
+      setTimeout(() => setShowLoadingIndicator(false), 0);
       return;
     }
 
@@ -203,10 +204,11 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
             containerRef.current.scrollTop = containerRef.current.scrollHeight;
           }
         });
-        setShowScrollButton(false);
+        // Queue state update to avoid sync setState in effect
+        setTimeout(() => setShowScrollButton(false), 0);
       } else {
         // User is scrolled up and new messages arrived - show button
-        setShowScrollButton(true);
+        setTimeout(() => setShowScrollButton(true), 0);
       }
     }
 

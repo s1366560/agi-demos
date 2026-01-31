@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTenantStore } from '@/stores/tenant'
 import { useProjectStore } from '@/stores/project'
@@ -39,11 +39,17 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
     }, [mode, currentTenant, projects.length, listProjects])
 
     // Reset focused index when dropdown closes
+    const wasOpenRef = useRef(false)
     useEffect(() => {
-        if (!isOpen) {
-            setFocusedIndex(-1)
-            menuItemRefs.current = []
+        // Reset when dropdown closes
+        if (wasOpenRef.current && !isOpen) {
+            // Use setTimeout to defer setState and avoid synchronous setState in effect
+            setTimeout(() => {
+                setFocusedIndex(-1)
+                menuItemRefs.current = []
+            }, 0)
         }
+        wasOpenRef.current = isOpen
     }, [isOpen])
 
     // Close dropdown when clicking outside
@@ -87,46 +93,53 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
     // Handle keyboard navigation within menu
     const handleMenuKeyDown = (e: React.KeyboardEvent, index: number) => {
         switch (e.key) {
-            case 'ArrowDown':
+            case 'ArrowDown': {
                 e.preventDefault()
                 const nextIndex = (index + 1) % menuItemsCount
                 setFocusedIndex(nextIndex)
                 menuItemRefs.current[nextIndex]?.focus()
                 break
-            case 'ArrowUp':
+            }
+            case 'ArrowUp': {
                 e.preventDefault()
                 const prevIndex = (index - 1 + menuItemsCount) % menuItemsCount
                 setFocusedIndex(prevIndex)
                 menuItemRefs.current[prevIndex]?.focus()
                 break
-            case 'Home':
+            }
+            case 'Home': {
                 e.preventDefault()
                 setFocusedIndex(0)
                 menuItemRefs.current[0]?.focus()
                 break
-            case 'End':
+            }
+            case 'End': {
                 e.preventDefault()
                 const lastIndex = menuItemsCount - 1
                 setFocusedIndex(lastIndex)
                 menuItemRefs.current[lastIndex]?.focus()
                 break
-            case 'Escape':
+            }
+            case 'Escape': {
                 e.preventDefault()
                 setIsOpen(false)
                 triggerButtonRef.current?.focus()
                 break
+            }
             case 'Enter':
-            case ' ':
+            case ' ': {
                 // Let the default click handler handle Enter/Space
                 // We just prevent default to avoid any unwanted behavior
                 if (e.key === ' ') {
                     e.preventDefault()
                 }
                 break
-            case 'Tab':
+            }
+            case 'Tab': {
                 // Allow Tab navigation but close dropdown
                 setIsOpen(false)
                 break
+            }
         }
     }
 

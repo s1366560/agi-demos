@@ -241,11 +241,8 @@ const MemoryListInternal: React.FC = () => {
         }
     }
 
-    if (!projectId) {
-        return <div className="p-8 text-center text-slate-500">Project not found</div>
-    }
-
     // Memoized row renderer for virtualized list
+    // Must be before early returns to follow rules of hooks
     const VirtualRow = useCallback(({ index, memory }: { index: number; memory: Memory }) => (
         <tr
             key={memory.id}
@@ -338,6 +335,10 @@ const MemoryListInternal: React.FC = () => {
             </td>
         </tr>
     ), [projectId, taskProgress, deletingId, t, handleReprocess, confirmDelete])
+
+    if (!projectId) {
+        return <div className="p-8 text-center text-slate-500">Project not found</div>
+    }
 
     return (
         <div className="max-w-7xl mx-auto flex flex-col gap-8">

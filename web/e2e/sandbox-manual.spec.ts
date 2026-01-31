@@ -51,7 +51,7 @@ test('manual sandbox UI test', async ({ page }) => {
 
     if (href) {
       // Navigate to project agent page
-      const projectId = href.match(/\/project\/([^\/]+)/)?.[1];
+      const projectId = href.match(/\/project\/([^/]+)/)?.[1];
       if (projectId) {
         console.log('Project ID:', projectId);
         await page.goto(`http://localhost:3000/project/${projectId}/agent`);

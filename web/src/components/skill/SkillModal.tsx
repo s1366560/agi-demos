@@ -4,7 +4,7 @@
  * Modal for creating and editing Skills with tabbed form layout.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Modal,
@@ -63,9 +63,16 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
   const isEditMode = !!skill;
 
+  // Track previous state to only update when values actually change
+  const prevSkillRef = useRef<SkillResponse | null>(null);
+  const prevIsOpenRef = useRef(false);
+
   // Reset form when modal opens/closes or skill changes
   useEffect(() => {
-    if (isOpen) {
+    const skillChanged = prevSkillRef.current?.id !== skill?.id;
+    const openStateChanged = prevIsOpenRef.current !== isOpen;
+
+    if (isOpen && (skillChanged || openStateChanged)) {
       if (skill) {
         // Edit mode - populate form
         form.setFieldsValue({
@@ -74,22 +81,47 @@ export const SkillModal: React.FC<SkillModalProps> = ({
           trigger_type: skill.trigger_type,
           prompt_template: skill.prompt_template,
         });
-        setPatterns(skill.trigger_patterns);
-        setTools(skill.tools);
       } else {
         // Create mode - reset form
         form.resetFields();
+      }
+      // Defer tab update to avoid synchronous setState in effect
+      if (openStateChanged) {
+        setTimeout(() => setActiveTab("basic"), 0);
+      }
+    }
+
+    prevSkillRef.current = skill || null;
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, skill, form]);
+
+  // Update patterns and tools when skill changes (separate effect)
+  useEffect(() => {
+    const skillChanged = prevSkillRef.current?.id !== skill?.id;
+
+    if (isOpen && skill && skillChanged) {
+      // Defer all state updates to avoid synchronous setState in effect
+      setTimeout(() => {
+        setPatterns(skill.trigger_patterns);
+        setTools(skill.tools);
+        setPatternInput("");
+        setPatternWeight(1.0);
+        setPatternExamples([]);
+        setCurrentExample("");
+        setToolInput("");
+      }, 0);
+    } else if (isOpen && !skill && skillChanged) {
+      setTimeout(() => {
         setPatterns([]);
         setTools([]);
-      }
-      setActiveTab("basic");
-      setPatternInput("");
-      setPatternWeight(1.0);
-      setPatternExamples([]);
-      setCurrentExample("");
-      setToolInput("");
+        setPatternInput("");
+        setPatternWeight(1.0);
+        setPatternExamples([]);
+        setCurrentExample("");
+        setToolInput("");
+      }, 0);
     }
-  }, [isOpen, skill, form]);
+  }, [isOpen, skill]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {

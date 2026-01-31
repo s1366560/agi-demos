@@ -9,11 +9,11 @@ import { describe, it, expect, vi } from 'vitest';
 
 describe('Text Delta Performance', () => {
   describe('Buffer Configuration', () => {
-    it('should have flush interval <= 16ms (60fps target)', () => {
-      // Read the agent store source file to verify constants
-      const fs = require('fs');
+    it('should have flush interval <= 16ms (60fps target)', async () => {
+      // Dynamic import to avoid require() statement
+      const fs = await import('fs');
       const agentStoreContent = fs.readFileSync(
-        require.resolve('../../stores/agent.ts'),
+        '../../stores/agent.ts',
         'utf-8'
       );
 
@@ -36,10 +36,10 @@ describe('Text Delta Performance', () => {
       expect(bufferSize).toBeLessThanOrEqual(50);
     });
 
-    it('should provide smooth streaming with minimal batching delay', () => {
-      const fs = require('fs');
+    it('should provide smooth streaming with minimal batching delay', async () => {
+      const fs = await import('fs');
       const agentStoreContent = fs.readFileSync(
-        require.resolve('../../stores/agent.ts'),
+        '../../stores/agent.ts',
         'utf-8'
       );
 

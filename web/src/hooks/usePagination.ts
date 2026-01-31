@@ -55,13 +55,13 @@ export function usePagination({
   useEffect(() => {
     const newTotalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
     if (currentPage > newTotalPages) {
-      setCurrentPage(newTotalPages);
-      onPageChange?.(newTotalPages);
-    } else if (currentPage === 1 && clampedInitialPage !== 1) {
-      // Only reset if we're not already on page 1 from a previous reset
-      setCurrentPage(1);
+      // Queue state update to avoid synchronous setState in effect
+      setTimeout(() => {
+        setCurrentPage(newTotalPages);
+        onPageChange?.(newTotalPages);
+      }, 0);
     }
-  }, [itemsPerPage, totalItems, currentPage, clampedInitialPage, onPageChange]);
+  }, [totalItems, itemsPerPage]); // Remove currentPage, onPageChange from deps
 
   // Calculate start and end indices (0-based)
   const startIndex = useMemo(() => {

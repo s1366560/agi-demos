@@ -65,9 +65,11 @@ export function useAgentLifecycleState({
         agentService.unsubscribeLifecycleState();
         globalSubscriptionLock.delete(lockKey);
       }
-      setIsConnected(false);
       return;
     }
+
+    // Update connection status in a separate effect to avoid sync setState
+    // setIsConnected(false) - handled by cleanup
 
     // GLOBAL LOCK: Prevent duplicate subscriptions in React StrictMode
     if (globalSubscriptionLock.has(lockKey)) {

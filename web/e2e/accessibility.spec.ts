@@ -59,7 +59,7 @@ test.describe('Accessibility - ARIA Labels (A11Y)', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     const projectId = match[1];
                     await page.goto(`http://localhost:3000/project/${projectId}/agent`);
@@ -134,7 +134,7 @@ test.describe('Accessibility - ARIA Labels (A11Y)', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     const projectId = match[1];
                     await page.goto(`http://localhost:3000/project/${projectId}/agent`);
@@ -162,7 +162,7 @@ test.describe('Accessibility - ARIA Labels (A11Y)', () => {
         if (await projectCard.isVisible({ timeout: 5000 })) {
             const href = await projectCard.getAttribute('href');
             if (href) {
-                const match = href.match(/\/project\/([^\/]+)/);
+                const match = href.match(/\/project\/([^/]+)/);
                 if (match) {
                     const projectId = match[1];
                     await page.goto(`http://localhost:3000/project/${projectId}/agent`);

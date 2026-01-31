@@ -54,7 +54,7 @@ test('debug sandbox UI', async ({ page }) => {
   console.log('Project href:', href);
 
   if (href) {
-    const projectId = href.match(/\/project\/([^\/]+)/)?.[1];
+    const projectId = href.match(/\/project\/([^/]+)/)?.[1];
     console.log('Project ID:', projectId);
 
     // Navigate to agent page WITHOUT conversation ID

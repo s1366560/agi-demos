@@ -387,7 +387,7 @@ const AdjustmentsList: React.FC<AdjustmentsListProps> = ({ adjustments }) => {
  * - Adjustments
  */
 export const ExecutionPlanViewer: React.FC<ExecutionPlanViewerProps> = ({ plan }) => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   usePlanModeEvents({});
 
   // Create empty reflections and adjustments arrays

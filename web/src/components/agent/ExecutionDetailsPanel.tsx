@@ -191,12 +191,28 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     return availableViews[0]?.value || "thinking";
   }, [currentView, availableViews]);
 
-  // Don't render if no execution data and not streaming
-  if (!hasData && !isStreaming) {
-    return null;
-  }
+  // Memoized segmented options to avoid re-creation on every render
+  // Must be before any early returns to follow rules of hooks
+  const segmentedOptions = useMemo(() =>
+    availableViews.map((opt) => ({
+      value: opt.value,
+      label: (
+        <div className="flex items-center gap-1.5 px-1">
+          {opt.icon}
+          {!compact && <span className="text-xs">{opt.label}</span>}
+        </div>
+      ),
+    })),
+    [availableViews, compact]
+  );
+
+  // Handle view change with useCallback for optimization
+  const handleViewChange = useCallback((value: string | number) => {
+    setCurrentView(value as ViewType);
+  }, []);
 
   // Memoized view content to avoid re-creation on every render
+  // Must be before any early returns to follow rules of hooks
   const viewContent = useMemo(() => {
     switch (effectiveView) {
       case "thinking":
@@ -240,29 +256,15 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     }
   }, [effectiveView, thinkingChainProps, timelineData, isStreaming, compact, toolVisualizationData, tokenInfo]);
 
+  // Don't render if no execution data and not streaming
+  if (!hasData && !isStreaming) {
+    return null;
+  }
+
   // Single view mode (no selector)
   if (!showViewSelector || availableViews.length <= 1) {
     return <div className="w-full">{viewContent}</div>;
   }
-
-  // Memoized segmented options to avoid re-creation on every render
-  const segmentedOptions = useMemo(() =>
-    availableViews.map((opt) => ({
-      value: opt.value,
-      label: (
-        <div className="flex items-center gap-1.5 px-1">
-          {opt.icon}
-          {!compact && <span className="text-xs">{opt.label}</span>}
-        </div>
-      ),
-    })),
-    [availableViews, compact]
-  );
-
-  // Handle view change with useCallback for optimization
-  const handleViewChange = useCallback((value: string | number) => {
-    setCurrentView(value as ViewType);
-  }, []);
 
   return (
     <div className="w-full space-y-3">

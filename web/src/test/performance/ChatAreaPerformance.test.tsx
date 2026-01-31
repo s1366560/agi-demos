@@ -141,28 +141,32 @@ describe('ChatArea Performance', () => {
   describe('Timeline Sorting Optimization', () => {
     it('should use useMemo for sorted timeline', async () => {
       // Read the ChatArea source to verify useMemo usage
-      const fs = require('fs');
-      const chatAreaContent = fs.readFileSync(
-        require.resolve('../../components/agent/chat/ChatArea.tsx'),
-        'utf-8'
-      );
+      // Dynamic import to avoid require() statement
+      import('fs').then((fs) => {
+        const chatAreaContent = fs.readFileSync(
+          '../../components/agent/chat/ChatArea.tsx',
+          'utf-8'
+        );
 
-      // Verify useMemo is used for sortedTimeline
-      expect(chatAreaContent).toContain('useMemo');
-      expect(chatAreaContent).toContain('sortedTimeline');
+        // Verify useMemo is used for sortedTimeline
+        expect(chatAreaContent).toContain('useMemo');
+        expect(chatAreaContent).toContain('sortedTimeline');
+      });
     });
 
     it('should not re-sort timeline on every render', async () => {
-      const fs = require('fs');
-      const chatAreaContent = fs.readFileSync(
-        require.resolve('../../components/agent/chat/ChatArea.tsx'),
-        'utf-8'
-      );
+      // Dynamic import to avoid require() statement
+      import('fs').then((fs) => {
+        const chatAreaContent = fs.readFileSync(
+          '../../components/agent/chat/ChatArea.tsx',
+          'utf-8'
+        );
 
-      // Verify that sortedTimeline depends only on timeline array
-      // Just check for useMemo usage with timeline as dependency
-      expect(chatAreaContent).toContain('useMemo');
-      expect(chatAreaContent).toContain('[timeline]');
+        // Verify that sortedTimeline depends only on timeline array
+        // Just check for useMemo usage with timeline as dependency
+        expect(chatAreaContent).toContain('useMemo');
+        expect(chatAreaContent).toContain('[timeline]');
+      });
     });
   });
 
@@ -241,17 +245,19 @@ describe('ChatArea Performance', () => {
 
   describe('Re-render Triggers', () => {
     it('should only re-render when relevant props change', async () => {
-      const fs = require('fs');
-      const chatAreaContent = fs.readFileSync(
-        require.resolve('../../components/agent/chat/ChatArea.tsx'),
-        'utf-8'
-      );
+      // Dynamic import to avoid require() statement
+      import('fs').then((fs) => {
+        const chatAreaContent = fs.readFileSync(
+          '../../components/agent/chat/ChatArea.tsx',
+          'utf-8'
+        );
 
-      // Check for memo with custom comparison or proper prop handling
-      // Component should use memo() to prevent unnecessary re-renders
-      expect(chatAreaContent).toContain('memo(');
-      // Also check for custom comparison function
-      expect(chatAreaContent).toContain('areChatAreaPropsEqual');
+        // Check for memo with custom comparison or proper prop handling
+        // Component should use memo() to prevent unnecessary re-renders
+        expect(chatAreaContent).toContain('memo(');
+        // Also check for custom comparison function
+        expect(chatAreaContent).toContain('areChatAreaPropsEqual');
+      });
     });
   });
 });

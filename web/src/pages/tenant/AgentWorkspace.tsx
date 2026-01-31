@@ -88,7 +88,12 @@ export const AgentWorkspace: React.FC = () => {
   if (initializing) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
-        <Spin size="large" tip={t('agent.workspace.loading')} />
+        <div className="text-center">
+          <Spin size="large" />
+          <div className="mt-2 text-slate-500 dark:text-slate-400">
+            {t('agent.workspace.loading')}
+          </div>
+        </div>
       </div>
     );
   }
