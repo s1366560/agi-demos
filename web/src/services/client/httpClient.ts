@@ -7,7 +7,7 @@
 
 import axios, { AxiosRequestConfig } from 'axios';
 import { getAuthToken } from '@/utils/tokenResolver';
-import { ApiError } from './ApiError';
+import { ApiError, ApiErrorType } from './ApiError';
 
 /**
  * HTTP request configuration interface
@@ -101,7 +101,7 @@ client.interceptors.response.use(
     }
     
     // Network errors
-    return Promise.reject(new ApiError('NETWORK', 'NETWORK_ERROR', error.message));
+    return Promise.reject(new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', error.message));
   }
 );
 

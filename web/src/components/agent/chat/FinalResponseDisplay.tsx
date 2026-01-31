@@ -35,7 +35,6 @@ export function FinalResponseDisplay({
   content,
   version = "v1.0 Final",
   generatedAt,
-  isStreaming = false,
 }: FinalResponseDisplayProps) {
   const [copied, setCopied] = useState(false);
 

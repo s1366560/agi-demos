@@ -5,7 +5,6 @@
  * and state management for the agent layout.
  */
 
-import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AppSidebar } from './AppSidebar'
@@ -31,11 +30,10 @@ export interface AgentSidebarProps {
  */
 export function AgentSidebar({
   projectId = '',
-  conversationId = '',
   defaultCollapsed = false,
   collapsed: controlledCollapsed,
   onCollapseToggle,
-}: AgentSidebarProps): JSX.Element {
+}: AgentSidebarProps) {
   const { t } = useTranslation()
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()

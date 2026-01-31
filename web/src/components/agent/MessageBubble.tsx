@@ -157,9 +157,8 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
 };
 
 // Text Delta Component (for streaming content)
-const TextDeltaBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({ 
-  content, 
-  isStreaming 
+const TextDeltaBubble: React.FC<{ content: string }> = ({
+  content,
 }) => {
   if (!content) return null;
   return (
@@ -181,9 +180,8 @@ const TextDeltaBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
 }
 
 // Thought/Reasoning Component - Uses same styling as ReasoningLogCard
-const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({ 
-  content, 
-  isStreaming 
+const ThoughtBubble: React.FC<{ content: string }> = ({
+  content,
 }) => {
   if (!content) return null;
 
@@ -197,13 +195,6 @@ const ThoughtBubble: React.FC<{ content: string; isStreaming?: boolean }> = ({
           <div className="flex items-center gap-2 mb-2">
             <span className="material-symbols-outlined text-sm text-primary">chevron_right</span>
             <span className="font-semibold uppercase text-[10px] text-primary">Reasoning Log</span>
-            {isStreaming && (
-              <span className="flex gap-0.5 ml-2">
-                <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </span>
-            )}
           </div>
           <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed">
             <p className="whitespace-pre-wrap">{content}</p>
@@ -434,17 +425,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
 
     case 'text_delta':
       return (
-        <TextDeltaBubble 
-          content={getContent(event)} 
-          isStreaming={isStreaming}
+        <TextDeltaBubble
+          content={getContent(event)}
         />
       );
 
     case 'thought':
       return (
-        <ThoughtBubble 
-          content={getContent(event)} 
-          isStreaming={isStreaming}
+        <ThoughtBubble
+          content={getContent(event)}
         />
       );
 

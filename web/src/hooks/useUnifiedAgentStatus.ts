@@ -231,7 +231,7 @@ export function useUnifiedAgentStatus({
   const activeSandboxId = useSandboxStore((s) => s.activeSandboxId);
 
   // WebSocket-based lifecycle state (replaces HTTP polling)
-  const { lifecycleState, isLoading: isLifecycleLoading, error: lifecycleError } =
+  const { lifecycleState, isConnected: isLifecycleConnected, error: lifecycleError } =
     useAgentLifecycleState({
       projectId,
       tenantId,
@@ -260,7 +260,7 @@ export function useUnifiedAgentStatus({
 
   return {
     status,
-    isLoading: isLifecycleLoading,
+    isLoading: !isLifecycleConnected,
     error: lifecycleError,
     isStreaming: isStreamingAgent,
   };

@@ -307,9 +307,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           }
         }}
         isLoadingEarlier={isLoadingEarlier}
+        conversationId={activeConversationId}
       />
     )
-  ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, isLoadingEarlier, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation, hasEarlier, loadEarlierMessages, projectId]);
+  ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, isLoadingEarlier, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation, hasEarlier, loadEarlierMessages, projectId, conversationId]);
 
 
 

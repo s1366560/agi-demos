@@ -1049,6 +1049,38 @@ class AgentServiceImpl implements AgentService {
   }
 
   /**
+   * Update conversation title
+   *
+   * Manually update the title of a conversation.
+   *
+   * @param conversationId - The conversation ID to update
+   * @param projectId - The project ID for scoping
+   * @param title - The new title for the conversation
+   * @returns Promise resolving to the updated conversation
+   * @throws {ApiError} If conversation doesn't exist or update fails
+   *
+   * @example
+   * ```typescript
+   * const updated = await agentService.updateConversationTitle('conv-123', 'proj-123', 'New Title');
+   * console.log('Updated title:', updated.title);
+   * ```
+   */
+  async updateConversationTitle(
+    conversationId: string,
+    projectId: string,
+    title: string
+  ): Promise<Conversation> {
+    const response = await api.patch<Conversation>(
+      `/agent/conversations/${conversationId}`,
+      { title },
+      {
+        params: { project_id: projectId },
+      }
+    );
+    return response;
+  }
+
+  /**
    * Generate and update conversation title
    *
    * Uses the Agent to analyze the conversation and generate an appropriate title.

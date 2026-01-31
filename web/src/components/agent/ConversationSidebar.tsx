@@ -2,8 +2,8 @@
  * ConversationSidebar - Modern conversation list sidebar
  */
 
-import React, { useMemo } from 'react';
-import { Button, Badge, Tooltip, Dropdown } from 'antd';
+import React, { useMemo, useState } from 'react';
+import { Button, Badge, Tooltip, Dropdown, Modal, Input } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
   Plus, 
@@ -22,6 +22,7 @@ interface ConversationSidebarProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string, e: React.MouseEvent) => void;
+  onRename?: (id: string, title: string) => Promise<void>;
   collapsed: boolean;
   onToggleCollapse: () => void;
   headerExtra?: React.ReactNode;
@@ -32,6 +33,7 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  onRename?: () => void;
   compact?: boolean;
 }
 
@@ -40,6 +42,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   isActive,
   onSelect,
   onDelete,
+  onRename,
   compact = false,
 }) => {
   const timeAgo = useMemo(() => {
@@ -67,6 +70,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     if (key === 'delete') {
       onDelete({} as React.MouseEvent);
+    } else if (key === 'rename' && onRename) {
+      onRename();
     }
   };
 
@@ -155,9 +160,39 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onSelect,
   onNew,
   onDelete,
+  onRename,
   collapsed,
   headerExtra,
 }) => {
+  const [renamingConversation, setRenamingConversation] = useState<Conversation | null>(null);
+  const [newTitle, setNewTitle] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+
+  const handleRenameClick = (conv: Conversation) => {
+    setRenamingConversation(conv);
+    setNewTitle(conv.title || '');
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renamingConversation || !newTitle.trim()) return;
+    
+    setIsRenaming(true);
+    try {
+      await onRename?.(renamingConversation.id, newTitle.trim());
+      setRenamingConversation(null);
+      setNewTitle('');
+    } catch (error) {
+      console.error('Failed to rename conversation:', error);
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleRenameCancel = () => {
+    setRenamingConversation(null);
+    setNewTitle('');
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -221,6 +256,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               isActive={conv.id === activeId}
               onSelect={() => onSelect(conv.id)}
               onDelete={(e) => onDelete(conv.id, e)}
+              onRename={onRename ? () => handleRenameClick(conv) : undefined}
               compact={collapsed}
             />
           ))}
@@ -245,6 +281,25 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
           </div>
         </div>
       )}
+
+      {/* Rename Modal */}
+      <Modal
+        title="Rename Conversation"
+        open={!!renamingConversation}
+        onOk={handleRenameSubmit}
+        onCancel={handleRenameCancel}
+        confirmLoading={isRenaming}
+        okText="Rename"
+        cancelText="Cancel"
+      >
+        <Input
+          placeholder="Enter conversation title"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onPressEnter={handleRenameSubmit}
+          autoFocus
+        />
+      </Modal>
     </div>
   );
 };

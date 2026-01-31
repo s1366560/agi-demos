@@ -276,10 +276,8 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
  */
 function TextDeltaItem({
   event,
-  isStreaming,
 }: {
   event: TimelineEvent;
-  isStreaming: boolean;
 }) {
   if (event.type !== "text_delta") return null;
 
@@ -388,7 +386,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       case "text_delta":
         return (
           <div className="my-4 animate-slide-up">
-            <TextDeltaItem event={event} isStreaming={isStreaming} />
+            <TextDeltaItem event={event} />
           </div>
         );
 

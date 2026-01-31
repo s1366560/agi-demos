@@ -58,6 +58,11 @@ interface ConversationsState {
     conversationId: string,
     projectId: string
   ) => Promise<void>;
+  renameConversation: (
+    conversationId: string,
+    projectId: string,
+    title: string
+  ) => Promise<void>;
   setCurrentConversation: (
     conversation: Conversation | null
   ) => void;

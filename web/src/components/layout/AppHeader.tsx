@@ -247,8 +247,6 @@ function UserStatusDropdown({
 
 export function AppHeader({
   context = 'tenant',
-  basePath,
-  contextName,
   showSidebarToggle = false,
   sidebarCollapsed = false,
   onSidebarToggle,
@@ -272,7 +270,7 @@ export function AppHeader({
   showUserStatus = true,
   userProfilePath = '/profile',
   userSettingsPath = '/settings',
-}: AppHeaderProps): JSX.Element {
+}: AppHeaderProps) {
   const { t } = useTranslation()
 
   // Use custom breadcrumbs or generate from hook

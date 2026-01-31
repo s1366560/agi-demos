@@ -28,6 +28,8 @@ interface VirtualTimelineEventListProps {
   onLoadEarlier?: () => void;
   // Preload configuration
   preloadThreshold?: number; // Number of items before end to trigger preload
+  // Conversation ID for scroll reset on conversation change
+  conversationId?: string | null;
 }
 
 function estimateEventHeight(event: TimelineEvent): number {
@@ -105,6 +107,7 @@ export const VirtualTimelineEventList: React.FC<
   isLoadingEarlier = false,
   onLoadEarlier,
   preloadThreshold = 8, // 当用户看到前8条消息时就开始加载更多
+  conversationId,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -285,6 +288,29 @@ export const VirtualTimelineEventList: React.FC<
       }
     }
   }, [timeline.length, isStreaming, eventVirtualizer]);
+
+  // Reset scroll state when conversation changes
+  useEffect(() => {
+    // Reset all scroll-related refs when conversationId changes
+    isInitialLoadRef.current = true;
+    hasScrolledInitiallyRef.current = false;
+    previousTimelineLengthRef.current = 0;
+    isLoadingEarlierRef.current = false;
+    firstVisibleItemIndexRef.current = 0;
+    firstVisibleItemOffsetRef.current = 0;
+    
+    // Scroll to bottom after a short delay to ensure rendering is complete
+    const timeoutId = setTimeout(() => {
+      if (timeline.length > 0) {
+        eventVirtualizer.scrollToIndex(timeline.length - 1, { align: 'end' });
+        isInitialLoadRef.current = false;
+        hasScrolledInitiallyRef.current = true;
+        previousTimelineLengthRef.current = timeline.length;
+      }
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [conversationId, eventVirtualizer]); // Only trigger when conversationId changes
 
   // Cleanup timeout on unmount
   useEffect(() => {

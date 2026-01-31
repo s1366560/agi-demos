@@ -23,7 +23,6 @@
  */
 
 import { useParams, useLocation } from 'react-router-dom'
-import { useTenantStore } from '@/stores/tenant'
 import { useProjectStore } from '@/stores/project'
 import type { Breadcrumb } from '@/config/navigation'
 
@@ -56,7 +55,6 @@ export function useBreadcrumbs(
   const params = useParams()
   const location = useLocation()
   // Use selective selectors to prevent unnecessary re-renders
-  const currentTenant = useTenantStore((state) => state.currentTenant)
   const currentProject = useProjectStore((state) => state.currentProject)
 
   const {

@@ -12,7 +12,7 @@
  * @module components/agent/ProjectAgentStatusBar
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Tooltip, Badge } from 'antd';
 import {
   Zap,
@@ -27,9 +27,7 @@ import {
   Cpu,
   Wrench,
   BrainCircuit,
-  Bot,
   Activity,
-  Clock,
   AlertTriangle,
 } from 'lucide-react';
 import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
@@ -110,31 +108,6 @@ const lifecycleConfig: Record<
     animate: true,
   },
 };
-
-/**
- * Format uptime to human readable string
- */
-function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
-}
-
-/**
- * Format timestamp to relative time
- */
-function formatLastActivity(timestamp: string): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-
-  if (diffSecs < 60) return '刚刚';
-  if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)} 分钟前`;
-  if (diffSecs < 86400) return `${Math.floor(diffSecs / 3600)} 小时前`;
-  return `${Math.floor(diffSecs / 86400)} 天前`;
-}
 
 /**
  * ProjectAgentStatusBar - Refactored to use unified status hook

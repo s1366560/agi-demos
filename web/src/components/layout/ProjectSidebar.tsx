@@ -5,7 +5,6 @@
  * and state management for the project workbench layout.
  */
 
-import * as React from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -27,7 +26,7 @@ export interface ProjectSidebarProps {
 export function ProjectSidebar({
   projectId = '',
   defaultCollapsed = false,
-}: ProjectSidebarProps): JSX.Element {
+}: ProjectSidebarProps) {
   const { t } = useTranslation()
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()

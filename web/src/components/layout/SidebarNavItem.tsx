@@ -5,7 +5,6 @@
  * Handles active state, tooltip when collapsed, and badges.
  */
 
-import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from 'antd'
 import { useNavigation } from '@/hooks/useNavigation'
@@ -35,45 +34,16 @@ function normalizePath(path: string): string {
 }
 
 /**
- * Remove trailing slash from path
- */
-function removeTrailingSlash(path: string): string {
-  return path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path
-}
-
-/**
- * Check if a nav item is active based on current path
- */
-function isNavActive(item: NavItem, basePath: string, currentPath: string): boolean {
-  const normalizedCurrentPath = removeTrailingSlash(currentPath)
-  const normalizedItemPath = normalizePath(item.path)
-  const targetPath = basePath + normalizedItemPath
-
-  // Handle empty path (root navigation)
-  if (item.path === '' || item.exact) {
-    return normalizedCurrentPath === targetPath
-  }
-
-  // Check for exact match or nested path match
-  return (
-    normalizedCurrentPath === targetPath ||
-    normalizedCurrentPath.startsWith(`${targetPath}/`)
-  )
-}
-
-/**
  * Render a single navigation item in the sidebar
  */
 export function SidebarNavItem({
   item,
   collapsed = false,
   basePath,
-  currentPathname,
   forceActive = false,
   t = (key: string) => key,
-}: SidebarNavItemProps): JSX.Element {
+}: SidebarNavItemProps) {
   const { isActive: checkIsActive } = useNavigation(basePath)
-  const currentPath = currentPathname || (typeof window !== 'undefined' ? window.location.pathname : '')
 
   const isActive = forceActive || checkIsActive(item.path)
 

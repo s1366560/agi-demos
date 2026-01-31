@@ -33,6 +33,8 @@ interface MessageAreaProps {
   isLoadingEarlier?: boolean;  // 分页加载状态（不影响初始 loading）
   // Preload configuration
   preloadItemCount?: number; // 当剩余消息数少于此值时触发预加载
+  // Conversation ID for scroll reset on conversation change
+  conversationId?: string | null;
 }
 
 // Check if scroll is near bottom
@@ -55,6 +57,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
   onLoadEarlier,
   isLoadingEarlier: propIsLoadingEarlier = false,
   preloadItemCount = 10, // 当用户看到前10条消息时就开始加载更多
+  conversationId,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -210,6 +213,30 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
     prevTimelineLengthRef.current = currentTimelineLength;
   }, [timeline.length, isStreaming, isLoading, restoreScrollPosition]);
 
+  // Reset scroll state when conversation changes
+  useEffect(() => {
+    // Reset all scroll-related refs when conversationId changes
+    isInitialLoadRef.current = true;
+    hasScrolledInitiallyRef.current = false;
+    prevTimelineLengthRef.current = 0;
+    previousScrollHeightRef.current = 0;
+    previousScrollTopRef.current = 0;
+    isLoadingEarlierRef.current = false;
+    
+    // Scroll to bottom after a short delay to ensure rendering is complete
+    const timeoutId = setTimeout(() => {
+      const container = containerRef.current;
+      if (container && timeline.length > 0) {
+        container.scrollTop = container.scrollHeight;
+        isInitialLoadRef.current = false;
+        hasScrolledInitiallyRef.current = true;
+        prevTimelineLengthRef.current = timeline.length;
+      }
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [conversationId]); // Only trigger when conversationId changes
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -319,7 +346,7 @@ export const MessageArea: React.FC<MessageAreaProps> = ({
             <div className="flex items-start gap-3 animate-slide-up">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinecap="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
               <div className="flex-1 max-w-[85%] md:max-w-[75%]">

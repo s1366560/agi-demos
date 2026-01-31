@@ -127,14 +127,6 @@ export function useAgentLifecycleState({
     }
 
     switch (lifecycleState.lifecycleState) {
-      case "uninitialized":
-        return {
-          label: "未启动",
-          color: "text-slate-500",
-          icon: "Power",
-          description: "Agent 尚未初始化，将在首次请求时自动启动",
-        };
-
       case "initializing":
         return {
           label: "初始化中",

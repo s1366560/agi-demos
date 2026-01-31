@@ -7,7 +7,6 @@
 
 import * as React from 'react'
 import { useState } from 'react'
-import { Collapse } from 'antd'
 import { ChevronDown } from 'lucide-react'
 import { SidebarNavItem } from './SidebarNavItem'
 import type { SidebarConfig, NavGroup, NavUser } from '@/config/navigation'
@@ -121,14 +120,12 @@ function NavGroupSection({
       )}
 
       {/* Group items */}
-      {!collapsed && (
-        <Collapse in={isOpen ?? group.defaultOpen ?? true}>
-          <div className="space-y-1">
-            {group.items.map((item) => (
-              <SidebarNavItem key={item.id} item={item} collapsed={collapsed} basePath={basePath} t={translate} />
-            ))}
-          </div>
-        </Collapse>
+      {(!collapsed || (isOpen ?? group.defaultOpen ?? true)) && (
+        <div className="space-y-1">
+          {group.items.map((item) => (
+            <SidebarNavItem key={item.id} item={item} collapsed={collapsed} basePath={basePath} t={translate} />
+          ))}
+        </div>
       )}
 
       {/* When collapsed, always show items */}
@@ -159,7 +156,7 @@ export function AppSidebar({
   onGroupToggle,
   brand,
   t,
-}: AppSidebarProps): JSX.Element {
+}: AppSidebarProps) {
   const translate = t || ((key: string) => key)
 
   // Internal state for uncontrolled mode
@@ -197,8 +194,6 @@ export function AppSidebar({
       setInternalOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
     }
   }
-
-  const width = isCollapsed ? (config.collapsedWidth ?? 80) : (config.width ?? 256)
 
   return (
     <aside

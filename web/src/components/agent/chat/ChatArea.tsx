@@ -314,6 +314,7 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
                 hasEarlierMessages={hasEarlierMessages}
                 isLoadingEarlier={messagesLoading && hasEarlierMessages}
                 onLoadEarlier={onLoadEarlier}
+                conversationId={currentConversation?.id}
               />
             </div>
 

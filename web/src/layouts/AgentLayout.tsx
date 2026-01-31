@@ -24,7 +24,6 @@ import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary'
 import { AgentSidebar } from '@/components/layout/AgentSidebar'
 import { useProjectStore } from '@/stores/project'
 import { useTenantStore } from '@/stores/tenant'
-import { useAuthStore } from '@/stores/auth'
 import { Search, History, GitBranch } from 'lucide-react'
 
 // Top navigation tabs for agent views
@@ -41,8 +40,6 @@ export const AgentLayout: React.FC = () => {
     const projects = useProjectStore((state) => state.projects)
     const getProject = useProjectStore((state) => state.getProject)
     const currentTenant = useTenantStore((state) => state.currentTenant)
-    const user = useAuthStore((state) => state.user)
-    const logout = useAuthStore((state) => state.logout)
     const navigate = useNavigate()
     const location = useLocation()
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -74,17 +71,10 @@ export const AgentLayout: React.FC = () => {
 
     const handleTabClick = (tab: { id: string; path: string }) => {
         if (projectId) {
-            const basePath = `/project/${projectId}/agent`
-            navigate(tab.path ? `${basePath}/${tab.path}` : basePath)
+            const agentBasePath = `/project/${projectId}/agent`
+            navigate(tab.path ? `${agentBasePath}/${tab.path}` : agentBasePath)
         }
     }
-
-    const handleLogout = () => {
-        logout()
-        navigate('/login')
-    }
-
-    const basePath = projectId ? `/project/${projectId}` : '/project'
 
     return (
         <div className="flex h-screen overflow-hidden bg-background-light dark:bg-background-dark">

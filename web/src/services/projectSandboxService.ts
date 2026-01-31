@@ -15,7 +15,6 @@ import { httpClient } from "./client/httpClient";
 import { logger } from "../utils/logger";
 import {
   buildTerminalWebSocketUrl,
-  getApiHost,
 } from "./sandboxWebSocketUtils";
 
 /**

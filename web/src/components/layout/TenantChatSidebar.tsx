@@ -13,7 +13,7 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Badge, Dropdown, Modal, Select } from 'antd';
+import { Button, Badge, Dropdown, Modal, Select, Input } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
   Plus, 
@@ -40,6 +40,7 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  onRename?: (e: React.MouseEvent) => void;
   compact?: boolean;
 }
 
@@ -55,6 +56,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   isActive,
   onSelect,
   onDelete,
+  onRename,
   compact = false,
 }) => {
   const timeAgo = React.useMemo(() => {
@@ -82,6 +84,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     if (key === 'delete') {
       onDelete({} as React.MouseEvent);
+    } else if (key === 'rename') {
+      onRename?.({} as React.MouseEvent);
     }
   };
 
@@ -315,6 +319,38 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     });
   }, [selectedProjectId, activeConversationId, deleteConversation, navigate, tenantId]);
 
+  // Rename conversation state and handlers
+  const [renamingConversation, setRenamingConversation] = useState<ConversationWithProject | null>(null);
+  const [newTitle, setNewTitle] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+  const { renameConversation } = useAgentV3Store();
+
+  const handleRenameClick = useCallback((conv: ConversationWithProject, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenamingConversation(conv);
+    setNewTitle(conv.title || '');
+  }, []);
+
+  const handleRenameSubmit = useCallback(async () => {
+    if (!renamingConversation || !newTitle.trim() || !selectedProjectId) return;
+    
+    setIsRenaming(true);
+    try {
+      await renameConversation(renamingConversation.id, selectedProjectId, newTitle.trim());
+      setRenamingConversation(null);
+      setNewTitle('');
+    } catch (error) {
+      console.error('Failed to rename conversation:', error);
+    } finally {
+      setIsRenaming(false);
+    }
+  }, [renamingConversation, newTitle, selectedProjectId, renameConversation]);
+
+  const handleRenameCancel = useCallback(() => {
+    setRenamingConversation(null);
+    setNewTitle('');
+  }, []);
+
   const handleProjectChange = useCallback((projectId: string) => {
     setSelectedProjectId(projectId);
     localStorage.setItem('agent:lastProjectId', projectId);
@@ -524,6 +560,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                     isActive={conv.id === activeConversationId}
                     onSelect={() => handleSelectConversation(conv.id, conv.projectId)}
                     onDelete={(e) => handleDeleteConversation(conv.id, e)}
+                    onRename={(e) => handleRenameClick(conv, e)}
                     compact={collapsed}
                   />
                 ))
@@ -554,6 +591,25 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           </div>
         </div>
       )}
+
+      {/* Rename Modal */}
+      <Modal
+        title="Rename Conversation"
+        open={!!renamingConversation}
+        onOk={handleRenameSubmit}
+        onCancel={handleRenameCancel}
+        confirmLoading={isRenaming}
+        okText="Rename"
+        cancelText="Cancel"
+      >
+        <Input
+          placeholder="Enter conversation title"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onPressEnter={handleRenameSubmit}
+          autoFocus
+        />
+      </Modal>
     </aside>
   );
 };

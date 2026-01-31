@@ -12,11 +12,9 @@ import {
   ObserveEventData,
   UserMessageEvent,
   ThoughtEventData,
-  ThoughtDeltaEventData,
   WorkPlanEventData,
   StepStartEventData,
   CompleteEventData,
-  TextEndEventData,
   ExecutionPlan,
   PlanExecutionStartEvent,
   PlanExecutionCompleteEvent,
@@ -215,6 +213,11 @@ interface AgentV3State {
   deleteConversation: (
     conversationId: string,
     projectId: string
+  ) => Promise<void>;
+  renameConversation: (
+    conversationId: string,
+    projectId: string,
+    title: string
   ) => Promise<void>;
   abortStream: () => void;
   togglePlanPanel: () => void;
@@ -420,6 +423,25 @@ export const useAgentV3Store = create<AgentV3State>()(
       } catch (error) {
         console.error("Failed to delete conversation", error);
         set({ error: "Failed to delete conversation" });
+      }
+    },
+
+    renameConversation: async (conversationId, projectId, title) => {
+      try {
+        const updatedConversation = await agentService.updateConversationTitle(
+          conversationId,
+          projectId,
+          title
+        );
+        // Update in local state
+        set((state) => ({
+          conversations: state.conversations.map((c) =>
+            c.id === conversationId ? updatedConversation : c
+          ),
+        }));
+      } catch (error) {
+        console.error("Failed to rename conversation", error);
+        set({ error: "Failed to rename conversation" });
       }
     },
 
