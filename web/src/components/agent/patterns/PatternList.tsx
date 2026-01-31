@@ -3,6 +3,9 @@
  *
  * Displays patterns with status, name, usage count, and success rate.
  *
+ * REACT COMPOSITION PATTERN: Uses configuration objects instead of boolean props
+ * for better extensibility and clearer intent.
+ *
  * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
  */
 
@@ -30,6 +33,20 @@ export interface WorkflowPattern {
   pattern?: PatternDefinition;
 }
 
+/**
+ * View mode configuration for PatternList
+ * - 'compact': Shows minimal columns (status, name, success rate)
+ * - 'detailed': Shows all columns including usage count
+ */
+export type PatternListViewMode = 'compact' | 'detailed';
+
+/**
+ * Selection policy for pattern list
+ * - 'all': All patterns can be selected including deprecated ones
+ * - 'active-only': Only active and preferred patterns can be selected
+ */
+export type PatternListSelectionPolicy = 'all' | 'active-only';
+
 export interface PatternListProps {
   /** List of patterns */
   patterns?: WorkflowPattern[];
@@ -39,9 +56,25 @@ export interface PatternListProps {
   onSelect?: (pattern: WorkflowPattern) => void;
   /** Callback when pattern is deprecated */
   onDeprecate?: (patternId: string) => void;
-  /** Whether to show all columns */
+
+  /**
+   * View mode configuration
+   * Replaces boolean `showAllColumns` prop
+   * @default 'detailed'
+   */
+  viewMode?: PatternListViewMode;
+
+  /**
+   * Selection policy configuration
+   * Replaces boolean `allowSelectDeprecated` prop
+   * @default 'active-only'
+   */
+  selectionPolicy?: PatternListSelectionPolicy;
+
+  // Legacy boolean props for backwards compatibility (deprecated)
+  /** @deprecated Use viewMode='detailed' instead */
   showAllColumns?: boolean;
-  /** Whether deprecated patterns can be selected */
+  /** @deprecated Use selectionPolicy='all' instead */
   allowSelectDeprecated?: boolean;
 }
 
@@ -83,11 +116,26 @@ const getSuccessRateColor = (rate: number): string => {
 /**
  * PatternList component
  *
+ * Configuration objects replace boolean props for better extensibility:
+ * - viewMode: 'compact' | 'detailed' (instead of showAllColumns: boolean)
+ * - selectionPolicy: 'all' | 'active-only' (instead of allowSelectDeprecated: boolean)
+ *
  * @example
+ * // Modern usage with configuration objects
  * <PatternList
  *   patterns={patterns}
+ *   viewMode="detailed"
+ *   selectionPolicy="all"
  *   selectedId={selectedId}
  *   onSelect={(p) => setSelected(p.id)}
+ * />
+ *
+ * @example
+ * // Compact view with active-only selection
+ * <PatternList
+ *   patterns={patterns}
+ *   viewMode="compact"
+ *   selectionPolicy="active-only"
  * />
  */
 export function PatternList({
@@ -95,26 +143,46 @@ export function PatternList({
   selectedId,
   onSelect,
   onDeprecate,
-  showAllColumns = false,
-  allowSelectDeprecated = false,
+  viewMode = 'detailed',
+  selectionPolicy = 'active-only',
+  // Legacy boolean props (deprecated, but supported for backwards compatibility)
+  showAllColumns,
+  allowSelectDeprecated,
 }: PatternListProps) {
+  // Support legacy boolean props for backwards compatibility
+  // If legacy props are provided, they take precedence (migration path)
+  const resolvedViewMode: PatternListViewMode = showAllColumns === true
+    ? 'detailed'
+    : showAllColumns === false
+      ? 'compact'
+      : viewMode;
+
+  const resolvedSelectionPolicy: PatternListSelectionPolicy = allowSelectDeprecated === true
+    ? 'all'
+    : allowSelectDeprecated === false
+      ? 'active-only'
+      : selectionPolicy;
+
+  const showUsageColumn = resolvedViewMode === 'detailed';
+  const canSelectDeprecated = resolvedSelectionPolicy === 'all';
+
   // Memoize patterns with computed properties to avoid re-computing on every render
   const computedPatterns = useMemo(() => {
     return patterns.map((pattern) => ({
       ...pattern,
       isSelected: pattern.id === selectedId,
-      canSelect: pattern.status !== 'deprecated' || allowSelectDeprecated,
-      isClickable: pattern.status !== 'deprecated' || allowSelectDeprecated,
+      canSelect: pattern.status !== 'deprecated' || canSelectDeprecated,
+      isClickable: pattern.status !== 'deprecated' || canSelectDeprecated,
       rowClassName: pattern.id === selectedId
         ? 'bg-primary/10 dark:bg-primary/20'
-        : pattern.status === 'deprecated' && !allowSelectDeprecated
+        : pattern.status === 'deprecated' && !canSelectDeprecated
           ? 'opacity-50 cursor-not-allowed'
           : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
     }));
-  }, [patterns, selectedId, allowSelectDeprecated]);
+  }, [patterns, selectedId, canSelectDeprecated]);
 
   const handleRowClick = (pattern: WorkflowPattern) => {
-    if (pattern.status === 'deprecated' && !allowSelectDeprecated) {
+    if (pattern.status === 'deprecated' && !canSelectDeprecated) {
       return;
     }
     onSelect?.(pattern);
@@ -131,7 +199,7 @@ export function PatternList({
       <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-border-dark text-xs font-semibold text-slate-500 uppercase tracking-wider">
         <div className="col-span-1">Status</div>
         <div className="col-span-4">Pattern Name</div>
-        {showAllColumns && <div className="col-span-2">Usage</div>}
+        {showUsageColumn && <div className="col-span-2">Usage</div>}
         <div className="col-span-4">Success Rate</div>
         <div className="col-span-1"></div>
       </div>
@@ -158,7 +226,7 @@ export function PatternList({
             </div>
 
             {/* Usage Count */}
-            {showAllColumns && (
+            {showUsageColumn && (
               <div className="col-span-2">
                 <span className="text-sm text-slate-600 dark:text-slate-400">
                   {pattern.usageCount.toLocaleString()}
@@ -209,6 +277,8 @@ export default memo(PatternList, (prevProps, nextProps) => {
   return (
     prevProps.patterns === nextProps.patterns &&
     prevProps.selectedId === nextProps.selectedId &&
+    prevProps.viewMode === nextProps.viewMode &&
+    prevProps.selectionPolicy === nextProps.selectionPolicy &&
     prevProps.showAllColumns === nextProps.showAllColumns &&
     prevProps.allowSelectDeprecated === nextProps.allowSelectDeprecated
   );

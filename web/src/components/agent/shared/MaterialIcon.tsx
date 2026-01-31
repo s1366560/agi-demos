@@ -3,9 +3,11 @@
  *
  * Provides consistent styling and behavior for Material Design icons.
  * Uses the material-symbols package which loads Google's Material Symbols.
+ *
+ * REACT 19: No longer uses forwardRef - components can accept ref directly.
  */
 
-import { forwardRef, type ComponentProps } from 'react';
+import { type ComponentProps } from 'react';
 
 export interface MaterialIconProps extends Omit<ComponentProps<'span'>, 'ref'> {
   /**
@@ -38,33 +40,40 @@ export interface MaterialIconProps extends Omit<ComponentProps<'span'>, 'ref'> {
 /**
  * MaterialIcon component renders Material Symbols Outlined icons
  *
+ * In React 19, components can accept ref directly without forwardRef.
+ *
  * @example
  * <MaterialIcon name="search" />
  * <MaterialIcon name="home" size={20} filled />
  * <MaterialIcon name="settings" weight={700} className="text-primary" />
+ * <MaterialIcon name="edit" ref={ref} />
  */
-export const MaterialIcon = forwardRef<HTMLSpanElement, MaterialIconProps>(
-  ({ name, size = 24, weight = 400, filled = false, className = '', ...props }, ref) => {
-    const fontVariationSettings = `${filled ? 'FILL' : '0'} ${weight} 0 24`;
+export function MaterialIcon({
+  name,
+  size = 24,
+  weight = 400,
+  filled = false,
+  className = '',
+  style: propsStyle,
+  ...props
+}: MaterialIconProps) {
+  const fontVariationSettings = `${filled ? 'FILL' : '0'} ${weight} 0 24`;
 
-    return (
-      <span
-        ref={ref}
-        className={`material-symbols-outlined ${className}`}
-        style={{
-          fontVariationSettings,
-          fontSize: `${size}px`,
-          lineHeight: '1',
-          ...props.style,
-        }}
-        {...props}
-      >
-        {name}
-      </span>
-    );
-  }
-);
+  return (
+    <span
+      className={`material-symbols-outlined ${className}`}
+      style={{
+        fontVariationSettings,
+        fontSize: `${size}px`,
+        lineHeight: '1',
+        ...propsStyle,
+      }}
+      {...props}
+    >
+      {name}
+    </span>
+  );
+}
 
-MaterialIcon.displayName = 'MaterialIcon';
-
+// Export the named function as default as well
 export default MaterialIcon;
