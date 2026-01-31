@@ -23,6 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.auth_service_v2 import AuthService
 from src.configuration.di_container import DIContainer
+from src.infrastructure.adapters.primary.web.routers.event_dispatcher import (
+    DispatcherManager,
+    get_dispatcher_manager,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import UserTenant
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
@@ -72,6 +76,8 @@ class ConnectionManager:
         self.session_project_subscriptions: Dict[str, Set[str]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+        # Event dispatcher manager for async event delivery
+        self.dispatcher_manager: DispatcherManager = get_dispatcher_manager()
 
     async def connect(self, user_id: str, session_id: str, websocket: WebSocket) -> None:
         """Accept and register a new WebSocket connection for a session."""
@@ -124,6 +130,9 @@ class ConnectionManager:
             # Remove connection and session mappings
             self.active_connections.pop(session_id, None)
             self.session_users.pop(session_id, None)
+
+        # Clean up event dispatcher (outside lock to avoid deadlock)
+        await self.dispatcher_manager.cleanup_session(session_id)
 
         total_sessions = len(self.active_connections)
         logger.info(f"[WS] Session {session_id[:8]}... disconnected. Total: {total_sessions}")
@@ -189,13 +198,25 @@ class ConnectionManager:
         return sent_count
 
     async def broadcast_to_conversation(self, conversation_id: str, message: Dict[str, Any]) -> int:
-        """Broadcast a message to all sessions subscribed to a conversation."""
+        """
+        Broadcast a message to all sessions subscribed to a conversation.
+
+        Uses EventDispatcher for async, non-blocking event delivery with
+        backpressure handling and priority queuing.
+        """
         subscribers = self.conversation_subscribers.get(conversation_id, set())
-        sent_count = 0
+        enqueued_count = 0
+
         for session_id in subscribers:
-            if await self.send_to_session(session_id, message):
-                sent_count += 1
-        return sent_count
+            ws = self.active_connections.get(session_id)
+            if ws:
+                # Get or create dispatcher for this session
+                dispatcher = await self.dispatcher_manager.get_dispatcher(session_id, ws)
+                # Enqueue event (non-blocking)
+                if await dispatcher.enqueue(message):
+                    enqueued_count += 1
+
+        return enqueued_count
 
     def get_connection(self, session_id: str) -> Optional[WebSocket]:
         """Get the WebSocket connection for a session."""
@@ -1201,3 +1222,14 @@ async def monitor_agent_status(
         logger.debug(f"[WS Status] Monitor cancelled for project {project_id}")
     except Exception as e:
         logger.error(f"[WS Status] Unexpected error: {e}", exc_info=True)
+
+
+@router.get("/dispatcher-stats")
+async def get_dispatcher_stats() -> Dict[str, Any]:
+    """
+    Get event dispatcher statistics.
+
+    Returns queue sizes, drop counts, and other metrics for monitoring
+    the async event delivery system.
+    """
+    return get_dispatcher_manager().get_all_stats()
