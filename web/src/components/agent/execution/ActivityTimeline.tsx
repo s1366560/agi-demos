@@ -8,7 +8,7 @@
  * shows atomic-level activities (Thought → Tool → Result) for detailed debugging.
  */
 
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect, memo } from "react";
 import { Collapse, Tooltip } from "antd";
 import {
   BulbOutlined,
@@ -342,8 +342,9 @@ const ToolCardInline: React.FC<ToolCardInlineProps> = ({
 
 /**
  * ActivityTimeline component
+ * Memoized to prevent unnecessary re-renders (rerender-memo)
  */
-export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
+const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
   timeline,
   toolExecutions = {},
   toolResults = [],
@@ -525,5 +526,8 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
     />
   );
 };
+
+export const ActivityTimeline = memo(ActivityTimelineInternal);
+ActivityTimeline.displayName = 'ActivityTimeline';
 
 export default ActivityTimeline;

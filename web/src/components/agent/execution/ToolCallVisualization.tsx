@@ -7,7 +7,7 @@
  * - Flow: Flow diagram showing execution sequence
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, memo } from "react";
 import { Tooltip, Drawer, Tag, Empty, Segmented } from "antd";
 import {
   CheckCircleOutlined,
@@ -449,8 +449,9 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
 
 /**
  * ToolCallVisualization component
+ * Memoized to prevent unnecessary re-renders (rerender-memo)
  */
-export const ToolCallVisualization: React.FC<ToolCallVisualizationProps> = ({
+const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
   toolExecutions,
   mode: initialMode = "grid",
   showDetails = true,
@@ -545,5 +546,8 @@ export const ToolCallVisualization: React.FC<ToolCallVisualizationProps> = ({
     </div>
   );
 };
+
+export const ToolCallVisualization = memo(ToolCallVisualizationInternal);
+ToolCallVisualization.displayName = 'ToolCallVisualization';
 
 export default ToolCallVisualization;

@@ -1,16 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import {
-    Chart as ChartJS,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler
-} from 'chart.js'
-import { Line } from 'react-chartjs-2'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { taskAPI } from '../../services/api'
 import { format } from 'date-fns'
 import {
@@ -24,15 +12,14 @@ import {
 import { TaskList } from '../../components/tasks/TaskList'
 import { useTranslation } from 'react-i18next'
 
-ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler
+// Loading fallback for charts
+const ChartLoading: React.FC<{ height?: string }> = ({ height = "200px" }) => (
+    <div className={`w-full ${height} flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg`}>
+        <div className="text-center">
+            <span className="material-symbols-outlined text-2xl text-blue-600 animate-spin">progress_activity</span>
+            <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">Loading chart...</p>
+        </div>
+    </div>
 )
 
 interface TaskStats {
@@ -53,15 +40,22 @@ interface QueueDepth {
     timestamp?: string
 }
 
-export const TaskDashboard: React.FC = () => {
+// Inner component that uses Chart.js
+const TaskDashboardInner: React.FC<{
+    ChartJS: any;
+    Line: any;
+    stats: TaskStats | null;
+    setStats: (s: TaskStats | null) => void;
+    queueDepth: QueueDepth | null;
+    setQueueDepth: (qd: QueueDepth | null) => void;
+    loading: boolean;
+    setLoading: (l: boolean) => void;
+    refreshing: boolean;
+    setRefreshing: (r: boolean) => void;
+    queueHistory: { time: string; count: number }[];
+    setQueueHistory: (h: { time: string; count: number }[] | ((prev: { time: string; count: number }[]) => { time: string; count: number }[])) => void;
+}> = ({ ChartJS: _ChartJS, Line, stats, setStats, queueDepth, setQueueDepth, loading, setLoading, refreshing, setRefreshing, queueHistory, setQueueHistory }) => {
     const { t } = useTranslation()
-    const [stats, setStats] = useState<TaskStats | null>(null)
-    const [queueDepth, setQueueDepth] = useState<QueueDepth | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [refreshing, setRefreshing] = useState(false)
-
-    // Chart Data State
-    const [queueHistory, setQueueHistory] = useState<{ time: string; count: number }[]>([])
 
     const fetchData = useCallback(async () => {
         try {
@@ -74,7 +68,7 @@ export const TaskDashboard: React.FC = () => {
             setQueueDepth(queueData)
 
             // Update queue history for chart
-            setQueueHistory((prev) => {
+            setQueueHistory((prev: { time: string; count: number }[]) => {
                 const now = new Date()
                 const total = (queueData as { total?: number }).total
                 const depth = (queueData as { depth?: number }).depth
@@ -95,10 +89,9 @@ export const TaskDashboard: React.FC = () => {
             setLoading(false)
             setRefreshing(false)
         }
-    }, [])
+    }, [setStats, setQueueDepth, setQueueHistory, setLoading, setRefreshing])
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchData()
         const interval = setInterval(fetchData, 5000)
         return () => clearInterval(interval)
@@ -110,7 +103,7 @@ export const TaskDashboard: React.FC = () => {
     }
 
     // Chart Configurations
-    const lineChartOptions = {
+    const lineChartOptions = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -162,15 +155,15 @@ export const TaskDashboard: React.FC = () => {
             axis: 'x' as const,
             intersect: false
         }
-    }
+    }), [])
 
-    const lineChartData = {
+    const lineChartData = useMemo(() => ({
         labels: queueHistory.map((h) => h.time),
         datasets: [
             {
                 label: t('tenant.tasks.charts.pending_tasks'),
                 data: queueHistory.map((h) => h.count),
-                borderColor: '#2563eb', // primary blue
+                borderColor: '#2563eb',
                 backgroundColor: (context: any) => {
                     const ctx = context.chart.ctx;
                     const gradient = ctx.createLinearGradient(0, 0, 0, 200);
@@ -182,7 +175,7 @@ export const TaskDashboard: React.FC = () => {
                 borderWidth: 2,
             },
         ],
-    }
+    }), [queueHistory, t])
 
     if (loading && !stats) {
         return (
@@ -334,3 +327,93 @@ export const TaskDashboard: React.FC = () => {
         </div>
     )
 }
+
+// Chart.js wrapper component - lazy loaded
+const ChartJSLib: React.FC<{ children: (props: any) => React.ReactNode }> = ({ children }) => {
+    return (
+        <React.Suspense fallback={<ChartLoading />}>
+            <ChartJSLibInner>{children}</ChartJSLibInner>
+        </React.Suspense>
+    )
+}
+
+const ChartJSLibInner: React.FC<{ children: (props: any) => React.ReactNode }> = ({ children }) => {
+    const [ChartJSModule, setChartJSModule] = React.useState<any>(null)
+
+    React.useEffect(() => {
+        let mounted = true
+        Promise.all([
+            import('chart.js'),
+            import('react-chartjs-2')
+        ]).then(([chartJsModule, reactChartModule]) => {
+            if (mounted) {
+                const { Chart: ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } = chartJsModule
+
+                ChartJS.register(
+                    CategoryScale,
+                    LinearScale,
+                    PointElement,
+                    LineElement,
+                    Title,
+                    Tooltip,
+                    Legend,
+                    Filler
+                )
+
+                setChartJSModule({ ChartJS, Line: reactChartModule.Line })
+            }
+        })
+        return () => { mounted = false }
+    }, [])
+
+    if (!ChartJSModule) {
+        return <ChartLoading />
+    }
+
+    return <>{children({ ChartJS: ChartJSModule.ChartJS, Line: ChartJSModule.Line })}</>
+}
+
+// Public TaskDashboard component with lazy loaded charts
+export const TaskDashboard: React.FC = () => {
+    const [stats, setStats] = useState<TaskStats | null>(null)
+    const [queueDepth, setQueueDepth] = useState<QueueDepth | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [refreshing, setRefreshing] = useState(false)
+    const [queueHistory, setQueueHistory] = useState<{ time: string; count: number }[]>([])
+
+    // Only render charts on client-side to avoid hydration issues (rendering-hydration-no-flicker)
+    const [isClient, setIsClient] = useState(false)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Necessary for client-side hydration check
+    useEffect(() => setIsClient(true), [])
+
+    if (!isClient) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            </div>
+        )
+    }
+
+    return (
+        <ChartJSLib>
+            {({ ChartJS, Line }: any) => (
+                <TaskDashboardInner
+                    ChartJS={ChartJS}
+                    Line={Line}
+                    stats={stats}
+                    setStats={setStats}
+                    queueDepth={queueDepth}
+                    setQueueDepth={setQueueDepth}
+                    loading={loading}
+                    setLoading={setLoading}
+                    refreshing={refreshing}
+                    setRefreshing={setRefreshing}
+                    queueHistory={queueHistory}
+                    setQueueHistory={setQueueHistory}
+                />
+            )}
+        </ChartJSLib>
+    )
+}
+
+export default TaskDashboard

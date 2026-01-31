@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import cytoscape, { Core, ElementDefinition } from 'cytoscape'
 import { graphService } from '../../services/graphService'
 import { useThemeStore } from '../../stores/theme'
 
@@ -65,7 +64,32 @@ const layoutOptions = {
     minTemp: 1.0,
 }
 
-export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
+// Loading fallback component for lazy loading (bundle-dynamic-imports)
+const CytoscapeGraphLoading: React.FC = () => (
+    <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <span>Nodes:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">-</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <span>Edges:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">-</span>
+            </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+                <span className="material-symbols-outlined text-4xl text-blue-600 animate-spin">
+                    progress_activity
+                </span>
+                <p className="text-slate-600 dark:text-slate-400 mt-2">Loading graph visualization...</p>
+            </div>
+        </div>
+    </div>
+)
+
+// Inner component that dynamically imports cytoscape
+const CytoscapeGraphInner: React.FC<CytoscapeGraphProps> = ({
     projectId,
     tenantId,
     includeCommunities = true,
@@ -73,8 +97,53 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
     onNodeClick,
     subgraphNodeIds,
 }) => {
+    // Dynamic import state for cytoscape (bundle-dynamic-imports)
+    const [CytoscapeLib, setCytoscapeLib] = useState<any>(null)
+    const [loadingLib, setLoadingLib] = useState(true)
+
+    useEffect(() => {
+        let mounted = true
+        import('cytoscape').then((mod) => {
+            if (mounted) {
+                setCytoscapeLib(() => mod)
+                setLoadingLib(false)
+            }
+        })
+        return () => { mounted = false }
+    }, [])
+
+    if (loadingLib || !CytoscapeLib) {
+        return <CytoscapeGraphLoading />
+    }
+
+    return <CytoscapeGraphRender
+        CytoscapeLib={CytoscapeLib}
+        projectId={projectId}
+        tenantId={tenantId}
+        includeCommunities={includeCommunities}
+        minConnections={minConnections}
+        onNodeClick={onNodeClick}
+        subgraphNodeIds={subgraphNodeIds}
+    />
+}
+
+// Actual render component that uses cytoscape
+interface CytoscapeGraphRenderProps extends CytoscapeGraphProps {
+    CytoscapeLib: any
+}
+
+const CytoscapeGraphRender: React.FC<CytoscapeGraphRenderProps> = ({
+    CytoscapeLib,
+    projectId,
+    tenantId,
+    includeCommunities = true,
+    minConnections = 0,
+    onNodeClick,
+    subgraphNodeIds,
+}) => {
+    const { cytoscape } = CytoscapeLib
     const containerRef = useRef<HTMLDivElement>(null)
-    const cyRef = useRef<Core | null>(null)
+    const cyRef = useRef<any>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [nodeCount, setNodeCount] = useState(0)
@@ -114,7 +183,7 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
                     const name = ele.data('name') || ''
                     return name.length > 20 ? name.substring(0, 20) + '...' : name
                 },
-                'color': computedTheme === 'dark' ? '#e2e8f0' : '#1e293b', // Label color
+                'color': computedTheme === 'dark' ? '#e2e8f0' : '#1e293b',
                 'width': (ele: any) => ele.data('type') === 'Community' ? 70 : 50,
                 'height': (ele: any) => ele.data('type') === 'Community' ? 70 : 50,
                 'font-size': '5px',
@@ -215,7 +284,7 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
                 })
             }
 
-            const elements: ElementDefinition[] = []
+            const elements: any[] = []
 
             // Nodes
             data.elements.nodes.forEach((node: any) => {
@@ -259,14 +328,14 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
                 })
             })
 
-            // Clear existing elements and add new ones to ensure clean state
+            // Clear existing elements and add new ones
             cyRef.current.elements().remove()
             cyRef.current.add(elements)
 
             cyRef.current.layout(layoutOptions).run()
 
-            setNodeCount(elements.filter(e => e.group === 'nodes').length)
-            setEdgeCount(elements.filter(e => e.group === 'edges').length)
+            setNodeCount(elements.filter((e: any) => e.group === 'nodes').length)
+            setEdgeCount(elements.filter((e: any) => e.group === 'edges').length)
 
         } catch (err) {
             console.error('Failed to load graph data:', err)
@@ -278,7 +347,7 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
 
     // Initialize Cytoscape
     useEffect(() => {
-        if (!containerRef.current) return
+        if (!containerRef.current || !cytoscape) return
 
         const cy = cytoscape({
             container: containerRef.current,
@@ -290,18 +359,12 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
 
         cyRef.current = cy
 
-        cy.on('tap', 'node', (evt) => {
+        cy.on('tap', 'node', (evt: any) => {
             const node = evt.target
-            console.log('Node clicked:', node.data())
             onNodeClick?.(node.data())
         })
 
-        cy.on('tap', 'edge', (evt) => {
-            const edge = evt.target
-            console.log('Edge clicked:', edge.data())
-        })
-
-        cy.on('tap', (evt) => {
+        cy.on('tap', (evt: any) => {
             if (evt.target === cy) {
                 onNodeClick?.(null)
             }
@@ -313,7 +376,7 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
             cy.destroy()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []) // Initialize once
+    }, [cytoscape]) // Initialize once
 
     // Update styles when theme changes
     useEffect(() => {
@@ -322,7 +385,7 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
         }
     }, [cytoscapeStyles])
 
-    // Load data
+    // Load data when dependencies change
     useEffect(() => {
         if (cyRef.current) {
             loadGraphData()
@@ -460,6 +523,21 @@ export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = ({
             </div>
         </div>
     )
+}
+
+// Public wrapper component
+export const CytoscapeGraph: React.FC<CytoscapeGraphProps> = (props) => {
+    // Detect client-side rendering to avoid hydration mismatch (rendering-hydration-no-flicker)
+    const [isClient, setIsClient] = useState(false)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Necessary for client-side hydration check
+    useEffect(() => setIsClient(true), [])
+
+    // Only render on client-side to avoid hydration mismatch
+    if (!isClient) {
+        return <CytoscapeGraphLoading />
+    }
+
+    return <CytoscapeGraphInner {...props} />
 }
 
 export default CytoscapeGraph
