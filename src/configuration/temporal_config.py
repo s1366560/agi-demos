@@ -72,6 +72,10 @@ class TemporalSettings(BaseSettings):
         default=60, alias="AGENT_PROVIDER_REFRESH_INTERVAL"
     )
 
+    # OpenTelemetry Tracing for Temporal client
+    # Note: Named differently to avoid conflicts with global ENABLE_TELEMETRY env var
+    temporal_tracing_enabled: bool = Field(default=False)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

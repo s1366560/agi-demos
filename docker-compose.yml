@@ -28,6 +28,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
 
   # Neo4j Graph Database
   neo4j:
@@ -40,10 +48,10 @@ services:
       - NEO4J_AUTH=neo4j/your_password_here
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
-      # Increased heap size for high concurrency (1000+ users)
-      - NEO4J_dbms_memory_heap_max__size=4G
-      # Page cache for faster graph traversal (1G)
-      - NEO4J_dbms_memory_pagecache_size=1G
+      # Heap size for development (lower than production)
+      - NEO4J_dbms_memory_heap_max__size=1G
+      # Page cache for faster graph traversal
+      - NEO4J_dbms_memory_pagecache_size=512M
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
@@ -56,6 +64,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
 
   # PostgreSQL for metadata
   postgres:
@@ -74,6 +90,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
 
   # Redis for caching
   redis:
@@ -90,6 +114,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   # Temporal Server for workflow orchestration
   temporal:
@@ -115,6 +147,14 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
 
   # Temporal Web UI
   temporal-ui:
@@ -130,6 +170,14 @@ services:
     depends_on:
       temporal:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   # MinIO for S3-compatible object storage (file uploads, PDF generation)
   minio:
@@ -149,6 +197,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # MinIO setup - creates default bucket
   minio-setup:
@@ -164,6 +220,14 @@ services:
       mc anonymous set download memstack/memstack-files;
       exit 0;
       "
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
 
   # Temporal Worker (optional - can run separately)
   # worker-temporal:
@@ -224,6 +288,14 @@ services:
       - CUA_MCP_HOST=0.0.0.0
       - CUA_MCP_PORT=18766
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
 
   # Prometheus for metrics collection
@@ -245,6 +317,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # Grafana for metrics visualization
   grafana:
@@ -263,6 +343,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # ============================================
   # Langfuse V3 LLM Observability (self-hosted)
@@ -328,6 +416,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # Langfuse Background Worker
   langfuse-worker:
@@ -345,6 +441,14 @@ services:
         condition: service_healthy
       langfuse-minio:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # Langfuse PostgreSQL Database
   langfuse-db:
@@ -364,6 +468,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
   # Langfuse ClickHouse (OLAP storage for V3)
   langfuse-clickhouse:
@@ -387,6 +499,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
 
   # Langfuse Redis (separate from main Redis)
   langfuse-redis:
@@ -399,6 +519,14 @@ services:
       interval: 3s
       timeout: 10s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
 
   # Langfuse MinIO (S3-compatible storage, separate from main MinIO)
   langfuse-minio:
@@ -420,6 +548,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
 
   # Langfuse MinIO setup - creates bucket
   langfuse-minio-setup:
@@ -434,6 +570,72 @@ services:
       mc mb --ignore-existing langfuse/langfuse;
       exit 0;
       "
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+# ============================================
+# OpenTelemetry Observability Stack
+# ============================================
+# OpenTelemetry Collector - 收集 traces 和 metrics
+# Jaeger - 分布式追踪可视化
+# Prometheus - 指标收集和存储
+# Grafana - 指标可视化
+
+# OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: memstack-otel-collector
+    command: --config=/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "9411:9411"   # Zpages collector endpoint
+      - "8888:8888"   # Prometheus metrics
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # OTLP trace check
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel_collector_data:/var/lib/otelcollector
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  # Jaeger - 分布式追踪可视化
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: memstack-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14317:4317"   # OTLP gRPC receiver (mapped to avoid conflict with Collector)
+      - "14318:4318"   # OTLP HTTP receiver (mapped to avoid conflict with Collector)
+      - "6831:6831"    # Jaeger thrift compact
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=memory
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
 
 volumes:
   neo4j_data:
@@ -447,3 +649,4 @@ volumes:
   langfuse_clickhouse_data:
   langfuse_clickhouse_logs:
   langfuse_minio_data:
+  otel_collector_data:

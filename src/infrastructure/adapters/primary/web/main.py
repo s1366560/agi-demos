@@ -8,6 +8,11 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
+from src.infrastructure.telemetry import (
+    configure_telemetry,
+    instrument_all,
+    shutdown_telemetry,
+)
 from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_native_graph_adapter
 from src.infrastructure.adapters.primary.web.dependencies import initialize_default_credentials
@@ -59,6 +64,28 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
+
+    # Initialize OpenTelemetry (FastAPI is instrumented in create_app, before routes)
+    if settings.enable_telemetry:
+        logger.info("Initializing OpenTelemetry...")
+        try:
+            # Configure metrics (tracing configured in create_app)
+            from src.infrastructure.telemetry.config import configure_meter_provider
+
+            configure_meter_provider()
+
+            # Auto-instrument other libraries (httpx, sqlalchemy, redis)
+            instrumentation_results = instrument_all(auto_instrument=True)
+
+            logger.info(f"OpenTelemetry auto-instrumentation: {instrumentation_results}")
+            logger.info(
+                f"OpenTelemetry initialized (service={settings.service_name}, "
+                f"environment={settings.environment})"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize OpenTelemetry: {e}")
+    else:
+        logger.info("OpenTelemetry disabled")
 
     # Initialize Database Schema
     logger.info("Initializing database schema...")
@@ -192,6 +219,15 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down...")
+
+    # Shutdown OpenTelemetry
+    if settings.enable_telemetry:
+        try:
+            shutdown_telemetry()
+            logger.info("OpenTelemetry shutdown complete")
+        except Exception as e:
+            logger.warning(f"Error shutting down OpenTelemetry: {e}")
+
     # Close Neo4j connection
     if hasattr(graph_service, "client") and hasattr(graph_service.client, "close"):
         await graph_service.client.close()
@@ -289,6 +325,15 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
             "url": "https://opensource.org/licenses/MIT",
         },
     )
+
+    # Instrument FastAPI for OpenTelemetry (must be done before router registration)
+    if settings.enable_telemetry:
+        from src.infrastructure.telemetry.config import configure_tracer_provider
+        from src.infrastructure.telemetry.instrumentation import instrument_fastapi
+
+        configure_tracer_provider()
+        if instrument_fastapi(app):
+            logger.info("FastAPI instrumented for OpenTelemetry")
 
     app.add_middleware(
         CORSMiddleware,

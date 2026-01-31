@@ -5,13 +5,39 @@ pooling and TLS support for production deployments.
 """
 
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from temporalio.client import Client, TLSConfig
 
 from src.configuration.temporal_config import TemporalSettings, get_temporal_settings
 
 logger = logging.getLogger(__name__)
+
+
+def create_tracing_interceptor():
+    """Create an OpenTelemetry TracingInterceptor for Temporal client.
+
+    Returns:
+        TracingInterceptor instance if telemetry is enabled, None otherwise
+    """
+    try:
+        from temporalio.contrib.opentelemetry import TracingInterceptor
+        from src.infrastructure.telemetry.config import _TRACER_PROVIDER
+
+        if _TRACER_PROVIDER is None:
+            return None
+
+        return TracingInterceptor()
+    except ImportError:
+        # temporalio[opentelemetry] not installed
+        logger.warning(
+            "temporalio[opentelemetry] not installed. "
+            "Install with: pip install temporalio[opentelemetry]"
+        )
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to create TracingInterceptor: {e}")
+        return None
 
 
 class TemporalClientFactory:
@@ -46,17 +72,29 @@ class TemporalClientFactory:
         if settings.temporal_tls_enabled:
             tls_config = cls._build_tls_config(settings)
 
+        # Build interceptors list
+        interceptors: List = []
+        if settings.temporal_tracing_enabled:
+            tracing_interceptor = create_tracing_interceptor()
+            if tracing_interceptor is not None:
+                interceptors.append(tracing_interceptor)
+                logger.info("OpenTelemetry tracing enabled for Temporal client")
+
         logger.info(
             f"Connecting to Temporal server at {settings.temporal_host}, "
             f"namespace: {settings.temporal_namespace}"
         )
 
         try:
-            cls._instance = await Client.connect(
-                target_host=settings.temporal_host,
-                namespace=settings.temporal_namespace,
-                tls=tls_config,
-            )
+            connect_kwargs = {
+                "target_host": settings.temporal_host,
+                "namespace": settings.temporal_namespace,
+                "tls": tls_config,
+            }
+            if interceptors:
+                connect_kwargs["interceptors"] = interceptors
+
+            cls._instance = await Client.connect(**connect_kwargs)
             logger.info("Successfully connected to Temporal server")
             return cls._instance
         except Exception as e:

@@ -279,6 +279,12 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: Optional[str] = Field(
         default=None, alias="OTEL_EXPORTER_OTLP_ENDPOINT"
     )
+    otel_exporter_otlp_headers: Optional[str] = Field(
+        default=None, alias="OTEL_EXPORTER_OTLP_HEADERS"
+    )
+    otel_traces_sampler: str = Field(default="traceidratio", alias="OTEL_TRACES_SAMPLER")
+    otel_traces_sampler_arg: float = Field(default=1.0, alias="OTEL_TRACES_SAMPLER_ARG")
+    otel_batch_timeout: int = Field(default=30000, alias="OTEL_BATCH_TIMEOUT")
     enable_telemetry: bool = Field(default=True, alias="ENABLE_TELEMETRY")
 
     # Langfuse LLM Observability Settings

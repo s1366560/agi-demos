@@ -3,6 +3,8 @@ Agent execution metrics (T131).
 
 This module provides metrics collection for agent operations,
 tracking performance, usage patterns, and error rates.
+
+Supports both Prometheus export format and OpenTelemetry metrics.
 """
 
 import logging
@@ -14,6 +16,18 @@ from functools import wraps
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+# Try to import OpenTelemetry metrics if available
+try:
+    from src.infrastructure.telemetry import (
+        create_counter,
+        create_histogram,
+        increment_counter,
+        record_histogram_value,
+    )
+    OTEL_AVAILABLE = True
+except ImportError:
+    OTEL_AVAILABLE = False
 
 
 @dataclass
@@ -36,12 +50,17 @@ class AgentMetrics:
     - Error frequencies
     """
 
-    def __init__(self):
-        """Initialize metrics collector."""
+    def __init__(self, enable_otel: bool = True):
+        """Initialize metrics collector.
+
+        Args:
+            enable_otel: Whether to also export metrics to OpenTelemetry
+        """
         self._counters: defaultdict[str, int] = defaultdict(int)
         self._gauges: defaultdict[str, list[float]] = defaultdict(list)
         self._histograms: defaultdict[str, list[float]] = defaultdict(list)
         self._labels: dict[str, dict[str, str]] = {}
+        self._enable_otel = enable_otel and OTEL_AVAILABLE
 
     def increment(self, name: str, value: int = 1, labels: dict[str, str] | None = None):
         """
@@ -55,6 +74,11 @@ class AgentMetrics:
         key = self._make_key(name, labels)
         self._counters[key] += value
         self._labels[key] = labels or {}
+
+        # Also export to OpenTelemetry
+        if self._enable_otel:
+            metric_name = name.replace(".", "_")
+            increment_counter(f"agent_{metric_name}", f"Agent {metric_name}", amount=value, attributes=labels or {})
 
     def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None):
         """
@@ -81,6 +105,11 @@ class AgentMetrics:
         key = self._make_key(name, labels)
         self._histograms[key].append(value)
         self._labels[key] = labels or {}
+
+        # Also export to OpenTelemetry
+        if self._enable_otel:
+            metric_name = name.replace(".", "_")
+            record_histogram_value(f"agent_{metric_name}", f"Agent {metric_name}", value, attributes=labels or {})
 
     def get_counter(self, name: str, labels: dict[str, str] | None = None) -> int:
         """Get counter value."""

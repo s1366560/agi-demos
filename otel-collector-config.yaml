@@ -1,0 +1,83 @@
+# OpenTelemetry Collector Configuration for MemStack
+# Receives traces/metrics from applications and exports to Jaeger + Prometheus
+
+receivers:
+  # OTLP receiver for traces and metrics (gRPC)
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus metrics receiver (scrape)
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'memstack-api'
+          static_configs:
+            - targets: ['host.docker.internal:8000']
+          metrics_path: '/metrics'
+        - job_name: 'otel-collector'
+          static_configs:
+            - targets: ['localhost:8889']
+
+processors:
+  # Batch traces and metrics for better performance
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Add resource attributes to all telemetry
+  resource:
+    attributes:
+      - key: service.name
+        value: memstack-collector
+        action: upsert
+      - key: environment
+        value: development
+        action: upsert
+
+exporters:
+  # Export traces to Jaeger via OTLP/gRPC (Jaeger all-in-one supports this on port 14250)
+  otlp/jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # Export metrics to Prometheus (for scraping)
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+
+  # Debug logging (for development)
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/jaeger, debug]
+
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheusremotewrite, debug]
+
+  # Telemetry for the collector itself
+  telemetry:
+    metrics:
+      level: detailed
+    logs:
+      level: debug

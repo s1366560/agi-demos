@@ -18,6 +18,7 @@
 # =============================================================================
 
 .PHONY: help install update clean init reset fresh restart
+.PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: sandbox-build sandbox-build-lite sandbox-run sandbox-run-lite sandbox-run-tigervnc sandbox-stop sandbox-stop-lite sandbox-restart sandbox-logs sandbox-shell sandbox-root-shell sandbox-status sandbox-status-lite sandbox-ps sandbox-test sandbox-clean sandbox-reset
 .PHONY: sandbox-desktop-start sandbox-desktop-stop sandbox-desktop-status sandbox-desktop-logs
 .PHONY: sandbox-terminal-start sandbox-terminal-stop sandbox-terminal-status sandbox-terminal-logs
@@ -90,6 +91,13 @@ help: ## Show this help message
 	@echo "  make docker-logs      - Show Docker service logs"
 	@echo "  make docker-build     - Build Docker images"
 	@echo "  make docker-clean     - Clean up containers, volumes, and orphans"
+	@echo ""
+	@echo "Observability:"
+	@echo "  make obs-start        - Start observability stack (Jaeger, OTel, Prometheus, Grafana)"
+	@echo "  make obs-stop         - Stop observability services"
+	@echo "  make obs-status       - Show observability service status"
+	@echo "  make obs-logs         - Show observability service logs"
+	@echo "  make obs-ui           - Show observability UI URLs"
 	@echo ""
 	@echo "Sandbox (All-in-one Dev Environment):"
 	@echo "  make sandbox-build          - Build full sandbox Docker image (with desktop)"
@@ -368,6 +376,8 @@ dev-infra: ## Start infrastructure services only
 	@echo "   Redis: localhost:6379"
 	@echo "   MinIO: http://localhost:9000 (console: http://localhost:9001)"
 	@echo "   Temporal: http://localhost:7233 (console: http://localhost:8080/namespaces/default)"
+	@echo ""
+	@echo "💡 Start observability stack with: make obs-start"
 
 status: ## Show status of all services
 	@echo "📊 Service Status"
@@ -411,6 +421,8 @@ status: ## Show status of all services
 	@lsof -i :6379 2>/dev/null | grep -q LISTEN && echo "  6379 (Redis): ✅ In use" || echo "  6379 (Redis): ❌ Free"
 	@lsof -i :9000 2>/dev/null | grep -q LISTEN && echo "  9000 (MinIO): ✅ In use" || echo "  9000 (MinIO): ❌ Free"
 	@lsof -i :7233 2>/dev/null | grep -q LISTEN && echo "  7233 (Temporal): ✅ In use" || echo "  7233 (Temporal): ❌ Free"
+	@lsof -i :16686 2>/dev/null | grep -q LISTEN && echo "  16686 (Jaeger): ✅ In use" || echo "  16686 (Jaeger): ❌ Free"
+	@lsof -i :9090 2>/dev/null | grep -q LISTEN && echo "  9090 (Prometheus): ✅ In use" || echo "  9090 (Prometheus): ❌ Free"
 	@lsof -i :6080 2>/dev/null | grep -q LISTEN && echo "  6080 (Desktop): ✅ In use" || echo "  6080 (Desktop): ❌ Free"
 	@lsof -i :7681 2>/dev/null | grep -q LISTEN && echo "  7681 (Terminal): ✅ In use" || echo "  7681 (Terminal): ❌ Free"
 
@@ -591,6 +603,49 @@ docker-clean: ## Clean up containers, volumes, and orphans
 	@echo "🧹 Cleaning Docker containers and volumes..."
 	docker compose down -v --remove-orphans
 	@echo "✅ Docker containers and volumes cleaned"
+
+# =============================================================================
+# Observability Stack (OpenTelemetry, Jaeger, Prometheus, Grafana)
+# =============================================================================
+
+obs-start: ## Start observability services (Jaeger, OTel Collector, Prometheus, Grafana)
+	@echo "📊 Starting observability stack..."
+	docker compose up -d jaeger otel-collector prometheus grafana
+	@echo "✅ Observability services started"
+	@$(MAKE) obs-ui
+
+obs-stop: ## Stop observability services
+	@echo "🛑 Stopping observability services..."
+	docker compose stop jaeger otel-collector prometheus grafana 2>/dev/null || true
+	@echo "✅ Observability services stopped"
+
+obs-status: ## Show observability service status
+	@echo "📊 Observability Service Status"
+	@echo "==============================="
+	@docker compose ps jaeger otel-collector prometheus grafana 2>/dev/null || echo "  Services not running"
+	@echo ""
+	@echo "Port Status:"
+	@lsof -i :16686 2>/dev/null | grep -q LISTEN && echo "  16686 (Jaeger UI):        ✅ In use" || echo "  16686 (Jaeger UI):        ❌ Free"
+	@lsof -i :4317 2>/dev/null | grep -q LISTEN && echo "  4317  (OTLP gRPC):        ✅ In use" || echo "  4317  (OTLP gRPC):        ❌ Free"
+	@lsof -i :4318 2>/dev/null | grep -q LISTEN && echo "  4318  (OTLP HTTP):        ✅ In use" || echo "  4318  (OTLP HTTP):        ❌ Free"
+	@lsof -i :9090 2>/dev/null | grep -q LISTEN && echo "  9090  (Prometheus):       ✅ In use" || echo "  9090  (Prometheus):       ❌ Free"
+	@lsof -i :3003 2>/dev/null | grep -q LISTEN && echo "  3003  (Grafana):          ✅ In use" || echo "  3003  (Grafana):          ❌ Free"
+
+obs-logs: ## Show observability service logs
+	@echo "📋 Showing observability logs (Ctrl+C to exit)..."
+	docker compose logs -f jaeger otel-collector prometheus grafana
+
+obs-ui: ## Show observability UI URLs
+	@echo "📊 Observability UI"
+	@echo "===================="
+	@echo "   Jaeger UI:        http://localhost:16686"
+	@echo "   Prometheus:       http://localhost:9090"
+	@echo "   Grafana:          http://localhost:3003 (admin/admin)"
+	@echo "   OTLP Endpoint:    http://localhost:4318 (HTTP), grpc://localhost:4317 (gRPC)"
+	@echo ""
+	@echo "💡 Set environment variables to enable OTel in the API:"
+	@echo "   export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318"
+	@echo "   export ENABLE_TELEMETRY=true"
 
 # =============================================================================
 # Sandbox MCP Server - All-in-one development environment
