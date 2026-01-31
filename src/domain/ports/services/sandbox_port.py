@@ -31,7 +31,7 @@ class SandboxConfig:
     """Configuration for creating a sandbox instance."""
 
     provider: SandboxProvider = SandboxProvider.DOCKER
-    image: str = "python:3.12-slim"
+    image: str = "sandbox-mcp-server:latest"
     cpu_limit: str = "2"
     memory_limit: str = "2G"
     timeout_seconds: int = 60
