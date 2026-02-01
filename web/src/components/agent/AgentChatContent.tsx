@@ -20,7 +20,6 @@ import { usePlanModeStore } from '@/stores/agent/planModeStore';
 import { useSandboxStore } from '@/stores/sandbox';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
-import { sandboxService } from '@/services/sandboxService';
 import { Resizer } from './Resizer';
 
 // Import design components
@@ -125,7 +124,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     activeSandboxId,
     toolExecutions,
     currentTool,
-    setSandboxId
   } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
@@ -158,26 +156,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   const clampedPanelWidth = useMemo(() => {
     return panelWidth > maxPanelWidth ? maxPanelWidth : panelWidth;
   }, [panelWidth, maxPanelWidth]);
-
-  // Ensure sandbox exists
-  const ensureSandbox = useCallback(async () => {
-    if (activeSandboxId) return activeSandboxId;
-    if (!projectId) return null;
-
-    try {
-      const { sandboxes } = await sandboxService.listSandboxes(projectId);
-      if (sandboxes.length > 0 && sandboxes[0].status === 'running') {
-        setSandboxId(sandboxes[0].id);
-        return sandboxes[0].id;
-      }
-      const { sandbox } = await sandboxService.createSandbox({ project_id: projectId });
-      setSandboxId(sandbox.id);
-      return sandbox.id;
-    } catch (error) {
-      console.error('[AgentChatContent] Failed to ensure sandbox:', error);
-      return null;
-    }
-  }, [activeSandboxId, projectId, setSandboxId]);
 
   // Load conversations
   useEffect(() => {
@@ -234,7 +212,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
 
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
-    await ensureSandbox();
+    // Note: Sandbox auto-creation removed - backend should handle sandbox provisioning
     const newId = await sendMessage(content, projectId, { onAct, onObserve });
     if (!conversationId && newId) {
       if (customBasePath) {
@@ -243,7 +221,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         navigate(`${basePath}/${newId}`);
       }
     }
-  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox, basePath, customBasePath, queryProjectId]);
+  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, basePath, customBasePath, queryProjectId]);
 
   const handleViewPlan = useCallback(() => {
     setPanelCollapsed(false);

@@ -82,7 +82,6 @@ export function useAgentChatHandlers(options: {
   customBasePath: string | undefined
   queryProjectId: string | null
   navigate: (path: string) => void
-  ensureSandbox: () => Promise<string | null>
   togglePlanPanel: () => void
   activeConversationId: string | null
   planModeStatus: { current_plan_id?: string } | null
@@ -101,7 +100,6 @@ export function useAgentChatHandlers(options: {
     customBasePath,
     queryProjectId,
     navigate,
-    ensureSandbox,
     togglePlanPanel,
     activeConversationId,
     createNewConversation,
@@ -122,13 +120,13 @@ export function useAgentChatHandlers(options: {
 
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return
-    await ensureSandbox()
+    // Note: Sandbox auto-creation removed - backend should handle sandbox provisioning
     const newId = await sendMessage(content, projectId, { onAct, onObserve })
     if (!conversationId && newId) {
       const queryString = queryProjectId ? `?projectId=${queryProjectId}` : ''
       navigate(`${basePath}/${newId}${queryString}`)
     }
-  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, ensureSandbox, basePath, customBasePath, queryProjectId])
+  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, basePath, customBasePath, queryProjectId])
 
   const handleViewPlan = useCallback(() => {
     togglePlanPanel()
