@@ -630,21 +630,27 @@ async def get_conversation_messages(
             "step_end",
         }
 
-        # Calculate from_sequence for initial load (get the latest N events)
+        # Calculate pagination parameters for initial load (get the latest N events)
         # When both from_sequence=0 and before_sequence=None, fetch the latest events
         calculated_from_sequence = from_sequence
+        calculated_before_sequence = before_sequence
+        
         if from_sequence == 0 and before_sequence is None:
+            # Use backward pagination to get the latest N displayable events
+            # Set before_sequence to a large value to get the most recent events
             last_seq = await event_repo.get_last_sequence(conversation_id)
-            if last_seq >= limit:
-                # Start from (last_seq - limit + 1) to get the last `limit` events
-                calculated_from_sequence = max(0, last_seq - limit + 1)
+            if last_seq > 0:
+                # Use backward pagination: get events before (last_seq + 1)
+                # This ensures we get the latest events regardless of event type gaps
+                calculated_before_sequence = last_seq + 1
+                calculated_from_sequence = 0  # Not used in backward mode, but set for clarity
 
         events = await event_repo.get_events(
             conversation_id=conversation_id,
             from_sequence=calculated_from_sequence,
             limit=limit,
             event_types=DISPLAYABLE_EVENTS,
-            before_sequence=before_sequence,
+            before_sequence=calculated_before_sequence,
         )
 
         # Get tool executions for duration info
@@ -1894,11 +1900,14 @@ async def get_pending_hitl_requests(
             raise HTTPException(status_code=403, detail="Access denied to this conversation")
 
         # Query pending requests
+        # Note: Don't exclude expired - show all pending requests so users can respond
+        # The recovery service will handle requests when Agent is not waiting
         repo = SQLHITLRequestRepository(db)
         pending = await repo.get_pending_by_conversation(
             conversation_id=conversation_id,
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
+            exclude_expired=False,  # Show all pending, let user decide
         )
 
         requests = [
