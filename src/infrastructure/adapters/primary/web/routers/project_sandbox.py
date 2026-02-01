@@ -23,7 +23,10 @@ from src.application.services.sandbox_profile import (
     SandboxProfileType,
 )
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
@@ -75,9 +78,7 @@ class ProjectSandboxResponse(BaseModel):
             desktop_url=info.desktop_url,
             terminal_url=info.terminal_url,
             created_at=info.created_at.isoformat() if info.created_at else None,
-            last_accessed_at=info.last_accessed_at.isoformat()
-            if info.last_accessed_at
-            else None,
+            last_accessed_at=info.last_accessed_at.isoformat() if info.last_accessed_at else None,
             is_healthy=info.is_healthy,
             error_message=info.error_message,
         )
@@ -89,9 +90,7 @@ class EnsureSandboxRequest(BaseModel):
     profile: Optional[str] = Field(
         default=None, description="Sandbox profile: lite, standard, or full"
     )
-    auto_create: bool = Field(
-        default=True, description="Auto-create sandbox if it doesn't exist"
-    )
+    auto_create: bool = Field(default=True, description="Auto-create sandbox if it doesn't exist")
 
 
 class ExecuteToolRequest(BaseModel):
@@ -119,6 +118,27 @@ class HealthCheckResponse(BaseModel):
     healthy: bool = Field(..., description="Whether sandbox is healthy")
     status: str = Field(..., description="Current status")
     checked_at: str = Field(..., description="Check timestamp")
+
+
+class SandboxStatsResponse(BaseModel):
+    """Response from sandbox stats/metrics query."""
+
+    project_id: str = Field(..., description="Project ID")
+    sandbox_id: str = Field(..., description="Sandbox ID")
+    status: str = Field(..., description="Current sandbox status")
+    cpu_percent: float = Field(default=0.0, description="CPU usage percentage")
+    memory_usage: int = Field(default=0, description="Memory usage in bytes")
+    memory_limit: int = Field(default=0, description="Memory limit in bytes")
+    memory_percent: float = Field(default=0.0, description="Memory usage percentage")
+    disk_usage: Optional[int] = Field(None, description="Disk usage in bytes")
+    disk_limit: Optional[int] = Field(None, description="Disk limit in bytes")
+    disk_percent: Optional[float] = Field(None, description="Disk usage percentage")
+    network_rx_bytes: Optional[int] = Field(None, description="Network bytes received")
+    network_tx_bytes: Optional[int] = Field(None, description="Network bytes transmitted")
+    pids: int = Field(default=0, description="Number of processes")
+    uptime_seconds: Optional[int] = Field(None, description="Container uptime in seconds")
+    created_at: Optional[str] = Field(None, description="Container creation time")
+    collected_at: str = Field(..., description="Timestamp when stats were collected")
 
 
 class SandboxActionResponse(BaseModel):
@@ -185,8 +205,8 @@ def get_event_publisher() -> Optional[SandboxEventPublisher]:
 
 def get_orchestrator() -> SandboxOrchestrator:
     """Get the sandbox orchestrator."""
-    from src.configuration.di_container import DIContainer
     from src.configuration.config import get_settings
+    from src.configuration.di_container import DIContainer
 
     container = DIContainer()
     settings = get_settings()
@@ -233,6 +253,7 @@ async def ensure_project_sandbox(
     project_id: str,
     request: EnsureSandboxRequest,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
@@ -257,7 +278,7 @@ async def ensure_project_sandbox(
     try:
         info = await service.get_or_create_sandbox(
             project_id=project_id,
-            tenant_id=str(current_user.tenant_id) if hasattr(current_user, "tenant_id") else "default",
+            tenant_id=tenant_id,
             profile=profile,
         )
 
@@ -313,6 +334,68 @@ async def check_project_sandbox_health(
     except Exception as e:
         logger.error(f"Health check failed for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+
+
+@router.get("/{project_id}/sandbox/stats", response_model=SandboxStatsResponse)
+async def get_project_sandbox_stats(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+    adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
+):
+    """Get resource usage statistics for a project's sandbox.
+
+    Returns CPU, memory, disk, network, and process metrics.
+    """
+    # TODO: Verify user has access to project
+
+    try:
+        info = await service.get_project_sandbox(project_id)
+
+        if not info:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No sandbox found for project {project_id}",
+            )
+
+        # Get stats from the adapter (pass project_id as fallback for container lookup)
+        stats = await adapter.get_sandbox_stats(info.sandbox_id, project_id=project_id)
+
+        # Calculate uptime if we have creation time
+        uptime_seconds = None
+        if info.created_at:
+            # Use timezone-aware datetime to avoid naive vs aware comparison
+            from datetime import timezone
+
+            now = datetime.now(timezone.utc)
+            created_at = info.created_at
+            # Ensure created_at is timezone-aware
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            uptime_seconds = int((now - created_at).total_seconds())
+
+        return SandboxStatsResponse(
+            project_id=project_id,
+            sandbox_id=info.sandbox_id,
+            status=info.status,
+            cpu_percent=stats.get("cpu_percent", 0.0),
+            memory_usage=stats.get("memory_usage", 0),
+            memory_limit=stats.get("memory_limit", 0),
+            memory_percent=stats.get("memory_percent", 0.0),
+            network_rx_bytes=stats.get("network_rx_bytes"),
+            network_tx_bytes=stats.get("network_tx_bytes"),
+            disk_usage=stats.get("disk_read_bytes"),  # Use disk read as usage proxy
+            pids=stats.get("pids", 0),
+            uptime_seconds=uptime_seconds,
+            created_at=info.created_at.isoformat() if info.created_at else None,
+            collected_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get sandbox stats for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Stats query failed: {str(e)}")
 
 
 @router.post("/{project_id}/sandbox/execute", response_model=ExecuteToolResponse)
@@ -455,6 +538,7 @@ async def list_project_sandboxes(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """List all project sandboxes for the current tenant."""
@@ -468,8 +552,6 @@ async def list_project_sandboxes(
                 status_code=400,
                 detail=f"Invalid status: {status}",
             )
-
-    tenant_id = str(current_user.tenant_id) if hasattr(current_user, "tenant_id") else "default"
 
     sandboxes = await service.list_project_sandboxes(
         tenant_id=tenant_id,
@@ -517,6 +599,7 @@ async def start_project_desktop(
     project_id: str,
     resolution: str = Query("1280x720", description="Screen resolution"),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ):
@@ -524,7 +607,7 @@ async def start_project_desktop(
     # Ensure sandbox exists and is running
     info = await service.ensure_sandbox_running(
         project_id=project_id,
-        tenant_id=str(current_user.tenant_id) if hasattr(current_user, "tenant_id") else "default",
+        tenant_id=tenant_id,
     )
 
     try:
@@ -575,13 +658,14 @@ async def stop_project_desktop(
 async def start_project_terminal(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ):
     """Start terminal service for the project's sandbox."""
     info = await service.ensure_sandbox_running(
         project_id=project_id,
-        tenant_id=str(current_user.tenant_id) if hasattr(current_user, "tenant_id") else "default",
+        tenant_id=tenant_id,
     )
 
     try:

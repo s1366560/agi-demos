@@ -61,7 +61,8 @@ class TestSandboxMCPToolWrapperPermission:
         )
 
         assert tool.permission == "read"
-        assert tool.name == "sandbox_abc123def_file_read"
+        assert tool.name == "file_read"
+        assert tool.sandbox_id == "abc123def"
 
     def test_write_tool_has_write_permission(self):
         """Test that write tools have 'write' permission."""
@@ -78,7 +79,8 @@ class TestSandboxMCPToolWrapperPermission:
         )
 
         assert tool.permission == "write"
-        assert tool.name == "sandbox_abc123def_file_write"
+        assert tool.name == "file_write"
+        assert tool.sandbox_id == "abc123def"
 
     def test_bash_tool_has_bash_permission(self):
         """Test that bash tools have 'bash' permission."""
@@ -95,7 +97,8 @@ class TestSandboxMCPToolWrapperPermission:
         )
 
         assert tool.permission == "bash"
-        assert tool.name == "sandbox_abc123def_bash"
+        assert tool.name == "bash"
+        assert tool.sandbox_id == "abc123def"
 
     def test_unknown_tool_has_ask_permission(self):
         """Test that unknown tools default to 'ask' permission."""
@@ -146,11 +149,11 @@ class TestSandboxMCPToolWrapperPermission:
         assert tool.permission == "read"
 
 
-class TestSandboxMCPToolWrapperNamespacing:
-    """Test SandboxMCPToolWrapper namespacing."""
+class TestSandboxMCPToolWrapperAttributes:
+    """Test SandboxMCPToolWrapper attributes."""
 
-    def test_namespaced_name_format(self):
-        """Test that tool name is correctly namespaced."""
+    def test_tool_name_is_original_name(self):
+        """Test that tool name uses original name without prefix."""
         adapter = MockSandboxAdapter()
         tool = SandboxMCPToolWrapper(
             sandbox_id="test123",
@@ -163,10 +166,11 @@ class TestSandboxMCPToolWrapperNamespacing:
             sandbox_adapter=adapter,
         )
 
-        assert tool.name == "sandbox_test123_bash"
+        assert tool.name == "bash"
+        assert tool.sandbox_id == "test123"
 
-    def test_description_includes_sandbox_id(self):
-        """Test that description includes sandbox context."""
+    def test_sandbox_id_attribute(self):
+        """Test that sandbox_id is stored as attribute."""
         adapter = MockSandboxAdapter()
         tool = SandboxMCPToolWrapper(
             sandbox_id="verylongsandboxid123",
@@ -179,9 +183,7 @@ class TestSandboxMCPToolWrapperNamespacing:
             sandbox_adapter=adapter,
         )
 
-        # Should include first 8 chars of sandbox ID
-        assert "[Sandbox:verylong" in tool.description
-        assert "Execute bash commands" in tool.description
+        assert tool.sandbox_id == "verylongsandboxid123"
 
 
 class TestSandboxMCPToolWrapperParameters:
@@ -433,4 +435,3 @@ class TestSandboxMCPToolWrapperRetry:
 
         assert "Mock result from file_read" in result
         assert adapter.call_count == 3  # 2 failures + 1 success
-

@@ -10,7 +10,7 @@ import logging
 from typing import Optional, Tuple
 from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,6 +99,117 @@ async def get_api_key_from_header(
         )
 
     return api_key
+
+
+async def get_api_key_from_header_or_query(
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None, description="API key for SSE/WebSocket authentication"),
+) -> str:
+    """Extract API key from Authorization header or query parameter.
+
+    This is useful for SSE endpoints where EventSource cannot set headers.
+    First checks Authorization header, then falls back to query parameter.
+    """
+    # Try header first
+    if authorization:
+        if authorization.startswith("Bearer "):
+            api_key = authorization[7:]
+        elif authorization.startswith("Token "):
+            api_key = authorization[6:]
+        else:
+            api_key = authorization
+
+        if api_key.startswith("ms_sk_"):
+            return api_key
+
+    # Fall back to query parameter
+    if token:
+        if token.startswith("ms_sk_"):
+            return token
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key format. API keys should start with 'ms_sk_'",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing API key. Please provide an API key in the Authorization header or 'token' query parameter.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def verify_api_key_from_header_or_query(
+    api_key: str = Depends(get_api_key_from_header_or_query), db: AsyncSession = Depends(get_db)
+) -> DBAPIKey:
+    """Verify API key from header or query parameter.
+
+    This is a FastAPI adapter that uses the AuthService for business logic.
+    Useful for SSE endpoints where EventSource cannot set headers.
+    """
+    # Create AuthService with repositories
+    auth_service = AuthService(
+        user_repository=SqlAlchemyUserRepository(db),
+        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+    )
+
+    try:
+        # Verify using application service
+        domain_api_key = await auth_service.verify_api_key(api_key)
+
+        # Convert to DB model for backward compatibility
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        db_key = result.scalar_one_or_none()
+
+        return db_key
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+
+
+async def get_current_user_from_header_or_query(
+    api_key: DBAPIKey = Depends(verify_api_key_from_header_or_query),
+    db: AsyncSession = Depends(get_db),
+) -> DBUser:
+    """Get current user from API key (header or query parameter).
+
+    This is useful for SSE endpoints where EventSource cannot set headers.
+    """
+    # Create AuthService with repositories
+    auth_service = AuthService(
+        user_repository=SqlAlchemyUserRepository(db),
+        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+    )
+
+    try:
+        # Get user using application service
+        domain_user = await auth_service.get_user_by_id(api_key.user_id)
+
+        if not domain_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        # Convert to DB model for backward compatibility
+        result = await db.execute(select(DBUser).where(DBUser.id == domain_user.id))
+        db_user = result.scalar_one_or_none()
+
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        return db_user
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 async def verify_api_key_dependency(

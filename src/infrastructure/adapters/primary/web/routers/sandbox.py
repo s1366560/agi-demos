@@ -21,7 +21,11 @@ from src.application.services.sandbox_health_service import HealthCheckLevel, Sa
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.sandbox_profile import get_profile, list_profiles
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_from_header_or_query,
+    get_current_user_tenant,
+)
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
@@ -409,6 +413,7 @@ async def check_sandbox_health(
 async def create_sandbox(
     request: CreateSandboxRequest,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
@@ -443,6 +448,7 @@ async def create_sandbox(
         image = request.image or profile.image_name
         if not image:
             from src.configuration.config import get_settings
+
             image = get_settings().sandbox_default_image
 
         config = SandboxConfig(
@@ -474,13 +480,6 @@ async def create_sandbox(
 
                     container = DIContainer()
                     tool_registry = container.sandbox_tool_registry()
-
-                    # Use current_user's tenant_id
-                    tenant_id = (
-                        str(current_user.tenant_id)
-                        if hasattr(current_user, "tenant_id")
-                        else "default"
-                    )
 
                     registered_tools = await tool_registry.register_sandbox_tools(
                         sandbox_id=instance.id,
@@ -686,12 +685,11 @@ async def list_agent_tools(
     """
     List sandbox tools registered to Agent context.
 
-    Returns the namespaced tool names that have been registered
-    to the Agent tool registry for this sandbox.
+    Returns the tool names that have been registered to the Agent
+    tool registry for this sandbox.
 
-    The tools are returned with their Agent-side namespaced names
-    (e.g., "sandbox_abc123_bash") which can be used directly in
-    Agent tool execution.
+    Tools are registered with their original names (e.g., "bash", "file_read")
+    without any namespace prefix.
     """
     from src.configuration.di_container import DIContainer
 
@@ -710,12 +708,11 @@ async def list_agent_tools(
                 "message": "Sandbox tools not registered to Agent context",
             }
 
-        # Generate namespaced tool names
-        namespaced_tools = [
+        # Return tool info with original names
+        tools = [
             {
-                "agent_name": f"sandbox_{sandbox_id}_{tool_name}",
-                "original_name": tool_name,
-                "description": f"[Sandbox:{sandbox_id[:8]}...] {tool_name}",
+                "name": tool_name,
+                "description": f"{tool_name}",
             }
             for tool_name in tool_names
         ]
@@ -723,8 +720,8 @@ async def list_agent_tools(
         return {
             "sandbox_id": sandbox_id,
             "registered": True,
-            "tools": namespaced_tools,
-            "count": len(namespaced_tools),
+            "tools": tools,
+            "count": len(tools),
         }
 
     except Exception as e:
@@ -1251,7 +1248,7 @@ async def sse_generator(
 async def subscribe_sandbox_events(
     project_id: str,
     last_id: str = Query("0", description="Last event ID for resuming stream"),
-    _current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user_from_header_or_query),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
     """
@@ -1261,6 +1258,7 @@ async def subscribe_sandbox_events(
     and service events (desktop_started, desktop_stopped, terminal_started, etc.).
 
     Query Parameters:
+    - token: API key for authentication (required for SSE since EventSource cannot set headers)
     - last_id: Last received event ID for resuming (default: "0")
              Use the ID from the last received event's id field
 

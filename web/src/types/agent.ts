@@ -1915,7 +1915,12 @@ export type TimelineEvent =
     | ScreenshotUpdateEvent
     | SandboxCreatedEvent
     | SandboxTerminatedEvent
-    | SandboxStatusEvent;
+    | SandboxStatusEvent
+    // Artifact events
+    | ArtifactCreatedEvent
+    | ArtifactReadyEvent
+    | ArtifactErrorEvent
+    | ArtifactsBatchEvent;
 
 /**
  * Timeline response from API (unified event stream)
@@ -2140,6 +2145,187 @@ export interface SandboxStatusEvent extends BaseTimelineEvent {
     type: "sandbox_status";
     sandboxId: string;
     status: string;
+}
+
+// ============================================
+// Artifact Types (Rich Output Display)
+// ============================================
+
+/**
+ * Artifact category for UI rendering decisions
+ */
+export type ArtifactCategory =
+    | "image"
+    | "video"
+    | "audio"
+    | "document"
+    | "code"
+    | "data"
+    | "archive"
+    | "other";
+
+/**
+ * Artifact status
+ */
+export type ArtifactStatus =
+    | "pending"
+    | "uploading"
+    | "ready"
+    | "error"
+    | "deleted";
+
+/**
+ * Artifact information for rich output display
+ */
+export interface Artifact {
+    id: string;
+    projectId: string;
+    tenantId: string;
+    sandboxId?: string;
+    toolExecutionId?: string;
+    conversationId?: string;
+
+    filename: string;
+    mimeType: string;
+    category: ArtifactCategory;
+    sizeBytes: number;
+
+    url?: string;
+    previewUrl?: string;
+
+    status: ArtifactStatus;
+    errorMessage?: string;
+
+    sourceTool?: string;
+    sourcePath?: string;
+
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+}
+
+/**
+ * Artifact created event data
+ */
+export interface ArtifactCreatedEventData {
+    artifact_id: string;
+    sandbox_id: string;
+    tool_execution_id?: string;
+    filename: string;
+    mime_type: string;
+    category: string;
+    size_bytes: number;
+    source_tool?: string;
+    source_path?: string;
+}
+
+/**
+ * Artifact ready event data
+ */
+export interface ArtifactReadyEventData {
+    artifact_id: string;
+    sandbox_id: string;
+    tool_execution_id?: string;
+    filename: string;
+    mime_type: string;
+    category: string;
+    size_bytes: number;
+    url: string;
+    preview_url?: string;
+    source_tool?: string;
+    metadata?: Record<string, unknown>;
+}
+
+/**
+ * Artifact error event data
+ */
+export interface ArtifactErrorEventData {
+    artifact_id: string;
+    sandbox_id: string;
+    tool_execution_id?: string;
+    filename: string;
+    error: string;
+}
+
+/**
+ * Artifact info for batch events
+ */
+export interface ArtifactInfo {
+    id: string;
+    filename: string;
+    mimeType: string;
+    category: string;
+    sizeBytes: number;
+    url?: string;
+    previewUrl?: string;
+    sourceTool?: string;
+    metadata?: Record<string, unknown>;
+}
+
+/**
+ * Artifacts batch event data
+ */
+export interface ArtifactsBatchEventData {
+    sandbox_id: string;
+    tool_execution_id?: string;
+    artifacts: ArtifactInfo[];
+    source_tool?: string;
+}
+
+/**
+ * Artifact created timeline event
+ */
+export interface ArtifactCreatedEvent extends BaseTimelineEvent {
+    type: "artifact_created";
+    artifactId: string;
+    sandboxId: string;
+    toolExecutionId?: string;
+    filename: string;
+    mimeType: string;
+    category: ArtifactCategory;
+    sizeBytes: number;
+    sourceTool?: string;
+    sourcePath?: string;
+}
+
+/**
+ * Artifact ready timeline event
+ */
+export interface ArtifactReadyEvent extends BaseTimelineEvent {
+    type: "artifact_ready";
+    artifactId: string;
+    sandboxId: string;
+    toolExecutionId?: string;
+    filename: string;
+    mimeType: string;
+    category: ArtifactCategory;
+    sizeBytes: number;
+    url: string;
+    previewUrl?: string;
+    sourceTool?: string;
+    metadata?: Record<string, unknown>;
+}
+
+/**
+ * Artifact error timeline event
+ */
+export interface ArtifactErrorEvent extends BaseTimelineEvent {
+    type: "artifact_error";
+    artifactId: string;
+    sandboxId: string;
+    toolExecutionId?: string;
+    filename: string;
+    error: string;
+}
+
+/**
+ * Artifacts batch timeline event
+ */
+export interface ArtifactsBatchEvent extends BaseTimelineEvent {
+    type: "artifacts_batch";
+    sandboxId: string;
+    toolExecutionId?: string;
+    artifacts: ArtifactInfo[];
+    sourceTool?: string;
 }
 
 // ===========================================================================

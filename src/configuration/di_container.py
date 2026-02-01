@@ -393,6 +393,34 @@ class DIContainer:
             endpoint_url=self._settings.s3_endpoint_url,
         )
 
+    def artifact_service(self):
+        """Get ArtifactService for managing tool output artifacts.
+
+        Returns:
+            ArtifactService configured with storage backend and event publisher.
+        """
+        from src.application.services.artifact_service import ArtifactService
+
+        # Get event publisher function if available
+        event_publisher = None
+        try:
+            sandbox_event_pub = self.sandbox_event_publisher()
+            if sandbox_event_pub and sandbox_event_pub._event_bus:
+
+                async def publish_event(project_id: str, event):
+                    await sandbox_event_pub._publish(project_id, event)
+
+                event_publisher = publish_event
+        except Exception:
+            pass  # Event publishing is optional
+
+        return ArtifactService(
+            storage_service=self.storage_service(),
+            event_publisher=event_publisher,
+            bucket_prefix="artifacts",
+            url_expiration_seconds=7 * 24 * 3600,  # 7 days
+        )
+
     # === Application Services ===
 
     def project_service(self) -> ProjectService:

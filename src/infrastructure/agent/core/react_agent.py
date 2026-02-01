@@ -908,19 +908,13 @@ class ReActAgent:
         }
 
         # Try to extract sandbox_id from tools
-        # Tools using sandbox are named: sandbox_{sandbox_id}_{tool_name}
+        # Sandbox tools have a sandbox_id attribute on the wrapper
         sandbox_id = None
         for tool_name in skill.tools:
             if tool_name in self.tools and hasattr(self.tools[tool_name], "sandbox_id"):
                 # Found a sandbox tool with explicit sandbox_id attribute
                 sandbox_id = self.tools[tool_name].sandbox_id
                 break
-            elif tool_name.startswith("sandbox_"):
-                # Parse sandbox_id from namespaced tool name
-                parts = tool_name.split("_", 2)
-                if len(parts) >= 2:
-                    sandbox_id = parts[1]
-                    break
 
         # Emit skill execution start event
         yield {

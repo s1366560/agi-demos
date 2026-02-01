@@ -646,7 +646,7 @@ async def _load_project_sandbox_tools(
             # Create sandbox with project_id and tenant_id labels
             instance = await _mcp_sandbox_adapter.create_sandbox(
                 project_path=workspace_dir,
-                config=SandboxConfig(timeout_seconds=3600),
+                config=SandboxConfig(image="sandbox-mcp-server:latest", timeout_seconds=3600),
                 project_id=project_id,
                 tenant_id=tenant_id,
             )

@@ -24,9 +24,8 @@ class SandboxMCPToolWrapper(AgentTool):
     """
     Wrapper for Sandbox MCP tools to be used by ReActAgent.
 
-    Tools are namespaced to avoid conflicts between multiple sandboxes:
-    - Format: sandbox_{sandbox_id}_{tool_name}
-    - Example: sandbox_abc123def_bash, sandbox_abc123def_file_read
+    Tools are registered with their original names (e.g., "bash", "file_read").
+    The sandbox_id is stored as an attribute for routing and context.
 
     The wrapper routes tool execution calls to the correct sandbox instance
     with automatic error classification and retry logic.
@@ -56,24 +55,21 @@ class SandboxMCPToolWrapper(AgentTool):
         self._schema = tool_schema
         self._retry_config = retry_config or RetryConfig()
 
-        # Create namespaced name to avoid conflicts
-        namespaced_name = f"sandbox_{sandbox_id}_{tool_name}"
-
-        # Create description with sandbox context
+        # Use original tool name directly (no prefix)
         base_description = tool_schema.get("description", f"{tool_name} tool")
-        description = f"[Sandbox:{sandbox_id[:8]}...] {base_description}"
+        description = base_description  # Remove sandbox context from description
 
         # Determine permission type based on tool name
         self.permission = classify_sandbox_tool_permission(tool_name)
 
         super().__init__(
-            name=namespaced_name,
+            name=tool_name,
             description=description,
         )
 
         logger.debug(
             f"SandboxMCPToolWrapper: Created wrapper for sandbox={sandbox_id}, "
-            f"tool={tool_name}, namespaced_name={namespaced_name}, permission={self.permission}"
+            f"tool={tool_name}, permission={self.permission}"
         )
 
     def get_parameters_schema(self) -> Dict[str, Any]:

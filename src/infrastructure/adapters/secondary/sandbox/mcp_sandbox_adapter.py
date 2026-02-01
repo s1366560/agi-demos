@@ -26,16 +26,15 @@ from src.domain.ports.services.sandbox_port import (
     SandboxPort,
     SandboxStatus,
 )
-from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
-logger = logging.getLogger(__name__)
-
-# Import sandbox constants (single source of truth from config)
 from src.infrastructure.adapters.secondary.sandbox.constants import (
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
     MCP_WEBSOCKET_PORT,
     TERMINAL_PORT,
 )
+from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -257,6 +256,10 @@ class MCPSandboxAdapter(SandboxPort):
         config = config or SandboxConfig(image=self._mcp_image)
         sandbox_id = f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
 
+        # Check and cleanup any existing containers for this project
+        if project_id:
+            await self.cleanup_project_containers(project_id)
+
         # Allocate ports for all services with lock protection
         async with self._lock:
             host_mcp_port = self._get_next_port_unsafe()
@@ -269,6 +272,9 @@ class MCPSandboxAdapter(SandboxPort):
                 "image": self._mcp_image,
                 "name": sandbox_id,
                 "detach": True,
+                # Auto-restart policy for container-level recovery
+                # Docker will restart the container if it exits with non-zero code
+                "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
                 "ports": {
                     f"{MCP_WEBSOCKET_PORT}/tcp": host_mcp_port,
                     f"{DESKTOP_PORT}/tcp": host_desktop_port,
@@ -666,6 +672,93 @@ class MCPSandboxAdapter(SandboxPort):
             async with self._lock:
                 self._cleanup_in_progress.discard(sandbox_id)
 
+    async def cleanup_project_containers(self, project_id: str) -> int:
+        """Clean up all existing containers for a specific project.
+
+        This ensures only one container exists per project by removing any
+        orphan containers before creating a new one.
+
+        Args:
+            project_id: The project ID to clean up containers for
+
+        Returns:
+            Number of containers terminated
+        """
+        if not project_id:
+            return 0
+
+        terminated_count = 0
+
+        try:
+            loop = asyncio.get_event_loop()
+
+            # Find all containers for this project
+            containers = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(
+                    all=True,  # Include stopped containers
+                    filters={
+                        "label": [
+                            "memstack.sandbox=true",
+                            f"memstack.project_id={project_id}",
+                        ]
+                    },
+                ),
+            )
+
+            if not containers:
+                return 0
+
+            logger.info(
+                f"Found {len(containers)} existing container(s) for project {project_id}, cleaning up..."
+            )
+
+            for container in containers:
+                container_id = container.name or container.id
+                try:
+                    # Stop if running
+                    if container.status == "running":
+                        try:
+                            await asyncio.wait_for(
+                                loop.run_in_executor(None, lambda c=container: c.stop(timeout=5)),
+                                timeout=10.0,
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Stop timed out for orphan container {container_id}, forcing kill"
+                            )
+                            await loop.run_in_executor(None, container.kill)
+
+                    # Remove container
+                    await loop.run_in_executor(None, lambda c=container: c.remove(force=True))
+
+                    # Clean up from internal tracking
+                    async with self._lock:
+                        if container_id in self._active_sandboxes:
+                            instance = self._active_sandboxes[container_id]
+                            ports_to_release = [
+                                instance.mcp_port,
+                                instance.desktop_port,
+                                instance.terminal_port,
+                            ]
+                            ports_to_release = [p for p in ports_to_release if p is not None]
+                            self._release_ports_unsafe(ports_to_release)
+                            del self._active_sandboxes[container_id]
+
+                    terminated_count += 1
+                    logger.info(
+                        f"Cleaned up orphan container {container_id} for project {project_id}"
+                    )
+
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup orphan container {container_id}: {e}")
+
+            return terminated_count
+
+        except Exception as e:
+            logger.error(f"Error cleaning up project containers for {project_id}: {e}")
+            return terminated_count
+
     async def execute_code(
         self,
         request: CodeExecutionRequest,
@@ -832,7 +925,9 @@ class MCPSandboxAdapter(SandboxPort):
                     instance = MCPSandboxInstance(
                         id=sandbox_id,
                         status=SandboxStatus.RUNNING,
-                        config=SandboxConfig(image=self._mcp_image),  # Default config for discovered containers
+                        config=SandboxConfig(
+                            image=self._mcp_image
+                        ),  # Default config for discovered containers
                         project_path=project_path,
                         endpoint=websocket_url,
                         created_at=now,  # Approximation
@@ -944,22 +1039,49 @@ class MCPSandboxAdapter(SandboxPort):
 
         return count
 
-    async def get_sandbox_stats(self, sandbox_id: str) -> Dict[str, Any]:
+    async def get_sandbox_stats(self, sandbox_id: str, project_id: str = None) -> Dict[str, Any]:
         """
         Get container resource usage statistics.
 
         Args:
             sandbox_id: Sandbox identifier
+            project_id: Optional project ID to search by label if sandbox_id not found
 
         Returns:
             Dict with cpu_percent, memory_usage, memory_limit, etc.
         """
         try:
             loop = asyncio.get_event_loop()
-            container = await loop.run_in_executor(
-                None,
-                lambda: self._docker.containers.get(sandbox_id),
-            )
+            container = None
+
+            # Try to get container by sandbox_id first
+            try:
+                container = await loop.run_in_executor(
+                    None,
+                    lambda: self._docker.containers.get(sandbox_id),
+                )
+            except Exception:
+                # If not found by ID and project_id is provided, search by label
+                if project_id:
+                    containers = await loop.run_in_executor(
+                        None,
+                        lambda: self._docker.containers.list(
+                            filters={
+                                "label": [
+                                    "memstack.sandbox=true",
+                                    f"memstack.project_id={project_id}",
+                                ],
+                                "status": "running",
+                            }
+                        ),
+                    )
+                    if containers:
+                        container = containers[0]
+                        logger.info(f"Found container {container.id} by project_id {project_id}")
+
+            if not container:
+                logger.warning(f"Container not found: {sandbox_id}")
+                return {}
 
             stats = container.stats(stream=False)
 
@@ -977,6 +1099,24 @@ class MCPSandboxAdapter(SandboxPort):
 
             memory_stats = stats.get("memory_stats", {})
 
+            # Network I/O stats
+            networks = stats.get("networks", {})
+            network_rx_bytes = 0
+            network_tx_bytes = 0
+            for interface_stats in networks.values():
+                network_rx_bytes += interface_stats.get("rx_bytes", 0)
+                network_tx_bytes += interface_stats.get("tx_bytes", 0)
+
+            # Block I/O stats (disk)
+            blkio_stats = stats.get("blkio_stats", {})
+            disk_read_bytes = 0
+            disk_write_bytes = 0
+            for entry in blkio_stats.get("io_service_bytes_recursive", []) or []:
+                if entry.get("op") == "read":
+                    disk_read_bytes += entry.get("value", 0)
+                elif entry.get("op") == "write":
+                    disk_write_bytes += entry.get("value", 0)
+
             return {
                 "cpu_percent": round(cpu_percent, 2),
                 "memory_usage": memory_stats.get("usage", 0),
@@ -984,6 +1124,10 @@ class MCPSandboxAdapter(SandboxPort):
                 "memory_percent": round(
                     (memory_stats.get("usage", 0) / memory_stats.get("limit", 1)) * 100, 2
                 ),
+                "network_rx_bytes": network_rx_bytes,
+                "network_tx_bytes": network_tx_bytes,
+                "disk_read_bytes": disk_read_bytes,
+                "disk_write_bytes": disk_write_bytes,
                 "pids": stats.get("pids_stats", {}).get("current", 0),
                 "status": container.status,
             }
@@ -1481,6 +1625,8 @@ class MCPSandboxAdapter(SandboxPort):
                 "image": self._mcp_image,
                 "name": original_sandbox_id,
                 "detach": True,
+                # Auto-restart policy for container-level recovery (preserved in rebuild)
+                "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
                 "ports": {
                     f"{MCP_WEBSOCKET_PORT}/tcp": old_ports[0] if len(old_ports) > 0 else None,
                     f"{DESKTOP_PORT}/tcp": old_ports[1] if len(old_ports) > 1 else None,

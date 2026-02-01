@@ -91,7 +91,8 @@ class MCPWebSocketServer:
             tool: Tool to register
         """
         self._tools[tool.name] = tool
-        logger.info(f"Registered tool: {tool.name}")
+        logger.info(f"[MCP] Registered tool: {tool.name}")
+        logger.debug(f"[MCP] Tool schema: {tool.input_schema}")
 
     def register_tools(self, tools: list[MCPTool]) -> None:
         """Register multiple tools."""
@@ -157,17 +158,34 @@ class MCPWebSocketServer:
 
         client_id = f"client-{id(ws)}"
         self._clients[client_id] = ws
-        logger.info(f"Client connected: {client_id}")
 
+        # Log connection details
+        remote = request.remote or "unknown"
+        headers = dict(request.headers)
+        user_agent = headers.get("User-Agent", "unknown")
+        logger.info(
+            f"[MCP] Client CONNECTED - id={client_id} remote={remote} user_agent={user_agent}"
+        )
+        logger.debug(f"[MCP] Connection headers: {headers}")
+
+        message_count = 0
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
+                    message_count += 1
                     try:
                         data = json.loads(msg.data)
+                        method = data.get("method", "unknown")
+                        request_id = data.get("id")
+                        logger.debug(
+                            f"[MCP] Message #{message_count} - method={method} id={request_id}"
+                        )
+
                         response = await self._handle_message(data)
                         if response:
                             await ws.send_json(response)
                     except json.JSONDecodeError as e:
+                        logger.warning(f"[MCP] Invalid JSON from client {client_id}: {e}")
                         await ws.send_json(
                             {
                                 "jsonrpc": "2.0",
@@ -176,16 +194,18 @@ class MCPWebSocketServer:
                             }
                         )
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    logger.error(f"WebSocket error: {ws.exception()}")
+                    logger.error(f"[MCP] WebSocket error for {client_id}: {ws.exception()}")
                     break
 
         except asyncio.CancelledError:
-            logger.debug(f"Client handler cancelled: {client_id}")
+            logger.debug(f"[MCP] Client handler cancelled: {client_id}")
         except Exception as e:
-            logger.error(f"Error handling client {client_id}: {e}", exc_info=True)
+            logger.error(f"[MCP] Error handling client {client_id}: {e}", exc_info=True)
         finally:
             self._clients.pop(client_id, None)
-            logger.info(f"Client disconnected: {client_id}")
+            logger.info(
+                f"[MCP] Client DISCONNECTED - id={client_id} messages_processed={message_count}"
+            )
 
         return ws
 
@@ -259,9 +279,17 @@ class MCPWebSocketServer:
     async def _handle_initialize(self, params: dict) -> dict:
         """Handle MCP initialize request."""
         client_info = params.get("clientInfo", {})
-        logger.info(f"Initializing client: {client_info}")
+        protocol_version = params.get("protocolVersion", "unknown")
+        capabilities = params.get("capabilities", {})
 
-        return {
+        logger.info(
+            f"[MCP] initialize - client={client_info.get('name', 'unknown')} "
+            f"version={client_info.get('version', 'unknown')} "
+            f"protocol={protocol_version}"
+        )
+        logger.debug(f"[MCP] initialize - client capabilities: {capabilities}")
+
+        response = {
             "protocolVersion": self._server_info.protocol_version,
             "capabilities": {
                 "tools": {"listChanged": False},
@@ -271,6 +299,14 @@ class MCPWebSocketServer:
                 "version": self._server_info.version,
             },
         }
+
+        logger.info(
+            f"[MCP] initialize - server={self._server_info.name} "
+            f"version={self._server_info.version} "
+            f"tools_count={len(self._tools)}"
+        )
+
+        return response
 
     async def _handle_list_tools(self) -> dict:
         """Handle tools/list request."""
@@ -282,48 +318,76 @@ class MCPWebSocketServer:
             }
             for tool in self._tools.values()
         ]
+        tool_names = [t["name"] for t in tools]
+        logger.info(f"[MCP] tools/list - Returning {len(tools)} tools: {tool_names}")
         return {"tools": tools}
 
     async def _handle_call_tool(self, params: dict) -> dict:
         """Handle tools/call request."""
+        import time
+
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
 
+        # Log tool call start
+        logger.info(f"[MCP] tools/call START - tool={tool_name}")
+        logger.debug(f"[MCP] tools/call arguments: {arguments}")
+
         if tool_name not in self._tools:
+            logger.warning(f"[MCP] tools/call FAILED - Unknown tool: {tool_name}")
+            logger.debug(f"[MCP] Available tools: {list(self._tools.keys())}")
             return {
                 "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
                 "isError": True,
             }
 
         tool = self._tools[tool_name]
+        start_time = time.time()
 
         try:
             # Inject workspace_dir into arguments for file tools
             arguments["_workspace_dir"] = self.workspace_dir
             result = await tool.handler(**arguments)
 
+            elapsed_ms = (time.time() - start_time) * 1000
+
             # Normalize result to MCP format
             if isinstance(result, str):
-                return {
+                response = {
                     "content": [{"type": "text", "text": result}],
                     "isError": False,
                 }
             elif isinstance(result, dict):
                 if "content" in result:
-                    return result
+                    response = result
                 else:
-                    return {
+                    response = {
                         "content": [{"type": "text", "text": json.dumps(result)}],
                         "isError": False,
                     }
             else:
-                return {
+                response = {
                     "content": [{"type": "text", "text": str(result)}],
                     "isError": False,
                 }
 
+            # Log success with timing
+            is_error = response.get("isError", False)
+            status = "ERROR" if is_error else "OK"
+            content_preview = str(response.get("content", []))[:200]
+            logger.info(
+                f"[MCP] tools/call END - tool={tool_name} status={status} elapsed={elapsed_ms:.1f}ms"
+            )
+            logger.debug(f"[MCP] tools/call result preview: {content_preview}...")
+
+            return response
+
         except Exception as e:
-            logger.error(f"Tool {tool_name} error: {e}", exc_info=True)
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                f"[MCP] tools/call EXCEPTION - tool={tool_name} elapsed={elapsed_ms:.1f}ms error={e}",
+                exc_info=True,
+            )
             return {
                 "content": [{"type": "text", "text": f"Error: {str(e)}"}],
                 "isError": True,

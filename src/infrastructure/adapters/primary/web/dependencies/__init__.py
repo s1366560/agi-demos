@@ -9,7 +9,9 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     create_user,
     generate_api_key,
     get_api_key_from_header,
+    get_api_key_from_header_or_query,
     get_current_user,
+    get_current_user_from_header_or_query,
     get_current_user_tenant,
     get_password_hash,
     hash_api_key,
@@ -17,6 +19,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     security,
     verify_api_key,
     verify_api_key_dependency,
+    verify_api_key_from_header_or_query,
     verify_password,
 )
 

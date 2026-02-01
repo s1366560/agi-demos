@@ -2,6 +2,7 @@
  * ProjectAgentStatusBar - Project ReAct Agent Lifecycle Status Bar
  *
  * Displays the complete lifecycle state of the ProjectReActAgent:
+ * - Sandbox status (with click-to-start and metrics popover)
  * - Lifecycle state (uninitialized, initializing, ready, executing, paused, error, shutting_down)
  * - Resource counts (tools, skills, subagents)
  * - Execution metrics (total/failed chats, active chats)
@@ -12,12 +13,11 @@
  * @module components/agent/ProjectAgentStatusBar
  */
 
-import React from 'react';
+import type { FC } from 'react';
 import { Tooltip, Badge } from 'antd';
 import {
   Zap,
   MessageSquare,
-  Terminal,
   Wifi,
   Loader2,
   CheckCircle2,
@@ -31,6 +31,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
+import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
 
 interface ProjectAgentStatusBarProps {
   /** Project ID */
@@ -119,7 +120,7 @@ const lifecycleConfig: Record<
  * - Streaming state (from streamingStore)
  * - Sandbox connection (from sandboxStore)
  */
-export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
+export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   projectId,
   tenantId,
   messageCount = 0,
@@ -139,9 +140,18 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
 
   return (
     <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-      {/* Left: Lifecycle Status & Resources */}
+      {/* Left: Sandbox Status, Lifecycle Status & Resources */}
       <div className="flex items-center gap-3">
-        {/* Main Lifecycle Status */}
+        {/* Sandbox Status Indicator (First Column) */}
+        <SandboxStatusIndicator
+          projectId={projectId}
+          tenantId={tenantId}
+        />
+
+        {/* Separator */}
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+
+        {/* Agent Lifecycle Status */}
         <Tooltip
           title={
             <div className="space-y-2 max-w-xs">
@@ -203,19 +213,6 @@ export const ProjectAgentStatusBar: React.FC<ProjectAgentStatusBarProps> = ({
             <span>{messageCount}</span>
           </div>
         </Tooltip>
-
-        {/* Sandbox Status */}
-        {status.connection.sandbox && (
-          <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-            <Tooltip title="沙盒环境已连接">
-              <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                <Terminal size={11} />
-                <span>沙盒</span>
-              </div>
-            </Tooltip>
-          </>
-        )}
 
         {/* Plan Mode */}
         {status.planMode.isActive && (

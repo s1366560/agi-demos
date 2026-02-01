@@ -9,8 +9,8 @@ export type { SandboxTerminalProps } from "./SandboxTerminal";
 
 export { SandboxOutputViewer } from "./SandboxOutputViewer";
 export type {
-  SandboxOutputViewerProps,
-  ToolExecution,
+    SandboxOutputViewerProps,
+    ToolExecution,
 } from "./SandboxOutputViewer";
 
 export { SandboxPanel } from "./SandboxPanel";
@@ -21,3 +21,5 @@ export type { RemoteDesktopViewerProps } from "./RemoteDesktopViewer";
 
 export { SandboxControlPanel } from "./SandboxControlPanel";
 export type { SandboxControlPanelProps } from "./SandboxControlPanel";
+
+export { SandboxStatusIndicator } from "./SandboxStatusIndicator";

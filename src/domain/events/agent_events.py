@@ -111,6 +111,12 @@ class AgentEventType(str, Enum):
     TERMINAL_STOPPED = "terminal_stopped"
     TERMINAL_STATUS = "terminal_status"
 
+    # Artifact events (rich output display)
+    ARTIFACT_CREATED = "artifact_created"
+    ARTIFACT_READY = "artifact_ready"
+    ARTIFACT_ERROR = "artifact_error"
+    ARTIFACTS_BATCH = "artifacts_batch"
+
 
 class AgentDomainEvent(BaseModel):
     """Base class for all agent domain events."""
@@ -694,6 +700,87 @@ class AgentTerminalStatusEvent(AgentDomainEvent):
     pid: Optional[int] = None
 
 
+# === Artifact Events ===
+
+
+class ArtifactInfo(BaseModel):
+    """Artifact information for event payloads."""
+
+    id: str
+    filename: str
+    mime_type: str
+    category: str  # ArtifactCategory value
+    size_bytes: int
+    url: Optional[str] = None
+    preview_url: Optional[str] = None
+    source_tool: Optional[str] = None
+    metadata: Dict[str, Any] = {}
+
+
+class AgentArtifactCreatedEvent(AgentDomainEvent):
+    """Event emitted when an artifact is detected and upload started.
+
+    This event is emitted immediately when a new file is detected in the
+    sandbox output directory, before the upload completes.
+    """
+
+    event_type: AgentEventType = AgentEventType.ARTIFACT_CREATED
+    artifact_id: str
+    sandbox_id: str
+    tool_execution_id: Optional[str] = None
+    filename: str
+    mime_type: str
+    category: str
+    size_bytes: int
+    source_tool: Optional[str] = None
+    source_path: Optional[str] = None
+
+
+class AgentArtifactReadyEvent(AgentDomainEvent):
+    """Event emitted when an artifact is fully uploaded and accessible.
+
+    This event provides the final URL(s) for accessing the artifact.
+    """
+
+    event_type: AgentEventType = AgentEventType.ARTIFACT_READY
+    artifact_id: str
+    sandbox_id: str
+    tool_execution_id: Optional[str] = None
+    filename: str
+    mime_type: str
+    category: str
+    size_bytes: int
+    url: str
+    preview_url: Optional[str] = None
+    source_tool: Optional[str] = None
+    metadata: Dict[str, Any] = {}
+
+
+class AgentArtifactErrorEvent(AgentDomainEvent):
+    """Event emitted when artifact processing fails."""
+
+    event_type: AgentEventType = AgentEventType.ARTIFACT_ERROR
+    artifact_id: str
+    sandbox_id: str
+    tool_execution_id: Optional[str] = None
+    filename: str
+    error: str
+
+
+class AgentArtifactsBatchEvent(AgentDomainEvent):
+    """Event emitted with multiple artifacts at once (e.g., after tool completion).
+
+    This is useful for efficiently sending multiple artifacts discovered
+    after a tool execution completes.
+    """
+
+    event_type: AgentEventType = AgentEventType.ARTIFACTS_BATCH
+    sandbox_id: str
+    tool_execution_id: Optional[str] = None
+    artifacts: List[ArtifactInfo] = []
+    source_tool: Optional[str] = None
+
+
 # =========================================================================
 # Event Type Utilities
 # =========================================================================
@@ -781,6 +868,10 @@ def get_event_type_docstring() -> str:
         AgentTerminalStartedEvent,
         AgentTerminalStoppedEvent,
         AgentTerminalStatusEvent,
+        AgentArtifactCreatedEvent,
+        AgentArtifactReadyEvent,
+        AgentArtifactErrorEvent,
+        AgentArtifactsBatchEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
 

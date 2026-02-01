@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from src.application.services.sandbox_profile import SandboxProfileType
 from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
+from src.infrastructure.adapters.secondary.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 
 logger = logging.getLogger(__name__)
 
@@ -285,6 +286,7 @@ class SandboxManagerService:
 
         # 使用 profile 的配置创建 SandboxConfig
         config = SandboxConfig(
+            image=DEFAULT_SANDBOX_IMAGE,
             memory_limit=sandbox_profile.memory_limit,
             cpu_limit=sandbox_profile.cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,

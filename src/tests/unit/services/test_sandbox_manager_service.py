@@ -114,7 +114,9 @@ class TestSandboxManagerService:
         assert result.desktop_port is None
         # 验证配置使用了正确的资源限制
         call_args = mock_adapter.create_sandbox.call_args
-        config = call_args[0][1]  # call_args[0] 是位置参数列表，[1] 是 config
+        # create_sandbox 使用关键字参数调用，所以从 kwargs 获取
+        config = call_args[1].get("config")
+        assert config is not None
         assert config.memory_limit == "512m"
         assert config.cpu_limit == "0.5"
 

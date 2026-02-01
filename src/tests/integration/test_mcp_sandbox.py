@@ -14,6 +14,7 @@ import tempfile
 import pytest
 
 from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
+from src.infrastructure.adapters.secondary.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
@@ -51,7 +52,7 @@ class TestMCPSandbox:
         # Create sandbox
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         assert instance is not None
@@ -69,7 +70,7 @@ class TestMCPSandbox:
         # Create sandbox
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:
@@ -96,7 +97,7 @@ class TestMCPSandbox:
         """Test reading a file via MCP."""
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:
@@ -122,7 +123,7 @@ class TestMCPSandbox:
         """Test writing and reading a file via MCP."""
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:
@@ -158,7 +159,7 @@ class TestMCPSandbox:
         """Test glob file search via MCP."""
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:
@@ -183,7 +184,7 @@ class TestMCPSandbox:
         """Test bash command execution via MCP."""
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:
@@ -218,7 +219,7 @@ class TestMCPSandbox:
         """Test grep search via MCP."""
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:
@@ -244,7 +245,7 @@ class TestMCPSandbox:
         """Test editing a file via MCP."""
         instance = await sandbox_adapter.create_sandbox(
             project_path=workspace_dir,
-            config=SandboxConfig(timeout_seconds=300),
+            config=SandboxConfig(image=DEFAULT_SANDBOX_IMAGE, timeout_seconds=300),
         )
 
         try:

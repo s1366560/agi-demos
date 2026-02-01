@@ -255,8 +255,13 @@ def explore_mode_ruleset() -> List[PermissionRule]:
         PermissionRule("ask_clarification", "*", PermissionAction.DENY),
         PermissionRule("ask_decision", "*", PermissionAction.DENY),
         # Deny all sandbox tools in explore mode (must come AFTER read allow rule)
-        # Using wild permission to match all types for sandbox tools
-        PermissionRule("*", "sandbox_*_*", PermissionAction.DENY),
+        # Sandbox tools use original names like "bash", "write", etc.
+        PermissionRule("*", "bash", PermissionAction.DENY),
+        PermissionRule("*", "write", PermissionAction.DENY),
+        PermissionRule("*", "file_write", PermissionAction.DENY),
+        PermissionRule("*", "edit", PermissionAction.DENY),
+        PermissionRule("*", "patch", PermissionAction.DENY),
+        PermissionRule("*", "execute", PermissionAction.DENY),
     ]
 
 
@@ -342,8 +347,8 @@ def sandbox_mcp_ruleset() -> List[PermissionRule]:
     Get the permission ruleset for Sandbox MCP tools.
 
     This ruleset provides fine-grained permission control for MCP tools
-    exposed through sandbox instances. Tools are namespaced with the
-    pattern: `sandbox_{sandbox_id}_{tool_name}`.
+    exposed through sandbox instances. Tools are registered with their
+    original names (e.g., "bash", "file_read", "grep").
 
     Permission Strategy:
     - Read tools (file_read, list_files, etc): ALLOW by default
@@ -366,31 +371,29 @@ def sandbox_mcp_ruleset() -> List[PermissionRule]:
     """
     return [
         # Read-type tools: allow by default
-        PermissionRule("read", "sandbox_*_*_read", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_*_list", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_file_read", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_list_files", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_cat", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_grep", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_glob", PermissionAction.ALLOW),
-        PermissionRule("read", "sandbox_*_find", PermissionAction.ALLOW),
+        PermissionRule("read", "read", PermissionAction.ALLOW),
+        PermissionRule("read", "file_read", PermissionAction.ALLOW),
+        PermissionRule("read", "list_files", PermissionAction.ALLOW),
+        PermissionRule("read", "cat", PermissionAction.ALLOW),
+        PermissionRule("read", "grep", PermissionAction.ALLOW),
+        PermissionRule("read", "glob", PermissionAction.ALLOW),
+        PermissionRule("read", "find", PermissionAction.ALLOW),
         # Write-type tools: ask for confirmation
-        PermissionRule("write", "sandbox_*_*_write", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_*_create", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_*_edit", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_*_delete", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_file_write", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_write_file", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_create_file", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_edit_file", PermissionAction.ASK),
-        PermissionRule("write", "sandbox_*_delete_file", PermissionAction.ASK),
+        PermissionRule("write", "write", PermissionAction.ASK),
+        PermissionRule("write", "file_write", PermissionAction.ASK),
+        PermissionRule("write", "write_file", PermissionAction.ASK),
+        PermissionRule("write", "create_file", PermissionAction.ASK),
+        PermissionRule("write", "edit_file", PermissionAction.ASK),
+        PermissionRule("write", "delete_file", PermissionAction.ASK),
+        PermissionRule("write", "edit", PermissionAction.ASK),
+        PermissionRule("write", "patch", PermissionAction.ASK),
         # Execute/bash tools: ask for confirmation
-        PermissionRule("bash", "sandbox_*_bash", PermissionAction.ASK),
-        PermissionRule("bash", "sandbox_*_execute", PermissionAction.ASK),
-        PermissionRule("bash", "sandbox_*_run", PermissionAction.ASK),
-        PermissionRule("bash", "sandbox_*_python", PermissionAction.ASK),
-        PermissionRule("bash", "sandbox_*_sh", PermissionAction.ASK),
-        PermissionRule("bash", "sandbox_*_shell", PermissionAction.ASK),
+        PermissionRule("bash", "bash", PermissionAction.ASK),
+        PermissionRule("bash", "execute", PermissionAction.ASK),
+        PermissionRule("bash", "run", PermissionAction.ASK),
+        PermissionRule("bash", "python", PermissionAction.ASK),
+        PermissionRule("bash", "sh", PermissionAction.ASK),
+        PermissionRule("bash", "shell", PermissionAction.ASK),
         # Default rule: ask for unknown sandbox tools
-        PermissionRule("sandbox_*_*", "*", PermissionAction.ASK),
+        PermissionRule("*", "*", PermissionAction.ASK),
     ]

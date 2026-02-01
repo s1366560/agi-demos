@@ -73,10 +73,9 @@ async def run_server(
         auto_start_sessions: Whether to auto-start sessions on server start
     """
     # Import tools here to avoid circular imports
-    from src.tools.registry import get_tool_registry
-
     # Import session manager
     from src.server.session_manager import SessionManager
+    from src.tools.registry import get_tool_registry
 
     # Create session manager
     session_manager = SessionManager(
@@ -96,9 +95,15 @@ async def run_server(
 
     # Register all tools
     registry = get_tool_registry(workspace_dir)
-    server.register_tools(registry.get_all_tools())
+    tools = registry.get_all_tools()
+    server.register_tools(tools)
 
-    logger.info(f"Registered {len(registry.get_all_tools())} tools")
+    # Log registered tools summary
+    tool_names = [t.name for t in tools]
+    logger.info("[MCP] ======== Tool Registration Complete ========")
+    logger.info(f"[MCP] Total tools registered: {len(tools)}")
+    logger.info(f"[MCP] Available tools: {tool_names}")
+    logger.info("[MCP] ============================================")
 
     # Setup signal handlers
     loop = asyncio.get_event_loop()
@@ -109,21 +114,23 @@ async def run_server(
 
     # Auto-start sessions if requested
     if auto_start_sessions:
-        logger.info("Auto-starting sessions...")
+        logger.info("[MCP] Auto-starting sessions...")
         try:
             await session_manager.start_all()
         except Exception as e:
-            logger.error(f"Failed to auto-start sessions: {e}")
+            logger.error(f"[MCP] Failed to auto-start sessions: {e}")
 
-    logger.info(f"Server running on ws://{host}:{port}")
-    logger.info(f"Workspace directory: {workspace_dir}")
+    logger.info("[MCP] ======== Server Started ========")
+    logger.info(f"[MCP] WebSocket endpoint: ws://{host}:{port}")
+    logger.info(f"[MCP] Workspace directory: {workspace_dir}")
 
     if terminal_enabled:
-        logger.info(f"Terminal available at ws://{host}:{terminal_port}")
+        logger.info(f"[MCP] Terminal endpoint: ws://{host}:{terminal_port}")
     if desktop_enabled:
-        logger.info(f"Desktop available at http://{host}:{desktop_port}/vnc.html")
+        logger.info(f"[MCP] Desktop endpoint: http://{host}:{desktop_port}/vnc.html")
 
-    logger.info("Press Ctrl+C to stop")
+    logger.info("[MCP] =================================")
+    logger.info("[MCP] Press Ctrl+C to stop")
 
     # Wait for shutdown
     await server.wait_closed()

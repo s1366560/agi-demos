@@ -603,12 +603,36 @@ class ProjectSandboxLifecycleService:
             return False
 
     async def _cleanup_failed_sandbox(self, association: ProjectSandbox) -> None:
-        """Clean up a failed sandbox before recreating."""
+        """Clean up a failed sandbox before recreating.
+
+        This method:
+        1. Terminates the Docker container (if exists)
+        2. Cleans up any orphan containers for this project
+        3. Deletes the database association record
+        """
         try:
+            # Terminate the container by sandbox_id
             await self._adapter.terminate_sandbox(association.sandbox_id)
         except Exception:
-            # Ignore errors during cleanup
+            # Ignore errors during cleanup - container might not exist
             pass
+
+        try:
+            # Also cleanup any orphan containers for this project
+            await self._adapter.cleanup_project_containers(association.project_id)
+        except Exception as e:
+            logger.warning(
+                f"Failed to cleanup orphan containers for project {association.project_id}: {e}"
+            )
+
+        # Delete the database association record to allow fresh creation
+        try:
+            await self._repository.delete(association.id)
+            logger.info(
+                f"Deleted sandbox association {association.id} for project {association.project_id}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to delete sandbox association {association.id}: {e}")
 
     async def _get_sandbox_info(self, association: ProjectSandbox) -> SandboxInfo:
         """Build SandboxInfo from association and container."""
@@ -647,7 +671,11 @@ class ProjectSandboxLifecycleService:
         profile_type = profile or self._default_profile
         sandbox_profile = get_sandbox_profile(profile_type)
 
+        # Get image from profile or use default
+        image = sandbox_profile.image_name or "sandbox-mcp-server:latest"
+
         config = SandboxConfig(
+            image=image,
             memory_limit=sandbox_profile.memory_limit,
             cpu_limit=sandbox_profile.cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
@@ -657,6 +685,8 @@ class ProjectSandboxLifecycleService:
 
         # Apply overrides
         if config_override:
+            if "image" in config_override:
+                config.image = config_override["image"]
             if "memory_limit" in config_override:
                 config.memory_limit = config_override["memory_limit"]
             if "cpu_limit" in config_override:

@@ -3,6 +3,7 @@
  *
  * Shows the output from sandbox tool executions (read, write, edit, etc.)
  * with proper formatting and syntax highlighting.
+ * Now supports artifact display for rich outputs (images, videos, etc.)
  */
 
 import { useState, useMemo } from "react";
@@ -16,8 +17,12 @@ import {
   SearchOutlined,
   EditOutlined,
   FolderOutlined,
+  PictureOutlined,
 } from "@ant-design/icons";
 import type { CollapseProps } from "antd";
+
+import type { Artifact } from "../../../types/agent";
+import { ArtifactRenderer } from "../../artifact";
 
 const { Text } = Typography;
 
@@ -29,6 +34,8 @@ export interface ToolExecution {
   error?: string;
   durationMs?: number;
   timestamp: number;
+  /** Artifacts produced by this tool execution */
+  artifacts?: Artifact[];
 }
 
 export interface SandboxOutputViewerProps {
@@ -38,6 +45,8 @@ export interface SandboxOutputViewerProps {
   maxHeight?: string | number;
   /** Called when user clicks on a file path */
   onFileClick?: (filePath: string) => void;
+  /** Called when user wants to expand an artifact */
+  onArtifactExpand?: (artifact: Artifact) => void;
 }
 
 // Tool icons mapping
@@ -63,9 +72,11 @@ const TOOL_COLORS: Record<string, string> = {
 function ToolExecutionCard({
   execution,
   onFileClick,
+  onArtifactExpand,
 }: {
   execution: ToolExecution;
   onFileClick?: (filePath: string) => void;
+  onArtifactExpand?: (artifact: Artifact) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -180,6 +191,29 @@ function ToolExecutionCard({
           </div>
         )}
       </div>
+
+      {/* Artifacts section */}
+      {execution.artifacts && execution.artifacts.length > 0 && (
+        <div className="border-t border-slate-200">
+          <div className="px-3 py-2 bg-slate-50 flex items-center gap-2">
+            <PictureOutlined className="text-blue-500" />
+            <Text className="text-xs text-slate-600">
+              {execution.artifacts.length} artifact{execution.artifacts.length > 1 ? "s" : ""}
+            </Text>
+          </div>
+          <div className="p-3 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+            {execution.artifacts.map((artifact) => (
+              <ArtifactRenderer
+                key={artifact.id}
+                artifact={artifact}
+                compact
+                maxHeight={120}
+                onExpand={onArtifactExpand}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -188,6 +222,7 @@ export function SandboxOutputViewer({
   executions,
   maxHeight = "100%",
   onFileClick,
+  onArtifactExpand,
 }: SandboxOutputViewerProps) {
   if (executions.length === 0) {
     return (
@@ -222,10 +257,19 @@ export function SandboxOutputViewer({
             {new Date(exec.timestamp).toLocaleTimeString()}
           </Text>
           {exec.error && <Tag color="error">Error</Tag>}
+          {exec.artifacts && exec.artifacts.length > 0 && (
+            <Tag icon={<PictureOutlined />} color="blue">
+              {exec.artifacts.length}
+            </Tag>
+          )}
         </div>
       ),
       children: (
-        <ToolExecutionCard execution={exec} onFileClick={onFileClick} />
+        <ToolExecutionCard
+          execution={exec}
+          onFileClick={onFileClick}
+          onArtifactExpand={onArtifactExpand}
+        />
       ),
     }));
 
@@ -247,6 +291,7 @@ export function SandboxOutputViewer({
           key={exec.id}
           execution={exec}
           onFileClick={onFileClick}
+          onArtifactExpand={onArtifactExpand}
         />
       ))}
     </div>

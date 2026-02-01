@@ -226,10 +226,47 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to sync sandbox containers from Docker: {e}")
 
+    # Start Docker event monitor for real-time container status updates
+    docker_event_monitor = None
+    try:
+        from src.application.services.sandbox_status_sync_service import SandboxStatusSyncService
+        from src.infrastructure.adapters.secondary.sandbox.docker_event_monitor import (
+            start_docker_event_monitor,
+        )
+
+        # Get event publisher from container (already configured with Redis event bus)
+        event_publisher = container.sandbox_event_publisher()
+
+        # Create status sync service
+        sync_service = SandboxStatusSyncService(
+            session_factory=async_session_factory,
+            event_publisher=event_publisher,
+        )
+
+        # Start monitor with sync service callback
+        docker_event_monitor = await start_docker_event_monitor(
+            on_status_change=sync_service.handle_status_change
+        )
+        logger.info("Docker event monitor started for real-time container status updates")
+    except Exception as e:
+        logger.warning(f"Failed to start Docker event monitor: {e}")
+
     yield
 
     # Shutdown
     logger.info("Shutting down...")
+
+    # Stop Docker event monitor
+    if docker_event_monitor:
+        try:
+            from src.infrastructure.adapters.secondary.sandbox.docker_event_monitor import (
+                stop_docker_event_monitor,
+            )
+
+            await stop_docker_event_monitor()
+            logger.info("Docker event monitor stopped")
+        except Exception as e:
+            logger.warning(f"Error stopping Docker event monitor: {e}")
 
     # Shutdown OpenTelemetry
     if settings.enable_telemetry:
