@@ -8,11 +8,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
-from src.infrastructure.telemetry import (
-    configure_telemetry,
-    instrument_all,
-    shutdown_telemetry,
-)
 from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_native_graph_adapter
 from src.infrastructure.adapters.primary.web.dependencies import initialize_default_credentials
@@ -20,6 +15,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     agent,
     agent_websocket,
     ai_tools,
+    artifacts,
     auth,
     background_tasks,
     billing,
@@ -53,6 +49,10 @@ from src.infrastructure.adapters.secondary.persistence.database import (
 from src.infrastructure.adapters.secondary.temporal import TemporalWorkflowEngine
 from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
 from src.infrastructure.middleware.rate_limit import limiter
+from src.infrastructure.telemetry import (
+    instrument_all,
+    shutdown_telemetry,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -214,6 +214,17 @@ async def lifespan(app: FastAPI):
     ws_manager = get_connection_manager()
     register_websocket_manager(ws_manager)
     logger.info("WebSocket manager registered for lifecycle state notifications")
+
+    # Sync existing sandbox containers from Docker
+    logger.info("Syncing existing sandbox containers from Docker...")
+    try:
+        from src.infrastructure.adapters.primary.web.routers.sandbox import (
+            ensure_sandbox_sync,
+        )
+
+        await ensure_sandbox_sync()
+    except Exception as e:
+        logger.warning(f"Failed to sync sandbox containers from Docker: {e}")
 
     yield
 
@@ -393,6 +404,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Terminal (Interactive shell via WebSocket)
     app.include_router(terminal.router)
+
+    # Artifacts (Rich output from sandbox/MCP tools)
+    app.include_router(artifacts.router)
 
     return app
 

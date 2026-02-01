@@ -313,8 +313,10 @@ async def main():
         set_mcp_sandbox_adapter(mcp_sandbox_adapter)
         logger.info("Agent Worker: MCP Sandbox Adapter initialized")
 
-        # Sync existing sandbox containers from Docker
-        asyncio.create_task(sync_mcp_sandbox_adapter_from_docker())
+        # Sync existing sandbox containers from Docker (wait for completion)
+        count = await sync_mcp_sandbox_adapter_from_docker()
+        if count > 0:
+            logger.info(f"Agent Worker: Synced {count} existing sandboxes from Docker")
 
     except Exception as e:
         logger.warning(

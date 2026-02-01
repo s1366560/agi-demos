@@ -35,6 +35,8 @@ _sandbox_adapter: Optional[MCPSandboxAdapter] = None
 _sandbox_orchestrator: Optional[SandboxOrchestrator] = None
 _event_publisher: Optional[SandboxEventPublisher] = None
 _worker_id: Optional[int] = None  # Track worker ID for multi-worker detection
+_sync_pending: bool = False  # Track if sync is pending
+_sync_lock = asyncio.Lock()  # Async lock for sync operation
 
 
 def _get_worker_id() -> int:
@@ -46,7 +48,7 @@ def _get_worker_id() -> int:
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
     """Get or create the sandbox adapter singleton with thread-safe initialization."""
-    global _sandbox_adapter, _worker_id
+    global _sandbox_adapter, _worker_id, _sync_pending
 
     current_worker = _get_worker_id()
 
@@ -59,13 +61,45 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
             )
             _sandbox_adapter = None
             _worker_id = current_worker
+            _sync_pending = False  # Reset sync flag on reinit
 
         if _sandbox_adapter is None:
             _sandbox_adapter = MCPSandboxAdapter()
             _worker_id = current_worker
+            _sync_pending = True  # Mark sync as pending
             logger.info(f"Initialized sandbox adapter for worker {current_worker}")
 
         return _sandbox_adapter
+
+
+async def ensure_sandbox_sync() -> None:
+    """Ensure sandbox adapter is synced with existing Docker containers.
+
+    This should be called during application startup to discover and recover
+    any existing sandbox containers that were created before the adapter was
+    (re)initialized.
+
+    This function is idempotent and will only sync once per adapter instance.
+    """
+    global _sync_pending
+
+    adapter = get_sandbox_adapter()
+
+    async with _sync_lock:
+        if not _sync_pending:
+            # Already synced
+            return
+
+        try:
+            count = await adapter.sync_from_docker()
+            if count > 0:
+                logger.info(f"API Server: Synced {count} existing sandboxes from Docker")
+            else:
+                logger.info("API Server: No existing sandboxes found in Docker")
+            _sync_pending = False
+        except Exception as e:
+            logger.warning(f"API Server: Failed to sync sandboxes from Docker: {e}")
+            _sync_pending = False
 
 
 def get_sandbox_orchestrator() -> SandboxOrchestrator:
