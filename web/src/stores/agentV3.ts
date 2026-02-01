@@ -24,7 +24,6 @@ import {
     EnvVarRequestedEventData,
 } from "../types/agent";
 import { agentService } from "../services/agentService";
-import { agentEventReplayService } from "../services/agentEventReplayService";
 import { planService } from "../services/planService";
 import { v4 as uuidv4 } from "uuid";
 import { appendSSEEventToTimeline } from "../utils/sseEventAdapter";
@@ -388,17 +387,27 @@ export const useAgentV3Store = create<AgentV3State>()(
                             lastSequence,
                         });
 
-                        // Check execution status and recover stream if needed
+                        // If agent is running, set up streaming state and subscribe to WebSocket
+                        // The normal WebSocket event flow will handle incoming events
+                        // No special recovery logic needed - just subscribe and wait for events
                         if (execStatus?.is_running) {
                             console.log(
                                 `[AgentV3] Conversation ${conversationId} is running, ` +
-                                `recovery=${JSON.stringify(execStatus.recovery)}`
+                                `subscribing to WebSocket for live events...`
                             );
 
-                            // Create handler for recovery/streaming events
-                            const recoveryHandler: AgentStreamHandler = {
+                            // Set streaming state
+                            set({ isStreaming: true, agentState: "thinking" });
+
+                            // Ensure WebSocket is connected
+                            if (!agentService.isConnected()) {
+                                console.log(`[AgentV3] Connecting WebSocket...`);
+                                await agentService.connect();
+                            }
+
+                            // Simple handler for streaming events - same as normal chat
+                            const streamHandler: AgentStreamHandler = {
                                 onTextDelta: (event) => {
-                                    // Append streaming text
                                     set((state) => ({
                                         streamingAssistantContent: state.streamingAssistantContent + (event.data.delta || ""),
                                     }));
@@ -464,7 +473,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                                         return { activeToolCalls: newMap, agentState: "acting" };
                                     });
                                 },
-                                onObserve: (_event) => {
+                                onObserve: () => {
                                     set((state) => {
                                         const stack = [...state.pendingToolsStack];
                                         stack.pop();
@@ -472,6 +481,9 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     });
                                 },
                                 onComplete: () => {
+                                    console.log(`[AgentV3] Stream complete, resetting state`);
+                                    // Simply reset streaming state - messages are already loaded
+                                    // or will be loaded on next conversation switch
                                     set({
                                         isStreaming: false,
                                         agentState: "idle",
@@ -488,45 +500,11 @@ export const useAgentV3Store = create<AgentV3State>()(
                                         agentState: "idle",
                                     });
                                 },
-                                onRecoveryComplete: (event) => {
-                                    console.log(
-                                        `[AgentV3] Recovery complete: recovered ${event.data.recovered_count} events ` +
-                                        `from ${event.data.source}`
-                                    );
-                                },
                             };
 
-                            // Use recoverStream for seamless event recovery
-                            try {
-                                set({ isStreaming: true, agentState: "thinking" });
-
-                                // Ensure WebSocket is connected BEFORE attempting recovery
-                                if (!agentService.isConnected()) {
-                                    console.log(`[AgentV3] Connecting WebSocket before recovery...`);
-                                    await agentService.connect();
-                                }
-
-                                // Register handler first, then recover
-                                agentService.subscribe(conversationId, recoveryHandler);
-
-                                const recoveryResult = await agentService.recoverStream(
-                                    conversationId,
-                                    projectId,
-                                    lastSequence,  // Resume from last loaded sequence
-                                    execStatus.current_message_id ?? undefined,
-                                    recoveryHandler
-                                );
-
-                                console.log(`[AgentV3] Stream recovery initiated for ${conversationId}:`, recoveryResult);
-                            } catch (recoveryError) {
-                                console.error(`[AgentV3] Stream recovery failed:`, recoveryError);
-                                // Fall back to event replay service
-                                await agentEventReplayService.replayEvents(
-                                    conversationId,
-                                    recoveryHandler,
-                                    lastSequence
-                                );
-                            }
+                            // Subscribe to conversation - WebSocket will forward events from Redis Stream
+                            agentService.subscribe(conversationId, streamHandler);
+                            console.log(`[AgentV3] Subscribed to conversation ${conversationId}`);
                         }
 
                         set({ isLoadingHistory: false });
@@ -891,7 +869,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                             set((state) => {
                                 const fullText = event.data.full_text;
                                 const finalContent = fullText || (state.streamingAssistantContent + remainingBuffer);
-                                
+
                                 // Add text_end event to timeline for proper rendering
                                 // This converts the streaming content to a formal timeline event
                                 const textEndEvent: AgentEvent<any> = {
@@ -899,8 +877,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     data: { full_text: finalContent },
                                 };
                                 const updatedTimeline = appendSSEEventToTimeline(state.timeline, textEndEvent);
-                                
-                                return { 
+
+                                return {
                                     streamingAssistantContent: finalContent,
                                     timeline: updatedTimeline,
                                 };
@@ -986,10 +964,18 @@ export const useAgentV3Store = create<AgentV3State>()(
                             thoughtDeltaBuffer = '';
 
                             set((state) => {
-                                // Append complete event to timeline using SSE adapter
-                                // This adds the assistant_message to timeline
-                                const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+                                // Check if we already have a text_end event with content
+                                // If so, skip adding assistant_message to avoid duplicate content
+                                const hasTextEndWithContent = state.timeline.some(
+                                    (e) => e.type === 'text_end' && 'fullText' in e && e.fullText?.trim()
+                                );
+
+                                let updatedTimeline = state.timeline;
+                                if (!hasTextEndWithContent) {
+                                    // Only add assistant_message if there's no text_end with content
+                                    const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+                                    updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+                                }
 
                                 // Derive messages from updated timeline (no merging)
                                 const newMessages = timelineToMessages(updatedTimeline);

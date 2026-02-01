@@ -1317,3 +1317,59 @@ class HITLRequest(IdGeneratorMixin, Base):
         Index("ix_hitl_requests_tenant_project_status", "tenant_id", "project_id", "status"),
         Index("ix_hitl_requests_expires_at", "expires_at"),
     )
+
+
+class MessageExecutionStatus(Base):
+    """
+    Tracks the execution status of an assistant message generation.
+
+    This is different from AgentExecution which tracks individual Think-Act-Observe cycles.
+    MessageExecutionStatus tracks the overall message generation process, enabling:
+    - Detection of in-progress executions after page refresh
+    - Event recovery from the correct position
+    - Proper state restoration in the frontend
+
+    One MessageExecutionStatus per assistant message.
+    """
+
+    __tablename__ = "message_execution_status"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # Same as message_id
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    message_id: Mapped[str] = mapped_column(
+        String, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Execution status: pending | running | completed | failed | cancelled
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+
+    # Event tracking for recovery
+    last_event_sequence: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Error information
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Timestamps
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    conversation: Mapped["Conversation"] = relationship(foreign_keys=[conversation_id])
+    message: Mapped["Message"] = relationship(foreign_keys=[message_id])
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+
+    __table_args__ = (
+        Index("ix_msg_exec_status_conv_status", "conversation_id", "status"),
+        Index("ix_msg_exec_status_tenant_project", "tenant_id", "project_id", "status"),
+    )

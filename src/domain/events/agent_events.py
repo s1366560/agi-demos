@@ -61,8 +61,6 @@ class AgentEventType(str, Enum):
     # Environment variable events
     ENV_VAR_REQUESTED = "env_var_requested"
     ENV_VAR_PROVIDED = "env_var_provided"
-    ENV_VAR_BATCH_REQUESTED = "env_var_batch_requested"
-    ENV_VAR_BATCH_PROVIDED = "env_var_batch_provided"
 
     # Cost events
     COST_UPDATE = "cost_update"
@@ -370,23 +368,6 @@ class AgentEnvVarProvidedEvent(AgentDomainEvent):
     request_id: str
     tool_name: str
     saved_variables: List[str]
-
-
-class AgentEnvVarBatchRequestedEvent(AgentDomainEvent):
-    """Event: Agent requests multiple env vars from multiple tools."""
-
-    event_type: AgentEventType = AgentEventType.ENV_VAR_BATCH_REQUESTED
-    request_id: str
-    requests: List[Dict[str, Any]]  # List of {tool_name, fields}
-    context: Dict[str, Any] = Field(default_factory=dict)
-
-
-class AgentEnvVarBatchProvidedEvent(AgentDomainEvent):
-    """Event: User provided multiple env var values."""
-
-    event_type: AgentEventType = AgentEventType.ENV_VAR_BATCH_PROVIDED
-    request_id: str
-    results: List[Dict[str, Any]]  # List of {tool_name, saved_variables}
 
 
 # === Cost Events ===

@@ -363,6 +363,7 @@ export const MessageArea = memo<MessageAreaProps>(({
             />
           ))}
           {/* Streaming thought indicator - shows thought_delta content in real-time */}
+          {/* Rendered BEFORE streaming content to maintain correct order: thought -> response */}
           {(isThinkingStreaming || streamingThought) && (
             <StreamingThoughtBubble 
               content={streamingThought || ''} 
@@ -371,7 +372,8 @@ export const MessageArea = memo<MessageAreaProps>(({
           )}
 
           {/* Streaming content indicator - shows text_delta content in real-time */}
-          {isStreaming && streamingContent && (
+          {/* Only show when streaming AND we have content AND NOT thinking (to avoid showing response before thought) */}
+          {isStreaming && streamingContent && !isThinkingStreaming && (
             <div className="flex items-start gap-3 animate-slide-up">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
                 <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

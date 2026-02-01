@@ -486,6 +486,7 @@ class AgentServiceImpl implements AgentService {
 
         if (type === "ack") {
             logger.debug(`[AgentWS] Ack for ${message.action} on ${conversation_id}`);
+            // Ack handling simplified - just log
             return;
         }
 
@@ -509,7 +510,15 @@ class AgentServiceImpl implements AgentService {
         // Route conversation-specific messages to handlers
         if (conversation_id) {
             const handler = this.handlers.get(conversation_id);
-            logger.debug("[AgentWS] Looking for handler:", { conversation_id, hasHandler: !!handler, handlersSize: this.handlers.size });
+            // DEBUG: Enhanced logging for recovery troubleshooting
+            const isRecovery = (message as { is_recovery?: boolean }).is_recovery;
+            logger.debug("[AgentWS] Looking for handler:", {
+                conversation_id,
+                hasHandler: !!handler,
+                handlersSize: this.handlers.size,
+                type,
+                isRecovery,
+            });
             if (handler) {
                 this.routeToHandler(type as AgentEventType, data, handler);
             } else {
@@ -988,7 +997,6 @@ class AgentServiceImpl implements AgentService {
             });
         }
     }
-
     /**
      * Unsubscribe from a conversation's events
      *
@@ -1546,20 +1554,47 @@ class AgentServiceImpl implements AgentService {
      * } else {
      *   console.log('Last sequence:', status.last_sequence);
      * }
+     *
+     * // With recovery info
+     * const statusWithRecovery = await agentService.getExecutionStatus('conv-123', true, 100);
+     * if (statusWithRecovery.recovery?.can_recover) {
+     *   console.log('Can recover', statusWithRecovery.recovery.missed_events_count, 'events');
+     * }
      * ```
      */
-    async getExecutionStatus(conversationId: string): Promise<{
+    async getExecutionStatus(
+        conversationId: string,
+        includeRecovery: boolean = false,
+        fromSequence: number = 0
+    ): Promise<{
         is_running: boolean;
         last_sequence: number;
         current_message_id: string | null;
         conversation_id: string;
+        recovery?: {
+            can_recover: boolean;
+            stream_exists: boolean;
+            recovery_source: string;
+            missed_events_count: number;
+        };
     }> {
         const response = await api.get<{
             is_running: boolean;
             last_sequence: number;
             current_message_id: string | null;
             conversation_id: string;
-        }>(`/agent/conversations/${conversationId}/execution-status`);
+            recovery?: {
+                can_recover: boolean;
+                stream_exists: boolean;
+                recovery_source: string;
+                missed_events_count: number;
+            };
+        }>(`/agent/conversations/${conversationId}/execution-status`, {
+            params: {
+                include_recovery: includeRecovery,
+                from_sequence: fromSequence,
+            },
+        });
         return response;
     }
 

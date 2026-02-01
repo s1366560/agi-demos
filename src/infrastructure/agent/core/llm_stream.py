@@ -590,9 +590,9 @@ class LLMStream:
 
         # Import rate limiter for concurrency control
         from src.infrastructure.llm.rate_limiter import (
-            get_rate_limiter,
             ProviderType,
             RateLimitError,
+            get_rate_limiter,
         )
 
         request_id = request_id or str(uuid.uuid4())
@@ -650,8 +650,7 @@ class LLMStream:
         except RateLimitError as e:
             logger.warning(f"Rate limit exceeded for {provider_name}: {e}")
             yield StreamEvent.error(
-                f"Rate limit exceeded. Please wait a moment and try again.",
-                code="RATE_LIMIT"
+                "Rate limit exceeded. Please wait a moment and try again.", code="RATE_LIMIT"
             )
         except Exception as e:
             logger.error(f"LLM stream error: {e}", exc_info=True)
@@ -821,15 +820,18 @@ class LLMStream:
         Yields:
             Final StreamEvent objects
         """
-        # End text stream if active
-        if self._in_text:
-            yield StreamEvent.text_end(self._text_buffer)
-            self._in_text = False
-
-        # End reasoning stream if active
+        # IMPORTANT: End reasoning stream BEFORE text stream
+        # Reasoning (thought) should logically complete before the final response (text)
+        # This ensures correct timeline ordering in the frontend:
+        # thought -> response (not response -> thought)
         if self._in_reasoning:
             yield StreamEvent.reasoning_end(self._reasoning_buffer)
             self._in_reasoning = False
+
+        # End text stream after reasoning is complete
+        if self._in_text:
+            yield StreamEvent.text_end(self._text_buffer)
+            self._in_text = False
 
         # Complete any pending tool calls
         for index, tracker in self._tool_calls.items():

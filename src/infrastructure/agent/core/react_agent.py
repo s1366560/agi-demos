@@ -817,9 +817,16 @@ class ReActAgent:
                 # Convert AgentDomainEvent to legacy event format
                 event = self._convert_domain_event(domain_event)
                 if event:
-                    # Track complete content
+                    # Track complete content from text_delta events
                     if event.get("type") == "text_delta":
                         final_content += event.get("data", {}).get("delta", "")
+                    # Use text_end full_text as authoritative final content (handles buffer edge cases)
+                    elif event.get("type") == "text_end":
+                        text_end_content = event.get("data", {}).get("full_text", "")
+                        if text_end_content:
+                            final_content = (
+                                text_end_content  # Override with authoritative full text
+                            )
 
                     yield event
 

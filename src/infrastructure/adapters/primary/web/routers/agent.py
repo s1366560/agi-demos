@@ -634,7 +634,7 @@ async def get_conversation_messages(
         # When both from_sequence=0 and before_sequence=None, fetch the latest events
         calculated_from_sequence = from_sequence
         calculated_before_sequence = before_sequence
-        
+
         if from_sequence == 0 and before_sequence is None:
             # Use backward pagination to get the latest N displayable events
             # Set before_sequence to a large value to get the most recent events
@@ -911,24 +911,38 @@ async def get_conversation_tool_executions(
 async def get_conversation_execution_status(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
+    include_recovery_info: bool = Query(
+        False, description="Include event recovery information for stream resumption"
+    ),
+    from_sequence: int = Query(
+        0, description="Client's last known sequence (for recovery calculation)"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ) -> dict:
     """
-    Get the current execution status of a conversation.
+    Get the current execution status of a conversation with optional recovery info.
 
     This endpoint checks the Redis is_running key to determine if an agent
     is currently executing for this conversation.
 
+    When include_recovery_info=true, also returns information needed to
+    recover event stream after page refresh:
+    - last_sequence: Latest sequence number in event stream
+    - missed_events_count: Number of events missed since from_sequence
+    - can_recover: Whether recovery is possible (stream still exists)
+
     Args:
         conversation_id: Conversation ID
         project_id: Project ID for authorization
+        include_recovery_info: Include recovery information for stream resumption
+        from_sequence: Client's last known sequence (for missed_events calculation)
         current_user: Authenticated user
         db: Database session
 
     Returns:
-        Dictionary with execution status
+        Dictionary with execution status and optional recovery info
 
     Raises:
         404: If conversation not found or unauthorized
@@ -970,17 +984,109 @@ async def get_conversation_execution_status(
                             else message_id_bytes
                         )
 
-        return {
+        result = {
             "conversation_id": conversation_id,
             "is_running": is_running,
             "current_message_id": current_message_id,
         }
+
+        # Include recovery info if requested
+        if include_recovery_info:
+            recovery_info = await _get_recovery_info(
+                container=container,
+                redis_client=redis_client,
+                conversation_id=conversation_id,
+                message_id=current_message_id,
+                from_sequence=from_sequence,
+            )
+            result["recovery"] = recovery_info
+
+        return result
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting conversation execution status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get execution status: {str(e)}")
+
+
+async def _get_recovery_info(
+    container,
+    redis_client,
+    conversation_id: str,
+    message_id: Optional[str],
+    from_sequence: int,
+) -> dict:
+    """
+    Get event stream recovery information.
+
+    Checks both Redis Stream and database for recovery data.
+
+    Args:
+        container: DI container
+        redis_client: Redis client
+        conversation_id: Conversation ID
+        message_id: Current message ID being processed (if any)
+        from_sequence: Client's last known sequence
+
+    Returns:
+        Dictionary with recovery information:
+        - can_recover: Whether recovery is possible
+        - last_sequence: Latest sequence in the stream
+        - missed_events_count: Events missed since from_sequence
+        - stream_exists: Whether Redis Stream exists
+        - recovery_source: "stream" or "database"
+    """
+    recovery_info = {
+        "can_recover": False,
+        "last_sequence": -1,
+        "missed_events_count": 0,
+        "stream_exists": False,
+        "recovery_source": "none",
+    }
+
+    try:
+        # Check Redis Stream for live events
+        if redis_client and message_id:
+            import redis.asyncio as redis
+
+            if isinstance(redis_client, redis.Redis):
+                stream_key = f"agent:events:{conversation_id}"
+                try:
+                    # Check if stream exists
+                    stream_info = await redis_client.xinfo_stream(stream_key)
+                    if stream_info:
+                        recovery_info["stream_exists"] = True
+                        # Get last entry to find last sequence
+                        last_entry = await redis_client.xrevrange(stream_key, count=1)
+                        if last_entry:
+                            _, fields = last_entry[0]
+                            seq_raw = fields.get(b"seq") or fields.get("seq")
+                            if seq_raw:
+                                recovery_info["last_sequence"] = int(seq_raw)
+                                recovery_info["can_recover"] = True
+                                recovery_info["recovery_source"] = "stream"
+                                recovery_info["missed_events_count"] = max(
+                                    0, recovery_info["last_sequence"] - from_sequence
+                                )
+                except redis.ResponseError:
+                    # Stream doesn't exist
+                    pass
+
+        # Fallback to database if stream doesn't exist or no message_id
+        if not recovery_info["stream_exists"]:
+            event_repo = container.agent_execution_event_repository()
+            last_db_seq = await event_repo.get_last_sequence(conversation_id)
+            if last_db_seq >= 0:
+                recovery_info["last_sequence"] = last_db_seq
+                recovery_info["can_recover"] = True
+                recovery_info["recovery_source"] = "database"
+                recovery_info["missed_events_count"] = max(0, last_db_seq - from_sequence)
+
+    except Exception as e:
+        logger.warning(f"Error getting recovery info: {e}")
+
+    return recovery_info
 
 
 # === Workflow Pattern Endpoints (T080-T083) ===
@@ -2672,13 +2778,23 @@ class EventReplayResponse(BaseModel):
     has_more: bool
 
 
+class RecoveryInfo(BaseModel):
+    """Information needed for event stream recovery."""
+
+    can_recover: bool = False
+    stream_exists: bool = False
+    recovery_source: str = "none"  # "stream", "database", or "none"
+    missed_events_count: int = 0
+
+
 class ExecutionStatusResponse(BaseModel):
-    """Response with execution status."""
+    """Response with execution status and optional recovery information."""
 
     is_running: bool
     last_sequence: int
     current_message_id: Optional[str] = None
     conversation_id: str
+    recovery: Optional[RecoveryInfo] = None
 
 
 class WorkflowStatusResponse(BaseModel):
@@ -2752,24 +2868,39 @@ async def get_conversation_events(
 )
 async def get_execution_status(
     conversation_id: str,
+    include_recovery: bool = Query(
+        False, description="Include recovery information for stream resumption"
+    ),
+    from_sequence: int = Query(
+        0, description="Client's last known sequence (for recovery calculation)"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ) -> ExecutionStatusResponse:
     """
-    Get the current execution status of a conversation.
+    Get the current execution status of a conversation with optional recovery info.
 
     This endpoint provides information about whether an agent is currently
     executing for this conversation, the last event sequence number, and
     the current message being processed.
 
+    When include_recovery=true, also returns information needed to
+    recover event stream after page refresh:
+    - can_recover: Whether recovery is possible
+    - stream_exists: Whether Redis Stream exists
+    - recovery_source: "stream", "database", or "none"
+    - missed_events_count: Events missed since from_sequence
+
     Args:
         conversation_id: The conversation ID
+        include_recovery: Include recovery information
+        from_sequence: Client's last known sequence (for missed_events calculation)
         current_user: Authenticated user
         db: Database session
 
     Returns:
-        Execution status information
+        Execution status information with optional recovery details
     """
     try:
         container = get_container_with_db(request, db)
@@ -2795,6 +2926,11 @@ async def get_execution_status(
         if redis_client:
             running_key = f"agent:running:{conversation_id}"
             running_message_id = await redis_client.get(running_key)
+            # DEBUG: Log the running state check
+            logger.warning(
+                f"[ExecutionStatus] Redis check for {running_key}: "
+                f"value={running_message_id}, is_running={bool(running_message_id)}"
+            )
             if running_message_id:
                 is_running = True
                 current_message_id = (
@@ -2813,12 +2949,53 @@ async def get_execution_status(
             if events:
                 current_message_id = events[-1].message_id
 
-        return ExecutionStatusResponse(
+        # Build response
+        response = ExecutionStatusResponse(
             is_running=is_running,
             last_sequence=last_sequence,
             current_message_id=current_message_id,
             conversation_id=conversation_id,
         )
+
+        # Include recovery info if requested
+        if include_recovery:
+            recovery_info = RecoveryInfo(
+                can_recover=last_sequence > from_sequence,
+                recovery_source="database" if last_sequence > 0 else "none",
+                missed_events_count=max(0, last_sequence - from_sequence),
+            )
+
+            # Check Redis Stream for live events
+            if redis_client and current_message_id:
+                import redis.asyncio as redis
+
+                if isinstance(redis_client, redis.Redis):
+                    stream_key = f"agent:events:{conversation_id}"
+                    try:
+                        # Check if stream exists
+                        stream_info = await redis_client.xinfo_stream(stream_key)
+                        if stream_info:
+                            recovery_info.stream_exists = True
+                            recovery_info.recovery_source = "stream"
+                            # Get last entry to find last sequence
+                            last_entry = await redis_client.xrevrange(stream_key, count=1)
+                            if last_entry:
+                                _, fields = last_entry[0]
+                                seq_raw = fields.get(b"seq") or fields.get("seq")
+                                if seq_raw:
+                                    stream_seq = int(seq_raw)
+                                    if stream_seq > last_sequence:
+                                        recovery_info.missed_events_count = max(
+                                            0, stream_seq - from_sequence
+                                        )
+                                        recovery_info.can_recover = True
+                    except redis.ResponseError:
+                        # Stream doesn't exist
+                        pass
+
+            response.recovery = recovery_info
+
+        return response
 
     except Exception as e:
         logger.error(f"Error getting execution status: {e}", exc_info=True)

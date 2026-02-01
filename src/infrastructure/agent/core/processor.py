@@ -716,6 +716,10 @@ class SessionProcessor:
 
                     elif event.type == StreamEventType.TEXT_END:
                         full_text = event.data.get("full_text", text_buffer)
+                        logger.info(
+                            f"[Processor] Yielding TEXT_END: full_text_len={len(full_text) if full_text else 0}, "
+                            f"preview={full_text[:50] if full_text else '(empty)'}..."
+                        )
                         self._current_message.add_text(full_text)
                         yield AgentTextEndEvent(full_text=full_text)
 

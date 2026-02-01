@@ -399,6 +399,16 @@ async def execute_chat_activity(
         redis_client = await get_redis_client()
         event_bus = RedisEventBusAdapter(redis_client)
 
+        # Mark agent as running in Redis for page refresh recovery
+        # This allows frontend to detect running state and recover stream
+        running_key = f"agent:running:{conversation_id}"
+        await redis_client.setex(
+            running_key,
+            300,  # 5 minute TTL (should be longer than any chat execution)
+            message_id,
+        )
+        logger.info(f"[AgentSession] Set agent running: {running_key} -> {message_id}")
+
         # Get LLM provider configuration (cached)
         provider_config = await get_or_create_provider_config()
 
@@ -690,6 +700,13 @@ async def execute_chat_activity(
             f"conversation={conversation_id}, error={is_error}"
         )
 
+        # Clear running state after completion
+        try:
+            await redis_client.delete(running_key)
+            logger.info(f"[AgentSession] Cleared agent running: {running_key}")
+        except Exception as clear_err:
+            logger.warning(f"[AgentSession] Failed to clear running state: {clear_err}")
+
         return {
             "content": final_content,
             "sequence_number": sequence_number,
@@ -700,6 +717,14 @@ async def execute_chat_activity(
 
     except Exception as e:
         logger.error(f"[AgentSession] Chat execution failed: {e}", exc_info=True)
+        # Try to clear running state on error
+        try:
+            redis_client = await get_redis_client()
+            running_key = f"agent:running:{input.get('conversation_id', '')}"
+            await redis_client.delete(running_key)
+            logger.info(f"[AgentSession] Cleared agent running on error: {running_key}")
+        except Exception as clear_err:
+            logger.warning(f"[AgentSession] Failed to clear running state on error: {clear_err}")
         return {
             "content": "",
             "sequence_number": 0,

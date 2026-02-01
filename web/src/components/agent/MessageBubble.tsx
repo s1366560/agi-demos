@@ -455,6 +455,32 @@ const StepStartBubble: React.FC<{ event: any }> = ({ event }) => {
   );
 };
 
+// Text End Component - Displays final assistant response after streaming completes
+const TextEndBubble: React.FC<{ event: TimelineEvent }> = ({ event }) => {
+  // Type guard for text_end event
+  if (event.type !== 'text_end') return null;
+  
+  const fullText = 'fullText' in event ? (event.fullText as string) : '';
+  if (!fullText || !fullText.trim()) return null;
+
+  return (
+    <div className="flex items-start gap-3 mb-4 animate-slide-up">
+      <Avatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
+        <Sparkles size={16} className="text-white" />
+      </Avatar>
+      <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+          <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {fullText}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Main Message Bubble Component
 export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   event,
@@ -510,9 +536,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
     case 'step_start':
       return <StepStartBubble event={event} />;
 
+    case 'text_end':
+      // Display final assistant response after streaming completes
+      return <TextEndBubble event={event} />;
+
     case 'step_end':
     case 'text_start':
-    case 'text_end':
       // These are control events, no visual output needed
       return null;
 
