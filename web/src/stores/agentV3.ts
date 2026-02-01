@@ -39,6 +39,8 @@ import {
     loadConversationState,
     deleteConversationState,
 } from "../utils/conversationDB";
+import { tabSync, type TabSyncMessage } from "../utils/tabSync";
+import { logger } from "../utils/logger";
 
 /**
  * Token delta batching configuration
@@ -514,6 +516,9 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                         // Remove from IndexedDB
                         deleteConversationState(conversationId).catch(console.error);
+
+                        // Broadcast to other tabs
+                        tabSync.broadcastConversationDeleted(conversationId);
                     } catch (error) {
                         console.error("Failed to delete conversation", error);
                         set({ error: "Failed to delete conversation" });
@@ -533,6 +538,9 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 c.id === conversationId ? updatedConversation : c
                             ),
                         }));
+
+                        // Broadcast to other tabs
+                        tabSync.broadcastConversationRenamed(conversationId, title);
                     } catch (error) {
                         console.error("Failed to rename conversation", error);
                         set({ error: "Failed to rename conversation" });
@@ -1558,6 +1566,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     pendingToolsStack: [],
                                 });
                             }
+
+                            // Broadcast completion to other tabs
+                            tabSync.broadcastConversationCompleted(handlerConversationId);
+                            tabSync.broadcastStreamingStateChanged(handlerConversationId, false, 'idle');
                         },
                         onError: (event) => {
                             const { activeConversationId, updateConversationState } = get();
@@ -1823,6 +1835,11 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                         await agentService.respondToClarification(requestId, answer);
                         set({ pendingClarification: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
+
+                        // Broadcast HITL state change to other tabs
+                        if (activeConversationId) {
+                            tabSync.broadcastHITLStateChanged(activeConversationId, false, 'clarification');
+                        }
                     } catch (error) {
                         console.error("Failed to respond to clarification:", error);
                         set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
@@ -1959,6 +1976,11 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                         await agentService.respondToDecision(requestId, decision);
                         set({ pendingDecision: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
+
+                        // Broadcast HITL state change to other tabs
+                        if (activeConversationId) {
+                            tabSync.broadcastHITLStateChanged(activeConversationId, false, 'decision');
+                        }
                     } catch (error) {
                         console.error("Failed to respond to decision:", error);
                         set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
@@ -2095,6 +2117,11 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                         await agentService.respondToEnvVar(requestId, values);
                         set({ pendingEnvVarRequest: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
+
+                        // Broadcast HITL state change to other tabs
+                        if (activeConversationId) {
+                            tabSync.broadcastHITLStateChanged(activeConversationId, false, 'env_var');
+                        }
                     } catch (error) {
                         console.error("Failed to respond to env var request:", error);
                         set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
@@ -2229,9 +2256,115 @@ export const useAgentV3Store = create<AgentV3State>()(
             }))
 );
 
-// Selectors for streaming content
-export const useStreamingThought = () => useAgentV3Store((state) => state.streamingThought);
-export const useIsThinkingStreaming = () => useAgentV3Store((state) => state.isThinkingStreaming);
+// ===== Cross-Tab Synchronization =====
+// Subscribe to tab sync messages to keep state consistent across browser tabs
+
+/**
+ * Initialize cross-tab synchronization
+ * This runs once when the module is loaded
+ */
+function initTabSync(): void {
+    if (!tabSync.isSupported()) {
+        logger.info('[AgentV3] Cross-tab sync not supported in this browser');
+        return;
+    }
+
+    logger.info('[AgentV3] Initializing cross-tab sync');
+
+    tabSync.subscribe((message: TabSyncMessage) => {
+        const state = useAgentV3Store.getState();
+
+        switch (message.type) {
+            case 'STREAMING_STATE_CHANGED': {
+                const msg = message as TabSyncMessage & {
+                    conversationId: string;
+                    isStreaming: boolean;
+                    streamStatus: string;
+                };
+                // Update conversation state if we have it
+                const convState = state.conversationStates.get(msg.conversationId);
+                if (convState) {
+                    state.updateConversationState(msg.conversationId, {
+                        isStreaming: msg.isStreaming,
+                        streamStatus: msg.streamStatus as 'idle' | 'connecting' | 'streaming' | 'error',
+                    });
+                    logger.debug(`[TabSync] Updated streaming state for ${msg.conversationId}`);
+                }
+                break;
+            }
+
+            case 'CONVERSATION_COMPLETED': {
+                const msg = message as TabSyncMessage & { conversationId: string };
+                // If this is our active conversation, reload messages to get the latest
+                if (state.activeConversationId === msg.conversationId) {
+                    // Trigger a refresh of messages
+                    logger.info(`[TabSync] Conversation ${msg.conversationId} completed in another tab, reloading...`);
+                    // Find the project ID from conversations list
+                    const conv = state.conversations.find(c => c.id === msg.conversationId);
+                    if (conv) {
+                        state.loadMessages(msg.conversationId, conv.project_id);
+                    }
+                }
+                break;
+            }
+
+            case 'HITL_STATE_CHANGED': {
+                const msg = message as TabSyncMessage & {
+                    conversationId: string;
+                    hasPendingHITL: boolean;
+                    hitlType?: string;
+                };
+                // Update HITL state for this conversation
+                const convState = state.conversationStates.get(msg.conversationId);
+                if (convState) {
+                    // If HITL was resolved in another tab, clear our local pending state
+                    if (!msg.hasPendingHITL) {
+                        state.updateConversationState(msg.conversationId, {
+                            pendingClarification: null,
+                            pendingDecision: null,
+                            pendingEnvVarRequest: null,
+                        });
+                    }
+                    logger.debug(`[TabSync] Updated HITL state for ${msg.conversationId}`);
+                }
+                break;
+            }
+
+            case 'CONVERSATION_DELETED': {
+                const msg = message as TabSyncMessage & { conversationId: string };
+                // Remove from conversations list
+                useAgentV3Store.setState((s) => ({
+                    conversations: s.conversations.filter(c => c.id !== msg.conversationId),
+                }));
+                // Clean up conversation state
+                const newStates = new Map(state.conversationStates);
+                newStates.delete(msg.conversationId);
+                useAgentV3Store.setState({ conversationStates: newStates });
+                // Clear active conversation if it was deleted
+                if (state.activeConversationId === msg.conversationId) {
+                    useAgentV3Store.setState({ activeConversationId: null });
+                }
+                logger.info(`[TabSync] Removed deleted conversation ${msg.conversationId}`);
+                break;
+            }
+
+            case 'CONVERSATION_RENAMED': {
+                const msg = message as TabSyncMessage & { conversationId: string; newTitle: string };
+                // Update title in conversations list
+                useAgentV3Store.setState((s) => ({
+                    conversations: s.conversations.map(c =>
+                        c.id === msg.conversationId ? { ...c, title: msg.newTitle } : c
+                    ),
+                }));
+                logger.debug(`[TabSync] Updated title for ${msg.conversationId}`);
+                break;
+            }
+        }
+    });
+}
+
+// Initialize tab sync on module load
+initTabSync();
 
 // Selector for derived messages (rerender-derived-state)
 // Messages are computed from timeline to avoid duplicate state

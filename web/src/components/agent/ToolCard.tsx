@@ -73,7 +73,7 @@ export const ToolCard: React.FC<ToolCardProps> = memo(({
     );
 
     const content = (
-        <Collapse ghost size="small" defaultActiveKey={status === 'running' ? ['1'] : []}>
+        <Collapse ghost size="small" defaultActiveKey={[]}>
             <Panel header={getHeader()} key="1">
                 <div className="space-y-2">
                     {/* Timing Info */}

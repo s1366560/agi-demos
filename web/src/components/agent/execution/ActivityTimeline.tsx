@@ -427,7 +427,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
     <Collapse
       ghost
       size="small"
-      defaultActiveKey={isActive ? ["1"] : []}
+      defaultActiveKey={[]}
       className={`${
         compact ? "mb-2" : "mb-4"
       } bg-slate-50/50 dark:bg-slate-800/30 rounded-lg border border-slate-100 dark:border-slate-700 w-full max-w-full`}
