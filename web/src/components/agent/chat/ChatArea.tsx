@@ -124,6 +124,12 @@ interface ChatAreaProps {
   hasEarlierMessages?: boolean;
   /** Pagination: load earlier messages callback */
   onLoadEarlier?: () => void;
+  /** Streaming content for real-time display */
+  streamingContent?: string;
+  /** Streaming thought for real-time display */
+  streamingThought?: string;
+  /** Whether thinking is currently streaming */
+  isThinkingStreaming?: boolean;
 }
 
 /**
@@ -139,7 +145,10 @@ function areChatAreaPropsEqual(
     prevProps.timeline !== nextProps.timeline ||
     prevProps.currentConversation?.id !== nextProps.currentConversation?.id ||
     prevProps.isStreaming !== nextProps.isStreaming ||
-    prevProps.messagesLoading !== nextProps.messagesLoading;
+    prevProps.messagesLoading !== nextProps.messagesLoading ||
+    prevProps.streamingContent !== nextProps.streamingContent ||
+    prevProps.streamingThought !== nextProps.streamingThought ||
+    prevProps.isThinkingStreaming !== nextProps.isThinkingStreaming;
 
   if (criticalPropsChanged) {
     return false;
@@ -177,6 +186,9 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   onTileClick,
   hasEarlierMessages,
   onLoadEarlier,
+  streamingContent,
+  streamingThought,
+  isThinkingStreaming,
 }) => {
   // Memoize sorted timeline events (they should already be sorted by sequence)
   const sortedTimeline = useMemo(
@@ -315,6 +327,9 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
                 isLoadingEarlier={messagesLoading && hasEarlierMessages}
                 onLoadEarlier={onLoadEarlier}
                 conversationId={currentConversation?.id}
+                streamingContent={streamingContent}
+                streamingThought={streamingThought}
+                isThinkingStreaming={isThinkingStreaming}
               />
             </div>
 

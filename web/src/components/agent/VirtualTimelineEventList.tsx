@@ -15,6 +15,7 @@ import { Button, Spin } from "antd";
 import { DownOutlined, MessageOutlined } from "@ant-design/icons";
 import { TimelineEventItem } from "./TimelineEventItem";
 import { MessageStream } from "./chat/MessageStream";
+import { StreamingThoughtBubble } from "./StreamingThoughtBubble";
 import type { TimelineEvent } from "../../types/agent";
 
 interface VirtualTimelineEventListProps {
@@ -30,6 +31,10 @@ interface VirtualTimelineEventListProps {
   preloadThreshold?: number; // Number of items before end to trigger preload
   // Conversation ID for scroll reset on conversation change
   conversationId?: string | null;
+  // Streaming content props
+  streamingContent?: string;
+  streamingThought?: string;
+  isThinkingStreaming?: boolean;
 }
 
 function estimateEventHeight(event: TimelineEvent): number {
@@ -108,6 +113,9 @@ export const VirtualTimelineEventList: React.FC<
   onLoadEarlier,
   preloadThreshold = 8, // 当用户看到前8条消息时就开始加载更多
   conversationId,
+  streamingContent,
+  streamingThought,
+  isThinkingStreaming,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -121,6 +129,10 @@ export const VirtualTimelineEventList: React.FC<
   const isInitialLoadRef = useRef(true);
   const hasScrolledInitiallyRef = useRef(false);
   const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Track if user has manually scrolled up during streaming
+  // This is used to disable auto-scroll if user explicitly scrolls up to read
+  const userScrolledUpRef = useRef(false);
   const lastLoadTimeRef = useRef(0);
   
   // Virtual list setup - 增加 overscan 预渲染更多项目
@@ -225,7 +237,15 @@ export const VirtualTimelineEventList: React.FC<
     // Update button visibility based on scroll position
     const nearBottom = isNearBottom(container, 150);
     setShowScrollButton(!nearBottom && timeline.length > 0);
-  }, [timeline.length, checkAndPreload]);
+    
+    // Track if user has manually scrolled up during streaming
+    // This disables auto-scroll until they scroll back down
+    if (isStreaming && !nearBottom) {
+      userScrolledUpRef.current = true;
+    } else if (isStreaming && nearBottom) {
+      userScrolledUpRef.current = false;
+    }
+  }, [timeline.length, checkAndPreload, isStreaming]);
 
   // Initial scroll to bottom on first load
   useEffect(() => {
@@ -286,8 +306,31 @@ export const VirtualTimelineEventList: React.FC<
         // User is scrolled up - show the scroll button
         setShowScrollButton(true);
       }
+      
+      // IMPORTANT: Update the ref immediately after processing new messages
+      // This ensures subsequent new messages are correctly detected
+      previousTimelineLengthRef.current = currentLength;
     }
   }, [timeline.length, isStreaming, eventVirtualizer]);
+
+  // Auto-scroll when streaming content or thought updates (for real-time streaming)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    // Always auto-scroll during streaming unless user has explicitly scrolled up
+    // This ensures real-time content is always visible
+    if (isStreaming && !userScrolledUpRef.current) {
+      requestAnimationFrame(() => {
+        // For virtual list, scroll to the last item
+        if (timeline.length > 0) {
+          eventVirtualizer.scrollToIndex(timeline.length - 1, { align: 'end' });
+        }
+        // Also scroll the container to ensure streaming content is visible
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  }, [streamingContent, streamingThought, isStreaming, timeline.length, eventVirtualizer]);
 
   // Reset scroll state when conversation changes
   useEffect(() => {
@@ -298,6 +341,7 @@ export const VirtualTimelineEventList: React.FC<
     isLoadingEarlierRef.current = false;
     firstVisibleItemIndexRef.current = 0;
     firstVisibleItemOffsetRef.current = 0;
+    userScrolledUpRef.current = false; // Reset user scroll state
     
     // Scroll to bottom after a short delay to ensure rendering is complete
     const timeoutId = setTimeout(() => {
@@ -320,6 +364,13 @@ export const VirtualTimelineEventList: React.FC<
       }
     };
   }, []);
+
+  // Reset userScrolledUpRef when streaming ends
+  useEffect(() => {
+    if (!isStreaming) {
+      userScrolledUpRef.current = false;
+    }
+  }, [isStreaming]);
 
   // Scroll to bottom handler
   const scrollToBottom = useCallback(() => {
@@ -369,7 +420,7 @@ export const VirtualTimelineEventList: React.FC<
         className={`h-full overflow-y-auto chat-scrollbar ${className}`}
         style={propHeight ? { height: propHeight } : undefined}
       >
-        <div className="py-6 px-4 min-h-full">
+        <div className="pt-6 pb-24 px-4 min-h-full">
           <div className="w-full max-w-4xl mx-auto">
             <MessageStream>
               <div
@@ -408,6 +459,34 @@ export const VirtualTimelineEventList: React.FC<
                   );
                 })}
               </div>
+
+              {/* Streaming Content - Rendered after the virtual list */}
+              {(isThinkingStreaming || streamingThought) && (
+                <div className="mt-4">
+                  <StreamingThoughtBubble 
+                    content={streamingThought || ''} 
+                    isStreaming={!!isThinkingStreaming} 
+                  />
+                </div>
+              )}
+
+              {/* Streaming text content */}
+              {isStreaming && streamingContent && (
+                <div className="mt-4 flex items-start gap-3 animate-slide-up">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                      <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
+                        {streamingContent}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </MessageStream>
           </div>
         </div>

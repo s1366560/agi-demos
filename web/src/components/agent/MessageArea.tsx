@@ -73,6 +73,10 @@ export const MessageArea = memo<MessageAreaProps>(({
   const hasScrolledInitiallyRef = useRef(false);
   const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastLoadTimeRef = useRef(0);
+  
+  // Track if user has manually scrolled up during streaming
+  // This is used to disable auto-scroll if user explicitly scrolls up to read
+  const userScrolledUpRef = useRef(false);
 
   // Save scroll position before loading earlier messages
   const saveScrollPosition = useCallback(() => {
@@ -156,7 +160,15 @@ export const MessageArea = memo<MessageAreaProps>(({
 
     const atBottom = isNearBottom(container, 100);
     setShowScrollButton(!atBottom && timeline.length > 0);
-  }, [isLoading, timeline.length, checkAndPreload]);
+    
+    // Track if user has manually scrolled up during streaming
+    // This disables auto-scroll until they scroll back down
+    if (isStreaming && !atBottom) {
+      userScrolledUpRef.current = true;
+    } else if (isStreaming && atBottom) {
+      userScrolledUpRef.current = false;
+    }
+  }, [isLoading, timeline.length, checkAndPreload, isStreaming]);
 
   // Handle timeline changes
   useEffect(() => {
@@ -216,6 +228,22 @@ export const MessageArea = memo<MessageAreaProps>(({
     prevTimelineLengthRef.current = currentTimelineLength;
   }, [timeline.length, isStreaming, isLoading, restoreScrollPosition]);
 
+  // Auto-scroll when streaming content or thought updates (for real-time streaming)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Always auto-scroll during streaming unless user has explicitly scrolled up
+    // This ensures real-time content is always visible
+    if (isStreaming && !userScrolledUpRef.current) {
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        }
+      });
+    }
+  }, [streamingContent, streamingThought, isStreaming]);
+
   // Reset scroll state when conversation changes
   useEffect(() => {
     // Reset all scroll-related refs when conversationId changes
@@ -225,6 +253,7 @@ export const MessageArea = memo<MessageAreaProps>(({
     previousScrollHeightRef.current = 0;
     previousScrollTopRef.current = 0;
     isLoadingEarlierRef.current = false;
+    userScrolledUpRef.current = false; // Reset user scroll state
     
     // Scroll to bottom after a short delay to ensure rendering is complete
     const timeoutId = setTimeout(() => {
@@ -248,6 +277,13 @@ export const MessageArea = memo<MessageAreaProps>(({
       }
     };
   }, []);
+
+  // Reset userScrolledUpRef when streaming ends
+  useEffect(() => {
+    if (!isStreaming) {
+      userScrolledUpRef.current = false;
+    }
+  }, [isStreaming]);
 
   // Scroll to bottom handler
   const scrollToBottom = useCallback(() => {
@@ -315,7 +351,7 @@ export const MessageArea = memo<MessageAreaProps>(({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 min-h-0"
+        className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 pb-24 min-h-0"
       >
         <div className="w-full space-y-3">
           {timeline.map((event, index) => (
