@@ -1,0 +1,9 @@
+{
+  "source": "qodex-ai/ai-agent-skills",
+  "skill_name": "creative-generation-agent",
+  "branch": "main",
+  "source_path": "skills/creative-generation-agent/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

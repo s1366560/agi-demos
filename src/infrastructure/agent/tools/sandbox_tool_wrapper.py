@@ -136,8 +136,8 @@ class SandboxMCPToolWrapper(AgentTool):
                     kwargs,
                 )
 
-                # Parse result
-                if result.get("is_error"):
+                # Parse result - check both is_error (client normalized) and isError (MCP standard)
+                if result.get("is_error") or result.get("isError"):
                     content_list = result.get("content", [])
 
                     # Extract error message with better fallback

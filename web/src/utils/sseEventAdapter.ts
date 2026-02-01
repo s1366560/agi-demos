@@ -177,11 +177,33 @@ export function sseEventToTimeline(
         case 'observe':
         case 'tool_result': {
             const data = event.data as unknown as ObserveEventData;
+            // Get observation value - support both 'observation' (legacy) and 'result' (new) fields
+            // Also handle case where result is an object (e.g., from export_artifact)
+            let observationValue: string | undefined;
+            const rawResult = (data as any).result ?? data.observation;
+            if (typeof rawResult === 'string') {
+                observationValue = rawResult;
+            } else if (rawResult !== null && rawResult !== undefined) {
+                // If result is an object, try to extract meaningful text or stringify it
+                if (typeof rawResult === 'object' && 'content' in rawResult) {
+                    // MCP-style result with content array
+                    const content = (rawResult as any).content;
+                    if (Array.isArray(content) && content.length > 0) {
+                        observationValue = content[0]?.text ?? JSON.stringify(rawResult);
+                    } else {
+                        observationValue = JSON.stringify(rawResult);
+                    }
+                } else {
+                    observationValue = JSON.stringify(rawResult);
+                }
+            }
+
             // Determine if this is an error:
             // 1. Check if 'error' field is present in data
             // 2. Check if observation starts with 'Error:' (fallback for legacy format)
             const hasErrorField = !!data.error;
-            const observationLooksLikeError = data.observation?.toLowerCase()?.startsWith('error:');
+            const observationLooksLikeError = typeof observationValue === 'string' &&
+                observationValue.toLowerCase().startsWith('error:');
             const isError = hasErrorField || observationLooksLikeError;
 
             return {
@@ -191,7 +213,7 @@ export function sseEventToTimeline(
                 timestamp,
                 toolName: data.tool_name ?? 'unknown', // Use tool_name from event
                 execution_id: data.execution_id, // Unique ID for act/observe matching
-                toolOutput: data.observation,
+                toolOutput: observationValue,
                 isError,
             };
         }

@@ -628,6 +628,7 @@ async def get_conversation_messages(
             "work_plan",
             "step_start",
             "step_end",
+            "artifact_created",  # Display generated artifacts (images, files, etc.)
         }
 
         # Calculate pagination parameters for initial load (get the latest N events)
@@ -722,6 +723,18 @@ async def get_conversation_messages(
             elif event_type == "step_end":
                 item["stepIndex"] = data.get("step_index", 0)
                 item["status"] = data.get("status", "completed")
+
+            elif event_type == "artifact_created":
+                # Artifact created by sandbox/MCP tools (images, files, etc.)
+                item["artifactId"] = data.get("artifact_id", "")
+                item["filename"] = data.get("filename", "")
+                item["mimeType"] = data.get("mime_type", "")
+                item["category"] = data.get("category", "other")
+                item["sizeBytes"] = data.get("size_bytes", 0)
+                item["url"] = data.get("url", "")
+                item["previewUrl"] = data.get("preview_url", "")
+                item["sourceTool"] = data.get("source_tool", "")
+                item["metadata"] = data.get("metadata", {})
 
             timeline.append(item)
 

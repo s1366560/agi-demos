@@ -1,0 +1,9 @@
+{
+  "source": "intellectronica/agent-skills",
+  "skill_name": "gpt-image-1-5",
+  "branch": "main",
+  "source_path": "skills/gpt-image-1-5/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

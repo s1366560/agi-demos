@@ -1,0 +1,9 @@
+{
+  "source": "softaworks/agent-toolkit",
+  "skill_name": "daily-meeting-update",
+  "branch": "main",
+  "source_path": "skills/daily-meeting-update/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

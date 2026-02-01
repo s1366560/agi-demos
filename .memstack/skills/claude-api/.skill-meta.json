@@ -1,0 +1,9 @@
+{
+  "source": "jezweb/claude-skills",
+  "skill_name": "claude-api",
+  "branch": "main",
+  "source_path": "skills/claude-api/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

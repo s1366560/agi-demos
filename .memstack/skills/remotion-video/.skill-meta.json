@@ -1,0 +1,9 @@
+{
+  "source": "wshuyi/remotion-video-skill",
+  "skill_name": "remotion-video",
+  "branch": "main",
+  "source_path": "SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

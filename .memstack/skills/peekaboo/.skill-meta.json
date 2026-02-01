@@ -1,0 +1,9 @@
+{
+  "source": "moltbot/moltbot",
+  "skill_name": "peekaboo",
+  "branch": "main",
+  "source_path": "skills/peekaboo/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

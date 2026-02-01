@@ -1,0 +1,9 @@
+{
+  "source": "jezweb/claude-skills",
+  "skill_name": "project-health",
+  "branch": "main",
+  "source_path": "skills/project-health/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

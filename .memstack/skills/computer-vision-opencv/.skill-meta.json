@@ -1,0 +1,9 @@
+{
+  "source": "mindrally/skills",
+  "skill_name": "computer-vision-opencv",
+  "branch": "main",
+  "source_path": "computer-vision-opencv/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

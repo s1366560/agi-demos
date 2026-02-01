@@ -433,3 +433,108 @@ class TestSandboxMCPToolWrapperRetry:
 
         assert "Mock result from file_read" in result
         assert adapter.call_count == 3  # 2 failures + 1 success
+
+
+class TestSandboxMCPToolWrapperErrorFieldHandling:
+    """Test SandboxMCPToolWrapper error field handling (is_error vs isError)."""
+
+    @pytest.mark.asyncio
+    async def test_handles_mcp_isError_field(self):
+        """Test that wrapper correctly handles MCP-style isError field."""
+
+        class MCPStyleErrorAdapter:
+            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+                # Return MCP-style response with isError (camelCase)
+                return {
+                    "content": [{"text": "File not found"}],
+                    "isError": True,  # MCP standard uses camelCase
+                }
+
+        adapter = MCPStyleErrorAdapter()
+        tool = SandboxMCPToolWrapper(
+            sandbox_id="test123",
+            tool_name="export_artifact",
+            tool_schema={
+                "name": "export_artifact",
+                "description": "Export artifact",
+                "input_schema": {"type": "object", "properties": {}},
+            },
+            sandbox_adapter=adapter,
+        )
+
+        # Should raise RuntimeError when isError=True
+        with pytest.raises(RuntimeError) as excinfo:
+            await tool.execute(file_path="/nonexistent.txt")
+
+        assert "Tool execution failed" in str(excinfo.value)
+        assert "File not found" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_handles_snake_case_is_error_field(self):
+        """Test that wrapper correctly handles snake_case is_error field."""
+
+        class SnakeCaseErrorAdapter:
+            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+                # Return response with snake_case is_error
+                return {
+                    "content": [{"text": "Permission denied"}],
+                    "is_error": True,  # Some internal code might use snake_case
+                }
+
+        adapter = SnakeCaseErrorAdapter()
+        tool = SandboxMCPToolWrapper(
+            sandbox_id="test123",
+            tool_name="file_read",
+            tool_schema={
+                "name": "file_read",
+                "description": "Read file",
+                "input_schema": {"type": "object", "properties": {}},
+            },
+            sandbox_adapter=adapter,
+        )
+
+        # Should raise RuntimeError when is_error=True
+        with pytest.raises(RuntimeError) as excinfo:
+            await tool.execute(path="/etc/passwd")
+
+        assert "Tool execution failed" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_artifact_result_returned_on_success(self):
+        """Test that artifact data is returned on successful export_artifact."""
+
+        class ArtifactSuccessAdapter:
+            async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
+                return {
+                    "content": [{"type": "text", "text": "File exported"}],
+                    "isError": False,
+                    "artifact": {
+                        "filename": "test.png",
+                        "path": "/workspace/test.png",
+                        "mime_type": "image/png",
+                        "category": "image",
+                        "size": 1234,
+                        "encoding": "base64",
+                        "data": "iVBORw0KGgo=",
+                    },
+                }
+
+        adapter = ArtifactSuccessAdapter()
+        tool = SandboxMCPToolWrapper(
+            sandbox_id="test123",
+            tool_name="export_artifact",
+            tool_schema={
+                "name": "export_artifact",
+                "description": "Export artifact",
+                "input_schema": {"type": "object", "properties": {}},
+            },
+            sandbox_adapter=adapter,
+        )
+
+        result = await tool.execute(file_path="/workspace/test.png")
+
+        # Should return dict with artifact info
+        assert isinstance(result, dict)
+        assert "artifact" in result
+        assert result["artifact"]["filename"] == "test.png"
+        assert result["artifact"]["encoding"] == "base64"

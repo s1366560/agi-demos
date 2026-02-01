@@ -416,16 +416,34 @@ async def export_artifact(
             return {
                 "content": [{"type": "text", "text": f"Error: File not found: {file_path}"}],
                 "isError": True,
+                "errorCode": "FILE_NOT_FOUND",
+                "errorDetails": {"file_path": file_path},
             }
 
         if not resolved.is_file():
             return {
                 "content": [{"type": "text", "text": f"Error: Not a file: {file_path}"}],
                 "isError": True,
+                "errorCode": "NOT_A_FILE",
+                "errorDetails": {"file_path": file_path},
             }
 
         # Get file stats
-        stats = resolved.stat()
+        try:
+            stats = resolved.stat()
+        except PermissionError:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Error: Permission denied accessing file: {file_path}",
+                    }
+                ],
+                "isError": True,
+                "errorCode": "PERMISSION_DENIED",
+                "errorDetails": {"file_path": file_path},
+            }
+
         file_size = stats.st_size
 
         # Check size limit
@@ -438,6 +456,12 @@ async def export_artifact(
                     }
                 ],
                 "isError": True,
+                "errorCode": "FILE_TOO_LARGE",
+                "errorDetails": {
+                    "file_path": file_path,
+                    "file_size": file_size,
+                    "max_size": MAX_EXPORT_SIZE,
+                },
             }
 
         # Detect file type
@@ -455,16 +479,33 @@ async def export_artifact(
         else:  # auto
             use_base64 = is_binary or file_size > AUTO_BASE64_THRESHOLD
 
-        # Read file content
-        if use_base64:
-            with open(resolved, "rb") as f:
-                raw_content = f.read()
-            content_data = base64.b64encode(raw_content).decode("ascii")
-            content_encoding = "base64"
-        else:
-            with open(resolved, "r", encoding="utf-8", errors="replace") as f:
-                content_data = f.read()
-            content_encoding = "utf-8"
+        # Read file content with explicit error handling
+        try:
+            if use_base64:
+                with open(resolved, "rb") as f:
+                    raw_content = f.read()
+                content_data = base64.b64encode(raw_content).decode("ascii")
+                content_encoding = "base64"
+            else:
+                with open(resolved, "r", encoding="utf-8", errors="replace") as f:
+                    content_data = f.read()
+                content_encoding = "utf-8"
+        except PermissionError:
+            return {
+                "content": [
+                    {"type": "text", "text": f"Error: Permission denied reading file: {file_path}"}
+                ],
+                "isError": True,
+                "errorCode": "PERMISSION_DENIED",
+                "errorDetails": {"file_path": file_path, "operation": "read"},
+            }
+        except IOError as e:
+            return {
+                "content": [{"type": "text", "text": f"Error: Failed to read file: {str(e)}"}],
+                "isError": True,
+                "errorCode": "IO_ERROR",
+                "errorDetails": {"file_path": file_path, "error": str(e)},
+            }
 
         # Build response with MCP image content type for images
         if category == "image" and use_base64:
@@ -517,15 +558,43 @@ async def export_artifact(
             }
 
     except ValueError as e:
+        # Path security error or validation error
+        error_msg = str(e)
         return {
-            "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+            "content": [{"type": "text", "text": f"Error: {error_msg}"}],
             "isError": True,
+            "errorCode": "VALIDATION_ERROR",
+            "errorDetails": {"file_path": file_path, "error": error_msg},
+        }
+    except PermissionError as e:
+        return {
+            "content": [{"type": "text", "text": f"Error: Permission denied: {str(e)}"}],
+            "isError": True,
+            "errorCode": "PERMISSION_DENIED",
+            "errorDetails": {"file_path": file_path, "error": str(e)},
+        }
+    except OSError as e:
+        # Handle various OS-level errors (IO errors, disk full, etc.)
+        error_msg = str(e)
+        error_code = "OS_ERROR"
+        if "No space left" in error_msg:
+            error_code = "DISK_FULL"
+        elif "Input/output error" in error_msg:
+            error_code = "IO_ERROR"
+        logger.error(f"OS error exporting artifact {file_path}: {e}")
+        return {
+            "content": [{"type": "text", "text": f"Error: {error_msg}"}],
+            "isError": True,
+            "errorCode": error_code,
+            "errorDetails": {"file_path": file_path, "error": error_msg},
         }
     except Exception as e:
-        logger.error(f"Error exporting artifact: {e}")
+        logger.error(f"Error exporting artifact {file_path}: {e}")
         return {
             "content": [{"type": "text", "text": f"Error: {str(e)}"}],
             "isError": True,
+            "errorCode": "UNKNOWN_ERROR",
+            "errorDetails": {"file_path": file_path, "error": str(e)},
         }
 
 

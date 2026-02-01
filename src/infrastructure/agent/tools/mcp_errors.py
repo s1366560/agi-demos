@@ -69,7 +69,7 @@ class MCPToolError:
     def get_user_message(self) -> str:
         """Get user-friendly error message."""
         if self.error_type == MCPToolErrorType.CONNECTION_ERROR:
-            return f"无法连接到 sandbox 容器，请稍后重试"
+            return "无法连接到 sandbox 容器，请稍后重试"
         if self.error_type == MCPToolErrorType.TIMEOUT_ERROR:
             return f"工具执行超时: {self.tool_name}"
         if self.error_type == MCPToolErrorType.PARAMETER_ERROR:
@@ -77,9 +77,9 @@ class MCPToolError:
         if self.error_type == MCPToolErrorType.PERMISSION_ERROR:
             return f"权限被拒绝: {self.message}"
         if self.error_type == MCPToolErrorType.SANDBOX_NOT_FOUND:
-            return f"Sandbox 不存在或已终止"
+            return "Sandbox 不存在或已终止"
         if self.error_type == MCPToolErrorType.SANDBOX_TERMINATED:
-            return f"Sandbox 已终止"
+            return "Sandbox 已终止"
         return self.message
 
 
@@ -121,12 +121,35 @@ class MCPToolErrorClassifier:
         "unauthorized",
         "access denied",
         "forbidden",
+        "operation not permitted",
+        "eperm",
+        "eacces",
+    ]
+
+    # File not found patterns - separate from parameter errors
+    FILE_NOT_FOUND_PATTERNS = [
+        "file not found",
+        "no such file",
+        "enoent",
+        "does not exist",
+        "not found:",
+        "path not found",
+        "directory not found",
     ]
 
     SANDBOX_NOT_FOUND_PATTERNS = [
         "sandbox not found",
         "container not found",
         "no such container",
+    ]
+
+    # Resource errors - may be retryable
+    RESOURCE_PATTERNS = [
+        "too large",
+        "out of memory",
+        "no space left",
+        "disk quota",
+        "file too large",
     ]
 
     @classmethod
@@ -178,9 +201,21 @@ class MCPToolErrorClassifier:
             is_retryable = False
             max_retries = 0
 
-        # Check sandbox not found
+        # Check sandbox not found (MUST be before file_not_found since "not found" overlaps)
         elif any(pattern in error_message for pattern in cls.SANDBOX_NOT_FOUND_PATTERNS):
             error_type = MCPToolErrorType.SANDBOX_NOT_FOUND
+            is_retryable = False
+            max_retries = 0
+
+        # Check file not found errors (classify as parameter error - user provided wrong path)
+        elif any(pattern in error_message for pattern in cls.FILE_NOT_FOUND_PATTERNS):
+            error_type = MCPToolErrorType.PARAMETER_ERROR
+            is_retryable = False
+            max_retries = 0
+
+        # Check resource errors (file too large, out of space)
+        elif any(pattern in error_message for pattern in cls.RESOURCE_PATTERNS):
+            error_type = MCPToolErrorType.EXECUTION_ERROR
             is_retryable = False
             max_retries = 0
 
@@ -247,7 +282,7 @@ class RetryConfig:
         import random
 
         delay = min(
-            self.base_delay * (self.exponential_base ** attempt),
+            self.base_delay * (self.exponential_base**attempt),
             self.max_delay,
         )
 

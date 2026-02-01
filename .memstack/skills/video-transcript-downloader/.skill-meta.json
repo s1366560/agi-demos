@@ -1,0 +1,9 @@
+{
+  "source": "steipete/agent-scripts",
+  "skill_name": "video-transcript-downloader",
+  "branch": "main",
+  "source_path": "skills/video-transcript-downloader/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

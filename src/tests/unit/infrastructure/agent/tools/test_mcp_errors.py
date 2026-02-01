@@ -5,7 +5,6 @@ TDD: Tests written first (RED phase).
 
 import asyncio
 from datetime import datetime
-from unittest.mock import Mock
 
 import pytest
 
@@ -440,3 +439,100 @@ class TestMCPToolErrorIntegration:
             # Should return some message
             assert user_msg
             assert len(user_msg) > 0
+
+
+class TestMCPToolErrorClassifierNewPatterns:
+    """Test newly added error classification patterns."""
+
+    def test_classify_file_not_found_error(self):
+        """Test classification of file not found errors."""
+        error = Exception("Error: File not found: /path/to/file.txt")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="export_artifact",
+            sandbox_id="abc123",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.PARAMETER_ERROR
+        assert mcp_error.is_retryable is False
+
+    def test_classify_enoent_error(self):
+        """Test classification of ENOENT errors."""
+        error = Exception("ENOENT: no such file or directory")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="export_artifact",
+            sandbox_id="abc123",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.PARAMETER_ERROR
+        assert mcp_error.is_retryable is False
+
+    def test_classify_operation_not_permitted(self):
+        """Test classification of operation not permitted errors."""
+        error = Exception("Operation not permitted: /etc/passwd")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="file_read",
+            sandbox_id="abc123",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.PERMISSION_ERROR
+        assert mcp_error.is_retryable is False
+
+    def test_classify_eperm_error(self):
+        """Test classification of EPERM errors."""
+        error = Exception("EPERM: operation not permitted")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="file_write",
+            sandbox_id="abc123",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.PERMISSION_ERROR
+        assert mcp_error.is_retryable is False
+
+    def test_classify_file_too_large(self):
+        """Test classification of file too large errors."""
+        error = Exception("Error: File too large (500000000 bytes > 100000000 bytes limit)")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="export_artifact",
+            sandbox_id="abc123",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.EXECUTION_ERROR
+        assert mcp_error.is_retryable is False
+
+    def test_classify_disk_full(self):
+        """Test classification of disk full errors."""
+        error = Exception("No space left on device")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="file_write",
+            sandbox_id="abc123",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.EXECUTION_ERROR
+        assert mcp_error.is_retryable is False
+
+    def test_sandbox_not_found_takes_priority(self):
+        """Test that sandbox not found takes priority over file not found."""
+        # This error contains both "sandbox not found" and "not found"
+        error = Exception("Error: sandbox not found: abc123")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="file_read",
+            sandbox_id="abc123",
+        )
+
+        # Should be SANDBOX_NOT_FOUND, not PARAMETER_ERROR (file not found)
+        assert mcp_error.error_type == MCPToolErrorType.SANDBOX_NOT_FOUND
+        assert mcp_error.is_retryable is False

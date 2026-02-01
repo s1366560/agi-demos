@@ -1299,9 +1299,18 @@ class SessionProcessor:
                     # Text file - get from content
                     content = result.get("content", [])
                     if content:
-                        text = content[0].get("text", "")
+                        first_item = content[0] if content else {}
+                        text = (
+                            first_item.get("text", "")
+                            if isinstance(first_item, dict)
+                            else str(first_item)
+                        )
+                        if not text:
+                            logger.warning("export_artifact returned empty text content")
+                            return
                         file_content = text.encode("utf-8")
                     else:
+                        logger.warning("export_artifact returned no content")
                         return
 
                 # Create artifact
@@ -1342,7 +1351,13 @@ class SessionProcessor:
                 return
 
             except Exception as e:
-                logger.error(f"Failed to process export_artifact result: {e}")
+                import traceback
+
+                logger.error(
+                    f"Failed to process export_artifact result: {e}\n"
+                    f"Artifact info: {artifact_info}\n"
+                    f"Traceback: {traceback.format_exc()}"
+                )
 
         # Check for MCP content array with images/resources
         content = result.get("content", [])

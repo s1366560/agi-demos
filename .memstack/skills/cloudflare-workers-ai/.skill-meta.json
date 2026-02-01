@@ -1,0 +1,9 @@
+{
+  "source": "jezweb/claude-skills",
+  "skill_name": "cloudflare-workers-ai",
+  "branch": "main",
+  "source_path": "skills/cloudflare-workers-ai/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

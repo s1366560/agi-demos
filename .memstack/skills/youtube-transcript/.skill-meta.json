@@ -1,0 +1,9 @@
+{
+  "source": "michalparkola/tapestry-skills-for-claude-code",
+  "skill_name": "youtube-transcript",
+  "branch": "main",
+  "source_path": "youtube-transcript/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "source": "inference-sh/skills",
+  "skill_name": "ai-image-generation",
+  "branch": "main",
+  "source_path": "skills/ai-image-generation/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

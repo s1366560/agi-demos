@@ -1,0 +1,9 @@
+{
+  "source": "refoundai/lenny-skills",
+  "skill_name": "personal-productivity",
+  "branch": "main",
+  "source_path": "skills/personal-productivity/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

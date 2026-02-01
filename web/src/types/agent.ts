@@ -361,11 +361,11 @@ export interface ActEventData {
  * Observe event data (tool result)
  */
 export interface ObserveEventData {
-    observation: string;
+    observation?: string;     // Legacy field for observation text
     tool_name?: string;       // New: tool name
-    execution_id?: string;  // New: matches act event's execution_id
+    execution_id?: string;    // New: matches act event's execution_id
     error?: string;           // Error message if tool execution failed
-    result?: unknown;         // Raw result from tool execution
+    result?: unknown;         // Raw result from tool execution (may be string or object)
 }
 
 /**
@@ -1761,7 +1761,7 @@ export interface ActEvent extends BaseTimelineEvent {
 export interface ObserveEvent extends BaseTimelineEvent {
     type: "observe";
     toolName: string;
-    toolOutput: string;
+    toolOutput?: string;  // May be undefined if result is not a string or empty
     isError: boolean;
     execution_id?: string;  // New: matches act event's execution_id
 }

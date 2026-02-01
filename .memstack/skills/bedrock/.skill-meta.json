@@ -1,0 +1,9 @@
+{
+  "source": "itsmostafa/aws-agent-skills",
+  "skill_name": "bedrock",
+  "branch": "main",
+  "source_path": "skills/bedrock/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

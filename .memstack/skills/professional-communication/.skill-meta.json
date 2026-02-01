@@ -1,0 +1,9 @@
+{
+  "source": "softaworks/agent-toolkit",
+  "skill_name": "professional-communication",
+  "branch": "main",
+  "source_path": "skills/professional-communication/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

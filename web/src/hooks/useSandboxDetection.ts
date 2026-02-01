@@ -9,38 +9,38 @@ import { useEffect, useCallback, useRef } from "react";
 import { useSandboxStore, isSandboxTool } from "../stores/sandbox";
 
 export interface UseSandboxDetectionOptions {
-  /** Automatically open panel when sandbox tool is detected */
-  autoOpenPanel?: boolean;
-  /** Automatically switch to output tab on tool execution */
-  autoSwitchToOutput?: boolean;
-  /** Sandbox ID to associate with detections */
-  sandboxId?: string | null;
+    /** Automatically open panel when sandbox tool is detected */
+    autoOpenPanel?: boolean;
+    /** Automatically switch to output tab on tool execution */
+    autoSwitchToOutput?: boolean;
+    /** Sandbox ID to associate with detections */
+    sandboxId?: string | null;
 }
 
 export interface SandboxDetectionResult {
-  /** Whether a sandbox tool is currently executing */
-  isExecuting: boolean;
-  /** Current tool being executed */
-  currentTool: { name: string; input: Record<string, unknown> } | null;
-  /** Total execution count */
-  executionCount: number;
-  /** Handle tool start event */
-  handleToolStart: (
-    toolName: string,
-    input: Record<string, unknown>,
-    callId?: string
-  ) => void;
-  /** Handle tool end event */
-  handleToolEnd: (
-    callId: string,
-    output?: string,
-    error?: string,
-    durationMs?: number
-  ) => void;
-  /** Open sandbox panel */
-  openPanel: () => void;
-  /** Close sandbox panel */
-  closePanel: () => void;
+    /** Whether a sandbox tool is currently executing */
+    isExecuting: boolean;
+    /** Current tool being executed */
+    currentTool: { name: string; input: Record<string, unknown> } | null;
+    /** Total execution count */
+    executionCount: number;
+    /** Handle tool start event */
+    handleToolStart: (
+        toolName: string,
+        input: Record<string, unknown>,
+        callId?: string
+    ) => void;
+    /** Handle tool end event */
+    handleToolEnd: (
+        callId: string,
+        output?: string,
+        error?: string,
+        durationMs?: number
+    ) => void;
+    /** Open sandbox panel */
+    openPanel: () => void;
+    /** Close sandbox panel */
+    closePanel: () => void;
 }
 
 /**
@@ -77,93 +77,93 @@ export interface SandboxDetectionResult {
  * ```
  */
 export function useSandboxDetection(
-  options: UseSandboxDetectionOptions = {}
+    options: UseSandboxDetectionOptions = {}
 ): SandboxDetectionResult {
-  const {
-    autoOpenPanel = true,
-    autoSwitchToOutput = true,
-    sandboxId,
-  } = options;
+    const {
+        autoOpenPanel = true,
+        autoSwitchToOutput = true,
+        sandboxId,
+    } = options;
 
-  const {
-    currentTool,
-    toolExecutions,
-    onToolStart,
-    onToolEnd,
-    openPanel,
-    closePanel,
-    setSandboxId,
-    setActiveTab,
-  } = useSandboxStore();
+    const {
+        currentTool,
+        toolExecutions,
+        onToolStart,
+        onToolEnd,
+        openPanel,
+        closePanel,
+        setSandboxId,
+        setActiveTab,
+    } = useSandboxStore();
 
-  // Track if we've set the sandbox ID
-  const hasSetSandboxId = useRef(false);
+    // Track if we've set the sandbox ID
+    const hasSetSandboxId = useRef(false);
 
-  // Set sandbox ID when provided
-  useEffect(() => {
-    if (sandboxId && !hasSetSandboxId.current) {
-      setSandboxId(sandboxId);
-      hasSetSandboxId.current = true;
-    }
-  }, [sandboxId, setSandboxId]);
+    // Set sandbox ID when provided
+    useEffect(() => {
+        if (sandboxId && !hasSetSandboxId.current) {
+            setSandboxId(sandboxId);
+            hasSetSandboxId.current = true;
+        }
+    }, [sandboxId, setSandboxId]);
 
-  // Handle tool start
-  const handleToolStart = useCallback(
-    (
-      toolName: string,
-      input: Record<string, unknown>,
-      callId?: string
-    ) => {
-      // Only process sandbox tools
-      if (!isSandboxTool(toolName)) {
-        return;
-      }
+    // Handle tool start
+    const handleToolStart = useCallback(
+        (
+            toolName: string,
+            input: Record<string, unknown>,
+            callId?: string
+        ) => {
+            // Only process sandbox tools
+            if (!isSandboxTool(toolName)) {
+                return;
+            }
 
-      // Call store handler
-      onToolStart(toolName, input, callId);
+            // Call store handler
+            onToolStart(toolName, input, callId);
 
-      // Auto-open panel if enabled
-      if (autoOpenPanel) {
+            // Auto-open panel if enabled
+            if (autoOpenPanel) {
+                openPanel(sandboxId);
+            }
+
+            // Auto-switch to output tab if enabled
+            if (autoSwitchToOutput) {
+                setActiveTab("output");
+            }
+        },
+        [onToolStart, autoOpenPanel, autoSwitchToOutput, sandboxId, openPanel, setActiveTab]
+    );
+
+    // Handle tool end
+    const handleToolEnd = useCallback(
+        (
+            callId: string,
+            output?: string,
+            error?: string,
+            durationMs?: number
+        ) => {
+            onToolEnd(callId, output, error, durationMs);
+        },
+        [onToolEnd]
+    );
+
+    // Handle panel open
+    const handleOpenPanel = useCallback(() => {
         openPanel(sandboxId);
-      }
+    }, [openPanel, sandboxId]);
 
-      // Auto-switch to output tab if enabled
-      if (autoSwitchToOutput) {
-        setActiveTab("output");
-      }
-    },
-    [onToolStart, autoOpenPanel, autoSwitchToOutput, sandboxId, openPanel, setActiveTab]
-  );
-
-  // Handle tool end
-  const handleToolEnd = useCallback(
-    (
-      callId: string,
-      output?: string,
-      error?: string,
-      durationMs?: number
-    ) => {
-      onToolEnd(callId, output, error, durationMs);
-    },
-    [onToolEnd]
-  );
-
-  // Handle panel open
-  const handleOpenPanel = useCallback(() => {
-    openPanel(sandboxId);
-  }, [openPanel, sandboxId]);
-
-  return {
-    isExecuting: currentTool !== null,
-    currentTool: currentTool
-      ? { name: currentTool.name, input: currentTool.input }
-      : null,
-    executionCount: toolExecutions.length,
-    handleToolStart,
-    handleToolEnd,
-    openPanel: handleOpenPanel,
-    closePanel,
-  };
+    return {
+        isExecuting: currentTool !== null,
+        currentTool: currentTool
+            ? { name: currentTool.name, input: currentTool.input }
+            : null,
+        executionCount: toolExecutions.length,
+        handleToolStart,
+        handleToolEnd,
+        openPanel: handleOpenPanel,
+        closePanel,
+    };
 }
 
 /**
@@ -172,41 +172,50 @@ export function useSandboxDetection(
  * Returns handlers that can be directly used with AgentStreamHandler
  */
 export function useSandboxAgentHandlers(sandboxId?: string | null) {
-  const { handleToolStart, handleToolEnd } = useSandboxDetection({
-    sandboxId,
-    autoOpenPanel: true,
-    autoSwitchToOutput: true,
-  });
+    const { handleToolStart, handleToolEnd } = useSandboxDetection({
+        sandboxId,
+        autoOpenPanel: true,
+        autoSwitchToOutput: true,
+    });
 
-  // Create handlers for agent events
-  const onAct = useCallback(
-    (event: { data: { tool_name: string; tool_input: Record<string, unknown>; call_id?: string } }) => {
-      handleToolStart(
-        event.data.tool_name,
-        event.data.tool_input,
-        event.data.call_id
-      );
-    },
-    [handleToolStart]
-  );
+    // Create handlers for agent events
+    const onAct = useCallback(
+        (event: { data: { tool_name: string; tool_input: Record<string, unknown>; call_id?: string } }) => {
+            handleToolStart(
+                event.data.tool_name,
+                event.data.tool_input,
+                event.data.call_id
+            );
+        },
+        [handleToolStart]
+    );
 
-  const onObserve = useCallback(
-    (event: { data: { call_id?: string; observation?: string; error?: string; duration_ms?: number } }) => {
-      // call_id may be missing, pass empty string to let store handle it
-      handleToolEnd(
-        event.data.call_id || "",
-        event.data.observation,
-        event.data.error,
-        event.data.duration_ms
-      );
-    },
-    [handleToolEnd]
-  );
+    const onObserve = useCallback(
+        (event: { data: { call_id?: string; observation?: string; result?: unknown; error?: string; duration_ms?: number } }) => {
+            // call_id may be missing, pass empty string to let store handle it
+            // Support both 'observation' (legacy) and 'result' (new) fields
+            let observationValue: string | undefined;
+            const rawResult = event.data.result ?? event.data.observation;
+            if (typeof rawResult === 'string') {
+                observationValue = rawResult;
+            } else if (rawResult !== null && rawResult !== undefined) {
+                observationValue = JSON.stringify(rawResult);
+            }
 
-  return {
-    onAct,
-    onObserve,
-  };
+            handleToolEnd(
+                event.data.call_id || "",
+                observationValue,
+                event.data.error,
+                event.data.duration_ms
+            );
+        },
+        [handleToolEnd]
+    );
+
+    return {
+        onAct,
+        onObserve,
+    };
 }
 
 export default useSandboxDetection;

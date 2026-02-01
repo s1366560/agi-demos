@@ -1,0 +1,9 @@
+{
+  "source": "inference-sh/skills",
+  "skill_name": "speech-to-text",
+  "branch": "main",
+  "source_path": "skills/speech-to-text/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}
