@@ -332,6 +332,45 @@ function TextDeltaItem({
   );
 }
 
+/**
+ * Render text_end event as formal assistant message
+ * This displays the final content after streaming completes
+ */
+function TextEndItem({
+  event,
+}: {
+  event: TimelineEvent;
+}) {
+  if (event.type !== "text_end") return null;
+
+  const fullText = event.fullText || '';
+  if (!fullText || !fullText.trim()) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-4">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+          <span className="material-symbols-outlined text-primary text-lg">
+            smart_toy
+          </span>
+        </div>
+        <div
+          className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed"
+        >
+          <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
+            <MarkdownRenderer>
+              {fullText}
+            </MarkdownRenderer>
+          </Suspense>
+        </div>
+      </div>
+      <div className="pl-11">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
+}
+
 // ============================================
 // Human-in-the-Loop Event Components
 // ============================================
@@ -794,8 +833,14 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
         );
 
       case "text_start":
-      case "text_end":
         return null;
+
+      case "text_end":
+        return (
+          <div className="my-4 animate-slide-up">
+            <TextEndItem event={event} />
+          </div>
+        );
 
       // Human-in-the-loop events
       case "clarification_asked":

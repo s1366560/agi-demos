@@ -313,6 +313,15 @@ export const useAgentV3Store = create<AgentV3State>()(
                 },
 
                 loadMessages: async (conversationId, projectId) => {
+                    // Get last known sequence from localStorage for recovery
+                    const lastKnownSeq = parseInt(
+                        localStorage.getItem(`agent_seq_${conversationId}`) || "0",
+                        10
+                    );
+
+                    // DEBUG: Log recovery attempt parameters
+                    console.log(`[AgentV3] loadMessages starting for ${conversationId}, lastKnownSeq=${lastKnownSeq}`);
+
                     set({
                         isLoadingHistory: true,
                         timeline: [],      // Clear timeline
@@ -328,15 +337,22 @@ export const useAgentV3Store = create<AgentV3State>()(
                     });
                     try {
                         // Parallelize independent API calls (async-parallel)
+                        // Include recovery info in execution status check
                         const [response, planStatus, execStatus] = await Promise.all([
                             agentService.getConversationMessages(
                                 conversationId,
                                 projectId,
-                                200  // Load latest 200 messages (increased from 50 to show more assistant_message events)
+                                200  // Load latest 200 messages
                             ) as Promise<any>,
                             // Use catch to prevent one failure from blocking others
-                            planService.getPlanModeStatus(conversationId).catch(() => null),
-                            agentService.getExecutionStatus(conversationId).catch(() => null),
+                            planService.getPlanModeStatus(conversationId).catch((e) => {
+                                console.warn(`[AgentV3] getPlanModeStatus failed:`, e);
+                                return null;
+                            }),
+                            agentService.getExecutionStatus(conversationId, true, lastKnownSeq).catch((e) => {
+                                console.warn(`[AgentV3] getExecutionStatus failed:`, e);
+                                return null;
+                            }),
                         ]);
 
                         if (get().activeConversationId !== conversationId) {
@@ -347,6 +363,12 @@ export const useAgentV3Store = create<AgentV3State>()(
                         // Store the raw timeline and derive messages (no merging)
                         const messages = timelineToMessages(response.timeline);
                         const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
+                        const lastSequence = response.timeline[response.timeline.length - 1]?.sequenceNumber ?? 0;
+
+                        // Update localStorage with latest sequence
+                        if (lastSequence > 0) {
+                            localStorage.setItem(`agent_seq_${conversationId}`, String(lastSequence));
+                        }
 
                         set({
                             timeline: response.timeline,
@@ -358,38 +380,41 @@ export const useAgentV3Store = create<AgentV3State>()(
                             ...(planStatus ? { isPlanMode: planStatus.is_in_plan_mode } : {}),
                         });
 
-                        // Check execution status and replay events if needed
-                        if (execStatus && execStatus.is_running && execStatus.last_sequence > 0) {
+                        // DEBUG: Log execution status for recovery debugging
+                        console.log(`[AgentV3] execStatus for ${conversationId}:`, {
+                            execStatus,
+                            is_running: execStatus?.is_running,
+                            lastKnownSeq,
+                            lastSequence,
+                        });
+
+                        // Check execution status and recover stream if needed
+                        if (execStatus?.is_running) {
                             console.log(
-                                `Conversation ${conversationId} is running, replaying events...`
+                                `[AgentV3] Conversation ${conversationId} is running, ` +
+                                `recovery=${JSON.stringify(execStatus.recovery)}`
                             );
 
-                            // Create a temporary handler for replay
-                            const replayHandler: AgentStreamHandler = {
+                            // Create handler for recovery/streaming events
+                            const recoveryHandler: AgentStreamHandler = {
+                                onTextDelta: (event) => {
+                                    // Append streaming text
+                                    set((state) => ({
+                                        streamingAssistantContent: state.streamingAssistantContent + (event.data.delta || ""),
+                                    }));
+                                },
                                 onThought: (event) => {
                                     const thought = event.data.thought;
-                                    // Skip empty thoughts (REASONING_START events)
                                     if (!thought || thought.trim() === "") return;
-                                    set((state) => {
-                                        const lastMsg = state.messages[state.messages.length - 1];
-                                        if (!lastMsg || lastMsg.role !== "assistant") return state;
-                                        const thoughts =
-                                            (lastMsg.metadata?.thoughts as string[]) || [];
-                                        return {
-                                            currentThought: state.currentThought + "\n" + thought,
-                                            messages: state.messages.map((m, i) =>
-                                                i === state.messages.length - 1
-                                                    ? {
-                                                        ...m,
-                                                        metadata: {
-                                                            ...m.metadata,
-                                                            thoughts: [...thoughts, thought],
-                                                        },
-                                                    }
-                                                    : m
-                                            ),
-                                        };
-                                    });
+                                    set((state) => ({
+                                        currentThought: state.currentThought + "\n" + thought,
+                                    }));
+                                },
+                                onThoughtDelta: (event) => {
+                                    set((state) => ({
+                                        streamingThought: state.streamingThought + (event.data.delta || ""),
+                                        isThinkingStreaming: true,
+                                    }));
                                 },
                                 onWorkPlan: (event) => {
                                     set({
@@ -442,7 +467,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 onObserve: (_event) => {
                                     set((state) => {
                                         const stack = [...state.pendingToolsStack];
-                                        stack.pop(); // Remove processed tool from stack
+                                        stack.pop();
                                         return { pendingToolsStack: stack, agentState: "observing" };
                                     });
                                 },
@@ -451,21 +476,57 @@ export const useAgentV3Store = create<AgentV3State>()(
                                         isStreaming: false,
                                         agentState: "idle",
                                         activeToolCalls: new Map(),
+                                        streamingAssistantContent: "",
+                                        streamingThought: "",
+                                        isThinkingStreaming: false,
                                     });
                                 },
                                 onError: (event) => {
-                                    set({ error: event.data.message });
+                                    set({
+                                        error: event.data.message,
+                                        isStreaming: false,
+                                        agentState: "idle",
+                                    });
+                                },
+                                onRecoveryComplete: (event) => {
+                                    console.log(
+                                        `[AgentV3] Recovery complete: recovered ${event.data.recovered_count} events ` +
+                                        `from ${event.data.source}`
+                                    );
                                 },
                             };
 
-                            // Replay events
-                            await agentEventReplayService.replayEvents(
-                                conversationId,
-                                replayHandler,
-                                0
-                            );
+                            // Use recoverStream for seamless event recovery
+                            try {
+                                set({ isStreaming: true, agentState: "thinking" });
 
-                            set({ isStreaming: true, agentState: "thinking" });
+                                // Ensure WebSocket is connected BEFORE attempting recovery
+                                if (!agentService.isConnected()) {
+                                    console.log(`[AgentV3] Connecting WebSocket before recovery...`);
+                                    await agentService.connect();
+                                }
+
+                                // Register handler first, then recover
+                                agentService.subscribe(conversationId, recoveryHandler);
+
+                                const recoveryResult = await agentService.recoverStream(
+                                    conversationId,
+                                    projectId,
+                                    lastSequence,  // Resume from last loaded sequence
+                                    execStatus.current_message_id ?? undefined,
+                                    recoveryHandler
+                                );
+
+                                console.log(`[AgentV3] Stream recovery initiated for ${conversationId}:`, recoveryResult);
+                            } catch (recoveryError) {
+                                console.error(`[AgentV3] Stream recovery failed:`, recoveryError);
+                                // Fall back to event replay service
+                                await agentEventReplayService.replayEvents(
+                                    conversationId,
+                                    recoveryHandler,
+                                    lastSequence
+                                );
+                            }
                         }
 
                         set({ isLoadingHistory: false });
@@ -830,7 +891,19 @@ export const useAgentV3Store = create<AgentV3State>()(
                             set((state) => {
                                 const fullText = event.data.full_text;
                                 const finalContent = fullText || (state.streamingAssistantContent + remainingBuffer);
-                                return { streamingAssistantContent: finalContent };
+                                
+                                // Add text_end event to timeline for proper rendering
+                                // This converts the streaming content to a formal timeline event
+                                const textEndEvent: AgentEvent<any> = {
+                                    type: "text_end",
+                                    data: { full_text: finalContent },
+                                };
+                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, textEndEvent);
+                                
+                                return { 
+                                    streamingAssistantContent: finalContent,
+                                    timeline: updatedTimeline,
+                                };
                             });
                         },
                         onClarificationAsked: (event) => {
