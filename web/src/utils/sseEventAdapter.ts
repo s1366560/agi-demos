@@ -177,6 +177,13 @@ export function sseEventToTimeline(
         case 'observe':
         case 'tool_result': {
             const data = event.data as unknown as ObserveEventData;
+            // Determine if this is an error:
+            // 1. Check if 'error' field is present in data
+            // 2. Check if observation starts with 'Error:' (fallback for legacy format)
+            const hasErrorField = !!data.error;
+            const observationLooksLikeError = data.observation?.toLowerCase()?.startsWith('error:');
+            const isError = hasErrorField || observationLooksLikeError;
+
             return {
                 id: generateTimelineEventId('observe'),
                 type: 'observe',
@@ -185,7 +192,7 @@ export function sseEventToTimeline(
                 toolName: data.tool_name ?? 'unknown', // Use tool_name from event
                 execution_id: data.execution_id, // Unique ID for act/observe matching
                 toolOutput: data.observation,
-                isError: false,
+                isError,
             };
         }
 

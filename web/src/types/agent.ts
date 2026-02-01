@@ -364,6 +364,8 @@ export interface ObserveEventData {
     observation: string;
     tool_name?: string;       // New: tool name
     execution_id?: string;  // New: matches act event's execution_id
+    error?: string;           // Error message if tool execution failed
+    result?: unknown;         // Raw result from tool execution
 }
 
 /**

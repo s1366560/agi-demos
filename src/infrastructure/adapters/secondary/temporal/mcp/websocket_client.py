@@ -393,8 +393,17 @@ class MCPWebSocketClient:
                 isError=True,
             )
 
+        # _send_request returned None - this means timeout or connection issue
+        logger.error(
+            f"Tool '{name}' call failed: request returned no result (timeout or connection issue)"
+        )
         return MCPToolResult(
-            content=[{"type": "text", "text": "Unknown error"}],
+            content=[
+                {
+                    "type": "text",
+                    "text": f"Error: Tool '{name}' request failed - timeout or connection lost",
+                }
+            ],
             isError=True,
         )
 

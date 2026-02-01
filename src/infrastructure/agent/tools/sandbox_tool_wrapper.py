@@ -139,11 +139,26 @@ class SandboxMCPToolWrapper(AgentTool):
                 # Parse result
                 if result.get("is_error"):
                     content_list = result.get("content", [])
-                    error_msg = (
-                        content_list[0].get("text", "Unknown error")
-                        if content_list
-                        else "Unknown error"
-                    )
+
+                    # Extract error message with better fallback
+                    if content_list and len(content_list) > 0:
+                        first_content = content_list[0]
+                        if isinstance(first_content, dict):
+                            error_msg = first_content.get("text", "")
+                        else:
+                            error_msg = str(first_content)
+                    else:
+                        error_msg = ""
+
+                    # If still no error message, provide debugging info
+                    if not error_msg:
+                        logger.warning(
+                            f"SandboxMCPToolWrapper: Tool returned is_error=True but no error message. "
+                            f"Full result: {result}"
+                        )
+                        error_msg = (
+                            f"Tool execution failed (no details provided). Raw result: {result}"
+                        )
 
                     # Create error from tool result
                     error = Exception(error_msg)
@@ -215,11 +230,14 @@ class SandboxMCPToolWrapper(AgentTool):
                     await asyncio.sleep(delay)
                     continue
 
-                # Not retryable or max retries reached
-                return f"Error: {mcp_error.get_user_message()}"
+                # Not retryable or max retries reached - raise exception for processor to catch
+                raise RuntimeError(f"Tool execution failed: {mcp_error.get_user_message()}")
 
-        # All retries exhausted
+        # All retries exhausted - raise exception for processor to catch
         if last_error:
-            return f"Error: {last_error.get_user_message()} (已重试 {last_error.retry_count} 次)"
+            raise RuntimeError(
+                f"Tool execution failed after {last_error.retry_count + 1} attempts: "
+                f"{last_error.get_user_message()}"
+            )
 
-        return "Error: 未知错误"
+        raise RuntimeError("Tool execution failed: Unknown error")

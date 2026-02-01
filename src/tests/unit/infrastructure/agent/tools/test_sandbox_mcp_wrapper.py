@@ -3,13 +3,10 @@
 TDD: Tests written first (RED phase).
 """
 
-import asyncio
-from unittest.mock import AsyncMock, Mock
-
 import pytest
 
-from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 from src.infrastructure.agent.tools.mcp_errors import RetryConfig
+from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 
 
 class MockSandboxAdapter:
@@ -282,6 +279,7 @@ class TestSandboxMCPToolWrapperExecute:
     @pytest.mark.asyncio
     async def test_execute_error_response(self):
         """Test tool execution with error response."""
+
         class ErrorAdapter:
             async def call_tool(self, sandbox_id: str, tool_name: str, kwargs: dict):
                 return {
@@ -301,10 +299,12 @@ class TestSandboxMCPToolWrapperExecute:
             sandbox_adapter=adapter,
         )
 
-        result = await tool.execute(path="/nonexistent")
+        # Should raise RuntimeError for non-retryable errors
+        with pytest.raises(RuntimeError) as excinfo:
+            await tool.execute(path="/nonexistent")
 
-        assert "Error:" in result
-        assert "File not found" in result or "原始错误" in result
+        assert "Tool execution failed" in str(excinfo.value)
+        assert "File not found" in str(excinfo.value)
 
 
 class TestSandboxMCPToolWrapperRetry:
@@ -346,7 +346,7 @@ class TestSandboxMCPToolWrapperRetry:
         # Adapter that returns parameter error
         adapter = MockSandboxAdapter(
             fail_count=999,  # Always fail
-            error_message="missing required parameter: file_path"
+            error_message="missing required parameter: file_path",
         )
 
         retry_config = RetryConfig(
@@ -367,20 +367,18 @@ class TestSandboxMCPToolWrapperRetry:
             retry_config=retry_config,
         )
 
-        result = await tool.execute(path="/tmp/test")
+        # Should raise RuntimeError immediately without retry (parameter error is not retryable)
+        with pytest.raises(RuntimeError) as excinfo:
+            await tool.execute(path="/tmp/test")
 
-        # Should fail immediately without retry (parameter error)
-        assert "Error:" in result
+        assert "Tool execution failed" in str(excinfo.value)
         assert adapter.call_count == 1  # No retry
 
     @pytest.mark.asyncio
     async def test_retry_exhaustion(self):
         """Test behavior when max retries is exhausted."""
         # Adapter that always fails with connection error
-        adapter = MockSandboxAdapter(
-            fail_count=999,
-            error_message="connection refused"
-        )
+        adapter = MockSandboxAdapter(fail_count=999, error_message="connection refused")
 
         retry_config = RetryConfig(
             max_retries=2,
@@ -400,11 +398,11 @@ class TestSandboxMCPToolWrapperRetry:
             retry_config=retry_config,
         )
 
-        result = await tool.execute(path="/tmp/test")
+        # Should raise RuntimeError after exhausting retries
+        with pytest.raises(RuntimeError) as excinfo:
+            await tool.execute(path="/tmp/test")
 
-        # Should fail after retries
-        assert "Error:" in result
-        assert "已重试" in result or "retry" in result.lower()
+        assert "Tool execution failed" in str(excinfo.value)
         # max_retries=2 means 1 initial + 2 retries = 3 total attempts
         assert adapter.call_count == 3
 

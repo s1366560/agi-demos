@@ -1157,6 +1157,7 @@ class ReActAgent:
             return None
 
         # OBSERVE event: add redundant 'observation' field for legacy compat
+        # Also ensure 'error' field is included for proper error handling in frontend
         if event_type == AgentEventType.OBSERVE and isinstance(domain_event, AgentObserveEvent):
             observation = (
                 domain_event.result
@@ -1164,6 +1165,9 @@ class ReActAgent:
                 else (domain_event.error or "")
             )
             event_dict["data"]["observation"] = observation
+            # Include error field if present - frontend uses this to determine success/failure
+            if domain_event.error:
+                event_dict["data"]["error"] = domain_event.error
 
         # DOOM_LOOP_DETECTED: rename to 'doom_loop' for frontend compatibility
         if event_type == AgentEventType.DOOM_LOOP_DETECTED:
