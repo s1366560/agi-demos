@@ -465,7 +465,31 @@ export const useAgentV3Store = create<AgentV3State>()(
                     }
 
                     // Default state for new/unloaded conversation
-                    set({ activeConversationId: id });
+                    // IMPORTANT: Reset all streaming and state flags to prevent state leakage from previous conversation
+                    set({
+                        activeConversationId: id,
+                        timeline: [],
+                        messages: [],
+                        hasEarlier: false,
+                        earliestLoadedSequence: null,
+                        isStreaming: false,
+                        streamStatus: "idle",
+                        streamingAssistantContent: "",
+                        error: null,
+                        agentState: "idle",
+                        currentThought: "",
+                        streamingThought: "",
+                        isThinkingStreaming: false,
+                        activeToolCalls: new Map(),
+                        pendingToolsStack: [],
+                        workPlan: null,
+                        isPlanMode: false,
+                        executionPlan: null,
+                        pendingClarification: null,
+                        pendingDecision: null,
+                        pendingEnvVarRequest: null,
+                        doomLoopDetected: null,
+                    });
                 },
 
                 loadConversations: async (projectId) => {
@@ -650,6 +674,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                         const messages = timelineToMessages(response.timeline);
                         const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
                         const lastSequence = response.timeline[response.timeline.length - 1]?.sequenceNumber ?? 0;
+
+                        // DEBUG: Log artifact events in timeline
+                        const artifactEvents = response.timeline.filter((e: any) => e.type === 'artifact_created');
+                        console.log(`[AgentV3] loadMessages: Found ${artifactEvents.length} artifact_created events in timeline`, artifactEvents);
 
                         // Update localStorage with latest sequence
                         if (lastSequence > 0) {

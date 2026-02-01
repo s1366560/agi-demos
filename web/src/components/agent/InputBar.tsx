@@ -34,21 +34,24 @@ export const InputBar = memo<InputBarProps>(({
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Combine disabled and isStreaming for send button state
+  const canSend = !disabled && !isStreaming && content.trim().length > 0;
+  
   const handleSend = useCallback(() => {
-    if (!content.trim() || isStreaming) return;
+    if (!content.trim() || isStreaming || disabled) return;
     onSend(content.trim());
     setContent('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [content, isStreaming, onSend]);
+  }, [content, isStreaming, disabled, onSend]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !disabled && !isStreaming) {
       e.preventDefault();
       handleSend();
     }
-  }, [handleSend]);
+  }, [handleSend, disabled, isStreaming]);
 
   const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const target = e.currentTarget;
@@ -177,7 +180,7 @@ export const InputBar = memo<InputBarProps>(({
                 size="small"
                 icon={<Send size={14} />}
                 onClick={handleSend}
-                disabled={!content.trim()}
+                disabled={!canSend}
                 className="
                   rounded-lg flex items-center gap-1
                   bg-primary hover:bg-primary-600

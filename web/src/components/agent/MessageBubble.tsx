@@ -665,6 +665,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
       return null;
 
     case 'artifact_created':
+      console.log('[MessageBubble] Rendering artifact_created event:', event);
       return <ArtifactCreatedBubble event={event as unknown as ArtifactCreatedEvent} />;
 
     // These artifact events don't need visual rendering
