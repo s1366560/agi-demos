@@ -14,9 +14,10 @@ LABEL description="Sandbox MCP Server with XFCE 4.20, Python, Java, Node.js"
 # Environment Variables
 # ====================
 ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=UTC \
-    LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8
+    TZ=Asia/Shanghai \
+    LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    LANGUAGE=zh_CN:en
 
 # Development versions
 ENV PYTHON_VERSION=3.13 \
@@ -71,7 +72,23 @@ RUN set -eux; \
     jq \
     # File management
     tree rsync sudo \
+    # Locale support for Chinese
+    locales \
+    # Document Processing (docx, pptx, xlsx, pdf skills)
+    pandoc libreoffice-writer libreoffice-calc libreoffice-impress poppler-utils \
+    # Video/Media Processing (remotion, slack-gif-creator skills)
+    ffmpeg \
+    # Chinese fonts for document/image generation
+    fonts-noto-cjk fonts-noto-cjk-extra \
+    fonts-wqy-microhei fonts-wqy-zenhei \
+    fonts-arphic-ukai fonts-arphic-uming \
     ; \
+    # Generate Chinese locale
+    sed -i '/zh_CN.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen zh_CN.UTF-8 && \
+    update-locale LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8; \
+    # Refresh font cache
+    fc-cache -fv; \
     rm -rf /var/lib/apt/lists/*
 
 # ====================
@@ -86,6 +103,41 @@ RUN set -eux; \
 # Install Global Node Packages (with cache mount)
 # ====================
 RUN --mount=type=cache,target=/root/.npm npm install -g pnpm yarn
+
+# ====================
+# Install Bun Runtime (varg-video-generation skill)
+# ====================
+RUN set -eux; \
+    curl -fsSL https://bun.sh/install | bash; \
+    ln -sf /root/.bun/bin/bun /usr/local/bin/bun; \
+    ln -sf /root/.bun/bin/bunx /usr/local/bin/bunx
+
+# ====================
+# Install Skills Dependencies - Global Node Packages
+# ====================
+# PPT/DOCX Processing (pptx, docx skills)
+RUN --mount=type=cache,target=/root/.npm npm install -g \
+    pptxgenjs docx
+
+# Web Development (web-artifacts-builder, frontend-design skills)
+RUN --mount=type=cache,target=/root/.npm npm install -g \
+    typescript vite parcel
+
+# Remotion Video Generation (remotion, create-remotion-geist skills)
+RUN --mount=type=cache,target=/root/.npm npm install -g \
+    remotion @remotion/cli
+
+# HTML Rendering Dependencies (pptx html2pptx workflow)
+RUN --mount=type=cache,target=/root/.npm npm install -g \
+    puppeteer sharp react react-dom react-icons
+
+# TailwindCSS for frontend development
+RUN --mount=type=cache,target=/root/.npm npm install -g \
+    tailwindcss postcss autoprefixer
+
+# MCP Development (mcp-builder skill)
+RUN --mount=type=cache,target=/root/.npm npm install -g \
+    zod @types/node
 
 # ====================
 # Configure Python Alternatives (cached layer)
@@ -106,17 +158,84 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     virtualenv pipenv poetry ipython black ruff mypy pytest pytest-asyncio
 
 # ====================
+# Install Skills Dependencies - Python Packages
+# ====================
+# PDF Processing (pdf skill)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    pypdf pdfplumber reportlab pdf2image
+
+# Image/GIF Processing (slack-gif-creator, canvas-design skills)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    "pillow>=10.0.0" "imageio>=2.31.0" "imageio-ffmpeg>=0.4.9" "numpy>=1.24.0"
+
+# Excel/Spreadsheet Processing (xlsx skill)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    openpyxl pandas xlrd xlwt
+
+# Word/OOXML Processing (docx skill)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    python-docx defusedxml lxml
+
+# Web Automation (webapp-testing skill)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    playwright
+
+# Document Conversion (pptx, docx skills)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    markitdown
+
+# Data Visualization & Science
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --no-cache-dir --break-system-packages \
+    matplotlib seaborn scipy
+
+# ====================
+# Install Playwright Browsers (webapp-testing skill)
+# ====================
+RUN playwright install chromium --with-deps
+
+# ====================
+# Setup Python Virtual Environment for Skills
+# ====================
+# Create a pre-configured virtual environment for sandbox operations
+ENV SKILLS_VENV=/opt/skills-venv
+ENV PATH="${SKILLS_VENV}/bin:${PATH}"
+RUN python -m venv ${SKILLS_VENV} && \
+    ${SKILLS_VENV}/bin/pip install --upgrade pip && \
+    ${SKILLS_VENV}/bin/pip install \
+    # Core dependencies for skills
+    pypdf pdfplumber reportlab pdf2image \
+    "pillow>=10.0.0" "imageio>=2.31.0" "numpy>=1.24.0" \
+    openpyxl pandas xlrd xlwt \
+    python-docx defusedxml lxml \
+    playwright markitdown \
+    matplotlib seaborn scipy \
+    # Additional common packages
+    requests httpx aiohttp \
+    pydantic typing-extensions \
+    jinja2 pyyaml toml
+
+# Install Playwright browsers in venv
+RUN ${SKILLS_VENV}/bin/playwright install chromium
+
+# ====================
 # Install ttyd for Web Terminal
 # ====================
 ENV TTYD_VERSION=1.7.7
 RUN set -eux; \
     ARCH=$(dpkg --print-architecture); \
     TTYD_ARCH=$([ "$ARCH" = "x86_64" ] && echo "x86_64" || \
-               [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
-               [ "$ARCH" = "arm64" ] && echo "aarch64" || \
-               echo "$ARCH"); \
+    [ "$ARCH" = "aarch64" ] && echo "aarch64" || \
+    [ "$ARCH" = "arm64" ] && echo "aarch64" || \
+    echo "$ARCH"); \
     curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.${TTYD_ARCH}" \
-        -o /usr/local/bin/ttyd; \
+    -o /usr/local/bin/ttyd; \
     chmod +x /usr/local/bin/ttyd
 
 # ====================
@@ -127,45 +246,49 @@ RUN set -eux; \
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        # X11 and display
-        xorg xvfb \
-        # XFCE 4.20 desktop core
-        xfce4 xfce4-goodies xfce4-terminal xfce4-taskmanager thunar \
-        # Panel plugins (available in Ubuntu 25.04)
-        xfce4-whiskermenu-plugin \
-        xfce4-pulseaudio-plugin \
-        xfce4-power-manager \
-        xfce4-clipman-plugin \
-        xfce4-xkb-plugin \
-        xfce4-time-out-plugin \
-        xfce4-diskperf-plugin \
-        xfce4-netload-plugin \
-        xfce4-cpugraph-plugin \
-        xfce4-genmon-plugin \
-        # File manager enhancements
-        thunar-archive-plugin thunar-media-tags-plugin \
-        # Desktop and window manager
-        xfdesktop4 xfwm4 \
-        # Settings and appearance
-        xfce4-settings \
-        gtk2-engines-murrine gtk2-engines-pixbuf \
-        xfce4-indicator-plugin xfce4-places-plugin \
-        # Themes and icons (Ubuntu 25.04 available packages)
-        arc-theme \
-        # Sound
-        pulseaudio pulseaudio-utils pavucontrol \
-        # Network
-        network-manager-gnome \
-        # Utilities
-        dbus-x11 dconf-cli dconf-gsettings-backend gsettings-desktop-schemas \
-        # VNC servers
-        x11vnc tigervnc-standalone-server tigervnc-tools \
-        # Fonts (including CJK support for Asian languages)
-        fonts-freefont-ttf fonts-noto-cjk fonts-noto-color-emoji \
-        fonts-liberation fonts-dejavu-core \
-        # System monitor
-        htop \
+    # X11 and display
+    xorg xvfb \
+    # XFCE 4.20 desktop core
+    xfce4 xfce4-goodies xfce4-terminal xfce4-taskmanager thunar \
+    # Panel plugins (available in Ubuntu 25.04)
+    xfce4-whiskermenu-plugin \
+    xfce4-pulseaudio-plugin \
+    xfce4-power-manager \
+    xfce4-clipman-plugin \
+    xfce4-xkb-plugin \
+    xfce4-time-out-plugin \
+    xfce4-diskperf-plugin \
+    xfce4-netload-plugin \
+    xfce4-cpugraph-plugin \
+    xfce4-genmon-plugin \
+    # File manager enhancements
+    thunar-archive-plugin thunar-media-tags-plugin \
+    # Desktop and window manager
+    xfdesktop4 xfwm4 \
+    # Settings and appearance
+    xfce4-settings \
+    gtk2-engines-murrine gtk2-engines-pixbuf \
+    xfce4-indicator-plugin xfce4-places-plugin \
+    # Themes and icons (Ubuntu 25.04 available packages)
+    arc-theme \
+    # Sound
+    pulseaudio pulseaudio-utils pavucontrol \
+    # Network
+    network-manager-gnome \
+    # Utilities
+    dbus-x11 dconf-cli dconf-gsettings-backend gsettings-desktop-schemas \
+    # VNC servers
+    x11vnc tigervnc-standalone-server tigervnc-tools \
+    # Fonts (including CJK support for Asian languages)
+    fonts-freefont-ttf fonts-noto-color-emoji \
+    fonts-liberation fonts-dejavu-core \
+    # Chinese fonts already installed in base layer, add input method
+    ibus ibus-libpinyin \
+    # System monitor
+    htop \
     ; \
+    # Refresh font cache for desktop
+    fc-cache -fv; \
     rm -rf /var/lib/apt/lists/*
 
 # ====================
@@ -177,7 +300,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends python3-websockify; \
     rm -rf /var/lib/apt/lists/*; \
     curl -fsSL "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
-        | tar -xz -C /opt; \
+    | tar -xz -C /opt; \
     mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC; \
     chmod +x /opt/noVNC/utils/novnc_proxy
 
