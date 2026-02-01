@@ -109,7 +109,7 @@ class SandboxMCPToolWrapper(AgentTool):
         required = input_schema.get("required", [])
         return all(arg in kwargs for arg in required)
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> Any:
         """
         Execute the tool with automatic error handling and retry.
 
@@ -117,7 +117,7 @@ class SandboxMCPToolWrapper(AgentTool):
             **kwargs: Tool arguments as defined in input_schema
 
         Returns:
-            String result from tool execution
+            String result for regular tools, or dict with artifact data for export_artifact
         """
         last_error: Optional[MCPToolError] = None
 
@@ -139,7 +139,11 @@ class SandboxMCPToolWrapper(AgentTool):
                 # Parse result
                 if result.get("is_error"):
                     content_list = result.get("content", [])
-                    error_msg = content_list[0].get("text", "Unknown error") if content_list else "Unknown error"
+                    error_msg = (
+                        content_list[0].get("text", "Unknown error")
+                        if content_list
+                        else "Unknown error"
+                    )
 
                     # Create error from tool result
                     error = Exception(error_msg)
@@ -166,8 +170,19 @@ class SandboxMCPToolWrapper(AgentTool):
                     last_error = mcp_error
                     break
 
-                # Success - extract output
+                # Success - check if this is an artifact result (for export_artifact tool)
+                artifact = result.get("artifact")
                 content_list = result.get("content", [])
+
+                if artifact:
+                    # Return full result dict for artifact processing in processor
+                    # This allows _process_tool_artifacts to extract and upload the artifact
+                    return {
+                        "content": content_list,
+                        "artifact": artifact,
+                    }
+
+                # Regular tool - extract text output
                 if content_list and len(content_list) > 0:
                     return content_list[0].get("text", "")
 

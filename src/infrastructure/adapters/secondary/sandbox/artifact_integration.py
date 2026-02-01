@@ -257,22 +257,55 @@ class SandboxArtifactIntegration:
                 return []
 
         async def read_file(path: str) -> Optional[bytes]:
+            """Read file using export_artifact tool for proper binary support."""
             try:
+                # Use export_artifact tool which supports binary files
                 result = await call_tool_fn(
                     sandbox_id,
-                    "read",
-                    {"file_path": path},
+                    "export_artifact",
+                    {"file_path": path, "encoding": "auto"},
                 )
-                if result.get("is_error"):
+                if result.get("is_error") or result.get("isError"):
+                    # Fallback to text read for non-binary files
+                    result = await call_tool_fn(
+                        sandbox_id,
+                        "read",
+                        {"file_path": path},
+                    )
+                    if result.get("is_error") or result.get("isError"):
+                        return None
+                    content = result.get("content", [])
+                    if not content:
+                        return None
+                    text = content[0].get("text", "")
+                    return text.encode("utf-8")
+
+                # Extract content from export_artifact result
+                artifact_info = result.get("artifact", {})
+                encoding = artifact_info.get("encoding", "utf-8")
+
+                # Check for base64 encoded data
+                if encoding == "base64":
+                    import base64
+
+                    data = artifact_info.get("data")
+                    if data:
+                        return base64.b64decode(data)
+                    # Also check for image content
+                    for item in result.get("content", []):
+                        if item.get("type") == "image":
+                            return base64.b64decode(item.get("data", ""))
                     return None
 
+                # Text content
                 content = result.get("content", [])
-                if not content:
-                    return None
+                if content:
+                    text = content[0].get("text", "")
+                    return text.encode("utf-8")
+                return None
 
-                text = content[0].get("text", "")
-                return text.encode("utf-8")
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Failed to read file {path}: {e}")
                 return None
 
         # Scan for new artifacts
@@ -357,5 +390,111 @@ async def extract_artifacts_from_text(
 
         except Exception as e:
             logger.warning(f"Failed to decode embedded data: {e}")
+
+    return artifacts
+
+
+def extract_artifacts_from_mcp_result(
+    result: Dict[str, Any],
+    tool_name: str,
+) -> List[Dict[str, Any]]:
+    """
+    Extract artifacts from MCP tool result content.
+
+    MCP tools can return multiple content types including images.
+    This function extracts image and other rich content as artifacts.
+
+    Args:
+        result: MCP tool result with 'content' array
+        tool_name: Name of the tool that produced the result
+
+    Returns:
+        List of artifact data dicts with keys:
+            - content: bytes
+            - mime_type: str
+            - category: str
+            - filename: str
+            - size_bytes: int
+            - source: str (tool name)
+    """
+    import base64
+
+    artifacts = []
+    content_items = result.get("content", [])
+
+    if not content_items:
+        return artifacts
+
+    counter = 0
+    for item in content_items:
+        item_type = item.get("type", "")
+
+        if item_type == "image":
+            # MCP image content: {"type": "image", "data": "base64...", "mimeType": "image/png"}
+            base64_data = item.get("data", "")
+            mime_type = item.get("mimeType", "image/png")
+
+            if base64_data:
+                try:
+                    content = base64.b64decode(base64_data)
+                    category = get_category_from_mime(mime_type)
+
+                    # Generate filename based on mime type
+                    ext_map = {
+                        "image/png": ".png",
+                        "image/jpeg": ".jpg",
+                        "image/gif": ".gif",
+                        "image/webp": ".webp",
+                        "image/svg+xml": ".svg",
+                        "image/bmp": ".bmp",
+                    }
+                    ext = ext_map.get(mime_type, ".bin")
+
+                    artifacts.append(
+                        {
+                            "content": content,
+                            "mime_type": mime_type,
+                            "category": category.value,
+                            "filename": f"{tool_name}_output_{counter}{ext}",
+                            "size_bytes": len(content),
+                            "source": tool_name,
+                        }
+                    )
+                    counter += 1
+
+                except Exception as e:
+                    logger.warning(f"Failed to decode MCP image content: {e}")
+
+        elif item_type == "resource":
+            # MCP resource content (file references)
+            uri = item.get("uri", "")
+            mime_type = item.get("mimeType", "application/octet-stream")
+            blob = item.get("blob")  # Optional base64 blob
+
+            if blob:
+                try:
+                    content = base64.b64decode(blob)
+                    category = get_category_from_mime(mime_type)
+
+                    # Extract filename from URI
+                    filename = uri.split("/")[-1] if uri else f"{tool_name}_resource_{counter}"
+
+                    artifacts.append(
+                        {
+                            "content": content,
+                            "mime_type": mime_type,
+                            "category": category.value,
+                            "filename": filename,
+                            "size_bytes": len(content),
+                            "source": tool_name,
+                            "source_path": uri,
+                        }
+                    )
+                    counter += 1
+
+                except Exception as e:
+                    logger.warning(f"Failed to decode MCP resource blob: {e}")
+
+    return artifacts
 
     return artifacts

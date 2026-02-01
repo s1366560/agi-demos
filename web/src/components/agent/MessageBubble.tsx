@@ -19,7 +19,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 // Lazy load syntax highlighter to reduce initial bundle size (bundle-dynamic-imports)
 // ~400KB savings - only loaded when code blocks are actually rendered
-import type { TimelineEvent, ActEvent, ObserveEvent } from '../../types/agent';
+import type { TimelineEvent, ActEvent, ObserveEvent, ArtifactCreatedEvent } from '../../types/agent';
 
 // Dynamic import hook for syntax highlighter
 const useSyntaxHighlighter = () => {
@@ -481,6 +481,125 @@ const TextEndBubble: React.FC<{ event: TimelineEvent }> = ({ event }) => {
   );
 };
 
+/**
+ * ArtifactCreatedBubble - Display generated artifact (image, file, etc.)
+ */
+const ArtifactCreatedBubble: React.FC<{ event: ArtifactCreatedEvent }> = ({ event }) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  // Determine icon based on category
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'image': return 'image';
+      case 'video': return 'movie';
+      case 'audio': return 'audio_file';
+      case 'document': return 'description';
+      case 'code': return 'code';
+      case 'data': return 'table_chart';
+      case 'archive': return 'folder_zip';
+      default: return 'attach_file';
+    }
+  };
+
+  // Format file size
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const isImage = event.category === 'image';
+  const url = event.url || event.previewUrl;
+
+  return (
+    <div className="flex items-start gap-3 animate-slide-up">
+      <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+        <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
+          {getCategoryIcon(event.category)}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-700/50">
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-lg">
+              {getCategoryIcon(event.category)}
+            </span>
+            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+              文件已生成
+            </span>
+            {event.sourceTool && (
+              <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded">
+                {event.sourceTool}
+              </span>
+            )}
+          </div>
+
+          {/* Image Preview */}
+          {isImage && url && !imageError && (
+            <div className="mb-3 relative">
+              {!imageLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg min-h-[100px]">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                </div>
+              )}
+              <img
+                src={url}
+                alt={event.filename}
+                className={`max-w-full max-h-[300px] rounded-lg shadow-sm object-contain ${
+                  imageLoaded ? 'opacity-100' : 'opacity-0'
+                } transition-opacity duration-300`}
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageError(true)}
+              />
+            </div>
+          )}
+
+          {/* File Info */}
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-base">
+                insert_drive_file
+              </span>
+              <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
+                {event.filename}
+              </span>
+            </div>
+            <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              {formatSize(event.sizeBytes)}
+            </span>
+            {url && (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                download={event.filename}
+              >
+                <span className="material-symbols-outlined text-base">
+                  download
+                </span>
+                下载
+              </a>
+            )}
+          </div>
+
+          {/* Additional metadata */}
+          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="px-2 py-0.5 bg-white/50 dark:bg-slate-800/50 rounded">
+              {event.mimeType}
+            </span>
+            <span className="capitalize px-2 py-0.5 bg-white/50 dark:bg-slate-800/50 rounded">
+              {event.category}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Main Message Bubble Component
 export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
   event,
@@ -543,6 +662,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
     case 'step_end':
     case 'text_start':
       // These are control events, no visual output needed
+      return null;
+
+    case 'artifact_created':
+      return <ArtifactCreatedBubble event={event as unknown as ArtifactCreatedEvent} />;
+
+    // These artifact events don't need visual rendering
+    case 'artifact_ready':
+    case 'artifact_error':
+    case 'artifacts_batch':
       return null;
 
     default:

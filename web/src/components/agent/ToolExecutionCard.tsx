@@ -25,7 +25,7 @@ import {
   parseCodeExecutorResult,
 } from "./CodeExecutorResultCard";
 import {
-  isImageUrl,
+  isImageUrl as _isImageUrl,
   parseBase64Image,
   extractImageUrl,
   foldText,

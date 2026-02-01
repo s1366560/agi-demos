@@ -48,6 +48,8 @@ from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
 
 if TYPE_CHECKING:
+    from src.application.services.artifact_service import ArtifactService
+
     from ..planning import HybridPlanModeDetector
 
 logger = logging.getLogger(__name__)
@@ -116,6 +118,8 @@ class ReActAgent:
         project_root: Optional[Path] = None,
         # Plan Mode detection
         plan_mode_detector: Optional["HybridPlanModeDetector"] = None,
+        # Artifact service for rich output handling
+        artifact_service: Optional["ArtifactService"] = None,
         # ====================================================================
         # Agent Session Pool: Pre-cached components for performance optimization
         # These are internal parameters set by execute_react_agent_activity
@@ -150,6 +154,7 @@ class ReActAgent:
             max_context_tokens: Maximum context tokens (default: 128000)
             agent_mode: Agent mode for skill filtering (default: "default")
             project_root: Optional project root path for custom rules loading
+            artifact_service: Optional artifact service for handling rich tool outputs
             _cached_tool_definitions: Pre-cached tool definitions from Session Pool
             _cached_system_prompt_manager: Pre-cached SystemPromptManager singleton
             _cached_subagent_router: Pre-cached SubAgentRouter with built index
@@ -165,6 +170,7 @@ class ReActAgent:
         self.agent_mode = agent_mode  # Store agent mode for skill filtering
         self.project_root = project_root or Path.cwd()
         self.plan_mode_detector = plan_mode_detector  # Plan Mode detection
+        self.artifact_service = artifact_service  # Artifact service for rich outputs
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -787,11 +793,12 @@ class ReActAgent:
                 max_steps=subagent_config.get("max_iterations", self.max_steps),
             )
 
-        # Create processor
+        # Create processor with artifact service for rich output handling
         processor = SessionProcessor(
             config=config,
             tools=tools_to_use,
             permission_manager=self.permission_manager,
+            artifact_service=self.artifact_service,
         )
 
         # Track final content
@@ -1201,6 +1208,23 @@ class ReActAgent:
         # ERROR: provide default code
         if event_type == AgentEventType.ERROR and isinstance(domain_event, AgentErrorEvent):
             event_dict["data"]["code"] = domain_event.code or "UNKNOWN"
+
+        # ARTIFACT_CREATED: forward artifact info to frontend
+        if event_type == AgentEventType.ARTIFACT_CREATED:
+            from src.domain.events.agent_events import AgentArtifactCreatedEvent
+
+            if isinstance(domain_event, AgentArtifactCreatedEvent):
+                event_dict["data"] = {
+                    "artifact_id": domain_event.artifact_id,
+                    "filename": domain_event.filename,
+                    "mime_type": domain_event.mime_type,
+                    "category": domain_event.category,
+                    "size_bytes": domain_event.size_bytes,
+                    "url": domain_event.url,
+                    "preview_url": domain_event.preview_url,
+                    "tool_execution_id": domain_event.tool_execution_id,
+                    "source_tool": domain_event.source_tool,
+                }
 
         return event_dict
 

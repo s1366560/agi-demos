@@ -9,7 +9,7 @@ import logging
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
@@ -40,13 +40,17 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     return _sandbox_adapter
 
 
-def get_event_publisher() -> Optional[SandboxEventPublisher]:
-    """Get or create the sandbox event publisher singleton."""
+def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
+    """Get the sandbox event publisher from app container.
+
+    Uses the properly initialized container from app.state which has
+    redis_client configured for the event bus.
+    """
     global _event_publisher
     if _event_publisher is None:
         try:
-            from src.configuration.di_container import DIContainer
-            container = DIContainer()
+            # Get container from app.state which has redis_client properly configured
+            container = request.app.state.container
             _event_publisher = container.sandbox_event_publisher()
         except Exception as e:
             logger.warning(f"Could not create event publisher: {e}")

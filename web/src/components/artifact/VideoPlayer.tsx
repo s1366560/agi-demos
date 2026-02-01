@@ -26,7 +26,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   src,
   mimeType,
   maxHeight = 400,
-  compact = false,
+  compact: _compact = false,
   autoPlay = false,
   onLoad,
   onError,

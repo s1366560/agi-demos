@@ -1893,6 +1893,7 @@ class MCPSandboxAdapter(SandboxPort):
                 return {
                     "content": result.content,
                     "is_error": result.isError,
+                    "artifact": result.artifact,  # Preserve artifact data from export_artifact
                 }
 
             except (SandboxConnectionError, ConnectionError) as e:

@@ -36,6 +36,7 @@ class MCPToolResult:
     content: List[Dict[str, Any]] = field(default_factory=list)
     isError: bool = False
     metadata: Optional[Dict[str, Any]] = None
+    artifact: Optional[Dict[str, Any]] = None  # For export_artifact tool results
 
 
 class MCPSubprocessClient:

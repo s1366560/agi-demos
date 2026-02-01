@@ -42,6 +42,8 @@ import type {
     DecisionAnsweredEventData,
     EnvVarRequestedEventData,
     EnvVarProvidedEventData,
+    ArtifactCreatedEventData,
+    ArtifactCategory,
 } from '../types/agent';
 
 /**
@@ -496,6 +498,25 @@ export function sseEventToTimeline(
                 requestId: data.request_id,
                 toolName: data.tool_name,
                 variableNames: data.variable_names,
+            };
+        }
+
+        case 'artifact_created': {
+            const data = event.data as unknown as ArtifactCreatedEventData;
+            return {
+                id: generateTimelineEventId('artifact_created'),
+                type: 'artifact_created',
+                sequenceNumber,
+                timestamp,
+                artifactId: data.artifact_id,
+                filename: data.filename,
+                mimeType: data.mime_type,
+                category: data.category as ArtifactCategory,
+                sizeBytes: data.size_bytes,
+                url: data.url,
+                previewUrl: data.preview_url,
+                toolExecutionId: data.tool_execution_id,
+                sourceTool: data.source_tool,
             };
         }
 

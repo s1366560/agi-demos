@@ -721,17 +721,19 @@ class AgentArtifactCreatedEvent(AgentDomainEvent):
     """Event emitted when an artifact is detected and upload started.
 
     This event is emitted immediately when a new file is detected in the
-    sandbox output directory, before the upload completes.
+    sandbox output directory or extracted from tool output, before the upload completes.
     """
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_CREATED
     artifact_id: str
-    sandbox_id: str
+    sandbox_id: Optional[str] = None
     tool_execution_id: Optional[str] = None
     filename: str
     mime_type: str
     category: str
     size_bytes: int
+    url: Optional[str] = None  # URL if already available
+    preview_url: Optional[str] = None
     source_tool: Optional[str] = None
     source_path: Optional[str] = None
 
@@ -744,7 +746,7 @@ class AgentArtifactReadyEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_READY
     artifact_id: str
-    sandbox_id: str
+    sandbox_id: Optional[str] = None
     tool_execution_id: Optional[str] = None
     filename: str
     mime_type: str
@@ -761,7 +763,7 @@ class AgentArtifactErrorEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_ERROR
     artifact_id: str
-    sandbox_id: str
+    sandbox_id: Optional[str] = None
     tool_execution_id: Optional[str] = None
     filename: str
     error: str
@@ -775,7 +777,7 @@ class AgentArtifactsBatchEvent(AgentDomainEvent):
     """
 
     event_type: AgentEventType = AgentEventType.ARTIFACTS_BATCH
-    sandbox_id: str
+    sandbox_id: Optional[str] = None
     tool_execution_id: Optional[str] = None
     artifacts: List[ArtifactInfo] = []
     source_tool: Optional[str] = None

@@ -23,10 +23,22 @@ import {
     DecisionAskedEventData,
     EnvVarRequestedEventData,
 } from "../types/agent";
+import {
+    type ConversationState,
+    type HITLSummary,
+    createDefaultConversationState,
+    getHITLSummaryFromState,
+    MAX_CONCURRENT_STREAMING_CONVERSATIONS,
+} from "../types/conversationState";
 import { agentService } from "../services/agentService";
 import { planService } from "../services/planService";
 import { v4 as uuidv4 } from "uuid";
 import { appendSSEEventToTimeline } from "../utils/sseEventAdapter";
+import {
+    saveConversationState,
+    loadConversationState,
+    deleteConversationState,
+} from "../utils/conversationDB";
 
 /**
  * Token delta batching configuration
@@ -95,7 +107,10 @@ interface AgentV3State {
     conversations: Conversation[];
     activeConversationId: string | null;
 
-    // Timeline State (Primary data source - events rendered in natural order)
+    // Per-conversation state (isolated for multi-conversation support)
+    conversationStates: Map<string, ConversationState>;
+
+    // Timeline State (for active conversation - backward compatibility)
     timeline: TimelineEvent[];
 
     // Messages State (Derived from timeline for backward compatibility)
@@ -105,13 +120,13 @@ interface AgentV3State {
     hasEarlier: boolean;  // Whether there are earlier messages to load
     earliestLoadedSequence: number | null;  // For pagination
 
-    // Stream State
+    // Stream State (for active conversation - backward compatibility)
     isStreaming: boolean;
     streamStatus: "idle" | "connecting" | "streaming" | "error";
     error: string | null;
     streamingAssistantContent: string; // Streaming content (used for real-time display)
 
-    // Agent Execution State
+    // Agent Execution State (for active conversation - backward compatibility)
     agentState: "idle" | "thinking" | "acting" | "observing" | "awaiting_input";
     currentThought: string;
     streamingThought: string; // For streaming thought_delta content
@@ -122,7 +137,7 @@ interface AgentV3State {
     >;
     pendingToolsStack: string[]; // Track order of tool executions
 
-    // Plan State
+    // Plan State (for active conversation - backward compatibility)
     workPlan: WorkPlan | null;
     isPlanMode: boolean;
     executionPlan: ExecutionPlan | null;
@@ -133,11 +148,18 @@ interface AgentV3State {
     leftSidebarWidth: number;
     rightPanelWidth: number;
 
-    // Interactivity
+    // Interactivity (for active conversation - backward compatibility)
     pendingClarification: any; // Pending clarification request from agent
     pendingDecision: any; // Using any for brevity in this update
     doomLoopDetected: any;
     pendingEnvVarRequest: any; // Pending environment variable request from agent
+
+    // Multi-conversation state helpers
+    getConversationState: (conversationId: string) => ConversationState;
+    updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
+    getStreamingConversationCount: () => number;
+    getConversationsWithPendingHITL: () => Array<{ conversationId: string; summary: HITLSummary }>;
+    syncActiveConversationState: () => void;
 
     // Actions
     setActiveConversation: (id: string | null) => void;
@@ -159,7 +181,7 @@ interface AgentV3State {
         projectId: string,
         title: string
     ) => Promise<void>;
-    abortStream: () => void;
+    abortStream: (conversationId?: string) => void;
     togglePlanPanel: () => void;
     toggleHistorySidebar: () => void;
     setLeftSidebarWidth: (width: number) => void;
@@ -178,6 +200,9 @@ export const useAgentV3Store = create<AgentV3State>()(
             (set, get) => ({
                 conversations: [],
                 activeConversationId: null,
+
+                // Per-conversation state map
+                conversationStates: new Map<string, ConversationState>(),
 
                 // Timeline: Primary data source (stores raw events from API and streaming)
                 timeline: [],
@@ -215,7 +240,231 @@ export const useAgentV3Store = create<AgentV3State>()(
                 doomLoopDetected: null,
                 pendingEnvVarRequest: null,
 
-                setActiveConversation: (id) => set({ activeConversationId: id }),
+                // ===== Multi-conversation state helpers =====
+
+                /**
+                 * Get state for a specific conversation (creates default if not exists)
+                 */
+                getConversationState: (conversationId: string) => {
+                    const { conversationStates } = get();
+                    let state = conversationStates.get(conversationId);
+                    if (!state) {
+                        state = createDefaultConversationState();
+                        // Don't mutate here - just return default
+                    }
+                    return state;
+                },
+
+                /**
+                 * Update state for a specific conversation
+                 */
+                updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => {
+                    set((state) => {
+                        const newStates = new Map(state.conversationStates);
+                        const currentState = newStates.get(conversationId) || createDefaultConversationState();
+
+                        // Merge updates with current state
+                        const updatedState: ConversationState = {
+                            ...currentState,
+                            ...updates,
+                            // Special handling for Maps
+                            activeToolCalls: updates.activeToolCalls !== undefined
+                                ? updates.activeToolCalls
+                                : currentState.activeToolCalls,
+                        };
+
+                        // Update HITL summary if HITL state changed
+                        if (updates.pendingClarification !== undefined ||
+                            updates.pendingDecision !== undefined ||
+                            updates.pendingEnvVarRequest !== undefined) {
+                            updatedState.pendingHITLSummary = getHITLSummaryFromState(updatedState);
+                        }
+
+                        newStates.set(conversationId, updatedState);
+
+                        // Also update global state if this is the active conversation
+                        const isActive = state.activeConversationId === conversationId;
+                        if (isActive) {
+                            return {
+                                conversationStates: newStates,
+                                // Sync to global state for backward compatibility
+                                ...(updates.timeline !== undefined && { timeline: updates.timeline }),
+                                ...(updates.isStreaming !== undefined && { isStreaming: updates.isStreaming }),
+                                ...(updates.streamStatus !== undefined && { streamStatus: updates.streamStatus }),
+                                ...(updates.streamingAssistantContent !== undefined && { streamingAssistantContent: updates.streamingAssistantContent }),
+                                ...(updates.error !== undefined && { error: updates.error }),
+                                ...(updates.agentState !== undefined && { agentState: updates.agentState }),
+                                ...(updates.currentThought !== undefined && { currentThought: updates.currentThought }),
+                                ...(updates.streamingThought !== undefined && { streamingThought: updates.streamingThought }),
+                                ...(updates.isThinkingStreaming !== undefined && { isThinkingStreaming: updates.isThinkingStreaming }),
+                                ...(updates.activeToolCalls !== undefined && { activeToolCalls: updates.activeToolCalls }),
+                                ...(updates.pendingToolsStack !== undefined && { pendingToolsStack: updates.pendingToolsStack }),
+                                ...(updates.workPlan !== undefined && { workPlan: updates.workPlan }),
+                                ...(updates.isPlanMode !== undefined && { isPlanMode: updates.isPlanMode }),
+                                ...(updates.executionPlan !== undefined && { executionPlan: updates.executionPlan }),
+                                ...(updates.pendingClarification !== undefined && { pendingClarification: updates.pendingClarification }),
+                                ...(updates.pendingDecision !== undefined && { pendingDecision: updates.pendingDecision }),
+                                ...(updates.pendingEnvVarRequest !== undefined && { pendingEnvVarRequest: updates.pendingEnvVarRequest }),
+                                ...(updates.doomLoopDetected !== undefined && { doomLoopDetected: updates.doomLoopDetected }),
+                                ...(updates.hasEarlier !== undefined && { hasEarlier: updates.hasEarlier }),
+                                ...(updates.earliestLoadedSequence !== undefined && { earliestLoadedSequence: updates.earliestLoadedSequence }),
+                            };
+                        }
+
+                        return { conversationStates: newStates };
+                    });
+
+                    // Persist to IndexedDB (debounced)
+                    const fullState = get().conversationStates.get(conversationId);
+                    if (fullState) {
+                        saveConversationState(conversationId, fullState).catch(console.error);
+                    }
+                },
+
+                /**
+                 * Get count of currently streaming conversations
+                 */
+                getStreamingConversationCount: () => {
+                    const { conversationStates } = get();
+                    let count = 0;
+                    conversationStates.forEach((state) => {
+                        if (state.isStreaming) count++;
+                    });
+                    return count;
+                },
+
+                /**
+                 * Get all conversations with pending HITL requests
+                 */
+                getConversationsWithPendingHITL: () => {
+                    const { conversationStates } = get();
+                    const result: Array<{ conversationId: string; summary: HITLSummary }> = [];
+                    conversationStates.forEach((state, conversationId) => {
+                        const summary = getHITLSummaryFromState(state);
+                        if (summary) {
+                            result.push({ conversationId, summary });
+                        }
+                    });
+                    return result;
+                },
+
+                /**
+                 * Sync global state from active conversation state
+                 * Call this when switching conversations
+                 */
+                syncActiveConversationState: () => {
+                    const { activeConversationId, conversationStates } = get();
+                    if (!activeConversationId) return;
+
+                    const convState = conversationStates.get(activeConversationId);
+                    if (!convState) return;
+
+                    set({
+                        timeline: convState.timeline,
+                        messages: timelineToMessages(convState.timeline),
+                        hasEarlier: convState.hasEarlier,
+                        earliestLoadedSequence: convState.earliestLoadedSequence,
+                        isStreaming: convState.isStreaming,
+                        streamStatus: convState.streamStatus,
+                        streamingAssistantContent: convState.streamingAssistantContent,
+                        error: convState.error,
+                        agentState: convState.agentState,
+                        currentThought: convState.currentThought,
+                        streamingThought: convState.streamingThought,
+                        isThinkingStreaming: convState.isThinkingStreaming,
+                        activeToolCalls: convState.activeToolCalls,
+                        pendingToolsStack: convState.pendingToolsStack,
+                        workPlan: convState.workPlan,
+                        isPlanMode: convState.isPlanMode,
+                        executionPlan: convState.executionPlan,
+                        pendingClarification: convState.pendingClarification,
+                        pendingDecision: convState.pendingDecision,
+                        pendingEnvVarRequest: convState.pendingEnvVarRequest,
+                        doomLoopDetected: convState.doomLoopDetected,
+                    });
+                },
+
+                setActiveConversation: (id) => {
+                    const { activeConversationId, conversationStates, timeline, isStreaming, streamStatus,
+                        streamingAssistantContent, error, agentState, currentThought, streamingThought,
+                        isThinkingStreaming, activeToolCalls, pendingToolsStack, workPlan, isPlanMode,
+                        executionPlan, pendingClarification, pendingDecision, pendingEnvVarRequest,
+                        doomLoopDetected, hasEarlier, earliestLoadedSequence } = get();
+
+                    // Save current conversation state before switching
+                    if (activeConversationId && activeConversationId !== id) {
+                        const newStates = new Map(conversationStates);
+                        const currentState = newStates.get(activeConversationId) || createDefaultConversationState();
+                        newStates.set(activeConversationId, {
+                            ...currentState,
+                            timeline,
+                            hasEarlier,
+                            earliestLoadedSequence,
+                            isStreaming,
+                            streamStatus,
+                            streamingAssistantContent,
+                            error,
+                            agentState,
+                            currentThought,
+                            streamingThought,
+                            isThinkingStreaming,
+                            activeToolCalls,
+                            pendingToolsStack,
+                            workPlan,
+                            isPlanMode,
+                            executionPlan,
+                            pendingClarification,
+                            pendingDecision,
+                            pendingEnvVarRequest,
+                            doomLoopDetected,
+                            pendingHITLSummary: getHITLSummaryFromState({
+                                ...currentState,
+                                pendingClarification,
+                                pendingDecision,
+                                pendingEnvVarRequest,
+                            } as ConversationState),
+                        });
+                        set({ conversationStates: newStates });
+
+                        // Persist to IndexedDB
+                        saveConversationState(activeConversationId, newStates.get(activeConversationId)!).catch(console.error);
+                    }
+
+                    // Load new conversation state if exists
+                    if (id) {
+                        const newState = conversationStates.get(id);
+                        if (newState) {
+                            set({
+                                activeConversationId: id,
+                                timeline: newState.timeline,
+                                messages: timelineToMessages(newState.timeline),
+                                hasEarlier: newState.hasEarlier,
+                                earliestLoadedSequence: newState.earliestLoadedSequence,
+                                isStreaming: newState.isStreaming,
+                                streamStatus: newState.streamStatus,
+                                streamingAssistantContent: newState.streamingAssistantContent,
+                                error: newState.error,
+                                agentState: newState.agentState,
+                                currentThought: newState.currentThought,
+                                streamingThought: newState.streamingThought,
+                                isThinkingStreaming: newState.isThinkingStreaming,
+                                activeToolCalls: newState.activeToolCalls,
+                                pendingToolsStack: newState.pendingToolsStack,
+                                workPlan: newState.workPlan,
+                                isPlanMode: newState.isPlanMode,
+                                executionPlan: newState.executionPlan,
+                                pendingClarification: newState.pendingClarification,
+                                pendingDecision: newState.pendingDecision,
+                                pendingEnvVarRequest: newState.pendingEnvVarRequest,
+                                doomLoopDetected: newState.doomLoopDetected,
+                            });
+                            return;
+                        }
+                    }
+
+                    // Default state for new/unloaded conversation
+                    set({ activeConversationId: id });
+                },
 
                 loadConversations: async (projectId) => {
                     console.log(`[agentV3] loadConversations called for project: ${projectId}`);
@@ -240,22 +489,31 @@ export const useAgentV3Store = create<AgentV3State>()(
                 deleteConversation: async (conversationId, projectId) => {
                     try {
                         await agentService.deleteConversation(conversationId, projectId);
-                        // Remove from local state
-                        set((state) => ({
-                            conversations: state.conversations.filter(
-                                (c) => c.id !== conversationId
-                            ),
-                            // Clear active conversation if it was the deleted one
-                            activeConversationId:
-                                state.activeConversationId === conversationId
-                                    ? null
-                                    : state.activeConversationId,
-                            // Clear messages and timeline if the deleted conversation was active
-                            messages:
-                                state.activeConversationId === conversationId ? [] : state.messages,
-                            timeline:
-                                state.activeConversationId === conversationId ? [] : state.timeline,
-                        }));
+                        // Remove from local state and conversation states map
+                        set((state) => {
+                            const newStates = new Map(state.conversationStates);
+                            newStates.delete(conversationId);
+
+                            return {
+                                conversations: state.conversations.filter(
+                                    (c) => c.id !== conversationId
+                                ),
+                                conversationStates: newStates,
+                                // Clear active conversation if it was the deleted one
+                                activeConversationId:
+                                    state.activeConversationId === conversationId
+                                        ? null
+                                        : state.activeConversationId,
+                                // Clear messages and timeline if the deleted conversation was active
+                                messages:
+                                    state.activeConversationId === conversationId ? [] : state.messages,
+                                timeline:
+                                    state.activeConversationId === conversationId ? [] : state.timeline,
+                            };
+                        });
+
+                        // Remove from IndexedDB
+                        deleteConversationState(conversationId).catch(console.error);
                     } catch (error) {
                         console.error("Failed to delete conversation", error);
                         set({ error: "Failed to delete conversation" });
@@ -287,22 +545,35 @@ export const useAgentV3Store = create<AgentV3State>()(
                             project_id: projectId,
                             title: "New Conversation",
                         });
+
+                        // Create fresh state for new conversation
+                        const newConvState = createDefaultConversationState();
+
                         // Add to conversations list and set as active
-                        set((state) => ({
-                            conversations: [newConv, ...state.conversations],
-                            activeConversationId: newConv.id,
-                            // Clear messages and timeline for new conversation
-                            messages: [],
-                            timeline: [],
-                            currentThought: "",
-                            streamingThought: "",
-                            isThinkingStreaming: false,
-                            workPlan: null,
-                            executionPlan: null,
-                            agentState: "idle",
-                            isStreaming: false,
-                            error: null,
-                        }));
+                        set((state) => {
+                            const newStates = new Map(state.conversationStates);
+                            newStates.set(newConv.id, newConvState);
+
+                            return {
+                                conversations: [newConv, ...state.conversations],
+                                conversationStates: newStates,
+                                activeConversationId: newConv.id,
+                                // Clear messages and timeline for new conversation
+                                messages: [],
+                                timeline: [],
+                                currentThought: "",
+                                streamingThought: "",
+                                isThinkingStreaming: false,
+                                workPlan: null,
+                                executionPlan: null,
+                                agentState: "idle",
+                                isStreaming: false,
+                                error: null,
+                                pendingClarification: null,
+                                pendingDecision: null,
+                                pendingEnvVarRequest: null,
+                            };
+                        });
                         return newConv.id;
                     } catch (error) {
                         console.error("Failed to create conversation", error);
@@ -321,19 +592,27 @@ export const useAgentV3Store = create<AgentV3State>()(
                     // DEBUG: Log recovery attempt parameters
                     console.log(`[AgentV3] loadMessages starting for ${conversationId}, lastKnownSeq=${lastKnownSeq}`);
 
+                    // Try to load from IndexedDB first
+                    const cachedState = await loadConversationState(conversationId);
+
                     set({
                         isLoadingHistory: true,
-                        timeline: [],      // Clear timeline
-                        messages: [],
-                        currentThought: "",
+                        timeline: cachedState?.timeline || [],      // Use cached if available
+                        messages: cachedState?.timeline ? timelineToMessages(cachedState.timeline) : [],
+                        currentThought: cachedState?.currentThought || "",
                         streamingThought: "",
                         isThinkingStreaming: false,
-                        workPlan: null,
-                        executionPlan: null,
-                        agentState: "idle",
-                        hasEarlier: false,
-                        earliestLoadedSequence: null,
+                        workPlan: cachedState?.workPlan || null,
+                        executionPlan: cachedState?.executionPlan || null,
+                        agentState: cachedState?.agentState || "idle",
+                        hasEarlier: cachedState?.hasEarlier || false,
+                        earliestLoadedSequence: cachedState?.earliestLoadedSequence || null,
+                        // Restore HITL state if any
+                        pendingClarification: cachedState?.pendingClarification || null,
+                        pendingDecision: cachedState?.pendingDecision || null,
+                        pendingEnvVarRequest: cachedState?.pendingEnvVarRequest || null,
                     });
+
                     try {
                         // Parallelize independent API calls (async-parallel)
                         // Include recovery info in execution status check
@@ -369,15 +648,36 @@ export const useAgentV3Store = create<AgentV3State>()(
                             localStorage.setItem(`agent_seq_${conversationId}`, String(lastSequence));
                         }
 
-                        set({
+                        // Update both global state and conversation-specific state
+                        const newConvState: Partial<ConversationState> = {
                             timeline: response.timeline,
-                            messages: messages,
-                            isLoadingHistory: false,
                             hasEarlier: response.has_more ?? false,
                             earliestLoadedSequence: firstSequence,
-                            // Set plan mode if successfully fetched
-                            ...(planStatus ? { isPlanMode: planStatus.is_in_plan_mode } : {}),
+                            isPlanMode: planStatus?.is_in_plan_mode ?? false,
+                        };
+
+                        set((state) => {
+                            const newStates = new Map(state.conversationStates);
+                            const currentConvState = newStates.get(conversationId) || createDefaultConversationState();
+                            newStates.set(conversationId, {
+                                ...currentConvState,
+                                ...newConvState,
+                            } as ConversationState);
+
+                            return {
+                                conversationStates: newStates,
+                                timeline: response.timeline,
+                                messages: messages,
+                                isLoadingHistory: false,
+                                hasEarlier: response.has_more ?? false,
+                                earliestLoadedSequence: firstSequence,
+                                // Set plan mode if successfully fetched
+                                ...(planStatus ? { isPlanMode: planStatus.is_in_plan_mode } : {}),
+                            };
                         });
+
+                        // Persist to IndexedDB
+                        saveConversationState(conversationId, newConvState).catch(console.error);
 
                         // DEBUG: Log execution status for recovery debugging
                         console.log(`[AgentV3] execStatus for ${conversationId}:`, {
@@ -566,7 +866,14 @@ export const useAgentV3Store = create<AgentV3State>()(
                 },
 
                 sendMessage: async (content, projectId, additionalHandlers) => {
-                    const { activeConversationId, messages, timeline } = get();
+                    const { activeConversationId, messages, timeline, getStreamingConversationCount } = get();
+
+                    // Check concurrent streaming limit
+                    const streamingCount = getStreamingConversationCount();
+                    if (streamingCount >= MAX_CONCURRENT_STREAMING_CONVERSATIONS) {
+                        set({ error: `Maximum ${MAX_CONCURRENT_STREAMING_CONVERSATIONS} concurrent conversations reached. Please wait for one to complete.` });
+                        return null;
+                    }
 
                     let conversationId = activeConversationId;
                     let isNewConversation = false;
@@ -579,9 +886,18 @@ export const useAgentV3Store = create<AgentV3State>()(
                             });
                             conversationId = newConv.id;
                             isNewConversation = true;
-                            set({
-                                activeConversationId: conversationId,
-                                conversations: [newConv, ...get().conversations],
+
+                            // Create fresh state for new conversation
+                            const newConvState = createDefaultConversationState();
+
+                            set((state) => {
+                                const newStates = new Map(state.conversationStates);
+                                newStates.set(conversationId!, newConvState);
+                                return {
+                                    activeConversationId: conversationId,
+                                    conversations: [newConv, ...state.conversations],
+                                    conversationStates: newStates,
+                                };
                             });
                         } catch (_error) {
                             set({ error: "Failed to create conversation" });
@@ -609,20 +925,47 @@ export const useAgentV3Store = create<AgentV3State>()(
                         role: "user",
                     };
 
-                    set({
-                        messages: [...messages, userMsg],
-                        timeline: [...timeline, userMessageEvent],
-                        isStreaming: true,
-                        streamStatus: "connecting",
-                        streamingAssistantContent: "", // Reset streaming content
-                        error: null,
-                        currentThought: "",
-                        streamingThought: "",
-                        isThinkingStreaming: false,
-                        activeToolCalls: new Map(),
-                        pendingToolsStack: [],
-                        agentState: "thinking",
+                    // Update both global state and conversation-specific state
+                    const newTimeline = [...timeline, userMessageEvent];
+                    set((state) => {
+                        const newStates = new Map(state.conversationStates);
+                        const convState = newStates.get(conversationId!) || createDefaultConversationState();
+                        newStates.set(conversationId!, {
+                            ...convState,
+                            timeline: newTimeline,
+                            isStreaming: true,
+                            streamStatus: 'connecting',
+                            streamingAssistantContent: '',
+                            error: null,
+                            currentThought: '',
+                            streamingThought: '',
+                            isThinkingStreaming: false,
+                            activeToolCalls: new Map(),
+                            pendingToolsStack: [],
+                            agentState: 'thinking',
+                        });
+
+                        return {
+                            conversationStates: newStates,
+                            messages: [...messages, userMsg],
+                            timeline: newTimeline,
+                            isStreaming: true,
+                            streamStatus: "connecting",
+                            streamingAssistantContent: "", // Reset streaming content
+                            error: null,
+                            currentThought: "",
+                            streamingThought: "",
+                            isThinkingStreaming: false,
+                            activeToolCalls: new Map(),
+                            pendingToolsStack: [],
+                            agentState: "thinking",
+                        };
                     });
+
+                    // Capture conversationId in closure for event handler isolation
+                    // This is critical for multi-conversation support - events must only update
+                    // the conversation they belong to, not the currently active one
+                    const handlerConversationId = conversationId!;
 
                     // Define handler first (needed for both new and existing conversations)
                     const handler: AgentStreamHandler = {
@@ -643,194 +986,318 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     thoughtDeltaFlushTimer = null;
 
                                     if (bufferedContent) {
-                                        set((state) => ({
-                                            streamingThought: state.streamingThought + bufferedContent,
+                                        const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                                        // Always update per-conversation state
+                                        const convState = getConversationState(handlerConversationId);
+                                        updateConversationState(handlerConversationId, {
+                                            streamingThought: convState.streamingThought + bufferedContent,
                                             isThinkingStreaming: true,
                                             agentState: "thinking",
-                                        }));
+                                        });
+
+                                        // Only update global state if this is the active conversation
+                                        if (handlerConversationId === activeConversationId) {
+                                            set((state) => ({
+                                                streamingThought: state.streamingThought + bufferedContent,
+                                                isThinkingStreaming: true,
+                                                agentState: "thinking",
+                                            }));
+                                        }
                                     }
                                 }, THOUGHT_BATCH_INTERVAL_MS);
                             }
                         },
                         onThought: (event) => {
                             const newThought = event.data.thought;
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                            // Complete thought - add to timeline and reset streaming state
-                            set((state) => {
-                                // Append thought event to timeline using SSE adapter
-                                const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
+                            // Append thought event to timeline using SSE adapter
+                            const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, thoughtEvent);
 
-                                // Skip empty thoughts (REASONING_START events)
-                                if (!newThought || newThought.trim() === "") {
+                            // Prepare updates for per-conversation state
+                            const stateUpdates: Partial<ConversationState> = {
+                                agentState: "thinking",
+                                timeline: updatedTimeline,
+                                streamingThought: "",
+                                isThinkingStreaming: false,
+                            };
+
+                            // Skip empty thoughts (REASONING_START events)
+                            if (newThought && newThought.trim() !== "") {
+                                stateUpdates.currentThought = convState.currentThought + "\n" + newThought;
+                            }
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, stateUpdates);
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set((state) => {
+                                    if (!newThought || newThought.trim() === "") {
+                                        return {
+                                            agentState: "thinking",
+                                            timeline: updatedTimeline,
+                                            streamingThought: "",
+                                            isThinkingStreaming: false,
+                                        };
+                                    }
                                     return {
-                                        agentState: "thinking",
-                                        timeline: updatedTimeline,
+                                        currentThought: state.currentThought + "\n" + newThought,
                                         streamingThought: "",
                                         isThinkingStreaming: false,
+                                        agentState: "thinking",
+                                        timeline: updatedTimeline,
                                     };
-                                }
-
-                                return {
-                                    currentThought: state.currentThought + "\n" + newThought,
-                                    streamingThought: "",
-                                    isThinkingStreaming: false,
-                                    agentState: "thinking",
-                                    timeline: updatedTimeline,
-                                };
-                            });
+                                });
+                            }
                         },
                         onWorkPlan: (event) => {
-                            set((state) => {
-                                // Append work_plan event to timeline using SSE adapter
-                                const workPlanEvent: AgentEvent<WorkPlanEventData> = event as AgentEvent<WorkPlanEventData>;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, workPlanEvent);
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                                return {
-                                    workPlan: {
-                                        id: event.data.plan_id,
-                                        conversation_id: event.data.conversation_id,
-                                        status: event.data.status,
-                                        steps: event.data.steps.map((s) => ({
-                                            step_number: s.step_number,
-                                            description: s.description,
-                                            thought_prompt: "",
-                                            required_tools: [],
-                                            expected_output: s.expected_output,
-                                            dependencies: [],
-                                        })),
-                                        current_step_index: event.data.current_step,
-                                        created_at: new Date().toISOString(),
-                                    },
-                                    timeline: updatedTimeline,
-                                };
+                            // Append work_plan event to timeline using SSE adapter
+                            const workPlanEvent: AgentEvent<WorkPlanEventData> = event as AgentEvent<WorkPlanEventData>;
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, workPlanEvent);
+
+                            const newWorkPlan: WorkPlan = {
+                                id: event.data.plan_id,
+                                conversation_id: event.data.conversation_id,
+                                status: event.data.status,
+                                steps: event.data.steps.map((s) => ({
+                                    step_number: s.step_number,
+                                    description: s.description,
+                                    thought_prompt: "",
+                                    required_tools: [],
+                                    expected_output: s.expected_output,
+                                    dependencies: [],
+                                })),
+                                current_step_index: event.data.current_step,
+                                created_at: new Date().toISOString(),
+                            };
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                workPlan: newWorkPlan,
+                                timeline: updatedTimeline,
                             });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
+                                    workPlan: newWorkPlan,
+                                    timeline: updatedTimeline,
+                                });
+                            }
                         },
                         onStepStart: (event) => {
-                            set((state) => {
-                                // Append step_start event to timeline using SSE adapter
-                                const stepStartEvent: AgentEvent<StepStartEventData> = event as AgentEvent<StepStartEventData>;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, stepStartEvent);
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                                if (!state.workPlan) {
-                                    return { timeline: updatedTimeline };
-                                }
-                                const newPlan = { ...state.workPlan };
-                                newPlan.current_step_index = event.data.current_step;
-                                return { workPlan: newPlan, agentState: "acting", timeline: updatedTimeline };
-                            });
+                            // Append step_start event to timeline using SSE adapter
+                            const stepStartEvent: AgentEvent<StepStartEventData> = event as AgentEvent<StepStartEventData>;
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, stepStartEvent);
+
+                            // Update per-conversation state
+                            const updates: Partial<ConversationState> = { timeline: updatedTimeline };
+                            if (convState.workPlan) {
+                                updates.workPlan = {
+                                    ...convState.workPlan,
+                                    current_step_index: event.data.current_step,
+                                };
+                                updates.agentState = "acting";
+                            }
+                            updateConversationState(handlerConversationId, updates);
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set((state) => {
+                                    if (!state.workPlan) {
+                                        return { timeline: updatedTimeline };
+                                    }
+                                    const newPlan = { ...state.workPlan };
+                                    newPlan.current_step_index = event.data.current_step;
+                                    return { workPlan: newPlan, agentState: "acting", timeline: updatedTimeline };
+                                });
+                            }
                         },
                         onStepEnd: (_event) => { },
                         onPlanExecutionStart: (event) => {
-                            set((state) => {
-                                const executionPlanEvent: AgentEvent<PlanExecutionStartEvent> = event;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, executionPlanEvent);
-                                // Access data from event.data.data (nested structure)
-                                const eventData = (event as any).data || {};
-                                // Create a minimal execution plan from the event data
-                                const newExecutionPlan: ExecutionPlan = {
-                                    id: eventData.plan_id || `plan-${Date.now()}`,
-                                    conversation_id: state.activeConversationId || "",
-                                    user_query: eventData.user_query || "",
-                                    steps: [],
-                                    status: "executing",
-                                    reflection_enabled: true,
-                                    max_reflection_cycles: 3,
-                                    completed_steps: [],
-                                    failed_steps: [],
-                                    progress_percentage: 0,
-                                    is_complete: false,
-                                };
-                                return {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            const executionPlanEvent: AgentEvent<PlanExecutionStartEvent> = event;
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, executionPlanEvent);
+                            // Access data from event.data.data (nested structure)
+                            const eventData = (event as any).data || {};
+                            // Create a minimal execution plan from the event data
+                            const newExecutionPlan: ExecutionPlan = {
+                                id: eventData.plan_id || `plan-${Date.now()}`,
+                                conversation_id: handlerConversationId,
+                                user_query: eventData.user_query || "",
+                                steps: [],
+                                status: "executing",
+                                reflection_enabled: true,
+                                max_reflection_cycles: 3,
+                                completed_steps: [],
+                                failed_steps: [],
+                                progress_percentage: 0,
+                                is_complete: false,
+                            };
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                executionPlan: newExecutionPlan,
+                                timeline: updatedTimeline,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     executionPlan: newExecutionPlan,
                                     timeline: updatedTimeline,
-                                };
-                            });
+                                });
+                            }
                         },
                         onPlanExecutionComplete: (event) => {
-                            set((state) => {
-                                const executionPlanEvent: AgentEvent<PlanExecutionCompleteEvent> = event;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, executionPlanEvent);
-                                // Access data from event.data
-                                const eventData = (event as any).data || {};
-                                return {
-                                    executionPlan: state.executionPlan
-                                        ? {
-                                            ...state.executionPlan,
-                                            status: eventData.status || state.executionPlan.status,
-                                            completed_steps: Array(eventData.completed_steps || 0).fill(""),
-                                            failed_steps: Array(eventData.failed_steps || 0).fill(""),
-                                            progress_percentage: (eventData.completed_steps || 0) / (state.executionPlan.steps.length || 1),
-                                            is_complete: eventData.status === "completed" || eventData.status === "failed",
-                                        }
-                                        : null,
-                                    timeline: updatedTimeline,
-                                };
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            const executionPlanEvent: AgentEvent<PlanExecutionCompleteEvent> = event;
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, executionPlanEvent);
+                            // Access data from event.data
+                            const eventData = (event as any).data || {};
+
+                            const updatedExecutionPlan = convState.executionPlan
+                                ? {
+                                    ...convState.executionPlan,
+                                    status: eventData.status || convState.executionPlan.status,
+                                    completed_steps: Array(eventData.completed_steps || 0).fill(""),
+                                    failed_steps: Array(eventData.failed_steps || 0).fill(""),
+                                    progress_percentage: (eventData.completed_steps || 0) / (convState.executionPlan.steps.length || 1),
+                                    is_complete: eventData.status === "completed" || eventData.status === "failed",
+                                }
+                                : null;
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                executionPlan: updatedExecutionPlan,
+                                timeline: updatedTimeline,
                             });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
+                                    executionPlan: updatedExecutionPlan,
+                                    timeline: updatedTimeline,
+                                });
+                            }
                         },
                         onReflectionComplete: (event) => {
-                            set((state) => {
-                                const reflectionEvent: AgentEvent<ReflectionCompleteEvent> = event;
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, reflectionEvent);
-                                return {
-                                    timeline: updatedTimeline,
-                                };
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            const reflectionEvent: AgentEvent<ReflectionCompleteEvent> = event;
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, reflectionEvent);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
                             });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({ timeline: updatedTimeline });
+                            }
                         },
 
                         onAct: (event) => {
-                            set((state) => {
-                                // Append act event to timeline using SSE adapter
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                                const toolName = event.data.tool_name;
-                                const startTime = Date.now();
+                            // Append act event to timeline using SSE adapter
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-                                const newCall: ToolCall & { status: "running"; startTime: number } =
-                                {
-                                    name: toolName,
-                                    arguments: event.data.tool_input,
-                                    status: "running",
-                                    startTime,
-                                };
+                            const toolName = event.data.tool_name;
+                            const startTime = Date.now();
 
-                                const newMap = new Map(state.activeToolCalls);
-                                newMap.set(toolName, newCall);
+                            const newCall: ToolCall & { status: "running"; startTime: number } = {
+                                name: toolName,
+                                arguments: event.data.tool_input,
+                                status: "running",
+                                startTime,
+                            };
 
-                                const newStack = [...state.pendingToolsStack, toolName];
+                            const newMap = new Map(convState.activeToolCalls);
+                            newMap.set(toolName, newCall);
 
-                                return {
+                            const newStack = [...convState.pendingToolsStack, toolName];
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                activeToolCalls: newMap,
+                                pendingToolsStack: newStack,
+                                agentState: "acting",
+                                timeline: updatedTimeline,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     activeToolCalls: newMap,
                                     pendingToolsStack: newStack,
                                     agentState: "acting",
                                     timeline: updatedTimeline,
-                                };
-                            });
+                                });
+                            }
 
                             // Call additional handler if provided
                             additionalHandlers?.onAct?.(event);
                         },
                         onObserve: (event) => {
-                            set((state) => {
-                                // Append observe event to timeline using SSE adapter
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                                const stack = [...state.pendingToolsStack];
-                                stack.pop(); // Remove completed tool from stack
+                            // Append observe event to timeline using SSE adapter
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
-                                return {
+                            const stack = [...convState.pendingToolsStack];
+                            stack.pop(); // Remove completed tool from stack
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                pendingToolsStack: stack,
+                                agentState: "observing",
+                                timeline: updatedTimeline,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     pendingToolsStack: stack,
                                     agentState: "observing",
                                     timeline: updatedTimeline,
-                                };
-                            });
+                                });
+                            }
 
                             // Call additional handler if provided
                             additionalHandlers?.onObserve?.(event);
                         },
                         onTextStart: () => {
-                            // Text streaming started - reset stream status to streaming
-                            set({ streamStatus: "streaming", streamingAssistantContent: "" });
+                            const { activeConversationId, updateConversationState } = get();
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                streamStatus: "streaming",
+                                streamingAssistantContent: "",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({ streamStatus: "streaming", streamingAssistantContent: "" });
+                            }
                         },
                         onTextDelta: (event) => {
                             // Batch rapid token updates for performance (reduces re-renders from 100+/s to ~20/s)
@@ -848,15 +1315,29 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     textDeltaFlushTimer = null;
 
                                     if (bufferedContent) {
-                                        set((state) => ({
-                                            streamingAssistantContent: state.streamingAssistantContent + bufferedContent,
-                                            streamStatus: "streaming"
-                                        }));
+                                        const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                                        // Always update per-conversation state
+                                        const convState = getConversationState(handlerConversationId);
+                                        updateConversationState(handlerConversationId, {
+                                            streamingAssistantContent: convState.streamingAssistantContent + bufferedContent,
+                                            streamStatus: "streaming",
+                                        });
+
+                                        // Only update global state if this is the active conversation
+                                        if (handlerConversationId === activeConversationId) {
+                                            set((state) => ({
+                                                streamingAssistantContent: state.streamingAssistantContent + bufferedContent,
+                                                streamStatus: "streaming"
+                                            }));
+                                        }
                                     }
                                 }, TOKEN_BATCH_INTERVAL_MS);
                             }
                         },
                         onTextEnd: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
                             // Flush any remaining buffered content before applying final text
                             if (textDeltaFlushTimer) {
                                 clearTimeout(textDeltaFlushTimer);
@@ -865,72 +1346,142 @@ export const useAgentV3Store = create<AgentV3State>()(
                             const remainingBuffer = textDeltaBuffer;
                             textDeltaBuffer = '';
 
-                            // Text streaming ended - use full_text for final content (ensures consistency)
-                            set((state) => {
-                                const fullText = event.data.full_text;
-                                const finalContent = fullText || (state.streamingAssistantContent + remainingBuffer);
+                            const convState = getConversationState(handlerConversationId);
+                            const fullText = event.data.full_text;
+                            const finalContent = fullText || (convState.streamingAssistantContent + remainingBuffer);
 
-                                // Add text_end event to timeline for proper rendering
-                                // This converts the streaming content to a formal timeline event
-                                const textEndEvent: AgentEvent<any> = {
-                                    type: "text_end",
-                                    data: { full_text: finalContent },
-                                };
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, textEndEvent);
+                            // Add text_end event to timeline for proper rendering
+                            const textEndEvent: AgentEvent<any> = {
+                                type: "text_end",
+                                data: { full_text: finalContent },
+                            };
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, textEndEvent);
 
-                                return {
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                streamingAssistantContent: finalContent,
+                                timeline: updatedTimeline,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     streamingAssistantContent: finalContent,
                                     timeline: updatedTimeline,
-                                };
-                            });
+                                });
+                            }
                         },
                         onClarificationAsked: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
                             // Add to timeline for inline rendering
                             const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
                                 type: "clarification_asked",
                                 data: event.data,
                             };
-                            set((state) => {
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
-                                return {
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, clarificationEvent);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                pendingClarification: event.data,
+                                agentState: "awaiting_input",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     timeline: updatedTimeline,
                                     pendingClarification: event.data,
                                     agentState: "awaiting_input",
-                                };
-                            });
+                                });
+                            }
                         },
                         onDecisionAsked: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
                             // Add to timeline for inline rendering
                             const decisionEvent: AgentEvent<DecisionAskedEventData> = {
                                 type: "decision_asked",
                                 data: event.data,
                             };
-                            set((state) => {
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
-                                return {
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, decisionEvent);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                pendingDecision: event.data,
+                                agentState: "awaiting_input",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     timeline: updatedTimeline,
                                     pendingDecision: event.data,
                                     agentState: "awaiting_input",
-                                };
-                            });
+                                });
+                            }
                         },
                         onDoomLoopDetected: (event) => {
-                            set({ doomLoopDetected: event.data });
+                            const { activeConversationId, updateConversationState } = get();
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                doomLoopDetected: event.data,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({ doomLoopDetected: event.data });
+                            }
                         },
                         onEnvVarRequested: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
                             // Add to timeline for inline rendering
                             const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
                                 type: "env_var_requested",
                                 data: event.data,
                             };
-                            set((state) => {
-                                const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
-                                return {
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, envVarEvent);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                pendingEnvVarRequest: event.data,
+                                agentState: "awaiting_input",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     timeline: updatedTimeline,
                                     pendingEnvVarRequest: event.data,
                                     agentState: "awaiting_input",
-                                };
+                                });
+                            }
+                        },
+                        onArtifactCreated: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            // Handle artifact created event - add to timeline for rich display
+                            console.log("[AgentV3] Artifact created event:", event.data);
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
                             });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({ timeline: updatedTimeline });
+                            }
                         },
                         onTitleGenerated: (event) => {
                             const data = event.data as {
@@ -951,6 +1502,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                             });
                         },
                         onComplete: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
                             // Clear all delta buffers on completion
                             if (textDeltaFlushTimer) {
                                 clearTimeout(textDeltaFlushTimer);
@@ -963,36 +1516,52 @@ export const useAgentV3Store = create<AgentV3State>()(
                             textDeltaBuffer = '';
                             thoughtDeltaBuffer = '';
 
-                            set((state) => {
-                                // Check if we already have a text_end event with content
-                                // If so, skip adding assistant_message to avoid duplicate content
-                                const hasTextEndWithContent = state.timeline.some(
-                                    (e) => e.type === 'text_end' && 'fullText' in e && e.fullText?.trim()
-                                );
+                            const convState = getConversationState(handlerConversationId);
 
-                                let updatedTimeline = state.timeline;
-                                if (!hasTextEndWithContent) {
-                                    // Only add assistant_message if there's no text_end with content
-                                    const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
-                                    updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
-                                }
+                            // Check if we already have a text_end event with content
+                            // If so, skip adding assistant_message to avoid duplicate content
+                            const hasTextEndWithContent = convState.timeline.some(
+                                (e) => e.type === 'text_end' && 'fullText' in e && e.fullText?.trim()
+                            );
 
-                                // Derive messages from updated timeline (no merging)
-                                const newMessages = timelineToMessages(updatedTimeline);
+                            let updatedTimeline = convState.timeline;
+                            if (!hasTextEndWithContent) {
+                                // Only add assistant_message if there's no text_end with content
+                                const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+                                updatedTimeline = appendSSEEventToTimeline(convState.timeline, completeEvent);
+                            }
 
-                                return {
+                            // Derive messages from updated timeline (no merging)
+                            const newMessages = timelineToMessages(updatedTimeline);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                streamingAssistantContent: "",
+                                isStreaming: false,
+                                streamStatus: "idle",
+                                agentState: "idle",
+                                activeToolCalls: new Map(),
+                                pendingToolsStack: [],
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
                                     messages: newMessages,
                                     timeline: updatedTimeline,
-                                    streamingAssistantContent: "", // Clear streaming content
+                                    streamingAssistantContent: "",
                                     isStreaming: false,
                                     streamStatus: "idle",
                                     agentState: "idle",
                                     activeToolCalls: new Map(),
                                     pendingToolsStack: [],
-                                };
-                            });
+                                });
+                            }
                         },
                         onError: (event) => {
+                            const { activeConversationId, updateConversationState } = get();
+
                             // Clear all delta buffers on error
                             if (textDeltaFlushTimer) {
                                 clearTimeout(textDeltaFlushTimer);
@@ -1005,13 +1574,25 @@ export const useAgentV3Store = create<AgentV3State>()(
                             textDeltaBuffer = '';
                             thoughtDeltaBuffer = '';
 
-                            set({
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
                                 error: event.data.message,
                                 isStreaming: false,
                                 streamStatus: "error",
                             });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
+                                    error: event.data.message,
+                                    isStreaming: false,
+                                    streamStatus: "error",
+                                });
+                            }
                         },
                         onClose: () => {
+                            const { activeConversationId, updateConversationState } = get();
+
                             // Clear all delta buffers on close
                             if (textDeltaFlushTimer) {
                                 clearTimeout(textDeltaFlushTimer);
@@ -1024,7 +1605,16 @@ export const useAgentV3Store = create<AgentV3State>()(
                             textDeltaBuffer = '';
                             thoughtDeltaBuffer = '';
 
-                            set({ isStreaming: false, streamStatus: "idle" });
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                isStreaming: false,
+                                streamStatus: "idle",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({ isStreaming: false, streamStatus: "idle" });
+                            }
                         },
                     };
 
@@ -1041,6 +1631,12 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 handler
                             )
                             .catch(() => {
+                                const { updateConversationState } = get();
+                                updateConversationState(handlerConversationId, {
+                                    error: "Failed to connect to chat stream",
+                                    isStreaming: false,
+                                    streamStatus: "error",
+                                });
                                 set({
                                     error: "Failed to connect to chat stream",
                                     isStreaming: false,
@@ -1062,6 +1658,12 @@ export const useAgentV3Store = create<AgentV3State>()(
                         );
                         return conversationId!;
                     } catch (_e) {
+                        const { updateConversationState } = get();
+                        updateConversationState(handlerConversationId, {
+                            error: "Failed to connect to chat stream",
+                            isStreaming: false,
+                            streamStatus: "error",
+                        });
                         set({
                             error: "Failed to connect to chat stream",
                             isStreaming: false,
@@ -1071,11 +1673,22 @@ export const useAgentV3Store = create<AgentV3State>()(
                     }
                 },
 
-                abortStream: () => {
-                    const { activeConversationId } = get();
-                    if (activeConversationId) {
-                        agentService.stopChat(activeConversationId);
-                        set({ isStreaming: false, streamStatus: "idle" });
+                abortStream: (conversationId?: string) => {
+                    const targetConvId = conversationId || get().activeConversationId;
+                    if (targetConvId) {
+                        agentService.stopChat(targetConvId);
+
+                        // Update conversation-specific state
+                        const { updateConversationState, activeConversationId } = get();
+                        updateConversationState(targetConvId, {
+                            isStreaming: false,
+                            streamStatus: 'idle',
+                        });
+
+                        // Also update global state if this is active conversation
+                        if (targetConvId === activeConversationId) {
+                            set({ isStreaming: false, streamStatus: "idle" });
+                        }
                     }
                 },
 

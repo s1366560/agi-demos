@@ -90,6 +90,7 @@ import type {
     LifecycleState,
     LifecycleStateData,
     PendingHITLResponse,
+    ArtifactCreatedEventData,
 } from "../types/agent";
 
 // Use centralized HTTP client for REST API calls
@@ -650,6 +651,10 @@ class AgentServiceImpl implements AgentService {
                 break;
             case "skill_fallback":
                 handler.onSkillFallback?.(event as AgentEvent<SkillFallbackEventData>);
+                break;
+            // Artifact events
+            case "artifact_created":
+                handler.onArtifactCreated?.(event as AgentEvent<ArtifactCreatedEventData>);
                 break;
             // Context management events
             case "context_compressed":

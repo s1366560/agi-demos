@@ -7,6 +7,11 @@ import logging
 from typing import Dict, List
 
 from src.server.websocket_server import MCPTool
+from src.tools.artifact_tools import (
+    create_batch_export_artifacts_tool,
+    create_export_artifact_tool,
+    create_list_artifacts_tool,
+)
 from src.tools.ast_tools import (
     create_ast_extract_function_tool,
     create_ast_find_symbols_tool,
@@ -14,6 +19,12 @@ from src.tools.ast_tools import (
     create_ast_parse_tool,
 )
 from src.tools.bash_tool import create_bash_tool
+from src.tools.desktop_tools import (
+    create_desktop_status_tool,
+    create_restart_desktop_tool,
+    create_start_desktop_tool,
+    create_stop_desktop_tool,
+)
 from src.tools.edit_tools import (
     create_batch_edit_tool,
     create_edit_by_ast_tool,
@@ -28,6 +39,11 @@ from src.tools.file_tools import (
     create_read_tool,
     create_write_tool,
 )
+from src.tools.git_tools import (
+    create_generate_commit_tool,
+    create_git_diff_tool,
+    create_git_log_tool,
+)
 from src.tools.index_tools import (
     create_call_graph_tool,
     create_code_index_build_tool,
@@ -35,27 +51,16 @@ from src.tools.index_tools import (
     create_find_definition_tool,
     create_find_references_tool,
 )
-from src.tools.git_tools import (
-    create_generate_commit_tool,
-    create_git_diff_tool,
-    create_git_log_tool,
-)
-from src.tools.test_tools import (
-    create_analyze_coverage_tool,
-    create_generate_tests_tool,
-    create_run_tests_tool,
-)
 from src.tools.terminal_tools import (
     create_restart_terminal_tool,
     create_start_terminal_tool,
     create_stop_terminal_tool,
     create_terminal_status_tool,
 )
-from src.tools.desktop_tools import (
-    create_desktop_status_tool,
-    create_restart_desktop_tool,
-    create_start_desktop_tool,
-    create_stop_desktop_tool,
+from src.tools.test_tools import (
+    create_analyze_coverage_tool,
+    create_generate_tests_tool,
+    create_run_tests_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,6 +121,11 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_grep_tool())
     registry.register(create_list_tool())
     registry.register(create_patch_tool())
+
+    # Register artifact tools
+    registry.register(create_export_artifact_tool())
+    registry.register(create_list_artifacts_tool())
+    registry.register(create_batch_export_artifacts_tool())
 
     # Register bash tool
     registry.register(create_bash_tool())

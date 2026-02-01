@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.application.services.project_sandbox_lifecycle_service import (
@@ -191,12 +191,15 @@ def get_lifecycle_service(db=Depends(get_db)) -> ProjectSandboxLifecycleService:
     return container.project_sandbox_lifecycle_service()
 
 
-def get_event_publisher() -> Optional[SandboxEventPublisher]:
-    """Get or create the sandbox event publisher."""
-    try:
-        from src.configuration.di_container import DIContainer
+def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
+    """Get the sandbox event publisher from app container.
 
-        container = DIContainer()
+    Uses the properly initialized container from app.state which has
+    redis_client configured for the event bus.
+    """
+    try:
+        # Get container from app.state which has redis_client properly configured
+        container = request.app.state.container
         return container.sandbox_event_publisher()
     except Exception as e:
         logger.warning(f"Could not create event publisher: {e}")

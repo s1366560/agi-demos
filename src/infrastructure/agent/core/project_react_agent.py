@@ -281,6 +281,7 @@ class ProjectReActAgent:
             logger.info(f"ProjectReActAgent[{self.project_key}]: Initializing...")
 
             # Import dependencies here to avoid circular imports
+            from src.configuration.di_container import Container
             from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
                 get_agent_graph_service,
                 get_or_create_agent_session,
@@ -299,6 +300,14 @@ class ProjectReActAgent:
                 raise RuntimeError("Graph service not available")
 
             redis_client = await get_redis_client()
+
+            # Get artifact service for rich output handling
+            try:
+                container = Container()
+                artifact_service = container.artifact_service()
+            except Exception as e:
+                logger.warning(f"Could not initialize artifact service: {e}")
+                artifact_service = None
 
             # Get LLM provider configuration
             provider_config = await get_or_create_provider_config(force_refresh=force_refresh)
@@ -341,6 +350,9 @@ class ProjectReActAgent:
                 max_steps=self.config.max_steps,
             )
 
+            # Store artifact_service for use in ReActAgent
+            self._artifact_service = artifact_service
+
             # Get or create agent session (caches tool definitions, router, etc.)
             self._session_context = await get_or_create_agent_session(
                 tenant_id=self.config.tenant_id,
@@ -364,6 +376,7 @@ class ProjectReActAgent:
                 agent_mode=self.config.agent_mode,
                 skills=self._skills,
                 subagents=self._subagents,
+                artifact_service=self._artifact_service,  # Pass artifact service
                 # Use cached components from session pool
                 _cached_tool_definitions=self._session_context.tool_definitions,
                 _cached_system_prompt_manager=self._session_context.system_prompt_manager,

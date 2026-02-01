@@ -13,11 +13,14 @@ import { useState } from "react";
 import type { ToolExecution } from "../../../types/agent";
 import { MaterialIcon } from "../shared";
 import {
-  isImageUrl,
+  isImageUrl as _isImageUrl,
   parseBase64Image,
   extractImageUrl,
   foldTextWithMetadata,
 } from "../../../utils/toolResultUtils";
+
+// Keep reference to suppress unused warning - may be used in future
+void _isImageUrl;
 
 export interface ToolExecutionDetailProps {
   /** Tool execution data */

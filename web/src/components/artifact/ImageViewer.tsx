@@ -27,7 +27,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   alt = "Artifact image",
   previewSrc,
   maxHeight = 400,
-  compact = false,
+  compact: _compact = false,
   onLoad,
   onError,
 }) => {

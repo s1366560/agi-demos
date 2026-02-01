@@ -26,7 +26,7 @@ export interface CodeViewerProps {
 }
 
 // Detect language from filename
-function detectLanguage(filename: string, mimeType?: string): string {
+function detectLanguage(filename: string, _mimeType?: string): string {
   const ext = filename.split(".").pop()?.toLowerCase();
 
   const extMap: Record<string, string> = {

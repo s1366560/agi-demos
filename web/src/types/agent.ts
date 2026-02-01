@@ -261,6 +261,11 @@ export type AgentEventType =
     | "terminal_stopped" // Web terminal stopped
     | "terminal_status" // Web terminal status update
     | "screenshot_update" // Desktop screenshot update
+    // Artifact events
+    | "artifact_created" // Artifact (file/image/video) created
+    | "artifact_ready" // Artifact ready for download
+    | "artifact_error" // Artifact processing error
+    | "artifacts_batch" // Batch of artifacts
     // System events
     | "start" // Stream started
     | "status" // Status update
@@ -736,6 +741,8 @@ export interface AgentStreamHandler {
         event: AgentEvent<SkillExecutionCompleteEventData>
     ) => void;
     onSkillFallback?: (event: AgentEvent<SkillFallbackEventData>) => void;
+    // Artifact handlers
+    onArtifactCreated?: (event: AgentEvent<ArtifactCreatedEventData>) => void;
     // Context management handlers
     onContextCompressed?: (event: AgentEvent<ContextCompressedEventData>) => void;
     // Title generation handlers
@@ -1686,7 +1693,12 @@ export type TimelineEventType =
     | "terminal_started"
     | "terminal_stopped"
     | "terminal_status"
-    | "screenshot_update";
+    | "screenshot_update"
+    // Artifact event types
+    | "artifact_created"
+    | "artifact_ready"
+    | "artifact_error"
+    | "artifacts_batch";
 
 /**
  * Base timeline event (all events share these fields)
@@ -2208,12 +2220,14 @@ export interface Artifact {
  */
 export interface ArtifactCreatedEventData {
     artifact_id: string;
-    sandbox_id: string;
+    sandbox_id?: string;
     tool_execution_id?: string;
     filename: string;
     mime_type: string;
     category: string;
     size_bytes: number;
+    url?: string;
+    preview_url?: string;
     source_tool?: string;
     source_path?: string;
 }
@@ -2277,12 +2291,14 @@ export interface ArtifactsBatchEventData {
 export interface ArtifactCreatedEvent extends BaseTimelineEvent {
     type: "artifact_created";
     artifactId: string;
-    sandboxId: string;
+    sandboxId?: string;
     toolExecutionId?: string;
     filename: string;
     mimeType: string;
     category: ArtifactCategory;
     sizeBytes: number;
+    url?: string;
+    previewUrl?: string;
     sourceTool?: string;
     sourcePath?: string;
 }

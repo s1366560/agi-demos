@@ -383,6 +383,7 @@ class MCPWebSocketClient:
                 return MCPToolResult(
                     content=result.get("content", []),
                     isError=result.get("isError", False),
+                    artifact=result.get("artifact"),  # Preserve artifact data from export_artifact
                 )
 
         except Exception as e:

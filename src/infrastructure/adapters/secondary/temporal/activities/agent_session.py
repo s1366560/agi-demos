@@ -24,6 +24,7 @@ from temporalio import activity
 logger = logging.getLogger(__name__)
 
 _ARTIFACT_STORAGE_ADAPTER = None
+_ARTIFACT_SERVICE = None
 
 
 async def _get_artifact_storage_adapter():
@@ -49,6 +50,45 @@ async def _get_artifact_storage_adapter():
         return _ARTIFACT_STORAGE_ADAPTER
     except Exception as e:
         logger.warning(f"[AgentSession] Failed to init artifact storage adapter: {e}")
+        return None
+
+
+async def _get_artifact_service():
+    """Initialize and cache ArtifactService for rich output handling."""
+    global _ARTIFACT_SERVICE
+    if _ARTIFACT_SERVICE is not None:
+        return _ARTIFACT_SERVICE
+
+    try:
+        from src.application.services.artifact_service import ArtifactService
+        from src.configuration.config import get_settings
+        from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import (
+            S3StorageAdapter,
+        )
+
+        settings = get_settings()
+        # S3StorageAdapter implements StorageServicePort directly
+        storage_service = S3StorageAdapter(
+            bucket_name=settings.s3_bucket_name,
+            region=settings.aws_region,
+            access_key_id=settings.aws_access_key_id,
+            secret_access_key=settings.aws_secret_access_key,
+            endpoint_url=settings.s3_endpoint_url,
+        )
+
+        _ARTIFACT_SERVICE = ArtifactService(
+            storage_service=storage_service,
+            event_publisher=None,  # Event publishing handled via SSE streaming
+            bucket_prefix="artifacts",
+            url_expiration_seconds=7 * 24 * 3600,  # 7 days
+        )
+        logger.info("[AgentSession] ArtifactService initialized successfully")
+        return _ARTIFACT_SERVICE
+    except Exception as e:
+        logger.warning(f"[AgentSession] Failed to init ArtifactService: {e}")
+        import traceback
+
+        logger.warning(f"[AgentSession] Traceback: {traceback.format_exc()}")
         return None
 
 
@@ -506,6 +546,9 @@ async def execute_chat_activity(
         elif provider_type_str == "anthropic":
             os.environ["ANTHROPIC_API_KEY"] = api_key
 
+        # Get artifact service for rich output handling (images, files, etc.)
+        artifact_service = await _get_artifact_service()
+
         # Create ReActAgent with cached components
         agent = ReActAgent(
             model=default_model,
@@ -521,6 +564,8 @@ async def execute_chat_activity(
             _cached_tool_definitions=session_ctx.tool_definitions,
             _cached_system_prompt_manager=session_ctx.system_prompt_manager,
             _cached_subagent_router=session_ctx.subagent_router,
+            # Artifact service for handling rich tool outputs
+            artifact_service=artifact_service,
         )
 
         agent_init_time_ms = (time_module.time() - start_time) * 1000

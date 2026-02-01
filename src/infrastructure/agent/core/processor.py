@@ -25,10 +25,11 @@ import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
 
 from src.domain.events.agent_events import (
     AgentActEvent,
+    AgentArtifactCreatedEvent,
     AgentClarificationAnsweredEvent,
     AgentClarificationAskedEvent,
     AgentCompactNeededEvent,
@@ -57,6 +58,12 @@ from src.domain.events.agent_events import (
     AgentThoughtEvent,
     AgentWorkPlanEvent,
 )
+from src.infrastructure.adapters.secondary.sandbox.artifact_integration import (
+    extract_artifacts_from_mcp_result,
+)
+
+if TYPE_CHECKING:
+    from src.application.services.artifact_service import ArtifactService
 
 from ..cost import CostTracker, TokenUsage
 from ..doom_loop import DoomLoopDetector
@@ -154,6 +161,7 @@ class SessionProcessor:
     - Intelligent retry with backoff
     - Real-time cost tracking
     - SSE event emission
+    - Artifact extraction from tool outputs
 
     Usage:
         processor = SessionProcessor(config, tools)
@@ -166,6 +174,7 @@ class SessionProcessor:
         config: ProcessorConfig,
         tools: List[ToolDefinition],
         permission_manager: Optional[PermissionManager] = None,
+        artifact_service: Optional["ArtifactService"] = None,
     ):
         """
         Initialize session processor.
@@ -174,6 +183,7 @@ class SessionProcessor:
             config: Processor configuration
             tools: List of available tools
             permission_manager: Optional permission manager (creates default if None)
+            artifact_service: Optional artifact service for handling rich outputs
         """
         self.config = config
         self.tools = {t.name: t for t in tools}
@@ -186,6 +196,9 @@ class SessionProcessor:
             initial_delay_ms=config.initial_delay_ms,
         )
         self.cost_tracker = CostTracker()
+
+        # Artifact service for rich output handling
+        self._artifact_service = artifact_service
 
         # Session state
         self._state = ProcessorState.IDLE
@@ -1168,6 +1181,14 @@ class SessionProcessor:
                 tool_execution_id=tool_part.tool_execution_id,
             )
 
+            # Extract and upload artifacts from tool result (images, files, etc.)
+            async for artifact_event in self._process_tool_artifacts(
+                tool_name=tool_name,
+                result=result,
+                tool_execution_id=tool_part.tool_execution_id,
+            ):
+                yield artifact_event
+
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)
 
@@ -1193,6 +1214,194 @@ class SessionProcessor:
             )
 
         self._state = ProcessorState.OBSERVING
+
+    async def _process_tool_artifacts(
+        self,
+        tool_name: str,
+        result: Any,
+        tool_execution_id: Optional[str] = None,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """
+        Process tool result and extract any artifacts (images, files, etc.).
+
+        This method:
+        1. Extracts image/resource content from MCP-style results
+        2. Uploads artifacts to storage via ArtifactService
+        3. Emits artifact_created events for frontend display
+
+        Args:
+            tool_name: Name of the tool that produced the result
+            result: Tool execution result (may contain images/resources)
+            tool_execution_id: ID of the tool execution
+
+        Yields:
+            AgentArtifactCreatedEvent for each artifact created
+        """
+        # Log entry for debugging
+        logger.info(
+            f"_process_tool_artifacts: ENTER tool_name={tool_name}, "
+            f"has_artifact_service={self._artifact_service is not None}, "
+            f"result_type={type(result).__name__}"
+        )
+
+        if not self._artifact_service:
+            # No artifact service configured, skip processing
+            logger.warning("_process_tool_artifacts: No artifact_service configured, skipping")
+            return
+
+        # Get context from langfuse context
+        ctx = self._langfuse_context or {}
+        project_id = ctx.get("project_id")
+        tenant_id = ctx.get("tenant_id")
+        conversation_id = ctx.get("conversation_id")
+
+        if not project_id or not tenant_id:
+            logger.warning(
+                f"Missing project_id={project_id} or tenant_id={tenant_id} for artifact processing"
+            )
+            return
+
+        # Check if result contains MCP-style content
+        if not isinstance(result, dict):
+            logger.info(
+                f"_process_tool_artifacts: result is not dict, type={type(result)}, skipping"
+            )
+            return
+
+        # Log for debugging
+        logger.info(
+            f"_process_tool_artifacts: tool_name={tool_name}, has_artifact={result.get('artifact') is not None}"
+        )
+
+        # Check for export_artifact tool result which has special 'artifact' field
+        if result.get("artifact"):
+            artifact_info = result["artifact"]
+            try:
+                import base64
+
+                # Get file content
+                encoding = artifact_info.get("encoding", "utf-8")
+                if encoding == "base64":
+                    # Binary file - get data from artifact info or image content
+                    data = artifact_info.get("data")
+                    if not data:
+                        # Check for image content
+                        for item in result.get("content", []):
+                            if item.get("type") == "image":
+                                data = item.get("data")
+                                break
+                    if data:
+                        file_content = base64.b64decode(data)
+                    else:
+                        logger.warning("export_artifact has base64 encoding but no data")
+                        return
+                else:
+                    # Text file - get from content
+                    content = result.get("content", [])
+                    if content:
+                        text = content[0].get("text", "")
+                        file_content = text.encode("utf-8")
+                    else:
+                        return
+
+                # Create artifact
+                artifact = await self._artifact_service.create_artifact(
+                    file_content=file_content,
+                    filename=artifact_info.get("filename", "exported_file"),
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    sandbox_id=None,
+                    tool_execution_id=tool_execution_id,
+                    conversation_id=conversation_id,
+                    source_tool=tool_name,
+                    source_path=artifact_info.get("path"),
+                    metadata={
+                        "extracted_from": "export_artifact",
+                        "original_mime": artifact_info.get("mime_type"),
+                        "category": artifact_info.get("category"),
+                        "is_binary": artifact_info.get("is_binary"),
+                    },
+                )
+
+                logger.info(
+                    f"Created artifact {artifact.id} from export_artifact: "
+                    f"{artifact.filename} ({artifact.category.value}, {artifact.size_bytes} bytes)"
+                )
+
+                yield AgentArtifactCreatedEvent(
+                    artifact_id=artifact.id,
+                    filename=artifact.filename,
+                    mime_type=artifact.mime_type,
+                    category=artifact.category.value,
+                    size_bytes=artifact.size_bytes,
+                    url=artifact.url,
+                    preview_url=artifact.preview_url,
+                    tool_execution_id=tool_execution_id,
+                    source_tool=tool_name,
+                )
+                return
+
+            except Exception as e:
+                logger.error(f"Failed to process export_artifact result: {e}")
+
+        # Check for MCP content array with images/resources
+        content = result.get("content", [])
+        if not content:
+            return
+
+        # Check if there are any image or resource types
+        has_rich_content = any(
+            item.get("type") in ("image", "resource") for item in content if isinstance(item, dict)
+        )
+        if not has_rich_content:
+            return
+
+        try:
+            # Extract artifacts from MCP result
+            artifact_data_list = extract_artifacts_from_mcp_result(result, tool_name)
+
+            for artifact_data in artifact_data_list:
+                try:
+                    # Upload artifact
+                    artifact = await self._artifact_service.create_artifact(
+                        file_content=artifact_data["content"],
+                        filename=artifact_data["filename"],
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        sandbox_id=None,  # TODO: Get sandbox_id if available
+                        tool_execution_id=tool_execution_id,
+                        conversation_id=conversation_id,
+                        source_tool=tool_name,
+                        source_path=artifact_data.get("source_path"),
+                        metadata={
+                            "extracted_from": "mcp_result",
+                            "original_mime": artifact_data["mime_type"],
+                        },
+                    )
+
+                    logger.info(
+                        f"Created artifact {artifact.id} from tool {tool_name}: "
+                        f"{artifact.filename} ({artifact.category.value}, {artifact.size_bytes} bytes)"
+                    )
+
+                    # Emit artifact created event
+                    yield AgentArtifactCreatedEvent(
+                        artifact_id=artifact.id,
+                        filename=artifact.filename,
+                        mime_type=artifact.mime_type,
+                        category=artifact.category.value,
+                        size_bytes=artifact.size_bytes,
+                        url=artifact.url,
+                        preview_url=artifact.preview_url,
+                        tool_execution_id=tool_execution_id,
+                        source_tool=tool_name,
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to create artifact from {tool_name}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing artifacts from tool {tool_name}: {e}")
 
     async def _handle_clarification_tool(
         self,

@@ -1,8 +1,14 @@
 /**
  * ConversationSidebar - Modern conversation list sidebar
+ * 
+ * Features:
+ * - Shows all conversations with status indicators
+ * - HITL (Human-In-The-Loop) pending indicators for conversations awaiting user input
+ * - Streaming indicators for active conversations
  */
 
-import React, { useMemo, useState, memo } from 'react';
+import type { FC } from 'react';
+import { useMemo, useState, memo } from 'react';
 import { Button, Badge, Tooltip, Dropdown, Modal, Input } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -11,10 +17,23 @@ import {
   MoreVertical, 
   Trash2, 
   Edit3,
-  Bot
+  Bot,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import type { Conversation } from '../../types/agent';
+import type { HITLSummary } from '../../types/conversationState';
 import { formatDistanceToNow } from '../../utils/date';
+
+/**
+ * Conversation status for UI display
+ */
+export interface ConversationStatus {
+  /** Whether this conversation is currently streaming */
+  isStreaming: boolean;
+  /** Pending HITL request summary (if any) */
+  pendingHITL: HITLSummary | null;
+}
 
 interface ConversationSidebarProps {
   conversations: Conversation[];
@@ -26,6 +45,8 @@ interface ConversationSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   headerExtra?: React.ReactNode;
+  /** Status map for each conversation (conversationId -> status) */
+  conversationStatuses?: Map<string, ConversationStatus>;
 }
 
 interface ConversationItemProps {
@@ -35,6 +56,8 @@ interface ConversationItemProps {
   onDelete: (e: React.MouseEvent) => void;
   onRename?: () => void;
   compact?: boolean;
+  /** Status for this conversation */
+  status?: ConversationStatus;
 }
 
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
@@ -45,6 +68,7 @@ const ConversationItem = memo<ConversationItemProps>(({
   onDelete,
   onRename,
   compact = false,
+  status,
 }) => {
   const timeAgo = useMemo(() => {
     try {
@@ -78,10 +102,24 @@ const ConversationItem = memo<ConversationItemProps>(({
     },
   ], [onDelete, onRename]);
 
+  // Determine status indicator
+  const hasHITL = status?.pendingHITL != null;
+  const isStreaming = status?.isStreaming ?? false;
+
   if (compact) {
     return (
-      <Tooltip title={conversation.title || 'Untitled'} placement="right">
+      <Tooltip 
+        title={
+          <div>
+            <div>{conversation.title || 'Untitled'}</div>
+            {hasHITL && <div className="text-amber-400 text-xs mt-1">⚠️ Needs your input</div>}
+            {isStreaming && <div className="text-blue-400 text-xs mt-1">🔄 Processing...</div>}
+          </div>
+        } 
+        placement="right"
+      >
         <button
+          type="button"
           onClick={onSelect}
           className={`
             w-full p-3 rounded-xl mb-1 transition-all duration-200
@@ -96,33 +134,57 @@ const ConversationItem = memo<ConversationItemProps>(({
           {isActive && (
             <span className="absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full" />
           )}
+          {/* HITL indicator badge */}
+          {hasHITL && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full animate-pulse" />
+          )}
+          {/* Streaming indicator */}
+          {!hasHITL && isStreaming && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
+          )}
         </button>
       </Tooltip>
     );
   }
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={`
-        group relative p-3 rounded-xl mb-1 cursor-pointer
+        w-full text-left group relative p-3 rounded-xl mb-1 cursor-pointer
         transition-all duration-200 border
         ${isActive 
           ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100' 
           : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
         }
+        ${hasHITL ? 'border-amber-300 dark:border-amber-600/50' : ''}
       `}
     >
       <div className="flex items-start gap-3">
-        {/* Icon */}
+        {/* Icon with status indicator */}
         <div className={`
-          w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
-          ${isActive 
-            ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' 
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+          relative w-9 h-9 rounded-lg flex items-center justify-center shrink-0
+          ${hasHITL 
+            ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+            : isActive 
+              ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' 
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
           }
         `}>
-          <MessageSquare size={18} />
+          {hasHITL ? (
+            <AlertCircle size={18} className="animate-pulse" />
+          ) : isStreaming ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <MessageSquare size={18} />
+          )}
         </div>
 
         {/* Content */}
@@ -131,11 +193,32 @@ const ConversationItem = memo<ConversationItemProps>(({
             <p className="font-medium text-sm truncate">
               {conversation.title || 'Untitled Conversation'}
             </p>
-            {conversation.status === 'active' && (
+            {/* Status badge */}
+            {hasHITL ? (
+              <Tooltip title={status?.pendingHITL?.title || 'Awaiting input'}>
+                <Badge 
+                  status="warning" 
+                  text={<span className="text-xs text-amber-600 dark:text-amber-400">Needs Input</span>}
+                  className="flex-shrink-0" 
+                />
+              </Tooltip>
+            ) : isStreaming ? (
               <Badge status="processing" className="flex-shrink-0" />
+            ) : conversation.status === 'active' ? (
+              <Badge status="success" className="flex-shrink-0" />
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-slate-400">{timeAgo}</p>
+            {/* HITL type indicator */}
+            {hasHITL && status?.pendingHITL?.type && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400">
+                {status.pendingHITL.type === 'clarification' && '❓ Clarification'}
+                {status.pendingHITL.type === 'decision' && '🤔 Decision'}
+                {status.pendingHITL.type === 'env_var' && '🔑 Input needed'}
+              </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">{timeAgo}</p>
         </div>
 
         {/* Actions */}
@@ -148,18 +231,18 @@ const ConversationItem = memo<ConversationItemProps>(({
             type="text"
             size="small"
             icon={<MoreVertical size={14} />}
-            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             onClick={(e) => e.stopPropagation()}
           />
         </Dropdown>
       </div>
-    </div>
+    </button>
   );
 });
 
 ConversationItem.displayName = 'ConversationItem';
 
-export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
+export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   conversations,
   activeId,
   onSelect,
@@ -168,10 +251,21 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
   onRename,
   collapsed,
   headerExtra,
+  conversationStatuses,
 }) => {
   const [renamingConversation, setRenamingConversation] = useState<Conversation | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
+
+  // Count conversations with pending HITL
+  const pendingHITLCount = useMemo(() => {
+    if (!conversationStatuses) return 0;
+    let count = 0;
+    conversationStatuses.forEach((status) => {
+      if (status.pendingHITL) count++;
+    });
+    return count;
+  }, [conversationStatuses]);
 
   const handleRenameClick = (conv: Conversation) => {
     setRenamingConversation(conv);
@@ -248,6 +342,18 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
         </Button>
       </div>
 
+      {/* Pending HITL Alert Banner */}
+      {!collapsed && pendingHITLCount > 0 && (
+        <div className="mx-3 mb-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <AlertCircle size={14} />
+            <span className="text-xs font-medium">
+              {pendingHITLCount} conversation{pendingHITLCount > 1 ? 's' : ''} need{pendingHITLCount === 1 ? 's' : ''} your input
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Conversation List */}
       <div className={`
         flex-1 overflow-y-auto
@@ -263,6 +369,7 @@ export const ConversationSidebar: React.FC<ConversationSidebarProps> = ({
               onDelete={(e) => onDelete(conv.id, e)}
               onRename={onRename ? () => handleRenameClick(conv) : undefined}
               compact={collapsed}
+              status={conversationStatuses?.get(conv.id)}
             />
           ))}
         </div>

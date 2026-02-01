@@ -13,7 +13,7 @@ import re
 import threading
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
@@ -130,16 +130,19 @@ def get_sandbox_orchestrator() -> SandboxOrchestrator:
         return _sandbox_orchestrator
 
 
-def get_event_publisher() -> Optional[SandboxEventPublisher]:
-    """Get or create the sandbox event publisher singleton with thread-safe initialization."""
+def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
+    """Get the sandbox event publisher from app container.
+
+    Uses the properly initialized container from app.state which has
+    redis_client configured for the event bus.
+    """
     global _event_publisher
 
     with _singleton_lock:
         if _event_publisher is None:
             try:
-                from src.configuration.di_container import DIContainer
-
-                container = DIContainer()
+                # Get container from app.state which has redis_client properly configured
+                container = request.app.state.container
                 _event_publisher = container.sandbox_event_publisher()
             except Exception as e:
                 logger.warning(f"Could not create event publisher: {e}")
@@ -1284,6 +1287,14 @@ async def subscribe_sandbox_events(
     - Client will receive only new events after the saved ID
     """
     from fastapi.responses import StreamingResponse
+
+    # Check if event bus is available before starting SSE stream
+    if not event_publisher or not event_publisher._event_bus:
+        logger.warning("[SandboxSSE] Event bus not available, returning 503")
+        raise HTTPException(
+            status_code=503,
+            detail="Event streaming service temporarily unavailable. Redis event bus not configured.",
+        )
 
     return StreamingResponse(
         sse_generator(project_id, last_id, event_publisher),

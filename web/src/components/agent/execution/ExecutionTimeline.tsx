@@ -167,7 +167,9 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ children }) => {
-  const { workPlan, steps, isStreaming, matchedPattern } = useExecutionTimelineContext();
+  const { workPlan: _workPlan, steps, isStreaming, matchedPattern } = useExecutionTimelineContext();
+  // _workPlan kept for potential future use
+  void _workPlan;
 
   const completedSteps = steps.filter((s) => s.status === "completed").length;
   const totalSteps = steps.length;
