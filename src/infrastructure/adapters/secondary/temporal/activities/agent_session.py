@@ -550,6 +550,7 @@ async def execute_chat_activity(
             user_id=user_id,
             tenant_id=tenant_id,
             conversation_context=conversation_context,
+            message_id=assistant_message_id,
         ):
             event_count += 1
             sequence_number += 1
@@ -1063,7 +1064,8 @@ async def generate_conversation_title_activity(
     Returns:
         Dict with status, title, and metadata
     """
-    from src.application.services.agent_service import AgentService
+    from sqlalchemy import select
+
     from src.domain.events.agent_events import AgentTitleGeneratedEvent
     from src.domain.model.agent.agent_execution_event import USER_MESSAGE
     from src.infrastructure.adapters.secondary.event.redis_event_bus import (
@@ -1076,7 +1078,6 @@ async def generate_conversation_title_activity(
         AgentExecutionEvent,
         Conversation,
     )
-    from sqlalchemy import select
 
     conversation_id = input.get("conversation_id", "")
     user_id = input.get("user_id", "")
@@ -1095,9 +1096,7 @@ async def generate_conversation_title_activity(
             conversation = result.scalar_one_or_none()
 
         if not conversation:
-            logger.warning(
-                f"[TitleGen] Conversation not found: {conversation_id}"
-            )
+            logger.warning(f"[TitleGen] Conversation not found: {conversation_id}")
             return {
                 "status": "error",
                 "error": "Conversation not found",
@@ -1209,9 +1208,7 @@ async def generate_conversation_title_activity(
         }
 
 
-async def _generate_title_for_message(
-    first_message: str, llm_client
-) -> str | None:
+async def _generate_title_for_message(first_message: str, llm_client) -> str | None:
     """Generate a title using LLM with retry logic.
 
     Args:
@@ -1221,8 +1218,9 @@ async def _generate_title_for_message(
     Returns:
         Generated title or None if generation fails
     """
-    from src.domain.llm_providers.llm_types import Message as LLMMessage
     import asyncio
+
+    from src.domain.llm_providers.llm_types import Message as LLMMessage
 
     prompt = f"""Generate a short, friendly title (max 50 characters) for a conversation that starts with this message:
 
@@ -1261,13 +1259,11 @@ Title:"""
                 return title
 
         except Exception as e:
-            logger.warning(
-                f"[TitleGen] LLM attempt {attempt + 1}/{max_retries} failed: {e}"
-            )
+            logger.warning(f"[TitleGen] LLM attempt {attempt + 1}/{max_retries} failed: {e}")
 
             # If not the last attempt, wait with exponential backoff
             if attempt < max_retries - 1:
-                delay = base_delay * (2 ** attempt)
+                delay = base_delay * (2**attempt)
                 await asyncio.sleep(delay)
 
     return None
@@ -1306,7 +1302,6 @@ async def _get_conversation_message_count(conversation_id: str) -> int:
         Number of message events (user_message + assistant_message)
     """
     from sqlalchemy import func, select
-    from sqlalchemy.orm import sessionmaker
 
     from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
     from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
@@ -1352,7 +1347,6 @@ async def _maybe_generate_and_publish_title(
         event_bus: Event bus instance
     """
     from sqlalchemy import select
-    from sqlalchemy.orm import sessionmaker
 
     from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
     from src.infrastructure.adapters.secondary.persistence.models import Conversation

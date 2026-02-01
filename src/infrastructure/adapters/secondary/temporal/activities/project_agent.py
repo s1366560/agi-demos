@@ -18,15 +18,6 @@ from typing import Any, Dict, List, Optional
 
 from temporalio import activity
 
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-    get_agent_graph_service,
-    get_or_create_llm_client,
-    get_or_create_provider_config,
-    get_or_create_skills,
-    get_or_create_tools,
-    get_redis_client,
-)
-
 logger = logging.getLogger(__name__)
 
 # Import project agent types
@@ -140,9 +131,7 @@ async def initialize_project_agent_activity(
         )
 
         if cached_agent and not force_refresh:
-            logger.info(
-                f"[ProjectAgentActivity] Using cached agent: {cached_agent.project_key}"
-            )
+            logger.info(f"[ProjectAgentActivity] Using cached agent: {cached_agent.project_key}")
             return {
                 "status": "initialized",
                 "tool_count": cached_agent._status.tool_count,
@@ -286,6 +275,7 @@ async def execute_project_chat_activity(
             user_id=user_id,
             conversation_context=conversation_context,
             tenant_id=tenant_id,
+            message_id=message_id,
         ):
             events.append(event)
 
@@ -377,9 +367,7 @@ async def cleanup_project_agent_activity(
         # Remove from cache
         removed = _remove_cached_project_agent(tenant_id, project_id, agent_mode)
 
-        logger.info(
-            f"[ProjectAgentActivity] Cleanup completed: removed={removed}"
-        )
+        logger.info(f"[ProjectAgentActivity] Cleanup completed: removed={removed}")
 
         return {
             "status": "cleaned",

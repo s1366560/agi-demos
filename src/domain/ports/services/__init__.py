@@ -4,6 +4,11 @@ from src.domain.ports.services.queue_port import QueuePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.agent_service_port import AgentServicePort
 from src.domain.ports.services.storage_service_port import StorageServicePort, UploadResult
+from src.domain.ports.services.hitl_message_bus_port import (
+    HITLMessageBusPort,
+    HITLMessage,
+    HITLMessageType,
+)
 from src.domain.ports.services.sandbox_port import (
     SandboxPort,
     SandboxConfig,
@@ -26,6 +31,9 @@ __all__ = [
     "AgentServicePort",
     "StorageServicePort",
     "UploadResult",
+    "HITLMessageBusPort",
+    "HITLMessage",
+    "HITLMessageType",
     "SandboxPort",
     "SandboxConfig",
     "SandboxInstance",

@@ -53,6 +53,7 @@ from src.application.use_cases.task import (
 )
 from src.configuration.config import get_settings
 from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 
 # Workflow Engine Port
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
@@ -189,6 +190,21 @@ class DIContainer:
     def redis(self) -> Optional[redis.Redis]:
         """Get the Redis client for cache operations."""
         return self._redis_client
+
+    def hitl_message_bus(self) -> Optional[HITLMessageBusPort]:
+        """Get the HITL message bus for cross-process communication.
+
+        Returns the Redis Streams based message bus for HITL tools
+        (decision, clarification, env_var). This replaces the old
+        pub/sub mechanism for more reliable message delivery.
+        """
+        if not self._redis_client:
+            return None
+        from src.infrastructure.adapters.secondary.messaging.redis_hitl_message_bus import (
+            RedisHITLMessageBusAdapter,
+        )
+
+        return RedisHITLMessageBusAdapter(self._redis_client)
 
     def sandbox_adapter(self):
         """Get the MCP Sandbox adapter for desktop and terminal management."""

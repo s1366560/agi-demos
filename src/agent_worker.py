@@ -406,6 +406,17 @@ async def main():
     global cleanup_task
     cleanup_task = asyncio.create_task(periodic_session_cleanup())
 
+    # Recover unprocessed HITL responses from previous Worker instance
+    # This handles the case where Worker crashed while Agent was waiting for user response
+    try:
+        from src.infrastructure.agent.hitl.recovery_service import recover_hitl_on_startup
+
+        recovered = await recover_hitl_on_startup()
+        if recovered > 0:
+            logger.info(f"Agent Worker: Recovered {recovered} HITL requests from previous session")
+    except Exception as e:
+        logger.warning(f"Agent Worker: HITL recovery failed (non-fatal): {e}")
+
     try:
         # Run the worker
         await worker.run()

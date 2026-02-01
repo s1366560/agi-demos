@@ -1237,9 +1237,14 @@ class SessionProcessor:
             if isinstance(context_raw, str):
                 context = {"description": context_raw} if context_raw else {}
             elif isinstance(context_raw, dict):
-                context = context_raw
+                context = context_raw.copy()  # Copy to avoid modifying original
             else:
                 context = {}
+
+            # Add conversation_id to context for cross-process resolution after page refresh
+            ctx = getattr(self, "_langfuse_context", {}) or {}
+            if ctx.get("conversation_id"):
+                context["conversation_id"] = ctx["conversation_id"]
 
             # Create request ID
             request_id = f"clarif_{uuid.uuid4().hex[:8]}"
@@ -1405,9 +1410,14 @@ class SessionProcessor:
             if isinstance(context_raw, str):
                 context = {"description": context_raw} if context_raw else {}
             elif isinstance(context_raw, dict):
-                context = context_raw
+                context = context_raw.copy()  # Copy to avoid modifying original
             else:
                 context = {}
+
+            # Add conversation_id to context for cross-process resolution after page refresh
+            ctx = getattr(self, "_langfuse_context", {}) or {}
+            if ctx.get("conversation_id"):
+                context["conversation_id"] = ctx["conversation_id"]
 
             # Create request ID
             request_id = f"decision_{uuid.uuid4().hex[:8]}"
@@ -1483,7 +1493,7 @@ class SessionProcessor:
             start_time = time.time()
             try:
                 decision = await manager.wait_for_response(
-                    request_id, timeout=timeout, default_option=default_option
+                    request_id, timeout=timeout, default_response=default_option
                 )
                 end_time = time.time()
 
@@ -1576,8 +1586,19 @@ class SessionProcessor:
             target_tool_name = arguments.get("tool_name", "")
             fields_raw = arguments.get("fields", [])
             message = arguments.get("message")
-            context = arguments.get("context", {})
+            context_raw = arguments.get("context", {})
             timeout = arguments.get("timeout", 300.0)
+
+            # Ensure context is a dictionary and add conversation_id
+            if isinstance(context_raw, dict):
+                context = context_raw.copy()
+            else:
+                context = {}
+
+            # Add conversation_id to context for cross-process resolution after page refresh
+            ctx = getattr(self, "_langfuse_context", {}) or {}
+            if ctx.get("conversation_id"):
+                context["conversation_id"] = ctx["conversation_id"]
 
             # Create request ID
             request_id = f"envvar_{uuid.uuid4().hex[:8]}"

@@ -10,15 +10,15 @@ Tests cover:
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
+    ExecutionPlanStatus,
     ExecutionStep,
     ExecutionStepStatus,
-    ExecutionPlanStatus,
 )
 
 
@@ -103,9 +103,7 @@ class TestPlanExecutorParallel:
         )
 
     @pytest.mark.asyncio
-    async def test_parallel_execution_of_independent_steps(
-        self, plan_executor, sample_plan
-    ):
+    async def test_parallel_execution_of_independent_steps(self, plan_executor, sample_plan):
         """Test that independent steps execute in parallel."""
         # Create a new plan with independent steps
         independent_steps = [
@@ -167,9 +165,7 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = track_execution
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            independent_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(independent_plan, abort_signal=None)
 
         # Verify all steps completed
         assert len(result.completed_steps) == 4
@@ -179,9 +175,7 @@ class TestPlanExecutorParallel:
         )
 
     @pytest.mark.asyncio
-    async def test_concurrency_limited_by_max_parallel_steps(
-        self, plan_executor, sample_plan
-    ):
+    async def test_concurrency_limited_by_max_parallel_steps(self, plan_executor, sample_plan):
         """Test that concurrent execution respects max_parallel_steps."""
         # Create 5 independent steps (more than max_parallel_steps=3)
         for i in range(5, 7):
@@ -219,19 +213,16 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = tracked_execute
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            sample_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
 
         # Verify max concurrent executions didn't exceed limit
         assert max_concurrent <= plan_executor.max_parallel_steps
         assert max_concurrent == 3  # Should hit the limit
 
     @pytest.mark.asyncio
-    async def test_step_failure_does_not_block_other_steps(
-        self, plan_executor, sample_plan
-    ):
+    async def test_step_failure_does_not_block_other_steps(self, plan_executor, sample_plan):
         """Test that a failed step doesn't prevent other steps from executing."""
+
         # Make step-2 fail
         async def failing_execute(step, conversation_id):
             if step.step_id == "step-2":
@@ -241,9 +232,7 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = failing_execute
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            sample_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
 
         # Verify step-2 failed
         step_2 = result.get_step_by_id("step-2")
@@ -253,10 +242,10 @@ class TestPlanExecutorParallel:
         assert result.get_step_by_id("step-1").status == ExecutionStepStatus.COMPLETED
 
     @pytest.mark.asyncio
-    async def test_semaphore_limits_concurrent_execution(
-        self, plan_executor, sample_plan
-    ):
+    async def test_semaphore_limits_concurrent_execution(self, plan_executor, sample_plan):
         """Test that Semaphore properly limits concurrent execution."""
+        import time
+
         # Create 10 independent steps
         for i in range(5, 15):
             sample_plan.steps.append(
@@ -273,33 +262,32 @@ class TestPlanExecutorParallel:
         execution_times = []
 
         async def timed_execute(step, conversation_id):
-            import time
-
             start = time.time()
             await asyncio.sleep(0.1)  # 100ms work
             end = time.time()
-            execution_times.append((step.step_id, end - start))
+            execution_times.append((step.step_id, start, end))
             return f"Result for {step.step_id}"
 
         plan_executor._execute_step = timed_execute
 
         # Execute plan
+        overall_start = time.time()
         await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
+        overall_elapsed = time.time() - overall_start
 
-        # With max_parallel_steps=3 and 10 steps taking 100ms each,
-        # we expect approximately 4 batches (3+3+3+1) = ~400ms total
+        # With max_parallel_steps=3 and 14 steps taking 100ms each,
+        # we expect approximately 5 batches (3+3+3+3+2) = ~500ms total
         # If all ran in parallel, it would be ~100ms
-        total_time = max(t for _, t in execution_times)
-
         # Verify concurrency limiting worked
-        # 10 steps / 3 concurrent ≈ 4 batches
-        # 4 batches * 100ms = 400ms (with some overhead)
-        assert total_time >= 0.3  # At least 300ms (3 batches minimum)
-        assert total_time < 0.6  # Less than 600ms
+        # 14 steps / 3 concurrent ≈ 5 batches
+        # 5 batches * 100ms = 500ms (with some overhead)
+        assert overall_elapsed >= 0.3  # At least 300ms (3 batches minimum)
+        assert overall_elapsed < 0.8  # Less than 800ms (with overhead)
 
     @pytest.mark.asyncio
     async def test_errors_logged_correctly(self, plan_executor, sample_plan):
         """Test that execution errors are logged properly."""
+
         # Make multiple steps fail
         async def failing_execute(step, conversation_id):
             if step.step_id in ["step-2", "step-3"]:
@@ -309,34 +297,25 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = failing_execute
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            sample_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
 
         # Verify failed steps are in failed_steps
         assert "step-2" in result.failed_steps or any(
-            s.step_id == "step-2" and s.status == ExecutionStepStatus.FAILED
-            for s in result.steps
+            s.step_id == "step-2" and s.status == ExecutionStepStatus.FAILED for s in result.steps
         )
 
     @pytest.mark.asyncio
-    async def test_all_steps_completed_on_success(
-        self, plan_executor, sample_plan
-    ):
+    async def test_all_steps_completed_on_success(self, plan_executor, sample_plan):
         """Test that all steps are marked completed on successful execution."""
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            sample_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
 
         # Verify all steps completed
         assert len(result.completed_steps) == 4
         assert len(result.failed_steps) == 0
 
     @pytest.mark.asyncio
-    async def test_abort_signal_cancels_execution(
-        self, plan_executor, sample_plan
-    ):
+    async def test_abort_signal_cancels_execution(self, plan_executor, sample_plan):
         """Test that AbortSignal can cancel ongoing execution."""
         abort_signal = asyncio.Event()
 
@@ -350,9 +329,7 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = slow_execute
 
         # Execute in background
-        task = asyncio.create_task(
-            plan_executor._execute_plan_parallel(sample_plan, abort_signal)
-        )
+        task = asyncio.create_task(plan_executor._execute_plan_parallel(sample_plan, abort_signal))
 
         # Wait a bit then check result
         await asyncio.sleep(0.05)
@@ -366,9 +343,7 @@ class TestPlanExecutorParallel:
         assert result.status == ExecutionPlanStatus.CANCELLED
 
     @pytest.mark.asyncio
-    async def test_empty_ready_steps_returns_original_plan(
-        self, plan_executor, sample_plan
-    ):
+    async def test_empty_ready_steps_returns_original_plan(self, plan_executor, sample_plan):
         """Test that empty ready_steps returns the original plan."""
         # Create a plan with all steps already completed
         completed_steps = []
@@ -396,18 +371,14 @@ class TestPlanExecutorParallel:
         )
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            completed_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(completed_plan, abort_signal=None)
 
         # Verify plan is complete
         assert result.is_complete
         assert len(result.completed_steps) == 4
 
     @pytest.mark.asyncio
-    async def test_dependencies_respected_in_parallel_execution(
-        self, plan_executor, sample_plan
-    ):
+    async def test_dependencies_respected_in_parallel_execution(self, plan_executor, sample_plan):
         """Test that step dependencies are respected during parallel execution."""
         execution_order = []
 
@@ -419,9 +390,7 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = tracking_execute
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            sample_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
 
         # Verify step-1 executed before step-2 and step-3
         step_1_idx = execution_order.index("step-1")
@@ -437,10 +406,9 @@ class TestPlanExecutorParallel:
         assert step_4_idx > step_3_idx
 
     @pytest.mark.asyncio
-    async def test_mixed_success_and_failure_states(
-        self, plan_executor, sample_plan
-    ):
+    async def test_mixed_success_and_failure_states(self, plan_executor, sample_plan):
         """Test handling of mixed successful and failed steps."""
+
         # Make step-2 fail, others succeed
         async def mixed_execute(step, conversation_id):
             if step.step_id == "step-2":
@@ -450,9 +418,7 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = mixed_execute
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            sample_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(sample_plan, abort_signal=None)
 
         # Verify mixed states
         assert result.get_step_by_id("step-1").status == ExecutionStepStatus.COMPLETED
@@ -463,9 +429,7 @@ class TestPlanExecutorParallel:
         assert step_4.status in [ExecutionStepStatus.PENDING, ExecutionStepStatus.FAILED]
 
     @pytest.mark.asyncio
-    async def test_concurrent_limit_of_one_is_sequential(
-        self, plan_executor, sample_plan
-    ):
+    async def test_concurrent_limit_of_one_is_sequential(self, plan_executor, sample_plan):
         """Test that max_parallel_steps=1 results in sequential execution."""
         # Set limit to 1
         plan_executor.max_parallel_steps = 1
@@ -505,9 +469,7 @@ class TestPlanExecutorParallel:
         plan_executor._execute_step = tracking_execute
 
         # Execute plan
-        result = await plan_executor._execute_plan_parallel(
-            independent_plan, abort_signal=None
-        )
+        result = await plan_executor._execute_plan_parallel(independent_plan, abort_signal=None)
 
         # With limit of 1, should execute sequentially
         # All steps should complete in order

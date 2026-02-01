@@ -748,117 +748,113 @@ class AgentService(AgentServicePort):
         # This is necessary because events are published to Redis Stream BEFORE
         # being saved to DB. If we used "$", we might miss events published during DB replay.
         # We use last_sequence_id filtering to skip duplicates from DB replay.
-        if message_id:
-            stream_key = f"agent:events:{conversation_id}"
-            logger.warning(
-                f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
-                f"message_id={message_id}, last_seq={last_sequence_id}"
-            )
-            live_event_count = 0
-            try:
-                # Use "0" to read all messages (catch any missed during DB replay)
-                # Filter by last_sequence_id to avoid duplicates
-                async for message in self._event_bus.stream_read(
-                    stream_key, last_id="0", count=1000, block_ms=1000
-                ):
-                    event = message.get("data", {})
-                    event_type = event.get("type", "unknown")
-                    seq = event.get("seq", 0)
-                    event_data = event.get("data", {})
+        #
+        # When message_id is None: Read ALL new events for the conversation (HITL recovery mode)
+        # When message_id is set: Filter events for that specific message
+        stream_key = f"agent:events:{conversation_id}"
+        logger.warning(
+            f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
+            f"message_id={message_id or 'ALL'}, last_seq={last_sequence_id}"
+        )
+        live_event_count = 0
+        try:
+            # Use "0" to read all messages (catch any missed during DB replay)
+            # Filter by last_sequence_id to avoid duplicates
+            async for message in self._event_bus.stream_read(
+                stream_key, last_id="0", count=1000, block_ms=1000
+            ):
+                event = message.get("data", {})
+                event_type = event.get("type", "unknown")
+                seq = event.get("seq", 0)
+                event_data = event.get("data", {})
 
-                    live_event_count += 1
-                    if live_event_count <= 10:
-                        logger.warning(
-                            f"[AgentService] Live stream event #{live_event_count}: "
-                            f"type={event_type}, seq={seq}, message_id={event_data.get('message_id')}"
-                        )
+                live_event_count += 1
+                if live_event_count <= 10:
+                    logger.warning(
+                        f"[AgentService] Live stream event #{live_event_count}: "
+                        f"type={event_type}, seq={seq}, message_id={event_data.get('message_id')}"
+                    )
 
-                    # Filter by message_id (only events for this specific message)
-                    if event_data.get("message_id") != message_id:
-                        continue
+                # Filter by message_id (only when message_id is specified)
+                # When message_id is None (HITL recovery mode), accept all events
+                if message_id and event_data.get("message_id") != message_id:
+                    continue
 
-                    # CRITICAL: Use last_sequence_id (from DB replay) for filtering
-                    # This prevents re-yielding events that were already replayed from DB
-                    if seq <= last_sequence_id:
-                        continue
+                # CRITICAL: Use last_sequence_id (from DB replay) for filtering
+                # This prevents re-yielding events that were already replayed from DB
+                if seq <= last_sequence_id:
+                    continue
 
-                    yield {
-                        "type": event_type,
-                        "data": event_data,
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "id": seq,
-                    }
-                    last_sequence_id = max(last_sequence_id, seq)
+                yield {
+                    "type": event_type,
+                    "data": event_data,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "id": seq,
+                }
+                last_sequence_id = max(last_sequence_id, seq)
 
-                    # Stop when completion is seen, but continue briefly for delayed events
-                    # (e.g., title_generated which is published after complete)
-                    if event_type in ("complete", "error"):
-                        logger.info(
-                            f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
-                            f"reading delayed events for 2 seconds"
-                        )
-                        # Continue reading for a short time to catch delayed events like title_generated
-                        # These events are published AFTER the complete event by the backend
-                        delayed_start = time_module.time()
-                        max_delay = 2.0  # Read for up to 2 more seconds
-                        try:
-                            async for delayed_message in self._event_bus.stream_read(
-                                stream_key, last_id="0", count=100, block_ms=200
-                            ):
-                                delayed_event = delayed_message.get("data", {})
-                                delayed_type = delayed_event.get("type", "unknown")
-                                delayed_seq = delayed_event.get("seq", 0)
-                                delayed_data = delayed_event.get("data", {})
+                # Stop when completion is seen, but continue briefly for delayed events
+                # (e.g., title_generated which is published after complete)
+                if event_type in ("complete", "error"):
+                    logger.info(
+                        f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
+                        f"reading delayed events for 2 seconds"
+                    )
+                    # Continue reading for a short time to catch delayed events like title_generated
+                    # These events are published AFTER the complete event by the backend
+                    delayed_start = time_module.time()
+                    max_delay = 2.0  # Read for up to 2 more seconds
+                    try:
+                        async for delayed_message in self._event_bus.stream_read(
+                            stream_key, last_id="0", count=100, block_ms=200
+                        ):
+                            delayed_event = delayed_message.get("data", {})
+                            delayed_type = delayed_event.get("type", "unknown")
+                            delayed_seq = delayed_event.get("seq", 0)
+                            delayed_data = delayed_event.get("data", {})
 
-                                # Skip already seen events
-                                if delayed_seq <= last_sequence_id:
-                                    continue
+                            # Skip already seen events
+                            if delayed_seq <= last_sequence_id:
+                                continue
 
-                                # For conversation-level events (like title_generated), check conversation_id
-                                # For message-level events, check message_id
-                                event_message_id = delayed_data.get("message_id")
-                                event_conversation_id = delayed_data.get("conversation_id")
+                            # For conversation-level events (like title_generated), check conversation_id
+                            # For message-level events, check message_id
+                            event_message_id = delayed_data.get("message_id")
+                            event_conversation_id = delayed_data.get("conversation_id")
 
-                                # Skip events for different conversations
-                                if (
-                                    event_conversation_id
-                                    and event_conversation_id != conversation_id
-                                ):
-                                    continue
+                            # Skip events for different conversations
+                            if event_conversation_id and event_conversation_id != conversation_id:
+                                continue
 
-                                # Skip message events for different messages
-                                if event_message_id and event_message_id != message_id:
-                                    continue
+                            # Skip message events for different messages (only when filtering by message_id)
+                            if message_id and event_message_id and event_message_id != message_id:
+                                continue
 
-                                # Only process specific delayed events (conversation-level events)
-                                # These events don't have message_id but are valid for this conversation
-                                if delayed_type in ("title_generated",):
-                                    logger.info(
-                                        f"[AgentService] Yielding delayed event: type={delayed_type}, "
-                                        f"conversation_id={event_conversation_id}"
-                                    )
-                                    yield {
-                                        "type": delayed_type,
-                                        "data": delayed_data,
-                                        "timestamp": datetime.utcnow().isoformat(),
-                                        "id": delayed_seq,
-                                    }
-                                    last_sequence_id = max(last_sequence_id, delayed_seq)
+                            # Only process specific delayed events (conversation-level events)
+                            # These events don't have message_id but are valid for this conversation
+                            if delayed_type in ("title_generated",):
+                                logger.info(
+                                    f"[AgentService] Yielding delayed event: type={delayed_type}, "
+                                    f"conversation_id={event_conversation_id}"
+                                )
+                                yield {
+                                    "type": delayed_type,
+                                    "data": delayed_data,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "id": delayed_seq,
+                                }
+                                last_sequence_id = max(last_sequence_id, delayed_seq)
 
-                                # Timeout check
-                                if time_module.time() - delayed_start > max_delay:
-                                    break
-                        except Exception as delay_err:
-                            logger.warning(
-                                f"[AgentService] Error reading delayed events: {delay_err}"
-                            )
+                            # Timeout check
+                            if time_module.time() - delayed_start > max_delay:
+                                break
+                    except Exception as delay_err:
+                        logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
 
-                        logger.info("[AgentService] Stream ended (after delayed event window)")
-                        return
-            except Exception as e:
-                logger.error(
-                    f"[AgentService] Error streaming from Redis Stream: {e}", exc_info=True
-                )
+                    logger.info("[AgentService] Stream ended (after delayed event window)")
+                    return
+        except Exception as e:
+            logger.error(f"[AgentService] Error streaming from Redis Stream: {e}", exc_info=True)
 
     async def create_conversation(
         self,

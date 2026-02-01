@@ -88,20 +88,39 @@ class SQLHITLRequestRepository(HITLRequestRepositoryPort):
         conversation_id: str,
         tenant_id: str,
         project_id: str,
+        exclude_expired: bool = True,
     ) -> List[HITLRequest]:
-        """Get all pending HITL requests for a conversation."""
+        """Get all pending HITL requests for a conversation.
+
+        Args:
+            conversation_id: The conversation ID
+            tenant_id: The tenant ID
+            project_id: The project ID
+            exclude_expired: If True, exclude requests that have passed their expires_at
+        """
+        from datetime import datetime
+
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
         )
 
+        conditions = [
+            HITLRequestRecord.conversation_id == conversation_id,
+            HITLRequestRecord.tenant_id == tenant_id,
+            HITLRequestRecord.project_id == project_id,
+            HITLRequestRecord.status == HITLRequestStatus.PENDING.value,
+        ]
+
+        # Exclude expired requests if requested
+        if exclude_expired:
+            now = datetime.utcnow()
+            conditions.append(
+                (HITLRequestRecord.expires_at.is_(None)) | (HITLRequestRecord.expires_at > now)
+            )
+
         result = await self._session.execute(
             select(HITLRequestRecord)
-            .where(
-                HITLRequestRecord.conversation_id == conversation_id,
-                HITLRequestRecord.tenant_id == tenant_id,
-                HITLRequestRecord.project_id == project_id,
-                HITLRequestRecord.status == HITLRequestStatus.PENDING.value,
-            )
+            .where(*conditions)
             .order_by(HITLRequestRecord.created_at.desc())
         )
 
@@ -221,6 +240,69 @@ class SQLHITLRequestRepository(HITLRequestRepositoryPort):
             return self._to_domain(db_record)
 
         return None
+
+    async def mark_completed(self, request_id: str) -> Optional[HITLRequest]:
+        """Mark an HITL request as completed (Agent finished processing)."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            HITLRequest as HITLRequestRecord,
+        )
+
+        result = await self._session.execute(
+            update(HITLRequestRecord)
+            .where(
+                HITLRequestRecord.id == request_id,
+                HITLRequestRecord.status.in_(
+                    [
+                        HITLRequestStatus.ANSWERED.value,
+                        HITLRequestStatus.PROCESSING.value,
+                    ]
+                ),
+            )
+            .values(status=HITLRequestStatus.COMPLETED.value)
+            .returning(HITLRequestRecord)
+        )
+
+        db_record = result.scalar_one_or_none()
+        if db_record:
+            logger.info(f"Marked HITL request as completed: {request_id}")
+            return self._to_domain(db_record)
+
+        return None
+
+    async def get_unprocessed_answered_requests(
+        self,
+        limit: int = 100,
+    ) -> List[HITLRequest]:
+        """
+        Get HITL requests that have been answered but not yet processed by Agent.
+
+        This is used for recovery after Worker restart:
+        - Status is ANSWERED (user responded, but Agent crashed before processing)
+        - Ordered by answered_at to process oldest first
+
+        Args:
+            limit: Maximum number of requests to return
+
+        Returns:
+            List of HITL requests needing recovery
+        """
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            HITLRequest as HITLRequestRecord,
+        )
+
+        result = await self._session.execute(
+            select(HITLRequestRecord)
+            .where(
+                HITLRequestRecord.status == HITLRequestStatus.ANSWERED.value,
+            )
+            .order_by(HITLRequestRecord.answered_at.asc())
+            .limit(limit)
+        )
+
+        requests = [self._to_domain(r) for r in result.scalars().all()]
+        if requests:
+            logger.info(f"Found {len(requests)} unprocessed answered HITL requests for recovery")
+        return requests
 
     async def mark_expired_requests(self, before: datetime) -> int:
         """Mark all expired pending requests as timed out."""

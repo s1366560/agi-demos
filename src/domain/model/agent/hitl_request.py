@@ -21,10 +21,24 @@ class HITLRequestType(str, Enum):
 
 
 class HITLRequestStatus(str, Enum):
-    """Status of HITL request."""
+    """Status of HITL request.
+
+    State transitions:
+    - PENDING -> ANSWERED: User provides response
+    - ANSWERED -> PROCESSING: Agent picks up the response
+    - PROCESSING -> COMPLETED: Agent successfully processed the response
+    - PENDING -> TIMEOUT: Request expired without response
+    - PENDING -> CANCELLED: Request was cancelled
+
+    Recovery: If Worker restarts while PROCESSING, the request remains
+    ANSWERED (since PROCESSING is transient in-memory state). On startup,
+    Worker scans for ANSWERED requests and re-triggers Agent execution.
+    """
 
     PENDING = "pending"
     ANSWERED = "answered"
+    PROCESSING = "processing"  # Agent is processing the response
+    COMPLETED = "completed"  # Agent finished processing
     TIMEOUT = "timeout"
     CANCELLED = "cancelled"
 
@@ -96,6 +110,16 @@ class HITLRequest(Entity):
         return self.status == HITLRequestStatus.PENDING
 
     @property
+    def is_answered(self) -> bool:
+        """Check if request has been answered but not yet processed."""
+        return self.status == HITLRequestStatus.ANSWERED
+
+    @property
+    def needs_processing(self) -> bool:
+        """Check if request needs Agent processing (answered but not completed)."""
+        return self.status == HITLRequestStatus.ANSWERED
+
+    @property
     def is_expired(self) -> bool:
         """Check if request has expired."""
         return datetime.utcnow() > self.expires_at if self.expires_at else False
@@ -113,6 +137,18 @@ class HITLRequest(Entity):
         self.response_metadata = response_metadata
         self.status = HITLRequestStatus.ANSWERED
         self.answered_at = datetime.utcnow()
+
+    def mark_processing(self) -> None:
+        """Mark request as being processed by Agent."""
+        if self.status != HITLRequestStatus.ANSWERED:
+            raise ValueError(f"Cannot mark processing for status: {self.status}")
+        self.status = HITLRequestStatus.PROCESSING
+
+    def mark_completed(self) -> None:
+        """Mark request as completed (Agent finished processing)."""
+        if self.status not in (HITLRequestStatus.ANSWERED, HITLRequestStatus.PROCESSING):
+            raise ValueError(f"Cannot mark completed for status: {self.status}")
+        self.status = HITLRequestStatus.COMPLETED
 
     def mark_timeout(self, default_response: Optional[str] = None) -> None:
         """Mark request as timed out."""

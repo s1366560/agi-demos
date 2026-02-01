@@ -178,6 +178,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
           <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
             {content ? (
               <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
                   code({ node, inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');

@@ -66,6 +66,7 @@ def get_websocket_notifier() -> Optional[Any]:
     from src.infrastructure.adapters.secondary.websocket_notifier import (
         WebSocketNotifier,
     )
+
     return WebSocketNotifier(_websocket_manager)
 
 
@@ -188,10 +189,10 @@ class ProjectReActAgent:
     Usage:
         agent = ProjectReActAgent(config)
         await agent.initialize()
-        
+
         async for event in agent.execute_chat(...):
             yield event
-            
+
         status = agent.get_status()
         await agent.stop()
     """
@@ -400,8 +401,7 @@ class ProjectReActAgent:
             error_message = str(e)
 
             logger.error(
-                f"ProjectReActAgent[{self.project_key}]: Initialization failed: {e}",
-                exc_info=True
+                f"ProjectReActAgent[{self.project_key}]: Initialization failed: {e}", exc_info=True
             )
 
             # Notify error state
@@ -440,13 +440,13 @@ class ProjectReActAgent:
             project_sandbox_id = None
 
             for sandbox in all_sandboxes:
-                project_path = getattr(sandbox, 'project_path', '') or ''
+                project_path = getattr(sandbox, "project_path", "") or ""
                 if project_path and f"memstack_{self.config.project_id}" in project_path:
                     project_sandbox_id = sandbox.id
                     break
 
-                labels = getattr(sandbox, 'labels', {}) or {}
-                if labels.get('memstack.project_id') == self.config.project_id:
+                labels = getattr(sandbox, "labels", {}) or {}
+                if labels.get("memstack.project_id") == self.config.project_id:
                     project_sandbox_id = sandbox.id
                     break
 
@@ -455,9 +455,7 @@ class ProjectReActAgent:
 
             # Check if we already have sandbox tools loaded
             sandbox_prefix = f"sandbox_{project_sandbox_id}_"
-            has_sandbox_tools = any(
-                name.startswith(sandbox_prefix) for name in self._tools.keys()
-            )
+            has_sandbox_tools = any(name.startswith(sandbox_prefix) for name in self._tools.keys())
 
             if has_sandbox_tools:
                 # Sandbox tools already loaded
@@ -475,8 +473,7 @@ class ProjectReActAgent:
 
         except Exception as e:
             logger.warning(
-                f"ProjectReActAgent[{self.project_key}]: "
-                f"Error checking sandbox tools: {e}"
+                f"ProjectReActAgent[{self.project_key}]: Error checking sandbox tools: {e}"
             )
             return False
 
@@ -487,6 +484,7 @@ class ProjectReActAgent:
         user_id: str,
         conversation_context: Optional[List[Dict[str, str]]] = None,
         tenant_id: Optional[str] = None,
+        message_id: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -507,6 +505,7 @@ class ProjectReActAgent:
             user_id: User ID
             conversation_context: Optional conversation history
             tenant_id: Optional tenant ID (defaults to config.tenant_id)
+            message_id: Optional message ID for HITL request persistence
 
         Yields:
             Event dictionaries for streaming
@@ -587,6 +586,7 @@ class ProjectReActAgent:
                 user_id=user_id,
                 tenant_id=effective_tenant_id,
                 conversation_context=conversation_context or [],
+                message_id=message_id,
             ):
                 event_count += 1
 
@@ -627,8 +627,7 @@ class ProjectReActAgent:
             self._status.failed_chats += 1
 
             logger.error(
-                f"ProjectReActAgent[{self.project_key}]: Chat execution error: {e}",
-                exc_info=True
+                f"ProjectReActAgent[{self.project_key}]: Chat execution error: {e}", exc_info=True
             )
 
             yield {
@@ -815,8 +814,12 @@ class ProjectReActAgent:
             sorted_latencies = sorted(self._latencies)
             n = len(sorted_latencies)
             self._metrics.latency_p50 = sorted_latencies[int(n * 0.5)]
-            self._metrics.latency_p95 = sorted_latencies[int(n * 0.95)] if n >= 20 else sorted_latencies[-1]
-            self._metrics.latency_p99 = sorted_latencies[int(n * 0.99)] if n >= 100 else sorted_latencies[-1]
+            self._metrics.latency_p95 = (
+                sorted_latencies[int(n * 0.95)] if n >= 20 else sorted_latencies[-1]
+            )
+            self._metrics.latency_p99 = (
+                sorted_latencies[int(n * 0.99)] if n >= 100 else sorted_latencies[-1]
+            )
 
         return self._metrics
 
@@ -851,9 +854,7 @@ class ProjectReActAgent:
                 return subagents
 
         except Exception as e:
-            logger.warning(
-                f"ProjectReActAgent[{self.project_key}]: Failed to load subagents: {e}"
-            )
+            logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to load subagents: {e}")
             # Return empty list on error - subagents are optional
             return []
 
@@ -897,19 +898,19 @@ class ProjectAgentManager:
 
     Usage:
         manager = ProjectAgentManager()
-        
+
         # Get or create project agent
         agent = await manager.get_or_create_agent(
             tenant_id="tenant-123",
             project_id="project-456"
         )
-        
+
         # Get existing agent
         agent = manager.get_agent("tenant-123", "project-456")
-        
+
         # Stop project agent
         await manager.stop_agent("tenant-123", "project-456")
-        
+
         # Stop all agents
         await manager.stop_all()
     """
@@ -1135,10 +1136,7 @@ class ProjectAgentManager:
         for key in agents_to_stop:
             try:
                 # Get agent from local list (already removed from dict)
-                agent = next(
-                    (a for k, a in self._agents.items() if k == key),
-                    None
-                )
+                agent = next((a for k, a in self._agents.items() if k == key), None)
                 if agent:
                     await agent.stop()
                     logger.info(f"ProjectAgentManager: Cleaned up idle agent {key}")

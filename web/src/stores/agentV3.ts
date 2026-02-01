@@ -1432,6 +1432,9 @@ export const useAgentV3Store = create<AgentV3State>()(
                 /**
                  * Load pending HITL (Human-In-The-Loop) requests for a conversation
                  * This is used to restore dialog state after page refresh
+                 * 
+                 * Shows dialogs for all pending requests. If Agent crashed/restarted,
+                 * the recovery service will handle it when Worker restarts.
                  */
                 loadPendingHITL: async (conversationId) => {
                     console.log("[agentV3] Loading pending HITL requests for conversation:", conversationId);

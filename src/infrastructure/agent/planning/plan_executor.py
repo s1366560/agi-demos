@@ -13,7 +13,6 @@ from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
     ExecutionStep,
     ExecutionStepStatus,
-    ExecutionPlanStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,51 +125,59 @@ class PlanExecutor:
     def _emit_step_ready_event(self, step: ExecutionStep) -> None:
         """Emit an event when a step is ready to execute."""
         if self.event_emitter:
-            self.event_emitter({
-                "type": "PLAN_STEP_READY",
-                "data": {
-                    "step_id": step.step_id,
-                    "description": step.description,
-                    "tool_name": step.tool_name,
-                },
-            })
+            self.event_emitter(
+                {
+                    "type": "PLAN_STEP_READY",
+                    "data": {
+                        "step_id": step.step_id,
+                        "description": step.description,
+                        "tool_name": step.tool_name,
+                    },
+                }
+            )
 
     def _emit_step_complete_event(self, step: ExecutionStep) -> None:
         """Emit an event when a step completes."""
         if self.event_emitter:
-            self.event_emitter({
-                "type": "PLAN_STEP_COMPLETE",
-                "data": {
-                    "step_id": step.step_id,
-                    "status": step.status.value,
-                    "result": step.result,
-                },
-            })
+            self.event_emitter(
+                {
+                    "type": "PLAN_STEP_COMPLETE",
+                    "data": {
+                        "step_id": step.step_id,
+                        "status": step.status.value,
+                        "result": step.result,
+                    },
+                }
+            )
 
     def _emit_plan_start_event(self, plan: ExecutionPlan) -> None:
         """Emit an event when plan execution starts."""
         if self.event_emitter:
-            self.event_emitter({
-                "type": "PLAN_EXECUTION_START",
-                "data": {
-                    "plan_id": plan.id,
-                    "total_steps": len(plan.steps),
-                    "user_query": plan.user_query,
-                },
-            })
+            self.event_emitter(
+                {
+                    "type": "PLAN_EXECUTION_START",
+                    "data": {
+                        "plan_id": plan.id,
+                        "total_steps": len(plan.steps),
+                        "user_query": plan.user_query,
+                    },
+                }
+            )
 
     def _emit_plan_complete_event(self, plan: ExecutionPlan) -> None:
         """Emit an event when plan execution completes."""
         if self.event_emitter:
-            self.event_emitter({
-                "type": "PLAN_EXECUTION_COMPLETE",
-                "data": {
-                    "plan_id": plan.id,
-                    "status": plan.status.value,
-                    "completed_steps": len(plan.completed_steps),
-                    "failed_steps": len(plan.failed_steps),
-                },
-            })
+            self.event_emitter(
+                {
+                    "type": "PLAN_EXECUTION_COMPLETE",
+                    "data": {
+                        "plan_id": plan.id,
+                        "status": plan.status.value,
+                        "completed_steps": len(plan.completed_steps),
+                        "failed_steps": len(plan.failed_steps),
+                    },
+                }
+            )
 
     async def execute_plan(
         self,
@@ -245,8 +252,7 @@ class PlanExecutor:
                     # Some progress made, might just be waiting on dependencies
                     # Check if there are any pending steps left
                     pending_steps = [
-                        s for s in plan.steps
-                        if s.status == ExecutionStepStatus.PENDING
+                        s for s in plan.steps if s.status == ExecutionStepStatus.PENDING
                     ]
                     if not pending_steps:
                         break
@@ -310,16 +316,20 @@ class PlanExecutor:
         """
         # Use Semaphore to limit concurrent executions
         semaphore = asyncio.Semaphore(self.max_parallel_steps)
+        # Use a mutable container to allow inner function to update plan state
+        plan_state = {"plan": plan}
 
         async def execute_with_limit(step_id: str) -> tuple[str, ExecutionStep | None]:
             """Execute step with semaphore limit."""
+            nonlocal plan_state
             async with semaphore:
                 # Check abort signal before executing
                 if abort_signal and abort_signal.is_set():
                     return step_id, None
 
                 try:
-                    step = plan.get_step_by_id(step_id)
+                    current_plan = plan_state["plan"]
+                    step = current_plan.get_step_by_id(step_id)
                     if not step:
                         logger.error(f"Step {step_id} not found in plan")
                         return step_id, None
@@ -328,18 +338,21 @@ class PlanExecutor:
                     self._emit_step_ready_event(step)
 
                     # Mark step as started
-                    plan = plan.mark_step_started(step_id)
-                    step = plan.get_step_by_id(step_id)
+                    current_plan = current_plan.mark_step_started(step_id)
+                    plan_state["plan"] = current_plan
+                    step = current_plan.get_step_by_id(step_id)
 
                     if not step:
                         return step_id, None
 
                     # Execute the step
-                    result = await self._execute_step(step, plan.conversation_id)
+                    result = await self._execute_step(step, current_plan.conversation_id)
 
                     # Mark step as completed
-                    plan = plan.mark_step_completed(step_id, result)
-                    updated_step = plan.get_step_by_id(step_id)
+                    current_plan = plan_state["plan"]  # Re-fetch in case other tasks updated it
+                    current_plan = current_plan.mark_step_completed(step_id, result)
+                    plan_state["plan"] = current_plan
+                    updated_step = current_plan.get_step_by_id(step_id)
 
                     if updated_step:
                         self._emit_step_complete_event(updated_step)
@@ -348,33 +361,37 @@ class PlanExecutor:
                 except Exception as e:
                     logger.error(f"Step {step_id} failed with error: {e}")
                     # Mark step as failed
-                    step = plan.get_step_by_id(step_id)
+                    current_plan = plan_state["plan"]
+                    step = current_plan.get_step_by_id(step_id)
                     if step:
-                        plan = await self._handle_step_failure(plan, step, e)
-                        failed_step = plan.get_step_by_id(step_id)
+                        current_plan = await self._handle_step_failure(current_plan, step, e)
+                        plan_state["plan"] = current_plan
+                        failed_step = current_plan.get_step_by_id(step_id)
                         return step_id, failed_step
                     return step_id, None
 
-        while not plan.is_complete:
+        while not plan_state["plan"].is_complete:
+            current_plan = plan_state["plan"]
             # Check abort signal
             if abort_signal and abort_signal.is_set():
                 logger.info("Abort signal set, stopping parallel execution")
+                # Mark plan as cancelled
+                plan_state["plan"] = current_plan.mark_cancelled()
                 break
 
             # Get ready steps
-            ready_steps = self._get_ready_steps(plan)
+            ready_steps = self._get_ready_steps(current_plan)
 
             if not ready_steps:
                 # No steps ready - check if we're done
                 pending_steps = [
-                    s for s in plan.steps
-                    if s.status == ExecutionStepStatus.PENDING
+                    s for s in current_plan.steps if s.status == ExecutionStepStatus.PENDING
                 ]
                 if not pending_steps:
                     break
                 # If there are pending steps but none ready, we might be stuck
                 # waiting on a failed dependency
-                if plan.failed_steps:
+                if current_plan.failed_steps:
                     logger.warning("No ready steps but failed steps detected, stopping execution")
                     break
                 # Wait a bit and check again
@@ -382,10 +399,7 @@ class PlanExecutor:
                 continue
 
             # Execute all ready steps in parallel (Semaphore will limit concurrency)
-            tasks = [
-                execute_with_limit(step_id)
-                for step_id in ready_steps
-            ]
+            tasks = [execute_with_limit(step_id) for step_id in ready_steps]
 
             if tasks:
                 # Execute all tasks in parallel
@@ -406,7 +420,7 @@ class PlanExecutor:
                             # Step was skipped or aborted
                             pass
 
-        return plan
+        return plan_state["plan"]
 
     async def _execute_and_update_step(
         self,

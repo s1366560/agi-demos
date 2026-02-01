@@ -187,9 +187,23 @@ class ConnectionManager:
         return self.active_connections.get(session_id)
 
     def add_bridge_task(self, session_id: str, conversation_id: str, task: asyncio.Task) -> None:
-        """Register a bridge task for a session's conversation."""
+        """Register a bridge task for a session's conversation.
+
+        If there's already a bridge task for this session+conversation,
+        cancel the old task before registering the new one.
+        """
         if session_id not in self.bridge_tasks:
             self.bridge_tasks[session_id] = {}
+
+        # Cancel existing task if present
+        existing_task = self.bridge_tasks[session_id].get(conversation_id)
+        if existing_task and not existing_task.done():
+            logger.info(
+                f"[WS] Cancelling existing bridge task for session {session_id[:8]}... "
+                f"conversation {conversation_id}"
+            )
+            existing_task.cancel()
+
         self.bridge_tasks[session_id][conversation_id] = task
 
     def get_user_id(self, session_id: str) -> Optional[str]:
@@ -646,6 +660,43 @@ async def handle_send_message(
             )
             return
 
+        # Check for pending HITL requests - if any, block new messages
+        # Only check for non-expired pending requests
+        from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
+            SQLHITLRequestRepository,
+        )
+
+        hitl_repo = SQLHITLRequestRepository(db)
+        pending_hitl = await hitl_repo.get_pending_by_conversation(
+            conversation_id=conversation_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            exclude_expired=True,  # Don't block for expired requests
+        )
+
+        if pending_hitl:
+            # There's a pending HITL request - inform the user
+            pending_types = [r.request_type.value for r in pending_hitl]
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "conversation_id": conversation_id,
+                    "data": {
+                        "code": "HITL_PENDING",
+                        "message": f"Agent is waiting for your response. Please complete the pending {', '.join(pending_types)} request(s) before sending new messages.",
+                        "pending_requests": [
+                            {
+                                "request_id": r.id,
+                                "request_type": r.request_type.value,
+                                "question": r.question,
+                            }
+                            for r in pending_hitl
+                        ],
+                    },
+                }
+            )
+            return
+
         # Auto-subscribe this session to this conversation
         await manager.subscribe(session_id, conversation_id)
 
@@ -763,7 +814,7 @@ async def stream_hitl_response_to_websocket(
     agent_service,
     session_id: str,
     conversation_id: str,
-    message_id: str,
+    message_id: Optional[str] = None,
 ) -> None:
     """
     Stream agent events after HITL response to WebSocket.
@@ -779,18 +830,18 @@ async def stream_hitl_response_to_websocket(
         agent_service: The agent service instance
         session_id: Client session ID for unsubscribe check
         conversation_id: Conversation ID to monitor
-        message_id: Message ID to filter events for
+        message_id: Optional message ID to filter events (if None, read all new events)
     """
     event_count = 0
     try:
         logger.info(
             f"[WS HITL Bridge] Starting stream for conversation {conversation_id}, "
-            f"message_id={message_id}"
+            f"message_id={message_id or 'ALL'}"
         )
 
         async for event in agent_service.connect_chat_stream(
             conversation_id=conversation_id,
-            message_id=message_id,
+            message_id=message_id,  # Pass None to read all events
         ):
             event_count += 1
             event_type = event.get("type", "unknown")
@@ -1294,16 +1345,20 @@ async def _start_hitl_stream_bridge(
     """
     Start streaming agent events after HITL response.
 
-    This helper function:
-    1. Queries the HITL request from database to get conversation_id and message_id
-    2. Creates agent service and starts streaming
-    3. Subscribes session to conversation and starts bridge task
+    This helper function handles page refresh scenarios:
+    1. Queries the HITL request from database to get conversation_id
+    2. Checks if there's already an active bridge task for this conversation
+    3. Only starts a new bridge if needed (page refresh scenario)
+
+    Note: In normal flow (no page refresh), there's already a bridge task running
+    from the original send_message. We only need to start a new bridge after
+    page refresh when the original bridge was lost.
 
     Args:
         websocket: The WebSocket connection
         session_id: Client session ID
         tenant_id: User's tenant ID
-        request_id: HITL request ID
+        request_id: HITL request ID (may be stale after page refresh)
         db: Database session
     """
     try:
@@ -1321,15 +1376,26 @@ async def _start_hitl_stream_bridge(
             return
 
         conversation_id = hitl_request.conversation_id
-        message_id = hitl_request.message_id
 
-        if not conversation_id or not message_id:
-            logger.warning(f"[WS HITL] Request {request_id} missing conversation_id or message_id")
+        if not conversation_id:
+            logger.warning(f"[WS HITL] Request {request_id} missing conversation_id")
             return
 
+        # Check if there's already an active bridge task for this conversation
+        # If yes, we don't need to start a new one (normal flow, no page refresh)
+        existing_tasks = manager.bridge_tasks.get(session_id, {})
+        existing_task = existing_tasks.get(conversation_id)
+        if existing_task and not existing_task.done():
+            logger.info(
+                f"[WS HITL] Bridge task already running for conversation {conversation_id}, "
+                f"skipping (normal HITL flow)"
+            )
+            return
+
+        # No existing bridge - this is likely a page refresh scenario
         logger.info(
             f"[WS HITL] Starting stream bridge for request {request_id}, "
-            f"conversation={conversation_id}, message={message_id}"
+            f"conversation={conversation_id} (page refresh recovery)"
         )
 
         # Auto-subscribe session to conversation
@@ -1342,12 +1408,14 @@ async def _start_hitl_stream_bridge(
         agent_service = container.agent_service(llm)
 
         # Start streaming in background task
+        # Note: Don't pass message_id - we want ALL new events for this conversation
+        # After page refresh, the agent may use a different message_id
         task = asyncio.create_task(
             stream_hitl_response_to_websocket(
                 agent_service=agent_service,
                 session_id=session_id,
                 conversation_id=conversation_id,
-                message_id=message_id,
+                message_id=None,  # Read all new events, not filtered by message_id
             )
         )
         manager.add_bridge_task(session_id, conversation_id, task)
@@ -1394,25 +1462,32 @@ async def handle_clarification_respond(
         from src.infrastructure.agent.tools.clarification import get_clarification_manager
 
         clarification_manager = get_clarification_manager()
-        success = await clarification_manager.respond(request_id, answer)
+        result = await clarification_manager.respond(request_id, answer)
 
-        if success:
-            logger.info(f"[WS HITL] User {user_id} responded to clarification {request_id}")
+        if result:
+            # result is the target_request_id (may differ from input after page refresh)
+            target_request_id = result if isinstance(result, str) else request_id
+            logger.info(
+                f"[WS HITL] User {user_id} responded to clarification {request_id}"
+                + (f" (target: {target_request_id})" if target_request_id != request_id else "")
+            )
             await websocket.send_json(
                 {
                     "type": "clarification_response_ack",
                     "request_id": request_id,
+                    "target_request_id": target_request_id,
                     "success": True,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
 
             # Start streaming agent events after HITL response
+            # Use target_request_id to get correct conversation/message context
             await _start_hitl_stream_bridge(
                 websocket=websocket,
                 session_id=session_id,
                 tenant_id=tenant_id,
-                request_id=request_id,
+                request_id=target_request_id,
                 db=db,
             )
         else:
@@ -1473,25 +1548,32 @@ async def handle_decision_respond(
         from src.infrastructure.agent.tools.decision import get_decision_manager
 
         decision_manager = get_decision_manager()
-        success = await decision_manager.respond(request_id, decision)
+        result = await decision_manager.respond(request_id, decision)
 
-        if success:
-            logger.info(f"[WS HITL] User {user_id} responded to decision {request_id}")
+        if result:
+            # result is the target_request_id (may differ from input after page refresh)
+            target_request_id = result if isinstance(result, str) else request_id
+            logger.info(
+                f"[WS HITL] User {user_id} responded to decision {request_id}"
+                + (f" (target: {target_request_id})" if target_request_id != request_id else "")
+            )
             await websocket.send_json(
                 {
                     "type": "decision_response_ack",
                     "request_id": request_id,
+                    "target_request_id": target_request_id,  # Include for debugging
                     "success": True,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
 
             # Start streaming agent events after HITL response
+            # Use target_request_id to get correct conversation/message context
             await _start_hitl_stream_bridge(
                 websocket=websocket,
                 session_id=session_id,
                 tenant_id=tenant_id,
-                request_id=request_id,
+                request_id=target_request_id,  # Use target, not original
                 db=db,
             )
         else:
@@ -1552,17 +1634,21 @@ async def handle_env_var_respond(
         from src.infrastructure.agent.tools.env_var_tools import get_env_var_manager
 
         env_var_manager = get_env_var_manager()
-        success = await env_var_manager.respond(request_id, values)
+        result = await env_var_manager.respond(request_id, values)
 
-        if success:
+        if result:
+            # result is the target_request_id (may differ from input after page refresh)
+            target_request_id = result if isinstance(result, str) else request_id
             logger.info(
                 f"[WS HITL] User {user_id} provided env vars for request {request_id}: "
                 f"{list(values.keys())}"
+                + (f" (target: {target_request_id})" if target_request_id != request_id else "")
             )
             await websocket.send_json(
                 {
                     "type": "env_var_response_ack",
                     "request_id": request_id,
+                    "target_request_id": target_request_id,
                     "success": True,
                     "variable_names": list(values.keys()),
                     "timestamp": datetime.utcnow().isoformat(),
@@ -1570,11 +1656,12 @@ async def handle_env_var_respond(
             )
 
             # Start streaming agent events after HITL response
+            # Use target_request_id to get correct conversation/message context
             await _start_hitl_stream_bridge(
                 websocket=websocket,
                 session_id=session_id,
                 tenant_id=tenant_id,
-                request_id=request_id,
+                request_id=target_request_id,
                 db=db,
             )
         else:

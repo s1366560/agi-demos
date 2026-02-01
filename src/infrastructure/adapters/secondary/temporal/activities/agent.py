@@ -16,7 +16,9 @@ from typing import Any, Dict, List, Optional
 from temporalio import activity
 
 from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-    get_agent_graph_service, get_redis_client)
+    get_agent_graph_service,
+    get_redis_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +33,9 @@ async def _get_artifact_storage_adapter():
 
     try:
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import \
-            S3StorageAdapter
+        from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import (
+            S3StorageAdapter,
+        )
 
         settings = get_settings()
         _ARTIFACT_STORAGE_ADAPTER = S3StorageAdapter(
@@ -213,12 +216,11 @@ async def execute_react_step_activity(
     try:
         # Import dependencies here to avoid import issues in worker
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.event.redis_event_bus import \
-            RedisEventBusAdapter
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import \
-            get_or_create_provider_config
-        from src.infrastructure.llm.litellm.litellm_client import \
-            create_litellm_client
+        from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_or_create_provider_config,
+        )
+        from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
 
         settings = get_settings()
 
@@ -713,10 +715,8 @@ async def _sync_sequence_number_from_db(
     """
     from sqlalchemy import func, select
 
-    from src.infrastructure.adapters.secondary.persistence.database import \
-        async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import \
-        AgentExecutionEvent
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
 
     try:
         async with async_session_factory() as session:
@@ -793,10 +793,8 @@ async def _save_event_to_db(
     from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy.exc import IntegrityError
 
-    from src.infrastructure.adapters.secondary.persistence.database import \
-        async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import \
-        AgentExecutionEvent
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
 
     try:
         async with async_session_factory() as session:
@@ -850,10 +848,8 @@ async def _save_assistant_message_event(
     from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy.exc import IntegrityError
 
-    from src.infrastructure.adapters.secondary.persistence.database import \
-        async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import \
-        AgentExecutionEvent
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
 
     assistant_msg_id = assistant_message_id or str(uuid.uuid4())
     event_data = {
@@ -919,10 +915,8 @@ async def save_checkpoint_activity(
     Returns:
         Created checkpoint ID
     """
-    from src.infrastructure.adapters.secondary.persistence.database import \
-        async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import \
-        ExecutionCheckpoint
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import ExecutionCheckpoint
 
     async with async_session_factory() as session:
         async with session.begin():
@@ -1126,8 +1120,7 @@ async def _execute_entity_lookup(
     """Execute entity lookup tool."""
     entity_name = tool_args.get("name", "")
 
-    from src.infrastructure.graph.native_graph_adapter import \
-        NativeGraphAdapter
+    from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
 
     if not isinstance(graph_service, NativeGraphAdapter):
         return {"error": "Graph service not available"}
@@ -1163,8 +1156,7 @@ async def _execute_graph_query(
     query = tool_args.get("query", "")
     params = tool_args.get("params", {})
 
-    from src.infrastructure.graph.native_graph_adapter import \
-        NativeGraphAdapter
+    from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
 
     if not isinstance(graph_service, NativeGraphAdapter):
         return {"error": "Graph service not available"}
@@ -1301,10 +1293,8 @@ async def _save_tool_execution_record(
     """
     import json
 
-    from src.infrastructure.adapters.secondary.persistence.database import \
-        async_session_factory
-    from src.infrastructure.adapters.secondary.persistence.models import \
-        ToolExecutionRecord
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import ToolExecutionRecord
 
     # Convert tool_output to JSON string if it's a dict
     output_str = None
@@ -1388,15 +1378,18 @@ async def execute_react_agent_activity(
     import time as time_module
 
     from src.configuration.config import get_settings
-    from src.infrastructure.adapters.secondary.event.redis_event_bus import \
-        RedisEventBusAdapter
+    from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
     from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-        get_agent_graph_service, get_or_create_agent_session,
-        get_or_create_llm_client, get_or_create_provider_config,
-        get_or_create_skills, get_or_create_tools, get_redis_client)
+        get_agent_graph_service,
+        get_or_create_agent_session,
+        get_or_create_llm_client,
+        get_or_create_provider_config,
+        get_or_create_skills,
+        get_or_create_tools,
+        get_redis_client,
+    )
     from src.infrastructure.agent.core.react_agent import ReActAgent
-    from src.infrastructure.security.encryption_service import \
-        get_encryption_service
+    from src.infrastructure.security.encryption_service import get_encryption_service
 
     redis_client = None
     start_time = time_module.time()
@@ -1581,6 +1574,7 @@ async def execute_react_agent_activity(
             user_id=user_id,
             tenant_id=tenant_id,
             conversation_context=conversation_context,
+            message_id=assistant_message_id,
         ):
             sequence_number += 1
 

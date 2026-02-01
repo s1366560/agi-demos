@@ -453,6 +453,7 @@ class ReActAgent:
         user_id: str,
         tenant_id: str,
         conversation_context: Optional[List[Dict[str, str]]] = None,
+        message_id: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -472,6 +473,7 @@ class ReActAgent:
             user_id: User ID
             tenant_id: Tenant ID
             conversation_context: Optional conversation history
+            message_id: Optional message ID for HITL request persistence
 
         Yields:
             Event dictionaries compatible with existing SSE format:
@@ -802,6 +804,7 @@ class ReActAgent:
             "user_id": user_id,
             "tenant_id": tenant_id,
             "project_id": project_id,
+            "message_id": message_id,
         }
 
         try:
