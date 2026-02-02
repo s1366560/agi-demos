@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Select, Modal, Spin, Alert } from 'antd';
+import { Select, Modal, Spin, Alert } from '@/components/ui/lazyAntd';
 import { ExclamationCircleOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useProjectStore } from '../../stores/project';
 import { useAgentV3Store } from '../../stores/agentV3';

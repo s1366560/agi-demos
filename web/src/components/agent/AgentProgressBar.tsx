@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import { Progress, Space, Typography } from 'antd'
+import { LazyProgress, LazySpace, Typography } from '@/components/ui/lazyAntd'
 import {
   CheckCircleOutlined,
   LoadingOutlined,
@@ -63,7 +63,7 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
 
   // Step indicators (dots)
   const stepIndicators = showSteps && !compact ? (
-    <Space size={4}>
+    <LazySpace size={4}>
       {Array.from({ length: total }).map((_, index) => {
         const stepNumber = index + 1
         let stepClass = 'step-dot-pending'
@@ -96,7 +96,7 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
           />
         )
       })}
-    </Space>
+    </LazySpace>
   ) : null
 
   return (
@@ -109,10 +109,10 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
       aria-live="polite"
       className={`agent-progress-bar ${compact ? 'compact' : ''}`}
     >
-      <Space orientation="vertical" size="small" style={{ width: '100%' }}>
+      <LazySpace orientation="vertical" size="small" style={{ width: '100%' }}>
         {/* Label and Step Indicators */}
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space>
+        <LazySpace style={{ width: '100%', justifyContent: 'space-between' }}>
+          <LazySpace>
             {config.icon}
             <Text strong>{displayLabel}</Text>
             {estimatedTimeRemaining && (
@@ -120,20 +120,20 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
                 (~{estimatedTimeRemaining} remaining)
               </Text>
             )}
-          </Space>
+          </LazySpace>
 
           {!compact && (
-            <Space>
+            <LazySpace>
               <Text type="secondary">
                 {current} / {total}
               </Text>
               <Text strong>{percentage}%</Text>
-            </Space>
+            </LazySpace>
           )}
-        </Space>
+        </LazySpace>
 
         {/* Progress Bar */}
-        <Progress
+        <LazyProgress
           percent={percentage}
           status={status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'}
           size="small"
@@ -147,7 +147,7 @@ export const AgentProgressBar: React.FC<AgentProgressBarProps> = ({
 
         {/* Step Indicators */}
         {stepIndicators}
-      </Space>
+      </LazySpace>
     </div>
   )
 }

@@ -17,7 +17,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Spin, Tag, Typography } from 'antd';
+import { LazyAlert, LazyButton, LazyCard, LazyDescriptions, Descriptions, LazySpin, LazyTag } from '@/components/ui/lazyAntd';
+import { Typography } from 'antd';
 import { EditOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { TenantAgentConfig } from '@/types/agent';
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
@@ -93,7 +94,7 @@ export function TenantAgentConfigView({
   if (loading) {
     return (
       <div className={`flex flex-col justify-center items-center gap-3 p-8 ${className || ''}`}>
-        <Spin size="large" />
+        <LazySpin size="large" />
         <span className="text-slate-500 dark:text-slate-400">Loading configuration...</span>
       </div>
     );
@@ -103,15 +104,15 @@ export function TenantAgentConfigView({
   if (error) {
     return (
       <div className={className || ''}>
-        <Alert
+        <LazyAlert
           type="error"
           message="Configuration Error"
           description={error}
           showIcon
           action={
-            <Button size="small" onClick={loadConfig}>
+            <LazyButton size="small" onClick={loadConfig}>
               Retry
-            </Button>
+            </LazyButton>
           }
         />
       </div>
@@ -122,15 +123,15 @@ export function TenantAgentConfigView({
   if (!config) {
     return (
       <div className={className || ''}>
-        <Alert
+        <LazyAlert
           type="warning"
           message="No Configuration"
           description="Unable to load tenant agent configuration."
           showIcon
           action={
-            <Button size="small" icon={<ReloadOutlined />} onClick={loadConfig}>
+            <LazyButton size="small" icon={<ReloadOutlined />} onClick={loadConfig}>
               Reload
-            </Button>
+            </LazyButton>
           }
         />
       </div>
@@ -141,32 +142,32 @@ export function TenantAgentConfigView({
 
   return (
     <div className={className || ''}>
-      <Card
+      <LazyCard
         title={
           <div className="flex items-center justify-between">
             <Title level={4} style={{ margin: 0 }}>
               Agent Configuration
             </Title>
-            <Tag color={isDefault ? 'default' : 'blue'}>
+            <LazyTag color={isDefault ? 'default' : 'blue'}>
               {isDefault ? 'Default' : 'Custom'}
-            </Tag>
+            </LazyTag>
           </div>
         }
         extra={
           canEdit && onEdit ? (
-            <Button
+            <LazyButton
               type="primary"
               icon={<EditOutlined />}
               onClick={onEdit}
               aria-label="Edit configuration"
             >
               Edit
-            </Button>
+            </LazyButton>
           ) : undefined
         }
       >
         {isDefault && (
-          <Alert
+          <LazyAlert
             type="info"
             message="Using Default Configuration"
             description="This tenant is using the default agent configuration. Contact your tenant administrator to customize settings."
@@ -175,7 +176,7 @@ export function TenantAgentConfigView({
           />
         )}
 
-        <Descriptions column={{ xs: 1, sm: 2 }} bordered size="small">
+        <LazyDescriptions column={{ xs: 1, sm: 2 }} bordered size="small">
           {/* LLM Settings */}
           <Descriptions.Item label="LLM Model" span={2}>
             <Text code>{config.llm_model}</Text>
@@ -190,15 +191,15 @@ export function TenantAgentConfigView({
 
           {/* Agent Features */}
           <Descriptions.Item label="Pattern Learning">
-            <Tag color={config.pattern_learning_enabled ? 'green' : 'red'}>
+            <LazyTag color={config.pattern_learning_enabled ? 'green' : 'red'}>
               {config.pattern_learning_enabled ? 'Enabled' : 'Disabled'}
-            </Tag>
+            </LazyTag>
           </Descriptions.Item>
 
           <Descriptions.Item label="Multi-Level Thinking">
-            <Tag color={config.multi_level_thinking_enabled ? 'green' : 'red'}>
+            <LazyTag color={config.multi_level_thinking_enabled ? 'green' : 'red'}>
               {config.multi_level_thinking_enabled ? 'Enabled' : 'Disabled'}
-            </Tag>
+            </LazyTag>
           </Descriptions.Item>
 
           {/* Limits */}
@@ -215,9 +216,9 @@ export function TenantAgentConfigView({
             {config.enabled_tools.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {config.enabled_tools.map((tool) => (
-                  <Tag key={tool} color="green">
+                  <LazyTag key={tool} color="green">
                     {tool}
-                  </Tag>
+                  </LazyTag>
                 ))}
               </div>
             ) : (
@@ -229,9 +230,9 @@ export function TenantAgentConfigView({
             {config.disabled_tools.length > 0 ? (
               <div className="flex flex-wrap gap-1">
                 {config.disabled_tools.map((tool) => (
-                  <Tag key={tool} color="red">
+                  <LazyTag key={tool} color="red">
                     {tool}
-                  </Tag>
+                  </LazyTag>
                 ))}
               </div>
             ) : (
@@ -243,8 +244,8 @@ export function TenantAgentConfigView({
           <Descriptions.Item label="Last Updated" span={2}>
             <Text type="secondary">{formatTimestamp(config.updated_at)}</Text>
           </Descriptions.Item>
-        </Descriptions>
-      </Card>
+        </LazyDescriptions>
+      </LazyCard>
     </div>
   );
 }

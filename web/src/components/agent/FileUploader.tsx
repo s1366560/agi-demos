@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
-import { Button, Progress, Select, message, Tag, Tooltip } from 'antd';
+import { Button, Progress, Select, Tag, Tooltip, message } from '@/components/ui/lazyAntd';
 import { 
   Paperclip, 
   X, 

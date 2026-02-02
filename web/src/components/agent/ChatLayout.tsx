@@ -9,9 +9,9 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Button, Tooltip } from 'antd';
-import { 
-  PanelLeft, 
+import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
+import {
+  PanelLeft,
   PanelRight
 } from 'lucide-react';
 
@@ -155,26 +155,26 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         {/* Floating Toggle Buttons - positioned at top corners to avoid blocking content */}
         <div className="absolute top-3 left-3 z-30 pointer-events-none">
           {/* Sidebar Toggle */}
-          <Tooltip title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-            <Button
+          <LazyTooltip title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+            <LazyButton
               type="text"
               icon={sidebarCollapsed ? <PanelLeft size={16} /> : <PanelLeft size={16} className="rotate-180" />}
               onClick={onToggleSidebar}
               className="pointer-events-auto bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all rounded-md h-7 w-7 flex items-center justify-center text-slate-500"
             />
-          </Tooltip>
+          </LazyTooltip>
         </div>
         
         <div className="absolute top-3 right-3 z-30 pointer-events-none">
           {/* Panel Toggle */}
-          <Tooltip title={panelCollapsed ? "Show panel" : "Hide panel"}>
-            <Button
+          <LazyTooltip title={panelCollapsed ? "Show panel" : "Hide panel"}>
+            <LazyButton
               type="text"
               icon={panelCollapsed ? <PanelRight size={16} /> : <PanelRight size={16} className="rotate-180" />}
               onClick={onTogglePanel}
               className="pointer-events-auto bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all rounded-md h-7 w-7 flex items-center justify-center text-slate-500"
             />
-          </Tooltip>
+          </LazyTooltip>
         </div>
 
         {/* Message Area */}

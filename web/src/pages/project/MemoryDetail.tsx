@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { message } from 'antd'
+import { useLazyMessage } from '@/components/ui/lazyAntd'
 import { memoryAPI } from '../../services/api'
 import { Memory } from '../../types/memory'
 import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal'
@@ -17,6 +17,7 @@ interface ProcessingProgress {
 
 export const MemoryDetail: React.FC = () => {
     const { t } = useTranslation()
+    const message = useLazyMessage()
     const { projectId, memoryId } = useParams()
     const navigate = useNavigate()
     const [memory, setMemory] = useState<Memory | null>(null)
@@ -148,7 +149,7 @@ export const MemoryDetail: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to reprocess:', error)
-            message.error(t('project.memories.errors.reprocessFailed', 'Failed to start processing. Please try again.'))
+            message?.error(t('project.memories.errors.reprocessFailed', 'Failed to start processing. Please try again.'))
         } finally {
             setIsReprocessing(false)
         }

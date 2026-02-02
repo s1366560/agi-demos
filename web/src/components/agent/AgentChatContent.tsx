@@ -12,7 +12,7 @@
 import * as React from 'react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { notification } from 'antd';
+import { useLazyNotification } from '@/components/ui/lazyAntd';
 import { useTranslation } from 'react-i18next';
 import { PanelRight, GripHorizontal } from 'lucide-react';
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -61,6 +61,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   headerExtra
 }) => {
   const { t } = useTranslation();
+  const notification = useLazyNotification();
   const { projectId: urlProjectId, conversation: conversationId } = useParams<{
     projectId: string;
     conversation?: string;
@@ -177,10 +178,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Handle errors
   useEffect(() => {
     if (error) {
-      notification.error({ 
-        message: t('agent.chat.errors.title'), 
-        description: error, 
-        onClose: clearError 
+      notification?.error({
+        message: t('agent.chat.errors.title'),
+        description: error,
+        onClose: clearError
       });
     }
   }, [error, clearError, t]);
@@ -188,7 +189,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Handle doom loop
   useEffect(() => {
     if (doomLoopDetected) {
-      notification.warning({
+      notification?.warning({
         message: t('agent.chat.doomLoop.title'),
         description: t('agent.chat.doomLoop.description', { 
           tool: doomLoopDetected.tool_name, 
@@ -234,9 +235,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       await exitPlanMode(activeConversationId, planModeStatus.current_plan_id, false);
       togglePlanMode();
     } catch (error) {
-      notification.error({ 
-        message: t('agent.notifications.planModeExitFailed.title'), 
-        description: t('agent.notifications.planModeExitFailed.description') 
+      notification?.error({
+        message: t('agent.notifications.planModeExitFailed.title'),
+        description: t('agent.notifications.planModeExitFailed.description')
       });
     }
   }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t]);

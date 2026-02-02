@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, memo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { message } from 'antd'
+import { useLazyMessage } from '@/components/ui/lazyAntd'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useDebounce } from 'use-debounce'
 import { memoryAPI } from '../../services/api'
@@ -41,6 +41,7 @@ const getProcessingStatusStyles = (status: string | undefined) => {
 
 const MemoryListInternal: React.FC = () => {
     const { t } = useTranslation()
+    const message = useLazyMessage()
     const { projectId } = useParams()
     const [memories, setMemories] = useState<Memory[]>([])
     const [isLoading, setIsLoading] = useState(false)
@@ -221,7 +222,7 @@ const MemoryListInternal: React.FC = () => {
             setItemToDelete(null)
         } catch (error) {
             console.error('Failed to delete memory:', error)
-            message.error(t('project.memories.errors.deleteFailed', 'Failed to delete memory'))
+            message?.error(t('project.memories.errors.deleteFailed', 'Failed to delete memory'))
         } finally {
             setDeletingId(null)
         }
@@ -237,7 +238,7 @@ const MemoryListInternal: React.FC = () => {
             ))
         } catch (error) {
             console.error('Failed to reprocess:', error)
-            message.error(t('project.memories.errors.reprocessFailed', 'Failed to start processing. Please try again.'))
+            message?.error(t('project.memories.errors.reprocessFailed', 'Failed to start processing. Please try again.'))
         }
     }
 

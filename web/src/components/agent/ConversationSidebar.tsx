@@ -9,7 +9,7 @@
 
 import type { FC } from 'react';
 import { useMemo, useState, memo, useTransition } from 'react';
-import { Button, Badge, Tooltip, Dropdown, Modal, Input } from 'antd';
+import { LazyButton, LazyBadge, LazyTooltip, LazyDropdown, LazyModal, LazyInput } from '@/components/ui/lazyAntd';
 import type { MenuProps } from 'antd';
 import { 
   Plus, 
@@ -108,14 +108,14 @@ const ConversationItem = memo<ConversationItemProps>(({
 
   if (compact) {
     return (
-      <Tooltip 
+      <LazyTooltip
         title={
           <div>
             <div>{conversation.title || 'Untitled'}</div>
             {hasHITL && <div className="text-amber-400 text-xs mt-1">⚠️ Needs your input</div>}
             {isStreaming && <div className="text-blue-400 text-xs mt-1">🔄 Processing...</div>}
           </div>
-        } 
+        }
         placement="right"
       >
         <button
@@ -143,7 +143,7 @@ const ConversationItem = memo<ConversationItemProps>(({
             <span className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse" />
           )}
         </button>
-      </Tooltip>
+      </LazyTooltip>
     );
   }
 
@@ -195,17 +195,17 @@ const ConversationItem = memo<ConversationItemProps>(({
             </p>
             {/* Status badge */}
             {hasHITL ? (
-              <Tooltip title={status?.pendingHITL?.title || 'Awaiting input'}>
-                <Badge 
+              <LazyTooltip title={status?.pendingHITL?.title || 'Awaiting input'}>
+                <LazyBadge 
                   status="warning" 
                   text={<span className="text-xs text-amber-600 dark:text-amber-400">Needs Input</span>}
-                  className="flex-shrink-0" 
+                  className="flex-shrink-0"
                 />
-              </Tooltip>
+              </LazyTooltip>
             ) : isStreaming ? (
-              <Badge status="processing" className="flex-shrink-0" />
+              <LazyBadge status="processing" className="flex-shrink-0" />
             ) : conversation.status === 'active' ? (
-              <Badge status="success" className="flex-shrink-0" />
+              <LazyBadge status="success" className="flex-shrink-0" />
             ) : null}
           </div>
           <div className="flex items-center gap-2 mt-0.5">
@@ -222,19 +222,19 @@ const ConversationItem = memo<ConversationItemProps>(({
         </div>
 
         {/* Actions */}
-        <Dropdown
+        <LazyDropdown
           menu={{ items, onClick: handleMenuClick }}
           trigger={['click']}
           placement="bottomRight"
         >
-          <Button
+          <LazyButton
             type="text"
             size="small"
             icon={<MoreVertical size={14} />}
             className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
           />
-        </Dropdown>
+        </LazyDropdown>
       </div>
     </button>
   );
@@ -333,7 +333,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
 
       {/* New Chat Button */}
       <div className={collapsed ? 'p-2' : 'p-4'}>
-        <Button
+        <LazyButton
           type="primary"
           icon={<Plus size={18} />}
           onClick={onNew}
@@ -344,7 +344,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
           `}
         >
           {!collapsed && <span>New Chat</span>}
-        </Button>
+        </LazyButton>
       </div>
 
       {/* Pending HITL Alert Banner */}
@@ -400,7 +400,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
       )}
 
       {/* Rename Modal */}
-      <Modal
+      <LazyModal
         title="Rename Conversation"
         open={!!renamingConversation}
         onOk={handleRenameSubmit}
@@ -409,14 +409,14 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
         okText="Rename"
         cancelText="Cancel"
       >
-        <Input
+        <LazyInput
           placeholder="Enter conversation title"
           value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
           onPressEnter={handleRenameSubmit}
           autoFocus
         />
-      </Modal>
+      </LazyModal>
     </div>
   );
 };

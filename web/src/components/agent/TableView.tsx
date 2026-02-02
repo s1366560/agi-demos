@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Table, Button, Card, Typography, Input, Space } from 'antd';
+import { LazyTable, LazyButton, LazyCard, LazyInput, LazySpace } from '@/components/ui/lazyAntd';
+import { Typography } from 'antd';
 import {
   DownloadOutlined,
   SearchOutlined,
@@ -129,7 +130,7 @@ export const TableView: React.FC<TableViewProps> = ({
   };
 
   return (
-    <Card
+    <LazyCard
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -139,40 +140,40 @@ export const TableView: React.FC<TableViewProps> = ({
               ({filteredData.length} rows)
             </Text>
           </div>
-          <Space>
+          <LazySpace>
             {showSearch && (
-              <Input
+              <LazyInput
                 placeholder="Search..."
                 prefix={<SearchOutlined />}
                 value={searchText}
-                onChange={(e) => handleSearch(e.target.value)}
+                onChange={(e: any) => handleSearch(e.target.value)}
                 allowClear
                 style={{ width: 200 }}
               />
             )}
             {showExport && (
-              <Button
+              <LazyButton
                 icon={<DownloadOutlined />}
                 onClick={handleExportCSV}
                 disabled={!data || data.length === 0}
               >
                 Export CSV
-              </Button>
+              </LazyButton>
             )}
-          </Space>
+          </LazySpace>
         </div>
       }
       className="table-view"
     >
-      <Table
+      <LazyTable
         columns={detectedColumns}
         dataSource={filteredData}
-        rowKey={(record, index) => record.id || index}
+        rowKey={(record: any, index: number) => (record as any).id || index}
         size={size}
         pagination={pagination}
         scroll={{ x: 'max-content' }}
       />
-    </Card>
+    </LazyCard>
   );
 };
 

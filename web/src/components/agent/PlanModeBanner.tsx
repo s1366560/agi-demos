@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Button, Tag } from 'antd';
+import { LazyButton, LazyTag } from '@/components/ui/lazyAntd';
 import { FileText, Eye, X, Beaker, Hammer } from 'lucide-react';
 import type { PlanModeStatus, AgentMode } from '../../types/agent';
 
@@ -75,12 +75,12 @@ export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({
               <h3 className={`font-semibold ${config.color}`}>
                 {config.label}
               </h3>
-              <Tag className={`
+              <LazyTag className={`
                 ${config.bgColor} ${config.color} border-0
                 text-xs font-medium
               `}>
                 Active
-              </Tag>
+              </LazyTag>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {config.description}
@@ -90,7 +90,7 @@ export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({
 
         <div className="flex items-center gap-2">
           {status.plan && (
-            <Button
+            <LazyButton
               type="default"
               size="small"
               icon={<Eye size={14} />}
@@ -98,9 +98,9 @@ export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({
               className="flex items-center gap-1"
             >
               View Plan
-            </Button>
+            </LazyButton>
           )}
-          <Button
+          <LazyButton
             type="primary"
             danger
             size="small"
@@ -108,7 +108,7 @@ export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({
             onClick={onExit}
           >
             Exit
-          </Button>
+          </LazyButton>
         </div>
       </div>
     </div>

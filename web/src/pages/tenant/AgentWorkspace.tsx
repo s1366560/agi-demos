@@ -7,7 +7,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Empty, Spin, Button } from 'antd';
+import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
+import { Empty as AntEmpty } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../stores/project';
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -110,7 +111,7 @@ export const AgentWorkspace: React.FC = () => {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div className="text-center">
-          <Spin size="large" />
+          <LazySpin size="large" />
           <div className="mt-2 text-slate-500 dark:text-slate-400">
             {t('agent.workspace.loading')}
           </div>
@@ -123,14 +124,14 @@ export const AgentWorkspace: React.FC = () => {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12 max-w-lg">
-          <Empty
+          <LazyEmpty
             description={t('agent.workspace.noProjects')}
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            image={AntEmpty.PRESENTED_IMAGE_SIMPLE}
           >
-            <Button type="primary" onClick={handleCreateProject}>
+            <LazyButton type="primary" onClick={handleCreateProject}>
               {t('agent.workspace.createProject')}
-            </Button>
-          </Empty>
+            </LazyButton>
+          </LazyEmpty>
         </div>
       </div>
     );
@@ -147,9 +148,9 @@ export const AgentWorkspace: React.FC = () => {
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty
+          <LazyEmpty
             description={t('agent.workspace.selectProjectToStart')}
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            image={AntEmpty.PRESENTED_IMAGE_SIMPLE}
           />
         </div>
       )}

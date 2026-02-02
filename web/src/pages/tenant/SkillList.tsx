@@ -6,7 +6,8 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { message, Popconfirm, Select, Empty, Spin, Input } from 'antd';
+import { useLazyMessage, LazyPopconfirm, LazySelect, LazyEmpty, LazySpin } from '@/components/ui/lazyAntd';
+import { Input } from 'antd';
 import {
   useSkillStore,
   useSkillLoading,
@@ -23,6 +24,7 @@ const { Search } = Input;
 
 export const SkillList: React.FC = () => {
   const { t } = useTranslation();
+  const message = useLazyMessage();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deprecated'>('all');
   const [triggerTypeFilter, setTriggerTypeFilter] = useState<'all' | 'keyword' | 'semantic' | 'hybrid'>('all');
@@ -85,7 +87,7 @@ export const SkillList: React.FC = () => {
   // Show error message
   useEffect(() => {
     if (error) {
-      message.error(error);
+      message?.error(error);
     }
   }, [error]);
 
@@ -103,7 +105,7 @@ export const SkillList: React.FC = () => {
   const handleStatusChange = useCallback(async (id: string, status: 'active' | 'disabled' | 'deprecated') => {
     try {
       await updateSkillStatus(id, status);
-      message.success(t('tenant.skills.statusUpdateSuccess'));
+      message?.success(t('tenant.skills.statusUpdateSuccess'));
     } catch {
       // Error handled by store
     }
@@ -112,7 +114,7 @@ export const SkillList: React.FC = () => {
   const handleDelete = useCallback(async (id: string) => {
     try {
       await deleteSkill(id);
-      message.success(t('tenant.skills.deleteSuccess'));
+      message?.success(t('tenant.skills.deleteSuccess'));
     } catch {
       // Error handled by store
     }
@@ -226,7 +228,7 @@ export const SkillList: React.FC = () => {
               allowClear
             />
           </div>
-          <Select
+          <LazySelect
             value={statusFilter}
             onChange={setStatusFilter}
             className="w-full sm:w-40"
@@ -237,7 +239,7 @@ export const SkillList: React.FC = () => {
               { label: t('common.status.deprecated'), value: 'deprecated' },
             ]}
           />
-          <Select
+          <LazySelect
             value={triggerTypeFilter}
             onChange={setTriggerTypeFilter}
             className="w-full sm:w-40"
@@ -260,10 +262,10 @@ export const SkillList: React.FC = () => {
       {/* Content */}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <Spin size="large" />
+          <LazySpin size="large" />
         </div>
       ) : skills.length === 0 ? (
-        <Empty
+        <LazyEmpty
           description={t('tenant.skills.empty')}
           className="py-12"
         />
@@ -350,9 +352,9 @@ export const SkillList: React.FC = () => {
 
               {/* Actions */}
               <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
-                <Select
+                <LazySelect
                   value={skill.status}
-                  onChange={(status) => handleStatusChange(skill.id, status)}
+                  onChange={(status: any) => handleStatusChange(skill.id, status)}
                   className="w-32"
                   size="small"
                   options={[
@@ -368,7 +370,7 @@ export const SkillList: React.FC = () => {
                   >
                     <span className="material-symbols-outlined text-lg">edit</span>
                   </button>
-                  <Popconfirm
+                  <LazyPopconfirm
                     title={t('tenant.skills.deleteConfirm')}
                     onConfirm={() => handleDelete(skill.id)}
                     okText={t('common.confirm')}
@@ -377,7 +379,7 @@ export const SkillList: React.FC = () => {
                     <button className="p-2 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
                       <span className="material-symbols-outlined text-lg">delete</span>
                     </button>
-                  </Popconfirm>
+                  </LazyPopconfirm>
                 </div>
               </div>
             </div>

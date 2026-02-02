@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Result, Button } from 'antd'
+import { LazyResult, LazyButton } from '@/components/ui/lazyAntd'
 import { useTranslation } from 'react-i18next'
 import { ErrorBoundary } from './ErrorBoundary'
 import type { ErrorInfo } from 'react'
@@ -46,22 +46,22 @@ function RouteErrorFallback({
     }
 
     const buttons = [
-        <Button key="retry" onClick={onReset}>
+        <LazyButton key="retry" onClick={onReset}>
             {t('error.retry', { defaultValue: 'Try Again' })}
-        </Button>,
-        <Button type="primary" key="back" onClick={handleGoBack}>
+        </LazyButton>,
+        <LazyButton type="primary" key="back" onClick={handleGoBack}>
             {fallbackPath
                 ? t('error.goToPage', { defaultValue: `Go to ${fallbackPath}` })
                 : t('error.goBack', { defaultValue: 'Go Back' })}
-        </Button>,
-        <Button key="home" onClick={() => navigate('/')}>
+        </LazyButton>,
+        <LazyButton key="home" onClick={() => navigate('/')}>
             {t('error.home', { defaultValue: 'Go Home' })}
-        </Button>,
+        </LazyButton>,
     ]
 
     return (
         <div style={{ padding: '50px', textAlign: 'center' }}>
-            <Result
+            <LazyResult
                 status="error"
                 title={t('error.title', { defaultValue: 'Something went wrong' })}
                 subTitle={

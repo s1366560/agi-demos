@@ -12,7 +12,7 @@
  * - Error handling
  */
 
-import { Empty, Alert, Spin } from 'antd';
+import { LazyEmpty, Empty, LazyAlert, LazySpin } from '@/components/ui/lazyAntd';
 import { CheckCircle2, Play, Clock } from 'lucide-react';
 import { PlanEditor } from '../PlanEditor';
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
@@ -140,7 +140,7 @@ export const PlanContent = ({ workPlan, executionPlan }: PlanContentProps) => {
   if (planError && planModeStatus?.is_in_plan_mode) {
     return (
       <div className="p-4">
-        <Alert
+        <LazyAlert
           type="error"
           message="Plan Mode Error"
           description={planError}
@@ -178,7 +178,7 @@ export const PlanContent = ({ workPlan, executionPlan }: PlanContentProps) => {
   if (planModeStatus?.is_in_plan_mode && planLoading && !currentPlan) {
     return (
       <div className="p-8 text-center">
-        <Spin size="large" />
+        <LazySpin size="large" />
         <p className="mt-4 text-slate-500">Loading plan...</p>
       </div>
     );
@@ -187,7 +187,7 @@ export const PlanContent = ({ workPlan, executionPlan }: PlanContentProps) => {
   // Show EmptyState if no plan at all
   if (!workPlan && !executionPlan && !planModeStatus?.is_in_plan_mode) {
     return (
-      <Empty
+      <LazyEmpty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description="No active plan"
         className="mt-8"

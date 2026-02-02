@@ -1,5 +1,5 @@
 import React from 'react'
-import { Empty, Button } from 'antd'
+import { LazyEmpty, LazyButton } from '@/components/ui/lazyAntd'
 import { useTranslation } from 'react-i18next'
 import {
     PlusOutlined,
@@ -113,7 +113,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                 minHeight: '400px',
             }}
         >
-            <Empty
+            <LazyEmpty
                 image={illustration || config.icon}
                 description={
                     <div style={{ textAlign: 'center' }}>
@@ -127,9 +127,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                 }
             />
             {onAction && (
-                <Button type="primary" icon={<PlusOutlined />} onClick={onAction} style={{ marginTop: '16px' }}>
+                <LazyButton type="primary" icon={<PlusOutlined />} onClick={onAction} style={{ marginTop: '16px' }}>
                     {actionText || t('empty.create', { defaultValue: 'Create New' })}
-                </Button>
+                </LazyButton>
             )}
         </div>
     )

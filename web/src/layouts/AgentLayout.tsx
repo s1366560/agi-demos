@@ -19,7 +19,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom'
-import { Tooltip } from 'antd'
+import { LazyTooltip } from '@/components/ui/lazyAntd'
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary'
 import { AgentSidebar } from '@/components/layout/AgentSidebar'
 import { useProjectStore } from '@/stores/project'
@@ -155,22 +155,22 @@ export const AgentLayout: React.FC = () => {
 
                         {/* Quick Actions */}
                         <div className="flex items-center gap-1">
-                            <Tooltip title="View execution history">
+                            <LazyTooltip title="View execution history">
                                 <button
                                     className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
                                     onClick={() => handleTabClick(TOP_TABS[1])}
                                 >
                                     <History className="w-5 h-5" />
                                 </button>
-                            </Tooltip>
-                            <Tooltip title="View workflow patterns">
+                            </LazyTooltip>
+                            <LazyTooltip title="View workflow patterns">
                                 <button
                                     className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
                                     onClick={() => handleTabClick(TOP_TABS[2])}
                                 >
                                     <GitBranch className="w-5 h-5" />
                                 </button>
-                            </Tooltip>
+                            </LazyTooltip>
                         </div>
                     </div>
                 </header>

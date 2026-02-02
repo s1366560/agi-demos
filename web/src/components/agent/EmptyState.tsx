@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Button } from 'antd';
+import { LazyButton } from '@/components/ui/lazyAntd';
 import { Plus, Sparkles, BarChart3, FileText, Search } from 'lucide-react';
 
 interface EmptyStateProps {
@@ -58,7 +58,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onNewConversation }) => 
         </p>
 
         {/* New Chat Button */}
-        <Button
+        <LazyButton
           type="primary"
           size="large"
           icon={<Plus size={18} />}
@@ -66,7 +66,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onNewConversation }) => 
           className="h-12 px-6 bg-primary hover:bg-primary-600 shadow-lg shadow-primary/20 rounded-xl"
         >
           Start New Conversation
-        </Button>
+        </LazyButton>
       </div>
 
       {/* Suggestion Cards */}

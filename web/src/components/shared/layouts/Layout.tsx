@@ -8,7 +8,8 @@ import {
   SettingOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
-import { Layout as AntLayout, Menu } from 'antd';
+import { LazyMenu } from '@/components/ui/lazyAntd';
+import { Layout as AntLayout } from 'antd';
 import type { MenuProps } from 'antd';
 
 const { Header, Content, Sider } = AntLayout;
@@ -69,7 +70,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           width={200}
           theme="light"
         >
-          <Menu
+          <LazyMenu
             mode="inline"
             selectedKeys={[location.pathname]}
             style={{ height: '100%', borderRight: 0 }}

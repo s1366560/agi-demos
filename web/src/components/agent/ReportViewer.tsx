@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Card, Button, Typography } from 'antd';
+import { LazyCard, LazyButton, Typography } from '@/components/ui/lazyAntd';
 import {
   DownloadOutlined,
   CopyOutlined,
@@ -129,7 +129,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
   };
 
   return (
-    <Card
+    <LazyCard
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {getIcon()}
@@ -142,28 +142,28 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
       extra={
         showDownload && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button
+            <LazyButton
               icon={<CopyOutlined />}
               size="small"
               onClick={handleCopy}
             >
               {copied ? 'Copied!' : 'Copy'}
-            </Button>
-            <Button
+            </LazyButton>
+            <LazyButton
               type="primary"
               icon={<DownloadOutlined />}
               size="small"
               onClick={handleDownload}
             >
               Download
-            </Button>
+            </LazyButton>
           </div>
         )
       }
       className="report-viewer"
     >
       {renderContent()}
-    </Card>
+    </LazyCard>
   );
 };
 

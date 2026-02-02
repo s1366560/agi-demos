@@ -6,7 +6,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Tooltip } from 'antd'
+import { LazyTooltip } from '@/components/ui/lazyAntd'
 import { useNavigation } from '@/hooks/useNavigation'
 import type { NavItem } from '@/config/navigation'
 
@@ -91,9 +91,9 @@ export function SidebarNavItem({
   // Show tooltip when collapsed
   if (collapsed) {
     return (
-      <Tooltip title={label} placement="right">
+      <LazyTooltip title={label} placement="right">
         {linkContent}
-      </Tooltip>
+      </LazyTooltip>
     )
   }
 

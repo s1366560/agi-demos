@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
-import { Button, Tooltip, Badge, Popover } from 'antd';
+import { LazyButton, LazyTooltip, LazyBadge, LazyPopover } from '@/components/ui/lazyAntd';
 import {
   Send,
   Square,
@@ -115,12 +115,12 @@ export const InputBar = memo<InputBarProps>(({
         {/* Plan Mode Badge */}
         {isPlanMode && (
           <div className="px-3 pt-2 flex-shrink-0">
-            <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs">
+            <LazyBadge className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 text-xs">
               <span className="flex items-center gap-1">
                 <Wand2 size={12} />
                 Plan Mode Active
               </span>
-            </Badge>
+            </LazyBadge>
           </div>
         )}
 
@@ -190,7 +190,7 @@ export const InputBar = memo<InputBarProps>(({
         <div className="flex-shrink-0 px-2 pb-2 flex items-center justify-between">
           {/* Left Actions */}
           <div className="flex items-center gap-1">
-            <Popover
+            <LazyPopover
               content={
                 <FileUploader
                   conversationId={conversationId}
@@ -207,45 +207,45 @@ export const InputBar = memo<InputBarProps>(({
               placement="topLeft"
               overlayClassName="file-uploader-popover"
             >
-              <Tooltip title="Attach file">
-                <Button
+              <LazyTooltip title="Attach file">
+                <LazyButton
                   type="text"
                   size="small"
                   icon={
-                    <Badge count={attachments.length} size="small" offset={[-2, 2]}>
+                    <LazyBadge count={attachments.length} size="small" offset={[-2, 2]}>
                       <Paperclip size={16} />
-                    </Badge>
+                    </LazyBadge>
                   }
                   className={`text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 ${attachments.length > 0 ? 'text-primary' : ''}`}
                 />
-              </Tooltip>
-            </Popover>
-            <Tooltip title="Voice input">
-              <Button
+              </LazyTooltip>
+            </LazyPopover>
+            <LazyTooltip title="Voice input">
+              <LazyButton
                 type="text"
                 size="small"
                 icon={<Mic size={16} />}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               />
-            </Tooltip>
+            </LazyTooltip>
             <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
-            <Tooltip title={isPlanMode ? "Exit Plan Mode" : "Enter Plan Mode"}>
-              <Button
+            <LazyTooltip title={isPlanMode ? "Exit Plan Mode" : "Enter Plan Mode"}>
+              <LazyButton
                 type="text"
                 size="small"
                 onClick={onTogglePlanMode}
                 className={`
                   flex items-center gap-1
-                  ${isPlanMode 
-                    ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' 
+                  ${isPlanMode
+                    ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20'
                     : 'text-slate-400 hover:text-slate-600'
                   }
                 `}
               >
                 <Wand2 size={14} />
                 <span className="text-xs font-medium">Plan</span>
-              </Button>
-            </Tooltip>
+              </LazyButton>
+            </LazyTooltip>
           </div>
 
           {/* Right Actions */}
@@ -262,7 +262,7 @@ export const InputBar = memo<InputBarProps>(({
 
             {/* Send/Stop Button */}
             {isStreaming ? (
-              <Button
+              <LazyButton
                 type="primary"
                 danger
                 size="small"
@@ -271,9 +271,9 @@ export const InputBar = memo<InputBarProps>(({
                 className="rounded-lg flex items-center gap-1"
               >
                 Stop
-              </Button>
+              </LazyButton>
             ) : (
-              <Button
+              <LazyButton
                 type="primary"
                 size="small"
                 icon={<Send size={14} />}
@@ -286,7 +286,7 @@ export const InputBar = memo<InputBarProps>(({
                 "
               >
                 Send
-              </Button>
+              </LazyButton>
             )}
           </div>
         </div>

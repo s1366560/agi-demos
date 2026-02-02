@@ -3,7 +3,7 @@
  */
 
 import React, { memo, useState, useEffect } from 'react';
-import { Avatar, Tag } from 'antd';
+import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
 import {
   User,
   Sparkles,
@@ -155,9 +155,9 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => {
           <p className="text-base leading-relaxed whitespace-pre-wrap break-words text-slate-900 dark:text-slate-100 font-sans">{content}</p>
         </div>
       </div>
-      <Avatar className="w-8 h-8 bg-slate-200 dark:bg-slate-700 flex-shrink-0">
+      <LazyAvatar className="w-8 h-8 bg-slate-200 dark:bg-slate-700 flex-shrink-0">
         <User size={16} className="text-slate-600 dark:text-slate-400" />
-      </Avatar>
+      </LazyAvatar>
     </div>
   );
 };
@@ -170,9 +170,9 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
   if (!content && !isStreaming) return null;
   return (
     <div className="flex items-start gap-3 mb-4 animate-slide-up">
-      <Avatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
+      <LazyAvatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
         <Sparkles size={16} className="text-white" />
-      </Avatar>
+      </LazyAvatar>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
           <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
@@ -215,9 +215,9 @@ const TextDeltaBubble: React.FC<{ content: string }> = ({
   if (!content) return null;
   return (
     <div className="flex items-start gap-3 mb-4 animate-slide-up">
-      <Avatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
+      <LazyAvatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
         <Sparkles size={16} className="text-white" />
-      </Avatar>
+      </LazyAvatar>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
           <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
@@ -308,7 +308,7 @@ const ToolExecution: React.FC<{
               <span className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
                 {event.toolName || 'Unknown Tool'}
               </span>
-              <Tag className={`
+              <LazyTag className={`
                 flex-shrink-0
                 ${observeEvent
                   ? (hasError ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200')
@@ -319,7 +319,7 @@ const ToolExecution: React.FC<{
                   {statusIcon}
                   {statusText}
                 </span>
-              </Tag>
+              </LazyTag>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0 ml-2">
               {duration && duration > 0 && (
@@ -465,9 +465,9 @@ const TextEndBubble: React.FC<{ event: TimelineEvent }> = ({ event }) => {
 
   return (
     <div className="flex items-start gap-3 mb-4 animate-slide-up">
-      <Avatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
+      <LazyAvatar className="w-8 h-8 bg-gradient-to-br from-primary to-primary-600 flex-shrink-0">
         <Sparkles size={16} className="text-white" />
-      </Avatar>
+      </LazyAvatar>
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
           <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">

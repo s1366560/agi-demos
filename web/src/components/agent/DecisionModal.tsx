@@ -14,7 +14,7 @@
  */
 
 import React, { useState, createContext, useContext } from 'react';
-import { Modal, Radio, Input, Button, Tag, Typography, Alert, Divider } from 'antd';
+import { Modal, Radio, Input, Button, Tag, Divider, Typography, Alert } from '@/components/ui/lazyAntd';
 import {
   ExclamationCircleOutlined,
   CheckCircleOutlined,

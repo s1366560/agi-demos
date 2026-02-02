@@ -13,7 +13,8 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Badge, Dropdown, Modal, Select, Input } from 'antd';
+import { LazyButton, LazyBadge, LazyDropdown, LazySelect, LazyInput } from '@/components/ui/lazyAntd';
+import { Modal } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
   Plus, 
@@ -146,7 +147,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(({
               {conversation.title || 'Untitled Conversation'}
             </p>
             {conversation.status === 'active' && (
-              <Badge status="processing" className="flex-shrink-0" />
+              <LazyBadge status="processing" className="flex-shrink-0" />
             )}
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -155,19 +156,19 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(({
         </div>
 
         {/* Actions */}
-        <Dropdown
+        <LazyDropdown
           menu={{ items, onClick: handleMenuClick }}
           trigger={['click']}
           placement="bottomRight"
         >
-          <Button
+          <LazyButton
             type="text"
             size="small"
             icon={<MoreVertical size={14} />}
             className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
           />
-        </Dropdown>
+        </LazyDropdown>
       </div>
     </div>
   );
@@ -488,7 +489,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Project Selector */}
       {!collapsed && (
         <div className="p-3 border-b border-slate-100 dark:border-slate-800/50">
-          <Select
+          <LazySelect
             value={selectedProjectId}
             onChange={handleProjectChange}
             className="w-full"
@@ -524,7 +525,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       {/* New Chat Button */}
       <div className={collapsed ? 'px-2 flex justify-center' : 'p-3'}>
-        <Button
+        <LazyButton
           type="primary"
           icon={<Plus size={collapsed ? 20 : 18} />}
           onClick={handleNewConversation}
@@ -536,7 +537,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           `}
         >
           {!collapsed && <span>New Chat</span>}
-        </Button>
+        </LazyButton>
       </div>
 
       {/* Conversation List */}
@@ -606,10 +607,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         okText="Rename"
         cancelText="Cancel"
       >
-        <Input
+        <LazyInput
           placeholder="Enter conversation title"
           value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewTitle(e.target.value)}
           onPressEnter={handleRenameSubmit}
           autoFocus
         />

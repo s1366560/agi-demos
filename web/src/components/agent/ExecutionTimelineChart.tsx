@@ -4,7 +4,7 @@
  * Displays execution activity over time with count, success, and failure metrics.
  */
 
-import { Card, Empty } from 'antd';
+import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
 import { MaterialIcon } from './shared';
 import type { ExecutionStatsResponse } from '../../types/agent';
 
@@ -17,9 +17,9 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
 
   if (!timeline_data || timeline_data.length === 0) {
     return (
-      <Card className="mb-6">
-        <Empty description="No timeline data available" />
-      </Card>
+      <LazyCard className="mb-6">
+        <LazyEmpty description="No timeline data available" />
+      </LazyCard>
     );
   }
 
@@ -28,7 +28,7 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
   const barHeight = 120;
 
   return (
-    <Card className="mb-6">
+    <LazyCard className="mb-6">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
           <MaterialIcon name="show_chart" size={20} className="text-purple-600" />
@@ -116,6 +116,6 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
           <span className="text-sm text-slate-600 dark:text-slate-400">Other</span>
         </div>
       </div>
-    </Card>
+    </LazyCard>
   );
 }

@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { Modal, Radio, Space, Button, Alert, Typography, Divider, List } from 'antd';
+import { Modal, Radio, Space, Button, Alert, Divider, List, Typography } from '@/components/ui/lazyAntd';
 import {
   WarningOutlined,
   StopOutlined,

@@ -5,7 +5,7 @@
  * success/failure rates, tool usage, and performance metrics.
  */
 
-import { Card, Statistic, Row, Col, Progress, Table, Tag } from 'antd';
+import { LazyCard, LazyStatistic, LazyRow, LazyCol, LazyProgress, LazyTable, Tag } from '@/components/ui/lazyAntd';
 import type { ExecutionStatsResponse } from '../../types/agent';
 import { MaterialIcon } from './shared';
 
@@ -59,7 +59,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
   ];
 
   return (
-    <Card className="mb-6">
+    <LazyCard className="mb-6">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
           <MaterialIcon name="analytics" size={20} className="text-blue-600" />
@@ -68,20 +68,20 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
       </div>
 
       {/* Key Metrics */}
-      <Row gutter={[16, 16]} className="mb-6">
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
-            <Statistic
+      <LazyRow gutter={[16, 16]} className="mb-6">
+        <LazyCol xs={24} sm={12} lg={6}>
+          <LazyCard className="bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700">
+            <LazyStatistic
               title="Total Executions"
               value={stats.total_executions}
               prefix={<MaterialIcon name="play_circle" size={20} className="text-slate-600" />}
             />
-          </Card>
-        </Col>
+          </LazyCard>
+        </LazyCol>
 
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700">
-            <Statistic
+        <LazyCol xs={24} sm={12} lg={6}>
+          <LazyCard className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700">
+            <LazyStatistic
               title="Completed"
               value={stats.completed_count}
               prefix={<MaterialIcon name="check_circle" size={20} className="text-green-600" />}
@@ -91,12 +91,12 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
                 </span>
               }
             />
-          </Card>
-        </Col>
+          </LazyCard>
+        </LazyCol>
 
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700">
-            <Statistic
+        <LazyCol xs={24} sm={12} lg={6}>
+          <LazyCard className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700">
+            <LazyStatistic
               title="Failed"
               value={stats.failed_count}
               prefix={<MaterialIcon name="error" size={20} className="text-red-600" />}
@@ -106,20 +106,20 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
                 </span>
               }
             />
-          </Card>
-        </Col>
+          </LazyCard>
+        </LazyCol>
 
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700">
-            <Statistic
+        <LazyCol xs={24} sm={12} lg={6}>
+          <LazyCard className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700">
+            <LazyStatistic
               title="Avg Duration"
               value={stats.average_duration_ms.toFixed(0)}
               suffix="ms"
               prefix={<MaterialIcon name="timer" size={20} className="text-amber-600" />}
             />
-          </Card>
-        </Col>
-      </Row>
+          </LazyCard>
+        </LazyCol>
+      </LazyRow>
 
       {/* Success Rate Progress */}
       <div className="mb-6">
@@ -131,7 +131,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
             {successRate.toFixed(1)}%
           </span>
         </div>
-        <Progress
+        <LazyProgress
           percent={successRate}
           status={successRate >= 80 ? 'success' : successRate >= 50 ? 'normal' : 'exception'}
           strokeColor={{
@@ -148,7 +148,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
             <MaterialIcon name="build" size={16} />
             Tool Usage Distribution
           </h4>
-          <Table
+          <LazyTable
             dataSource={toolUsageData}
             columns={toolColumns}
             pagination={false}
@@ -157,6 +157,6 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
           />
         </div>
       )}
-    </Card>
+    </LazyCard>
   );
 }

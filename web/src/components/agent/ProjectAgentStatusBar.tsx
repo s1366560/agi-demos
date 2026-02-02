@@ -16,7 +16,7 @@
 
 import type { FC } from 'react';
 import { useState, useCallback } from 'react';
-import { Tooltip, Popconfirm, message } from 'antd';
+import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 import {
   Zap,
   MessageSquare,
@@ -192,7 +192,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
         {/* Agent Lifecycle Status */}
-        <Tooltip
+        <LazyTooltip
           title={
             <div className="space-y-2 max-w-xs">
               <div className="font-medium">{config.label}</div>
@@ -221,14 +221,14 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               <span className="ml-0.5">({status.resources.activeCalls})</span>
             ) : null}
           </div>
-        </Tooltip>
+        </LazyTooltip>
 
         {/* Separator */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
         {/* Resources: Tools with detailed breakdown */}
         {status.toolStats.total > 0 && (
-          <Tooltip 
+          <LazyTooltip
             title={
               <div className="space-y-1">
                 <div className="font-medium">工具统计</div>
@@ -249,12 +249,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 </>
               )}
             </div>
-          </Tooltip>
+          </LazyTooltip>
         )}
 
         {/* Resources: Skills with detailed breakdown */}
         {status.skillStats.total > 0 && (
-          <Tooltip 
+          <LazyTooltip
             title={
               <div className="space-y-1">
                 <div className="font-medium">技能统计</div>
@@ -267,27 +267,27 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               <BrainCircuit size={11} />
               <span>{status.skillStats.loaded}/{status.skillStats.total}</span>
             </div>
-          </Tooltip>
+          </LazyTooltip>
         )}
 
         {/* Message Count */}
-        <Tooltip title="对话消息数">
+        <LazyTooltip title="对话消息数">
           <div className="flex items-center gap-1 text-xs text-slate-500">
             <MessageSquare size={11} />
             <span>{messageCount}</span>
           </div>
-        </Tooltip>
+        </LazyTooltip>
 
         {/* Plan Mode */}
         {status.planMode.isActive && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-            <Tooltip title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}>
+            <LazyTooltip title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}>
               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                 <Zap size={11} />
                 <span>{status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}</span>
               </div>
-            </Tooltip>
+            </LazyTooltip>
           </>
         )}
 
@@ -306,12 +306,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {isError && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-            <Tooltip title={error || 'Agent 错误'}>
+            <LazyTooltip title={error || 'Agent 错误'}>
               <div className="flex items-center gap-1 text-xs text-red-500">
                 <AlertTriangle size={11} />
                 <span>错误</span>
               </div>
-            </Tooltip>
+            </LazyTooltip>
           </>
         )}
       </div>
@@ -322,7 +322,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         <div className="flex items-center gap-1.5">
           {/* Start Button - shown when agent is not running */}
           {canStart && (
-            <Tooltip title="启动 Agent">
+            <LazyTooltip title="启动 Agent">
               <button
                 type="button"
                 onClick={handleStartAgent}
@@ -341,12 +341,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   <Play size={14} />
                 )}
               </button>
-            </Tooltip>
+            </LazyTooltip>
           )}
 
           {/* Stop Button - shown when agent is running */}
           {canStop && (
-            <Popconfirm
+            <LazyPopconfirm
               title="停止 Agent"
               description="确定要停止 Agent 吗？正在进行的任务将被中断。"
               onConfirm={handleStopAgent}
@@ -354,7 +354,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
-              <Tooltip title="停止 Agent">
+              <LazyTooltip title="停止 Agent">
                 <button
                   type="button"
                   disabled={isActionPending}
@@ -372,20 +372,20 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                     <Square size={14} />
                   )}
                 </button>
-              </Tooltip>
-            </Popconfirm>
+              </LazyTooltip>
+            </LazyPopconfirm>
           )}
 
           {/* Restart Button - shown when agent exists */}
           {canRestart && (
-            <Popconfirm
+            <LazyPopconfirm
               title="重启 Agent"
               description="重启将刷新工具和配置。确定要重启吗？"
               onConfirm={handleRestartAgent}
               okText="重启"
               cancelText="取消"
             >
-              <Tooltip title="重启 Agent (刷新工具和配置)">
+              <LazyTooltip title="重启 Agent (刷新工具和配置)">
                 <button
                   type="button"
                   disabled={isActionPending}
@@ -403,8 +403,8 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                     <RefreshCw size={14} />
                   )}
                 </button>
-              </Tooltip>
-            </Popconfirm>
+              </LazyTooltip>
+            </LazyPopconfirm>
           )}
         </div>
 
@@ -412,7 +412,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
         {/* Connection & Activity Status - Combined */}
-        <Tooltip 
+        <LazyTooltip
           title={
             <div className="space-y-1">
               <div>{isLoading ? '加载中...' : status.connection.websocket ? 'WebSocket 已连接' : '就绪'}</div>
@@ -442,7 +442,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               </>
             )}
           </div>
-        </Tooltip>
+        </LazyTooltip>
       </div>
     </div>
   );

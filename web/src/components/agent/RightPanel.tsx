@@ -14,7 +14,7 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { Tabs, Button, Badge } from 'antd';
+import { LazyTabs, LazyButton, LazyBadge } from '@/components/ui/lazyAntd';
 import { X, ListTodo, Terminal } from 'lucide-react';
 import { SandboxSection } from './SandboxSection';
 import { ResizeHandle, PlanContent } from './RightPanelComponents';
@@ -76,7 +76,7 @@ export const RightPanel = memo<RightPanelProps>(({
         <div className="flex items-center gap-2">
           <ListTodo size={16} />
           <span>Plan</span>
-          {hasPlan && <Badge status="processing" className="ml-1" />}
+          {hasPlan && <LazyBadge status="processing" className="ml-1" />}
         </div>
       ),
       children: (
@@ -92,7 +92,7 @@ export const RightPanel = memo<RightPanelProps>(({
         <div className="flex items-center gap-2">
           <Terminal size={16} />
           <span>Sandbox</span>
-          {hasSandbox && <Badge status="success" className="ml-1" />}
+          {hasSandbox && <LazyBadge status="success" className="ml-1" />}
         </div>
       ),
       children: (
@@ -140,7 +140,7 @@ export const RightPanel = memo<RightPanelProps>(({
           </div>
           <div className="flex items-center gap-1">
             {onClose ? (
-              <Button
+              <LazyButton
                 type="text"
                 size="small"
                 icon={<X size={18} />}
@@ -153,9 +153,9 @@ export const RightPanel = memo<RightPanelProps>(({
         </div>
 
         {/* Tabs */}
-        <Tabs
+        <LazyTabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as RightPanelTab)}
+          onChange={(key: string) => setActiveTab(key as RightPanelTab)}
           items={tabItems}
           className="flex-1 right-panel-tabs"
           tabBarStyle={{

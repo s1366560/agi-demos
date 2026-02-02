@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Select } from 'antd';
+import { LazySelect } from '@/components/ui/lazyAntd';
 import { GlobalOutlined } from '@ant-design/icons';
 
 export const LanguageSwitcher: React.FC = () => {
@@ -11,7 +11,7 @@ export const LanguageSwitcher: React.FC = () => {
   };
 
   return (
-    <Select
+    <LazySelect
       defaultValue={i18n.language || 'en-US'}
       value={i18n.language}
       onChange={handleChange}

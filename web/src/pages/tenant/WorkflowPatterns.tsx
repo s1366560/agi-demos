@@ -10,7 +10,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { message, Modal, Skeleton } from 'antd';
+import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
+import { Modal } from 'antd';
 import {
   PatternStats,
   PatternList,
@@ -64,6 +65,7 @@ function toUIPattern(apiPattern: APIWorkflowPattern): UIWorkflowPattern {
 
 export function WorkflowPatterns() {
   const { tenantId } = useParams<{ tenantId: string }>();
+  const message = useLazyMessage();
 
   // Data state
   const [patterns, setPatterns] = useState<UIWorkflowPattern[]>([]);
@@ -95,7 +97,7 @@ export function WorkflowPatterns() {
           ? err.message
           : 'Failed to load patterns';
       setError(errorMessage);
-      message.error(errorMessage);
+      message?.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -141,7 +143,7 @@ export function WorkflowPatterns() {
 
   const handleSavePattern = (updatedPattern: Record<string, unknown>) => {
     console.log('Saving pattern:', updatedPattern);
-    message.info('Pattern update is not yet implemented');
+    message?.info('Pattern update is not yet implemented');
   };
 
   const handleDeprecatePattern = async (patternId: string) => {
@@ -157,7 +159,7 @@ export function WorkflowPatterns() {
         setDeleting(true);
         try {
           await patternService.deletePattern(patternId, tenantId);
-          message.success('Pattern deleted successfully');
+          message?.success('Pattern deleted successfully');
 
           // Remove from local state
           setPatterns((prev) => prev.filter((p) => p.id !== patternId));
@@ -171,7 +173,7 @@ export function WorkflowPatterns() {
             err instanceof PatternServiceError
               ? err.message
               : 'Failed to delete pattern';
-          message.error(errorMessage);
+          message?.error(errorMessage);
         } finally {
           setDeleting(false);
         }
@@ -180,7 +182,7 @@ export function WorkflowPatterns() {
   };
 
   const handleNewPattern = () => {
-    message.info('Pattern creation is not yet implemented. Patterns are learned automatically from successful agent executions.');
+    message?.info('Pattern creation is not yet implemented. Patterns are learned automatically from successful agent executions.');
   };
 
   // Error state
@@ -241,7 +243,7 @@ export function WorkflowPatterns() {
       {loading ? (
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[1, 2, 3].map((i) => (
-            <Skeleton.Button key={i} active block style={{ height: 100 }} />
+            <AntSkeleton.Button key={i} active block style={{ height: 100 }} />
           ))}
         </div>
       ) : (
@@ -289,7 +291,7 @@ export function WorkflowPatterns() {
         <div className="flex-1 min-w-0">
           {loading ? (
             <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4">
-              <Skeleton active paragraph={{ rows: 8 }} />
+              <LazySkeleton active paragraph={{ rows: 8 }} />
             </div>
           ) : (
             <PatternList

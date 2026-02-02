@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { Spin } from "antd";
+import { LazySpin } from "./components/ui/lazyAntd";
 import "./i18n/config";
 import { ThemeProvider } from "./theme";
 import { Login } from "./pages/Login";
@@ -159,7 +159,7 @@ const EdgeMapList = lazy(() => import("./pages/project/schema/EdgeMapList"));
 // Hoisted outside component to avoid recreation on each render
 const PageLoader: React.FC = () => (
     <div className="flex items-center justify-center h-[200px]">
-        <Spin size="large" />
+        <LazySpin size="large" />
     </div>
 );
 

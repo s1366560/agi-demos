@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Tabs, Button, Badge, Empty, Tooltip } from 'antd';
+import { LazyTabs, LazyButton, LazyBadge, LazyEmpty, Empty, LazyTooltip } from '@/components/ui/lazyAntd';
 import { 
   Terminal, 
   Monitor, 
@@ -51,14 +51,14 @@ const TerminalTab: React.FC<{ sandboxId: string }> = ({ sandboxId }) => {
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Tooltip title="Reconnect">
-            <Button
+          <LazyTooltip title="Reconnect">
+            <LazyButton
               type="text"
               size="small"
               icon={<RefreshCw size={14} />}
               className="text-slate-400 hover:text-white"
             />
-          </Tooltip>
+          </LazyTooltip>
         </div>
       </div>
 
@@ -91,19 +91,19 @@ const DesktopTab: React.FC<{
   if (!desktopStatus?.running) {
     return (
       <div className="h-full flex items-center justify-center bg-slate-900">
-        <Empty
+        <LazyEmpty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <div className="text-center">
               <p className="text-slate-400 mb-4">Desktop is not running</p>
-              <Button
+              <LazyButton
                 type="primary"
                 icon={<Play size={16} />}
                 onClick={() => startDesktop()}
                 loading={isDesktopLoading}
               >
                 Start Desktop
-              </Button>
+              </LazyButton>
             </div>
           }
         />
@@ -121,17 +121,17 @@ const DesktopTab: React.FC<{
           <span className="text-xs text-slate-500">({sandboxId.slice(0, 8)})</span>
         </div>
         <div className="flex items-center gap-1">
-          <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
-            <Button
+          <LazyTooltip title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+            <LazyButton
               type="text"
               size="small"
               icon={isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="text-slate-400 hover:text-white"
             />
-          </Tooltip>
-          <Tooltip title="Stop Desktop">
-            <Button
+          </LazyTooltip>
+          <LazyTooltip title="Stop Desktop">
+            <LazyButton
               type="text"
               size="small"
               icon={<Square size={14} />}
@@ -139,7 +139,7 @@ const DesktopTab: React.FC<{
               loading={isDesktopLoading}
               className="text-slate-400 hover:text-red-400"
             />
-          </Tooltip>
+          </LazyTooltip>
         </div>
       </div>
 
@@ -161,7 +161,7 @@ const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) =>
   return (
     <div className="h-full overflow-y-auto p-4">
       {executions.length === 0 ? (
-        <Empty
+        <LazyEmpty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="No tool executions yet"
         />
@@ -176,7 +176,7 @@ const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) =>
                 <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
                   {exec.toolName}
                 </span>
-                <Badge 
+                <LazyBadge
                   status={exec.error ? 'error' : 'success'}
                   text={exec.error ? 'error' : 'success'}
                 />
@@ -226,7 +226,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
           <Terminal size={16} />
           <span>Terminal</span>
           {terminalStatus?.running && (
-            <Badge status="success" className="ml-1" />
+            <LazyBadge status="success" className="ml-1" />
           )}
         </div>
       ),
@@ -234,7 +234,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         <TerminalTab sandboxId={sandboxId} />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty description="No sandbox connected" />
+          <LazyEmpty description="No sandbox connected" />
         </div>
       ),
     },
@@ -245,7 +245,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
           <Monitor size={16} />
           <span>Desktop</span>
           {desktopStatus?.running && (
-            <Badge status="success" className="ml-1" />
+            <LazyBadge status="success" className="ml-1" />
           )}
         </div>
       ),
@@ -253,7 +253,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         <DesktopTab sandboxId={sandboxId} desktopStatus={desktopStatus} />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty description="No sandbox connected" />
+          <LazyEmpty description="No sandbox connected" />
         </div>
       ),
     },
@@ -264,7 +264,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
           <Settings size={16} />
           <span>Output</span>
           {toolExecutions.length > 0 && (
-            <Badge count={toolExecutions.length} size="small" className="ml-1" />
+            <LazyBadge count={toolExecutions.length} size="small" className="ml-1" />
           )}
         </div>
       ),
@@ -288,18 +288,18 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
           )}
         </div>
         {currentTool && (
-          <Badge status="processing" text={currentTool.name} />
+          <LazyBadge status="processing" text={currentTool.name} />
         )}
       </div>
 
       {/* Tabs */}
-      <Tabs
+      <LazyTabs
         activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as SandboxTab)}
+        onChange={(key: string) => setActiveTab(key as SandboxTab)}
         items={tabItems}
         className="flex-1 sandbox-tabs"
-        tabBarStyle={{ 
-          margin: 0, 
+        tabBarStyle={{
+          margin: 0,
           padding: '0 16px',
           borderBottom: '1px solid #e2e8f0',
         }}
