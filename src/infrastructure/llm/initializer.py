@@ -26,6 +26,8 @@ PROVIDER_TYPE_MAP: Dict[str, ProviderType] = {
     "zhipu": ProviderType.ZAI,  # Alias for zai
     "kimi": ProviderType.KIMI,  # Moonshot AI (Kimi)
     "moonshot": ProviderType.KIMI,  # Alias for kimi
+    "anthropic": ProviderType.ANTHROPIC,  # Anthropic (Claude)
+    "claude": ProviderType.ANTHROPIC,  # Alias for anthropic
 }
 
 
@@ -208,6 +210,14 @@ def _build_provider_config(
         embedding_model = settings.kimi_embedding_model
         reranker_model = settings.kimi_rerank_model
         base_url = settings.kimi_base_url
+
+    elif provider_name in ("anthropic", "claude"):
+        api_key = settings.anthropic_api_key
+        llm_model = settings.anthropic_model
+        llm_small_model = settings.anthropic_small_model
+        embedding_model = settings.anthropic_embedding_model
+        reranker_model = settings.anthropic_rerank_model
+        base_url = settings.anthropic_base_url
 
     # Check if API key is available
     if not api_key:

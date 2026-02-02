@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # LLM Provider Selection
     llm_provider: str = Field(
         default="qwen", alias="LLM_PROVIDER"
-    )  # 'gemini', 'qwen', 'openai', 'deepseek', 'zai'
+    )  # 'gemini', 'qwen', 'openai', 'deepseek', 'zai', 'kimi', 'anthropic'
 
     # Native SDK Integration
     # Note: use_litellm now enables database provider resolution with native SDKs (not LiteLLM)
@@ -121,6 +121,32 @@ class Settings(BaseSettings):
     zhipu_base_url: str = Field(
         default="https://open.bigmodel.cn/api/paas/v4", alias="ZHIPU_BASE_URL"
     )
+
+    # LLM Provider - Kimi (Moonshot AI)
+    # Get key from: https://platform.moonshot.cn/console/api-keys
+    kimi_api_key: Optional[str] = Field(default=None, alias="KIMI_API_KEY")
+    kimi_model: str = Field(default="moonshot-v1-8k", alias="KIMI_MODEL")
+    kimi_small_model: str = Field(default="moonshot-v1-8k", alias="KIMI_SMALL_MODEL")
+    # Moonshot doesn't have embedding API, uses external provider
+    kimi_embedding_model: str = Field(default="", alias="KIMI_EMBEDDING_MODEL")
+    # Kimi doesn't have a dedicated rerank API, uses LLM-based reranking
+    kimi_rerank_model: str = Field(default="moonshot-v1-8k", alias="KIMI_RERANK_MODEL")
+    kimi_base_url: str = Field(default="https://api.moonshot.cn/v1", alias="KIMI_BASE_URL")
+
+    # LLM Provider - Anthropic (Claude)
+    # Get key from: https://console.anthropic.com/settings/keys
+    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = Field(default="claude-sonnet-4-20250514", alias="ANTHROPIC_MODEL")
+    anthropic_small_model: str = Field(
+        default="claude-haiku-4-20250514", alias="ANTHROPIC_SMALL_MODEL"
+    )
+    # Anthropic doesn't have embedding API, uses external provider (e.g., Voyage)
+    anthropic_embedding_model: str = Field(default="", alias="ANTHROPIC_EMBEDDING_MODEL")
+    # Anthropic doesn't have a dedicated rerank API, uses LLM-based reranking
+    anthropic_rerank_model: str = Field(
+        default="claude-haiku-4-20250514", alias="ANTHROPIC_RERANK_MODEL"
+    )
+    anthropic_base_url: Optional[str] = Field(default=None, alias="ANTHROPIC_BASE_URL")
 
     # Web Search Settings (Tavily API)
     tavily_api_key: Optional[str] = Field(default=None, alias="TAVILY_API_KEY")
@@ -212,6 +238,9 @@ class Settings(BaseSettings):
     agent_max_steps: int = Field(
         default=5000, alias="AGENT_MAX_STEPS"
     )  # Maximum steps for ReActAgent execution
+    agent_max_tokens: int = Field(
+        default=16384, alias="AGENT_MAX_TOKENS"
+    )  # Maximum output tokens for LLM responses (increased for large file writes)
 
     # Monitoring
     enable_metrics: bool = Field(default=True, alias="ENABLE_METRICS")
@@ -326,6 +355,10 @@ class Settings(BaseSettings):
                 self.llm_provider = "deepseek"
             elif self.zai_api_key:
                 self.llm_provider = "zai"
+            elif self.kimi_api_key:
+                self.llm_provider = "kimi"
+            elif self.anthropic_api_key:
+                self.llm_provider = "anthropic"
 
         return self
 
