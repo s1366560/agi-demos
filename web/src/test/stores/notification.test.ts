@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useNotificationStore } from '../../stores/notification'
 
 // Mock the API module
+// Note: httpClient.get already returns response.data, so mock should return the data directly
 vi.mock('../../services/api', () => ({
     default: {
         get: vi.fn().mockResolvedValue({ notifications: [] }),
@@ -53,8 +54,9 @@ describe('Notification Store', () => {
         },
       ]
 
+      // api.get returns response.data directly, so mock should return the data structure
       vi.mocked(api.get).mockResolvedValue({
-        data: { notifications: mockNotifications },
+        notifications: mockNotifications,
       })
 
       const { fetchNotifications } = useNotificationStore.getState()
@@ -84,8 +86,9 @@ describe('Notification Store', () => {
         },
       ]
 
+      // api.get returns response.data directly, so mock should return the data structure
       vi.mocked(api.get).mockResolvedValue({
-        data: { notifications: mockNotifications },
+        notifications: mockNotifications,
       })
 
       const { fetchNotifications } = useNotificationStore.getState()
@@ -143,7 +146,8 @@ describe('Notification Store', () => {
   describe('markAsRead', () => {
     it('should mark notification as read successfully', async () => {
       const api = (await import('../../services/api')).default
-      vi.mocked(api.put).mockResolvedValue({ data: { success: true } })
+      // api.put returns response.data directly
+      vi.mocked(api.put).mockResolvedValue({ success: true })
 
       // Set initial state with unread notification
       useNotificationStore.setState({
@@ -208,8 +212,10 @@ describe('Notification Store', () => {
   describe('markAllAsRead', () => {
     it('should mark all notifications as read successfully', async () => {
       const api = (await import('../../services/api')).default
+      // api.put returns response.data directly
       vi.mocked(api.put).mockResolvedValue({
-        data: { success: true, count: 2 },
+        success: true,
+        count: 2,
       })
 
       useNotificationStore.setState({
@@ -285,7 +291,8 @@ describe('Notification Store', () => {
   describe('deleteNotification', () => {
     it('should delete notification successfully', async () => {
       const api = (await import('../../services/api')).default
-      vi.mocked(api.delete).mockResolvedValue({ data: { success: true } })
+      // api.delete returns response.data directly
+      vi.mocked(api.delete).mockResolvedValue({ success: true })
 
       useNotificationStore.setState({
         notifications: [
@@ -324,7 +331,8 @@ describe('Notification Store', () => {
 
     it('should decrease unread count when deleting unread notification', async () => {
       const api = (await import('../../services/api')).default
-      vi.mocked(api.delete).mockResolvedValue({ data: { success: true } })
+      // api.delete returns response.data directly
+      vi.mocked(api.delete).mockResolvedValue({ success: true })
 
       useNotificationStore.setState({
         notifications: [
@@ -351,7 +359,8 @@ describe('Notification Store', () => {
 
     it('should not decrease unread count when deleting read notification', async () => {
       const api = (await import('../../services/api')).default
-      vi.mocked(api.delete).mockResolvedValue({ data: { success: true } })
+      // api.delete returns response.data directly
+      vi.mocked(api.delete).mockResolvedValue({ success: true })
 
       useNotificationStore.setState({
         notifications: [
