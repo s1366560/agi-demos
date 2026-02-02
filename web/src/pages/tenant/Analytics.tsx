@@ -1,31 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-    Chart as ChartJS,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    ArcElement,
-} from 'chart.js'
-import { Line, Pie } from 'react-chartjs-2'
 import { useTenantStore } from '../../stores/tenant'
 import { projectAPI } from '../../services/api'
 import { Project } from '../../types/memory'
 
-ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    ArcElement
-)
+// Dynamic imports for chart libraries to reduce initial bundle size
+const ChartComponents = lazy(() => import('./ChartComponents'))
 
 export const Analytics: React.FC = () => {
     const { t } = useTranslation()
@@ -173,27 +153,25 @@ export const Analytics: React.FC = () => {
             </div>
 
             {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Memory Growth Chart */}
-                <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">{t('tenant.analytics.creation_trend')}</h3>
-                    <div className="h-80 w-full relative">
-                        <Line options={lineOptions} data={memoryGrowthData} />
+            <Suspense fallback={
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-center h-96">
+                        <span className="text-slate-400">{t('common.loading')}</span>
+                    </div>
+                    <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-center h-96">
+                        <span className="text-slate-400">{t('common.loading')}</span>
                     </div>
                 </div>
-
-                {/* Storage Distribution */}
-                <div className="bg-white dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">{t('tenant.analytics.storage_distribution')}</h3>
-                    <div className="h-80 w-full relative flex items-center justify-center">
-                        {projects.length > 0 ? (
-                            <Pie options={pieOptions} data={projectStorageData} />
-                        ) : (
-                            <div className="text-slate-400">{t('tenant.analytics.no_data')}</div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            }>
+                <ChartComponents
+                    memoryGrowthData={memoryGrowthData}
+                    projectStorageData={projectStorageData}
+                    lineOptions={lineOptions}
+                    pieOptions={pieOptions}
+                    projectsLength={projects.length}
+                    t={t}
+                />
+            </Suspense>
         </div>
     )
 }

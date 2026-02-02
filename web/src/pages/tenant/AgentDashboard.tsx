@@ -33,58 +33,61 @@ interface Skill {
     icon: React.ElementType;
 }
 
+// Hoist static data to module scope to avoid re-creation on each render
+const DEFAULT_SUB_AGENTS: SubAgent[] = [
+    {
+        id: 'code-architect',
+        title: 'Code Architect',
+        description: 'Expert in refactoring, debugging, and cross-language pattern detection.',
+        tags: ['Python', 'GitOps', 'CI/CD'],
+        active: true,
+        icon: Terminal,
+        colorClass: 'text-blue-600 dark:text-blue-400',
+        iconBgClass: 'bg-blue-100 dark:bg-blue-900/30'
+    },
+    {
+        id: 'deep-researcher',
+        title: 'Deep Researcher',
+        description: 'Synthesizes large datasets into structured executive summaries and reports.',
+        tags: ['Web Search', 'PDF Analysis', 'NLP'],
+        active: true,
+        icon: Globe,
+        colorClass: 'text-purple-600 dark:text-purple-400',
+        iconBgClass: 'bg-purple-100 dark:bg-purple-900/30'
+    },
+    {
+        id: 'creative-strategist',
+        title: 'Creative Strategist',
+        description: 'Generates marketing copy, UI concepts, and brand narratives.',
+        tags: ['Copywriting', 'Branding'],
+        active: false,
+        icon: Palette,
+        colorClass: 'text-orange-600 dark:text-orange-400',
+        iconBgClass: 'bg-orange-100 dark:bg-orange-900/30'
+    },
+    {
+        id: 'data-analyst',
+        title: 'Data Analyst',
+        description: 'Statistical modeling and anomaly detection from structured SQL sources.',
+        tags: ['SQL', 'Statistics'],
+        active: false,
+        icon: BarChart,
+        colorClass: 'text-teal-600 dark:text-teal-400',
+        iconBgClass: 'bg-teal-100 dark:bg-teal-900/30'
+    }
+];
+
+const SKILLS: Skill[] = [
+    { id: 'doc-sum', name: 'Document Summarizer', version: 'Core Logic Module v1.2', icon: FileText },
+    { id: 'multi-lang', name: 'Multi-Lingual Bridge', version: 'Language Suite v4.0', icon: Languages },
+    { id: 'excel-proc', name: 'Excel/CSV Processor', version: 'Data Utils v2.1', icon: Table },
+    { id: 'email-syn', name: 'Email Synthesizer', version: 'Comm Engine v1.0', icon: Mail },
+];
+
 export const AgentDashboard: React.FC = () => {
     const { t: _t } = useTranslation();
 
-    const [subAgents, setSubAgents] = useState<SubAgent[]>([
-        {
-            id: 'code-architect',
-            title: 'Code Architect',
-            description: 'Expert in refactoring, debugging, and cross-language pattern detection.',
-            tags: ['Python', 'GitOps', 'CI/CD'],
-            active: true,
-            icon: Terminal,
-            colorClass: 'text-blue-600 dark:text-blue-400',
-            iconBgClass: 'bg-blue-100 dark:bg-blue-900/30'
-        },
-        {
-            id: 'deep-researcher',
-            title: 'Deep Researcher',
-            description: 'Synthesizes large datasets into structured executive summaries and reports.',
-            tags: ['Web Search', 'PDF Analysis', 'NLP'],
-            active: true,
-            icon: Globe,
-            colorClass: 'text-purple-600 dark:text-purple-400',
-            iconBgClass: 'bg-purple-100 dark:bg-purple-900/30'
-        },
-        {
-            id: 'creative-strategist',
-            title: 'Creative Strategist',
-            description: 'Generates marketing copy, UI concepts, and brand narratives.',
-            tags: ['Copywriting', 'Branding'],
-            active: false,
-            icon: Palette,
-            colorClass: 'text-orange-600 dark:text-orange-400',
-            iconBgClass: 'bg-orange-100 dark:bg-orange-900/30'
-        },
-        {
-            id: 'data-analyst',
-            title: 'Data Analyst',
-            description: 'Statistical modeling and anomaly detection from structured SQL sources.',
-            tags: ['SQL', 'Statistics'],
-            active: false,
-            icon: BarChart,
-            colorClass: 'text-teal-600 dark:text-teal-400',
-            iconBgClass: 'bg-teal-100 dark:bg-teal-900/30'
-        }
-    ]);
-
-    const skills: Skill[] = [
-        { id: 'doc-sum', name: 'Document Summarizer', version: 'Core Logic Module v1.2', icon: FileText },
-        { id: 'multi-lang', name: 'Multi-Lingual Bridge', version: 'Language Suite v4.0', icon: Languages },
-        { id: 'excel-proc', name: 'Excel/CSV Processor', version: 'Data Utils v2.1', icon: Table },
-        { id: 'email-syn', name: 'Email Synthesizer', version: 'Comm Engine v1.0', icon: Mail },
-    ];
+    const [subAgents, setSubAgents] = useState<SubAgent[]>(DEFAULT_SUB_AGENTS);
 
     const [autoLearning, setAutoLearning] = useState(true);
     const [browserAccess, setBrowserAccess] = useState(true);
@@ -213,7 +216,7 @@ export const AgentDashboard: React.FC = () => {
                         <div className="p-5 space-y-5">
                             <p className="text-xs text-slate-500 dark:text-slate-400">These basic skills will be available to all active SubAgents by default.</p>
                             <div className="space-y-4">
-                                {skills.map(skill => (
+                                {SKILLS.map(skill => (
                                     <div key={skill.id} className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400">
                                             <skill.icon className="h-4 w-4" />

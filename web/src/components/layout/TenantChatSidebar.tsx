@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Badge, Dropdown, Modal, Select, Input } from 'antd';
 import type { MenuProps } from 'antd';
@@ -51,7 +51,8 @@ const SIDEBAR_DEFAULT_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
 
-const ConversationItem: React.FC<ConversationItemProps> = ({
+// Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
+const ConversationItem: React.FC<ConversationItemProps> = memo(({
   conversation,
   isActive,
   onSelect,
@@ -170,7 +171,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
       </div>
     </div>
   );
-};
+});
+ConversationItem.displayName = 'ConversationItem';
 
 // Simple Tooltip component for collapsed state
 const Tooltip: React.FC<{ children: React.ReactNode; title: string }> = ({ 

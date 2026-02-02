@@ -1,17 +1,28 @@
 /**
- * Root Components Barrel Export
+ * Components Index - DEPRECATED for direct imports
  *
- * TDD Phase 1.2: Barrel Exports
+ * PERFORMANCE NOTE: For optimal tree-shaking, import from sub-barrels instead:
  *
- * This file provides a centralized export point for all components.
- * Use this to import components with cleaner paths:
+ *   GOOD: import { ErrorBoundary } from '@/components/common'
+ *   GOOD: import { ChatLayout } from '@/components/agent'
+ *   BAD:  import { ErrorBoundary } from '@/components'
  *
- *   import { ErrorBoundary, WorkPlanCard } from '@/components'
+ * This file exists primarily for TypeScript IDE support and documentation.
+ * Direct imports from here may cause larger bundle sizes due to tree-shaking limitations.
  *
- * For more specific imports, use the sub-barrels:
- *   import { ChatLayout } from '@/components/agent'
- *   import { WorkspaceSidebar } from '@/components/agent/layout'
+ * Available sub-barrels:
+ *   - @/components/common - ErrorBoundary, SkeletonLoader, EmptyState
+ *   - @/components/agent - ChatLayout, ConversationSidebar, MessageArea
+ *   - @/components/shared - AppLayout, Layout, Modal components
+ *   - @/components/graph - GraphVisualization, EntityCard
+ *   - @/components/agent/layout - WorkspaceSidebar, ResizablePanels
+ *   - @/components/agent/chat - MessageBubble, InputBar, IdleState
+ *   - @/components/agent/execution - WorkPlanProgress, ToolExecutionCard
+ *   - @/components/agent/sandbox - SandboxTerminal, SandboxPanel
+ *   - @/components/agent/patterns - PatternList, ThinkingChain
  */
+
+// Re-exports for IDE support - prefer sub-barrel imports in production code
 
 // Common components (ErrorBoundary, SkeletonLoader, EmptyState)
 export {
@@ -56,9 +67,3 @@ export {
     type EntityCardProps,
 } from './graph'
 
-// Note: For specific agent sub-categories, import directly from sub-barrels:
-// - Layout: import { WorkspaceSidebar } from '@/components/agent/layout'
-// - Chat: import { IdleState } from '@/components/agent/chat'
-// - Execution: import { WorkPlanProgress } from '@/components/agent/execution'
-// - Patterns: import { PatternList } from '@/components/agent/patterns'
-// - Sandbox: import { SandboxTerminal } from '@/components/agent/sandbox'

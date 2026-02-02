@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { schemaAPI } from '../../../services/api';
@@ -13,6 +13,156 @@ import {
     ArrowRight,
     Share2
 } from 'lucide-react';
+
+// Memoized entity card component to prevent unnecessary re-renders
+interface EntityCardProps {
+    entity: any;
+    t: (key: string, params?: any) => string;
+}
+
+const EntityCard = memo(({ entity, t }: EntityCardProps) => (
+    <div className="group relative flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-[#252d46] bg-white dark:bg-[#1c2333] p-5 hover:border-emerald-500/50 dark:hover:border-emerald-500/30 transition-all hover:shadow-lg hover:shadow-emerald-900/5">
+        <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] flex items-center justify-center text-slate-700 dark:text-white font-bold text-sm">
+                    {entity.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                    <div className="flex items-center gap-2">
+                        <h4 className="text-slate-900 dark:text-white font-bold text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{entity.name}</h4>
+                        {entity.source === 'generated' && (
+                            <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">{String(t('project.schema.overview.auto'))}</span>
+                        )}
+                    </div>
+                    <p className="text-slate-500 dark:text-[#95a0c6] text-sm">{entity.description || String(t('project.schema.overview.entity_types.no_description'))}</p>
+                </div>
+            </div>
+            <button className="text-slate-400 dark:text-[#56607a] hover:text-slate-900 dark:hover:text-white transition-colors">
+                <MoreVertical className="w-5 h-5" />
+            </button>
+        </div>
+        <div className="h-px w-full bg-slate-100 dark:bg-[#252d46]"></div>
+        <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-slate-400 dark:text-[#56607a] uppercase tracking-wider">{String(t('project.schema.overview.entity_types.attributes'))}</p>
+            <div className="flex flex-wrap gap-2">
+                {Object.entries(entity.schema || {}).slice(0, 4).map(([key, val]: [string, any]) => (
+                    <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] text-xs font-mono text-slate-500 dark:text-[#95a0c6]">
+                        <span className={`size-1.5 rounded-full ${key === 'name' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
+                        {key}: {typeof val === 'string' ? val : val.type}
+                    </span>
+                ))}
+                {Object.keys(entity.schema || {}).length > 4 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-[#111521]/50 border border-slate-200 dark:border-[#252d46] border-dashed text-xs font-medium text-slate-400 dark:text-[#56607a]">
+                        {String(t('project.schema.overview.entity_types.more', { count: Object.keys(entity.schema || {}).length - 4 }))}
+                    </span>
+                )}
+            </div>
+        </div>
+    </div>
+));
+EntityCard.displayName = 'EntityCard';
+
+// Memoized edge card component
+interface EdgeCardProps {
+    edge: any;
+    mappings: any[];
+    t: (key: string, params?: any) => string;
+}
+
+const EdgeCard = memo(({ edge, mappings, t }: EdgeCardProps) => (
+    <div className="group relative flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-[#252d46] bg-white dark:bg-[#1c2333] p-5 hover:border-blue-500/50 dark:hover:border-[#193db3]/50 transition-all hover:shadow-lg hover:shadow-blue-900/5">
+        <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] flex items-center justify-center">
+                    <Share2 className="text-blue-600 dark:text-[#193db3] w-5 h-5" />
+                </div>
+                <div>
+                    <div className="flex items-center gap-2">
+                        <h4 className="text-slate-900 dark:text-white font-bold text-base group-hover:text-blue-600 dark:group-hover:text-[#193db3] transition-colors">{edge.name}</h4>
+                        {edge.source === 'generated' && (
+                            <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">{String(t('project.schema.overview.auto'))}</span>
+                        )}
+                    </div>
+                    <p className="text-slate-500 dark:text-[#95a0c6] text-sm font-mono">{t('project.schema.overview.relationship_types.source_target')}</p>
+                </div>
+            </div>
+            <button className="text-slate-400 dark:text-[#56607a] hover:text-slate-900 dark:hover:text-white transition-colors">
+                <MoreVertical className="w-5 h-5" />
+            </button>
+        </div>
+        <EdgeMappings edgeName={edge.name} mappings={mappings} t={t} />
+        <EdgeAttributes edge={edge} t={t} />
+    </div>
+));
+EdgeCard.displayName = 'EdgeCard';
+
+// Memoized edge mappings component
+interface EdgeMappingsProps {
+    edgeName: string;
+    mappings: any[];
+    t: (key: string, params?: any) => string;
+}
+
+const EdgeMappings = memo(({ edgeName, mappings, t }: EdgeMappingsProps) => {
+    const filteredMappings = useMemo(
+        () => mappings.filter(m => m.edge_type === edgeName),
+        [mappings, edgeName]
+    );
+
+    if (filteredMappings.length === 0) {
+        return (
+            <div className="flex items-center justify-center p-3 rounded-lg bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] border-dashed">
+                <span className="text-xs text-slate-400 dark:text-[#56607a] italic">{String(t('project.schema.overview.relationship_types.no_active_mappings'))}</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            {filteredMappings.map(map => (
+                <div key={map.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46]">
+                    <span className="px-2 py-1 rounded bg-white dark:bg-[#252d46] text-xs font-bold text-slate-700 dark:text-white border border-slate-200 dark:border-transparent shadow-sm">
+                        {map.source_type}
+                    </span>
+                    <div className="flex-1 flex flex-col items-center gap-1 relative">
+                        <div className="h-px w-full bg-slate-300 dark:bg-[#56607a]"></div>
+                        {map.source === 'generated' && (
+                            <span className="absolute -top-2 text-[8px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-white dark:bg-[#111521] px-1">{String(t('project.schema.overview.auto'))}</span>
+                        )}
+                    </div>
+                    <ArrowRight className="text-slate-400 dark:text-[#56607a] w-4 h-4" />
+                    <span className="px-2 py-1 rounded bg-white dark:bg-[#252d46] text-xs font-bold text-slate-700 dark:text-white border border-slate-200 dark:border-transparent shadow-sm">
+                        {map.target_type}
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
+});
+EdgeMappings.displayName = 'EdgeMappings';
+
+// Memoized edge attributes component
+interface EdgeAttributesProps {
+    edge: any;
+    t: (key: string, params?: any) => string;
+}
+
+const EdgeAttributes = memo(({ edge, t }: EdgeAttributesProps) => (
+    <div className="flex flex-col gap-2">
+        <p className="text-xs font-semibold text-slate-400 dark:text-[#56607a] uppercase tracking-wider">{String(t('project.schema.overview.relationship_types.edge_attributes'))}</p>
+        <div className="flex flex-wrap gap-2">
+            {Object.entries(edge.schema || {}).slice(0, 4).map(([key, val]: [string, any]) => (
+                <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] text-xs font-mono text-slate-500 dark:text-[#95a0c6]">
+                    {key}: {typeof val === 'string' ? val : val.type}
+                </span>
+            ))}
+            {Object.keys(edge.schema || {}).length === 0 && (
+                <span className="text-slate-400 dark:text-[#95a0c6] text-xs italic">{String(t('project.schema.overview.relationship_types.no_attributes'))}</span>
+            )}
+        </div>
+    </div>
+));
+EdgeAttributes.displayName = 'EdgeAttributes';
 
 export default function SchemaOverview() {
     const { projectId } = useParams<{ projectId: string }>();
@@ -106,44 +256,7 @@ export default function SchemaOverview() {
                             </div>
                             <div className="flex flex-col gap-4">
                                 {entities.map(entity => (
-                                    <div key={entity.id} className="group relative flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-[#252d46] bg-white dark:bg-[#1c2333] p-5 hover:border-emerald-500/50 dark:hover:border-emerald-500/30 transition-all hover:shadow-lg hover:shadow-emerald-900/5">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="size-10 rounded-full bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] flex items-center justify-center text-slate-700 dark:text-white font-bold text-sm">
-                                                    {entity.name.slice(0, 2).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <h4 className="text-slate-900 dark:text-white font-bold text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{entity.name}</h4>
-                                                        {entity.source === 'generated' && (
-                                                            <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">{t('project.schema.overview.auto')}</span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-slate-500 dark:text-[#95a0c6] text-sm">{entity.description || t('project.schema.overview.entity_types.no_description')}</p>
-                                                </div>
-                                            </div>
-                                            <button className="text-slate-400 dark:text-[#56607a] hover:text-slate-900 dark:hover:text-white transition-colors">
-                                                <MoreVertical className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                        <div className="h-px w-full bg-slate-100 dark:bg-[#252d46]"></div>
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-xs font-semibold text-slate-400 dark:text-[#56607a] uppercase tracking-wider">{t('project.schema.overview.entity_types.attributes')}</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {Object.entries(entity.schema || {}).slice(0, 4).map(([key, val]: [string, any]) => (
-                                                    <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] text-xs font-mono text-slate-500 dark:text-[#95a0c6]">
-                                                        <span className={`size-1.5 rounded-full ${key === 'name' ? 'bg-emerald-500' : 'bg-blue-500'}`}></span>
-                                                        {key}: {typeof val === 'string' ? val : val.type}
-                                                    </span>
-                                                ))}
-                                                {Object.keys(entity.schema || {}).length > 4 && (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-[#111521]/50 border border-slate-200 dark:border-[#252d46] border-dashed text-xs font-medium text-slate-400 dark:text-[#56607a]">
-                                                        {t('project.schema.overview.entity_types.more', { count: Object.keys(entity.schema || {}).length - 4 })}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <EntityCard key={entity.id} entity={entity} t={t} />
                                 ))}
                                 {entities.length === 0 && (
                                     <div className="text-center p-8 text-slate-500 dark:text-[#95a0c6] bg-white dark:bg-[#1c2333] rounded-xl border border-slate-200 dark:border-[#252d46]">
@@ -169,65 +282,7 @@ export default function SchemaOverview() {
                             </div>
                             <div className="flex flex-col gap-4">
                                 {edges.map(edge => (
-                                    <div key={edge.id} className="group relative flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-[#252d46] bg-white dark:bg-[#1c2333] p-5 hover:border-blue-500/50 dark:hover:border-[#193db3]/50 transition-all hover:shadow-lg hover:shadow-blue-900/5">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="size-10 rounded-full bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] flex items-center justify-center">
-                                                    <Share2 className="text-blue-600 dark:text-[#193db3] w-5 h-5" />
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <h4 className="text-slate-900 dark:text-white font-bold text-base group-hover:text-blue-600 dark:group-hover:text-[#193db3] transition-colors">{edge.name}</h4>
-                                                        {edge.source === 'generated' && (
-                                                            <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-500/20 px-1.5 py-0.5 rounded">{t('project.schema.overview.auto')}</span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-slate-500 dark:text-[#95a0c6] text-sm font-mono">{t('project.schema.overview.relationship_types.source_target')}</p>
-                                                </div>
-                                            </div>
-                                            <button className="text-slate-400 dark:text-[#56607a] hover:text-slate-900 dark:hover:text-white transition-colors">
-                                                <MoreVertical className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                        {/* Mappings Visualization */}
-                                        <div className="flex flex-col gap-2">
-                                            {mappings.filter(m => m.edge_type === edge.name).map(map => (
-                                                <div key={map.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46]">
-                                                    <span className="px-2 py-1 rounded bg-white dark:bg-[#252d46] text-xs font-bold text-slate-700 dark:text-white border border-slate-200 dark:border-transparent shadow-sm">
-                                                        {map.source_type}
-                                                    </span>
-                                                    <div className="flex-1 flex flex-col items-center gap-1 relative">
-                                                        <div className="h-px w-full bg-slate-300 dark:bg-[#56607a]"></div>
-                                                        {map.source === 'generated' && (
-                                                            <span className="absolute -top-2 text-[8px] uppercase tracking-wider text-purple-600 dark:text-purple-400 font-bold bg-white dark:bg-[#111521] px-1">{t('project.schema.overview.auto')}</span>
-                                                        )}
-                                                    </div>
-                                                    <ArrowRight className="text-slate-400 dark:text-[#56607a] w-4 h-4" />
-                                                    <span className="px-2 py-1 rounded bg-white dark:bg-[#252d46] text-xs font-bold text-slate-700 dark:text-white border border-slate-200 dark:border-transparent shadow-sm">
-                                                        {map.target_type}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                            {mappings.filter(m => m.edge_type === edge.name).length === 0 && (
-                                                <div className="flex items-center justify-center p-3 rounded-lg bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] border-dashed">
-                                                    <span className="text-xs text-slate-400 dark:text-[#56607a] italic">{t('project.schema.overview.relationship_types.no_active_mappings')}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-xs font-semibold text-slate-400 dark:text-[#56607a] uppercase tracking-wider">{t('project.schema.overview.relationship_types.edge_attributes')}</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {Object.entries(edge.schema || {}).slice(0, 4).map(([key, val]: [string, any]) => (
-                                                    <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 dark:bg-[#111521] border border-slate-200 dark:border-[#252d46] text-xs font-mono text-slate-500 dark:text-[#95a0c6]">
-                                                        {key}: {typeof val === 'string' ? val : val.type}
-                                                    </span>
-                                                ))}
-                                                {Object.keys(edge.schema || {}).length === 0 && (
-                                                    <span className="text-slate-400 dark:text-[#95a0c6] text-xs italic">{t('project.schema.overview.relationship_types.no_attributes')}</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <EdgeCard key={edge.id} edge={edge} mappings={mappings} t={t} />
                                 ))}
                                 {edges.length === 0 && (
                                     <div className="text-center p-8 text-slate-500 dark:text-[#95a0c6] bg-white dark:bg-[#1c2333] rounded-xl border border-slate-200 dark:border-[#252d46]">
