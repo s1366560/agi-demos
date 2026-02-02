@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Brain,
@@ -84,19 +84,116 @@ const SKILLS: Skill[] = [
     { id: 'email-syn', name: 'Email Synthesizer', version: 'Comm Engine v1.0', icon: Mail },
 ];
 
-export const AgentDashboard: React.FC = () => {
+interface AgentDashboardProps {
+    // Props for future extensibility
+}
+
+// Sub-component: SubAgentCard with memo for performance optimization
+const SubAgentCard = memo<{
+    agent: SubAgent;
+    onToggle: (id: string) => void;
+}>(({ agent, onToggle }) => {
+    return (
+        <div
+            className={`rounded-xl p-5 relative overflow-hidden transition-all border-2 ${
+                agent.active
+                    ? 'bg-white dark:bg-slate-800 border-blue-600 shadow-lg shadow-blue-600/5'
+                    : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-300 dark:hover:border-slate-600'
+            }`}
+        >
+            <div className="flex justify-between items-start mb-4">
+                <div className={`p-2 rounded-lg ${agent.iconBgClass} ${agent.colorClass}`}>
+                    <agent.icon className="h-6 w-6" />
+                </div>
+                {agent.active ? (
+                    <div className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</div>
+                ) : (
+                    <button
+                        onClick={() => onToggle(agent.id)}
+                        className="text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-tight hover:underline"
+                    >
+                        Activate
+                    </button>
+                )}
+            </div>
+            <h4 className="font-bold text-lg mb-1 text-slate-900 dark:text-white">{agent.title}</h4>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed min-h-[40px]">{agent.description}</p>
+
+            {agent.active && (
+                <div className="flex flex-wrap gap-2">
+                    {agent.tags.map(tag => (
+                        <span key={tag} className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] rounded font-medium">
+                            {tag}
+                        </span>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+});
+SubAgentCard.displayName = 'SubAgentCard';
+
+// Sub-component: SkillCard with memo for performance optimization
+const SkillCard = memo<{ skill: Skill }>(({ skill }) => {
+    return (
+        <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400">
+                <skill.icon className="h-4 w-4" />
+            </div>
+            <div className="flex-1">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">{skill.name}</p>
+                <p className="text-[10px] text-slate-500">{skill.version}</p>
+            </div>
+            <CheckCircle className="text-green-500 h-4 w-4" />
+        </div>
+    );
+});
+SkillCard.displayName = 'SkillCard';
+
+// Sub-component: EngineConfigCard with memo for performance optimization
+interface EngineConfigCardProps {
+    label: string;
+    description: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+}
+
+const EngineConfigCard = memo<EngineConfigCardProps>(({ label, description, checked, onChange }) => {
+    return (
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 flex items-start gap-4">
+            <div className="pt-1 flex-shrink-0">
+                <label className="inline-flex relative items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => onChange(e.target.checked)}
+                        className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+            <div>
+                <h4 className="font-bold text-sm text-slate-900 dark:text-white">{label}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{description}</p>
+            </div>
+        </div>
+    );
+});
+EngineConfigCard.displayName = 'EngineConfigCard';
+
+// Main component with React.memo for performance optimization
+export const AgentDashboard: React.FC<AgentDashboardProps> = memo(() => {
     const { t: _t } = useTranslation();
 
     const [subAgents, setSubAgents] = useState<SubAgent[]>(DEFAULT_SUB_AGENTS);
-
     const [autoLearning, setAutoLearning] = useState(true);
     const [browserAccess, setBrowserAccess] = useState(true);
 
-    const toggleAgent = (id: string) => {
-        setSubAgents(prev => prev.map(agent => 
+    const toggleAgent = useCallback((id: string) => {
+        setSubAgents(prev => prev.map(agent =>
             agent.id === id ? { ...agent, active: !agent.active } : agent
         ));
-    };
+    }, []);
 
     return (
         <div className="max-w-full mx-auto pb-24">
@@ -124,42 +221,11 @@ export const AgentDashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {subAgents.map(agent => (
-                                <div 
+                                <SubAgentCard
                                     key={agent.id}
-                                    className={`rounded-xl p-5 relative overflow-hidden transition-all border-2 ${
-                                        agent.active 
-                                            ? 'bg-white dark:bg-slate-800 border-blue-600 shadow-lg shadow-blue-600/5' 
-                                            : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-300 dark:hover:border-slate-600'
-                                    }`}
-                                >
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className={`p-2 rounded-lg ${agent.iconBgClass} ${agent.colorClass}`}>
-                                            <agent.icon className="h-6 w-6" />
-                                        </div>
-                                        {agent.active ? (
-                                            <div className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</div>
-                                        ) : (
-                                            <button 
-                                                onClick={() => toggleAgent(agent.id)}
-                                                className="text-blue-600 dark:text-blue-400 text-[10px] font-bold uppercase tracking-tight hover:underline"
-                                            >
-                                                Activate
-                                            </button>
-                                        )}
-                                    </div>
-                                    <h4 className="font-bold text-lg mb-1 text-slate-900 dark:text-white">{agent.title}</h4>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed min-h-[40px]">{agent.description}</p>
-                                    
-                                    {agent.active && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {agent.tags.map(tag => (
-                                                <span key={tag} className="px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] rounded font-medium">
-                                                    {tag}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                                    agent={agent}
+                                    onToggle={toggleAgent}
+                                />
                             ))}
                         </div>
                     </section>
@@ -168,40 +234,18 @@ export const AgentDashboard: React.FC = () => {
                     <section className="space-y-4">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">Global Engine Configuration</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 flex items-start gap-4">
-                                <div className="pt-1 flex-shrink-0">
-                                    <label className="inline-flex relative items-center cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={autoLearning}
-                                            onChange={(e) => setAutoLearning(e.target.checked)}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                    </label>
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Auto-Learning Experience Engine</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Allow the platform to discover and optimize new workflow patterns from user interactions automatically.</p>
-                                </div>
-                            </div>
-                            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 flex items-start gap-4">
-                                <div className="pt-1 flex-shrink-0">
-                                    <label className="inline-flex relative items-center cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={browserAccess}
-                                            onChange={(e) => setBrowserAccess(e.target.checked)}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                    </label>
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Universal Browser Access</h4>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Enables agents to navigate the live web for real-time information retrieval and task execution.</p>
-                                </div>
-                            </div>
+                            <EngineConfigCard
+                                label="Auto-Learning Experience Engine"
+                                description="Allow the platform to discover and optimize new workflow patterns from user interactions automatically."
+                                checked={autoLearning}
+                                onChange={setAutoLearning}
+                            />
+                            <EngineConfigCard
+                                label="Universal Browser Access"
+                                description="Enables agents to navigate the live web for real-time information retrieval and task execution."
+                                checked={browserAccess}
+                                onChange={setBrowserAccess}
+                            />
                         </div>
                     </section>
                 </div>
@@ -217,16 +261,7 @@ export const AgentDashboard: React.FC = () => {
                             <p className="text-xs text-slate-500 dark:text-slate-400">These basic skills will be available to all active SubAgents by default.</p>
                             <div className="space-y-4">
                                 {SKILLS.map(skill => (
-                                    <div key={skill.id} className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-400">
-                                            <skill.icon className="h-4 w-4" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">{skill.name}</p>
-                                            <p className="text-[10px] text-slate-500">{skill.version}</p>
-                                        </div>
-                                        <CheckCircle className="text-green-500 h-4 w-4" />
-                                    </div>
+                                    <SkillCard key={skill.id} skill={skill} />
                                 ))}
                             </div>
                             <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
@@ -241,4 +276,8 @@ export const AgentDashboard: React.FC = () => {
             </div>
         </div>
     );
-};
+});
+AgentDashboard.displayName = 'AgentDashboard';
+
+// Export static data for testing
+export { DEFAULT_SUB_AGENTS, SKILLS };

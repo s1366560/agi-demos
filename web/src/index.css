@@ -1156,3 +1156,164 @@ body {
 .flex-col-scroll > .fixed-area {
     flex-shrink: 0;
 }
+
+/* ============================================================================
+ * PERFORMANCE OPTIMIZATION UTILITIES (LOW Priority)
+ * CSS-based performance improvements for long lists and animations
+ * ============================================================================ */
+
+/* Content-visibility for off-screen content (Major performance boost for long lists)
+ * Skips rendering work for content that is not currently visible
+ * Use on list items, table rows, or cards in virtualized lists
+ */
+.content-visibility-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 0px;
+}
+
+/* More aggressive version for static content */
+.content-visibility-hidden {
+    content-visibility: hidden;
+    contain-intrinsic-size: auto 200px;
+}
+
+/* CSS Containment - Isolates elements from the rest of the page
+ * Prevents unnecessary reflows/repaints when contained element changes
+ */
+.contain-layout {
+    contain: layout;
+}
+
+.contain-paint {
+    contain: paint;
+}
+
+.contain-layout-paint {
+    contain: layout paint;
+}
+
+.contain-strict {
+    contain: strict;
+}
+
+/* Will-change hints for animated elements
+ * Hint to browser about properties that will animate
+ * Use sparingly - only on elements that actually animate
+ */
+.will-change-transform {
+    will-change: transform;
+}
+
+.will-change-opacity {
+    will-change: opacity;
+}
+
+.will-change-top-left {
+    will-change: top, left;
+}
+
+/* GPU acceleration hints */
+.gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Performance optimization for long lists
+ * Combine content-visibility with containment for best results
+ */
+.list-item-optimized {
+    content-visibility: auto;
+    contain: layout style paint;
+    contain-intrinsic-size: auto 80px;
+}
+
+/* Table row optimization */
+.table-row-optimized {
+    content-visibility: auto;
+    contain: layout style;
+    contain-intrinsic-size: auto 48px;
+}
+
+/* Card optimization */
+.card-optimized {
+    content-visibility: auto;
+    contain: layout style paint;
+    contain-intrinsic-size: auto 200px;
+}
+
+/* Text rendering optimization for static text */
+.text-rendering-optimize {
+    text-rendering: optimizeSpeed;
+}
+
+/* Font display optimization */
+.font-display-swap {
+    font-display: swap;
+}
+
+.font-display-optional {
+    font-display: optional;
+}
+
+.font-display-block {
+    font-display: block;
+}
+
+/* Image rendering optimization */
+.image-rendering-pixelated {
+    image-rendering: pixelated;
+}
+
+.image-rendering-crisp {
+    image-rendering: crisp-edges;
+}
+
+/* Scroll-driven animations (modern browsers)
+ * More efficient than JS-driven scroll handlers
+ */
+@supports (animation-timeline: scroll()) {
+    .scroll-driven-fade {
+        animation: fade-in linear;
+        animation-timeline: view();
+    }
+}
+
+/* Low priority utility - non-critical UI elements */
+.render-priority-low {
+    contain: strict;
+    content-visibility: auto;
+}
+
+/* Composite layer hints for animated elements
+ * Forces element to its own GPU layer
+ */
+.composite-layer {
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Prevent layout thrashing for frequently updated elements */
+.no-layout-thrashing {
+    contain: layout style;
+}
+
+/* Optimize SVG rendering */
+.svg-optimize {
+    shape-rendering: geometricPrecision;
+}
+
+/* Async image loading optimization */
+img[loading="lazy"] {
+    contain: layout style paint;
+}

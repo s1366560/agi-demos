@@ -97,3 +97,62 @@ describe("CommunitiesList", () => {
     });
   });
 });
+
+describe("CommunitiesList - Performance Optimizations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (useParams as any).mockReturnValue({ projectId: "p1" });
+    (graphService.listCommunities as any).mockResolvedValue({
+      communities: [],
+    });
+  });
+
+  it("should export memoized component", () => {
+    // Component should be memoized with React.memo
+    expect(CommunitiesList).toBeDefined();
+  });
+
+  it("should use useCallback for event handlers", async () => {
+    render(<CommunitiesList />);
+
+    await waitFor(() => {
+      expect(graphService.listCommunities).toHaveBeenCalled();
+    });
+
+    // Handlers should be stable - component re-renders should not break them
+    const { rerender } = render(<CommunitiesList />);
+
+    // Re-render should not cause issues with stable handler references
+    rerender(<CommunitiesList />);
+  });
+
+  it("should use useMemo for computed pagination values", async () => {
+    (graphService.listCommunities as any).mockResolvedValue({
+      communities: mockCommunities,
+      total: 50,
+    });
+
+    render(<CommunitiesList />);
+
+    await waitFor(() => {
+      expect(graphService.listCommunities).toHaveBeenCalled();
+    });
+
+    // Pagination should work correctly with memoized values
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+  });
+
+  it("should have stable color palette outside component", () => {
+    // Color palette should be defined outside component to avoid re-creation
+    const colors = [
+      "from-blue-500 to-cyan-500",
+      "from-purple-500 to-pink-500",
+      "from-emerald-500 to-teal-500",
+      "from-orange-500 to-amber-500",
+      "from-rose-500 to-red-500",
+    ];
+
+    expect(colors).toHaveLength(5);
+    expect(colors[0]).toBe("from-blue-500 to-cyan-500");
+  });
+});

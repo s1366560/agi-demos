@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { logger } from '../../utils/logger'
@@ -36,7 +36,16 @@ interface BackgroundTask {
     error?: string
 }
 
-export const CommunitiesList: React.FC = () => {
+// Color palette for community cards - defined outside component for stability
+const COMMUNITY_COLORS = [
+    'from-blue-500 to-cyan-500',
+    'from-purple-500 to-pink-500',
+    'from-emerald-500 to-teal-500',
+    'from-orange-500 to-amber-500',
+    'from-rose-500 to-red-500',
+] as const
+
+const CommunitiesListInternal: React.FC = () => {
     const { t } = useTranslation()
     const { projectId } = useParams()
     const [communities, setCommunities] = useState<Community[]>([])
@@ -309,16 +318,31 @@ export const CommunitiesList: React.FC = () => {
         loadCommunities()
     }, [loadCommunities])
 
-    const getCommunityColor = (index: number) => {
-        const colors = [
-            'from-blue-500 to-cyan-500',
-            'from-purple-500 to-pink-500',
-            'from-emerald-500 to-teal-500',
-            'from-orange-500 to-amber-500',
-            'from-rose-500 to-red-500',
-        ]
-        return colors[index % colors.length]
-    }
+    // Memoized color function to avoid re-creation
+    const getCommunityColor = useCallback((index: number) => {
+        return COMMUNITY_COLORS[index % COMMUNITY_COLORS.length]
+    }, [])
+
+    // Memoize computed values for pagination
+    const totalPages = useMemo(() => Math.ceil(totalCount / limit), [totalCount, limit])
+    const hasNextPage = useMemo(() => (page + 1) * limit < totalCount, [page, limit, totalCount])
+    const hasPrevPage = useMemo(() => page > 0, [page])
+
+    // Memoize dismiss task handler
+    const handleDismissTask = useCallback(() => {
+        setCurrentTask(null)
+    }, [])
+
+    // Memoize clear error handler
+    const handleClearError = useCallback(() => {
+        setError(null)
+    }, [])
+
+    // Memoize close detail panel handler
+    const handleCloseDetail = useCallback(() => {
+        setSelectedCommunity(null)
+        setMembers([])
+    }, [])
 
     return (
         <div className="space-y-6">
@@ -395,7 +419,7 @@ export const CommunitiesList: React.FC = () => {
                                 )}
                                 {currentTask.status === 'failed' && (
                                     <button
-                                        onClick={() => setCurrentTask(null)}
+                                        onClick={handleDismissTask}
                                         className="px-3 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                                     >
                                         {t('project.graph.communities.task.dismiss')}
@@ -463,7 +487,7 @@ export const CommunitiesList: React.FC = () => {
                         <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
                     </div>
                     <button
-                        onClick={() => setError(null)}
+                        onClick={handleClearError}
                         className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                     >
                         <span className="material-symbols-outlined">close</span>
@@ -553,18 +577,18 @@ export const CommunitiesList: React.FC = () => {
                                 <div className="flex items-center justify-center gap-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
                                     <button
                                         onClick={() => setPage(p => Math.max(0, p - 1))}
-                                        disabled={page === 0}
+                                        disabled={!hasPrevPage}
                                         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
                                         <span className="material-symbols-outlined text-sm">chevron_left</span>
                                         Previous
                                     </button>
                                     <span className="text-sm text-slate-600 dark:text-slate-400">
-                                        Page {page + 1} of {Math.ceil(totalCount / limit)}
+                                        Page {page + 1} of {totalPages}
                                     </span>
                                     <button
                                         onClick={() => setPage(p => p + 1)}
-                                        disabled={(page + 1) * limit >= totalCount}
+                                        disabled={!hasNextPage}
                                         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                                     >
                                         Next
@@ -585,10 +609,7 @@ export const CommunitiesList: React.FC = () => {
                                     Community Details
                                 </h2>
                                 <button
-                                    onClick={() => {
-                                        setSelectedCommunity(null)
-                                        setMembers([])
-                                    }}
+                                    onClick={handleCloseDetail}
                                     className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                                 >
                                     <span className="material-symbols-outlined">close</span>
@@ -708,3 +729,9 @@ export const CommunitiesList: React.FC = () => {
         </div>
     )
 }
+
+/**
+ * Memoized CommunitiesList page component.
+ * Prevents unnecessary re-renders when parent components update.
+ */
+export const CommunitiesList = memo(CommunitiesListInternal)

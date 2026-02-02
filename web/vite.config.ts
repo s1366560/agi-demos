@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // Note: Ant Design 6+ has built-in tree-shaking support and uses CSS-in-JS
+    // No additional plugin needed for on-demand imports
     // Bundle analyzer - generates stats.html after build
     visualizer({
       open: false,

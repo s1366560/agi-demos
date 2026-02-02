@@ -103,52 +103,57 @@ export const TenantLayout: React.FC = () => {
     }
   }, [listTenants, setCurrentTenant, navigate])
 
-  // Sync tenant ID from URL with store
-  useEffect(() => {
+  /**
+   * Initialize tenant and project setup
+   * Extracted to reduce nested Promise chains in useEffect
+   */
+  const initializeTenantAndProject = useCallback(async () => {
     if (tenantId && (!currentTenant || currentTenant.id !== tenantId)) {
-      getTenant(tenantId).catch((error) => {
-        handleTenantAccessError(error, tenantId)
-      })
+      try {
+        await getTenant(tenantId)
+      } catch (error) {
+        await handleTenantAccessError(error, tenantId)
+      }
     } else if (!tenantId && !currentTenant) {
       const tenants = useTenantStore.getState().tenants
       if (tenants.length > 0) {
         setCurrentTenant(tenants[0])
       } else {
-        useTenantStore
-          .getState()
-          .listTenants()
-          .then(() => {
-            const tenants = useTenantStore.getState().tenants
-            if (tenants.length > 0) {
-              setCurrentTenant(tenants[0])
-            } else {
-              const defaultName = user?.name
-                ? `${user.name}'s Workspace`
-                : "My Workspace"
-              useTenantStore
-                .getState()
-                .createTenant({
-                  name: defaultName,
-                  description: "Automatically created default workspace",
-                })
-                .then(() => {
-                  const newTenants = useTenantStore.getState().tenants
-                  if (newTenants.length > 0) {
-                    setCurrentTenant(newTenants[newTenants.length - 1])
-                  } else {
-                    setNoTenants(true)
-                  }
-                })
-                .catch((err) => {
-                  console.error("Failed to auto-create tenant:", err)
-                  setNoTenants(true)
-                })
+        try {
+          await listTenants()
+          const updatedTenants = useTenantStore.getState().tenants
+          if (updatedTenants.length > 0) {
+            setCurrentTenant(updatedTenants[0])
+          } else {
+            // Auto-create default tenant
+            const defaultName = user?.name ? `${user.name}'s Workspace` : "My Workspace"
+            try {
+              await useTenantStore.getState().createTenant({
+                name: defaultName,
+                description: "Automatically created default workspace",
+              })
+              const newTenants = useTenantStore.getState().tenants
+              if (newTenants.length > 0) {
+                setCurrentTenant(newTenants[newTenants.length - 1])
+              } else {
+                setNoTenants(true)
+              }
+            } catch (err) {
+              console.error("Failed to auto-create tenant:", err)
+              setNoTenants(true)
             }
-          })
-          .catch(() => {})
+          }
+        } catch {
+          // Silently handle listTenants failure
+        }
       }
     }
-  }, [tenantId, currentTenant, getTenant, setCurrentTenant, user, navigate])
+  }, [tenantId, currentTenant, getTenant, handleTenantAccessError, listTenants, setCurrentTenant, user])
+
+  // Sync tenant ID from URL with store - flattened for better performance
+  useEffect(() => {
+    initializeTenantAndProject()
+  }, [initializeTenantAndProject])
 
   // Sync project ID from URL with store
   useEffect(() => {

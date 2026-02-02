@@ -3,6 +3,11 @@
  *
  * Management page for MCP (Model Context Protocol) servers with CRUD operations,
  * tool sync, connection testing, and filtering functionality.
+ *
+ * Performance optimizations:
+ * - React.memo on ServerTypeBadge, StatsCard, McpServerCard, ToolsModal
+ * - useCallback for all event handlers
+ * - useMemo for computed values (filtered servers, counts)
  */
 
 import React, {
@@ -54,6 +59,270 @@ const SERVER_TYPE_COLORS: Record<MCPServerType, { bg: string; text: string }> =
     },
   };
 
+// Server Type Badge - Memoized component
+const ServerTypeBadge = React.memo(({ type }: { type: MCPServerType }) => {
+  const { bg, text } = SERVER_TYPE_COLORS[type];
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}
+    >
+      {type.toUpperCase()}
+    </span>
+  );
+});
+ServerTypeBadge.displayName = "ServerTypeBadge";
+
+// Stats Card - Memoized component
+interface StatsCardProps {
+  title: string;
+  value: string | number;
+  icon: string;
+  iconColor?: string;
+  valueColor?: string;
+  extra?: React.ReactNode;
+}
+
+const StatsCard = React.memo<StatsCardProps>(({
+  title,
+  value,
+  icon,
+  iconColor = "text-primary-500",
+  valueColor = "text-slate-900 dark:text-white",
+  extra,
+}) => (
+  <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-slate-600 dark:text-slate-400">{title}</p>
+        <p className={`text-2xl font-bold ${valueColor} mt-1`}>
+          {value}
+        </p>
+        {extra && <div className="mt-1">{extra}</div>}
+      </div>
+      <span className={`material-symbols-outlined text-4xl ${iconColor}`}>
+        {icon}
+      </span>
+    </div>
+  </div>
+));
+StatsCard.displayName = "StatsCard";
+
+// MCP Server Card - Memoized component
+interface McpServerCardProps {
+  server: MCPServerResponse;
+  syncingServers: Set<string>;
+  testingServers: Set<string>;
+  onToggle: (server: MCPServerResponse, enabled: boolean) => void;
+  onSync: (server: MCPServerResponse) => void;
+  onTest: (server: MCPServerResponse) => void;
+  onEdit: (server: MCPServerResponse) => void;
+  onDelete: (id: string) => void;
+  onShowTools: (server: MCPServerResponse) => void;
+  formatLastSync: (dateStr?: string) => string;
+}
+
+const McpServerCard = React.memo<McpServerCardProps>(({
+  server,
+  syncingServers,
+  testingServers,
+  onToggle,
+  onSync,
+  onTest,
+  onEdit,
+  onDelete,
+  onShowTools,
+  formatLastSync,
+}) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+              {server.name}
+            </h3>
+            <ServerTypeBadge type={server.server_type} />
+          </div>
+        </div>
+        <Switch
+          checked={server.enabled}
+          onChange={(checked) => onToggle(server, checked)}
+          size="small"
+        />
+      </div>
+
+      {/* Description */}
+      {server.description && (
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-2">
+          {server.description}
+        </p>
+      )}
+
+      {/* Transport Config Preview */}
+      <div className="mb-4">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
+          {t("tenant.mcpServers.config")}:
+        </p>
+        <code className="text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded block truncate">
+          {server.server_type === "stdio"
+            ? (server.transport_config as { command?: string })
+                ?.command || "N/A"
+            : (server.transport_config as { url?: string })?.url ||
+              "N/A"}
+        </code>
+      </div>
+
+      {/* Tools Preview */}
+      <div className="mb-4">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+          {t("tenant.mcpServers.tools")} (
+          {server.discovered_tools?.length || 0})
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {server.discovered_tools
+            ?.slice(0, 3)
+            .map((tool: MCPToolInfo, idx: number) => (
+              <Tooltip key={idx} title={tool.description}>
+                <span className="inline-flex px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-300 rounded">
+                  {tool.name}
+                </span>
+              </Tooltip>
+            ))}
+          {(server.discovered_tools?.length || 0) > 3 && (
+            <button
+              onClick={() => onShowTools(server)}
+              className="inline-flex px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-xs text-primary-700 dark:text-primary-300 rounded hover:bg-primary-200 dark:hover:bg-primary-900/50"
+            >
+              +{server.discovered_tools.length - 3} more
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Last Sync */}
+      <div className="mb-4">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t("tenant.mcpServers.lastSync")}:{" "}
+          {formatLastSync(server.last_sync_at)}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+        <div className="flex items-center gap-2">
+          <Tooltip title={t("tenant.mcpServers.actions.sync")}>
+            <button
+              onClick={() => onSync(server)}
+              disabled={syncingServers.has(server.id)}
+              className="inline-flex items-center justify-center px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            >
+              {syncingServers.has(server.id) ? (
+                <Spin size="small" />
+              ) : (
+                <span className="material-symbols-outlined text-sm">
+                  sync
+                </span>
+              )}
+              <span className="ml-1">
+                {t("tenant.mcpServers.actions.sync")}
+              </span>
+            </button>
+          </Tooltip>
+          <Tooltip title={t("tenant.mcpServers.actions.test")}>
+            <button
+              onClick={() => onTest(server)}
+              disabled={testingServers.has(server.id)}
+              className="inline-flex items-center justify-center px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            >
+              {testingServers.has(server.id) ? (
+                <Spin size="small" />
+              ) : (
+                <span className="material-symbols-outlined text-sm">
+                  speed
+                </span>
+              )}
+            </button>
+          </Tooltip>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onEdit(server)}
+            className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            <span className="material-symbols-outlined text-lg">
+              edit
+            </span>
+          </button>
+          <Popconfirm
+            title={t("tenant.mcpServers.deleteConfirm")}
+            onConfirm={() => onDelete(server.id)}
+            okText={t("common.confirm")}
+            cancelText={t("common.cancel")}
+          >
+            <button className="p-2 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+              <span className="material-symbols-outlined text-lg">
+                delete
+              </span>
+            </button>
+          </Popconfirm>
+        </div>
+      </div>
+    </div>
+  );
+});
+McpServerCard.displayName = "McpServerCard";
+
+// Tools Modal - Memoized component
+interface ToolsModalProps {
+  server: MCPServerResponse;
+  onClose: () => void;
+}
+
+const ToolsModal = React.memo<ToolsModalProps>(({ server, onClose }) => {
+  const { t } = useTranslation();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+            {server.name} - {t("tenant.mcpServers.tools")}
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div className="space-y-3">
+          {server.discovered_tools?.map(
+            (tool: MCPToolInfo, idx: number) => (
+              <div
+                key={idx}
+                className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg"
+              >
+                <p className="font-medium text-slate-900 dark:text-white">
+                  {tool.name}
+                </p>
+                {tool.description && (
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    {tool.description}
+                  </p>
+                )}
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+ToolsModal.displayName = "ToolsModal";
+
 export const McpServerList: React.FC = () => {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
@@ -100,7 +369,7 @@ export const McpServerList: React.FC = () => {
   }, [servers]);
 
   // Filter servers locally
-  const filteredServers = React.useMemo(() => {
+  const filteredServers = useMemo(() => {
     return servers.filter((server) => {
       // Search filter
       if (search) {
@@ -244,20 +513,16 @@ export const McpServerList: React.FC = () => {
     listServers();
   }, [listServers]);
 
-  // Server type badge component
-  const ServerTypeBadge = ({ type }: { type: MCPServerType }) => {
-    const { bg, text } = SERVER_TYPE_COLORS[type];
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}
-      >
-        {type.toUpperCase()}
-      </span>
-    );
-  };
+  const handleShowTools = useCallback((server: MCPServerResponse) => {
+    setToolsModalServer(server);
+  }, []);
+
+  const handleCloseToolsModal = useCallback(() => {
+    setToolsModalServer(null);
+  }, []);
 
   // Format last sync time
-  const formatLastSync = (dateStr?: string) => {
+  const formatLastSync = useCallback((dateStr?: string) => {
     if (!dateStr) return t("tenant.mcpServers.neverSynced");
     const date = new Date(dateStr);
     const now = new Date();
@@ -272,7 +537,7 @@ export const McpServerList: React.FC = () => {
       return t("tenant.mcpServers.hoursAgo", { count: diffHours });
     const diffDays = Math.floor(diffHours / 24);
     return t("tenant.mcpServers.daysAgo", { count: diffDays });
-  };
+  }, [t]);
 
   return (
     <div className="max-w-full mx-auto w-full flex flex-col gap-8">
@@ -297,54 +562,26 @@ export const McpServerList: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t("tenant.mcpServers.stats.total")}
-              </p>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {total}
-              </p>
-            </div>
-            <span className="material-symbols-outlined text-4xl text-primary-500">
-              dns
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t("tenant.mcpServers.stats.enabled")}
-              </p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                {enabledCount}
-              </p>
-            </div>
-            <span className="material-symbols-outlined text-4xl text-green-500">
-              check_circle
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t("tenant.mcpServers.stats.totalTools")}
-              </p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                {totalToolsCount}
-              </p>
-            </div>
-            <span className="material-symbols-outlined text-4xl text-blue-500">
-              build
-            </span>
-          </div>
-        </div>
-
+        <StatsCard
+          title={t("tenant.mcpServers.stats.total")}
+          value={total}
+          icon="dns"
+          iconColor="text-primary-500"
+        />
+        <StatsCard
+          title={t("tenant.mcpServers.stats.enabled")}
+          value={enabledCount}
+          icon="check_circle"
+          iconColor="text-green-500"
+          valueColor="text-green-600 dark:text-green-400"
+        />
+        <StatsCard
+          title={t("tenant.mcpServers.stats.totalTools")}
+          value={totalToolsCount}
+          icon="build"
+          iconColor="text-blue-500"
+          valueColor="text-blue-600 dark:text-blue-400"
+        />
         <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div>
@@ -430,144 +667,19 @@ export const McpServerList: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredServers.map((server) => (
-            <div
+            <McpServerCard
               key={server.id}
-              className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-shadow"
-            >
-              {/* Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                      {server.name}
-                    </h3>
-                    <ServerTypeBadge type={server.server_type} />
-                  </div>
-                </div>
-                <Switch
-                  checked={server.enabled}
-                  onChange={(checked) => handleToggleEnabled(server, checked)}
-                  size="small"
-                />
-              </div>
-
-              {/* Description */}
-              {server.description && (
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 line-clamp-2">
-                  {server.description}
-                </p>
-              )}
-
-              {/* Transport Config Preview */}
-              <div className="mb-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                  {t("tenant.mcpServers.config")}:
-                </p>
-                <code className="text-xs text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded block truncate">
-                  {server.server_type === "stdio"
-                    ? (server.transport_config as { command?: string })
-                        ?.command || "N/A"
-                    : (server.transport_config as { url?: string })?.url ||
-                      "N/A"}
-                </code>
-              </div>
-
-              {/* Tools Preview */}
-              <div className="mb-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                  {t("tenant.mcpServers.tools")} (
-                  {server.discovered_tools?.length || 0})
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {server.discovered_tools
-                    ?.slice(0, 3)
-                    .map((tool: MCPToolInfo, idx: number) => (
-                      <Tooltip key={idx} title={tool.description}>
-                        <span className="inline-flex px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-300 rounded">
-                          {tool.name}
-                        </span>
-                      </Tooltip>
-                    ))}
-                  {(server.discovered_tools?.length || 0) > 3 && (
-                    <button
-                      onClick={() => setToolsModalServer(server)}
-                      className="inline-flex px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-xs text-primary-700 dark:text-primary-300 rounded hover:bg-primary-200 dark:hover:bg-primary-900/50"
-                    >
-                      +{server.discovered_tools.length - 3} more
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Last Sync */}
-              <div className="mb-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t("tenant.mcpServers.lastSync")}:{" "}
-                  {formatLastSync(server.last_sync_at)}
-                </p>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-2">
-                  <Tooltip title={t("tenant.mcpServers.actions.sync")}>
-                    <button
-                      onClick={() => handleSync(server)}
-                      disabled={syncingServers.has(server.id)}
-                      className="inline-flex items-center justify-center px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
-                    >
-                      {syncingServers.has(server.id) ? (
-                        <Spin size="small" />
-                      ) : (
-                        <span className="material-symbols-outlined text-sm">
-                          sync
-                        </span>
-                      )}
-                      <span className="ml-1">
-                        {t("tenant.mcpServers.actions.sync")}
-                      </span>
-                    </button>
-                  </Tooltip>
-                  <Tooltip title={t("tenant.mcpServers.actions.test")}>
-                    <button
-                      onClick={() => handleTest(server)}
-                      disabled={testingServers.has(server.id)}
-                      className="inline-flex items-center justify-center px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
-                    >
-                      {testingServers.has(server.id) ? (
-                        <Spin size="small" />
-                      ) : (
-                        <span className="material-symbols-outlined text-sm">
-                          speed
-                        </span>
-                      )}
-                    </button>
-                  </Tooltip>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleEdit(server)}
-                    className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
-                  >
-                    <span className="material-symbols-outlined text-lg">
-                      edit
-                    </span>
-                  </button>
-                  <Popconfirm
-                    title={t("tenant.mcpServers.deleteConfirm")}
-                    onConfirm={() => handleDelete(server.id)}
-                    okText={t("common.confirm")}
-                    cancelText={t("common.cancel")}
-                  >
-                    <button className="p-2 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
-                      <span className="material-symbols-outlined text-lg">
-                        delete
-                      </span>
-                    </button>
-                  </Popconfirm>
-                </div>
-              </div>
-            </div>
+              server={server}
+              syncingServers={syncingServers}
+              testingServers={testingServers}
+              onToggle={handleToggleEnabled}
+              onSync={handleSync}
+              onTest={handleTest}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onShowTools={handleShowTools}
+              formatLastSync={formatLastSync}
+            />
           ))}
         </div>
       )}
@@ -584,40 +696,7 @@ export const McpServerList: React.FC = () => {
 
       {/* Tools List Modal */}
       {toolsModalServer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                {toolsModalServer.name} - {t("tenant.mcpServers.tools")}
-              </h3>
-              <button
-                onClick={() => setToolsModalServer(null)}
-                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="space-y-3">
-              {toolsModalServer.discovered_tools?.map(
-                (tool: MCPToolInfo, idx: number) => (
-                  <div
-                    key={idx}
-                    className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg"
-                  >
-                    <p className="font-medium text-slate-900 dark:text-white">
-                      {tool.name}
-                    </p>
-                    {tool.description && (
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                        {tool.description}
-                      </p>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        </div>
+        <ToolsModal server={toolsModalServer} onClose={handleCloseToolsModal} />
       )}
     </div>
   );
