@@ -148,7 +148,8 @@ export const MessageArea = memo<MessageAreaProps>(({
         }, 500);
       }
     }
-  }, [isLoading, hasEarlierMessages, onLoadEarlier, preloadItemCount, saveScrollPosition, propIsLoadingEarlier]);
+  // Note: isLoading is used inside checkAndPreload but the effect should re-run when hasEarlierMessages changes
+  }, [hasEarlierMessages, onLoadEarlier, preloadItemCount, saveScrollPosition, propIsLoadingEarlier]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {

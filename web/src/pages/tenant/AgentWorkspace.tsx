@@ -1,11 +1,11 @@
 /**
  * AgentWorkspace - Tenant-level AI Agent Workspace
- * 
+ *
  * Allows users to access Agent Chat from tenant main menu,
  * with project selector for choosing which project's context to use.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Empty, Spin, Button } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -23,24 +23,40 @@ export const AgentWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string }>();
-  const { user } = useAuthStore();
-  const { currentTenant } = useTenantStore();
-  const { projects, currentProject, setCurrentProject, listProjects } = useProjectStore();
-  const { loadConversations } = useAgentV3Store();
-  
+
+  // Store subscriptions - select only what we need
+  const user = useAuthStore((state) => state.user);
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const projects = useProjectStore((state) => state.projects);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const setCurrentProject = useProjectStore((state) => state.setCurrentProject);
+  const listProjects = useProjectStore((state) => state.listProjects);
+  const loadConversations = useAgentV3Store((state) => state.loadConversations);
+
   // Track selected project for this session
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
 
-  // Get effective tenant ID
-  const tenantId = urlTenantId || currentTenant?.id || user?.tenant_id;
+  // Get effective tenant ID - memoized to prevent recalculation
+  const tenantId = useMemo(
+    () => urlTenantId || currentTenant?.id || user?.tenant_id,
+    [urlTenantId, currentTenant?.id, user?.tenant_id]
+  );
 
-  // Calculate base path for conversation navigation
-  const basePath = tenantId 
-    ? `/tenant/${tenantId}/agent-workspace`
-    : '/tenant/agent-workspace';
+  // Calculate base path for conversation navigation - memoized
+  const basePath = useMemo(
+    () => tenantId
+      ? `/tenant/${tenantId}/agent-workspace`
+      : '/tenant/agent-workspace',
+    [tenantId]
+  );
 
-  // Load projects on mount
+  // Navigate to create project - memoized callback
+  const handleCreateProject = useCallback(() => {
+    navigate('/tenant/projects/new');
+  }, [navigate]);
+
+  // Load projects on mount - optimized with removed function dependency
   useEffect(() => {
     const loadProjects = async () => {
       if (tenantId && projects.length === 0) {
@@ -48,7 +64,8 @@ export const AgentWorkspace: React.FC = () => {
       }
     };
     loadProjects();
-  }, [tenantId, listProjects, projects.length]);
+  // Only depend on tenantId - listProjects is stable from store
+  }, [tenantId]);
 
   // Initialize selected project after projects are loaded
   useEffect(() => {
@@ -64,7 +81,7 @@ export const AgentWorkspace: React.FC = () => {
       } else if (projects.length > 0) {
         setSelectedProjectId(projects[0].id);
       }
-      
+
       setInitializing(false);
     };
     init();
@@ -106,7 +123,7 @@ export const AgentWorkspace: React.FC = () => {
             description={t('agent.workspace.noProjects')}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           >
-            <Button type="primary" onClick={() => navigate('/tenant/projects/new')}>
+            <Button type="primary" onClick={handleCreateProject}>
               {t('agent.workspace.createProject')}
             </Button>
           </Empty>
@@ -120,13 +137,13 @@ export const AgentWorkspace: React.FC = () => {
   return (
     <div className="w-full h-full">
       {effectiveProjectId ? (
-        <AgentChatContent 
+        <AgentChatContent
           externalProjectId={effectiveProjectId}
           basePath={basePath}
         />
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty 
+          <Empty
             description={t('agent.workspace.selectProjectToStart')}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />

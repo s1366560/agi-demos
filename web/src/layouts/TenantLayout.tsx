@@ -17,7 +17,7 @@
  * - Workspace switcher
  */
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
@@ -44,36 +44,42 @@ export const TenantLayout: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { tenantId, projectId } = useParams()
+
+  // Optimized: Select only the state we need with typing
   const currentTenant = useTenantStore((state) => state.currentTenant)
   const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant)
   const getTenant = useTenantStore((state) => state.getTenant)
   const listTenants = useTenantStore((state) => state.listTenants)
+
   const currentProject = useProjectStore((state) => state.currentProject)
+
+  // Auth store
   const logout = useAuthStore((state) => state.logout)
   const user = useAuthStore((state) => state.user)
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [noTenants, setNoTenants] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     logout()
     navigate("/login")
-  }
+  }, [logout, navigate])
 
-  const handleCreateTenant = async () => {
+  const handleCreateTenant = useCallback(async () => {
     await listTenants()
     const tenants = useTenantStore.getState().tenants
     if (tenants.length > 0) {
       setCurrentTenant(tenants[tenants.length - 1])
       setNoTenants(false)
     }
-  }
+  }, [listTenants, setCurrentTenant])
 
   /**
    * Handle 403/404 errors when accessing unauthorized tenant
    * Falls back to first accessible tenant
    */
-  const handleTenantAccessError = async (error: unknown, requestedTenantId: string) => {
+  const handleTenantAccessError = useCallback(async (error: unknown, requestedTenantId: string) => {
     const status = (error as any)?.response?.status
 
     if (status === HTTP_STATUS.FORBIDDEN || status === HTTP_STATUS.NOT_FOUND) {
@@ -95,7 +101,7 @@ export const TenantLayout: React.FC = () => {
         setNoTenants(true)
       }
     }
-  }
+  }, [listTenants, setCurrentTenant, navigate])
 
   // Sync tenant ID from URL with store
   useEffect(() => {
