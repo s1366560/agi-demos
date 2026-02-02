@@ -101,6 +101,9 @@ class NativeGraphAdapter(GraphServicePort):
         # Cache for embedding dimension checks
         self._embedding_dim_cache: Dict[str, Any] = {"value": None, "expiry": None}
 
+        # Optional distributed transaction coordinator
+        self._transaction_coordinator: Optional[Any] = None
+
     @property
     def client(self) -> Neo4jClient:
         """Get the Neo4j client (for compatibility with tools expecting graphiti_client)."""
@@ -120,6 +123,19 @@ class NativeGraphAdapter(GraphServicePort):
     def community_updater(self) -> CommunityUpdater:
         """Get the community updater (lazily initialized)."""
         return self._get_community_updater()
+
+    def set_transaction_coordinator(self, coordinator: Any) -> None:
+        """
+        Set the distributed transaction coordinator.
+
+        Args:
+            coordinator: DistributedTransactionCoordinator instance
+        """
+        self._transaction_coordinator = coordinator
+
+    def get_transaction_coordinator(self) -> Optional[Any]:
+        """Get the current transaction coordinator."""
+        return self._transaction_coordinator
 
     def _get_entity_extractor(self) -> EntityExtractor:
         """Get or create entity extractor."""
