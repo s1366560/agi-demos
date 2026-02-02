@@ -14,6 +14,7 @@ import { useAgentV3Store } from '../../stores/agentV3';
 import { useAuthStore } from '../../stores/auth';
 import { useTenantStore } from '../../stores/tenant';
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 import type { Project } from '../../types/memory';
 
 /**
@@ -33,7 +34,11 @@ export const AgentWorkspace: React.FC = () => {
   const listProjects = useProjectStore((state) => state.listProjects);
   const loadConversations = useAgentV3Store((state) => state.loadConversations);
 
-  // Track selected project for this session
+  // Track selected project for this session - using useLocalStorage for better performance
+  const { value: lastProjectId, setValue: setLastProjectId } = useLocalStorage<string | null>(
+    'agent:lastProjectId',
+    null
+  );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
 
@@ -72,8 +77,7 @@ export const AgentWorkspace: React.FC = () => {
     if (!projects.length) return;
 
     const init = () => {
-      // Try to restore last selected project from localStorage
-      const lastProjectId = localStorage.getItem('agent:lastProjectId');
+      // Try to restore last selected project from localStorage (now using cached hook)
       if (lastProjectId && projects.find((p: Project) => p.id === lastProjectId)) {
         setSelectedProjectId(lastProjectId);
       } else if (currentProject) {
@@ -85,21 +89,21 @@ export const AgentWorkspace: React.FC = () => {
       setInitializing(false);
     };
     init();
-  }, [projects, currentProject]);
+  }, [projects, currentProject, lastProjectId]);
 
   // Load conversations when project changes
   useEffect(() => {
     if (selectedProjectId) {
       loadConversations(selectedProjectId);
-      // Persist selection
-      localStorage.setItem('agent:lastProjectId', selectedProjectId);
+      // Persist selection using cached hook
+      setLastProjectId(selectedProjectId);
       // Update global current project for consistency
       const project = projects.find((p: Project) => p.id === selectedProjectId);
       if (project) {
         setCurrentProject(project);
       }
     }
-  }, [selectedProjectId, loadConversations, projects, setCurrentProject]);
+  }, [selectedProjectId, loadConversations, projects, setCurrentProject, setLastProjectId]);
 
   // Show loading while initializing projects
   if (initializing) {
