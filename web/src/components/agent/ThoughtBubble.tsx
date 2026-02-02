@@ -50,17 +50,13 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
 
   // Handle empty thought
   if (!thought) {
+    const bgClass = level === "work" ? "bg-purple-50" : "bg-cyan-50";
+    const borderClass = level === "work" ? "border-purple-300" : "border-cyan-300";
+
     return (
       <div
         data-testid="thought-bubble"
-        className={`thought-bubble ${config.class}`}
-        style={{
-          padding: 8,
-          marginBottom: 8,
-          borderRadius: 4,
-          backgroundColor: level === "work" ? "#f9f0ff" : "#e6fffb",
-          border: `1px solid ${level === "work" ? "#d3adf7" : "#87e8de"}`,
-        }}
+        className={`thought-bubble ${config.class} ${bgClass} ${borderClass} border p-2 mb-2 rounded`}
         aria-label="Agent thinking process"
       >
         <Space>
@@ -78,67 +74,57 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
       ? `${thought.substring(0, 100)}...`
       : thought;
 
+  const bgClass = level === "work" ? "bg-purple-50" : "bg-cyan-50";
+  const borderClass = level === "work" ? "border-purple-300" : "border-cyan-300";
+  const animationClass = isThinking ? "animate-pulse" : "";
+  const maxHeightClass = collapsed ? "max-h-none" : "max-h-[200px]";
+  const overflowClass = collapsed ? "overflow-visible" : "overflow-auto";
+
   return (
     <Card
       data-testid="thought-bubble"
       size="small"
-      className={`thought-bubble ${config.class}`}
-      style={{
-        marginBottom: 8,
-        backgroundColor: level === "work" ? "#f9f0ff" : "#e6fffb",
-        border: `1px solid ${level === "work" ? "#d3adf7" : "#87e8de"}`,
-      }}
+      className={`thought-bubble ${config.class} ${bgClass} ${borderClass} border mb-2`}
       aria-label="Agent thinking process"
     >
-      <Space orientation="vertical" size="small" style={{ width: "100%" }}>
+      <Space orientation="vertical" size="small" className="w-full">
         {/* Header */}
-        <Space style={{ width: "100%", justifyContent: "space-between" }}>
+        <Space className="w-full justify-between">
           <Space>
             <BulbOutlined
-              className={isThinking ? "thinking-animation" : undefined}
-              style={{
-                animation: isThinking
-                  ? "pulse 1.5s ease-in-out infinite"
-                  : undefined,
-              }}
+              className={animationClass}
               data-testid="thinking-indicator"
             />
-            <Tag color={config.color} style={{ margin: 0 }}>
+            <Tag color={config.color} className="m-0">
               {config.label}
             </Tag>
-            {stepNumber !== undefined && (
+            {stepNumber !== undefined ? (
               <Tag color="default">Step {stepNumber + 1}</Tag>
-            )}
+            ) : null}
           </Space>
 
-          {thought.length > 100 && (
+          {thought.length > 100 ? (
             <Typography.Link
               onClick={() => setCollapsed(!collapsed)}
-              style={{ fontSize: 11 }}
+              className="text-xs"
               aria-label={collapsed ? "Expand thought" : "Collapse thought"}
             >
               {collapsed ? <CaretRightOutlined /> : <CaretDownOutlined />}
             </Typography.Link>
-          )}
+          ) : null}
         </Space>
 
         {/* Step Description */}
-        {stepDescription && (
-          <Text type="secondary" style={{ fontSize: 11 }}>
+        {stepDescription ? (
+          <Text type="secondary" className="text-xs">
             {stepDescription}
           </Text>
-        )}
+        ) : null}
 
         {/* Thought Content */}
         <Text
           italic
-          style={{
-            display: "block",
-            maxHeight: collapsed ? "auto" : "200px",
-            overflowY: collapsed ? "visible" : "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
+          className={`block ${maxHeightClass} ${overflowClass} whitespace-pre-wrap break-words`}
         >
           {displayThought}
         </Text>

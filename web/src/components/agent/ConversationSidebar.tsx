@@ -8,7 +8,7 @@
  */
 
 import type { FC } from 'react';
-import { useMemo, useState, memo } from 'react';
+import { useMemo, useState, memo, useTransition } from 'react';
 import { Button, Badge, Tooltip, Dropdown, Modal, Input } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -256,6 +256,8 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   const [renamingConversation, setRenamingConversation] = useState<Conversation | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
+  // Use transition for non-urgent UI updates (rename operation)
+  const [/* isPending */, startTransition] = useTransition();
 
   // Count conversations with pending HITL
   const pendingHITLCount = useMemo(() => {
@@ -274,12 +276,15 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
 
   const handleRenameSubmit = async () => {
     if (!renamingConversation || !newTitle.trim()) return;
-    
+
     setIsRenaming(true);
     try {
       await onRename?.(renamingConversation.id, newTitle.trim());
-      setRenamingConversation(null);
-      setNewTitle('');
+      // Use transition for non-urgent UI updates after successful rename
+      startTransition(() => {
+        setRenamingConversation(null);
+        setNewTitle('');
+      });
     } catch (error) {
       console.error('Failed to rename conversation:', error);
     } finally {

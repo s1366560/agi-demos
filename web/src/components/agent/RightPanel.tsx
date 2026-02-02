@@ -112,17 +112,17 @@ export const RightPanel = memo<RightPanelProps>(({
   return (
     <div
       className="h-full flex bg-white dark:bg-slate-900 relative"
-      style={{ width }}
+      style={{ '--panel-width': `${width}px` } as React.CSSProperties}
       data-testid="right-panel"
     >
       {/* Resize Handle - only show if onWidthChange is provided */}
-      {onWidthChange && (
+      {onWidthChange ? (
         <ResizeHandle
           onResize={handleResize}
           direction="horizontal"
           position="left"
         />
-      )}
+      ) : null}
 
       {/* Content */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -139,7 +139,7 @@ export const RightPanel = memo<RightPanelProps>(({
             </h2>
           </div>
           <div className="flex items-center gap-1">
-            {onClose && (
+            {onClose ? (
               <Button
                 type="text"
                 size="small"
@@ -148,7 +148,7 @@ export const RightPanel = memo<RightPanelProps>(({
                 className="text-slate-400 hover:text-slate-600"
                 data-testid="close-button"
               />
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -168,6 +168,9 @@ export const RightPanel = memo<RightPanelProps>(({
 
         {/* Styles */}
         <style>{`
+          [data-testid="right-panel"] {
+            width: var(--panel-width, 360px);
+          }
           .right-panel-tabs {
             display: flex;
             flex-direction: column;
