@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import threading
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -19,8 +19,9 @@ from pydantic import BaseModel, Field
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.application.services.sandbox_health_service import HealthCheckLevel, SandboxHealthService
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
-from src.application.services.sandbox_profile import get_profile, list_profiles
-from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
+from src.application.services.sandbox_profile import list_profiles
+from src.application.services.sandbox_token_service import SandboxTokenService
+from src.domain.ports.services.sandbox_port import SandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_from_header_or_query,
@@ -38,6 +39,7 @@ _singleton_lock = threading.Lock()
 _sandbox_adapter: Optional[MCPSandboxAdapter] = None
 _sandbox_orchestrator: Optional[SandboxOrchestrator] = None
 _event_publisher: Optional[SandboxEventPublisher] = None
+_sandbox_token_service: Optional[SandboxTokenService] = None
 _worker_id: Optional[int] = None  # Track worker ID for multi-worker detection
 _sync_pending: bool = False  # Track if sync is pending
 _sync_lock = asyncio.Lock()  # Async lock for sync operation
@@ -104,6 +106,23 @@ async def ensure_sandbox_sync() -> None:
         except Exception as e:
             logger.warning(f"API Server: Failed to sync sandboxes from Docker: {e}")
             _sync_pending = False
+
+
+def get_sandbox_token_service() -> SandboxTokenService:
+    """Get or create the sandbox token service singleton."""
+    global _sandbox_token_service
+
+    with _singleton_lock:
+        if _sandbox_token_service is None:
+            from src.configuration.config import get_settings
+
+            settings = get_settings()
+            # Use JWT secret as the token signing key
+            _sandbox_token_service = SandboxTokenService(
+                secret_key=settings.jwt_secret,
+                token_ttl=300,  # 5 minutes default
+            )
+        return _sandbox_token_service
 
 
 def get_sandbox_orchestrator() -> SandboxOrchestrator:
@@ -301,6 +320,57 @@ class TerminalStopResponse(BaseModel):
     message: str = Field(default="", description="Status message")
 
 
+# --- Sandbox Token Request/Response Schemas ---
+
+
+class SandboxTokenRequest(BaseModel):
+    """Request to generate a sandbox access token."""
+
+    sandbox_type: Literal["cloud", "local"] = Field(
+        default="cloud",
+        description="Type of sandbox: 'cloud' for server-managed, 'local' for user's machine",
+    )
+    ttl_seconds: int = Field(
+        default=300,
+        ge=60,
+        le=3600,
+        description="Token time-to-live in seconds (1-60 minutes)",
+    )
+
+
+class SandboxTokenResponse(BaseModel):
+    """Response containing sandbox access token."""
+
+    token: str = Field(..., description="Access token for sandbox WebSocket connection")
+    project_id: str = Field(..., description="Project ID the token is scoped to")
+    sandbox_type: str = Field(..., description="Type of sandbox (cloud/local)")
+    expires_at: str = Field(..., description="ISO format expiration timestamp")
+    expires_in: int = Field(..., description="Seconds until token expires")
+    websocket_url_hint: str = Field(
+        default="",
+        description="Hint for constructing WebSocket URL with token",
+    )
+
+
+class ValidateTokenRequest(BaseModel):
+    """Request to validate a sandbox token."""
+
+    token: str = Field(..., description="Token to validate")
+    project_id: Optional[str] = Field(
+        default=None, description="Optional project ID to verify against"
+    )
+
+
+class ValidateTokenResponse(BaseModel):
+    """Response from token validation."""
+
+    valid: bool = Field(..., description="Whether the token is valid")
+    project_id: Optional[str] = Field(None, description="Project ID from token")
+    user_id: Optional[str] = Field(None, description="User ID from token")
+    sandbox_type: Optional[str] = Field(None, description="Sandbox type from token")
+    error: Optional[str] = Field(None, description="Error message if invalid")
+
+
 # --- Profile Response Schemas ---
 
 
@@ -340,6 +410,103 @@ class HealthCheckResponse(BaseModel):
 
 
 # --- Endpoints ---
+
+
+# --- Token Endpoints for Local Sandbox Authentication ---
+
+
+@router.post("/projects/{project_id}/token", response_model=SandboxTokenResponse)
+async def generate_sandbox_token(
+    project_id: str,
+    request: SandboxTokenRequest,
+    current_user: User = Depends(get_current_user),
+    token_service: SandboxTokenService = Depends(get_sandbox_token_service),
+):
+    """
+    Generate a short-lived access token for sandbox WebSocket connection.
+
+    This token is used to authenticate WebSocket connections to sandboxes,
+    especially for local sandboxes accessed via tunnel (ngrok/cloudflare).
+
+    The token is scoped to:
+    - The specified project
+    - The requesting user
+    - The user's tenant
+
+    Token lifetime is configurable (default 5 minutes, max 1 hour).
+    """
+    # Get user's tenant (assuming single tenant per user for simplicity)
+    tenant_id = current_user.tenants[0].tenant_id if current_user.tenants else "default"
+
+    # Generate token
+    access_token = token_service.generate_token(
+        project_id=project_id,
+        user_id=current_user.id,
+        tenant_id=tenant_id,
+        sandbox_type=request.sandbox_type,
+        ttl_override=request.ttl_seconds,
+    )
+
+    # Build WebSocket URL hint
+    websocket_hint = f"wss://your-sandbox-host:8765?token={access_token.token}"
+    if request.sandbox_type == "local":
+        websocket_hint = f"wss://your-tunnel-url?token={access_token.token}"
+
+    return SandboxTokenResponse(
+        token=access_token.token,
+        project_id=access_token.project_id,
+        sandbox_type=access_token.sandbox_type,
+        expires_at=access_token.expires_at.isoformat(),
+        expires_in=max(0, int((access_token.expires_at - access_token.created_at).total_seconds())),
+        websocket_url_hint=websocket_hint,
+    )
+
+
+@router.post("/token/validate", response_model=ValidateTokenResponse)
+async def validate_sandbox_token(
+    request: ValidateTokenRequest,
+    token_service: SandboxTokenService = Depends(get_sandbox_token_service),
+):
+    """
+    Validate a sandbox access token.
+
+    This endpoint is called by the sandbox MCP server to validate
+    incoming WebSocket connection tokens.
+
+    Can optionally verify the token matches a specific project_id.
+    """
+    result = token_service.validate_token(
+        token=request.token,
+        project_id=request.project_id,
+    )
+
+    return ValidateTokenResponse(
+        valid=result.valid,
+        project_id=result.project_id,
+        user_id=result.user_id,
+        sandbox_type=result.sandbox_type,
+        error=result.error,
+    )
+
+
+@router.delete("/projects/{project_id}/tokens")
+async def revoke_project_tokens(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    token_service: SandboxTokenService = Depends(get_sandbox_token_service),
+):
+    """
+    Revoke all active tokens for a project.
+
+    Useful when disconnecting a local sandbox or for security purposes.
+    """
+    count = token_service.revoke_all_for_project(project_id)
+
+    return {
+        "project_id": project_id,
+        "revoked_count": count,
+        "message": f"Revoked {count} tokens for project",
+    }
 
 
 @router.get("/profiles", response_model=ListProfilesResponse)
@@ -423,81 +590,57 @@ async def create_sandbox(
     """
     Create a new MCP sandbox.
 
-    Creates a Docker container running the sandbox-mcp-server, which provides
-    file system operations via MCP protocol over WebSocket.
+    IMPORTANT: This API is DEPRECATED. Use POST /api/v1/projects/{project_id}/sandbox instead.
 
-    After successful creation and MCP connection, registers sandbox tools
-    to the Agent tool registry for dynamic tool injection.
+    This endpoint now delegates to ProjectSandboxLifecycleService to ensure
+    proper distributed locking and prevent duplicate container creation.
     """
     try:
         # Extract project_id from project_path
         project_id = extract_project_id(request.project_path)
 
-        # Get profile and apply settings (with override support)
-        profile = get_profile(request.profile or "standard")
+        # CRITICAL: Use ProjectSandboxLifecycleService for proper locking
+        # This prevents duplicate containers across multiple API workers
+        from src.configuration.di_container import DIContainer
 
-        # Use profile defaults, allow explicit overrides
-        memory_limit = (
-            request.memory_limit if request.memory_limit is not None else profile.memory_limit
-        )
-        cpu_limit = request.cpu_limit if request.cpu_limit is not None else profile.cpu_limit
-        timeout_seconds = (
-            request.timeout_seconds
-            if request.timeout_seconds is not None
-            else profile.timeout_seconds
+        container = DIContainer()
+        lifecycle_service = container.project_sandbox_lifecycle_service()
+
+        logger.info(
+            f"[SandboxAPI] /create delegating to ProjectSandboxLifecycleService "
+            f"for project={project_id}, tenant={tenant_id}"
         )
 
-        # Determine image: request > profile > settings default
-        image = request.image or profile.image_name
-        if not image:
-            from src.configuration.config import get_settings
-
-            image = get_settings().sandbox_default_image
-
-        config = SandboxConfig(
-            image=image,
-            memory_limit=memory_limit,
-            cpu_limit=cpu_limit,
-            timeout_seconds=timeout_seconds,
-            network_isolated=request.network_isolated,
-            environment=request.environment,
-            desktop_enabled=profile.desktop_enabled,
+        # Use the unified lifecycle service
+        sandbox_info = await lifecycle_service.get_or_create_sandbox(
+            project_id=project_id,
+            tenant_id=tenant_id,
         )
 
-        instance = await adapter.create_sandbox(
-            project_path=request.project_path,
-            config=config,
-        )
-
-        # Auto-connect to get tools
+        # Auto-connect and get tools
         tools = []
         try:
-            await adapter.connect_mcp(instance.id)
-            tool_list = await adapter.list_tools(instance.id)
-            tools = [t["name"] for t in tool_list]
+            if sandbox_info.sandbox_id:
+                await adapter.connect_mcp(sandbox_info.sandbox_id)
+                tool_list = await adapter.list_tools(sandbox_info.sandbox_id)
+                tools = [t["name"] for t in tool_list]
 
-            # Register tools to Agent context via SandboxToolRegistry
-            if tools:
-                try:
-                    from src.configuration.di_container import DIContainer
-
-                    container = DIContainer()
-                    tool_registry = container.sandbox_tool_registry()
-
-                    registered_tools = await tool_registry.register_sandbox_tools(
-                        sandbox_id=instance.id,
-                        project_id=project_id,
-                        tenant_id=tenant_id,
-                        tools=tools,
-                    )
-
-                    logger.info(
-                        f"[SandboxAPI] Registered {len(registered_tools)} tools "
-                        f"for sandbox={instance.id} to Agent context"
-                    )
-                except Exception as e:
-                    logger.warning(f"[SandboxAPI] Failed to register tools to Agent: {e}")
-
+                # Register tools to Agent context via SandboxToolRegistry
+                if tools:
+                    try:
+                        tool_registry = container.sandbox_tool_registry()
+                        registered_tools = await tool_registry.register_sandbox_tools(
+                            sandbox_id=sandbox_info.sandbox_id,
+                            project_id=project_id,
+                            tenant_id=tenant_id,
+                            tools=tools,
+                        )
+                        logger.info(
+                            f"[SandboxAPI] Registered {len(registered_tools)} tools "
+                            f"for sandbox={sandbox_info.sandbox_id} to Agent context"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[SandboxAPI] Failed to register tools to Agent: {e}")
         except Exception as e:
             logger.warning(f"Could not connect MCP: {e}")
 
@@ -506,27 +649,27 @@ async def create_sandbox(
             try:
                 await event_publisher.publish_sandbox_created(
                     project_id=project_id,
-                    sandbox_id=instance.id,
-                    status=instance.status.value,
-                    endpoint=instance.endpoint,
-                    websocket_url=instance.websocket_url,
+                    sandbox_id=sandbox_info.sandbox_id,
+                    status=sandbox_info.status,
+                    endpoint=sandbox_info.endpoint,
+                    websocket_url=sandbox_info.websocket_url,
                 )
             except Exception as e:
                 logger.warning(f"Failed to publish sandbox_created event: {e}")
 
         return SandboxResponse(
-            id=instance.id,
-            status=instance.status.value,
-            project_path=instance.project_path,
-            endpoint=instance.endpoint,
-            websocket_url=instance.websocket_url,
-            created_at=instance.created_at.isoformat(),
+            id=sandbox_info.sandbox_id,
+            status=sandbox_info.status,
+            project_path=request.project_path,
+            endpoint=sandbox_info.endpoint,
+            websocket_url=sandbox_info.websocket_url,
+            created_at=sandbox_info.created_at.isoformat() if sandbox_info.created_at else "",
             tools=tools,
-            mcp_port=getattr(instance, "mcp_port", None),
-            desktop_port=getattr(instance, "desktop_port", None),
-            terminal_port=getattr(instance, "terminal_port", None),
-            desktop_url=getattr(instance, "desktop_url", None),
-            terminal_url=getattr(instance, "terminal_url", None),
+            mcp_port=sandbox_info.mcp_port,
+            desktop_port=sandbox_info.desktop_port,
+            terminal_port=sandbox_info.terminal_port,
+            desktop_url=sandbox_info.desktop_url,
+            terminal_url=sandbox_info.terminal_url,
         )
 
     except Exception as e:

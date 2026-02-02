@@ -159,6 +159,9 @@ class ReActAgent:
             _cached_system_prompt_manager: Pre-cached SystemPromptManager singleton
             _cached_subagent_router: Pre-cached SubAgentRouter with built index
         """
+        # Default sandbox workspace path - Agent should only see sandbox, not host filesystem
+        DEFAULT_SANDBOX_WORKSPACE = Path("/workspace")
+
         self.model = model
         self.raw_tools = tools
         self.api_key = api_key
@@ -168,7 +171,8 @@ class ReActAgent:
         self.max_steps = max_steps
         self.permission_manager = permission_manager or PermissionManager()
         self.agent_mode = agent_mode  # Store agent mode for skill filtering
-        self.project_root = project_root or Path.cwd()
+        # Always use sandbox workspace path, never expose host filesystem
+        self.project_root = project_root or DEFAULT_SANDBOX_WORKSPACE
         self.plan_mode_detector = plan_mode_detector  # Plan Mode detection
         self.artifact_service = artifact_service  # Artifact service for rich outputs
 
@@ -460,6 +464,8 @@ class ReActAgent:
         tenant_id: str,
         conversation_context: Optional[List[Dict[str, str]]] = None,
         message_id: Optional[str] = None,
+        attachment_content: Optional[List[Dict[str, Any]]] = None,
+        attachment_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -731,13 +737,109 @@ class ReActAgent:
                 }
             )
 
-        # Add current user message
-        context_messages.append(
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        )
+        # Build attachment context prompt for Agent awareness
+        # This tells the Agent exactly which files were uploaded in THIS SPECIFIC turn
+        # Using a structured format that's easy for LLM to parse and distinguish from history
+        attachment_context_prompt = ""
+        if attachment_metadata:
+            file_lines = []
+            for meta in attachment_metadata:
+                filename = meta.get("filename", "unknown")
+                sandbox_path = meta.get("sandbox_path", f"/workspace/{filename}")
+                mime_type = meta.get("mime_type", "unknown")
+                size_bytes = meta.get("size_bytes", 0)
+                # Format file size for readability
+                if size_bytes < 1024:
+                    size_str = f"{size_bytes} bytes"
+                elif size_bytes < 1024 * 1024:
+                    size_str = f"{size_bytes / 1024:.1f} KB"
+                else:
+                    size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+                file_lines.append(
+                    f"  📄 文件名: {filename}\n"
+                    f"     沙箱路径: {sandbox_path}\n"
+                    f"     类型: {mime_type}\n"
+                    f"     大小: {size_str}"
+                )
+
+            if file_lines:
+                # Use clear delimiters and explicit instructions
+                attachment_context_prompt = (
+                    "╔══════════════════════════════════════════════════════════════╗\n"
+                    "║  📎 用户本次消息上传的文件 (CURRENT MESSAGE ATTACHMENTS)    ║\n"
+                    "╚══════════════════════════════════════════════════════════════╝\n\n"
+                    + "\n\n".join(file_lines)
+                    + "\n\n"
+                    "⚠️ 重要提示:\n"
+                    "1. 以上是用户在【本条消息】中上传的文件，不是历史文件\n"
+                    "2. 文件已同步到沙箱，请直接使用【沙箱路径】访问\n"
+                    "3. 如需读取文件内容，请使用 bash 工具执行: cat <沙箱路径>\n"
+                    "4. 请勿猜测或修改路径，直接使用上面列出的沙箱路径\n\n"
+                    "════════════════════════════════════════════════════════════════\n\n"
+                )
+                logger.info(
+                    f"[ReActAgent] Injecting attachment context for {len(file_lines)} files: "
+                    f"{[m.get('filename') for m in attachment_metadata]}"
+                )
+
+        # Prepend attachment context to user message
+        enhanced_user_message = attachment_context_prompt + user_message
+
+        # Add current user message (with optional multimodal attachments)
+        if attachment_content:
+            # Build multimodal content array for LLM
+            # Format: [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {...}}]
+            user_content = [{"type": "text", "text": enhanced_user_message}]
+            for attachment in attachment_content:
+                att_type = attachment.get("type", "")
+                if att_type == "image_url":
+                    # Image attachment from attachment_service.prepare_for_llm
+                    image_url_data = attachment.get("image_url", {})
+                    if image_url_data:
+                        user_content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": image_url_data,
+                            }
+                        )
+                elif att_type == "image":
+                    # Legacy format: image attachment with base64 data URL
+                    image_url = attachment.get("content", "")
+                    if image_url:
+                        user_content.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url,
+                                    "detail": attachment.get("detail", "auto"),
+                                },
+                            }
+                        )
+                elif att_type == "text":
+                    # Text attachment: append as text content
+                    text_content = attachment.get("text", "") or attachment.get("content", "")
+                    if text_content:
+                        filename = attachment.get("filename", "attachment")
+                        user_content.append(
+                            {
+                                "type": "text",
+                                "text": f"\n\n--- Attached file: {filename} ---\n{text_content}\n--- End of file ---",
+                            }
+                        )
+            context_messages.append(
+                {
+                    "role": "user",
+                    "content": user_content,
+                }
+            )
+            logger.info(f"[ReActAgent] Added {len(attachment_content)} attachments to user message")
+        else:
+            context_messages.append(
+                {
+                    "role": "user",
+                    "content": enhanced_user_message,
+                }
+            )
 
         # Use ContextWindowManager for dynamic context sizing
         context_result = await self.context_manager.build_context_window(
