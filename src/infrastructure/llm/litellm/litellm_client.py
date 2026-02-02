@@ -114,6 +114,11 @@ class LiteLLMClient(LLMClient):
             self._zai_base_url = (
                 self.provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
             )
+        elif provider_type == "kimi":
+            # Moonshot AI (Kimi) uses OpenAI-compatible API
+            os.environ["KIMI_API_KEY"] = api_key
+            self._kimi_api_key = api_key
+            self._kimi_base_url = self.provider_config.base_url or "https://api.moonshot.cn/v1"
         # Add more providers as needed
 
         # Set base URL if provided
@@ -124,7 +129,9 @@ class LiteLLMClient(LLMClient):
                 os.environ["OPENAI_BASE_URL"] = self.provider_config.base_url
             elif provider_type == "deepseek":
                 os.environ["DEEPSEEK_API_BASE"] = self.provider_config.base_url
-            # ZAI base URL is handled above
+            elif provider_type == "kimi":
+                os.environ["OPENAI_API_BASE"] = self.provider_config.base_url
+            # ZAI and KIMI base URLs are handled above
             # Customize base URL per provider type
 
         logger.debug(f"Configured LiteLLM for provider: {provider_type}")
@@ -181,6 +188,8 @@ class LiteLLMClient(LLMClient):
 
         if hasattr(self, "_zai_base_url") and self._zai_base_url:
             completion_kwargs["api_base"] = self._zai_base_url
+        elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
+            completion_kwargs["api_base"] = self._kimi_base_url
 
         # Add max retries from settings
         settings = get_settings()
@@ -271,6 +280,8 @@ class LiteLLMClient(LLMClient):
         # Add api_base for ZAI (ZhipuAI) which uses OpenAI-compatible API
         if hasattr(self, "_zai_base_url") and self._zai_base_url:
             completion_kwargs["api_base"] = self._zai_base_url
+        elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
+            completion_kwargs["api_base"] = self._kimi_base_url
 
         # Add max retries from settings
         settings = get_settings()
@@ -375,9 +386,11 @@ class LiteLLMClient(LLMClient):
                 langfuse_metadata.update(langfuse_context["extra"])
             kwargs["metadata"] = langfuse_metadata
 
-        # Add api_base for ZAI (ZhipuAI) which uses OpenAI-compatible API
+        # Add api_base for ZAI/KIMI (ZhipuAI/Moonshot) which uses OpenAI-compatible API
         if hasattr(self, "_zai_base_url") and self._zai_base_url:
             kwargs["api_base"] = self._zai_base_url
+        elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
+            kwargs["api_base"] = self._kimi_base_url
 
         # Add structured output if requested
         if response_model:
@@ -506,6 +519,9 @@ class LiteLLMClient(LLMClient):
             return f"deepseek/{model}"
         elif provider_type == "zai":
             # ZhipuAI uses OpenAI-compatible API
+            return f"openai/{model}"
+        elif provider_type == "kimi":
+            # Moonshot AI (Kimi) uses OpenAI-compatible API
             return f"openai/{model}"
         # For Qwen, let's try explicitly adding the provider if it's missing?
         # LiteLLM docs say for some providers you need provider/model.

@@ -265,6 +265,7 @@ class ProviderType(str, Enum):
     VERTEX = "vertex"
     DEEPSEEK = "deepseek"
     ZAI = "zai"  # Z.AI (ZhipuAI)
+    KIMI = "kimi"  # Moonshot AI (Kimi)
 
 
 class ProviderStatus(str, Enum):

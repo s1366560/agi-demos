@@ -24,6 +24,8 @@ PROVIDER_TYPE_MAP: Dict[str, ProviderType] = {
     "deepseek": ProviderType.DEEPSEEK,
     "zai": ProviderType.ZAI,
     "zhipu": ProviderType.ZAI,  # Alias for zai
+    "kimi": ProviderType.KIMI,  # Moonshot AI (Kimi)
+    "moonshot": ProviderType.KIMI,  # Alias for kimi
 }
 
 
@@ -198,6 +200,14 @@ def _build_provider_config(
         # Deepseek uses Qwen embeddings by default
         reranker_model = settings.deepseek_rerank_model
         base_url = settings.deepseek_base_url
+
+    elif provider_name in ("kimi", "moonshot"):
+        api_key = settings.kimi_api_key
+        llm_model = settings.kimi_model
+        llm_small_model = settings.kimi_small_model
+        embedding_model = settings.kimi_embedding_model
+        reranker_model = settings.kimi_rerank_model
+        base_url = settings.kimi_base_url
 
     # Check if API key is available
     if not api_key:

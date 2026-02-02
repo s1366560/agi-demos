@@ -34,6 +34,7 @@ class ProviderType(str, Enum):
     GEMINI = "gemini"
     DEEPSEEK = "deepseek"
     ZHIPU = "zhipu"
+    KIMI = "kimi"
     LITELLM = "litellm"
 
 
@@ -52,6 +53,7 @@ DEFAULT_PROVIDER_LIMITS: Dict[ProviderType, ProviderConfig] = {
     ProviderType.GEMINI: ProviderConfig(max_concurrent=10, timeout=300.0),
     ProviderType.DEEPSEEK: ProviderConfig(max_concurrent=10, timeout=300.0),
     ProviderType.ZHIPU: ProviderConfig(max_concurrent=10, timeout=300.0),
+    ProviderType.KIMI: ProviderConfig(max_concurrent=10, timeout=300.0),
     ProviderType.LITELLM: ProviderConfig(max_concurrent=10, timeout=300.0),  # Increased for HITL
 }
 
