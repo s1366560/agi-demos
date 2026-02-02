@@ -17,7 +17,6 @@ Benefits:
 - 95%+ latency reduction for subsequent requests (<20ms vs 300-800ms)
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -54,7 +53,9 @@ class AgentSessionConfig:
     max_steps: int = 5000  # Default, overridden by AGENT_MAX_STEPS setting
 
     # Session configuration
-    idle_timeout_seconds: int = 1800  # 30 minutes idle timeout
+    # Note: persistent=True means the workflow runs indefinitely until explicitly stopped
+    # This replaces the previous idle_timeout_seconds approach
+    persistent: bool = True  # Agent runs forever until explicitly stopped
     max_concurrent_chats: int = 10  # Max concurrent update handlers
 
     # Tool configuration
@@ -72,6 +73,9 @@ class AgentChatRequest:
 
     # Conversation context (last N messages)
     conversation_context: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Attachment IDs for multimodal input
+    attachment_ids: Optional[List[str]] = None
 
     # Optional overrides
     agent_config_override: Optional[Dict[str, Any]] = None
@@ -307,31 +311,21 @@ class AgentSessionWorkflow:
                 f"project={config.project_id}, tools={self._tool_count}"
             )
 
-            # 2. Wait for stop signal or idle timeout (long-running)
+            # 2. Wait for stop signal (persistent mode - runs indefinitely)
             # The workflow stays alive here, handling chat updates via @workflow.update
+            # Unlike previous idle_timeout approach, this workflow runs forever
+            # until explicitly stopped via the stop() signal
             workflow.logger.info(
-                f"Agent Session waiting for requests: tenant={config.tenant_id}, "
-                f"project={config.project_id}, idle_timeout={config.idle_timeout_seconds}s"
+                f"Agent Session running (persistent mode): tenant={config.tenant_id}, "
+                f"project={config.project_id}"
             )
 
-            # Catch TimeoutError to treat idle timeout as normal shutdown, not an error
-            # Ref: https://community.temporal.io/t/workflow-and-streaming-event-subscription-make-wait-condition-retryable/14993
-            try:
-                await workflow.wait_condition(
-                    lambda: self._stop_requested,
-                    timeout=timedelta(seconds=config.idle_timeout_seconds),
-                )
-                workflow.logger.info(
-                    f"Stop requested for Agent Session: tenant={config.tenant_id}, "
-                    f"project={config.project_id}"
-                )
-            except asyncio.TimeoutError:
-                # Idle timeout is a normal shutdown condition, not an error
-                workflow.logger.info(
-                    f"Agent Session idle timeout: tenant={config.tenant_id}, "
-                    f"project={config.project_id} (normal shutdown after {config.idle_timeout_seconds}s)"
-                )
-                self._stop_requested = True  # Mark as stopped for cleanup
+            # Wait indefinitely for stop signal - no timeout
+            await workflow.wait_condition(lambda: self._stop_requested)
+            workflow.logger.info(
+                f"Stop requested for Agent Session: tenant={config.tenant_id}, "
+                f"project={config.project_id}"
+            )
 
         except Exception as e:
             import traceback
@@ -439,6 +433,7 @@ class AgentSessionWorkflow:
                     "user_message": request.user_message,
                     "user_id": request.user_id,
                     "conversation_context": request.conversation_context,
+                    "attachment_ids": request.attachment_ids,
                     "session_config": effective_config,
                     "session_data": self._session_data,
                 },
@@ -480,6 +475,7 @@ class AgentSessionWorkflow:
                                 "user_message": request.user_message,
                                 "user_id": request.user_id,
                                 "conversation_context": request.conversation_context,
+                                "attachment_ids": request.attachment_ids,
                                 "session_config": effective_config,
                                 "session_data": self._session_data,
                             },
@@ -624,19 +620,18 @@ class AgentSessionWorkflow:
         self._stop_requested = True
 
     @workflow.signal
-    def extend_timeout(self, additional_seconds: int = 1800):
+    def restart(self):
         """
-        Signal to extend the idle timeout.
+        Signal to restart the Agent Session.
 
-        This can be used to keep the session alive longer when needed.
-
-        Args:
-            additional_seconds: Additional seconds to extend (default 30 minutes)
+        This signal sets a restart flag that will cause the workflow to
+        restart itself with fresh initialization after cleanup.
+        Note: The actual restart is handled by the caller starting a new workflow.
         """
-        workflow.logger.info(f"Extending Agent Session timeout by {additional_seconds}s")
-        # Note: This signal resets the wait_condition timeout implicitly
-        # by updating the last activity time - use workflow.now() for deterministic time
-        self._last_activity_time = workflow.now().isoformat()
+        workflow.logger.info("Received restart signal for Agent Session")
+        self._stop_requested = True
+        # Mark as restart (not error) for proper status reporting
+        self._error = None
 
 
 # Workflow ID helper function

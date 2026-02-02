@@ -1,7 +1,7 @@
 """Tests for ProjectSandboxLifecycleService."""
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -60,6 +60,10 @@ class TestProjectSandboxLifecycleService:
         repo.delete = AsyncMock(return_value=True)
         repo.delete_by_project = AsyncMock(return_value=True)
         repo.exists_for_project = AsyncMock(return_value=False)
+        # Distributed locking methods (SESSION-level locks)
+        repo.acquire_project_lock = AsyncMock(return_value=True)
+        repo.release_project_lock = AsyncMock()
+        repo.find_and_lock_by_project = AsyncMock(return_value=None)
         return repo
 
     @pytest.fixture
@@ -72,6 +76,9 @@ class TestProjectSandboxLifecycleService:
         adapter.health_check = AsyncMock(return_value=True)
         adapter.call_tool = AsyncMock(return_value={"content": [], "is_error": False})
         adapter.connect_mcp = AsyncMock(return_value=True)
+        # Container existence check (for detecting externally killed containers)
+        adapter.container_exists = AsyncMock(return_value=True)
+        adapter.cleanup_project_containers = AsyncMock(return_value=0)
         return adapter
 
     @pytest.fixture
@@ -248,9 +255,7 @@ class TestProjectSandboxLifecycleService:
         mock_repository.delete.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_terminate_project_sandbox_not_found(
-        self, service, mock_repository
-    ) -> None:
+    async def test_terminate_project_sandbox_not_found(self, service, mock_repository) -> None:
         """Should return False if sandbox not found."""
         mock_repository.find_by_project.return_value = None
 
@@ -329,9 +334,7 @@ class TestProjectSandboxLifecycleService:
         assert results[0].sandbox_id == "sb-abc"
 
     @pytest.mark.asyncio
-    async def test_cleanup_stale_sandboxes(
-        self, service, mock_repository, mock_adapter
-    ) -> None:
+    async def test_cleanup_stale_sandboxes(self, service, mock_repository, mock_adapter) -> None:
         """Should clean up stale sandboxes."""
         stale_association = ProjectSandbox(
             id="assoc-old",
@@ -364,9 +367,7 @@ class TestProjectSandboxLifecycleService:
         )
         mock_repository.find_stale.return_value = [stale_association]
 
-        result = await service.cleanup_stale_sandboxes(
-            max_idle_seconds=3600, dry_run=True
-        )
+        result = await service.cleanup_stale_sandboxes(max_idle_seconds=3600, dry_run=True)
 
         assert len(result) == 1
         mock_adapter.terminate_sandbox.assert_not_called()

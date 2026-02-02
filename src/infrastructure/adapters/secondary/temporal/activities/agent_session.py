@@ -373,6 +373,403 @@ async def initialize_agent_session_activity(
         }
 
 
+async def _prepare_attachments(
+    attachment_ids: list[str],
+    project_id: str,
+    tenant_id: str,
+) -> Dict[str, Any]:
+    """
+    Prepare attachments for LLM multimodal input and sync to sandbox.
+
+    Args:
+        attachment_ids: List of attachment IDs to process
+        project_id: Project ID for sandbox lookup
+        tenant_id: Tenant ID
+
+    Returns:
+        Dict containing:
+        - llm_content: List of content parts for LLM multimodal messages
+        - attachment_metadata: List of attachment metadata for Agent context injection
+    """
+    empty_result = {"llm_content": [], "attachment_metadata": []}
+
+    if not attachment_ids:
+        return empty_result
+
+    try:
+        from src.application.services.attachment_service import AttachmentService
+        from src.configuration.config import get_settings
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
+            SqlAlchemyAttachmentRepository,
+        )
+        from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import (
+            S3StorageAdapter,
+        )
+
+        settings = get_settings()
+
+        # Initialize services
+        storage_service = S3StorageAdapter(
+            bucket_name=settings.s3_bucket_name,
+            region=settings.aws_region,
+            access_key_id=settings.aws_access_key_id,
+            secret_access_key=settings.aws_secret_access_key,
+            endpoint_url=settings.s3_endpoint_url,
+        )
+
+        async with async_session_factory() as db:
+            attachment_repo = SqlAlchemyAttachmentRepository(db)
+            attachment_service = AttachmentService(
+                storage_service=storage_service,
+                attachment_repository=attachment_repo,
+            )
+
+            # Get attachments
+            attachments = await attachment_service.get_by_ids(attachment_ids)
+            if not attachments:
+                logger.warning(f"[AgentSession] No attachments found for IDs: {attachment_ids}")
+                return empty_result
+
+            logger.info(
+                f"[AgentSession] Processing {len(attachments)} attachments for project={project_id}"
+            )
+
+            # Prepare for LLM and sandbox
+            llm_content = []
+            sandbox_files = []
+            attachment_metadata = []  # Metadata for Agent context awareness
+
+            for attachment in attachments:
+                # Log attachment details for debugging
+                logger.info(
+                    f"[AgentSession] Processing attachment: id={attachment.id}, "
+                    f"filename={attachment.filename}, purpose={attachment.purpose}, "
+                    f"status={attachment.status}, mime_type={attachment.mime_type}"
+                )
+
+                # Determine sandbox path for this attachment
+                # This MUST be set before prepare_for_llm to ensure consistent path reporting
+                sandbox_path = f"/workspace/{attachment.filename}"
+
+                # Set sandbox_path on attachment object for prepare_for_llm to use
+                # (This is a temporary in-memory update, not persisted yet)
+                attachment.sandbox_path = sandbox_path
+
+                # Collect metadata for ALL attachments (for Agent context)
+                meta = {
+                    "id": attachment.id,
+                    "filename": attachment.filename,
+                    "mime_type": attachment.mime_type,
+                    "size_bytes": attachment.size_bytes,
+                    "sandbox_path": sandbox_path,
+                    "purpose": attachment.purpose.value if attachment.purpose else "llm",
+                }
+                attachment_metadata.append(meta)
+
+                # Prepare for LLM if needed
+                needs_llm = attachment.needs_llm_processing()
+                logger.debug(
+                    f"[AgentSession] Attachment {attachment.id} needs_llm_processing={needs_llm}"
+                )
+                if needs_llm:
+                    try:
+                        llm_part = await attachment_service.prepare_for_llm(attachment)
+                        llm_content.append(llm_part)
+                        logger.info(
+                            f"[AgentSession] Prepared attachment {attachment.id} for LLM: "
+                            f"type={llm_part.get('type')}, filename={attachment.filename}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"[AgentSession] Failed to prepare attachment {attachment.id} for LLM: {e}"
+                        )
+
+                # Prepare for sandbox if needed
+                needs_sandbox = attachment.needs_sandbox_import()
+                can_use = attachment.can_be_used()
+                logger.info(
+                    f"[AgentSession] Attachment {attachment.id}: "
+                    f"needs_sandbox_import={needs_sandbox}, can_be_used={can_use}"
+                )
+
+                if needs_sandbox:
+                    if not can_use:
+                        logger.warning(
+                            f"[AgentSession] Attachment {attachment.id} needs sandbox but cannot be used: "
+                            f"status={attachment.status}"
+                        )
+                    try:
+                        sandbox_data = await attachment_service.prepare_for_sandbox(attachment)
+                        sandbox_data["attachment_id"] = attachment.id
+                        sandbox_files.append(sandbox_data)
+
+                        # 验证 base64 内容完整性
+                        content_base64 = sandbox_data.get("content_base64", "")
+                        import hashlib
+
+                        content_hash = hashlib.md5(content_base64.encode()).hexdigest()[:8]
+                        estimated_size = len(content_base64) * 3 // 4
+
+                        logger.info(
+                            f"[AgentSession] Prepared attachment {attachment.id} for sandbox: "
+                            f"filename={attachment.filename}, db_size={attachment.size_bytes}, "
+                            f"base64_len={len(content_base64)}, estimated_decoded={estimated_size}, "
+                            f"content_hash={content_hash}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"[AgentSession] Failed to prepare attachment {attachment.id} for sandbox: {e}",
+                            exc_info=True,
+                        )
+
+            # Sync files to sandbox if any need it
+            logger.info(
+                f"[AgentSession] Prepared {len(sandbox_files)} files for sandbox sync, "
+                f"{len(llm_content)} for LLM"
+            )
+            if sandbox_files:
+                await _sync_files_to_sandbox(
+                    sandbox_files=sandbox_files,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    attachment_service=attachment_service,
+                )
+            else:
+                logger.warning(
+                    "[AgentSession] No files to sync to sandbox! "
+                    "Check attachment purpose and status."
+                )
+
+            return {
+                "llm_content": llm_content,
+                "attachment_metadata": attachment_metadata,
+            }
+
+    except Exception as e:
+        logger.error(f"[AgentSession] Failed to prepare attachments: {e}", exc_info=True)
+        return empty_result
+
+
+async def _sync_files_to_sandbox(
+    sandbox_files: list[Dict[str, Any]],
+    project_id: str,
+    tenant_id: str,
+    attachment_service,
+) -> None:
+    """
+    Sync files to the project's sandbox /workspace directory.
+
+    CRITICAL: This function must use the SAME sandbox that API Server created.
+    It queries the database first (single source of truth), then syncs with Docker.
+
+    Args:
+        sandbox_files: List of file data dicts with content_base64, filename, etc.
+        project_id: Project ID
+        tenant_id: Tenant ID
+        attachment_service: AttachmentService instance
+    """
+    logger.info(
+        f"[AgentSession] _sync_files_to_sandbox called with {len(sandbox_files)} files "
+        f"for project={project_id}"
+    )
+    try:
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_mcp_sandbox_adapter,
+        )
+
+        # Get MCP sandbox adapter from worker state
+        sandbox_adapter = get_mcp_sandbox_adapter()
+        if not sandbox_adapter:
+            logger.warning("[AgentSession] MCP Sandbox adapter not available, skipping file sync")
+            return
+
+        # STEP 1: Query DATABASE first (single source of truth)
+        sandbox_id = None
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+            SqlAlchemyProjectSandboxRepository,
+        )
+
+        async with async_session_factory() as db:
+            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            assoc = await sandbox_repo.find_by_project(project_id)
+            if assoc and assoc.sandbox_id:
+                sandbox_id = assoc.sandbox_id
+                logger.info(f"[AgentSession] Found sandbox_id from DB: {sandbox_id}")
+            else:
+                logger.warning(
+                    f"[AgentSession] No sandbox association for project={project_id}. "
+                    f"Files cannot be synced until sandbox is created."
+                )
+                return
+
+        # STEP 2: Sync adapter cache with Docker to ensure we have the container
+        # This handles the case where API Server created the container but
+        # Agent Worker hasn't seen it yet
+        if sandbox_id not in sandbox_adapter._active_sandboxes:
+            logger.info(
+                f"[AgentSession] Sandbox {sandbox_id} not in adapter cache, syncing from Docker..."
+            )
+            await sandbox_adapter.sync_from_docker()
+
+        # STEP 3: Verify container actually exists
+        if sandbox_id not in sandbox_adapter._active_sandboxes:
+            # Try direct Docker check
+            container_exists = await sandbox_adapter.container_exists(sandbox_id)
+            if not container_exists:
+                logger.error(
+                    f"[AgentSession] Sandbox {sandbox_id} in DB but container doesn't exist! "
+                    f"This may indicate the container was externally deleted. "
+                    f"Files cannot be synced until sandbox is recreated."
+                )
+                return
+            else:
+                # Container exists but not in adapter cache - sync again
+                await sandbox_adapter.sync_from_docker()
+
+        # STEP 4: Final verification before proceeding
+        if sandbox_id not in sandbox_adapter._active_sandboxes:
+            logger.error(
+                f"[AgentSession] Failed to sync sandbox {sandbox_id} to adapter cache. "
+                f"Skipping file sync."
+            )
+            return
+
+        logger.info(
+            f"[AgentSession] Sandbox {sandbox_id} verified, proceeding to sync "
+            f"{len(sandbox_files)} files..."
+        )
+
+        # Import files to sandbox using import_file tool (supports binary files)
+        # NOTE: We use import_file instead of write because:
+        # 1. write tool only supports text files (UTF-8 encoding)
+        # 2. import_file accepts base64 and writes bytes (preserves binary files like PDF, images)
+        for file_data in sandbox_files:
+            filename = file_data.get("filename", "unnamed")
+            content_base64 = file_data.get("content_base64", "")
+            attachment_id = file_data.get("attachment_id", "")
+            size_bytes = file_data.get("size_bytes", len(content_base64) * 3 // 4)  # Estimate
+
+            if not content_base64:
+                logger.warning(f"[AgentSession] Empty content for file {filename}, skipping")
+                continue
+
+            try:
+                # Use import_file tool which properly handles binary files
+                # Files are imported to /workspace/ (not /workspace/input/ for consistency)
+                sandbox_path = f"/workspace/{filename}"
+
+                logger.info(
+                    f"[AgentSession] Importing file to sandbox: {filename} "
+                    f"(~{size_bytes} bytes, base64_len={len(content_base64)})"
+                )
+
+                result = await sandbox_adapter.call_tool(
+                    sandbox_id=sandbox_id,
+                    tool_name="import_file",
+                    arguments={
+                        "filename": filename,
+                        "content_base64": content_base64,
+                        "destination": "/workspace",  # Import directly to /workspace
+                        "overwrite": True,
+                    },
+                    timeout=120.0,  # Longer timeout for large files
+                )
+
+                # import_file returns {"success": bool, "path": str, ...}
+                result_content = result.get("content", [])
+                is_error = result.get("is_error", False)
+
+                # Log raw result for debugging
+                logger.debug(
+                    f"[AgentSession] import_file result for {filename}: "
+                    f"is_error={is_error}, content={result_content[:500] if result_content else 'empty'}..."
+                )
+
+                # Check for "Unknown tool" error (sandbox may need update)
+                for item in result_content or []:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text = item.get("text", "")
+                        if "Unknown tool" in text:
+                            logger.error(
+                                f"[AgentSession] CRITICAL: import_file tool not available in sandbox! "
+                                f"The sandbox-mcp-server Docker image may need to be rebuilt. "
+                                f"Error: {text}"
+                            )
+
+                # Check for success in the response
+                success = False
+                if not is_error and result_content:
+                    for item in result_content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text = item.get("text", "")
+                            # Parse JSON response from import_file
+                            try:
+                                import json
+
+                                response = json.loads(text)
+                                success = response.get("success", False)
+                                if success:
+                                    sandbox_path = response.get("path", sandbox_path)
+                                    actual_size = response.get("size_bytes", 0)
+                                    sandbox_md5 = response.get("md5", "unknown")
+                                    source_md5 = file_data.get("source_md5", "unknown")
+
+                                    # Verify end-to-end integrity
+                                    if source_md5 != "unknown" and sandbox_md5 != "unknown":
+                                        if source_md5 == sandbox_md5:
+                                            logger.info(
+                                                f"[AgentSession] ✅ File integrity verified: {filename} "
+                                                f"(source_md5={source_md5} == sandbox_md5={sandbox_md5})"
+                                            )
+                                        else:
+                                            logger.error(
+                                                f"[AgentSession] ❌ FILE INTEGRITY MISMATCH: {filename} "
+                                                f"source_md5={source_md5} != sandbox_md5={sandbox_md5}"
+                                            )
+
+                                    logger.info(
+                                        f"[AgentSession] Successfully imported {filename}: "
+                                        f"path={sandbox_path}, size={actual_size} bytes, md5={sandbox_md5}"
+                                    )
+                                else:
+                                    error_msg = response.get("error", "Unknown error")
+                                    logger.warning(
+                                        f"[AgentSession] import_file returned success=False for {filename}: {error_msg}"
+                                    )
+                            except json.JSONDecodeError:
+                                # Response is plain text, check for success message
+                                success = "successfully" in text.lower()
+
+                if not success or is_error:
+                    logger.warning(
+                        f"[AgentSession] Failed to import {filename} to sandbox: "
+                        f"is_error={is_error}, result={result_content}"
+                    )
+                    continue
+
+                # Mark attachment as imported
+                if attachment_id:
+                    await attachment_service.mark_sandbox_imported(
+                        attachment_id=attachment_id,
+                        sandbox_path=sandbox_path,
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"[AgentSession] Exception importing file {filename} to sandbox: {e}",
+                    exc_info=True,
+                )
+
+    except Exception as e:
+        logger.error(f"[AgentSession] Failed to sync files to sandbox: {e}", exc_info=True)
+
+
 @activity.defn
 async def execute_chat_activity(
     input: Dict[str, Any],
@@ -421,6 +818,7 @@ async def execute_chat_activity(
         user_message = input.get("user_message", "")
         user_id = input.get("user_id", "")
         conversation_context = input.get("conversation_context", [])
+        attachment_ids = input.get("attachment_ids", [])
         session_config = input.get("session_config", {})
         # session_data from Workflow (reserved for future use)
         _ = input.get("session_data", {})
@@ -428,6 +826,20 @@ async def execute_chat_activity(
         tenant_id = session_config.get("tenant_id", "")
         project_id = session_config.get("project_id", "")
         agent_mode = session_config.get("agent_mode", "default")
+
+        # Process attachments if any
+        attachment_result = {"llm_content": [], "attachment_metadata": []}
+        if attachment_ids:
+            attachment_result = await _prepare_attachments(
+                attachment_ids=attachment_ids,
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+            logger.info(
+                f"[AgentSession] Prepared {len(attachment_result.get('llm_content', []))} "
+                f"LLM content parts, {len(attachment_result.get('attachment_metadata', []))} "
+                f"metadata entries for conversation={conversation_id}"
+            )
 
         logger.info(
             f"[AgentSession] Executing chat: conversation={conversation_id}, "
@@ -606,6 +1018,8 @@ async def execute_chat_activity(
             tenant_id=tenant_id,
             conversation_context=conversation_context,
             message_id=assistant_message_id,
+            attachment_content=attachment_result.get("llm_content"),
+            attachment_metadata=attachment_result.get("attachment_metadata"),
         ):
             event_count += 1
             sequence_number += 1

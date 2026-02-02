@@ -1,12 +1,17 @@
 """S3 Storage Adapter - Implementation of StorageServicePort for S3/MinIO."""
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
 import aioboto3
 from botocore.exceptions import ClientError
 
-from src.domain.ports.services.storage_service_port import StorageServicePort, UploadResult
+from src.domain.ports.services.storage_service_port import (
+    MultipartUploadResult,
+    PartUploadResult,
+    StorageServicePort,
+    UploadResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +79,21 @@ class S3StorageAdapter(StorageServicePort):
                     "ContentType": content_type,
                 }
                 if metadata:
-                    put_kwargs["Metadata"] = {k: str(v) for k, v in metadata.items()}
+                    # S3 metadata can only contain ASCII characters
+                    # URL-encode non-ASCII values to comply with this requirement
+                    from urllib.parse import quote
+
+                    encoded_metadata = {}
+                    for k, v in metadata.items():
+                        str_v = str(v)
+                        # Check if value contains non-ASCII characters
+                        try:
+                            str_v.encode("ascii")
+                            encoded_metadata[k] = str_v
+                        except UnicodeEncodeError:
+                            # URL-encode non-ASCII values
+                            encoded_metadata[k] = quote(str_v, safe="")
+                    put_kwargs["Metadata"] = encoded_metadata
 
                 response = await s3.put_object(**put_kwargs)
 
@@ -238,3 +257,168 @@ class S3StorageAdapter(StorageServicePort):
                 else:
                     logger.error(f"Error checking bucket: {self._bucket}, error: {e}")
                     return False
+
+    # ==================== Multipart Upload Methods ====================
+
+    async def create_multipart_upload(
+        self,
+        object_key: str,
+        content_type: str,
+        metadata: Optional[dict] = None,
+    ) -> MultipartUploadResult:
+        """Initialize a multipart upload in S3."""
+        async with await self._get_client() as s3:
+            try:
+                kwargs = {
+                    "Bucket": self._bucket,
+                    "Key": object_key,
+                    "ContentType": content_type,
+                }
+                if metadata:
+                    # S3 metadata can only contain ASCII characters
+                    # URL-encode non-ASCII values to comply with this requirement
+                    from urllib.parse import quote
+
+                    encoded_metadata = {}
+                    for k, v in metadata.items():
+                        str_v = str(v)
+                        try:
+                            str_v.encode("ascii")
+                            encoded_metadata[k] = str_v
+                        except UnicodeEncodeError:
+                            encoded_metadata[k] = quote(str_v, safe="")
+                    kwargs["Metadata"] = encoded_metadata
+
+                response = await s3.create_multipart_upload(**kwargs)
+
+                logger.info(
+                    f"Created multipart upload: {object_key}, upload_id={response['UploadId']}"
+                )
+
+                return MultipartUploadResult(
+                    upload_id=response["UploadId"],
+                    object_key=object_key,
+                )
+
+            except ClientError as e:
+                logger.error(f"Failed to create multipart upload: {object_key}, error: {e}")
+                raise
+
+    async def upload_part(
+        self,
+        object_key: str,
+        upload_id: str,
+        part_number: int,
+        data: bytes,
+    ) -> PartUploadResult:
+        """Upload a single part in a multipart upload to S3."""
+        async with await self._get_client() as s3:
+            try:
+                response = await s3.upload_part(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                    UploadId=upload_id,
+                    PartNumber=part_number,
+                    Body=data,
+                )
+
+                logger.debug(f"Uploaded part {part_number} for {object_key} ({len(data)} bytes)")
+
+                return PartUploadResult(
+                    part_number=part_number,
+                    etag=response["ETag"].strip('"'),
+                )
+
+            except ClientError as e:
+                logger.error(f"Failed to upload part {part_number} for {object_key}, error: {e}")
+                raise
+
+    async def complete_multipart_upload(
+        self,
+        object_key: str,
+        upload_id: str,
+        parts: List[PartUploadResult],
+    ) -> UploadResult:
+        """Complete a multipart upload in S3."""
+        async with await self._get_client() as s3:
+            try:
+                # Build parts list for S3 API
+                s3_parts = [
+                    {"PartNumber": p.part_number, "ETag": f'"{p.etag}"'}
+                    for p in sorted(parts, key=lambda x: x.part_number)
+                ]
+
+                response = await s3.complete_multipart_upload(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                    UploadId=upload_id,
+                    MultipartUpload={"Parts": s3_parts},
+                )
+
+                # Get file info after completion
+                head = await s3.head_object(Bucket=self._bucket, Key=object_key)
+
+                logger.info(
+                    f"Completed multipart upload: {object_key} ({head['ContentLength']} bytes)"
+                )
+
+                return UploadResult(
+                    object_key=object_key,
+                    size_bytes=head["ContentLength"],
+                    content_type=head.get("ContentType", "application/octet-stream"),
+                    etag=response.get("ETag", "").strip('"'),
+                )
+
+            except ClientError as e:
+                logger.error(f"Failed to complete multipart upload: {object_key}, error: {e}")
+                raise
+
+    async def abort_multipart_upload(
+        self,
+        object_key: str,
+        upload_id: str,
+    ) -> bool:
+        """Abort a multipart upload and clean up uploaded parts."""
+        async with await self._get_client() as s3:
+            try:
+                await s3.abort_multipart_upload(
+                    Bucket=self._bucket,
+                    Key=object_key,
+                    UploadId=upload_id,
+                )
+
+                logger.info(f"Aborted multipart upload: {object_key}, upload_id={upload_id}")
+                return True
+
+            except ClientError as e:
+                logger.error(f"Failed to abort multipart upload: {object_key}, error: {e}")
+                raise
+
+    async def generate_presigned_upload_url(
+        self,
+        object_key: str,
+        content_type: str,
+        expiration_seconds: int = 3600,
+    ) -> str:
+        """Generate a presigned URL for uploading a file directly."""
+        async with await self._get_client() as s3:
+            try:
+                url = await s3.generate_presigned_url(
+                    "put_object",
+                    Params={
+                        "Bucket": self._bucket,
+                        "Key": object_key,
+                        "ContentType": content_type,
+                    },
+                    ExpiresIn=expiration_seconds,
+                )
+
+                logger.debug(
+                    f"Generated presigned upload URL for: {object_key} "
+                    f"(expires in {expiration_seconds}s)"
+                )
+                return url
+
+            except ClientError as e:
+                logger.error(f"Failed to generate presigned upload URL: {object_key}, error: {e}")
+                raise

@@ -572,8 +572,12 @@ async def _load_project_sandbox_tools(
 ) -> Dict[str, Any]:
     """Load MCP tools from project's sandbox.
 
-    This function checks if the project has an active sandbox by querying Docker
-    directly. If no sandbox exists, it creates one automatically.
+    This function first queries the database for existing sandbox associations,
+    then falls back to Docker discovery. It NEVER creates new sandboxes -
+    sandbox creation is handled by ProjectSandboxLifecycleService.
+
+    CRITICAL: This ensures API Server and Agent Worker use the SAME sandbox,
+    preventing the duplicate container bug.
 
     Args:
         project_id: Project ID
@@ -583,9 +587,7 @@ async def _load_project_sandbox_tools(
         Dictionary of tool name -> SandboxMCPToolWrapper instances
     """
     import asyncio
-    import tempfile
 
-    from src.domain.ports.services.sandbox_port import SandboxConfig
     from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 
     tools: Dict[str, Any] = {}
@@ -596,69 +598,103 @@ async def _load_project_sandbox_tools(
     project_sandbox_id = None
 
     try:
-        # Query Docker directly to find sandbox containers for this project
-        loop = asyncio.get_event_loop()
-
-        # List all containers with memstack.sandbox label
-        containers = await loop.run_in_executor(
-            None,
-            lambda: _mcp_sandbox_adapter._docker.containers.list(
-                all=True,
-                filters={"label": "memstack.sandbox=true"},
-            ),
+        # STEP 1: Query DATABASE first (single source of truth)
+        # This ensures we use the same sandbox that API Server created
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+            SqlAlchemyProjectSandboxRepository,
         )
 
-        for container in containers:
-            # Check if this container belongs to the project
-            labels = container.labels or {}
-            if labels.get("memstack.project_id") == project_id:
-                project_sandbox_id = container.name
-                # If container exists but is not running, try to start it
-                if container.status != "running":
-                    logger.info(
-                        f"Starting existing sandbox {project_sandbox_id} for project {project_id}"
+        async with async_session_factory() as db:
+            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            assoc = await sandbox_repo.find_by_project(project_id)
+            if assoc and assoc.sandbox_id:
+                project_sandbox_id = assoc.sandbox_id
+                logger.info(
+                    f"[AgentWorker] Found sandbox_id from DB for project {project_id}: "
+                    f"{project_sandbox_id}"
+                )
+
+        # STEP 2: If found in DB, verify container exists and sync to adapter
+        if project_sandbox_id:
+            # Sync from Docker to ensure adapter has the container in its cache
+            if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+                logger.info(
+                    f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
+                    f"to adapter's internal state"
+                )
+                await _mcp_sandbox_adapter.sync_from_docker()
+
+            # Verify container actually exists after sync
+            if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+                # Container might have been deleted - check if it's running in Docker
+                container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
+                if not container_exists:
+                    logger.warning(
+                        f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
+                        f"doesn't exist. Sandbox will be recreated by API on next access."
                     )
-                    await loop.run_in_executor(None, lambda: container.start())
-                    # Wait for container to be ready
-                    await asyncio.sleep(2)
-                break
+                    return tools
 
-            # Also check by project path
-            mounts = container.attrs.get("Mounts", [])
-            for mount in mounts:
-                source = mount.get("Source", "")
-                if source and f"memstack_{project_id}" in source:
-                    project_sandbox_id = container.name
-                    break
-            if project_sandbox_id:
-                break
-
-        # If no sandbox exists, create one automatically
+        # STEP 3: If not in DB, fall back to Docker discovery (for backwards compat)
         if not project_sandbox_id:
-            logger.info(f"No sandbox found for project {project_id}, creating one automatically...")
-
-            # Create a temporary workspace directory for the project
-            import os
-
-            workspace_dir = os.path.join(tempfile.gettempdir(), f"memstack_{project_id}")
-            os.makedirs(workspace_dir, exist_ok=True)
-
-            # Create sandbox with project_id and tenant_id labels
-            instance = await _mcp_sandbox_adapter.create_sandbox(
-                project_path=workspace_dir,
-                config=SandboxConfig(image="sandbox-mcp-server:latest", timeout_seconds=3600),
-                project_id=project_id,
-                tenant_id=tenant_id,
+            logger.info(
+                f"[AgentWorker] No sandbox association in DB for project {project_id}, "
+                f"checking Docker directly..."
             )
-            project_sandbox_id = instance.id
-            logger.info(f"Created new sandbox {project_sandbox_id} for project {project_id}")
+            loop = asyncio.get_event_loop()
 
-        # Sync the sandbox to adapter's internal tracking if not already tracked
-        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
-            logger.info(f"Syncing sandbox {project_sandbox_id} to adapter's internal state")
-            await _mcp_sandbox_adapter.sync_from_docker()
+            # List all containers with memstack.sandbox label
+            containers = await loop.run_in_executor(
+                None,
+                lambda: _mcp_sandbox_adapter._docker.containers.list(
+                    all=True,
+                    filters={"label": "memstack.sandbox=true"},
+                ),
+            )
 
-        # Connect to MCP
+            for container in containers:
+                # Check if this container belongs to the project
+                labels = container.labels or {}
+                if labels.get("memstack.project_id") == project_id:
+                    project_sandbox_id = container.name
+                    # If container exists but is not running, try to start it
+                    if container.status != "running":
+                        logger.info(
+                            f"[AgentWorker] Starting existing sandbox {project_sandbox_id} "
+                            f"for project {project_id}"
+                        )
+                        await loop.run_in_executor(None, lambda c=container: c.start())
+                        await asyncio.sleep(2)
+                    break
+
+                # Also check by project path
+                mounts = container.attrs.get("Mounts", [])
+                for mount in mounts:
+                    source = mount.get("Source", "")
+                    if source and f"memstack_{project_id}" in source:
+                        project_sandbox_id = container.name
+                        break
+                if project_sandbox_id:
+                    break
+
+            # Sync to adapter if found in Docker
+            if project_sandbox_id:
+                if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+                    await _mcp_sandbox_adapter.sync_from_docker()
+
+        # STEP 4: If still no sandbox found, DON'T CREATE ONE
+        # Let the API Server handle sandbox creation via ProjectSandboxLifecycleService
+        if not project_sandbox_id:
+            logger.info(
+                f"[AgentWorker] No sandbox found for project {project_id}. "
+                f"Sandbox will be created by API Server on first request."
+            )
+            return tools
+
+        # STEP 5: Connect to MCP and load tools
         await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
 
         # List tools from the sandbox
@@ -681,11 +717,15 @@ async def _load_project_sandbox_tools(
             tools[wrapper.name] = wrapper
 
         logger.info(
-            f"Loaded {len(tools)} tools from sandbox {project_sandbox_id} for project {project_id}"
+            f"[AgentWorker] Loaded {len(tools)} tools from sandbox {project_sandbox_id} "
+            f"for project {project_id}"
         )
 
     except Exception as e:
-        logger.warning(f"Failed to load project sandbox tools: {e}")
+        logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
+        import traceback
+
+        logger.debug(f"[AgentWorker] Traceback: {traceback.format_exc()}")
 
     return tools
 

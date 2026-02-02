@@ -111,7 +111,7 @@ async def initialize_project_agent_activity(
             temperature=config_data.get("temperature", 0.7),
             max_tokens=config_data.get("max_tokens", 4096),
             max_steps=config_data.get("max_steps", 20),
-            idle_timeout_seconds=config_data.get("idle_timeout_seconds", 1800),
+            persistent=config_data.get("persistent", True),
             max_concurrent_chats=config_data.get("max_concurrent_chats", 10),
             mcp_tools_ttl_seconds=config_data.get("mcp_tools_ttl_seconds", 300),
             enable_skills=config_data.get("enable_skills", True),

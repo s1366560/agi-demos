@@ -2,11 +2,19 @@
 
 This module provides a unified interface for sandbox operations,
 used by both REST API and Agent Tools to eliminate code duplication.
+
+Supports both cloud sandboxes (Docker containers) and local sandboxes
+(user's machine via WebSocket tunnel).
 """
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.sandbox.local_sandbox_adapter import (
+        LocalSandboxAdapter,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DesktopConfig:
     """Desktop service configuration."""
+
     resolution: str = "1280x720"
     display: str = ":1"
     port: int = 6080
@@ -27,6 +36,7 @@ class DesktopConfig:
 @dataclass
 class TerminalConfig:
     """Terminal service configuration."""
+
     port: int = 7681
     shell: str = "/bin/bash"
 
@@ -39,6 +49,7 @@ class TerminalConfig:
 @dataclass
 class DesktopStatus:
     """Desktop service status."""
+
     running: bool
     url: Optional[str] = None
     display: str = ":1"
@@ -50,6 +61,7 @@ class DesktopStatus:
 @dataclass
 class TerminalStatus:
     """Terminal service status."""
+
     running: bool
     url: Optional[str] = None
     port: int = 7681
@@ -60,6 +72,7 @@ class TerminalStatus:
 @dataclass
 class CommandResult:
     """Command execution result."""
+
     exit_code: int
     stdout: str
     stderr: str
@@ -80,6 +93,10 @@ class SandboxOrchestrator:
     MCPSandboxAdapter and provides a consistent interface with
     unified event publishing.
 
+    Supports both:
+    - Cloud sandboxes: Docker containers managed by MCPSandboxAdapter
+    - Local sandboxes: User's machine via LocalSandboxAdapter
+
     Usage:
         orchestrator = SandboxOrchestrator(sandbox_adapter, event_publisher)
 
@@ -98,21 +115,51 @@ class SandboxOrchestrator:
 
     def __init__(
         self,
-        sandbox_adapter: Any,  # SandboxPort
+        sandbox_adapter: Any,  # SandboxPort (MCPSandboxAdapter for cloud)
         event_publisher: Optional[Any] = None,  # Reserved for future use
         default_timeout: int = 30,
+        local_sandbox_adapter: Optional["LocalSandboxAdapter"] = None,
     ) -> None:
         """
         Initialize the orchestrator.
 
         Args:
-            sandbox_adapter: Sandbox adapter (MCPSandboxAdapter instance)
+            sandbox_adapter: Cloud sandbox adapter (MCPSandboxAdapter instance)
             event_publisher: Reserved for future event publishing integration
             default_timeout: Default timeout for operations (seconds)
+            local_sandbox_adapter: Optional local sandbox adapter for user's machine
         """
         self._adapter = sandbox_adapter
+        self._local_adapter = local_sandbox_adapter
         self._events = event_publisher  # Currently not used; events handled by API layer
         self._default_timeout = default_timeout
+        # Track sandbox type mapping: sandbox_id -> "cloud" or "local"
+        self._sandbox_types: Dict[str, str] = {}
+
+    def register_sandbox_type(self, sandbox_id: str, sandbox_type: str) -> None:
+        """
+        Register the type of a sandbox for routing.
+
+        Args:
+            sandbox_id: Sandbox identifier
+            sandbox_type: "cloud" or "local"
+        """
+        self._sandbox_types[sandbox_id] = sandbox_type
+        logger.debug(f"Registered sandbox {sandbox_id} as {sandbox_type}")
+
+    def get_sandbox_type(self, sandbox_id: str) -> str:
+        """Get the type of a sandbox (defaults to "cloud")."""
+        return self._sandbox_types.get(sandbox_id, "cloud")
+
+    def is_local_sandbox(self, sandbox_id: str) -> bool:
+        """Check if a sandbox is a local sandbox."""
+        return self.get_sandbox_type(sandbox_id) == "local"
+
+    def _get_adapter_for_sandbox(self, sandbox_id: str) -> Any:
+        """Get the appropriate adapter for a sandbox."""
+        if self.is_local_sandbox(sandbox_id) and self._local_adapter:
+            return self._local_adapter
+        return self._adapter
 
     # ========================================================================
     # Desktop Service Management
@@ -142,10 +189,11 @@ class SandboxOrchestrator:
             SandboxNotFoundError: If sandbox doesn't exist
         """
         config = config or DesktopConfig()
+        adapter = self._get_adapter_for_sandbox(sandbox_id)
 
         try:
             # Call MCP tool via adapter
-            result = await self._adapter.call_tool(
+            result = await adapter.call_tool(
                 sandbox_id,
                 "start_desktop",
                 {
@@ -170,8 +218,9 @@ class SandboxOrchestrator:
 
     async def stop_desktop(self, sandbox_id: str) -> bool:
         """Stop the remote desktop service."""
+        adapter = self._get_adapter_for_sandbox(sandbox_id)
         try:
-            result = await self._adapter.call_tool(
+            result = await adapter.call_tool(
                 sandbox_id,
                 "stop_desktop",
                 {"_workspace_dir": "/workspace"},
@@ -250,7 +299,8 @@ class SandboxOrchestrator:
 
     async def get_terminal_status(self, sandbox_id: str) -> TerminalStatus:
         """Get the current terminal service status."""
-        result = await self._adapter.call_tool(
+        adapter = self._get_adapter_for_sandbox(sandbox_id)
+        result = await adapter.call_tool(
             sandbox_id,
             "get_terminal_status",
             {"_workspace_dir": "/workspace"},
@@ -287,8 +337,9 @@ class SandboxOrchestrator:
         import time
 
         start_time = time.time()
+        adapter = self._get_adapter_for_sandbox(sandbox_id)
 
-        result = await self._adapter.call_tool(
+        result = await adapter.call_tool(
             sandbox_id,
             "bash",
             {
@@ -327,6 +378,7 @@ class SandboxOrchestrator:
 
         try:
             import json
+
             data = json.loads(content_list[0].get("text", "{}"))
             # If success is True, consider desktop as running
             running = data.get("running", data.get("success", False))
@@ -349,6 +401,7 @@ class SandboxOrchestrator:
 
         try:
             import json
+
             data = json.loads(content_list[0].get("text", "{}"))
             # If success is True, consider terminal as running
             running = data.get("running", data.get("success", False))

@@ -359,10 +359,27 @@ class SessionProcessor:
             self._state = ProcessorState.ERROR
 
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
-        """Extract the latest user query from messages."""
+        """Extract the latest user query from messages.
+
+        Handles both simple string content and multimodal content arrays.
+        For multimodal content, extracts the text parts.
+        """
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                return msg.get("content", "")
+                content = msg.get("content", "")
+                # Handle multimodal content (list of content parts)
+                if isinstance(content, list):
+                    # Extract text from content parts
+                    text_parts = []
+                    for part in content:
+                        if isinstance(part, dict):
+                            if part.get("type") == "text":
+                                text_parts.append(part.get("text", ""))
+                        elif isinstance(part, str):
+                            text_parts.append(part)
+                    return " ".join(text_parts) if text_parts else ""
+                # Simple string content
+                return content
         return None
 
     def _classify_tool_by_description(self, tool_name: str, tool_def: ToolDefinition) -> str:
@@ -1142,6 +1159,37 @@ class SessionProcessor:
         self._state = ProcessorState.ACTING
 
         try:
+            # Handle _raw arguments (from failed JSON parsing in llm_stream)
+            # This happens when LLM returns malformed JSON for tool arguments
+            if "_raw" in arguments and len(arguments) == 1:
+                raw_args = arguments["_raw"]
+                logger.warning(
+                    f"[Processor] Attempting to parse _raw arguments for tool {tool_name}: "
+                    f"{raw_args[:200]}..."
+                )
+                try:
+                    # Try to parse the raw string as JSON
+                    arguments = json.loads(raw_args)
+                    logger.info(f"[Processor] Successfully parsed _raw arguments for {tool_name}")
+                except json.JSONDecodeError as e:
+                    # Still can't parse - report error to LLM
+                    error_msg = (
+                        f"Invalid JSON in tool arguments: {str(e)}. "
+                        f"Raw arguments: {raw_args[:500]}..."
+                    )
+                    logger.error(f"[Processor] Failed to parse _raw arguments: {e}")
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = error_msg
+                    tool_part.end_time = time.time()
+
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error=error_msg,
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                    return
+
             # Call tool execute function
             start_time = time.time()
             result = await tool_def.execute(**arguments)

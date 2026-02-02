@@ -210,10 +210,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     }
   }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, attachmentIds?: string[]) => {
     if (!projectId) return;
     // Note: Sandbox auto-creation removed - backend should handle sandbox provisioning
-    const newId = await sendMessage(content, projectId, { onAct, onObserve });
+    const newId = await sendMessage(content, projectId, { onAct, onObserve, attachmentIds });
     if (!conversationId && newId) {
       if (customBasePath) {
         navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
@@ -342,6 +342,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
             isPlanMode={isPlanMode}
             onTogglePlanMode={togglePlanMode}
             disabled={isLoadingHistory}
+            conversationId={activeConversationId || undefined}
+            projectId={projectId || undefined}
           />
         </div>
 

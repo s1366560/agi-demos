@@ -56,12 +56,32 @@ let thoughtDeltaBuffer = '';
 let thoughtDeltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * Clear all delta buffers and timers
+ * IMPORTANT: Call this before starting any new streaming session to prevent
+ * stale buffer content from being flushed into the new session
+ */
+function clearAllDeltaBuffers(): void {
+    if (textDeltaFlushTimer) {
+        clearTimeout(textDeltaFlushTimer);
+        textDeltaFlushTimer = null;
+    }
+    if (thoughtDeltaFlushTimer) {
+        clearTimeout(thoughtDeltaFlushTimer);
+        thoughtDeltaFlushTimer = null;
+    }
+    textDeltaBuffer = '';
+    thoughtDeltaBuffer = '';
+}
+
+/**
  * Additional handlers that can be injected into sendMessage
  * for external integrations (e.g., sandbox tool detection)
  */
 export interface AdditionalAgentHandlers {
     onAct?: (event: AgentEvent<ActEventData>) => void;
     onObserve?: (event: AgentEvent<ObserveEventData>) => void;
+    /** Attachment IDs to include with the message */
+    attachmentIds?: string[];
 }
 
 /**
@@ -392,6 +412,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                         isThinkingStreaming, activeToolCalls, pendingToolsStack, workPlan, isPlanMode,
                         executionPlan, pendingClarification, pendingDecision, pendingEnvVarRequest,
                         doomLoopDetected, hasEarlier, earliestLoadedSequence } = get();
+
+                    // CRITICAL: Clear delta buffers when switching conversations
+                    // Prevents stale streaming content from previous conversation
+                    clearAllDeltaBuffers();
 
                     // Save current conversation state before switching
                     if (activeConversationId && activeConversationId !== id) {
@@ -732,6 +756,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 `subscribing to WebSocket for live events...`
                             );
 
+                            // CRITICAL: Clear any stale delta buffers before subscribing to running session
+                            // This prevents duplicate content from previous page loads
+                            clearAllDeltaBuffers();
+
                             // Set streaming state
                             set({ isStreaming: true, agentState: "thinking" });
 
@@ -903,6 +931,10 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                 sendMessage: async (content, projectId, additionalHandlers) => {
                     const { activeConversationId, messages, timeline, getStreamingConversationCount } = get();
+
+                    // CRITICAL: Clear any stale delta buffers before starting new stream
+                    // This prevents duplicate content from previous sessions being flushed
+                    clearAllDeltaBuffers();
 
                     // Check concurrent streaming limit
                     const streamingCount = getStreamingConversationCount();
@@ -1540,17 +1572,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                         onComplete: (event) => {
                             const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                            // Clear all delta buffers on completion
-                            if (textDeltaFlushTimer) {
-                                clearTimeout(textDeltaFlushTimer);
-                                textDeltaFlushTimer = null;
-                            }
-                            if (thoughtDeltaFlushTimer) {
-                                clearTimeout(thoughtDeltaFlushTimer);
-                                thoughtDeltaFlushTimer = null;
-                            }
-                            textDeltaBuffer = '';
-                            thoughtDeltaBuffer = '';
+                            // Clear all delta buffers on completion using helper function
+                            clearAllDeltaBuffers();
 
                             const convState = getConversationState(handlerConversationId);
 
@@ -1667,6 +1690,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     conversation_id: conversationId!,
                                     message: content,
                                     project_id: projectId,
+                                    attachment_ids: additionalHandlers?.attachmentIds,
                                 },
                                 handler
                             )
@@ -1693,6 +1717,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 conversation_id: conversationId!,
                                 message: content,
                                 project_id: projectId,
+                                attachment_ids: additionalHandlers?.attachmentIds,
                             },
                             handler
                         );
@@ -1862,6 +1887,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                         }
 
                         await agentService.respondToClarification(requestId, answer);
+                        // CRITICAL: Clear delta buffers before resuming streaming
+                        clearAllDeltaBuffers();
                         set({ pendingClarification: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
 
                         // Broadcast HITL state change to other tabs
@@ -2003,6 +2030,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                         }
 
                         await agentService.respondToDecision(requestId, decision);
+                        // CRITICAL: Clear delta buffers before resuming streaming
+                        clearAllDeltaBuffers();
                         set({ pendingDecision: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
 
                         // Broadcast HITL state change to other tabs
@@ -2144,6 +2173,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                         }
 
                         await agentService.respondToEnvVar(requestId, values);
+                        // CRITICAL: Clear delta buffers before resuming streaming
+                        clearAllDeltaBuffers();
                         set({ pendingEnvVarRequest: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
 
                         // Broadcast HITL state change to other tabs

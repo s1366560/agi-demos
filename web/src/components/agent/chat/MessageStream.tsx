@@ -5,8 +5,9 @@
  * Matches the design from docs/statics/project workbench/agent/
  */
 
-import { ReactNode, memo } from "react";
+import { ReactNode, memo, useState, useMemo } from "react";
 import { MarkdownContent } from "./MarkdownContent";
+import { foldTextWithMetadata } from "../../../utils/toolResultUtils";
 
 export interface MessageStreamProps {
     /** Messages to display */
@@ -151,6 +152,96 @@ export function formatToolResult(result: unknown): string {
     }
     // Convert objects, arrays, numbers, booleans to JSON string
     return JSON.stringify(result, null, 2);
+}
+
+/**
+ * ToolResultDisplay - Tool result with collapsible long text support
+ * 
+ * When the result text exceeds 10 lines (5 + 5), it will:
+ * - Show first 5 lines and last 5 lines by default
+ * - Display a "Show Full" button to expand the full content
+ * - Display a "Show Less" button when expanded to collapse it back
+ */
+interface ToolResultDisplayProps {
+    /** Result text to display */
+    result: string;
+    /** Whether this is an error result */
+    isError: boolean;
+}
+
+function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    
+    // Memoize the folded result calculation
+    const { foldedText, isFolded, totalLines } = useMemo(() => {
+        const { text, folded } = foldTextWithMetadata(result, 5);
+        const lines = result.split('\n').length;
+        return { foldedText: text, isFolded: folded, totalLines: lines };
+    }, [result]);
+    
+    const displayText = isExpanded ? result : foldedText;
+    
+    if (isError) {
+        return (
+            <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[12px]">
+                            error
+                        </span>
+                        Error
+                    </label>
+                    {isFolded && (
+                        <button
+                            type="button"
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className="text-[10px] text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+                        >
+                            <span className="material-symbols-outlined text-[12px]">
+                                {isExpanded ? 'unfold_less' : 'unfold_more'}
+                            </span>
+                            {isExpanded ? 'Show Less' : `Show Full (${totalLines} lines)`}
+                        </button>
+                    )}
+                </div>
+                <div className="px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto max-h-48 overflow-y-auto">
+                    <pre className="whitespace-pre-wrap break-words">{displayText}</pre>
+                </div>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="space-y-1">
+            <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-emerald-600 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[12px]">
+                        output
+                    </span>
+                    Output
+                </label>
+                {isFolded && (
+                    <button
+                        type="button"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                    >
+                        <span className="material-symbols-outlined text-[12px]">
+                            {isExpanded ? 'unfold_less' : 'unfold_more'}
+                        </span>
+                        {isExpanded ? 'Show Less' : `Show Full (${totalLines} lines)`}
+                    </button>
+                )}
+            </div>
+            <div className={`px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-x-auto ${isExpanded ? 'max-h-96' : 'max-h-48'} overflow-y-auto`}>
+                <MarkdownContent
+                    content={displayText}
+                    className="prose-p:my-0 prose-headings:my-1 prose-ul:my-0 prose-ol:my-0"
+                    prose={true}
+                />
+            </div>
+        </div>
+    );
 }
 
 /**
@@ -310,36 +401,18 @@ export function ToolExecutionCardDisplay({
 
                         {/* Success Result */}
                         {status === "success" && formattedResult && (
-                            <div className="space-y-1">
-                                <label className="text-[10px] uppercase font-bold text-emerald-600 flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-[12px]">
-                                        output
-                                    </span>
-                                    Output
-                                </label>
-                                <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-x-auto max-h-48 overflow-y-auto">
-                                    <MarkdownContent
-                                        content={formattedResult}
-                                        className="prose-p:my-0 prose-headings:my-1 prose-ul:my-0 prose-ol:my-0"
-                                        prose={true}
-                                    />
-                                </div>
-                            </div>
+                            <ToolResultDisplay 
+                                result={formattedResult} 
+                                isError={false}
+                            />
                         )}
 
                         {/* Error Result */}
                         {status === "error" && error && (
-                            <div className="space-y-1">
-                                <label className="text-[10px] uppercase font-bold text-red-600 flex items-center gap-1">
-                                    <span className="material-symbols-outlined text-[12px]">
-                                        error
-                                    </span>
-                                    Error
-                                </label>
-                                <div className="px-3 py-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto max-h-48 overflow-y-auto">
-                                    <pre className="whitespace-pre-wrap break-words">{error}</pre>
-                                </div>
-                            </div>
+                            <ToolResultDisplay 
+                                result={error} 
+                                isError={true}
+                            />
                         )}
                     </div>
                 </details>

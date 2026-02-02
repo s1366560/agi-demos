@@ -137,3 +137,6 @@ screenshots/plan-mode-entered-success.png
 screenshots/plan-mode-final-layout.png
 screenshots/plan-mode-in-input-bar.png
 screenshots/plan-mode-modal-from-input-bar.png
+
+# Local Sandbox App (Electron build outputs)
+local-sandbox-app/

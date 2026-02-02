@@ -318,6 +318,30 @@ class ConnectionManager:
 
         return sent_count
 
+    async def broadcast_lifecycle_state(
+        self, tenant_id: str, project_id: str, state: Dict[str, Any]
+    ) -> int:
+        """
+        Broadcast lifecycle state change to all sessions subscribed to a project.
+
+        This is a convenience method that wraps state in the proper message format.
+
+        Args:
+            tenant_id: Tenant identifier
+            project_id: Project identifier
+            state: Lifecycle state data (lifecycleState, isActive, isInitialized, etc.)
+
+        Returns:
+            Number of sessions notified
+        """
+        message = {
+            "type": "lifecycle_state_change",
+            "project_id": project_id,
+            "data": state,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        return await self.broadcast_to_project(tenant_id, project_id, message)
+
     async def disconnect(self, session_id: str) -> None:
         """Remove a WebSocket connection and clean up subscriptions for a session."""
         async with self._lock:
@@ -595,6 +619,16 @@ async def handle_client_message(
     elif msg_type == "env_var_respond":
         await handle_env_var_respond(websocket, user_id, tenant_id, session_id, message, db)
 
+    # Agent lifecycle control handlers
+    elif msg_type == "start_agent":
+        await handle_start_agent(websocket, user_id, tenant_id, session_id, message, db)
+
+    elif msg_type == "stop_agent":
+        await handle_stop_agent(websocket, user_id, tenant_id, session_id, message)
+
+    elif msg_type == "restart_agent":
+        await handle_restart_agent(websocket, user_id, tenant_id, session_id, message, db)
+
     else:
         await websocket.send_json(
             {
@@ -620,6 +654,7 @@ async def handle_send_message(
     conversation_id = message.get("conversation_id")
     user_message = message.get("message")
     project_id = message.get("project_id")
+    attachment_ids = message.get("attachment_ids")  # Optional attachment IDs
 
     if not all([conversation_id, user_message, project_id]):
         await websocket.send_json(
@@ -727,6 +762,7 @@ async def handle_send_message(
                 user_message=user_message,
                 project_id=project_id,
                 tenant_id=tenant_id,
+                attachment_ids=attachment_ids,
             )
         )
         manager.add_bridge_task(session_id, conversation_id, task)
@@ -751,6 +787,7 @@ async def stream_agent_to_websocket(
     user_message: str,
     project_id: str,
     tenant_id: str,
+    attachment_ids: Optional[list] = None,
 ) -> None:
     """
     Stream agent events to WebSocket.
@@ -767,6 +804,7 @@ async def stream_agent_to_websocket(
             project_id=project_id,
             user_id=user_id,
             tenant_id=tenant_id,
+            attachment_ids=attachment_ids,
         ):
             event_count += 1
             event_type = event.get("type", "unknown")
@@ -1168,7 +1206,16 @@ async def handle_subscribe_lifecycle_state(
     Handle subscribe_lifecycle_state: Subscribe to agent lifecycle state updates.
 
     This enables real-time lifecycle state bar updates via WebSocket.
+    Also sends the current agent state immediately upon subscription.
     """
+    from temporalio.client import WorkflowExecutionStatus
+
+    from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
+    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
+        AgentSessionWorkflow,
+        get_agent_session_workflow_id,
+    )
+
     project_id = message.get("project_id")
 
     if not project_id:
@@ -1192,6 +1239,100 @@ async def handle_subscribe_lifecycle_state(
                 "timestamp": datetime.utcnow().isoformat(),
             }
         )
+
+        # Query current agent state and send immediately
+        try:
+            client = await TemporalClientFactory.get_client()
+            workflow_id = get_agent_session_workflow_id(tenant_id, project_id)
+            handle = client.get_workflow_handle(workflow_id)
+
+            try:
+                describe = await handle.describe()
+                if describe.status == WorkflowExecutionStatus.RUNNING:
+                    # Query current status from workflow
+                    try:
+                        status = await handle.query(AgentSessionWorkflow.get_status)
+                        # Derive lifecycle state from status
+                        lifecycle_state = "ready"
+                        if status.error:
+                            lifecycle_state = "error"
+                        elif not status.is_initialized:
+                            lifecycle_state = "initializing"
+                        elif status.active_chats > 0:
+                            lifecycle_state = "executing"
+
+                        # Send current state to this subscriber
+                        await websocket.send_json(
+                            {
+                                "type": "lifecycle_state_change",
+                                "project_id": project_id,
+                                "data": {
+                                    "lifecycle_state": lifecycle_state,
+                                    "is_active": status.is_active,
+                                    "is_initialized": status.is_initialized,
+                                    "tool_count": status.tool_count or 0,
+                                    "skill_count": 0,  # Not tracked in status
+                                    "subagent_count": 0,  # Not tracked in status
+                                    "error_message": status.error,
+                                },
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                        )
+                        logger.debug(
+                            f"[WS] Sent current lifecycle state for {project_id}: "
+                            f"lifecycle={lifecycle_state}, is_active={status.is_active}"
+                        )
+                    except Exception as query_err:
+                        logger.debug(
+                            f"[WS] Could not query workflow state: {query_err}, "
+                            "sending default ready state"
+                        )
+                        # Workflow is running but query failed, assume ready
+                        await websocket.send_json(
+                            {
+                                "type": "lifecycle_state_change",
+                                "project_id": project_id,
+                                "data": {
+                                    "lifecycle_state": "ready",
+                                    "is_active": True,
+                                    "is_initialized": True,
+                                },
+                                "timestamp": datetime.utcnow().isoformat(),
+                            }
+                        )
+                else:
+                    # Workflow exists but not running (completed/failed/etc)
+                    await websocket.send_json(
+                        {
+                            "type": "lifecycle_state_change",
+                            "project_id": project_id,
+                            "data": {
+                                "lifecycle_state": "uninitialized",
+                                "is_active": False,
+                                "is_initialized": False,
+                            },
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    )
+            except Exception:
+                # Workflow doesn't exist - agent is uninitialized
+                await websocket.send_json(
+                    {
+                        "type": "lifecycle_state_change",
+                        "project_id": project_id,
+                        "data": {
+                            "lifecycle_state": "uninitialized",
+                            "is_active": False,
+                            "is_initialized": False,
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                logger.debug(f"[WS] Agent workflow not found for {project_id}, sent uninitialized")
+
+        except Exception as state_err:
+            logger.warning(f"[WS] Could not query current agent state: {state_err}")
+            # Don't fail the subscription, just log the warning
 
     except Exception as e:
         logger.error(f"[WS] Error subscribing to lifecycle state: {e}", exc_info=True)
@@ -1681,9 +1822,422 @@ async def handle_env_var_respond(
                 "type": "error",
                 "data": {"message": f"Failed to process env var response: {str(e)}"},
             }
-        ) @ router.get("/dispatcher-stats")
+        )
 
 
+# ============================================================================
+# Agent Lifecycle Control Handlers
+# ============================================================================
+
+
+async def handle_start_agent(
+    websocket: WebSocket,
+    user_id: str,
+    tenant_id: str,
+    session_id: str,
+    message: Dict[str, Any],
+    db: AsyncSession,
+) -> None:
+    """
+    Handle start_agent: Start the Agent Session Workflow for a project.
+
+    This explicitly starts the agent if it's not running.
+    It also ensures the project's sandbox exists before starting the agent.
+
+    Message format:
+        {type: 'start_agent', project_id: str}
+    """
+    from temporalio.client import WorkflowExecutionStatus
+
+    from src.configuration.config import get_settings
+    from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
+    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
+        AgentSessionConfig,
+        get_agent_session_workflow_id,
+    )
+
+    project_id = message.get("project_id")
+    if not project_id:
+        await websocket.send_json({"type": "error", "data": {"message": "Missing project_id"}})
+        return
+
+    try:
+        # STEP 0: Ensure sandbox exists before starting agent
+        # This integrates sandbox lifecycle management into agent startup
+        try:
+            from src.application.services.project_sandbox_lifecycle_service import (
+                ProjectSandboxLifecycleService,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+                SqlAlchemyProjectSandboxRepository,
+            )
+            from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+                MCPSandboxAdapter,
+            )
+
+            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            sandbox_adapter = MCPSandboxAdapter()
+            lifecycle_service = ProjectSandboxLifecycleService(
+                repository=sandbox_repo,
+                sandbox_adapter=sandbox_adapter,
+            )
+
+            # Ensure sandbox exists (will create if not exists, or verify/repair if exists)
+            sandbox_info = await lifecycle_service.get_or_create_sandbox(
+                project_id=project_id,
+                tenant_id=tenant_id,
+            )
+            logger.info(
+                f"[WS] Sandbox ensured for project {project_id}: "
+                f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"[WS] Failed to ensure sandbox for project {project_id}: {e}. "
+                f"Agent will start but may have limited sandbox tools."
+            )
+
+        settings = get_settings()
+        workflow_id = get_agent_session_workflow_id(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            agent_mode="default",
+        )
+
+        client = await TemporalClientFactory.get_client()
+        handle = client.get_workflow_handle(workflow_id)
+
+        # Check if already running
+        try:
+            describe = await handle.describe()
+            if describe.status == WorkflowExecutionStatus.RUNNING:
+                await websocket.send_json(
+                    {
+                        "type": "agent_lifecycle_ack",
+                        "action": "start_agent",
+                        "project_id": project_id,
+                        "status": "already_running",
+                        "workflow_id": workflow_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                return
+        except Exception:
+            # Workflow doesn't exist, we can start it
+            pass
+
+        # Start new workflow
+        config = AgentSessionConfig(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            agent_mode="default",
+            max_steps=settings.agent_max_steps,
+            persistent=True,
+            mcp_tools_ttl_seconds=300,
+        )
+
+        from src.configuration.temporal_settings import get_temporal_settings
+
+        temporal_settings = get_temporal_settings()
+
+        await client.start_workflow(
+            "agent_session",
+            config,
+            id=workflow_id,
+            task_queue=temporal_settings.agent_temporal_task_queue,
+        )
+
+        logger.info(f"[WS] Started Agent Session: {workflow_id}")
+
+        await websocket.send_json(
+            {
+                "type": "agent_lifecycle_ack",
+                "action": "start_agent",
+                "project_id": project_id,
+                "status": "started",
+                "workflow_id": workflow_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+        # Notify lifecycle state change
+        await manager.broadcast_lifecycle_state(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            state={
+                "lifecycleState": "initializing",
+                "isActive": True,
+                "isInitialized": False,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"[WS] Error starting agent: {e}", exc_info=True)
+        await websocket.send_json(
+            {"type": "error", "data": {"message": f"Failed to start agent: {str(e)}"}}
+        )
+
+
+async def handle_stop_agent(
+    websocket: WebSocket,
+    user_id: str,
+    tenant_id: str,
+    session_id: str,
+    message: Dict[str, Any],
+) -> None:
+    """
+    Handle stop_agent: Stop the Agent Session Workflow for a project.
+
+    This gracefully stops the agent by sending a stop signal.
+
+    Message format:
+        {type: 'stop_agent', project_id: str}
+    """
+    from temporalio.client import WorkflowExecutionStatus
+
+    from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
+    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
+        AgentSessionWorkflow,
+        get_agent_session_workflow_id,
+    )
+
+    project_id = message.get("project_id")
+    if not project_id:
+        await websocket.send_json({"type": "error", "data": {"message": "Missing project_id"}})
+        return
+
+    try:
+        workflow_id = get_agent_session_workflow_id(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            agent_mode="default",
+        )
+
+        client = await TemporalClientFactory.get_client()
+        handle = client.get_workflow_handle(workflow_id)
+
+        # Check if running
+        try:
+            describe = await handle.describe()
+            if describe.status != WorkflowExecutionStatus.RUNNING:
+                await websocket.send_json(
+                    {
+                        "type": "agent_lifecycle_ack",
+                        "action": "stop_agent",
+                        "project_id": project_id,
+                        "status": "not_running",
+                        "workflow_id": workflow_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                return
+        except Exception:
+            await websocket.send_json(
+                {
+                    "type": "agent_lifecycle_ack",
+                    "action": "stop_agent",
+                    "project_id": project_id,
+                    "status": "not_found",
+                    "workflow_id": workflow_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
+            return
+
+        # Send stop signal
+        await handle.signal(AgentSessionWorkflow.stop)
+
+        logger.info(f"[WS] Sent stop signal to Agent Session: {workflow_id}")
+
+        await websocket.send_json(
+            {
+                "type": "agent_lifecycle_ack",
+                "action": "stop_agent",
+                "project_id": project_id,
+                "status": "stopping",
+                "workflow_id": workflow_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+        # Notify lifecycle state change
+        await manager.broadcast_lifecycle_state(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            state={
+                "lifecycleState": "shutting_down",
+                "isActive": False,
+                "isInitialized": True,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"[WS] Error stopping agent: {e}", exc_info=True)
+        await websocket.send_json(
+            {"type": "error", "data": {"message": f"Failed to stop agent: {str(e)}"}}
+        )
+
+
+async def handle_restart_agent(
+    websocket: WebSocket,
+    user_id: str,
+    tenant_id: str,
+    session_id: str,
+    message: Dict[str, Any],
+    db: AsyncSession,
+) -> None:
+    """
+    Handle restart_agent: Restart the Agent Session Workflow for a project.
+
+    This stops the current agent and starts a new one.
+    It also ensures the project's sandbox exists and is healthy before restarting.
+
+    Message format:
+        {type: 'restart_agent', project_id: str}
+    """
+    from temporalio.client import WorkflowExecutionStatus
+
+    from src.configuration.config import get_settings
+    from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
+    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
+        AgentSessionConfig,
+        AgentSessionWorkflow,
+        get_agent_session_workflow_id,
+    )
+
+    project_id = message.get("project_id")
+    if not project_id:
+        await websocket.send_json({"type": "error", "data": {"message": "Missing project_id"}})
+        return
+
+    try:
+        # STEP 0: Ensure sandbox exists and is healthy before restarting agent
+        # This integrates sandbox lifecycle management into agent restart
+        try:
+            from src.application.services.project_sandbox_lifecycle_service import (
+                ProjectSandboxLifecycleService,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+                SqlAlchemyProjectSandboxRepository,
+            )
+            from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+                MCPSandboxAdapter,
+            )
+
+            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            sandbox_adapter = MCPSandboxAdapter()
+            lifecycle_service = ProjectSandboxLifecycleService(
+                repository=sandbox_repo,
+                sandbox_adapter=sandbox_adapter,
+            )
+
+            # Sync and repair sandbox on restart (handles container recreation if needed)
+            sandbox_info = await lifecycle_service.sync_and_repair_sandbox(project_id)
+            if sandbox_info:
+                logger.info(
+                    f"[WS] Sandbox synced for agent restart: project={project_id}, "
+                    f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+                )
+            else:
+                # If no existing sandbox, ensure one is created
+                sandbox_info = await lifecycle_service.get_or_create_sandbox(
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                )
+                logger.info(
+                    f"[WS] Sandbox ensured for agent restart: project={project_id}, "
+                    f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"[WS] Failed to ensure sandbox for project {project_id}: {e}. "
+                f"Agent will restart but may have limited sandbox tools."
+            )
+
+        settings = get_settings()
+        workflow_id = get_agent_session_workflow_id(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            agent_mode="default",
+        )
+
+        client = await TemporalClientFactory.get_client()
+        handle = client.get_workflow_handle(workflow_id)
+
+        # First, notify restarting state
+        await manager.broadcast_lifecycle_state(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            state={
+                "lifecycleState": "shutting_down",
+                "isActive": False,
+                "isInitialized": True,
+            },
+        )
+
+        # Stop existing workflow if running
+        try:
+            describe = await handle.describe()
+            if describe.status == WorkflowExecutionStatus.RUNNING:
+                await handle.signal(AgentSessionWorkflow.restart)
+                # Wait for it to stop
+                await asyncio.sleep(2)
+        except Exception:
+            pass  # Workflow doesn't exist, which is fine
+
+        # Start new workflow
+        config = AgentSessionConfig(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            agent_mode="default",
+            max_steps=settings.agent_max_steps,
+            persistent=True,
+            mcp_tools_ttl_seconds=300,
+        )
+
+        from src.configuration.temporal_settings import get_temporal_settings
+
+        temporal_settings = get_temporal_settings()
+
+        await client.start_workflow(
+            "agent_session",
+            config,
+            id=workflow_id,
+            task_queue=temporal_settings.agent_temporal_task_queue,
+        )
+
+        logger.info(f"[WS] Restarted Agent Session: {workflow_id}")
+
+        await websocket.send_json(
+            {
+                "type": "agent_lifecycle_ack",
+                "action": "restart_agent",
+                "project_id": project_id,
+                "status": "restarted",
+                "workflow_id": workflow_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+
+        # Notify initializing state
+        await manager.broadcast_lifecycle_state(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            state={
+                "lifecycleState": "initializing",
+                "isActive": True,
+                "isInitialized": False,
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"[WS] Error restarting agent: {e}", exc_info=True)
+        await websocket.send_json(
+            {"type": "error", "data": {"message": f"Failed to restart agent: {str(e)}"}}
+        )
+
+
+@router.get("/dispatcher-stats")
 async def get_dispatcher_stats() -> Dict[str, Any]:
     """
     Get event dispatcher statistics.

@@ -156,11 +156,13 @@ class MCPWebSocketClient:
             # Create aiohttp session
             self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout))
 
-            # Connect WebSocket
+            # Connect WebSocket with increased max_msg_size for large file transfers
+            # Default is 4MB, we increase to 100MB to support large attachments
             self._ws = await self._session.ws_connect(
                 self.url,
                 headers=self.headers,
                 heartbeat=self.heartbeat_interval,
+                max_msg_size=100 * 1024 * 1024,  # 100MB
             )
 
             # Start background task to receive messages

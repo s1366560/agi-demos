@@ -96,19 +96,28 @@ async def execute_bash(
 
         logger.info(f"Executing: {command[:100]}... (timeout={timeout}s, cwd={cwd})")
 
-        # Create subprocess
+        # Create subprocess with sanitized environment
+        # Start from os.environ but override path-related variables to prevent host path leakage
+        sanitized_env = {
+            **os.environ,
+            # Override path-related variables to sandbox workspace
+            "HOME": _workspace_dir,
+            "PWD": cwd,
+            "OLDPWD": cwd,
+            "TERM": "xterm-256color",
+            # Preserve DEBIAN_FRONTEND for non-interactive apt commands
+            "DEBIAN_FRONTEND": os.environ.get("DEBIAN_FRONTEND", "noninteractive"),
+        }
+        # Remove any variables that might contain host paths
+        for var in ["HOST_PATH", "PROJECT_PATH", "WORKSPACE_PATH"]:
+            sanitized_env.pop(var, None)
+
         process = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
-            env={
-                **os.environ,
-                "HOME": _workspace_dir,
-                "TERM": "xterm-256color",
-                # Preserve DEBIAN_FRONTEND for non-interactive apt commands
-                "DEBIAN_FRONTEND": os.environ.get("DEBIAN_FRONTEND", "noninteractive"),
-            },
+            env=sanitized_env,
         )
 
         try:

@@ -5,7 +5,7 @@ React-mode agent execution with streaming support.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.model.agent import Conversation
 
@@ -26,6 +26,7 @@ class AgentServicePort(ABC):
         project_id: str,
         user_id: str,
         tenant_id: str,
+        attachment_ids: Optional[List[str]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response using self-developed ReAct core.
@@ -39,6 +40,7 @@ class AgentServicePort(ABC):
             project_id: The project ID
             user_id: The user ID
             tenant_id: The tenant ID
+            attachment_ids: Optional list of attachment IDs to include with the message
 
         Yields:
             Event dictionaries with type and data:

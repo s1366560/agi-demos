@@ -5,13 +5,22 @@ Manages the lifecycle of project-dedicated sandboxes:
 - Lazy creation on first use
 - Health monitoring and auto-recovery
 - Resource cleanup on project deletion
+
+Threading Safety:
+- Uses database-level distributed locks (PostgreSQL advisory locks)
+- Ensures exactly one sandbox per project even across multiple API workers
+- In-process locks for additional protection within single worker
+- Handles unique constraint violations with retry mechanism
 """
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy.exc import IntegrityError
 
 from src.application.services.sandbox_profile import SandboxProfileType
 from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
@@ -122,65 +131,215 @@ class ProjectSandboxLifecycleService:
         self._health_check_interval = health_check_interval_seconds
         self._auto_recover = auto_recover
 
+        # Per-project locks to prevent concurrent sandbox creation for the same project
+        # This ensures exactly one sandbox per project even under high concurrency
+        self._project_locks: Dict[str, asyncio.Lock] = {}
+        self._locks_lock = asyncio.Lock()  # Lock for accessing _project_locks
+
+    async def _get_project_lock(self, project_id: str) -> asyncio.Lock:
+        """Get or create a lock for a specific project.
+
+        Args:
+            project_id: The project ID
+
+        Returns:
+            asyncio.Lock for the project
+        """
+        async with self._locks_lock:
+            if project_id not in self._project_locks:
+                self._project_locks[project_id] = asyncio.Lock()
+            return self._project_locks[project_id]
+
+    async def _cleanup_project_lock(self, project_id: str) -> None:
+        """Clean up the lock for a project (call after sandbox is terminated).
+
+        Args:
+            project_id: The project ID
+        """
+        async with self._locks_lock:
+            self._project_locks.pop(project_id, None)
+
     async def get_or_create_sandbox(
         self,
         project_id: str,
         tenant_id: str,
         profile: Optional[SandboxProfileType] = None,
         config_override: Optional[Dict[str, Any]] = None,
+        max_retries: int = 3,
     ) -> SandboxInfo:
         """Get existing sandbox or create a new one for the project.
 
         This is the primary method for accessing project sandboxes. It ensures
         that each project has exactly one persistent sandbox.
 
+        Thread Safety (Multi-Layer Protection):
+            1. Database-level: PostgreSQL advisory lock for cross-process safety
+            2. In-process: asyncio.Lock for same-process concurrency
+            3. Database constraint: Unique constraint on project_id with retry
+
         Args:
             project_id: The project ID
             tenant_id: The tenant ID for scoping
             profile: Sandbox profile (lite, standard, full)
             config_override: Optional configuration overrides
+            max_retries: Maximum retries on constraint violation
 
         Returns:
             SandboxInfo with connection details and status
 
         Raises:
-            SandboxError: If sandbox creation fails
+            SandboxError: If sandbox creation fails after all retries
         """
-        # Check if project already has a sandbox
-        existing = await self._repository.find_by_project(project_id)
-
-        if existing:
-            # Check if existing sandbox is usable
-            if existing.is_usable():
-                existing.mark_accessed()
-                await self._repository.save(existing)
-                return await self._get_sandbox_info(existing)
-
-            # Sandbox exists but not running - try to recover or recreate
-            if existing.status == ProjectSandboxStatus.STOPPED:
-                logger.info(f"Project {project_id} sandbox stopped, restarting...")
-                return await self._restart_sandbox(existing)
-
-            if existing.status == ProjectSandboxStatus.ERROR:
-                logger.warning(f"Project {project_id} sandbox in error state, recreating...")
-                await self._cleanup_failed_sandbox(existing)
-                # Fall through to create new
-
-            if existing.status == ProjectSandboxStatus.UNHEALTHY and self._auto_recover:
-                logger.info(f"Project {project_id} sandbox unhealthy, attempting recovery...")
-                recovered = await self._recover_sandbox(existing)
-                if recovered:
+        for attempt in range(max_retries):
+            try:
+                return await self._get_or_create_sandbox_impl(
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    profile=profile,
+                    config_override=config_override,
+                )
+            except IntegrityError as e:
+                # Unique constraint violation - another worker created the sandbox
+                logger.info(
+                    f"Concurrent sandbox creation detected for project {project_id} "
+                    f"(attempt {attempt + 1}/{max_retries}), retrying..."
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(0.2 * (attempt + 1))  # Exponential backoff
+                    continue
+                # Final attempt failed, try to return existing
+                existing = await self._repository.find_by_project(project_id)
+                if existing:
                     return await self._get_sandbox_info(existing)
-                # Recovery failed, recreate
-                await self._cleanup_failed_sandbox(existing)
+                raise RuntimeError(
+                    f"Failed to create sandbox for project {project_id} after {max_retries} attempts: {e}"
+                ) from e
 
-        # Create new sandbox
-        return await self._create_new_sandbox(
-            project_id=project_id,
-            tenant_id=tenant_id,
-            profile=profile,
-            config_override=config_override,
-        )
+        # Should not reach here, but just in case
+        raise RuntimeError(f"Unexpected state in get_or_create_sandbox for project {project_id}")
+
+    async def _get_or_create_sandbox_impl(
+        self,
+        project_id: str,
+        tenant_id: str,
+        profile: Optional[SandboxProfileType] = None,
+        config_override: Optional[Dict[str, Any]] = None,
+    ) -> SandboxInfo:
+        """Internal implementation of get_or_create_sandbox with multi-layer locking.
+
+        Uses:
+        1. In-process asyncio.Lock (fast path for same-worker concurrency)
+        2. PostgreSQL SESSION-level advisory lock (cross-process, persists until released)
+
+        CRITICAL: The session lock is held until container creation completes to prevent
+        any other process from creating a container for the same project.
+        """
+        # Layer 1: In-process lock (fast path for same-worker concurrency)
+        project_lock = await self._get_project_lock(project_id)
+
+        async with project_lock:
+            # Layer 2: Database-level SESSION advisory lock (cross-process safety)
+            # This lock persists until explicitly released, NOT until transaction ends
+            db_lock_acquired = await self._repository.acquire_project_lock(
+                project_id, blocking=True, timeout_seconds=30
+            )
+
+            try:
+                if not db_lock_acquired:
+                    # Another process is creating, wait and check
+                    logger.info(
+                        f"Project {project_id} sandbox creation locked by another worker, waiting..."
+                    )
+                    await asyncio.sleep(1.0)
+                    existing = await self._repository.find_by_project(project_id)
+                    if existing:
+                        if existing.is_usable():
+                            existing.mark_accessed()
+                            await self._repository.save(existing)
+                            return await self._get_sandbox_info(existing)
+                        # Created but not usable, fall through to handle
+                    # Lock not acquired and no existing sandbox, retry
+                    raise IntegrityError(
+                        statement="advisory_lock",
+                        params={},
+                        orig=Exception("Could not acquire distributed lock"),
+                    )
+
+                # Lock acquired, proceed with double-check
+                existing = await self._repository.find_by_project(project_id)
+
+                if existing:
+                    # CRITICAL: Verify container actually exists before returning
+                    # This handles cases where container was externally killed/deleted
+                    if existing.is_usable():
+                        container_exists = await self._adapter.container_exists(existing.sandbox_id)
+                        if container_exists:
+                            existing.mark_accessed()
+                            await self._repository.save(existing)
+                            return await self._get_sandbox_info(existing)
+                        else:
+                            # Container was killed/deleted externally, need to rebuild
+                            logger.warning(
+                                f"Project {project_id} sandbox {existing.sandbox_id} "
+                                f"marked as {existing.status.value} but container doesn't exist. "
+                                f"Triggering rebuild..."
+                            )
+                            # Clean up any orphan containers and rebuild
+                            await self._cleanup_failed_sandbox(existing)
+                            # Fall through to create new
+
+                    # Sandbox exists but not running - try to recover or recreate
+                    elif existing.status == ProjectSandboxStatus.STOPPED:
+                        logger.info(f"Project {project_id} sandbox stopped, restarting...")
+                        return await self._restart_sandbox(existing)
+
+                    elif existing.status == ProjectSandboxStatus.ERROR:
+                        logger.warning(
+                            f"Project {project_id} sandbox in error state, recreating..."
+                        )
+                        await self._cleanup_failed_sandbox(existing)
+                        # Fall through to create new
+
+                    elif existing.status == ProjectSandboxStatus.UNHEALTHY and self._auto_recover:
+                        logger.info(
+                            f"Project {project_id} sandbox unhealthy, attempting recovery..."
+                        )
+                        recovered = await self._recover_sandbox(existing)
+                        if recovered:
+                            return await self._get_sandbox_info(existing)
+                        # Recovery failed, recreate
+                        await self._cleanup_failed_sandbox(existing)
+
+                    elif existing.status == ProjectSandboxStatus.CREATING:
+                        # Check if container actually exists for CREATING state
+                        # It might be stuck in CREATING if previous creation failed
+                        container_exists = await self._adapter.container_exists(existing.sandbox_id)
+                        if container_exists:
+                            # Container exists, wait for it
+                            logger.info(
+                                f"Project {project_id} sandbox is being created, waiting..."
+                            )
+                            return await self._get_sandbox_info(existing)
+                        else:
+                            # CREATING but no container - previous creation failed
+                            logger.warning(
+                                f"Project {project_id} sandbox stuck in CREATING state "
+                                f"but container doesn't exist. Rebuilding..."
+                            )
+                            await self._cleanup_failed_sandbox(existing)
+                            # Fall through to create new
+
+                # Create new sandbox (under both locks)
+                # The session lock is held until this method returns
+                return await self._create_new_sandbox(
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    profile=profile,
+                    config_override=config_override,
+                )
+            finally:
+                # CRITICAL: Release the session-level lock after container creation completes
+                await self._repository.release_project_lock(project_id)
 
     async def get_project_sandbox(self, project_id: str) -> Optional[SandboxInfo]:
         """Get sandbox info for a project if it exists.
@@ -329,6 +488,9 @@ class ProjectSandboxLifecycleService:
             if delete_association:
                 await self._repository.delete(association.id)
 
+            # Clean up project lock
+            await self._cleanup_project_lock(project_id)
+
             logger.info(f"Terminated sandbox for project {project_id}")
             return True
 
@@ -339,20 +501,26 @@ class ProjectSandboxLifecycleService:
     async def restart_project_sandbox(self, project_id: str) -> SandboxInfo:
         """Restart the sandbox for a project.
 
+        Uses per-project lock to prevent concurrent restart operations
+        on the same project.
+
         Args:
             project_id: The project ID
 
         Returns:
             SandboxInfo for the restarted sandbox
         """
-        association = await self._repository.find_by_project(project_id)
-        if not association:
-            raise SandboxNotFoundError(
-                message=f"No sandbox found for project {project_id}",
-                project_id=project_id,
-            )
+        # Acquire per-project lock to prevent concurrent restart
+        project_lock = await self._get_project_lock(project_id)
+        async with project_lock:
+            association = await self._repository.find_by_project(project_id)
+            if not association:
+                raise SandboxNotFoundError(
+                    message=f"No sandbox found for project {project_id}",
+                    project_id=project_id,
+                )
 
-        return await self._restart_sandbox(association)
+            return await self._restart_sandbox(association)
 
     async def list_project_sandboxes(
         self,
@@ -537,12 +705,40 @@ class ProjectSandboxLifecycleService:
             raise
 
     async def _recreate_sandbox(self, association: ProjectSandbox) -> SandboxInfo:
-        """Recreate a sandbox while preserving the association."""
+        """Recreate a sandbox while preserving the association.
+
+        CRITICAL: This method MUST clean up all existing containers for the project
+        before creating a new one to prevent duplicate containers.
+        """
         project_path = f"/tmp/memstack_{association.project_id}"
 
         # Generate new sandbox ID
         old_sandbox_id = association.sandbox_id
         new_sandbox_id = f"proj-sb-{uuid.uuid4().hex[:12]}"
+
+        # CRITICAL: Clean up ALL existing containers for this project first
+        # This prevents orphan containers from accumulating
+        logger.info(
+            f"Recreating sandbox for project {association.project_id}, "
+            f"cleaning up old container {old_sandbox_id}..."
+        )
+
+        # Step 1: Terminate the old sandbox explicitly
+        try:
+            await self._adapter.terminate_sandbox(old_sandbox_id)
+            logger.info(f"Terminated old sandbox {old_sandbox_id}")
+        except Exception as e:
+            logger.warning(f"Could not terminate old sandbox {old_sandbox_id}: {e}")
+
+        # Step 2: Clean up any other containers for this project (orphans)
+        try:
+            cleaned = await self._adapter.cleanup_project_containers(association.project_id)
+            if cleaned > 0:
+                logger.info(
+                    f"Cleaned up {cleaned} additional container(s) for project {association.project_id}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to cleanup project containers: {e}")
 
         association.sandbox_id = new_sandbox_id
         association.status = ProjectSandboxStatus.CREATING
@@ -697,3 +893,91 @@ class ProjectSandboxLifecycleService:
                 config.desktop_enabled = config_override["desktop_enabled"]
 
         return config
+
+    async def sync_and_repair_sandbox(
+        self,
+        project_id: str,
+        tenant_id: str,
+        auto_rebuild: bool = True,
+    ) -> SandboxInfo:
+        """Synchronize sandbox state with actual Docker state and optionally repair.
+
+        This method is useful for:
+        1. Detecting containers that were externally killed/deleted
+        2. Repairing database state that is out of sync with Docker
+        3. Ensuring a working sandbox exists for the project
+
+        Args:
+            project_id: The project ID
+            tenant_id: The tenant ID (needed if rebuild is required)
+            auto_rebuild: If True, automatically rebuild if container is missing
+
+        Returns:
+            SandboxInfo with current state (possibly after rebuild)
+
+        Raises:
+            SandboxNotFoundError: If no sandbox exists and auto_rebuild is False
+        """
+        association = await self._repository.find_by_project(project_id)
+
+        if not association:
+            if auto_rebuild:
+                logger.info(f"No sandbox found for project {project_id}, creating...")
+                return await self.get_or_create_sandbox(project_id, tenant_id)
+            raise SandboxNotFoundError(
+                message=f"No sandbox found for project {project_id}",
+                project_id=project_id,
+            )
+
+        # Check if container actually exists
+        container_exists = await self._adapter.container_exists(association.sandbox_id)
+
+        if container_exists:
+            # Container exists, ensure state is correct
+            if association.status not in [
+                ProjectSandboxStatus.RUNNING,
+                ProjectSandboxStatus.UNHEALTHY,
+            ]:
+                logger.info(
+                    f"Project {project_id} container exists but state is {association.status.value}, "
+                    f"updating to RUNNING"
+                )
+                association.status = ProjectSandboxStatus.RUNNING
+                association.mark_healthy()
+                await self._repository.save(association)
+
+            return await self._get_sandbox_info(association)
+
+        # Container doesn't exist
+        logger.warning(
+            f"Project {project_id} sandbox {association.sandbox_id} "
+            f"is marked as {association.status.value} but container doesn't exist"
+        )
+
+        if not auto_rebuild:
+            # Update state to reflect reality
+            association.status = ProjectSandboxStatus.ERROR
+            association.mark_error("Container was externally deleted")
+            await self._repository.save(association)
+            return await self._get_sandbox_info(association)
+
+        # Auto-rebuild: use get_or_create_sandbox which handles locking properly
+        logger.info(f"Auto-rebuilding sandbox for project {project_id}...")
+        return await self.get_or_create_sandbox(project_id, tenant_id)
+
+    async def verify_container_exists(self, project_id: str) -> bool:
+        """Quick check if the container for a project actually exists.
+
+        Useful for UI to show accurate status without triggering rebuild.
+
+        Args:
+            project_id: The project ID to check
+
+        Returns:
+            True if container exists and is running, False otherwise
+        """
+        association = await self._repository.find_by_project(project_id)
+        if not association:
+            return False
+
+        return await self._adapter.container_exists(association.sandbox_id)

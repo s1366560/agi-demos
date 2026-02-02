@@ -1,9 +1,12 @@
 """SQLAlchemy implementation of ProjectSandboxRepository."""
 
+import hashlib
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import AsyncGenerator, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.sandbox.project_sandbox import (
@@ -16,6 +19,8 @@ from src.domain.ports.repositories.project_sandbox_repository import (
 from src.infrastructure.adapters.secondary.persistence.models import (
     ProjectSandbox as ProjectSandboxORM,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
@@ -207,3 +212,112 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
         result = await self._session.execute(query)
         return result.scalar() or 0
+
+    def _project_lock_id(self, project_id: str) -> int:
+        """Generate a stable lock ID for a project.
+
+        PostgreSQL advisory locks use bigint, so we hash the project_id
+        to get a consistent numeric identifier.
+        """
+        # Use first 8 bytes of MD5 hash as lock ID
+        hash_bytes = hashlib.md5(f"sandbox_create:{project_id}".encode()).digest()
+        # Convert to signed 64-bit integer (PostgreSQL bigint)
+        lock_id = int.from_bytes(hash_bytes[:8], byteorder="big", signed=True)
+        return lock_id
+
+    async def acquire_project_lock(
+        self,
+        project_id: str,
+        timeout_seconds: int = 30,
+        blocking: bool = True,
+    ) -> bool:
+        """Acquire a distributed lock using PostgreSQL session-level advisory lock.
+
+        IMPORTANT: This is a SESSION-level lock, NOT transaction-level.
+        The lock persists until explicitly released or the database connection closes.
+        This is critical for protecting long-running operations like Docker container creation.
+
+        Args:
+            project_id: The project ID to lock
+            timeout_seconds: Timeout for blocking lock (only used if blocking=True)
+            blocking: If True, wait for lock; if False, return immediately
+
+        Returns:
+            True if lock acquired, False if not (only possible if blocking=False)
+        """
+        lock_id = self._project_lock_id(project_id)
+
+        if blocking:
+            # pg_advisory_lock blocks until lock is acquired
+            # Use lock_timeout to prevent indefinite waiting
+            await self._session.execute(text(f"SET LOCAL lock_timeout = '{timeout_seconds}s'"))
+            try:
+                await self._session.execute(
+                    text("SELECT pg_advisory_lock(:lock_id)"),
+                    {"lock_id": lock_id},
+                )
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to acquire advisory lock for {project_id}: {e}")
+                return False
+        else:
+            # pg_try_advisory_lock returns immediately
+            result = await self._session.execute(
+                text("SELECT pg_try_advisory_lock(:lock_id)"),
+                {"lock_id": lock_id},
+            )
+            return result.scalar() or False
+
+    async def release_project_lock(self, project_id: str) -> None:
+        """Release the session-level distributed lock for a project.
+
+        IMPORTANT: Must be called explicitly after container creation completes.
+        Unlike transaction-level locks, session locks persist until released.
+        """
+        lock_id = self._project_lock_id(project_id)
+        try:
+            await self._session.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": lock_id},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to release advisory lock for {project_id}: {e}")
+
+    async def find_and_lock_by_project(
+        self,
+        project_id: str,
+    ) -> Optional[ProjectSandbox]:
+        """Find sandbox by project with row-level lock (SELECT FOR UPDATE).
+
+        This prevents TOCTOU race conditions by locking the row while checking.
+        """
+        result = await self._session.execute(
+            select(ProjectSandboxORM)
+            .where(ProjectSandboxORM.project_id == project_id)
+            .with_for_update(nowait=False)  # Wait for lock if held by another tx
+        )
+        orm = result.scalar_one_or_none()
+        return self._to_domain(orm) if orm else None
+
+    @asynccontextmanager
+    async def transaction_with_lock(
+        self,
+        project_id: str,
+    ) -> AsyncGenerator[bool, None]:
+        """Context manager that acquires advisory lock within a transaction.
+
+        Usage:
+            async with repository.transaction_with_lock(project_id) as locked:
+                if locked:
+                    # Safe to create sandbox
+                    ...
+                else:
+                    # Another process is creating, wait and retry
+                    ...
+        """
+        lock_acquired = await self.acquire_project_lock(project_id)
+        try:
+            yield lock_acquired
+        finally:
+            # Lock is auto-released on transaction end
+            pass

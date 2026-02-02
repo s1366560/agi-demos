@@ -102,7 +102,8 @@ class ProjectAgentConfig:
     max_steps: int = 20
 
     # Session Configuration
-    idle_timeout_seconds: int = 1800  # 30 minutes
+    # Note: Agent now runs persistently until explicitly stopped
+    persistent: bool = True  # Agent runs forever until explicitly stopped
     max_concurrent_chats: int = 10
 
     # Tool Configuration
@@ -383,27 +384,47 @@ class ProjectReActAgent:
                 _cached_subagent_router=self._session_context.subagent_router,
             )
 
+            # Calculate detailed tool statistics
+            builtin_tool_count = 0
+            mcp_tool_count = 0
+            for tool_name in self._tools.keys():
+                # MCP tools have prefixes like "mcp_", "sandbox_", or server-specific prefixes
+                if tool_name.startswith(("mcp_", "sandbox_")) or "_mcp_" in tool_name:
+                    mcp_tool_count += 1
+                else:
+                    builtin_tool_count += 1
+
+            # Calculate skill statistics
+            loaded_skill_count = len(self._skills) if self._skills else 0
+            # TODO: Get total_skill_count from skill registry if available
+            total_skill_count = loaded_skill_count  # For now, same as loaded
+
             # Update status
             self._initialized = True
             self._status.is_initialized = True
             self._status.is_active = True
             self._status.tool_count = len(self._tools)
-            self._status.skill_count = len(self._skills) if self._skills else 0
+            self._status.skill_count = loaded_skill_count
             self._status.subagent_count = len(self._subagents) if self._subagents else 0
 
             init_time_ms = (time.time() - start_time) * 1000
             logger.info(
                 f"ProjectReActAgent[{self.project_key}]: Initialized in {init_time_ms:.1f}ms, "
-                f"tools={self._status.tool_count}, skills={self._status.skill_count}"
+                f"tools={self._status.tool_count} (builtin={builtin_tool_count}, mcp={mcp_tool_count}), "
+                f"skills={loaded_skill_count}"
             )
 
-            # Notify ready state
+            # Notify ready state with detailed stats
             if notifier:
                 await notifier.notify_ready(
                     tenant_id=self.config.tenant_id,
                     project_id=self.config.project_id,
                     tool_count=self._status.tool_count,
-                    skill_count=self._status.skill_count,
+                    builtin_tool_count=builtin_tool_count,
+                    mcp_tool_count=mcp_tool_count,
+                    skill_count=loaded_skill_count,
+                    total_skill_count=total_skill_count,
+                    loaded_skill_count=loaded_skill_count,
                     subagent_count=self._status.subagent_count,
                 )
 

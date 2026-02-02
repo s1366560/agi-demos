@@ -21,13 +21,13 @@ instances through Temporal workflows. It handles:
 
 Usage:
     service = ProjectAgentService(temporal_client)
-    
+
     # Start project agent
     await service.start_project_agent(
         tenant_id="tenant-123",
         project_id="project-456"
     )
-    
+
     # Send chat request
     result = await service.chat(
         tenant_id="tenant-123",
@@ -35,13 +35,13 @@ Usage:
         conversation_id="conv-789",
         user_message="Hello"
     )
-    
+
     # Get status
     status = await service.get_status(
         tenant_id="tenant-123",
         project_id="project-456"
     )
-    
+
     # Stop project agent
     await service.stop_project_agent(
         tenant_id="tenant-123",
@@ -55,7 +55,6 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from temporalio.client import Client
-from temporalio.common import RetryPolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
@@ -87,7 +86,8 @@ class ProjectAgentStartOptions:
     max_steps: int = 20
 
     # Session Configuration
-    idle_timeout_seconds: int = 1800
+    # Note: Agent now runs persistently until explicitly stopped
+    persistent: bool = True  # Agent runs forever until explicitly stopped
     max_concurrent_chats: int = 10
 
     # Task Queue
@@ -196,7 +196,7 @@ class ProjectAgentService:
             temperature=options.temperature,
             max_tokens=options.max_tokens,
             max_steps=options.max_steps,
-            idle_timeout_seconds=options.idle_timeout_seconds,
+            persistent=options.persistent,
             max_concurrent_chats=options.max_concurrent_chats,
         )
 
@@ -265,9 +265,7 @@ class ProjectAgentService:
         Returns:
             True if stopped successfully
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)
@@ -310,9 +308,7 @@ class ProjectAgentService:
         Returns:
             True if paused successfully
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)
@@ -340,9 +336,7 @@ class ProjectAgentService:
         Returns:
             True if resumed successfully
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)
@@ -370,9 +364,7 @@ class ProjectAgentService:
         Returns:
             True if refresh requested successfully
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)
@@ -411,9 +403,7 @@ class ProjectAgentService:
         try:
             status = await handle.query(ProjectAgentWorkflow.get_status)
             if not status.is_initialized:
-                logger.warning(
-                    f"ProjectAgentService: Workflow {workflow_id} not initialized"
-                )
+                logger.warning(f"ProjectAgentService: Workflow {workflow_id} not initialized")
                 return ProjectChatResult(
                     conversation_id=options.conversation_id,
                     message_id=options.message_id,
@@ -421,9 +411,7 @@ class ProjectAgentService:
                     error_message="Project agent not initialized",
                 )
         except Exception as e:
-            logger.warning(
-                f"ProjectAgentService: Error querying status for {workflow_id}: {e}"
-            )
+            logger.warning(f"ProjectAgentService: Error querying status for {workflow_id}: {e}")
             # Try to start the workflow
             await self.start_project_agent(
                 ProjectAgentStartOptions(
@@ -479,9 +467,7 @@ class ProjectAgentService:
         Returns:
             Project agent status or None if not found
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)
@@ -508,9 +494,7 @@ class ProjectAgentService:
         Returns:
             Metrics dictionary or None if not found
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)
@@ -593,9 +577,7 @@ class ProjectAgentService:
         Returns:
             True if running
         """
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id, project_id, agent_mode
-        )
+        workflow_id = get_project_agent_workflow_id(tenant_id, project_id, agent_mode)
 
         try:
             handle = self._client.get_workflow_handle(workflow_id)

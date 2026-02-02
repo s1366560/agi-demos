@@ -185,6 +185,12 @@ class Project(Base):
     owner_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     memory_rules: Mapped[dict] = mapped_column(JSON, default=dict)
     graph_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    sandbox_type: Mapped[str] = mapped_column(
+        String(20), default="cloud", nullable=False
+    )  # cloud, local
+    sandbox_config: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False
+    )  # Local sandbox config when sandbox_type is "local"
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(
@@ -1144,6 +1150,9 @@ class ProjectSandbox(Base):
     - Remains running until project deletion or manual termination
     - Can be auto-restarted if unhealthy
 
+    Supports both cloud sandboxes (Docker containers) and local sandboxes
+    (user's machine via WebSocket tunnel).
+
     This enables efficient sandbox reuse and lifecycle management.
     """
 
@@ -1161,9 +1170,12 @@ class ProjectSandbox(Base):
         String, ForeignKey("tenants.id"), nullable=False, index=True
     )
     sandbox_id: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
+    sandbox_type: Mapped[str] = mapped_column(
+        String(20), default="cloud", nullable=False
+    )  # cloud, local
     status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False, index=True
-    )  # pending, creating, running, unhealthy, stopped, terminated, error
+    )  # pending, creating, running, unhealthy, stopped, terminated, error, connecting, disconnected
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -1176,6 +1188,9 @@ class ProjectSandbox(Base):
     )
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    local_config: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False
+    )  # Local sandbox connection config
 
     # Relationships
     project: Mapped["Project"] = relationship(

@@ -177,3 +177,58 @@ class ProjectSandboxRepository(ABC):
             Number of matching associations
         """
         pass
+
+    @abstractmethod
+    async def acquire_project_lock(
+        self,
+        project_id: str,
+        timeout_seconds: int = 30,
+        blocking: bool = True,
+    ) -> bool:
+        """Acquire a distributed SESSION-level lock for a project's sandbox creation.
+
+        CRITICAL: This is a SESSION-level lock that persists until explicitly released.
+        This is necessary because container creation is a long-running operation that
+        spans multiple database transactions.
+
+        Uses database-level locking (PostgreSQL advisory locks) to
+        ensure mutual exclusion across all workers.
+
+        Args:
+            project_id: The project ID to lock
+            timeout_seconds: Lock timeout (for blocking mode)
+            blocking: If True, wait for lock; if False, return immediately
+
+        Returns:
+            True if lock acquired, False if another process holds the lock
+        """
+        pass
+
+    @abstractmethod
+    async def release_project_lock(self, project_id: str) -> None:
+        """Release the SESSION-level distributed lock for a project.
+
+        CRITICAL: Must be called explicitly after container creation completes.
+        Unlike transaction-level locks, session locks persist until released.
+
+        Args:
+            project_id: The project ID to unlock
+        """
+        pass
+
+    @abstractmethod
+    async def find_and_lock_by_project(
+        self,
+        project_id: str,
+    ) -> Optional[ProjectSandbox]:
+        """Find sandbox by project with row-level lock (SELECT FOR UPDATE).
+
+        This prevents TOCTOU race conditions by locking the row while checking.
+
+        Args:
+            project_id: The project ID
+
+        Returns:
+            ProjectSandbox entity if found (with row locked), None otherwise
+        """
+        pass

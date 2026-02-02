@@ -589,6 +589,8 @@ export interface ChatRequest {
     conversation_id: string;
     message: string;
     project_id?: string;
+    /** Attachment IDs to include with the message */
+    attachment_ids?: string[];
 }
 
 /**
@@ -2649,8 +2651,18 @@ export interface LifecycleStateData {
     lifecycleState: LifecycleState | null;
     isInitialized: boolean;
     isActive: boolean;
+    /** Total tool count (builtin + mcp) */
     toolCount?: number;
+    /** Number of built-in tools */
+    builtinToolCount?: number;
+    /** Number of MCP tools */
+    mcpToolCount?: number;
+    /** Deprecated, use loadedSkillCount */
     skillCount?: number;
+    /** Total number of skills available in registry */
+    totalSkillCount?: number;
+    /** Number of skills loaded into current context */
+    loadedSkillCount?: number;
     subagentCount?: number;
     conversationId?: string;
     errorMessage?: string;

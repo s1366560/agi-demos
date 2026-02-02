@@ -16,6 +16,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     agent_websocket,
     ai_tools,
     artifacts,
+    attachments_upload,
     auth,
     background_tasks,
     billing,
@@ -184,6 +185,20 @@ async def lifespan(app: FastAPI):
 
         redis_client = redis.from_url(settings.redis_url, decode_responses=True)
         logger.info("Redis client initialized for event bus")
+
+        # Clean up stale agent running states on startup
+        # This handles cases where the server was restarted while agents were running
+        try:
+            stale_keys = []
+            async for key in redis_client.scan_iter(match="agent:running:*"):
+                stale_keys.append(key)
+            if stale_keys:
+                await redis_client.delete(*stale_keys)
+                logger.info(
+                    f"Cleaned up {len(stale_keys)} stale agent running states from previous session"
+                )
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to clean up stale agent running states: {cleanup_error}")
     except Exception as e:
         logger.warning(f"Failed to initialize Redis client: {e}")
 
@@ -444,6 +459,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Artifacts (Rich output from sandbox/MCP tools)
     app.include_router(artifacts.router)
+
+    # Attachments (File upload for agent chat)
+    app.include_router(attachments_upload.router)
 
     return app
 

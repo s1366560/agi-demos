@@ -305,7 +305,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   // Determine current status
   const currentStatus: ProjectSandboxStatus | "none" = sandbox?.status || "none";
-  const config = statusConfig[currentStatus];
+  const config = statusConfig[currentStatus] || statusConfig.none;
 
   /**
    * Fetch sandbox info
@@ -318,9 +318,9 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       const info = await projectSandboxService.getProjectSandbox(projectId);
       setSandbox(info);
     } catch (error) {
-      // 404 means no sandbox exists
-      const apiError = error as { status?: number };
-      if (apiError?.status !== 404) {
+      // 404 means no sandbox exists - handle silently
+      const apiError = error as { statusCode?: number };
+      if (apiError?.statusCode !== 404) {
         logger.error("[SandboxStatusIndicator] Failed to fetch sandbox:", error);
       }
       setSandbox(null);

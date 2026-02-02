@@ -44,6 +44,10 @@ from src.tools.git_tools import (
     create_git_diff_tool,
     create_git_log_tool,
 )
+from src.tools.import_tools import (
+    create_import_file_tool,
+    create_import_files_batch_tool,
+)
 from src.tools.index_tools import (
     create_call_graph_tool,
     create_code_index_build_tool,
@@ -169,6 +173,10 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_stop_desktop_tool())
     registry.register(create_desktop_status_tool())
     registry.register(create_restart_desktop_tool())
+
+    # Register import tools (for importing files from MemStack storage)
+    registry.register(create_import_file_tool())
+    registry.register(create_import_files_batch_tool())
 
     logger.info(f"Tool registry initialized with {len(registry.list_names())} tools")
     return registry

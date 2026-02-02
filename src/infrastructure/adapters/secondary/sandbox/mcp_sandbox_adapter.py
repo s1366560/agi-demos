@@ -140,9 +140,16 @@ class MCPSandboxAdapter(SandboxPort):
         # Track cleanup state to prevent double cleanup
         self._cleanup_in_progress: Set[str] = set()
 
-        # Track rebuild timestamps to prevent rebuild loops (cool-down period)
-        self._last_rebuild_at: Dict[str, float] = {}
+        # Track rebuild timestamps using TTL cache to prevent memory leaks
+        # Old entries auto-expire after rebuild_ttl_seconds
+        from src.infrastructure.adapters.secondary.sandbox.health_monitor import TTLCache
+
         self._rebuild_cooldown_seconds = 5.0  # Minimum seconds between rebuilds
+        self._rebuild_ttl_seconds = 300.0  # Entries expire after 5 minutes
+        self._last_rebuild_at: TTLCache = TTLCache(
+            default_ttl_seconds=self._rebuild_ttl_seconds,
+            max_size=1000,
+        )
 
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
@@ -672,11 +679,83 @@ class MCPSandboxAdapter(SandboxPort):
             async with self._lock:
                 self._cleanup_in_progress.discard(sandbox_id)
 
+    async def container_exists(self, sandbox_id: str) -> bool:
+        """Check if a Docker container actually exists and is running.
+
+        This is a direct Docker API check, bypassing internal caches.
+        Used to detect containers that were externally killed or deleted.
+
+        Args:
+            sandbox_id: The container ID or name to check
+
+        Returns:
+            True if container exists and is running, False otherwise
+        """
+        if not sandbox_id:
+            return False
+
+        try:
+            loop = asyncio.get_event_loop()
+            container = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.get(sandbox_id),
+            )
+            # Container exists, check if running
+            return container.status == "running"
+        except NotFound:
+            # Container doesn't exist
+            return False
+        except Exception as e:
+            logger.warning(f"Error checking container existence for {sandbox_id}: {e}")
+            return False
+
+    async def get_sandbox_id_by_project(self, project_id: str) -> Optional[str]:
+        """Get sandbox ID for a specific project.
+
+        Searches active sandboxes for one associated with the given project ID.
+
+        Args:
+            project_id: The project ID to look up
+
+        Returns:
+            The sandbox ID if found, None otherwise
+        """
+        if not project_id:
+            return None
+
+        async with self._lock:
+            for sandbox_id, instance in self._active_sandboxes.items():
+                if instance.labels.get("memstack.project_id") == project_id:
+                    return sandbox_id
+
+        # Also check Docker containers in case instance isn't in memory
+        try:
+            containers = self._docker.containers.list(
+                filters={
+                    "label": [
+                        "memstack.sandbox=true",
+                        f"memstack.project_id={project_id}",
+                    ]
+                }
+            )
+            if containers:
+                # Get sandbox ID from container labels
+                labels = containers[0].labels
+                return labels.get("memstack.sandbox.id")
+        except Exception as e:
+            logger.warning(f"Error looking up sandbox by project: {e}")
+
+        return None
+
     async def cleanup_project_containers(self, project_id: str) -> int:
         """Clean up all existing containers for a specific project.
 
         This ensures only one container exists per project by removing any
         orphan containers before creating a new one.
+
+        ENHANCED: Also cleans up containers that match by mount path pattern,
+        not just by label. This handles cases where containers were created
+        by old APIs without proper project_id labels.
 
         Args:
             project_id: The project ID to clean up containers for
@@ -688,12 +767,13 @@ class MCPSandboxAdapter(SandboxPort):
             return 0
 
         terminated_count = 0
+        containers_to_cleanup = set()
 
         try:
             loop = asyncio.get_event_loop()
 
-            # Find all containers for this project
-            containers = await loop.run_in_executor(
+            # Method 1: Find containers by project_id label (preferred)
+            labeled_containers = await loop.run_in_executor(
                 None,
                 lambda: self._docker.containers.list(
                     all=True,  # Include stopped containers
@@ -705,17 +785,50 @@ class MCPSandboxAdapter(SandboxPort):
                     },
                 ),
             )
+            for c in labeled_containers:
+                containers_to_cleanup.add(c.id)
 
-            if not containers:
+            # Method 2: Find containers by mount path pattern (fallback for old containers)
+            # This catches containers created without proper labels
+            all_sandbox_containers = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(
+                    all=True,
+                    filters={"label": "memstack.sandbox=true"},
+                ),
+            )
+
+            mount_pattern = f"memstack_{project_id}"
+            for container in all_sandbox_containers:
+                try:
+                    # Check container mounts
+                    mounts = container.attrs.get("Mounts", [])
+                    for mount in mounts:
+                        source = mount.get("Source", "")
+                        if mount_pattern in source:
+                            containers_to_cleanup.add(container.id)
+                            break
+
+                    # Also check container name
+                    container_name = container.name or ""
+                    if mount_pattern in container_name or project_id in container_name:
+                        containers_to_cleanup.add(container.id)
+                except Exception as e:
+                    logger.warning(f"Error checking container {container.id}: {e}")
+
+            if not containers_to_cleanup:
                 return 0
 
             logger.info(
-                f"Found {len(containers)} existing container(s) for project {project_id}, cleaning up..."
+                f"Found {len(containers_to_cleanup)} container(s) for project {project_id}, cleaning up..."
             )
 
-            for container in containers:
-                container_id = container.name or container.id
+            # Get container objects and clean up
+            for container_id in containers_to_cleanup:
                 try:
+                    container = self._docker.containers.get(container_id)
+                    container_name = container.name or container_id
+
                     # Stop if running
                     if container.status == "running":
                         try:
@@ -725,7 +838,7 @@ class MCPSandboxAdapter(SandboxPort):
                             )
                         except asyncio.TimeoutError:
                             logger.warning(
-                                f"Stop timed out for orphan container {container_id}, forcing kill"
+                                f"Stop timed out for container {container_name}, forcing kill"
                             )
                             await loop.run_in_executor(None, container.kill)
 
@@ -734,8 +847,8 @@ class MCPSandboxAdapter(SandboxPort):
 
                     # Clean up from internal tracking
                     async with self._lock:
-                        if container_id in self._active_sandboxes:
-                            instance = self._active_sandboxes[container_id]
+                        if container_name in self._active_sandboxes:
+                            instance = self._active_sandboxes[container_name]
                             ports_to_release = [
                                 instance.mcp_port,
                                 instance.desktop_port,
@@ -743,15 +856,13 @@ class MCPSandboxAdapter(SandboxPort):
                             ]
                             ports_to_release = [p for p in ports_to_release if p is not None]
                             self._release_ports_unsafe(ports_to_release)
-                            del self._active_sandboxes[container_id]
+                            del self._active_sandboxes[container_name]
 
                     terminated_count += 1
-                    logger.info(
-                        f"Cleaned up orphan container {container_id} for project {project_id}"
-                    )
+                    logger.info(f"Cleaned up container {container_name} for project {project_id}")
 
                 except Exception as e:
-                    logger.warning(f"Failed to cleanup orphan container {container_id}: {e}")
+                    logger.warning(f"Failed to cleanup container {container_id}: {e}")
 
             return terminated_count
 
@@ -1784,8 +1895,11 @@ class MCPSandboxAdapter(SandboxPort):
             return True
 
         # Container is unhealthy - check rebuild cooldown before attempting rebuild
-        now = asyncio.get_event_loop().time()
-        last_rebuild = self._last_rebuild_at.get(sandbox_id, 0.0)
+        import time as time_module
+
+        now = time_module.time()
+        last_rebuild = await self._last_rebuild_at.get(sandbox_id)
+        last_rebuild = last_rebuild or 0.0
 
         if now - last_rebuild < self._rebuild_cooldown_seconds:
             logger.warning(
@@ -1801,8 +1915,8 @@ class MCPSandboxAdapter(SandboxPort):
             f"attempting to rebuild..."
         )
 
-        # Record rebuild attempt time before starting rebuild
-        self._last_rebuild_at[sandbox_id] = now
+        # Record rebuild attempt time before starting rebuild (uses TTL cache)
+        await self._last_rebuild_at.set(sandbox_id, now)
 
         # Rebuild the sandbox with the same ID
         new_instance = await self._rebuild_sandbox(instance)

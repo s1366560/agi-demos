@@ -21,7 +21,7 @@ export interface AgentChatInputAreaProps {
   /** Callback when height changes */
   onHeightChange: (height: number) => void
   /** Callback when user sends a message */
-  onSend: (content: string) => void | Promise<void>
+  onSend: (content: string, attachmentIds?: string[]) => void | Promise<void>
   /** Callback when user aborts streaming */
   onAbort: () => void
   /** Whether agent is currently streaming */
@@ -36,6 +36,10 @@ export interface AgentChatInputAreaProps {
   minHeight?: typeof INPUT_MIN_HEIGHT
   /** Maximum height constraint */
   maxHeight?: typeof INPUT_MAX_HEIGHT
+  /** Current conversation ID for file attachments */
+  conversationId?: string
+  /** Current project ID for file attachments */
+  projectId?: string
 }
 
 /**
@@ -54,6 +58,8 @@ export const AgentChatInputArea = ({
   onTogglePlanMode,
   minHeight = 120,
   maxHeight = 400,
+  conversationId,
+  projectId,
 }: AgentChatInputAreaProps) => {
   return (
     <div
@@ -83,6 +89,8 @@ export const AgentChatInputArea = ({
         isPlanMode={isPlanMode}
         onTogglePlanMode={onTogglePlanMode}
         disabled={disabled}
+        conversationId={conversationId}
+        projectId={projectId}
       />
     </div>
   )

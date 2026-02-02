@@ -199,12 +199,10 @@ export function sseEventToTimeline(
             }
 
             // Determine if this is an error:
-            // 1. Check if 'error' field is present in data
-            // 2. Check if observation starts with 'Error:' (fallback for legacy format)
-            const hasErrorField = !!data.error;
-            const observationLooksLikeError = typeof observationValue === 'string' &&
-                observationValue.toLowerCase().startsWith('error:');
-            const isError = hasErrorField || observationLooksLikeError;
+            // Only check if 'error' field is present in data
+            // Note: We no longer check if observation starts with 'Error:' 
+            // as this caused false positives for valid tool outputs
+            const isError = !!data.error;
 
             return {
                 id: generateTimelineEventId('observe'),

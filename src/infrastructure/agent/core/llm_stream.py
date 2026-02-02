@@ -841,8 +841,14 @@ class LLMStream:
                 # Parse arguments
                 try:
                     arguments = json.loads(tracker.arguments) if tracker.arguments else {}
-                except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse tool arguments: {tracker.arguments}")
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"Failed to parse tool arguments for {tracker.name}: {e}. "
+                        f"Arguments preview: {tracker.arguments[:200]}..."
+                    )
+                    # Store raw arguments for later retry in processor
+                    # The processor will attempt to parse again and provide
+                    # better error feedback to the LLM if parsing still fails
                     arguments = {"_raw": tracker.arguments}
 
                 yield StreamEvent.tool_call_end(

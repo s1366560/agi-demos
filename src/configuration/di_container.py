@@ -393,6 +393,26 @@ class DIContainer:
             endpoint_url=self._settings.s3_endpoint_url,
         )
 
+    def attachment_repository(self):
+        """Get AttachmentRepository for attachment persistence."""
+        from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
+            SqlAlchemyAttachmentRepository,
+        )
+
+        return SqlAlchemyAttachmentRepository(self._db)
+
+    def attachment_service(self):
+        """Get AttachmentService for file upload handling.
+
+        Supports both simple and multipart uploads for agent chat attachments.
+        """
+        from src.application.services.attachment_service import AttachmentService
+
+        return AttachmentService(
+            storage_service=self.storage_service(),
+            attachment_repository=self.attachment_repository(),
+        )
+
     def artifact_service(self):
         """Get ArtifactService for managing tool output artifacts.
 

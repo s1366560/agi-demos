@@ -539,7 +539,11 @@ class AgentServiceImpl implements AgentService {
             isInitialized: Boolean(data.is_initialized),
             isActive: Boolean(data.is_active),
             toolCount: typeof data.tool_count === "number" ? data.tool_count : undefined,
+            builtinToolCount: typeof data.builtin_tool_count === "number" ? data.builtin_tool_count : undefined,
+            mcpToolCount: typeof data.mcp_tool_count === "number" ? data.mcp_tool_count : undefined,
             skillCount: typeof data.skill_count === "number" ? data.skill_count : undefined,
+            totalSkillCount: typeof data.total_skill_count === "number" ? data.total_skill_count : undefined,
+            loadedSkillCount: typeof data.loaded_skill_count === "number" ? data.loaded_skill_count : undefined,
             subagentCount: typeof data.subagent_count === "number" ? data.subagent_count : undefined,
             conversationId: typeof data.conversation_id === "string" ? data.conversation_id : undefined,
             errorMessage: typeof data.error_message === "string" ? data.error_message : undefined,
@@ -909,6 +913,89 @@ class AgentServiceImpl implements AgentService {
         this.subscriptions.delete(conversationId);
     }
 
+    // ============================================================================
+    // Agent Lifecycle Control Methods
+    // ============================================================================
+
+    /**
+     * Start the Agent Session for a project
+     *
+     * Explicitly starts the persistent Agent Session Workflow.
+     * The agent will run indefinitely until explicitly stopped.
+     *
+     * @param projectId - The project ID to start the agent for
+     * @returns Promise that resolves when the start signal is sent
+     *
+     * @example
+     * ```typescript
+     * await agentService.startAgent('proj-123');
+     * ```
+     */
+    startAgent(projectId: string): void {
+        const sent = this.send({
+            type: "start_agent",
+            project_id: projectId,
+        });
+
+        if (sent) {
+            logger.info(`[AgentWS] Start agent signal sent for project ${projectId}`);
+        } else {
+            logger.warn(`[AgentWS] Failed to send start agent signal - WebSocket not connected`);
+        }
+    }
+
+    /**
+     * Stop the Agent Session for a project
+     *
+     * Gracefully stops the persistent Agent Session Workflow.
+     * The agent will complete any in-progress work before shutting down.
+     *
+     * @param projectId - The project ID to stop the agent for
+     *
+     * @example
+     * ```typescript
+     * agentService.stopAgent('proj-123');
+     * ```
+     */
+    stopAgent(projectId: string): void {
+        const sent = this.send({
+            type: "stop_agent",
+            project_id: projectId,
+        });
+
+        if (sent) {
+            logger.info(`[AgentWS] Stop agent signal sent for project ${projectId}`);
+        } else {
+            logger.warn(`[AgentWS] Failed to send stop agent signal - WebSocket not connected`);
+        }
+    }
+
+    /**
+     * Restart the Agent Session for a project
+     *
+     * Stops the current agent and starts a fresh one.
+     * Useful for refreshing tools, skills, or recovering from errors.
+     *
+     * @param projectId - The project ID to restart the agent for
+     *
+     * @example
+     * ```typescript
+     * agentService.restartAgent('proj-123');
+     * ```
+     */
+    restartAgent(projectId: string): void {
+        const sent = this.send({
+            type: "restart_agent",
+            project_id: projectId,
+        });
+
+        if (sent) {
+            logger.info(`[AgentWS] Restart agent signal sent for project ${projectId}`);
+        } else {
+            logger.warn(`[AgentWS] Failed to send restart agent signal - WebSocket not connected`);
+        }
+    }
+
     /**
      * Chat with the Agent using WebSocket
      *
@@ -942,7 +1029,7 @@ class AgentServiceImpl implements AgentService {
      * @see AgentStreamHandler - Handler interface for all available callbacks
      */
     async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {
-        const { conversation_id, message, project_id } = request;
+        const { conversation_id, message, project_id, attachment_ids } = request;
 
         // Ensure WebSocket is connected
         if (!this.isConnected()) {
@@ -953,12 +1040,13 @@ class AgentServiceImpl implements AgentService {
         this.handlers.set(conversation_id, handler);
         this.subscriptions.add(conversation_id);
 
-        // Send message through WebSocket
+        // Send message through WebSocket (include attachment_ids if present)
         const sent = this.send({
             type: "send_message",
             conversation_id,
             message,
             project_id,
+            ...(attachment_ids && attachment_ids.length > 0 && { attachment_ids }),
         });
 
         if (!sent) {

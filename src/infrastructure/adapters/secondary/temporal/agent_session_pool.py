@@ -252,8 +252,12 @@ async def get_system_prompt_manager() -> Any:
 
             from src.infrastructure.agent.prompts import SystemPromptManager
 
-            _system_prompt_manager = SystemPromptManager(project_root=Path.cwd())
-            logger.info("Agent Session Pool: SystemPromptManager singleton created")
+            # Always use sandbox workspace path, never expose host filesystem
+            sandbox_workspace = Path("/workspace")
+            _system_prompt_manager = SystemPromptManager(project_root=sandbox_workspace)
+            logger.info(
+                "Agent Session Pool: SystemPromptManager singleton created (sandbox workspace)"
+            )
 
         return _system_prompt_manager
 
@@ -628,34 +632,47 @@ async def get_or_create_agent_session(
         match_threshold=subagent_match_threshold,
     )
 
-    # Create SkillExecutor (lightweight, doesn't need separate cache)
+    # Create SkillExecutor with unified SkillResourcePort
     skill_executor = None
     if skills:
-        import os
         from pathlib import Path
 
+        from src.infrastructure.adapters.secondary.skill import (
+            LocalSkillResourceAdapter,
+            SandboxSkillResourceAdapter,
+        )
         from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
             get_mcp_sandbox_adapter,
         )
         from src.infrastructure.agent.core.skill_executor import SkillExecutor
-        from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
-        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
 
         # Get sandbox adapter for resource injection
         sandbox_adapter = get_mcp_sandbox_adapter()
 
-        # Create resource injector if sandbox adapter is available
-        resource_injector = None
+        # Always use sandbox workspace path for skill resources
+        # Never expose host filesystem paths to agent
+        sandbox_workspace = Path("/workspace")
+
+        # Create unified SkillResourcePort based on environment
+        # If sandbox_adapter is available, use SandboxSkillResourceAdapter
+        # Otherwise, use LocalSkillResourceAdapter
+        skill_resource_port = None
         if sandbox_adapter:
-            # Use current working directory as project path for skill resources
-            project_path = Path(os.getcwd())
-            resource_loader = SkillResourceLoader(project_path)
-            resource_injector = SkillResourceInjector(resource_loader)
+            skill_resource_port = SandboxSkillResourceAdapter(
+                sandbox_adapter=sandbox_adapter,
+                default_project_path=sandbox_workspace,
+            )
+        else:
+            skill_resource_port = LocalSkillResourceAdapter(
+                default_project_path=sandbox_workspace,
+            )
 
         skill_executor = SkillExecutor(
             tools=tools,
-            resource_injector=resource_injector,
-            sandbox_adapter=sandbox_adapter,
+            skill_resource_port=skill_resource_port,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            project_path=sandbox_workspace,
         )
 
     # Get SystemPromptManager singleton
@@ -877,144 +894,6 @@ async def cleanup_marked_sessions() -> int:
             )
 
         return len(keys_to_remove)
-
-
-async def get_or_create_agent_session(
-    tenant_id: str,
-    project_id: str,
-    agent_mode: str,
-    tools: Dict[str, Any],
-    skills: Optional[List[Any]] = None,
-    subagents: Optional[List[Any]] = None,
-    processor_config: Optional[Any] = None,
-    subagent_match_threshold: float = 0.5,
-) -> AgentSessionContext:
-    """Get or create an agent session context with cached components.
-
-    This is the main entry point for the Agent Session Pool. It manages
-    the lifecycle of expensive-to-create components and enables efficient
-    reuse across multiple agent executions.
-
-    Args:
-        tenant_id: Tenant identifier
-        project_id: Project identifier
-        agent_mode: Agent mode (e.g., "default", "plan")
-        tools: Dictionary of tool name -> tool instance
-        skills: Optional list of Skill domain entities
-        subagents: Optional list of SubAgent domain entities
-        processor_config: Optional ProcessorConfig
-        subagent_match_threshold: Threshold for SubAgentRouter
-
-    Returns:
-        AgentSessionContext with cached components
-    """
-    skills = skills or []
-    subagents = subagents or []
-
-    session_key = generate_session_key(tenant_id, project_id, agent_mode)
-    tools_hash = compute_tools_hash(tools)
-    skills_hash = compute_skills_hash(skills)
-    subagents_hash = compute_subagents_hash(subagents)
-
-    async with _agent_session_pool_lock:
-        # Check for existing valid session
-        existing = _agent_session_pool.get(session_key)
-
-        if existing and existing.is_valid_for(tools_hash, skills_hash, subagents_hash):
-            # If session was marked for deletion, unmark it (it's being reused)
-            if hasattr(existing, "_marked_for_deletion_at"):
-                delattr(existing, "_marked_for_deletion_at")
-                logger.info(
-                    f"Agent Session Pool: Session {session_key} recovered from deletion queue"
-                )
-
-            existing.touch()
-            logger.debug(
-                f"Agent Session Pool: Cache hit for {session_key} (use_count={existing.use_count})"
-            )
-            return existing
-
-        # Cache miss or invalid - create new session
-        logger.info(
-            f"Agent Session Pool: Creating session for {session_key} "
-            f"(tools={len(tools)}, skills={len(skills)}, subagents={len(subagents)})"
-        )
-        start_time = time.time()
-
-    # Release lock during expensive operations
-
-    # Get or create tool definitions (cached separately)
-    tool_definitions = await get_or_create_tool_definitions(tools, tools_hash)
-
-    # Get or create SubAgentRouter (cached separately)
-    subagent_router = await get_or_create_subagent_router(
-        tenant_id=tenant_id,
-        subagents=subagents,
-        subagents_hash=subagents_hash,
-        match_threshold=subagent_match_threshold,
-    )
-
-    # Create SkillExecutor (lightweight, doesn't need separate cache)
-    skill_executor = None
-    if skills:
-        import os
-        from pathlib import Path
-
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-            get_mcp_sandbox_adapter,
-        )
-        from src.infrastructure.agent.core.skill_executor import SkillExecutor
-        from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
-        from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
-
-        # Get sandbox adapter for resource injection
-        sandbox_adapter = get_mcp_sandbox_adapter()
-
-        # Create resource injector if sandbox adapter is available
-        resource_injector = None
-        if sandbox_adapter:
-            # Use current working directory as project path for skill resources
-            project_path = Path(os.getcwd())
-            resource_loader = SkillResourceLoader(project_path)
-            resource_injector = SkillResourceInjector(resource_loader)
-
-        skill_executor = SkillExecutor(
-            tools=tools,
-            resource_injector=resource_injector,
-            sandbox_adapter=sandbox_adapter,
-        )
-
-    # Get SystemPromptManager singleton
-    system_prompt_manager = await get_system_prompt_manager()
-
-    # Create session context
-    session = AgentSessionContext(
-        session_key=session_key,
-        tenant_id=tenant_id,
-        project_id=project_id,
-        agent_mode=agent_mode,
-        tool_definitions=tool_definitions,
-        raw_tools=tools,
-        subagent_router=subagent_router,
-        skill_executor=skill_executor,
-        skills=skills,
-        system_prompt_manager=system_prompt_manager,
-        processor_config=processor_config,
-        tools_hash=tools_hash,
-        skills_hash=skills_hash,
-        subagents_hash=subagents_hash,
-    )
-
-    # Store in pool and mark as used
-    async with _agent_session_pool_lock:
-        _agent_session_pool[session_key] = session
-        # Mark session as used (use_count starts at 0, touch() increments to 1)
-        session.touch()
-
-    elapsed_ms = (time.time() - start_time) * 1000
-    logger.info(f"Agent Session Pool: Session created for {session_key} in {elapsed_ms:.1f}ms")
-
-    return session
 
 
 def clear_all_caches() -> Dict[str, int]:

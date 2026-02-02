@@ -47,6 +47,8 @@ class AgentInput:
     event_callback_url: Optional[str] = None
     # Use new ReActAgent-based Activity (recommended for full feature support)
     use_react_agent: bool = True
+    # Attachment IDs for files to include with the message
+    attachment_ids: Optional[List[str]] = None
 
 
 @dataclass
@@ -205,6 +207,7 @@ class AgentExecutionWorkflow:
             "project_id": input.project_id,
             "user_id": input.user_id,
             "tenant_id": input.tenant_id,
+            "attachment_ids": input.attachment_ids,
         }
 
         # Prepare activity state
@@ -244,6 +247,7 @@ class AgentExecutionWorkflow:
             "project_id": input.project_id,
             "user_id": input.user_id,
             "tenant_id": input.tenant_id,
+            "attachment_ids": input.attachment_ids,
         }
 
         # Prepare activity state

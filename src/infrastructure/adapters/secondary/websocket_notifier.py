@@ -15,7 +15,6 @@ Usage:
     await notifier.notify_ready(tenant_id, project_id, tool_count=10)
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -47,8 +46,12 @@ class LifecycleStateChangeMessage:
         lifecycle_state: Current lifecycle state
         is_initialized: Whether agent is initialized
         is_active: Whether agent is active (not paused/stopped)
-        tool_count: Number of available tools
-        skill_count: Number of available skills
+        tool_count: Total number of available tools (builtin + mcp)
+        builtin_tool_count: Number of built-in tools
+        mcp_tool_count: Number of MCP tools
+        skill_count: Number of loaded skills (deprecated, use loaded_skill_count)
+        total_skill_count: Total number of skills available
+        loaded_skill_count: Number of skills loaded into current context
         subagent_count: Number of available subagents
         conversation_id: Current conversation ID (for executing state)
         error_message: Error message (for error state)
@@ -61,7 +64,11 @@ class LifecycleStateChangeMessage:
     is_initialized: bool
     is_active: bool
     tool_count: int = 0
-    skill_count: int = 0
+    builtin_tool_count: int = 0
+    mcp_tool_count: int = 0
+    skill_count: int = 0  # Deprecated, kept for backward compatibility
+    total_skill_count: int = 0
+    loaded_skill_count: int = 0
     subagent_count: int = 0
     conversation_id: Optional[str] = None
     error_message: Optional[str] = None
@@ -74,7 +81,11 @@ class LifecycleStateChangeMessage:
             "is_initialized": self.is_initialized,
             "is_active": self.is_active,
             "tool_count": self.tool_count,
+            "builtin_tool_count": self.builtin_tool_count,
+            "mcp_tool_count": self.mcp_tool_count,
             "skill_count": self.skill_count,
+            "total_skill_count": self.total_skill_count,
+            "loaded_skill_count": self.loaded_skill_count,
             "subagent_count": self.subagent_count,
         }
 
@@ -114,9 +125,7 @@ class WebSocketNotifier:
         """
         self._manager = connection_manager
 
-    async def notify_lifecycle_state_change(
-        self, message: LifecycleStateChangeMessage
-    ) -> int:
+    async def notify_lifecycle_state_change(self, message: LifecycleStateChangeMessage) -> int:
         """
         Notify subscribers of a lifecycle state change.
 
@@ -148,9 +157,7 @@ class WebSocketNotifier:
             logger.error(f"[WSNotifier] Failed to notify lifecycle state: {e}")
             return 0
 
-    async def notify_initializing(
-        self, tenant_id: str, project_id: str
-    ) -> int:
+    async def notify_initializing(self, tenant_id: str, project_id: str) -> int:
         """
         Notify that agent is initializing.
 
@@ -177,7 +184,11 @@ class WebSocketNotifier:
         tenant_id: str,
         project_id: str,
         tool_count: int = 0,
+        builtin_tool_count: int = 0,
+        mcp_tool_count: int = 0,
         skill_count: int = 0,
+        total_skill_count: int = 0,
+        loaded_skill_count: int = 0,
         subagent_count: int = 0,
     ) -> int:
         """
@@ -186,8 +197,12 @@ class WebSocketNotifier:
         Args:
             tenant_id: Tenant identifier
             project_id: Project identifier
-            tool_count: Number of available tools
-            skill_count: Number of available skills
+            tool_count: Total number of available tools
+            builtin_tool_count: Number of built-in tools
+            mcp_tool_count: Number of MCP tools
+            skill_count: Deprecated, use loaded_skill_count
+            total_skill_count: Total number of skills available
+            loaded_skill_count: Number of skills loaded into current context
             subagent_count: Number of available subagents
 
         Returns:
@@ -200,7 +215,11 @@ class WebSocketNotifier:
             is_initialized=True,
             is_active=True,
             tool_count=tool_count,
+            builtin_tool_count=builtin_tool_count,
+            mcp_tool_count=mcp_tool_count,
             skill_count=skill_count,
+            total_skill_count=total_skill_count,
+            loaded_skill_count=loaded_skill_count,
             subagent_count=subagent_count,
         )
         return await self.notify_lifecycle_state_change(message)
@@ -232,9 +251,7 @@ class WebSocketNotifier:
         )
         return await self.notify_lifecycle_state_change(message)
 
-    async def notify_paused(
-        self, tenant_id: str, project_id: str
-    ) -> int:
+    async def notify_paused(self, tenant_id: str, project_id: str) -> int:
         """
         Notify that agent is paused.
 
@@ -254,9 +271,7 @@ class WebSocketNotifier:
         )
         return await self.notify_lifecycle_state_change(message)
 
-    async def notify_shutting_down(
-        self, tenant_id: str, project_id: str
-    ) -> int:
+    async def notify_shutting_down(self, tenant_id: str, project_id: str) -> int:
         """
         Notify that agent is shutting down.
 

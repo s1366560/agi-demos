@@ -26,7 +26,7 @@ Usage:
         id=f"project_agent_tenant-123_project-456_default",
         task_queue="project-agent-tasks",
     )
-    
+
     # Send chat request
     result = await handle.execute_update(
         ProjectAgentWorkflow.chat,
@@ -37,10 +37,10 @@ Usage:
             user_id="user-xyz",
         ),
     )
-    
+
     # Query status
     status = await handle.query(ProjectAgentWorkflow.get_status)
-    
+
     # Stop workflow
     await handle.signal(ProjectAgentWorkflow.stop)
 """
@@ -58,7 +58,6 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from src.infrastructure.agent.core.project_react_agent import (
         ProjectAgentConfig,
-        ProjectAgentStatus,
     )
 
 logger = logging.getLogger(__name__)
@@ -81,7 +80,8 @@ class ProjectAgentWorkflowInput:
     max_steps: int = 20
 
     # Session Configuration
-    idle_timeout_seconds: int = 1800  # 30 minutes
+    # Note: persistent=True means the workflow runs indefinitely until explicitly stopped
+    persistent: bool = True  # Agent runs forever until explicitly stopped
     max_concurrent_chats: int = 10
 
     # Tool Configuration
@@ -272,15 +272,11 @@ class ProjectAgentWorkflow:
 
             except asyncio.TimeoutError:
                 # Idle timeout - normal shutdown
-                workflow.logger.info(
-                    f"ProjectAgentWorkflow idle timeout: {self._workflow_id}"
-                )
+                workflow.logger.info(f"ProjectAgentWorkflow idle timeout: {self._workflow_id}")
                 self._stop_requested = True
 
             except Exception as e:
-                workflow.logger.error(
-                    f"ProjectAgentWorkflow error: {type(e).__name__}: {e}"
-                )
+                workflow.logger.error(f"ProjectAgentWorkflow error: {type(e).__name__}: {e}")
                 self._error = str(e)
 
                 # Check for recovery
@@ -374,7 +370,7 @@ class ProjectAgentWorkflow:
             return False
 
     async def _wait_for_activity(self) -> None:
-        """Wait for chat requests, signals, or idle timeout."""
+        """Wait for chat requests, signals (persistent mode - no timeout)."""
         # Reset pause flag
         was_paused = self._pause_requested
         self._pause_requested = False
@@ -384,19 +380,12 @@ class ProjectAgentWorkflow:
             workflow.logger.info("Project agent paused, waiting for resume or stop")
             await workflow.wait_condition(lambda: self._stop_requested or self._active_chats > 0)
         else:
-            # Normal operation - wait with idle timeout
-            idle_timeout = timedelta(seconds=self._input.idle_timeout_seconds)
-
-            try:
-                await workflow.wait_condition(
-                    lambda: self._stop_requested
-                    or self._pause_requested
-                    or self._refresh_requested,
-                    timeout=idle_timeout,
-                )
-            except asyncio.TimeoutError:
-                # Idle timeout - raise to trigger normal shutdown
-                raise
+            # Persistent mode - wait indefinitely for signals
+            # No idle timeout - workflow runs forever until explicitly stopped
+            workflow.logger.info("Project agent running (persistent mode)")
+            await workflow.wait_condition(
+                lambda: self._stop_requested or self._pause_requested or self._refresh_requested,
+            )
 
     async def _cleanup(self) -> None:
         """Cleanup resources before workflow exit."""
@@ -424,10 +413,12 @@ class ProjectAgentWorkflow:
         """Build final workflow status."""
         uptime_seconds = 0.0
         if self._created_at:
-            created_time = workflow.now() - workflow.parse_duration(
+            workflow.now() - workflow.parse_duration(
                 f"PT{(workflow.now() - workflow.datetime.fromisoformat(self._created_at)).total_seconds()}S"
             )
-            uptime_seconds = (workflow.now() - workflow.datetime.fromisoformat(self._created_at)).total_seconds()
+            uptime_seconds = (
+                workflow.now() - workflow.datetime.fromisoformat(self._created_at)
+            ).total_seconds()
 
         return {
             "tenant_id": self._input.tenant_id,
@@ -477,8 +468,7 @@ class ProjectAgentWorkflow:
         self._current_message_id = request.message_id
 
         workflow.logger.info(
-            f"Processing chat: conversation={request.conversation_id}, "
-            f"message={request.message_id}"
+            f"Processing chat: conversation={request.conversation_id}, message={request.message_id}"
         )
 
         try:
@@ -676,9 +666,7 @@ class ProjectAgentWorkflow:
         Args:
             additional_seconds: Additional seconds
         """
-        workflow.logger.info(
-            f"Extending timeout by {additional_seconds}s: {self._workflow_id}"
-        )
+        workflow.logger.info(f"Extending timeout by {additional_seconds}s: {self._workflow_id}")
         # This signal resets activity by triggering a new wait
         # The actual implementation would track extended timeout separately
 

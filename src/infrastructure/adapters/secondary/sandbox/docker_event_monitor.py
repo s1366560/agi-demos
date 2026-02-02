@@ -59,12 +59,16 @@ class DockerEventMonitor:
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
         self._tracked_containers: Set[str] = set()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None  # Store main event loop
 
     async def start(self) -> None:
         """Start monitoring Docker events."""
         if self._running:
             logger.warning("[DockerEventMonitor] Already running")
             return
+
+        # Capture the main event loop for use in thread pool callbacks
+        self._loop = asyncio.get_running_loop()
 
         # Initialize Docker client
         if not self._docker:
@@ -159,14 +163,12 @@ class DockerEventMonitor:
             f"(sandbox={sandbox_id}, project={project_id})"
         )
 
-        # Schedule async callback
-        if self._on_status_change and project_id:
+        # Schedule async callback using the captured main event loop
+        if self._on_status_change and project_id and self._loop:
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.run_coroutine_threadsafe(
-                        self._on_status_change(project_id, sandbox_id, new_status, action), loop
-                    )
+                asyncio.run_coroutine_threadsafe(
+                    self._on_status_change(project_id, sandbox_id, new_status, action), self._loop
+                )
             except Exception as e:
                 logger.error(f"[DockerEventMonitor] Callback error: {e}")
 

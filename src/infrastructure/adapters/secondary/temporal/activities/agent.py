@@ -100,6 +100,55 @@ async def _store_artifact(
         return None
 
 
+async def _prepare_attachments_for_llm(
+    attachment_ids: List[str],
+    tenant_id: str,
+    project_id: str,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Prepare attachments for LLM multimodal input.
+
+    Retrieves attachment content from storage and formats it for LLM consumption.
+    For images, returns base64 data URLs. For documents, returns text content.
+
+    Args:
+        attachment_ids: List of attachment IDs to prepare
+        tenant_id: Tenant ID for access control
+        project_id: Project ID for access control
+
+    Returns:
+        List of attachment content dicts with 'type', 'content', 'mime_type', etc.
+        Returns None if no valid attachments found or on error.
+    """
+    if not attachment_ids:
+        return None
+
+    try:
+        from src.configuration.di_container import get_container
+
+        container = get_container()
+        attachment_service = container.attachment_service()
+
+        # Prepare attachments for LLM (returns formatted content)
+        llm_content = await attachment_service.prepare_for_llm(
+            attachment_ids=attachment_ids,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+
+        if not llm_content:
+            logger.warning(
+                f"[AgentActivity] No valid LLM content from attachments: {attachment_ids}"
+            )
+            return None
+
+        return llm_content
+
+    except Exception as e:
+        logger.error(f"[AgentActivity] Failed to prepare attachments for LLM: {e}", exc_info=True)
+        return None
+
+
 async def _extract_artifacts_from_event_data(
     conversation_id: str,
     message_id: str,
@@ -1406,6 +1455,7 @@ async def execute_react_agent_activity(
         tenant_id = input.get("tenant_id", "")
         agent_config = input.get("agent_config", {})
         conversation_context = input.get("conversation_context", [])
+        attachment_ids = input.get("attachment_ids") or []
 
         # Get current sequence number
         sequence_number = state.get("sequence_number", 0)
@@ -1413,6 +1463,19 @@ async def execute_react_agent_activity(
         # Sync sequence_number from DB to handle Temporal retry scenarios
         # When Activity is retried, state.sequence_number may be stale
         sequence_number = await _sync_sequence_number_from_db(conversation_id, sequence_number)
+
+        # Process attachments if provided
+        attachment_content = None
+        if attachment_ids:
+            attachment_content = await _prepare_attachments_for_llm(
+                attachment_ids=attachment_ids,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+            if attachment_content:
+                logger.info(
+                    f"[ReActAgentActivity] Prepared {len(attachment_content)} attachments for LLM"
+                )
 
         # Get shared resources from Worker State
         graph_service = get_agent_graph_service()
@@ -1575,6 +1638,7 @@ async def execute_react_agent_activity(
             tenant_id=tenant_id,
             conversation_context=conversation_context,
             message_id=assistant_message_id,
+            attachment_content=attachment_content,
         ):
             sequence_number += 1
 

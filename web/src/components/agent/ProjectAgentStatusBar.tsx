@@ -7,6 +7,7 @@
  * - Resource counts (tools, skills, subagents)
  * - Execution metrics (total/failed chats, active chats)
  * - Health status (uptime, last error)
+ * - Lifecycle control buttons (start, stop, restart)
  *
  * This component now uses the unified agent status hook for consolidated state management.
  *
@@ -14,7 +15,8 @@
  */
 
 import type { FC } from 'react';
-import { Tooltip, Badge } from 'antd';
+import { useState, useCallback } from 'react';
+import { Tooltip, Popconfirm, message } from 'antd';
 import {
   Zap,
   MessageSquare,
@@ -29,9 +31,14 @@ import {
   BrainCircuit,
   Activity,
   AlertTriangle,
+  Play,
+  Square,
+  RefreshCw,
+  Plug,
 } from 'lucide-react';
 import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
 import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
+import { agentService } from '../../services/agentService';
 
 interface ProjectAgentStatusBarProps {
   /** Project ID */
@@ -132,11 +139,44 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     enabled: !!projectId,
   });
 
+  // Lifecycle control state
+  const [isActionPending, setIsActionPending] = useState(false);
+
   const lifecycleState = status.lifecycle;
   const config = lifecycleConfig[lifecycleState];
 
   const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
+
+  // Check if agent can be started (not running)
+  const canStart = lifecycleState === 'uninitialized' || lifecycleState === 'error';
+  // Check if agent can be stopped (is running)
+  const canStop = lifecycleState === 'ready' || lifecycleState === 'executing' || lifecycleState === 'paused';
+  // Check if agent can be restarted (exists)
+  const canRestart = lifecycleState !== 'uninitialized' && lifecycleState !== 'shutting_down' && lifecycleState !== 'initializing';
+
+  // Lifecycle control handlers
+  const handleStartAgent = useCallback(() => {
+    setIsActionPending(true);
+    agentService.startAgent(projectId);
+    message.info('正在启动 Agent...');
+    // Reset pending state after a delay (actual state will be updated via WebSocket)
+    setTimeout(() => setIsActionPending(false), 3000);
+  }, [projectId]);
+
+  const handleStopAgent = useCallback(() => {
+    setIsActionPending(true);
+    agentService.stopAgent(projectId);
+    message.info('正在停止 Agent...');
+    setTimeout(() => setIsActionPending(false), 3000);
+  }, [projectId]);
+
+  const handleRestartAgent = useCallback(() => {
+    setIsActionPending(true);
+    agentService.restartAgent(projectId);
+    message.info('正在重启 Agent...');
+    setTimeout(() => setIsActionPending(false), 5000);
+  }, [projectId]);
 
   return (
     <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -186,22 +226,46 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {/* Separator */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
 
-        {/* Resources: Tools - always show if we have data */}
-        {status.resources.tools > 0 && (
-          <Tooltip title={`可用工具: ${status.resources.tools}`}>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
+        {/* Resources: Tools with detailed breakdown */}
+        {status.toolStats.total > 0 && (
+          <Tooltip 
+            title={
+              <div className="space-y-1">
+                <div className="font-medium">工具统计</div>
+                <div>总工具: {status.toolStats.total}</div>
+                <div>内置工具: {status.toolStats.builtin}</div>
+                <div>MCP 工具: {status.toolStats.mcp}</div>
+              </div>
+            }
+          >
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
               <Wrench size={11} />
-              <span>{status.resources.tools}</span>
+              <span>{status.toolStats.builtin}</span>
+              {status.toolStats.mcp > 0 && (
+                <>
+                  <span className="text-slate-400">+</span>
+                  <Plug size={10} className="text-blue-500" />
+                  <span className="text-blue-500">{status.toolStats.mcp}</span>
+                </>
+              )}
             </div>
           </Tooltip>
         )}
 
-        {/* Resources: Skills - always show if we have data */}
-        {status.resources.skills > 0 && (
-          <Tooltip title={`已加载技能: ${status.resources.skills}`}>
+        {/* Resources: Skills with detailed breakdown */}
+        {status.skillStats.total > 0 && (
+          <Tooltip 
+            title={
+              <div className="space-y-1">
+                <div className="font-medium">技能统计</div>
+                <div>总技能: {status.skillStats.total}</div>
+                <div>已加载: {status.skillStats.loaded}</div>
+              </div>
+            }
+          >
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <BrainCircuit size={11} />
-              <span>{status.resources.skills}</span>
+              <span>{status.skillStats.loaded}/{status.skillStats.total}</span>
             </div>
           </Tooltip>
         )}
@@ -252,33 +316,131 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         )}
       </div>
 
-      {/* Right: Connection & Metrics */}
+      {/* Right: Lifecycle Controls & Connection */}
       <div className="flex items-center gap-3 text-xs">
-        {/* Active Calls */}
-        {status.resources.activeCalls > 0 && (
-          <Tooltip title={`活跃工具调用: ${status.resources.activeCalls}`}>
-            <div className="flex items-center gap-1.5 text-slate-400">
-              <Badge
-                count={status.resources.activeCalls}
-                style={{ fontSize: '10px', height: '14px', lineHeight: '14px', minWidth: '14px' }}
-                color="blue"
-              />
-              <span>调用</span>
-            </div>
-          </Tooltip>
-        )}
+        {/* Lifecycle Control Buttons */}
+        <div className="flex items-center gap-1.5">
+          {/* Start Button - shown when agent is not running */}
+          {canStart && (
+            <Tooltip title="启动 Agent">
+              <button
+                type="button"
+                onClick={handleStartAgent}
+                disabled={isActionPending}
+                className={`
+                  p-1 rounded transition-colors
+                  ${isActionPending 
+                    ? 'text-slate-400 cursor-not-allowed' 
+                    : 'text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                  }
+                `}
+              >
+                {isActionPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Play size={14} />
+                )}
+              </button>
+            </Tooltip>
+          )}
 
-        {/* Connection Status */}
-        <Tooltip title={isLoading ? '加载中...' : status.connection.websocket ? 'WebSocket 已连接' : '就绪'}>
-          <div className="flex items-center gap-1 text-slate-400">
+          {/* Stop Button - shown when agent is running */}
+          {canStop && (
+            <Popconfirm
+              title="停止 Agent"
+              description="确定要停止 Agent 吗？正在进行的任务将被中断。"
+              onConfirm={handleStopAgent}
+              okText="停止"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+            >
+              <Tooltip title="停止 Agent">
+                <button
+                  type="button"
+                  disabled={isActionPending}
+                  className={`
+                    p-1 rounded transition-colors
+                    ${isActionPending 
+                      ? 'text-slate-400 cursor-not-allowed' 
+                      : 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30'
+                    }
+                  `}
+                >
+                  {isActionPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Square size={14} />
+                  )}
+                </button>
+              </Tooltip>
+            </Popconfirm>
+          )}
+
+          {/* Restart Button - shown when agent exists */}
+          {canRestart && (
+            <Popconfirm
+              title="重启 Agent"
+              description="重启将刷新工具和配置。确定要重启吗？"
+              onConfirm={handleRestartAgent}
+              okText="重启"
+              cancelText="取消"
+            >
+              <Tooltip title="重启 Agent (刷新工具和配置)">
+                <button
+                  type="button"
+                  disabled={isActionPending}
+                  className={`
+                    p-1 rounded transition-colors
+                    ${isActionPending 
+                      ? 'text-slate-400 cursor-not-allowed' 
+                      : 'text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                    }
+                  `}
+                >
+                  {isActionPending ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <RefreshCw size={14} />
+                  )}
+                </button>
+              </Tooltip>
+            </Popconfirm>
+          )}
+        </div>
+
+        {/* Separator */}
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+
+        {/* Connection & Activity Status - Combined */}
+        <Tooltip 
+          title={
+            <div className="space-y-1">
+              <div>{isLoading ? '加载中...' : status.connection.websocket ? 'WebSocket 已连接' : '就绪'}</div>
+              {status.resources.activeCalls > 0 && (
+                <div>活跃工具调用: {status.resources.activeCalls}</div>
+              )}
+            </div>
+          }
+        >
+          <div className="flex items-center gap-1.5 text-slate-400">
             {isLoading ? (
               <Loader2 size={12} className="animate-spin" />
+            ) : status.resources.activeCalls > 0 ? (
+              <>
+                <Activity size={12} className="text-blue-500 animate-pulse" />
+                <span className="text-blue-500">{status.resources.activeCalls} 调用中</span>
+              </>
             ) : status.connection.websocket ? (
-              <Wifi size={12} />
+              <>
+                <Wifi size={12} className="text-emerald-500" />
+                <span className="text-emerald-500">在线</span>
+              </>
             ) : (
-              <Wifi size={12} />
+              <>
+                <Wifi size={12} />
+                <span>就绪</span>
+              </>
             )}
-            <span>{isLoading ? '加载中' : status.connection.websocket ? '已连接' : '就绪'}</span>
           </div>
         </Tooltip>
       </div>

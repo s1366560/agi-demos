@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 
 @dataclass
@@ -13,6 +13,22 @@ class UploadResult:
     size_bytes: int
     content_type: str
     etag: Optional[str] = None
+
+
+@dataclass
+class MultipartUploadResult:
+    """Result of initiating a multipart upload."""
+
+    upload_id: str
+    object_key: str
+
+
+@dataclass
+class PartUploadResult:
+    """Result of uploading a single part in multipart upload."""
+
+    part_number: int
+    etag: str
 
 
 class StorageServicePort(ABC):
@@ -118,5 +134,107 @@ class StorageServicePort(ABC):
 
         Returns:
             List of object keys matching the prefix
+        """
+        pass
+
+    # ==================== Multipart Upload Methods ====================
+
+    @abstractmethod
+    async def create_multipart_upload(
+        self,
+        object_key: str,
+        content_type: str,
+        metadata: Optional[dict] = None,
+    ) -> MultipartUploadResult:
+        """
+        Initialize a multipart upload.
+
+        Args:
+            object_key: The storage path/key for the file
+            content_type: MIME type of the file
+            metadata: Optional metadata to attach to the file
+
+        Returns:
+            MultipartUploadResult with upload_id and object_key
+        """
+        pass
+
+    @abstractmethod
+    async def upload_part(
+        self,
+        object_key: str,
+        upload_id: str,
+        part_number: int,
+        data: bytes,
+    ) -> PartUploadResult:
+        """
+        Upload a single part in a multipart upload.
+
+        Args:
+            object_key: The storage path/key for the file
+            upload_id: The multipart upload ID
+            part_number: The part number (1-indexed)
+            data: The part content as bytes
+
+        Returns:
+            PartUploadResult with part_number and etag
+        """
+        pass
+
+    @abstractmethod
+    async def complete_multipart_upload(
+        self,
+        object_key: str,
+        upload_id: str,
+        parts: List[PartUploadResult],
+    ) -> UploadResult:
+        """
+        Complete a multipart upload.
+
+        Args:
+            object_key: The storage path/key for the file
+            upload_id: The multipart upload ID
+            parts: List of PartUploadResult from uploaded parts
+
+        Returns:
+            UploadResult with the final file information
+        """
+        pass
+
+    @abstractmethod
+    async def abort_multipart_upload(
+        self,
+        object_key: str,
+        upload_id: str,
+    ) -> bool:
+        """
+        Abort a multipart upload and clean up uploaded parts.
+
+        Args:
+            object_key: The storage path/key for the file
+            upload_id: The multipart upload ID
+
+        Returns:
+            True if aborted successfully
+        """
+        pass
+
+    @abstractmethod
+    async def generate_presigned_upload_url(
+        self,
+        object_key: str,
+        content_type: str,
+        expiration_seconds: int = 3600,
+    ) -> str:
+        """
+        Generate a presigned URL for uploading a file directly.
+
+        Args:
+            object_key: The storage path/key for the file
+            content_type: MIME type of the file
+            expiration_seconds: URL validity period in seconds
+
+        Returns:
+            A presigned URL string for PUT operation
         """
         pass

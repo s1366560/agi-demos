@@ -1,7 +1,7 @@
 """Project data models."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,6 +33,57 @@ class GraphConfig(BaseModel):
     community_detection: bool = Field(default=True, description="Enable community detection")
 
 
+class LocalSandboxConfigSchema(BaseModel):
+    """Configuration for local sandbox connection."""
+
+    workspace_path: str = Field(
+        default="/workspace",
+        description="Path to workspace directory on user's local machine",
+    )
+    tunnel_url: Optional[str] = Field(
+        default=None,
+        description="WebSocket tunnel URL for NAT traversal (e.g., wss://xxx.ngrok.io)",
+    )
+    host: str = Field(default="localhost", description="Local host address")
+    port: int = Field(default=8765, ge=1024, le=65535, description="Local port number")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "workspace_path": "/home/user/projects/my-project",
+                "tunnel_url": "wss://abc123.ngrok.io",
+                "host": "localhost",
+                "port": 8765,
+            }
+        }
+    )
+
+
+class SandboxConfigSchema(BaseModel):
+    """Sandbox configuration for project."""
+
+    sandbox_type: Literal["cloud", "local"] = Field(
+        default="cloud",
+        description="Type of sandbox: 'cloud' for server-managed Docker, 'local' for user's machine",
+    )
+    local_config: Optional[LocalSandboxConfigSchema] = Field(
+        default=None,
+        description="Configuration for local sandbox (required when sandbox_type is 'local')",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "sandbox_type": "local",
+                "local_config": {
+                    "workspace_path": "/home/user/workspace",
+                    "tunnel_url": "wss://abc123.ngrok.io",
+                },
+            }
+        }
+    )
+
+
 class ProjectCreate(BaseModel):
     """Request model for creating a project."""
 
@@ -46,6 +97,9 @@ class ProjectCreate(BaseModel):
     )
     graph_config: GraphConfig = Field(
         default_factory=GraphConfig, description="Graph configuration"
+    )
+    sandbox_config: SandboxConfigSchema = Field(
+        default_factory=SandboxConfigSchema, description="Sandbox configuration"
     )
     is_public: bool = Field(default=False, description="Whether the project is public")
 
@@ -67,6 +121,9 @@ class ProjectCreate(BaseModel):
                     "similarity_threshold": 0.7,
                     "community_detection": True,
                 },
+                "sandbox_config": {
+                    "sandbox_type": "cloud",
+                },
                 "is_public": False,
             }
         }
@@ -84,6 +141,9 @@ class ProjectUpdate(BaseModel):
     )
     memory_rules: Optional[MemoryRulesConfig] = Field(default=None, description="Memory rules")
     graph_config: Optional[GraphConfig] = Field(default=None, description="Graph configuration")
+    sandbox_config: Optional[SandboxConfigSchema] = Field(
+        default=None, description="Sandbox configuration"
+    )
     is_public: Optional[bool] = Field(default=None, description="Whether the project is public")
 
     model_config = ConfigDict(
@@ -167,6 +227,9 @@ class ProjectResponse(BaseModel):
     )
     graph_config: GraphConfig = Field(
         default_factory=GraphConfig, description="Graph configuration"
+    )
+    sandbox_config: SandboxConfigSchema = Field(
+        default_factory=SandboxConfigSchema, description="Sandbox configuration"
     )
     is_public: bool = Field(default=False, description="Whether the project is public")
     created_at: datetime = Field(..., description="Creation timestamp")

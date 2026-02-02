@@ -2,6 +2,8 @@
 
 Provides a WebSocket-based MCP server that exposes file system tools
 for remote sandbox operations.
+
+Supports token-based authentication for secure local sandbox connections.
 """
 
 import asyncio
@@ -9,6 +11,7 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import parse_qs
 
 import aiohttp
 from aiohttp import web
@@ -23,6 +26,16 @@ class MCPServerInfo:
     name: str = "sandbox-mcp-server"
     version: str = "0.1.0"
     protocol_version: str = "2024-11-05"
+
+
+@dataclass
+class AuthConfig:
+    """Authentication configuration."""
+
+    enabled: bool = False  # Set to True for local sandbox mode
+    platform_url: Optional[str] = None  # MemStack platform URL for token validation
+    allow_localhost: bool = True  # Allow unauthenticated localhost connections
+    static_token: Optional[str] = None  # Optional static token for simple auth
 
 
 @dataclass
@@ -48,6 +61,7 @@ class MCPWebSocketServer:
     - Tool registration and discovery
     - Heartbeat/ping-pong support
     - Graceful shutdown
+    - Token-based authentication (optional, for local sandbox mode)
 
     Usage:
         server = MCPWebSocketServer(host="0.0.0.0", port=8765)
@@ -60,6 +74,7 @@ class MCPWebSocketServer:
         host: str = "0.0.0.0",
         port: int = 8765,
         workspace_dir: str = "/workspace",
+        auth_config: Optional[AuthConfig] = None,
     ):
         """
         Initialize the MCP WebSocket server.
@@ -68,10 +83,12 @@ class MCPWebSocketServer:
             host: Host to bind to
             port: Port to listen on
             workspace_dir: Root directory for file operations
+            auth_config: Authentication configuration (None = auth disabled)
         """
         self.host = host
         self.port = port
         self.workspace_dir = workspace_dir
+        self.auth_config = auth_config or AuthConfig()
 
         self._app: Optional[web.Application] = None
         self._runner: Optional[web.AppRunner] = None
@@ -79,9 +96,11 @@ class MCPWebSocketServer:
 
         self._tools: Dict[str, MCPTool] = {}
         self._clients: Dict[str, web.WebSocketResponse] = {}
+        self._client_auth: Dict[str, Dict[str, Any]] = {}  # client_id -> auth info
         self._server_info = MCPServerInfo()
 
         self._shutdown_event = asyncio.Event()
+        self._http_session: Optional[aiohttp.ClientSession] = None
 
     def register_tool(self, tool: MCPTool) -> None:
         """
@@ -125,6 +144,12 @@ class MCPWebSocketServer:
                 logger.error(f"Error closing client {client_id}: {e}")
 
         self._clients.clear()
+        self._client_auth.clear()
+
+        # Cleanup HTTP session for token validation
+        if self._http_session:
+            await self._http_session.close()
+            self._http_session = None
 
         # Cleanup server
         if self._site:
@@ -148,24 +173,136 @@ class MCPWebSocketServer:
                 "version": self._server_info.version,
                 "tools_count": len(self._tools),
                 "clients_count": len(self._clients),
+                "auth_enabled": self.auth_config.enabled,
             }
         )
 
+    async def _authenticate_request(
+        self, request: web.Request
+    ) -> tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Authenticate an incoming WebSocket connection.
+
+        Args:
+            request: The incoming HTTP request
+
+        Returns:
+            Tuple of (authenticated, auth_info, error_message)
+        """
+        # If auth is not enabled, allow all connections
+        if not self.auth_config.enabled:
+            return True, {"mode": "no_auth"}, None
+
+        # Check for localhost bypass
+        remote = request.remote or ""
+        if self.auth_config.allow_localhost and remote in ("127.0.0.1", "::1", "localhost"):
+            logger.debug(f"[Auth] Allowing localhost connection from {remote}")
+            return True, {"mode": "localhost", "remote": remote}, None
+
+        # Extract token from query params or headers
+        token = None
+
+        # Check query params first (for WebSocket URL: ws://host:port?token=xxx)
+        query_string = request.query_string
+        if query_string:
+            params = parse_qs(query_string)
+            token = params.get("token", [None])[0]
+
+        # Fallback to header
+        if not token:
+            token = request.headers.get("X-Auth-Token") or request.headers.get("Authorization")
+            if token and token.startswith("Bearer "):
+                token = token[7:]
+
+        if not token:
+            return False, None, "Authentication required: no token provided"
+
+        # Check static token if configured
+        if self.auth_config.static_token:
+            if token == self.auth_config.static_token:
+                return True, {"mode": "static_token"}, None
+            # Don't fail here, might be a platform token
+
+        # Validate token against platform if configured
+        if self.auth_config.platform_url:
+            auth_info = await self._validate_platform_token(token)
+            if auth_info:
+                return True, auth_info, None
+            return False, None, "Invalid or expired token"
+
+        return False, None, "Authentication failed: invalid token"
+
+    async def _validate_platform_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """
+        Validate token against the MemStack platform.
+
+        Args:
+            token: Token to validate
+
+        Returns:
+            Auth info dict if valid, None otherwise
+        """
+        if not self.auth_config.platform_url:
+            return None
+
+        try:
+            if self._http_session is None:
+                self._http_session = aiohttp.ClientSession()
+
+            validate_url = f"{self.auth_config.platform_url}/api/v1/sandbox/token/validate"
+            async with self._http_session.post(
+                validate_url,
+                json={"token": token},
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    if result.get("valid"):
+                        return {
+                            "mode": "platform_token",
+                            "project_id": result.get("project_id"),
+                            "user_id": result.get("user_id"),
+                            "sandbox_type": result.get("sandbox_type"),
+                        }
+                logger.warning(f"[Auth] Token validation failed: status={resp.status}")
+                return None
+        except Exception as e:
+            logger.error(f"[Auth] Error validating token against platform: {e}")
+            return None
+
     async def _handle_websocket(self, request: web.Request) -> web.WebSocketResponse:
-        """Handle incoming WebSocket connections."""
-        ws = web.WebSocketResponse(heartbeat=30.0)
+        """Handle incoming WebSocket connections with authentication."""
+        # Authenticate first
+        authenticated, auth_info, error = await self._authenticate_request(request)
+
+        if not authenticated:
+            logger.warning(f"[MCP] Authentication failed: {error}")
+            ws = web.WebSocketResponse()
+            await ws.prepare(request)
+            await ws.close(code=4001, message=error.encode() if error else b"Unauthorized")
+            return ws
+
+        ws = web.WebSocketResponse(
+            heartbeat=30.0,
+            max_msg_size=100 * 1024 * 1024,  # 100MB to support large file imports
+        )
         await ws.prepare(request)
 
         client_id = f"client-{id(ws)}"
         self._clients[client_id] = ws
+        self._client_auth[client_id] = auth_info or {}
 
         # Log connection details
         remote = request.remote or "unknown"
         headers = dict(request.headers)
         user_agent = headers.get("User-Agent", "unknown")
+        auth_mode = auth_info.get("mode", "unknown") if auth_info else "unknown"
         logger.info(
-            f"[MCP] Client CONNECTED - id={client_id} remote={remote} user_agent={user_agent}"
+            f"[MCP] Client CONNECTED - id={client_id} remote={remote} "
+            f"user_agent={user_agent} auth_mode={auth_mode}"
         )
+        if auth_info and auth_info.get("project_id"):
+            logger.info(f"[MCP] Client project: {auth_info.get('project_id')}")
         logger.debug(f"[MCP] Connection headers: {headers}")
 
         message_count = 0
@@ -203,6 +340,7 @@ class MCPWebSocketServer:
             logger.error(f"[MCP] Error handling client {client_id}: {e}", exc_info=True)
         finally:
             self._clients.pop(client_id, None)
+            self._client_auth.pop(client_id, None)  # Clean up auth info
             logger.info(
                 f"[MCP] Client DISCONNECTED - id={client_id} messages_processed={message_count}"
             )

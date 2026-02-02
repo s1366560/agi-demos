@@ -6,7 +6,7 @@ system prompts for the ReAct Agent, supporting:
 - Multi-model adaptation (Claude, Gemini, Qwen, etc.)
 - Dynamic mode switching (Plan/Build)
 - Environment context injection
-- Custom rules loading (AGENTS.md, CLAUDE.md)
+- Custom rules loading (.memstack/AGENTS.md, CLAUDE.md)
 
 Reference: OpenCode's system.ts and prompt management architecture.
 """

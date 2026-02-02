@@ -272,6 +272,7 @@ class AgentMessageEvent(AgentDomainEvent):
     event_type: AgentEventType = Field(default=AgentEventType.MESSAGE)
     role: str
     content: str
+    attachment_ids: Optional[List[str]] = None
 
     def __init__(self, **data):
         # Set event_type based on role

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import {
   ToolExecutionCardDisplay,
@@ -92,7 +92,7 @@ describe('ToolExecutionCardDisplay', () => {
       expect(screen.getByText(/item1/)).toBeInTheDocument()
     })
 
-    it('should handle nested object result', () => {
+    it('should handle nested object result with folding', () => {
       const nestedResult = {
         data: {
           items: [
@@ -113,8 +113,9 @@ describe('ToolExecutionCardDisplay', () => {
         )
       }).not.toThrow()
 
-      expect(screen.getByText(/First/)).toBeInTheDocument()
-      expect(screen.getByText(/Second/)).toBeInTheDocument()
+      // With folding enabled for long results (>10 lines), 
+      // the full content may be collapsed. Look for the "Show Full" button instead
+      expect(screen.getByText(/Show Full/)).toBeInTheDocument()
     })
   })
 
@@ -195,6 +196,85 @@ describe('ToolExecutionCardDisplay', () => {
       )
 
       expect(screen.getByText(/\(1\.3m\)/)).toBeInTheDocument()
+    })
+  })
+
+  describe('Result Folding', () => {
+    it('should fold long text results by default', () => {
+      // Create a result with more than 10 lines (5+5 threshold)
+      const longResult = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}`).join('\n')
+
+      render(
+        <ToolExecutionCardDisplay
+          toolName="test_tool"
+          status="success"
+          result={longResult}
+        />
+      )
+
+      // Should show "Show Full" button for folded content
+      expect(screen.getByText(/Show Full/)).toBeInTheDocument()
+      // Check for the collapsed line indicator
+      expect(screen.getByText(/10 lines collapsed/)).toBeInTheDocument()
+      // Middle lines should be collapsed
+      expect(screen.queryByText('Line 10')).not.toBeInTheDocument()
+    })
+
+    it('should not fold short text results', () => {
+      // Create a result with exactly 10 lines (5+5 threshold)
+      const shortResult = Array.from({ length: 10 }, (_, i) => `Line ${i + 1}`).join('\n')
+
+      render(
+        <ToolExecutionCardDisplay
+          toolName="test_tool"
+          status="success"
+          result={shortResult}
+        />
+      )
+
+      // Should NOT show "Show Full" button for non-folded content
+      expect(screen.queryByText(/Show Full/)).not.toBeInTheDocument()
+      // All lines should be visible
+      expect(screen.getByText(/Line 1/)).toBeInTheDocument()
+      expect(screen.getByText(/Line 10/)).toBeInTheDocument()
+    })
+
+    it('should expand folded content when Show Full is clicked', () => {
+      // Create a result with more than 10 lines
+      const longResult = Array.from({ length: 15 }, (_, i) => `Line ${i + 1}`).join('\n')
+
+      render(
+        <ToolExecutionCardDisplay
+          toolName="test_tool"
+          status="success"
+          result={longResult}
+        />
+      )
+
+      // Click "Show Full" button
+      const showFullButton = screen.getByText(/Show Full/)
+      fireEvent.click(showFullButton)
+
+      // After clicking, should show "Show Less"
+      expect(screen.getByText(/Show Less/)).toBeInTheDocument()
+      // All lines should now be visible
+      expect(screen.getByText(/Line 8/)).toBeInTheDocument()
+    })
+
+    it('should fold error results as well', () => {
+      // Create a long error message
+      const longError = Array.from({ length: 15 }, (_, i) => `Error line ${i + 1}`).join('\n')
+
+      render(
+        <ToolExecutionCardDisplay
+          toolName="test_tool"
+          status="error"
+          error={longError}
+        />
+      )
+
+      // Should show "Show Full" button for folded error content
+      expect(screen.getByText(/Show Full/)).toBeInTheDocument()
     })
   })
 })

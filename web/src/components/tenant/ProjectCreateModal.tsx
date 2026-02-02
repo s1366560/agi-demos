@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
-import { X, Folder, AlertCircle, Settings, Brain, Users } from 'lucide-react';
+import { X, Folder, AlertCircle, Settings, Brain, Users, Cloud, Monitor } from 'lucide-react';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
+
+interface LocalSandboxConfig {
+  workspace_path: string;
+  tunnel_url: string;
+  host: string;
+  port: number;
+}
+
+interface SandboxConfig {
+  sandbox_type: 'cloud' | 'local';
+  local_config?: LocalSandboxConfig;
+}
 
 interface ProjectCreateModalProps {
   isOpen: boolean;
@@ -32,46 +44,21 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       max_edges: 10000,
       similarity_threshold: 0.7,
       community_detection: true
+    },
+    sandbox_config: {
+      sandbox_type: 'cloud' as 'cloud' | 'local',
+      local_config: {
+        workspace_path: '/workspace',
+        tunnel_url: '',
+        host: 'localhost',
+        port: 8765
+      }
     }
   });
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'memory' | 'graph'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'memory' | 'graph' | 'sandbox'>('basic');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentTenant) return;
-    
-    try {
-      await createProject(currentTenant.id, {
-        ...formData,
-        tenant_id: currentTenant.id
-      });
-      onSuccess?.();
-      onClose();
-      setFormData({
-        name: '',
-        description: '',
-        status: 'active',
-        memory_rules: {
-          max_episodes: 1000,
-          retention_days: 30,
-          auto_refresh: true,
-          refresh_interval: 24
-        },
-        graph_config: {
-          max_nodes: 5000,
-          max_edges: 10000,
-          similarity_threshold: 0.7,
-          community_detection: true
-        }
-      });
-    } catch (_error) {
-      // Error is handled in store
-    }
-  };
-
-  const handleClose = () => {
-    onClose();
+  const resetFormData = () => {
     setFormData({
       name: '',
       description: '',
@@ -87,8 +74,47 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         max_edges: 10000,
         similarity_threshold: 0.7,
         community_detection: true
+      },
+      sandbox_config: {
+        sandbox_type: 'cloud',
+        local_config: {
+          workspace_path: '/workspace',
+          tunnel_url: '',
+          host: 'localhost',
+          port: 8765
+        }
       }
     });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentTenant) return;
+    
+    try {
+      // Only include local_config if sandbox_type is local
+      const submitData = {
+        ...formData,
+        tenant_id: currentTenant.id,
+        sandbox_config: {
+          sandbox_type: formData.sandbox_config.sandbox_type,
+          ...(formData.sandbox_config.sandbox_type === 'local' && {
+            local_config: formData.sandbox_config.local_config
+          })
+        }
+      };
+      await createProject(currentTenant.id, submitData);
+      onSuccess?.();
+      onClose();
+      resetFormData();
+    } catch (_error) {
+      // Error is handled in store
+    }
+  };
+
+  const handleClose = () => {
+    onClose();
+    resetFormData();
   };
 
   if (!isOpen) return null;
@@ -149,6 +175,19 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4" />
                 <span>图谱配置</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('sandbox')}
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'sandbox'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Monitor className="h-4 w-4" />
+                <span>沙箱设置</span>
               </div>
             </button>
           </nav>
@@ -428,6 +467,154 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     启用社区检测
                   </label>
                 </div>
+              </>
+            )}
+
+            {activeTab === 'sandbox' && (
+              <>
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    <strong>沙箱</strong>是 Agent 执行代码和工具的安全隔离环境。您可以选择使用云端托管沙箱或在本地运行沙箱。
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                    沙箱类型
+                  </label>
+                  
+                  <div className="space-y-3">
+                    <label className="flex items-start p-3 border border-gray-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
+                      <input
+                        type="radio"
+                        name="sandbox_type"
+                        value="cloud"
+                        checked={formData.sandbox_config.sandbox_type === 'cloud'}
+                        onChange={() => setFormData({
+                          ...formData,
+                          sandbox_config: {
+                            ...formData.sandbox_config,
+                            sandbox_type: 'cloud'
+                          }
+                        })}
+                        className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        disabled={isLoading}
+                      />
+                      <div className="ml-3 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <Cloud className="w-4 h-4 text-blue-500" />
+                          <span className="font-medium text-gray-900 dark:text-white">云端沙箱</span>
+                          <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded">推荐</span>
+                        </div>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                          在云端 Docker 容器中运行，无需本地配置，开箱即用。适合大多数用户。
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start p-3 border border-gray-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
+                      <input
+                        type="radio"
+                        name="sandbox_type"
+                        value="local"
+                        checked={formData.sandbox_config.sandbox_type === 'local'}
+                        onChange={() => setFormData({
+                          ...formData,
+                          sandbox_config: {
+                            ...formData.sandbox_config,
+                            sandbox_type: 'local'
+                          }
+                        })}
+                        className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        disabled={isLoading}
+                      />
+                      <div className="ml-3 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <Monitor className="w-4 h-4 text-purple-500" />
+                          <span className="font-medium text-gray-900 dark:text-white">本地沙箱</span>
+                          <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">高级</span>
+                        </div>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                          在您的本地电脑运行，支持访问本地文件和资源。需要安装桌面客户端。
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.sandbox_config.sandbox_type === 'local' && (
+                  <div className="mt-6 p-4 border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-4">
+                    <h4 className="font-medium text-purple-900 dark:text-purple-200 flex items-center space-x-2">
+                      <Monitor className="w-4 h-4" />
+                      <span>本地沙箱配置</span>
+                    </h4>
+                    
+                    <div>
+                      <label htmlFor="project-create-tunnel-url" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                        隧道 URL <span className="text-gray-400">(可选)</span>
+                      </label>
+                      <input
+                        type="url"
+                        id="project-create-tunnel-url"
+                        value={formData.sandbox_config.local_config?.tunnel_url || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          sandbox_config: {
+                            ...formData.sandbox_config,
+                            local_config: {
+                              ...formData.sandbox_config.local_config,
+                              tunnel_url: e.target.value || undefined
+                            }
+                          }
+                        })}
+                        placeholder="wss://your-tunnel.ngrok.io"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+                        disabled={isLoading}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                        使用 ngrok 或 cloudflare tunnel 生成的公网地址，用于云端平台连接到您的本地沙箱
+                      </p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="project-create-workspace-path" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                        工作目录 <span className="text-gray-400">(可选)</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="project-create-workspace-path"
+                        value={formData.sandbox_config.local_config?.workspace_path || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          sandbox_config: {
+                            ...formData.sandbox_config,
+                            local_config: {
+                              ...formData.sandbox_config.local_config,
+                              workspace_path: e.target.value || undefined
+                            }
+                          }
+                        })}
+                        placeholder="/home/user/workspace"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
+                        disabled={isLoading}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
+                        Agent 可以访问的本地工作目录路径
+                      </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
+                      <p className="text-sm text-purple-800 dark:text-purple-300">
+                        <strong>提示：</strong>选择本地沙箱后，您需要：
+                      </p>
+                      <ol className="mt-2 text-sm text-purple-700 dark:text-purple-400 list-decimal list-inside space-y-1">
+                        <li>下载并安装 MemStack 桌面客户端</li>
+                        <li>启动本地沙箱服务</li>
+                        <li>在客户端中配置隧道连接</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

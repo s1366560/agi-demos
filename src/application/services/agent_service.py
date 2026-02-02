@@ -18,7 +18,7 @@ import logging
 import time as time_module
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
@@ -163,6 +163,7 @@ class AgentService(AgentServicePort):
         project_id: str,
         user_id: str,
         tenant_id: str,
+        attachment_ids: Optional[List[str]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response using Temporal Workflow.
@@ -173,6 +174,7 @@ class AgentService(AgentServicePort):
             project_id: Project ID
             user_id: User ID
             tenant_id: Tenant ID
+            attachment_ids: Optional list of attachment IDs to include with the message
 
         Yields:
             Event dictionaries with type and data
@@ -205,10 +207,11 @@ class AgentService(AgentServicePort):
             # Create user message event (unified event timeline - no messages table)
             user_msg_id = str(uuid.uuid4())
 
-            # Use Domain Event
+            # Use Domain Event - include attachment_ids at creation time (model is frozen)
             user_domain_event = AgentMessageEvent(
                 role="user",
                 content=user_message,
+                attachment_ids=attachment_ids if attachment_ids else None,
             )
 
             # Get next sequence number
@@ -234,14 +237,18 @@ class AgentService(AgentServicePort):
 
             # Yield user message event (using SSE adapter manually here or constructing dict)
             # Since we are returning a dict yield, we construct it to match the legacy format expected by frontend
+            user_event_data = {
+                "id": user_msg_id,
+                "role": "user",
+                "content": user_message,
+                "created_at": user_msg_event.created_at.isoformat(),
+            }
+            if attachment_ids:
+                user_event_data["attachment_ids"] = attachment_ids
+
             yield {
                 "type": "message",
-                "data": {
-                    "id": user_msg_id,
-                    "role": "user",
-                    "content": user_message,
-                    "created_at": user_msg_event.created_at.isoformat(),
-                },
+                "data": user_event_data,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -268,6 +275,7 @@ class AgentService(AgentServicePort):
                 message_id=user_msg_id,
                 user_message=user_message,
                 conversation_context=conversation_context,
+                attachment_ids=attachment_ids,
             )
             logger.info(
                 f"[AgentService] Started workflow {workflow_id} for conversation {conversation_id}"
@@ -294,6 +302,7 @@ class AgentService(AgentServicePort):
         message_id: str,
         user_message: str,
         conversation_context: list[Dict[str, Any]],
+        attachment_ids: Optional[List[str]] = None,
     ) -> str:
         """Start agent execution workflow in Temporal.
 
@@ -312,6 +321,7 @@ class AgentService(AgentServicePort):
             message_id: The user message ID
             user_message: The user message content
             conversation_context: Pre-filtered conversation history (excludes current user message)
+            attachment_ids: Optional list of attachment IDs to include with the message
 
         Returns:
             The workflow ID
@@ -335,6 +345,7 @@ class AgentService(AgentServicePort):
                 conversation_context=conversation_context,
                 settings=settings,
                 temporal_settings=temporal_settings,
+                attachment_ids=attachment_ids,
             )
         else:
             return await self._start_legacy_workflow(
@@ -344,6 +355,7 @@ class AgentService(AgentServicePort):
                 conversation_context=conversation_context,
                 settings=settings,
                 temporal_settings=temporal_settings,
+                attachment_ids=attachment_ids,
             )
 
     async def _start_or_get_session_workflow(
@@ -354,6 +366,7 @@ class AgentService(AgentServicePort):
         conversation_context: list[Dict[str, Any]],
         settings,
         temporal_settings,
+        attachment_ids: Optional[List[str]] = None,
     ) -> str:
         """Start or get existing Agent Session Workflow and send chat via update.
 
@@ -419,7 +432,7 @@ class AgentService(AgentServicePort):
                 temperature=0.7,
                 max_tokens=4096,
                 max_steps=settings.agent_max_steps,
-                idle_timeout_seconds=1800,  # 30 minutes
+                persistent=True,  # Agent runs forever until explicitly stopped
                 mcp_tools_ttl_seconds=300,  # 5 minutes
             )
 
@@ -467,6 +480,7 @@ class AgentService(AgentServicePort):
             user_message=user_message,
             user_id=conversation.user_id,
             conversation_context=conversation_context,
+            attachment_ids=attachment_ids,
         )
 
         # Execute update asynchronously to avoid blocking first token streaming
@@ -520,6 +534,7 @@ class AgentService(AgentServicePort):
         conversation_context: list[Dict[str, Any]],
         settings,
         temporal_settings,
+        attachment_ids: Optional[List[str]] = None,
     ) -> str:
         """Start legacy per-request agent execution workflow.
 
@@ -532,6 +547,7 @@ class AgentService(AgentServicePort):
             conversation_context: Conversation history
             settings: Application settings
             temporal_settings: Temporal settings
+            attachment_ids: Optional list of attachment IDs to include with the message
 
         Returns:
             The workflow ID
@@ -553,6 +569,7 @@ class AgentService(AgentServicePort):
             "base_url": self._get_base_url(settings),
         }
 
+        # Include attachment_ids in input if present
         input_data = AgentInput(
             conversation_id=conversation.id,
             message_id=message_id,
@@ -562,6 +579,7 @@ class AgentService(AgentServicePort):
             tenant_id=conversation.tenant_id,
             agent_config=agent_config,
             conversation_context=conversation_context,
+            attachment_ids=attachment_ids,
         )
 
         workflow_id = f"agent-execution-{conversation.id}-{message_id}"

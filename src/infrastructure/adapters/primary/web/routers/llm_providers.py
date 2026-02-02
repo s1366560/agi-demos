@@ -11,7 +11,9 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.application.services.provider_service import ProviderService, get_provider_service
 from src.domain.llm_providers.models import (
@@ -24,7 +26,7 @@ from src.domain.llm_providers.models import (
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import User, UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,25 @@ async def get_provider_service_with_session(
     return get_provider_service(session=session)
 
 
-async def require_admin(current_user: User = Depends(get_current_user)):
+async def get_current_user_with_roles(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    Get current user with roles eagerly loaded.
+
+    This is needed because the base get_current_user doesn't load roles
+    to reduce query overhead, but this router needs role checks.
+    """
+    result = await db.execute(
+        select(User)
+        .where(User.id == current_user.id)
+        .options(selectinload(User.roles).selectinload(UserRole.role))
+    )
+    return result.scalar_one()
+
+
+async def require_admin(current_user: User = Depends(get_current_user_with_roles)):
     """Dependency to require admin role."""
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
     if not is_admin:
@@ -81,7 +101,7 @@ async def create_provider(
 @router.get("/", response_model=List[ProviderConfigResponse])
 async def list_providers(
     include_inactive: bool = Query(False, description="Include inactive providers"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
 ) -> List[ProviderConfigResponse]:
     """
@@ -145,7 +165,7 @@ async def list_models_for_provider_type(
 @router.get("/{provider_id}", response_model=ProviderConfigResponse)
 async def get_provider(
     provider_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
 ) -> ProviderConfigResponse:
     """
@@ -348,7 +368,7 @@ async def get_provider_usage(
     start_date: Optional[datetime] = Query(None, description="Start date filter"),
     end_date: Optional[datetime] = Query(None, description="End date filter"),
     operation_type: Optional[str] = Query(None, description="Filter by operation type"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
 ):
     """

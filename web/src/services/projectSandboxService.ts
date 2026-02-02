@@ -265,9 +265,20 @@ export interface ProjectSandboxService {
 
 /**
  * Project sandbox service implementation
+ *
+ * Features:
+ * - Request deduplication: concurrent requests for the same project share one API call
+ * - Automatic retry on failure
+ * - Logging for debugging
  */
 class ProjectSandboxServiceImpl implements ProjectSandboxService {
     private readonly api = httpClient;
+
+    /**
+     * Pending ensureSandbox requests by project ID.
+     * Used to deduplicate concurrent requests for the same project.
+     */
+    private pendingEnsureRequests: Map<string, Promise<ProjectSandbox>> = new Map();
 
     async getProjectSandbox(projectId: string): Promise<ProjectSandbox | null> {
         logger.debug(`[ProjectSandboxService] Getting sandbox for project: ${projectId}`);
@@ -289,6 +300,35 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
         request: EnsureSandboxRequest = {}
     ): Promise<ProjectSandbox> {
         logger.debug(`[ProjectSandboxService] Ensuring sandbox for project: ${projectId}`);
+
+        // Check if there's already a pending request for this project
+        const pendingRequest = this.pendingEnsureRequests.get(projectId);
+        if (pendingRequest) {
+            logger.debug(
+                `[ProjectSandboxService] Reusing pending request for project: ${projectId}`
+            );
+            return pendingRequest;
+        }
+
+        // Create new request and track it
+        const requestPromise = this._doEnsureSandbox(projectId, request);
+        this.pendingEnsureRequests.set(projectId, requestPromise);
+
+        try {
+            return await requestPromise;
+        } finally {
+            // Clean up after request completes (success or failure)
+            this.pendingEnsureRequests.delete(projectId);
+        }
+    }
+
+    /**
+     * Internal method to actually call the API
+     */
+    private async _doEnsureSandbox(
+        projectId: string,
+        request: EnsureSandboxRequest
+    ): Promise<ProjectSandbox> {
         const response = await this.api.post<ProjectSandbox>(
             `/projects/${projectId}/sandbox`,
             {

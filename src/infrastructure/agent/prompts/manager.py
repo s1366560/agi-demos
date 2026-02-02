@@ -8,12 +8,11 @@ Key features:
 - Multi-model adaptation (different prompts for Claude, Gemini, Qwen)
 - Dynamic mode management (Plan/Build modes)
 - Environment context injection
-- Custom rules loading (AGENTS.md, CLAUDE.md)
+- Custom rules loading (.memstack/AGENTS.md, CLAUDE.md)
 - File-based prompt templates with caching
 """
 
 import logging
-import platform
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -90,13 +89,16 @@ class SystemPromptManager:
     - Mode reminders (Plan/Build)
     - Section modules (safety, memory guidance)
     - Environment context
-    - Custom rules (AGENTS.md, CLAUDE.md)
+    - Custom rules (.memstack/AGENTS.md, CLAUDE.md)
 
     Reference: OpenCode's SystemPrompt namespace (system.ts)
     """
 
     # File extensions for custom rules
-    RULE_FILE_NAMES = ["AGENTS.md", "CLAUDE.md"]
+    RULE_FILE_NAMES = [".memstack/AGENTS.md", "CLAUDE.md"]
+
+    # Default sandbox workspace path - Agent should only see sandbox, not host filesystem
+    DEFAULT_SANDBOX_WORKSPACE = Path("/workspace")
 
     def __init__(
         self,
@@ -110,10 +112,11 @@ class SystemPromptManager:
             prompts_dir: Directory containing prompt template files.
                         Defaults to the prompts directory in this module.
             project_root: Root directory of the project for loading custom rules.
-                         Defaults to current working directory.
+                         Defaults to sandbox workspace (/workspace).
         """
         self.prompts_dir = prompts_dir or Path(__file__).parent
-        self.project_root = project_root or Path.cwd()
+        # Always use sandbox workspace path, never expose host filesystem
+        self.project_root = project_root or self.DEFAULT_SANDBOX_WORKSPACE
         self._cache: Dict[str, str] = {}
 
     async def build_system_prompt(
@@ -132,7 +135,7 @@ class SystemPromptManager:
         5. Environment context
         6. Mode reminder (Plan/Build)
         7. Max steps warning (if applicable)
-        8. Custom rules (AGENTS.md)
+        8. Custom rules (.memstack/AGENTS.md)
 
         Args:
             context: The prompt context containing all dynamic information.
@@ -188,7 +191,7 @@ class SystemPromptManager:
             if max_steps_warning:
                 sections.append(max_steps_warning)
 
-        # 10. Custom rules (AGENTS.md, CLAUDE.md)
+        # 10. Custom rules (.memstack/AGENTS.md, CLAUDE.md)
         custom_rules = await self._load_custom_rules()
         if custom_rules:
             sections.append(custom_rules)
@@ -230,15 +233,17 @@ class SystemPromptManager:
         Returns:
             Environment context XML block.
         """
-        # Get git status
-        git_dir = self.project_root / ".git"
-        is_git_repo = git_dir.exists()
+        # Always use sandbox workspace path - never expose host filesystem
+        # Git status is detected within sandbox, not host
+        workspace_path = context.working_directory or str(self.DEFAULT_SANDBOX_WORKSPACE)
+        sandbox_git_dir = Path(workspace_path) / ".git"
+        is_git_repo = sandbox_git_dir.exists() if Path(workspace_path).exists() else False
 
         return f"""<env>
-Working Directory: {context.working_directory or str(self.project_root)}
+Working Directory: {workspace_path}
 Project ID: {context.project_id}
 Is Git Repository: {"Yes" if is_git_repo else "No"}
-Platform: {platform.system()} {platform.release()}
+Platform: Linux (Sandbox Container)
 Today's Date: {datetime.now().strftime("%Y-%m-%d")}
 Conversation History: {context.conversation_history_length} messages
 Current Step: {context.current_step}/{context.max_steps}
@@ -341,12 +346,14 @@ Use these tools in order: {", ".join(skill.get("tools", []))}"""
 
     async def _load_custom_rules(self) -> str:
         """
-        Load custom rules from project files (AGENTS.md, CLAUDE.md).
+        Load custom rules from sandbox workspace files.
+
+        Security: Only loads rules from sandbox workspace (/workspace),
+        never from host filesystem to prevent information leakage.
 
         Search order (first found wins):
-        1. Project root AGENTS.md
-        2. Project root CLAUDE.md
-        3. Global config ~/.config/memstack/AGENTS.md
+        1. Sandbox workspace .memstack/AGENTS.md
+        2. Sandbox workspace CLAUDE.md
 
         Reference: OpenCode system.ts:94-155
 
@@ -355,25 +362,21 @@ Use these tools in order: {", ".join(skill.get("tools", []))}"""
         """
         rules: List[str] = []
 
-        # Search project root
-        for filename in self.RULE_FILE_NAMES:
-            file_path = self.project_root / filename
-            if file_path.exists():
-                try:
-                    content = file_path.read_text(encoding="utf-8")
-                    rules.append(f"# Instructions from: {file_path}\n\n{content}")
-                    break  # Only load first found
-                except Exception as e:
-                    logger.warning(f"Failed to load custom rules from {file_path}: {e}")
+        # Only search sandbox workspace - never expose host filesystem
+        sandbox_workspace = self.DEFAULT_SANDBOX_WORKSPACE
+        if sandbox_workspace.exists():
+            for filename in self.RULE_FILE_NAMES:
+                file_path = sandbox_workspace / filename
+                if file_path.exists():
+                    try:
+                        content = file_path.read_text(encoding="utf-8")
+                        rules.append(f"# Instructions from: {file_path}\n\n{content}")
+                        break  # Only load first found
+                    except Exception as e:
+                        logger.warning(f"Failed to load custom rules from {file_path}: {e}")
 
-        # Search global config
-        global_config_path = Path.home() / ".config" / "memstack" / "AGENTS.md"
-        if global_config_path.exists() and not rules:  # Only if no local rules
-            try:
-                content = global_config_path.read_text(encoding="utf-8")
-                rules.append(f"# Instructions from: {global_config_path}\n\n{content}")
-            except Exception as e:
-                logger.warning(f"Failed to load global rules from {global_config_path}: {e}")
+        # Note: Global config from host (~/.config/memstack) is intentionally NOT loaded
+        # to prevent host filesystem information leakage to sandbox agent
 
         return "\n\n".join(rules)
 

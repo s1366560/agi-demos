@@ -24,6 +24,13 @@ from src.domain.ports.services.sandbox_port import (
     SandboxConnectionError,
     SandboxNotFoundError,
 )
+from src.domain.ports.services.skill_resource_port import (
+    SkillResourcePort,
+    SkillResource,
+    SkillResourceContext,
+    ResourceEnvironment,
+    ResourceSyncResult,
+)
 
 __all__ = [
     "QueuePort",
@@ -47,4 +54,10 @@ __all__ = [
     "SandboxSecurityError",
     "SandboxConnectionError",
     "SandboxNotFoundError",
+    # Skill Resource Port
+    "SkillResourcePort",
+    "SkillResource",
+    "SkillResourceContext",
+    "ResourceEnvironment",
+    "ResourceSyncResult",
 ]
