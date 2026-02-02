@@ -17,7 +17,13 @@ from src.application.services.search_service import SearchService
 from src.application.services.skill_service import SkillService
 from src.application.services.task_service import TaskService
 from src.application.services.tenant_service import TenantService
+from src.application.services.unified_sandbox_service import (
+    UnifiedSandboxService,
+)
 from src.application.services.workflow_learner import WorkflowLearner
+from src.domain.ports.services.sandbox_resource_port import (
+    SandboxResourcePort,
+)
 
 # Agent use cases
 from src.application.use_cases.agent import (
@@ -537,11 +543,51 @@ class DIContainer:
             mcp_adapter=self.sandbox_adapter(),
         )
 
+    def sandbox_resource(self) -> SandboxResourcePort:
+        """Get SandboxResourcePort for agent workflow sandbox access.
+
+        This provides a clean abstraction that decouples agent logic from
+        sandbox lifecycle management. Agents should depend on this port
+        rather than directly on sandbox implementations.
+        """
+        return UnifiedSandboxService(
+            repository=self.project_sandbox_repository(),
+            sandbox_adapter=self.sandbox_adapter(),
+            distributed_lock=self.distributed_lock_adapter(),
+            default_profile=self._settings.sandbox_profile_type,
+            health_check_interval_seconds=60,
+            auto_recover=True,
+        )
+
+    def distributed_lock_adapter(self):
+        """Get Redis-based distributed lock adapter.
+
+        Returns None if Redis client is not available, allowing fallback
+        to PostgreSQL advisory locks.
+        """
+        if self._redis_client is None:
+            return None
+
+        from src.infrastructure.adapters.secondary.cache.redis_lock_adapter import (
+            RedisDistributedLockAdapter,
+        )
+
+        return RedisDistributedLockAdapter(
+            redis=self._redis_client,
+            namespace="memstack:lock",
+            default_ttl=120,  # 2 minutes for container creation
+            retry_interval=0.1,
+            max_retries=300,  # 30 seconds max wait
+        )
+
     def project_sandbox_lifecycle_service(self):
         """Get ProjectSandboxLifecycleService for project-dedicated sandbox management.
 
         This service manages persistent sandboxes for projects, ensuring each
         project has exactly one long-running sandbox instance.
+
+        Uses Redis distributed locks when available, falling back to PostgreSQL
+        advisory locks if Redis is not configured.
         """
         from src.application.services.project_sandbox_lifecycle_service import (
             ProjectSandboxLifecycleService,
@@ -550,6 +596,7 @@ class DIContainer:
         return ProjectSandboxLifecycleService(
             repository=self.project_sandbox_repository(),
             sandbox_adapter=self.sandbox_adapter(),
+            distributed_lock=self.distributed_lock_adapter(),
             default_profile=self._settings.sandbox_profile_type,
             health_check_interval_seconds=60,
             auto_recover=True,

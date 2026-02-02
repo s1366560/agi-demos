@@ -562,8 +562,9 @@ async def _sync_files_to_sandbox(
     """
     Sync files to the project's sandbox /workspace directory.
 
-    CRITICAL: This function must use the SAME sandbox that API Server created.
-    It queries the database first (single source of truth), then syncs with Docker.
+    This function uses the SandboxResourcePort interface to decouple from
+    direct MCPSandboxAdapter access. The port abstracts sandbox lifecycle
+    management and provides a clean interface for file operations.
 
     Args:
         sandbox_files: List of file data dicts with content_base64, filename, etc.
@@ -576,67 +577,25 @@ async def _sync_files_to_sandbox(
         f"for project={project_id}"
     )
     try:
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-            get_mcp_sandbox_adapter,
+        from src.infrastructure.agent.sandbox_resource_provider import (
+            get_sandbox_resource_port,
         )
 
-        # Get MCP sandbox adapter from worker state
-        sandbox_adapter = get_mcp_sandbox_adapter()
-        if not sandbox_adapter:
-            logger.warning("[AgentSession] MCP Sandbox adapter not available, skipping file sync")
+        # Get SandboxResourcePort from provider (decoupled from adapter)
+        sandbox_port = get_sandbox_resource_port()
+        if not sandbox_port:
+            logger.warning(
+                "[AgentSession] SandboxResourcePort not available, skipping file sync. "
+                "Ensure set_sandbox_resource_port() is called during worker initialization."
+            )
             return
 
-        # STEP 1: Query DATABASE first (single source of truth)
-        sandbox_id = None
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-            SqlAlchemyProjectSandboxRepository,
-        )
-
-        async with async_session_factory() as db:
-            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
-            assoc = await sandbox_repo.find_by_project(project_id)
-            if assoc and assoc.sandbox_id:
-                sandbox_id = assoc.sandbox_id
-                logger.info(f"[AgentSession] Found sandbox_id from DB: {sandbox_id}")
-            else:
-                logger.warning(
-                    f"[AgentSession] No sandbox association for project={project_id}. "
-                    f"Files cannot be synced until sandbox is created."
-                )
-                return
-
-        # STEP 2: Sync adapter cache with Docker to ensure we have the container
-        # This handles the case where API Server created the container but
-        # Agent Worker hasn't seen it yet
-        if sandbox_id not in sandbox_adapter._active_sandboxes:
-            logger.info(
-                f"[AgentSession] Sandbox {sandbox_id} not in adapter cache, syncing from Docker..."
-            )
-            await sandbox_adapter.sync_from_docker()
-
-        # STEP 3: Verify container actually exists
-        if sandbox_id not in sandbox_adapter._active_sandboxes:
-            # Try direct Docker check
-            container_exists = await sandbox_adapter.container_exists(sandbox_id)
-            if not container_exists:
-                logger.error(
-                    f"[AgentSession] Sandbox {sandbox_id} in DB but container doesn't exist! "
-                    f"This may indicate the container was externally deleted. "
-                    f"Files cannot be synced until sandbox is recreated."
-                )
-                return
-            else:
-                # Container exists but not in adapter cache - sync again
-                await sandbox_adapter.sync_from_docker()
-
-        # STEP 4: Final verification before proceeding
-        if sandbox_id not in sandbox_adapter._active_sandboxes:
-            logger.error(
-                f"[AgentSession] Failed to sync sandbox {sandbox_id} to adapter cache. "
-                f"Skipping file sync."
+        # Check if sandbox exists (without creating one)
+        sandbox_id = await sandbox_port.get_sandbox_id(project_id, tenant_id)
+        if not sandbox_id:
+            logger.warning(
+                f"[AgentSession] No sandbox found for project={project_id}. "
+                f"Files cannot be synced until sandbox is created."
             )
             return
 
@@ -646,9 +605,9 @@ async def _sync_files_to_sandbox(
         )
 
         # Import files to sandbox using import_file tool (supports binary files)
-        # NOTE: We use import_file instead of write because:
-        # 1. write tool only supports text files (UTF-8 encoding)
-        # 2. import_file accepts base64 and writes bytes (preserves binary files like PDF, images)
+        # NOTE: We use execute_tool with import_file instead of sync_file because:
+        # 1. import_file accepts base64 and writes bytes (preserves binary files like PDF, images)
+        # 2. sync_file is a higher-level abstraction that may not handle all edge cases
         for file_data in sandbox_files:
             filename = file_data.get("filename", "unnamed")
             content_base64 = file_data.get("content_base64", "")
@@ -669,8 +628,8 @@ async def _sync_files_to_sandbox(
                     f"(~{size_bytes} bytes, base64_len={len(content_base64)})"
                 )
 
-                result = await sandbox_adapter.call_tool(
-                    sandbox_id=sandbox_id,
+                result = await sandbox_port.execute_tool(
+                    project_id=project_id,
                     tool_name="import_file",
                     arguments={
                         "filename": filename,
@@ -724,12 +683,12 @@ async def _sync_files_to_sandbox(
                                     if source_md5 != "unknown" and sandbox_md5 != "unknown":
                                         if source_md5 == sandbox_md5:
                                             logger.info(
-                                                f"[AgentSession] ✅ File integrity verified: {filename} "
+                                                f"[AgentSession] File integrity verified: {filename} "
                                                 f"(source_md5={source_md5} == sandbox_md5={sandbox_md5})"
                                             )
                                         else:
                                             logger.error(
-                                                f"[AgentSession] ❌ FILE INTEGRITY MISMATCH: {filename} "
+                                                f"[AgentSession] FILE INTEGRITY MISMATCH: {filename} "
                                                 f"source_md5={source_md5} != sandbox_md5={sandbox_md5}"
                                             )
 
@@ -795,6 +754,7 @@ async def execute_chat_activity(
     """
     import os
 
+    from src.configuration.config import get_settings
     from src.infrastructure.adapters.secondary.event.redis_event_bus import RedisEventBusAdapter
     from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
         get_agent_graph_service,
@@ -808,6 +768,8 @@ async def execute_chat_activity(
     from src.infrastructure.agent.core.processor import ProcessorConfig
     from src.infrastructure.agent.core.react_agent import ReActAgent
     from src.infrastructure.security.encryption_service import get_encryption_service
+
+    settings = get_settings()
 
     start_time = time_module.time()
 
@@ -890,7 +852,7 @@ async def execute_chat_activity(
             api_key="",
             base_url=None,
             temperature=session_config.get("temperature", 0.7),
-            max_tokens=session_config.get("max_tokens", 4096),
+            max_tokens=session_config.get("max_tokens", settings.agent_max_tokens),
             max_steps=session_config.get("max_steps", 20),
         )
 
@@ -968,7 +930,7 @@ async def execute_chat_activity(
             api_key=api_key,
             base_url=base_url,
             temperature=session_config.get("temperature", 0.7),
-            max_tokens=session_config.get("max_tokens", 4096),
+            max_tokens=session_config.get("max_tokens", settings.agent_max_tokens),
             max_steps=session_config.get("max_steps", 20),
             agent_mode=agent_mode,
             skills=skills,
