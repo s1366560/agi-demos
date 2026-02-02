@@ -87,18 +87,31 @@ class LocalSandboxConfig:
 
 
 class ProjectSandboxStatus(Enum):
-    """Status of a project-sandbox association."""
+    """Status of a project-sandbox association.
 
-    PENDING = "pending"  # Sandbox creation requested but not yet ready
-    CREATING = "creating"  # Sandbox is being created
+    Simplified from 10 states to 4 essential states:
+    - STARTING: Combines PENDING, CREATING, CONNECTING
+    - RUNNING: Sandbox is running and healthy
+    - ERROR: Combines UNHEALTHY, ERROR, DISCONNECTED
+    - TERMINATED: Combines STOPPED, TERMINATED, ORPHAN
+
+    Legacy status values are retained for backward compatibility.
+    """
+
+    # Simplified states (preferred)
+    STARTING = "starting"  # Sandbox is being created or connecting
     RUNNING = "running"  # Sandbox is running and healthy
-    UNHEALTHY = "unhealthy"  # Sandbox is running but unhealthy
-    STOPPED = "stopped"  # Sandbox is stopped but can be restarted
+    ERROR = "error"  # Sandbox has an error (includes unhealthy, disconnected)
     TERMINATED = "terminated"  # Sandbox has been terminated
-    ERROR = "error"  # Sandbox creation or operation failed
-    CONNECTING = "connecting"  # Local sandbox connection in progress
-    DISCONNECTED = "disconnected"  # Local sandbox disconnected
-    ORPHAN = "orphan"  # Container exists but no valid association (discovered on startup)
+
+    # Legacy states (deprecated, mapped to simplified states)
+    PENDING = "pending"  # Deprecated: Use STARTING
+    CREATING = "creating"  # Deprecated: Use STARTING
+    UNHEALTHY = "unhealthy"  # Deprecated: Use ERROR
+    STOPPED = "stopped"  # Deprecated: Use TERMINATED
+    CONNECTING = "connecting"  # Deprecated: Use STARTING
+    DISCONNECTED = "disconnected"  # Deprecated: Use ERROR
+    ORPHAN = "orphan"  # Deprecated: Use ERROR (with metadata flag)
 
 
 @dataclass(kw_only=True)
@@ -133,7 +146,7 @@ class ProjectSandbox(Entity):
     tenant_id: str
     sandbox_id: str
     sandbox_type: SandboxType = SandboxType.CLOUD
-    status: ProjectSandboxStatus = ProjectSandboxStatus.PENDING
+    status: ProjectSandboxStatus = ProjectSandboxStatus.STARTING
     created_at: datetime = field(default_factory=datetime.utcnow)
     started_at: Optional[datetime] = None
     last_accessed_at: datetime = field(default_factory=datetime.utcnow)
@@ -152,82 +165,60 @@ class ProjectSandbox(Entity):
         """Update last accessed timestamp."""
         self.last_accessed_at = datetime.utcnow()
 
-    def _safe_transition(self, new_status: ProjectSandboxStatus) -> None:
-        """Perform a safe state transition with validation.
-
-        Uses the state machine to validate the transition is allowed.
-        Logs warnings for invalid transitions but allows them for backwards compatibility.
-
-        Args:
-            new_status: The target status to transition to
-        """
-        from src.domain.model.sandbox.state_machine import get_state_machine
-
-        state_machine = get_state_machine()
-        if not state_machine.can_transition(self.status, new_status):
-            # Log warning but allow transition for backwards compatibility
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                f"Invalid state transition from {self.status.value} to {new_status.value} "
-                f"for sandbox {self.sandbox_id}. Allowing for backwards compatibility."
-            )
-        self.status = new_status
-
     def mark_healthy(self) -> None:
         """Mark sandbox as healthy and running."""
-        self._safe_transition(ProjectSandboxStatus.RUNNING)
+        self.status = ProjectSandboxStatus.RUNNING
         self.health_checked_at = datetime.utcnow()
         self.error_message = None
 
     def mark_unhealthy(self, reason: Optional[str] = None) -> None:
-        """Mark sandbox as unhealthy."""
-        self._safe_transition(ProjectSandboxStatus.UNHEALTHY)
-        self.health_checked_at = datetime.utcnow()
-        if reason:
-            self.error_message = reason
+        """Mark sandbox as unhealthy (deprecated: use mark_error)."""
+        self.mark_error(reason or "Unhealthy")
 
     def mark_error(self, error: str) -> None:
         """Mark sandbox as having an error."""
-        self._safe_transition(ProjectSandboxStatus.ERROR)
+        self.status = ProjectSandboxStatus.ERROR
         self.error_message = error
 
     def mark_stopped(self) -> None:
-        """Mark sandbox as stopped."""
-        self._safe_transition(ProjectSandboxStatus.STOPPED)
+        """Mark sandbox as stopped (deprecated: use mark_terminated)."""
+        self.mark_terminated()
 
     def mark_terminated(self) -> None:
         """Mark sandbox as terminated."""
-        self._safe_transition(ProjectSandboxStatus.TERMINATED)
+        self.status = ProjectSandboxStatus.TERMINATED
 
     def mark_connecting(self) -> None:
-        """Mark local sandbox as connecting."""
-        self._safe_transition(ProjectSandboxStatus.CONNECTING)
+        """Mark sandbox as connecting (deprecated: use STARTING)."""
+        self.status = ProjectSandboxStatus.STARTING
 
     def mark_disconnected(self) -> None:
-        """Mark local sandbox as disconnected."""
-        self._safe_transition(ProjectSandboxStatus.DISCONNECTED)
+        """Mark sandbox as disconnected (deprecated: use mark_error)."""
+        self.mark_error("Disconnected")
 
     def mark_orphan(self) -> None:
-        """Mark sandbox as orphan (discovered container without valid association)."""
-        self.status = ProjectSandboxStatus.ORPHAN
+        """Mark sandbox as orphan (deprecated: use ERROR with metadata)."""
+        self.status = ProjectSandboxStatus.ERROR
+        # Store orphan flag in metadata for tracking
+        self.metadata["orphan"] = True
 
     def mark_creating(self) -> None:
-        """Mark sandbox as being created."""
-        self._safe_transition(ProjectSandboxStatus.CREATING)
+        """Mark sandbox as being created (deprecated: use STARTING)."""
+        self.status = ProjectSandboxStatus.STARTING
 
     def is_orphan(self) -> bool:
-        """Check if this sandbox is an orphan."""
-        return self.status == ProjectSandboxStatus.ORPHAN
+        """Check if this sandbox is an orphan.
+
+        Deprecated: ORPHAN status is now tracked via metadata flag.
+        """
+        return self.metadata.get("orphan", False)
 
     def can_adopt(self) -> bool:
         """Check if this orphan sandbox can be adopted.
 
-        Returns:
-            True if the sandbox is an orphan and can be adopted
+        Deprecated: Use metadata flag instead.
         """
-        return self.status == ProjectSandboxStatus.ORPHAN
+        return self.is_orphan()
 
     def is_local(self) -> bool:
         """Check if this is a local sandbox."""
@@ -238,9 +229,11 @@ class ProjectSandbox(Entity):
         return self.sandbox_type == SandboxType.CLOUD
 
     def is_active(self) -> bool:
-        """Check if sandbox is in an active state (running or creating)."""
+        """Check if sandbox is in an active state (running or starting)."""
         return self.status in (
             ProjectSandboxStatus.RUNNING,
+            ProjectSandboxStatus.STARTING,
+            # Legacy states for backward compatibility
             ProjectSandboxStatus.CREATING,
             ProjectSandboxStatus.CONNECTING,
         )

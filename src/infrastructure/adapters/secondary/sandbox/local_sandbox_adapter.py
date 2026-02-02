@@ -421,6 +421,7 @@ class LocalSandboxAdapter(SandboxPort):
         config: Optional[SandboxConfig] = None,
         project_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        sandbox_id: Optional[str] = None,
     ) -> SandboxInstance:
         """
         Create a sandbox connection (for local sandboxes, this means connect).

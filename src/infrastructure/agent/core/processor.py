@@ -988,11 +988,14 @@ class SessionProcessor:
         """
         tool_part = self._pending_tool_calls.get(call_id)
         if not tool_part:
+            logger.error(
+                f"[Processor] Tool call not found in pending: call_id={call_id}, tool={tool_name}"
+            )
             yield AgentObserveEvent(
                 tool_name=tool_name,
-                error="Tool call not found",
+                error=f"Tool call not found: {call_id}",
                 call_id=call_id,
-                tool_execution_id=tool_part.tool_execution_id if tool_part else None,
+                tool_execution_id=None,
             )
             return
 
@@ -1159,25 +1162,84 @@ class SessionProcessor:
         self._state = ProcessorState.ACTING
 
         try:
+            # Handle truncated arguments (from llm_stream detecting incomplete JSON)
+            if "_error" in arguments and arguments.get("_error") == "truncated":
+                error_msg = arguments.get(
+                    "_message", "Tool arguments were truncated. The content may be too large."
+                )
+                logger.error(f"[Processor] Tool arguments truncated for {tool_name}")
+                tool_part.status = ToolState.ERROR
+                tool_part.error = error_msg
+                tool_part.end_time = time.time()
+
+                yield AgentObserveEvent(
+                    tool_name=tool_name,
+                    error=error_msg,
+                    call_id=call_id,
+                    tool_execution_id=tool_part.tool_execution_id,
+                )
+                return
+
             # Handle _raw arguments (from failed JSON parsing in llm_stream)
             # This happens when LLM returns malformed JSON for tool arguments
             if "_raw" in arguments and len(arguments) == 1:
                 raw_args = arguments["_raw"]
                 logger.warning(
                     f"[Processor] Attempting to parse _raw arguments for tool {tool_name}: "
-                    f"{raw_args[:200]}..."
+                    f"{raw_args[:200] if len(raw_args) > 200 else raw_args}..."
                 )
+
+                # Define helper to escape control characters
+                def escape_control_chars(s):
+                    """Escape control characters in a JSON string."""
+                    s = s.replace("\n", "\\n")
+                    s = s.replace("\r", "\\r")
+                    s = s.replace("\t", "\\t")
+                    return s
+
+                parse_success = False
+
+                # Try 1: Direct parse
                 try:
-                    # Try to parse the raw string as JSON
                     arguments = json.loads(raw_args)
                     logger.info(f"[Processor] Successfully parsed _raw arguments for {tool_name}")
-                except json.JSONDecodeError as e:
-                    # Still can't parse - report error to LLM
+                    parse_success = True
+                except json.JSONDecodeError:
+                    pass
+
+                # Try 2: Escape control characters and parse
+                if not parse_success:
+                    try:
+                        fixed_args = escape_control_chars(raw_args)
+                        arguments = json.loads(fixed_args)
+                        logger.info(
+                            f"[Processor] Successfully parsed _raw arguments after escaping control chars for {tool_name}"
+                        )
+                        parse_success = True
+                    except json.JSONDecodeError:
+                        pass
+
+                # Try 3: Handle double-encoded JSON
+                if not parse_success:
+                    try:
+                        if raw_args.startswith('"') and raw_args.endswith('"'):
+                            inner = raw_args[1:-1]
+                            inner = inner.replace('\\"', '"').replace("\\\\", "\\")
+                            arguments = json.loads(inner)
+                            logger.info(
+                                f"[Processor] Successfully parsed double-encoded _raw arguments for {tool_name}"
+                            )
+                            parse_success = True
+                    except json.JSONDecodeError:
+                        pass
+
+                # All attempts failed
+                if not parse_success:
                     error_msg = (
-                        f"Invalid JSON in tool arguments: {str(e)}. "
-                        f"Raw arguments: {raw_args[:500]}..."
+                        f"Invalid JSON in tool arguments. "
+                        f"Raw arguments preview: {raw_args[:500] if len(raw_args) > 500 else raw_args}"
                     )
-                    logger.error(f"[Processor] Failed to parse _raw arguments: {e}")
+                    logger.error(f"[Processor] Failed to parse _raw arguments for {tool_name}")
                     tool_part.status = ToolState.ERROR
                     tool_part.error = error_msg
                     tool_part.end_time = time.time()

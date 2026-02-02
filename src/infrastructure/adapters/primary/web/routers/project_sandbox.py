@@ -285,7 +285,7 @@ async def ensure_project_sandbox(
             profile=profile,
         )
 
-        # Publish event
+        # Publish event via Redis Stream (for SSE subscribers)
         if event_publisher:
             try:
                 await event_publisher.publish_sandbox_created(
@@ -297,6 +297,28 @@ async def ensure_project_sandbox(
                 )
             except Exception as e:
                 logger.warning(f"Failed to publish sandbox_created event: {e}")
+
+        # Also broadcast via WebSocket for real-time sync
+        try:
+            from src.infrastructure.adapters.primary.web.routers.agent_websocket import manager
+
+            await manager.broadcast_sandbox_state(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                state={
+                    "event_type": "created",
+                    "sandbox_id": info.sandbox_id,
+                    "status": info.status,
+                    "endpoint": info.endpoint,
+                    "websocket_url": info.websocket_url,
+                    "mcp_port": info.mcp_port,
+                    "desktop_port": info.desktop_port,
+                    "terminal_port": info.terminal_port,
+                    "is_healthy": info.is_healthy,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast sandbox state via WebSocket: {e}")
 
         return ProjectSandboxResponse.from_info(info)
 
@@ -446,7 +468,7 @@ async def restart_project_sandbox(
     try:
         info = await service.restart_project_sandbox(project_id)
 
-        # Publish event
+        # Publish event via Redis Stream (for SSE subscribers)
         if event_publisher:
             try:
                 await event_publisher.publish_sandbox_status(
@@ -456,6 +478,28 @@ async def restart_project_sandbox(
                 )
             except Exception as e:
                 logger.warning(f"Failed to publish sandbox_restarted event: {e}")
+
+        # Also broadcast via WebSocket for real-time sync
+        try:
+            from src.infrastructure.adapters.primary.web.routers.agent_websocket import manager
+
+            # Get tenant_id from current user context
+            await manager.broadcast_sandbox_state(
+                tenant_id=current_user.current_tenant_id or "",
+                project_id=project_id,
+                state={
+                    "event_type": "restarted",
+                    "sandbox_id": info.sandbox_id,
+                    "status": info.status,
+                    "endpoint": info.endpoint,
+                    "mcp_port": info.mcp_port,
+                    "desktop_port": info.desktop_port,
+                    "terminal_port": info.terminal_port,
+                    "is_healthy": info.is_healthy,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast sandbox state via WebSocket: {e}")
 
         return SandboxActionResponse(
             success=True,
@@ -487,7 +531,7 @@ async def terminate_project_sandbox(
                 detail=f"No sandbox found for project {project_id}",
             )
 
-        # Publish event
+        # Publish event via Redis Stream (for SSE subscribers)
         if event_publisher:
             try:
                 await event_publisher.publish_sandbox_terminated(
@@ -496,6 +540,23 @@ async def terminate_project_sandbox(
                 )
             except Exception as e:
                 logger.warning(f"Failed to publish sandbox_terminated event: {e}")
+
+        # Also broadcast via WebSocket for real-time sync
+        try:
+            from src.infrastructure.adapters.primary.web.routers.agent_websocket import manager
+
+            await manager.broadcast_sandbox_state(
+                tenant_id=current_user.current_tenant_id or "",
+                project_id=project_id,
+                state={
+                    "event_type": "terminated",
+                    "sandbox_id": None,
+                    "status": "terminated",
+                    "is_healthy": False,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast sandbox state via WebSocket: {e}")
 
         return SandboxActionResponse(
             success=True,

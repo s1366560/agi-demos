@@ -7,8 +7,8 @@ Manages the lifecycle of project-dedicated sandboxes:
 - Resource cleanup on project deletion
 
 Threading Safety:
-- Uses database-level distributed locks (PostgreSQL advisory locks)
-- Ensures exactly one sandbox per project even across multiple API workers
+- Uses Redis distributed locks for cross-process safety (primary)
+- Falls back to PostgreSQL advisory locks if Redis unavailable
 - In-process locks for additional protection within single worker
 - Handles unique constraint violations with retry mechanism
 """
@@ -26,6 +26,7 @@ from src.application.services.sandbox_profile import SandboxProfileType
 from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
 from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
 from src.domain.ports.repositories.project_sandbox_repository import ProjectSandboxRepository
+from src.domain.ports.services.distributed_lock_port import DistributedLockPort
 from src.domain.ports.services.sandbox_port import (
     SandboxConfig,
     SandboxNotFoundError,
@@ -112,6 +113,7 @@ class ProjectSandboxLifecycleService:
         self,
         repository: ProjectSandboxRepository,
         sandbox_adapter: MCPSandboxAdapter,
+        distributed_lock: Optional[DistributedLockPort] = None,
         default_profile: SandboxProfileType = SandboxProfileType.STANDARD,
         health_check_interval_seconds: int = 60,
         auto_recover: bool = True,
@@ -121,12 +123,15 @@ class ProjectSandboxLifecycleService:
         Args:
             repository: Repository for ProjectSandbox associations
             sandbox_adapter: Adapter for sandbox container operations
+            distributed_lock: Distributed lock for cross-process safety (optional)
+                            If not provided, falls back to PostgreSQL advisory locks
             default_profile: Default sandbox profile
             health_check_interval_seconds: Minimum seconds between health checks
             auto_recover: Whether to auto-recover unhealthy sandboxes
         """
         self._repository = repository
         self._adapter = sandbox_adapter
+        self._distributed_lock = distributed_lock
         self._default_profile = default_profile
         self._health_check_interval = health_check_interval_seconds
         self._auto_recover = auto_recover
@@ -229,22 +234,40 @@ class ProjectSandboxLifecycleService:
 
         Uses:
         1. In-process asyncio.Lock (fast path for same-worker concurrency)
-        2. PostgreSQL SESSION-level advisory lock (cross-process, persists until released)
+        2. Redis distributed lock (primary, cross-process safety)
+        3. Fallback to PostgreSQL advisory lock if Redis unavailable
 
-        CRITICAL: The session lock is held until container creation completes to prevent
+        CRITICAL: The distributed lock is held until container creation completes to prevent
         any other process from creating a container for the same project.
         """
         # Layer 1: In-process lock (fast path for same-worker concurrency)
         project_lock = await self._get_project_lock(project_id)
 
         async with project_lock:
-            # Layer 2: Database-level SESSION advisory lock (cross-process safety)
+            # Layer 2: Distributed lock (Redis primary, PostgreSQL fallback)
             # This lock persists until explicitly released, NOT until transaction ends
-            db_lock_acquired = await self._repository.acquire_project_lock(
-                project_id, blocking=True, timeout_seconds=30
-            )
+            lock_key = f"sandbox:create:{project_id}"
+            lock_handle = None
+            use_redis_lock = self._distributed_lock is not None
 
             try:
+                if use_redis_lock:
+                    # Use Redis distributed lock (preferred)
+                    lock_handle = await self._distributed_lock.acquire(
+                        key=lock_key,
+                        ttl=120,  # 2 minutes for container creation
+                        blocking=True,
+                        timeout=30.0,
+                    )
+                    db_lock_acquired = lock_handle is not None
+                    if db_lock_acquired:
+                        logger.debug(f"Redis lock acquired for project {project_id}: {lock_handle}")
+                else:
+                    # Fallback to PostgreSQL advisory lock
+                    db_lock_acquired = await self._repository.acquire_project_lock(
+                        project_id, blocking=True, timeout_seconds=30
+                    )
+
                 if not db_lock_acquired:
                     # Another process is creating, wait and check
                     logger.info(
@@ -260,7 +283,7 @@ class ProjectSandboxLifecycleService:
                         # Created but not usable, fall through to handle
                     # Lock not acquired and no existing sandbox, retry
                     raise IntegrityError(
-                        statement="advisory_lock",
+                        statement="distributed_lock",
                         params={},
                         orig=Exception("Could not acquire distributed lock"),
                     )
@@ -330,7 +353,7 @@ class ProjectSandboxLifecycleService:
                             # Fall through to create new
 
                 # Create new sandbox (under both locks)
-                # The session lock is held until this method returns
+                # The distributed lock is held until this method returns
                 return await self._create_new_sandbox(
                     project_id=project_id,
                     tenant_id=tenant_id,
@@ -338,8 +361,16 @@ class ProjectSandboxLifecycleService:
                     config_override=config_override,
                 )
             finally:
-                # CRITICAL: Release the session-level lock after container creation completes
-                await self._repository.release_project_lock(project_id)
+                # CRITICAL: Release the distributed lock after container creation completes
+                if use_redis_lock and lock_handle:
+                    released = await self._distributed_lock.release(lock_handle)
+                    if released:
+                        logger.debug(f"Redis lock released for project {project_id}")
+                    else:
+                        logger.warning(f"Failed to release Redis lock for project {project_id}")
+                elif not use_redis_lock:
+                    # Fallback: release PostgreSQL advisory lock
+                    await self._repository.release_project_lock(project_id)
 
     async def get_project_sandbox(self, project_id: str) -> Optional[SandboxInfo]:
         """Get sandbox info for a project if it exists.
@@ -705,30 +736,32 @@ class ProjectSandboxLifecycleService:
             raise
 
     async def _recreate_sandbox(self, association: ProjectSandbox) -> SandboxInfo:
-        """Recreate a sandbox while preserving the association.
+        """Recreate a sandbox while preserving the association and sandbox_id.
 
-        CRITICAL: This method MUST clean up all existing containers for the project
-        before creating a new one to prevent duplicate containers.
+        CRITICAL: This method preserves the original sandbox_id so that
+        cached tool references in ReActAgent remain valid. The old container
+        is terminated and a new one is created with the same ID.
         """
         project_path = f"/tmp/memstack_{association.project_id}"
 
-        # Generate new sandbox ID
-        old_sandbox_id = association.sandbox_id
-        new_sandbox_id = f"proj-sb-{uuid.uuid4().hex[:12]}"
+        # IMPORTANT: Preserve the original sandbox_id to maintain tool references
+        # ReActAgent's SandboxMCPToolWrapper caches the sandbox_id, so changing it
+        # would break tool execution until the agent is reinitialized
+        original_sandbox_id = association.sandbox_id
 
         # CRITICAL: Clean up ALL existing containers for this project first
         # This prevents orphan containers from accumulating
         logger.info(
             f"Recreating sandbox for project {association.project_id}, "
-            f"cleaning up old container {old_sandbox_id}..."
+            f"cleaning up old container {original_sandbox_id}..."
         )
 
         # Step 1: Terminate the old sandbox explicitly
         try:
-            await self._adapter.terminate_sandbox(old_sandbox_id)
-            logger.info(f"Terminated old sandbox {old_sandbox_id}")
+            await self._adapter.terminate_sandbox(original_sandbox_id)
+            logger.info(f"Terminated old sandbox {original_sandbox_id}")
         except Exception as e:
-            logger.warning(f"Could not terminate old sandbox {old_sandbox_id}: {e}")
+            logger.warning(f"Could not terminate old sandbox {original_sandbox_id}: {e}")
 
         # Step 2: Clean up any other containers for this project (orphans)
         try:
@@ -740,22 +773,23 @@ class ProjectSandboxLifecycleService:
         except Exception as e:
             logger.warning(f"Failed to cleanup project containers: {e}")
 
-        association.sandbox_id = new_sandbox_id
+        # Keep the same sandbox_id for tool compatibility
         association.status = ProjectSandboxStatus.CREATING
         association.error_message = None
         await self._repository.save(association)
 
         try:
-            # Create new sandbox with project/tenant identification
+            # Create new sandbox with the SAME sandbox_id for tool compatibility
             config = self._resolve_config(self._default_profile, None)
             instance = await self._adapter.create_sandbox(
                 project_path=project_path,
                 config=config,
                 project_id=association.project_id,
                 tenant_id=association.tenant_id,
+                sandbox_id=original_sandbox_id,  # Reuse original sandbox_id
             )
 
-            # Update with actual container ID
+            # Update status (sandbox_id should remain the same)
             association.sandbox_id = instance.id
             association.status = ProjectSandboxStatus.RUNNING
             association.started_at = datetime.utcnow()
@@ -770,7 +804,7 @@ class ProjectSandboxLifecycleService:
 
             logger.info(
                 f"Recreated sandbox for project {association.project_id}: "
-                f"{old_sandbox_id} -> {instance.id}"
+                f"sandbox_id={instance.id} (preserved)"
             )
             return await self._get_sandbox_info(association)
 

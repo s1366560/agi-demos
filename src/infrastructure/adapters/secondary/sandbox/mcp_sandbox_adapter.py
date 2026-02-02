@@ -247,6 +247,7 @@ class MCPSandboxAdapter(SandboxPort):
         config: Optional[SandboxConfig] = None,
         project_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        sandbox_id: Optional[str] = None,
     ) -> MCPSandboxInstance:
         """
         Create a new MCP sandbox container.
@@ -256,12 +257,14 @@ class MCPSandboxAdapter(SandboxPort):
             config: Sandbox configuration
             project_id: Optional project ID for labeling and identification
             tenant_id: Optional tenant ID for labeling and identification
+            sandbox_id: Optional sandbox ID to reuse (for recreating with same ID)
 
         Returns:
             MCPSandboxInstance with MCP endpoint
         """
         config = config or SandboxConfig(image=self._mcp_image)
-        sandbox_id = f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
+        # Use provided sandbox_id or generate a new one
+        sandbox_id = sandbox_id or f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
 
         # Check and cleanup any existing containers for this project
         if project_id:
@@ -278,10 +281,13 @@ class MCPSandboxAdapter(SandboxPort):
             container_config = {
                 "image": self._mcp_image,
                 "name": sandbox_id,
+                "hostname": sandbox_id,  # Set hostname to sandbox_id for VNC hostname resolution
                 "detach": True,
                 # Auto-restart policy for container-level recovery
                 # Docker will restart the container if it exits with non-zero code
                 "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
+                # Add extra hosts to resolve the container hostname (required for VNC)
+                "extra_hosts": {sandbox_id: "127.0.0.1"},
                 "ports": {
                     f"{MCP_WEBSOCKET_PORT}/tcp": host_mcp_port,
                     f"{DESKTOP_PORT}/tcp": host_desktop_port,
@@ -958,6 +964,121 @@ class MCPSandboxAdapter(SandboxPort):
                 if status is None or instance.status == status:
                     result.append(instance)
             return result
+
+    async def sync_sandbox_from_docker(self, sandbox_id: str) -> Optional[MCPSandboxInstance]:
+        """
+        Sync a specific sandbox from Docker by container name/ID.
+
+        This method is used when a sandbox is not found in _active_sandboxes
+        but may have been created/recreated by another process (e.g., API server
+        using ProjectSandboxLifecycleService while Agent Worker is running).
+
+        Args:
+            sandbox_id: The sandbox ID (container name) to sync
+
+        Returns:
+            MCPSandboxInstance if found and synced, None otherwise
+        """
+        try:
+            loop = asyncio.get_event_loop()
+
+            # Try to get the container by name
+            try:
+                container = await loop.run_in_executor(
+                    None,
+                    lambda: self._docker.containers.get(sandbox_id),
+                )
+            except Exception:
+                # Container doesn't exist
+                logger.debug(f"Container {sandbox_id} not found in Docker")
+                return None
+
+            # Skip non-running containers
+            if container.status != "running":
+                logger.debug(f"Container {sandbox_id} exists but not running: {container.status}")
+                return None
+
+            labels = container.labels or {}
+
+            # Verify it's a memstack sandbox
+            if labels.get("memstack.sandbox") != "true":
+                logger.debug(f"Container {sandbox_id} is not a memstack sandbox")
+                return None
+
+            # Extract port information from labels
+            mcp_port_str = labels.get("memstack.sandbox.mcp_port", "")
+            desktop_port_str = labels.get("memstack.sandbox.desktop_port", "")
+            terminal_port_str = labels.get("memstack.sandbox.terminal_port", "")
+
+            mcp_port = int(mcp_port_str) if mcp_port_str else None
+            desktop_port = int(desktop_port_str) if desktop_port_str else None
+            terminal_port = int(terminal_port_str) if terminal_port_str else None
+
+            # Get project path from volume mounts
+            project_path = ""
+            mounts = container.attrs.get("Mounts", [])
+            for mount in mounts:
+                if mount.get("Destination") == "/workspace":
+                    project_path = mount.get("Source", "")
+                    break
+
+            # Build URLs if ports are available
+            websocket_url = None
+            desktop_url = None
+            terminal_url = None
+            if mcp_port:
+                instance_info = SandboxInstanceInfo(
+                    mcp_port=mcp_port,
+                    desktop_port=desktop_port or 0,
+                    terminal_port=terminal_port or 0,
+                    sandbox_id=sandbox_id,
+                    host="localhost",
+                )
+                urls = self._url_service.build_all_urls(instance_info)
+                websocket_url = urls.mcp_url
+                desktop_url = urls.desktop_url if desktop_port else None
+                terminal_url = urls.terminal_url if terminal_port else None
+
+            # Create instance record
+            now = datetime.now()
+            instance = MCPSandboxInstance(
+                id=sandbox_id,
+                status=SandboxStatus.RUNNING,
+                config=SandboxConfig(image=self._mcp_image),
+                project_path=project_path,
+                endpoint=websocket_url,
+                created_at=now,
+                last_activity_at=now,
+                websocket_url=websocket_url,
+                mcp_client=None,  # Will connect on first use
+                mcp_port=mcp_port,
+                desktop_port=desktop_port,
+                terminal_port=terminal_port,
+                desktop_url=desktop_url,
+                terminal_url=terminal_url,
+                labels=labels,
+            )
+
+            async with self._lock:
+                self._active_sandboxes[sandbox_id] = instance
+                # Track used ports
+                if mcp_port:
+                    self._used_ports.add(mcp_port)
+                if desktop_port:
+                    self._used_ports.add(desktop_port)
+                if terminal_port:
+                    self._used_ports.add(terminal_port)
+
+            logger.info(
+                f"Synced sandbox {sandbox_id} from Docker "
+                f"(project_id={labels.get('memstack.project_id', 'unknown')}, "
+                f"mcp_port={mcp_port})"
+            )
+            return instance
+
+        except Exception as e:
+            logger.error(f"Error syncing sandbox {sandbox_id} from Docker: {e}")
+            return None
 
     async def sync_from_docker(self) -> int:
         """
@@ -1735,9 +1856,12 @@ class MCPSandboxAdapter(SandboxPort):
             container_config = {
                 "image": self._mcp_image,
                 "name": original_sandbox_id,
+                "hostname": original_sandbox_id,  # Set hostname for VNC hostname resolution
                 "detach": True,
                 # Auto-restart policy for container-level recovery (preserved in rebuild)
                 "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
+                # Add extra hosts to resolve the container hostname (required for VNC)
+                "extra_hosts": {original_sandbox_id: "127.0.0.1"},
                 "ports": {
                     f"{MCP_WEBSOCKET_PORT}/tcp": old_ports[0] if len(old_ports) > 0 else None,
                     f"{DESKTOP_PORT}/tcp": old_ports[1] if len(old_ports) > 1 else None,
@@ -1876,6 +2000,11 @@ class MCPSandboxAdapter(SandboxPort):
         This method checks if the sandbox container is running and healthy.
         If the container is dead or unhealthy, it attempts to rebuild it.
 
+        IMPORTANT: If the sandbox is not found in _active_sandboxes, this method
+        will attempt to sync it from Docker. This handles the case where the
+        sandbox was created/recreated by another process (e.g., API server using
+        ProjectSandboxLifecycleService while Agent Worker is running).
+
         Args:
             sandbox_id: Sandbox identifier
 
@@ -1883,8 +2012,20 @@ class MCPSandboxAdapter(SandboxPort):
             True if sandbox is healthy or was successfully rebuilt
         """
         instance = self._active_sandboxes.get(sandbox_id)
+
+        # If sandbox not in memory, try to sync from Docker
+        # This handles the case where sandbox was created/recreated by another process
         if not instance:
-            return False
+            logger.info(
+                f"Sandbox {sandbox_id} not found in memory, attempting to sync from Docker..."
+            )
+            instance = await self.sync_sandbox_from_docker(sandbox_id)
+            if not instance:
+                logger.warning(
+                    f"Sandbox {sandbox_id} not found in Docker either, cannot ensure health"
+                )
+                return False
+            logger.info(f"Successfully synced sandbox {sandbox_id} from Docker")
 
         # Check health using existing health_check method
         is_healthy = await self.health_check(sandbox_id)

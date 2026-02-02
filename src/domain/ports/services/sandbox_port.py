@@ -105,6 +105,7 @@ class SandboxPort(ABC):
         config: Optional[SandboxConfig] = None,
         project_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        sandbox_id: Optional[str] = None,
     ) -> SandboxInstance:
         """
         Create a new sandbox instance.
@@ -114,6 +115,7 @@ class SandboxPort(ABC):
             config: Sandbox configuration
             project_id: Optional project ID for labeling and identification
             tenant_id: Optional tenant ID for labeling and identification
+            sandbox_id: Optional sandbox ID to reuse (for recreating with same ID)
 
         Returns:
             SandboxInstance with connection details

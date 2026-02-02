@@ -48,7 +48,10 @@ def mock_docker_container(mock_docker):
 @pytest.fixture
 def adapter(mock_docker):
     """Create MCPSandboxAdapter with mocked Docker."""
-    with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env", return_value=mock_docker):
+    with patch(
+        "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env",
+        return_value=mock_docker,
+    ):
         adapter = MCPSandboxAdapter()
         yield adapter
 
@@ -152,10 +155,14 @@ class TestSandboxAutoRebuild:
             )
 
         # Assert: Should have created containers (at least one for rebuild)
-        assert len(created_containers) >= 1, f"Should have created containers, but created: {list(created_containers.keys())}"
+        assert len(created_containers) >= 1, (
+            f"Should have created containers, but created: {list(created_containers.keys())}"
+        )
 
         # Assert: Tool call should succeed
-        assert result.get("is_error") is False, f"Tool call should succeed after rebuild, got: {result}"
+        assert result.get("is_error") is False, (
+            f"Tool call should succeed after rebuild, got: {result}"
+        )
         assert result.get("content")[0]["text"] == "Success"
 
     @pytest.mark.asyncio
@@ -223,9 +230,7 @@ class TestSandboxAutoRebuild:
                     # For now, we expect the function to handle it gracefully
 
     @pytest.mark.asyncio
-    async def test_health_check_returns_false_for_dead_container(
-        self, adapter, mock_docker
-    ):
+    async def test_health_check_returns_false_for_dead_container(self, adapter, mock_docker):
         """
         Test that health_check correctly identifies a dead container.
         """
@@ -257,9 +262,7 @@ class TestSandboxAutoRebuild:
         assert is_healthy is False, "health_check should return False for dead container"
 
     @pytest.mark.asyncio
-    async def test_health_check_returns_false_for_exited_container(
-        self, adapter, mock_docker
-    ):
+    async def test_health_check_returns_false_for_exited_container(self, adapter, mock_docker):
         """
         Test that health_check correctly identifies an exited container.
         """
@@ -433,9 +436,7 @@ class TestSandboxRestartPolicy:
     """Test that sandbox containers have proper restart policy for auto-recovery."""
 
     @pytest.mark.asyncio
-    async def test_create_sandbox_sets_restart_policy(
-        self, adapter, mock_docker
-    ):
+    async def test_create_sandbox_sets_restart_policy(self, adapter, mock_docker):
         """
         RED Test: Verify that create_sandbox sets restart_policy to on-failure.
 
@@ -483,9 +484,7 @@ class TestSandboxRestartPolicy:
         )
 
     @pytest.mark.asyncio
-    async def test_rebuild_sandbox_preserves_restart_policy(
-        self, adapter, mock_docker
-    ):
+    async def test_rebuild_sandbox_preserves_restart_policy(self, adapter, mock_docker):
         """
         Test that _rebuild_sandbox preserves restart_policy.
         """
@@ -548,9 +547,7 @@ class TestSandboxRestartPolicy:
         assert len(run_configs) >= 1, "Should have created at least one container"
 
         rebuilt_config = run_configs[-1]  # Last config is the rebuilt one
-        assert "restart_policy" in rebuilt_config, (
-            "Rebuilt container should have restart_policy"
-        )
+        assert "restart_policy" in rebuilt_config, "Rebuilt container should have restart_policy"
 
         restart_policy = rebuilt_config.get("restart_policy")
         assert restart_policy.get("Name") == "on-failure", (
@@ -562,9 +559,7 @@ class TestSandboxSyncFromDocker:
     """Test that adapter syncs existing containers from Docker on startup."""
 
     @pytest.mark.asyncio
-    async def test_adapter_calls_sync_from_docker_on_initialization(
-        self, mock_docker
-    ):
+    async def test_adapter_calls_sync_from_docker_on_initialization(self, mock_docker):
         """
         RED Test: Verify that MCPSandboxAdapter calls sync_from_docker during init.
 
@@ -606,11 +601,12 @@ class TestSandboxSyncFromDocker:
             return await original_sync(self)
 
         # Patch sync_from_docker to track calls
-        with patch.object(
-            MCPSandboxAdapter, "sync_from_docker", tracking_sync
-        ):
+        with patch.object(MCPSandboxAdapter, "sync_from_docker", tracking_sync):
             # Act: Create adapter (should trigger sync)
-            with patch("src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env", return_value=mock_docker):
+            with patch(
+                "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env",
+                return_value=mock_docker,
+            ):
                 adapter = MCPSandboxAdapter()
 
                 # Note: sync_from_docker is async and would need to be awaited
@@ -626,9 +622,7 @@ class TestSandboxSyncFromDocker:
                 assert count >= 0, "sync_from_docker should return a count"
 
     @pytest.mark.asyncio
-    async def test_sync_from_docker_populates_active_sandboxes(
-        self, adapter, mock_docker
-    ):
+    async def test_sync_from_docker_populates_active_sandboxes(self, adapter, mock_docker):
         """
         Test that sync_from_docker properly populates _active_sandboxes
         with existing containers.
@@ -673,3 +667,119 @@ class TestSandboxSyncFromDocker:
         assert instance.mcp_port == 18765
         assert instance.desktop_port == 16080
         assert instance.terminal_port == 17681
+
+
+class TestSandboxSyncSingleFromDocker:
+    """Tests for sync_sandbox_from_docker - syncing individual sandbox from Docker."""
+
+    @pytest.mark.asyncio
+    async def test_sync_sandbox_from_docker_success(self, adapter, mock_docker):
+        """
+        Test that sync_sandbox_from_docker properly syncs a single sandbox
+        that was created/recreated by another process.
+        """
+        # Setup: Container exists in Docker but not in adapter's memory
+        external_container = MagicMock()
+        external_container.name = "external-sandbox"
+        external_container.status = "running"
+        external_container.labels = {
+            "memstack.sandbox": "true",
+            "memstack.sandbox.id": "external-sandbox",
+            "memstack.sandbox.mcp_port": "19000",
+            "memstack.sandbox.desktop_port": "19001",
+            "memstack.sandbox.terminal_port": "19002",
+            "memstack.project_id": "proj-external",
+        }
+        external_container.attrs = {
+            "Mounts": [
+                {
+                    "Destination": "/workspace",
+                    "Source": "/tmp/external_project",
+                }
+            ]
+        }
+
+        mock_docker.containers.get = Mock(return_value=external_container)
+
+        # Verify sandbox is NOT in memory
+        assert "external-sandbox" not in adapter._active_sandboxes
+
+        # Act: Sync single sandbox from Docker
+        instance = await adapter.sync_sandbox_from_docker("external-sandbox")
+
+        # Assert: Should have synced the sandbox
+        assert instance is not None
+        assert instance.id == "external-sandbox"
+        assert instance.mcp_port == 19000
+        assert instance.desktop_port == 19001
+        assert instance.terminal_port == 19002
+
+        # Verify it's now in memory
+        assert "external-sandbox" in adapter._active_sandboxes
+
+    @pytest.mark.asyncio
+    async def test_sync_sandbox_from_docker_not_found(self, adapter, mock_docker):
+        """
+        Test that sync_sandbox_from_docker returns None when container doesn't exist.
+        """
+        # Setup: Container doesn't exist
+        mock_docker.containers.get = Mock(side_effect=Exception("Container not found"))
+
+        # Act
+        instance = await adapter.sync_sandbox_from_docker("nonexistent-sandbox")
+
+        # Assert
+        assert instance is None
+        assert "nonexistent-sandbox" not in adapter._active_sandboxes
+
+    @pytest.mark.asyncio
+    async def test_sync_sandbox_from_docker_not_running(self, adapter, mock_docker):
+        """
+        Test that sync_sandbox_from_docker returns None when container is not running.
+        """
+        # Setup: Container exists but is stopped
+        stopped_container = MagicMock()
+        stopped_container.name = "stopped-sandbox"
+        stopped_container.status = "exited"
+        stopped_container.labels = {"memstack.sandbox": "true"}
+
+        mock_docker.containers.get = Mock(return_value=stopped_container)
+
+        # Act
+        instance = await adapter.sync_sandbox_from_docker("stopped-sandbox")
+
+        # Assert
+        assert instance is None
+
+    @pytest.mark.asyncio
+    async def test_ensure_sandbox_healthy_syncs_from_docker(self, adapter, mock_docker):
+        """
+        Test that _ensure_sandbox_healthy syncs sandbox from Docker
+        when it's not in memory.
+        """
+        # Setup: Sandbox NOT in adapter's memory, but exists in Docker
+        docker_container = MagicMock()
+        docker_container.name = "recreated-sandbox"
+        docker_container.status = "running"
+        docker_container.labels = {
+            "memstack.sandbox": "true",
+            "memstack.sandbox.id": "recreated-sandbox",
+            "memstack.sandbox.mcp_port": "20000",
+        }
+        docker_container.attrs = {"Mounts": []}
+
+        mock_docker.containers.get = Mock(return_value=docker_container)
+
+        # Verify sandbox is NOT in memory
+        assert "recreated-sandbox" not in adapter._active_sandboxes
+
+        # Mock health_check to return True (container is healthy)
+        with patch.object(adapter, "health_check", new_callable=AsyncMock) as mock_health:
+            mock_health.return_value = True
+
+            # Act: Ensure sandbox healthy
+            result = await adapter._ensure_sandbox_healthy("recreated-sandbox")
+
+            # Assert: Should have synced and returned True
+            assert result is True
+            assert "recreated-sandbox" in adapter._active_sandboxes

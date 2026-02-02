@@ -27,7 +27,8 @@ ENV PYTHON_VERSION=3.13 \
 # MCP Server configuration
 ENV MCP_HOST=0.0.0.0 \
     MCP_PORT=8765 \
-    MCP_WORKSPACE=/workspace
+    MCP_WORKSPACE=/workspace \
+    HOSTNAME=mcp-sandbox
 
 # Desktop configuration
 ENV DESKTOP_ENABLED=true \
@@ -364,6 +365,9 @@ RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
 # ====================
 # Final Setup
 # ====================
+# NOTE: Hostname is configured at runtime via --hostname and --add-host parameters
+# in mcp_sandbox_adapter.py to support proper VNC hostname resolution
+
 WORKDIR /workspace
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=20s --retries=3 \

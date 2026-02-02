@@ -3,7 +3,7 @@
  *
  * Features:
  * - Click to start sandbox if not running
- * - Real-time status updates via SSE
+ * - Real-time status updates via WebSocket (replaces SSE)
  * - Hover to show detailed metrics (CPU, memory, disk, network)
  *
  * @module components/agent/sandbox/SandboxStatusIndicator
@@ -30,7 +30,8 @@ import {
   type SandboxStats,
   type ProjectSandboxStatus,
 } from "../../../services/projectSandboxService";
-import { sandboxSSEService } from "../../../services/sandboxSSEService";
+import { agentService } from "../../../services/agentService";
+import { type SandboxStateData } from "../../../types/agent";
 import { logger } from "../../../utils/logger";
 
 interface SandboxStatusIndicatorProps {
@@ -438,37 +439,81 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     }
   }, [popoverOpen, sandbox?.status, fetchStats]);
 
-  // Subscribe to SSE events
+  // Subscribe to WebSocket sandbox state events
+  // Note: WebSocket connection is managed by parent components (via useUnifiedAgentStatus)
+  // The subscription will receive events once connection is established
   useEffect(() => {
     if (!projectId) return;
 
-    const unsubscribe = sandboxSSEService.subscribe(projectId, {
-      onSandboxCreated: (event) => {
-        logger.debug("[SandboxStatusIndicator] Sandbox created:", event);
-        fetchSandbox();
-      },
-      onSandboxTerminated: () => {
-        logger.debug("[SandboxStatusIndicator] Sandbox terminated");
-        setSandbox(null);
-        setStats(null);
-      },
-      onStatusUpdate: (event) => {
-        logger.debug("[SandboxStatusIndicator] Status update:", event);
-        // Update status from event data
-        if (event.data && typeof event.data === "object" && "status" in event.data) {
-          const eventData = event.data as { status: ProjectSandboxStatus };
-          setSandbox((prev) =>
-            prev ? { ...prev, status: eventData.status } : null
-          );
+    // Subscribe to sandbox state changes via WebSocket
+    // Events will be queued internally until WebSocket is connected
+    agentService.subscribeSandboxState(
+      projectId,
+      "", // tenantId can be empty as it's optional on backend
+      (state: SandboxStateData) => {
+        logger.debug("[SandboxStatusIndicator] Sandbox state change:", state);
+
+        switch (state.eventType) {
+          case "created":
+          case "restarted":
+            // On created/restarted, update sandbox info from event data
+            if (state.status) {
+              setSandbox((prev) => {
+                if (prev) {
+                  return {
+                    ...prev,
+                    status: state.status as ProjectSandboxStatus,
+                    sandbox_id: state.sandboxId || prev.sandbox_id,
+                    endpoint: state.endpoint || prev.endpoint,
+                    websocket_url: state.websocketUrl || prev.websocket_url,
+                    mcp_port: state.mcpPort ?? prev.mcp_port,
+                    desktop_port: state.desktopPort ?? prev.desktop_port,
+                    terminal_port: state.terminalPort ?? prev.terminal_port,
+                    is_healthy: state.isHealthy,
+                  };
+                } else {
+                  // Create new sandbox object from event data - refetch for complete data
+                  fetchSandbox();
+                  return null;
+                }
+              });
+            } else {
+              // If no status in event, refetch
+              fetchSandbox();
+            }
+            break;
+
+          case "terminated":
+            logger.debug("[SandboxStatusIndicator] Sandbox terminated");
+            setSandbox(null);
+            setStats(null);
+            break;
+
+          case "status_changed":
+            // Update status from event data
+            if (state.status) {
+              setSandbox((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: state.status as ProjectSandboxStatus,
+                      is_healthy: state.isHealthy,
+                    }
+                  : null
+              );
+            }
+            break;
+
+          default:
+            // For any other event type, refetch to ensure consistency
+            logger.debug(`[SandboxStatusIndicator] Unknown event type: ${state.eventType}`);
+            fetchSandbox();
         }
-      },
-      onError: (error) => {
-        logger.error("[SandboxStatusIndicator] SSE error:", error);
-      },
-    });
+      }
+    );
 
     return () => {
-      unsubscribe();
+      agentService.unsubscribeSandboxState();
     };
   }, [projectId, fetchSandbox]);
 

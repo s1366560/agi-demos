@@ -38,6 +38,23 @@ TERMINAL_PORT="${TERMINAL_PORT:-7681}"
 SANDBOX_USER="${SANDBOX_USER:-sandbox}"
 VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
 SKIP_MCP_SERVER="${SKIP_MCP_SERVER:-false}"  # Set to true to skip MCP server (for desktop testing)
+CONTAINER_HOSTNAME="${HOSTNAME:-mcp-sandbox}"
+
+# Configure hostname in /etc/hosts at runtime
+configure_hostname() {
+    log_info "Configuring hostname: $CONTAINER_HOSTNAME"
+    
+    # Add hostname to /etc/hosts if not already present
+    if ! grep -q "$CONTAINER_HOSTNAME" /etc/hosts 2>/dev/null; then
+        echo "127.0.0.1 $CONTAINER_HOSTNAME" >> /etc/hosts
+        echo "::1 $CONTAINER_HOSTNAME" >> /etc/hosts
+    fi
+    
+    # Set hostname (may fail if not privileged, that's OK)
+    hostname "$CONTAINER_HOSTNAME" 2>/dev/null || true
+    
+    log_success "Hostname configured: $CONTAINER_HOSTNAME"
+}
 
 # PID tracking
 PIDS=()
@@ -345,12 +362,17 @@ _start_tigervnc() {
 # Start VNC Server (TigerVNC with x11vnc fallback)
 # Priority: TigerVNC (default, better performance) > x11vnc (fallback)
 # Environment variable VNC_SERVER_TYPE can force selection: "tigervnc" or "x11vnc"
+# NOTE: VNC failures are non-fatal - container continues running for MCP server
 start_vnc() {
     # Check if user wants to force x11vnc
     if [ "$VNC_SERVER_TYPE" = "x11vnc" ]; then
         log_info "Forcing x11vnc (VNC_SERVER_TYPE=x11vnc)..."
-        _start_x11vnc
-        return $?
+        if _start_x11vnc; then
+            return 0
+        else
+            log_warn "x11vnc failed to start, desktop will not be available"
+            return 1
+        fi
     fi
 
     # Try TigerVNC first (better performance: 50% bandwidth reduction)
@@ -365,7 +387,13 @@ start_vnc() {
     fi
 
     # Fallback to x11vnc if TigerVNC not available or failed
-    _start_x11vnc
+    if _start_x11vnc; then
+        return 0
+    else
+        log_warn "All VNC servers failed to start, desktop will not be available"
+        log_warn "MCP server will continue running"
+        return 1
+    fi
 }
 
 # Start noVNC (Remote Desktop)
@@ -435,29 +463,37 @@ main() {
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
+    # Configure hostname first
+    configure_hostname
+
     # Start MCP Server first (always required)
     start_mcp_server
 
     # Start Desktop if enabled
+    # NOTE: VNC failure is non-fatal - we continue running for MCP server
+    VNC_STARTED=false
     if [ "$DESKTOP_ENABLED" = "true" ]; then
         # Start Xvfb if needed (x11vnc mode requires it, TigerVNC has built-in X server)
         if ! ([ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null); then
-            start_xvfb
+            start_xvfb || log_warn "Xvfb failed to start"
         fi
 
         # Start VNC server (TigerVNC or x11vnc)
-        start_vnc
+        if start_vnc; then
+            VNC_STARTED=true
+            # Start desktop environment (XFCE)
+            # Note: TigerVNC runs xstartup automatically, so skip start_desktop
+            if [ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null; then
+                log_info "TigerVNC manages desktop via xstartup, skipping start_desktop"
+            else
+                start_desktop
+            fi
 
-        # Start desktop environment (XFCE)
-        # Note: TigerVNC runs xstartup automatically, so skip start_desktop
-        if [ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null; then
-            log_info "TigerVNC manages desktop via xstartup, skipping start_desktop"
+            # Start noVNC web client
+            start_novnc
         else
-            start_desktop
+            log_warn "Desktop will not be available due to VNC startup failure"
         fi
-
-        # Start noVNC web client
-        start_novnc
     fi
 
     # Start Terminal
@@ -481,19 +517,17 @@ main() {
     echo ""
     log_info "Container ready. Waiting for signals..."
 
-    # Wait for appropriate process
+    # Wait for MCP server - this is the primary service
     if [ -n "$MCP_PID" ] && kill -0 "$MCP_PID" 2>/dev/null; then
-        # Wait for MCP server process
+        # Wait for MCP server process - this is the main blocking call
         wait $MCP_PID
+        exit_code=$?
+        log_info "MCP server exited with code $exit_code"
     else
-        # No MCP server running, wait indefinitely for desktop
-        log_info "Waiting for VNC/Desktop sessions..."
+        # MCP server not running, but we should still keep container alive
+        # This allows health checks and manual debugging
+        log_warn "MCP server not running, entering standby mode"
         while true; do
-            # Check if container should exit
-            if ! kill -0 "$$VNC_PID" 2>/dev/null && [ "$DESKTOP_ENABLED" = "true" ]; then
-                log_warn "VNC server died, exiting..."
-                break
-            fi
             sleep 60
         done
     fi

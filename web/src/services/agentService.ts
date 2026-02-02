@@ -89,6 +89,7 @@ import type {
     ReflectionCompleteEvent,
     LifecycleState,
     LifecycleStateData,
+    SandboxStateData,
     PendingHITLResponse,
     ArtifactCreatedEventData,
 } from "../types/agent";
@@ -200,6 +201,9 @@ class AgentServiceImpl implements AgentService {
 
     // Lifecycle state subscription for Agent lifecycle monitoring
     private lifecycleStateSubscriber: { projectId: string; tenantId: string; callback: (state: LifecycleStateData) => void } | null = null;
+
+    // Sandbox state subscription for real-time sandbox status sync
+    private sandboxStateSubscriber: { projectId: string; tenantId: string; callback: (state: SandboxStateData) => void } | null = null;
 
     // Connection lock to prevent parallel connection attempts
     private connectingPromise: Promise<void> | null = null;
@@ -508,6 +512,15 @@ class AgentServiceImpl implements AgentService {
             return;
         }
 
+        // Handle sandbox state changes (replaces SSE-based sandbox events)
+        if (type === "sandbox_state_change") {
+            const projectId = (message as { project_id?: string }).project_id;
+            if (this.sandboxStateSubscriber && projectId === this.sandboxStateSubscriber.projectId) {
+                this.sandboxStateSubscriber.callback(this.parseSandboxStateData(message));
+            }
+            return;
+        }
+
         // Route conversation-specific messages to handlers
         if (conversation_id) {
             const handler = this.handlers.get(conversation_id);
@@ -546,6 +559,28 @@ class AgentServiceImpl implements AgentService {
             loadedSkillCount: typeof data.loaded_skill_count === "number" ? data.loaded_skill_count : undefined,
             subagentCount: typeof data.subagent_count === "number" ? data.subagent_count : undefined,
             conversationId: typeof data.conversation_id === "string" ? data.conversation_id : undefined,
+            errorMessage: typeof data.error_message === "string" ? data.error_message : undefined,
+        };
+    }
+
+    /**
+     * Parse sandbox state data from WebSocket message
+     * @private
+     */
+    private parseSandboxStateData(message: ServerMessage): SandboxStateData {
+        const data = (message as { data?: Record<string, unknown> }).data || {};
+        return {
+            eventType: typeof data.event_type === "string" ? data.event_type : "unknown",
+            sandboxId: typeof data.sandbox_id === "string" ? data.sandbox_id : null,
+            status: (data.status as SandboxStateData["status"]) || null,
+            endpoint: typeof data.endpoint === "string" ? data.endpoint : undefined,
+            websocketUrl: typeof data.websocket_url === "string" ? data.websocket_url : undefined,
+            mcpPort: typeof data.mcp_port === "number" ? data.mcp_port : undefined,
+            desktopPort: typeof data.desktop_port === "number" ? data.desktop_port : undefined,
+            terminalPort: typeof data.terminal_port === "number" ? data.terminal_port : undefined,
+            desktopUrl: typeof data.desktop_url === "string" ? data.desktop_url : undefined,
+            terminalUrl: typeof data.terminal_url === "string" ? data.terminal_url : undefined,
+            isHealthy: Boolean(data.is_healthy),
             errorMessage: typeof data.error_message === "string" ? data.error_message : undefined,
         };
     }
@@ -1866,6 +1901,66 @@ class AgentServiceImpl implements AgentService {
             logger.debug(`[AgentWS] Unsubscribed from lifecycle state for project: ${this.lifecycleStateSubscriber.projectId}`);
         }
         this.lifecycleStateSubscriber = null;
+    }
+
+    /**
+     * Subscribe to sandbox state changes for a project
+     *
+     * Registers a callback to receive real-time sandbox state updates via WebSocket.
+     * This replaces the previous SSE-based sandbox event subscription, providing
+     * more reliable and consistent state synchronization.
+     *
+     * The subscription is automatically re-established after reconnection.
+     * Only one project can be subscribed at a time per connection.
+     *
+     * @param projectId - The project ID to subscribe to
+     * @param tenantId - The tenant ID for project scoping
+     * @param callback - Function called when sandbox state changes
+     *
+     * @example
+     * ```typescript
+     * agentService.subscribeSandboxState('proj-123', 'tenant-456', (state) => {
+     *   console.log('Sandbox event:', state.eventType);
+     *   console.log('Sandbox status:', state.status);
+     *   console.log('Is healthy:', state.isHealthy);
+     * });
+     * ```
+     */
+    subscribeSandboxState(
+        projectId: string,
+        tenantId: string,
+        callback: (state: SandboxStateData) => void
+    ): void {
+        // Unsubscribe from previous project if different
+        if (this.sandboxStateSubscriber && this.sandboxStateSubscriber.projectId !== projectId) {
+            this.unsubscribeSandboxState();
+        }
+
+        this.sandboxStateSubscriber = { projectId, tenantId, callback };
+
+        // Sandbox state uses the same lifecycle subscription on the server
+        // (subscribed via subscribe_lifecycle_state message)
+        // No separate subscribe message needed - sandbox events are broadcast
+        // to all sessions subscribed to the project
+        logger.debug(`[AgentWS] Subscribed to sandbox state for project: ${projectId}`);
+    }
+
+    /**
+     * Unsubscribe from sandbox state changes
+     *
+     * Stops receiving sandbox state updates.
+     *
+     * @example
+     * ```typescript
+     * agentService.unsubscribeSandboxState();
+     * console.log('Sandbox state updates stopped');
+     * ```
+     */
+    unsubscribeSandboxState(): void {
+        if (this.sandboxStateSubscriber) {
+            logger.debug(`[AgentWS] Unsubscribed from sandbox state for project: ${this.sandboxStateSubscriber.projectId}`);
+        }
+        this.sandboxStateSubscriber = null;
     }
 }
 

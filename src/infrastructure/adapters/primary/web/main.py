@@ -58,6 +58,13 @@ from src.infrastructure.telemetry import (
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Fix LiteLLM duplicate logging - prevent log propagation to root logger
+# LiteLLM adds its own handler AND allows propagation by default, causing duplicate logs
+_litellm_loggers = ["LiteLLM", "LiteLLM Router", "LiteLLM Proxy"]
+for _logger_name in _litellm_loggers:
+    _litellm_logger = logging.getLogger(_logger_name)
+    _litellm_logger.propagate = False
+
 # Trigger reload 10
 
 

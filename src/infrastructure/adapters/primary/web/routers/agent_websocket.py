@@ -342,6 +342,41 @@ class ConnectionManager:
         }
         return await self.broadcast_to_project(tenant_id, project_id, message)
 
+    async def broadcast_sandbox_state(
+        self, tenant_id: str, project_id: str, state: Dict[str, Any]
+    ) -> int:
+        """
+        Broadcast sandbox state change to all sessions subscribed to a project.
+
+        This method pushes sandbox status updates via WebSocket to keep frontend
+        in sync with backend sandbox state. It replaces the previous SSE-based
+        sandbox event streaming approach.
+
+        Args:
+            tenant_id: Tenant identifier
+            project_id: Project identifier
+            state: Sandbox state data containing:
+                - sandbox_id: str - Unique sandbox identifier
+                - status: str - Current status (pending, creating, running, stopped, etc.)
+                - endpoint: Optional[str] - MCP WebSocket endpoint
+                - mcp_port: Optional[int] - MCP server port
+                - desktop_port: Optional[int] - Desktop (noVNC) port
+                - terminal_port: Optional[int] - Terminal (ttyd) port
+                - is_healthy: bool - Whether sandbox is healthy
+                - error_message: Optional[str] - Error message if in error state
+                - event_type: str - Type of event (created, terminated, status_changed)
+
+        Returns:
+            Number of sessions notified
+        """
+        message = {
+            "type": "sandbox_state_change",
+            "project_id": project_id,
+            "data": state,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        return await self.broadcast_to_project(tenant_id, project_id, message)
+
     async def disconnect(self, session_id: str) -> None:
         """Remove a WebSocket connection and clean up subscriptions for a session."""
         async with self._lock:
@@ -1864,6 +1899,7 @@ async def handle_start_agent(
     try:
         # STEP 0: Ensure sandbox exists before starting agent
         # This integrates sandbox lifecycle management into agent startup
+        sandbox_info = None
         try:
             from src.application.services.project_sandbox_lifecycle_service import (
                 ProjectSandboxLifecycleService,
@@ -1890,6 +1926,25 @@ async def handle_start_agent(
             logger.info(
                 f"[WS] Sandbox ensured for project {project_id}: "
                 f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+            )
+
+            # Broadcast sandbox state to frontend via WebSocket
+            await manager.broadcast_sandbox_state(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                state={
+                    "event_type": "created"
+                    if sandbox_info.status == "running"
+                    else "status_changed",
+                    "sandbox_id": sandbox_info.sandbox_id,
+                    "status": sandbox_info.status,
+                    "endpoint": sandbox_info.endpoint,
+                    "websocket_url": sandbox_info.websocket_url,
+                    "mcp_port": sandbox_info.mcp_port,
+                    "desktop_port": sandbox_info.desktop_port,
+                    "terminal_port": sandbox_info.terminal_port,
+                    "is_healthy": sandbox_info.is_healthy,
+                },
             )
         except Exception as e:
             logger.warning(
@@ -2113,6 +2168,7 @@ async def handle_restart_agent(
     try:
         # STEP 0: Ensure sandbox exists and is healthy before restarting agent
         # This integrates sandbox lifecycle management into agent restart
+        sandbox_info = None
         try:
             from src.application.services.project_sandbox_lifecycle_service import (
                 ProjectSandboxLifecycleService,
@@ -2147,6 +2203,24 @@ async def handle_restart_agent(
                 logger.info(
                     f"[WS] Sandbox ensured for agent restart: project={project_id}, "
                     f"sandbox_id={sandbox_info.sandbox_id}, status={sandbox_info.status}"
+                )
+
+            # Broadcast sandbox state to frontend via WebSocket
+            if sandbox_info:
+                await manager.broadcast_sandbox_state(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    state={
+                        "event_type": "restarted",
+                        "sandbox_id": sandbox_info.sandbox_id,
+                        "status": sandbox_info.status,
+                        "endpoint": sandbox_info.endpoint,
+                        "websocket_url": sandbox_info.websocket_url,
+                        "mcp_port": sandbox_info.mcp_port,
+                        "desktop_port": sandbox_info.desktop_port,
+                        "terminal_port": sandbox_info.terminal_port,
+                        "is_healthy": sandbox_info.is_healthy,
+                    },
                 )
         except Exception as e:
             logger.warning(

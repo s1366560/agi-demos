@@ -838,18 +838,89 @@ class LLMStream:
             if not tracker.complete:
                 tracker.complete = True
 
-                # Parse arguments
-                try:
-                    arguments = json.loads(tracker.arguments) if tracker.arguments else {}
-                except json.JSONDecodeError as e:
-                    logger.warning(
-                        f"Failed to parse tool arguments for {tracker.name}: {e}. "
-                        f"Arguments preview: {tracker.arguments[:200]}..."
-                    )
-                    # Store raw arguments for later retry in processor
-                    # The processor will attempt to parse again and provide
-                    # better error feedback to the LLM if parsing still fails
-                    arguments = {"_raw": tracker.arguments}
+                # Parse arguments - handle various edge cases
+                arguments = {}
+                if tracker.arguments:
+                    raw_args = tracker.arguments
+                    try:
+                        arguments = json.loads(raw_args)
+                    except json.JSONDecodeError as e:
+                        error_str = str(e)
+                        logger.warning(
+                            f"Failed to parse tool arguments for {tracker.name}: {e}. "
+                            f"Arguments preview: {raw_args[:200]}..."
+                        )
+
+                        # Try to fix common issues FIRST before declaring truncation
+                        parse_success = False
+
+                        # Fix 1: Handle unescaped control characters
+                        # This is the most common issue - LLM returns literal \n instead of \\n
+                        try:
+                            def escape_control_chars(s):
+                                """Escape control characters in a JSON string."""
+                                s = s.replace("\n", "\\n")
+                                s = s.replace("\r", "\\r")
+                                s = s.replace("\t", "\\t")
+                                return s
+
+                            fixed_args = escape_control_chars(raw_args)
+                            arguments = json.loads(fixed_args)
+                            logger.info(
+                                f"[LLMStream] Successfully parsed JSON after escaping control chars for {tracker.name}"
+                            )
+                            parse_success = True
+                        except json.JSONDecodeError:
+                            pass
+
+                        # Fix 2: Handle double-encoded JSON
+                        if not parse_success:
+                            try:
+                                if raw_args.startswith('"') and raw_args.endswith('"'):
+                                    inner = raw_args[1:-1]
+                                    inner = inner.replace('\\"', '"').replace("\\\\", "\\")
+                                    arguments = json.loads(inner)
+                                    logger.info(
+                                        f"[LLMStream] Successfully parsed double-encoded JSON for {tracker.name}"
+                                    )
+                                    parse_success = True
+                            except json.JSONDecodeError:
+                                pass
+
+                        # If all fixes failed, check if it's truly a truncation
+                        if not parse_success:
+                            # Truncation is indicated by:
+                            # 1. finish_reason == "length" (token limit reached)
+                            # 2. JSON structure is incomplete (missing closing brackets)
+                            is_truncated = (
+                                self._finish_reason == "length"
+                                or (
+                                    ("Unterminated string" in error_str or "Expecting" in error_str)
+                                    and not raw_args.rstrip().endswith("}")
+                                )
+                            )
+
+                            if is_truncated:
+                                logger.error(
+                                    f"[LLMStream] Tool arguments truncated for {tracker.name}. "
+                                    f"finish_reason={self._finish_reason}. "
+                                    f"Consider increasing max_tokens or reducing content size."
+                                )
+                                arguments = {
+                                    "_error": "truncated",
+                                    "_message": (
+                                        "Tool arguments were truncated (incomplete JSON). "
+                                        "The content may be too large. Try with smaller content or increase max_tokens."
+                                    ),
+                                    "_raw": raw_args,
+                                }
+                            else:
+                                # Not truncated, just malformed - pass raw for processor to handle
+                                logger.warning(
+                                    f"[LLMStream] Could not parse tool arguments for {tracker.name}, "
+                                    f"passing _raw for processor to handle"
+                                )
+                                arguments = {"_raw": raw_args}
 
                 yield StreamEvent.tool_call_end(
                     call_id=tracker.id,

@@ -2669,6 +2669,50 @@ export interface LifecycleStateData {
 }
 
 /**
+ * Sandbox status types
+ */
+export type SandboxStatus =
+    | "pending"
+    | "creating"
+    | "running"
+    | "unhealthy"
+    | "stopped"
+    | "terminated"
+    | "error";
+
+/**
+ * Sandbox state data from WebSocket
+ *
+ * Pushed via WebSocket when sandbox state changes, replacing SSE-based events.
+ */
+export interface SandboxStateData {
+    /** Event type: created, terminated, restarted, status_changed */
+    eventType: string;
+    /** Unique sandbox identifier */
+    sandboxId: string | null;
+    /** Current sandbox status */
+    status: SandboxStatus | null;
+    /** MCP WebSocket endpoint URL */
+    endpoint?: string;
+    /** WebSocket URL for MCP connection */
+    websocketUrl?: string;
+    /** MCP server port */
+    mcpPort?: number;
+    /** Desktop (noVNC) port */
+    desktopPort?: number;
+    /** Terminal (ttyd) port */
+    terminalPort?: number;
+    /** Desktop access URL */
+    desktopUrl?: string;
+    /** Terminal access URL */
+    terminalUrl?: string;
+    /** Whether sandbox is healthy */
+    isHealthy: boolean;
+    /** Error message if in error state */
+    errorMessage?: string;
+}
+
+/**
  * Lifecycle status for UI display
  */
 export interface LifecycleStatus {
