@@ -3,18 +3,6 @@ import { X, Folder, AlertCircle, Settings, Brain, Users, Cloud, Monitor } from '
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
-interface LocalSandboxConfig {
-  workspace_path: string;
-  tunnel_url: string;
-  host: string;
-  port: number;
-}
-
-interface SandboxConfig {
-  sandbox_type: 'cloud' | 'local';
-  local_config?: LocalSandboxConfig;
-}
-
 interface ProjectCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -562,8 +550,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                           sandbox_config: {
                             ...formData.sandbox_config,
                             local_config: {
-                              ...formData.sandbox_config.local_config,
-                              tunnel_url: e.target.value || undefined
+                              ...(formData.sandbox_config.local_config || {
+                                workspace_path: '/workspace',
+                                tunnel_url: '',
+                                host: 'localhost',
+                                port: 8765
+                              }),
+                              tunnel_url: e.target.value
                             }
                           }
                         })}
@@ -589,8 +582,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                           sandbox_config: {
                             ...formData.sandbox_config,
                             local_config: {
-                              ...formData.sandbox_config.local_config,
-                              workspace_path: e.target.value || undefined
+                              ...(formData.sandbox_config.local_config || {
+                                workspace_path: '/workspace',
+                                tunnel_url: '',
+                                host: 'localhost',
+                                port: 8765
+                              }),
+                              workspace_path: e.target.value
                             }
                           }
                         })}

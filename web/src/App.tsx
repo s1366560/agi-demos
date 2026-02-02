@@ -156,15 +156,9 @@ const EdgeMapList = lazy(() => import("./pages/project/schema/EdgeMapList"));
 
 
 // Loading fallback for lazy-loaded components
-const PageLoader = () => (
-    <div
-        style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "200px",
-        }}
-    >
+// Hoisted outside component to avoid recreation on each render
+const PageLoader: React.FC = () => (
+    <div className="flex items-center justify-center h-[200px]">
         <Spin size="large" />
     </div>
 );

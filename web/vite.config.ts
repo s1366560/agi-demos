@@ -1,11 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { visualizer } from "rollup-plugin-visualizer";
 import path from "node:path";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // Bundle analyzer - generates stats.html after build
+    visualizer({
+      open: false,
+      gzipSize: true,
+      brotliSize: true,
+      filename: "dist/stats.html",
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -15,7 +26,6 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 3000,
     strictPort: true,
-    hmr: false, // 禁用 HMR
     proxy: {
       "/api": {
         target: "http://localhost:8000",
@@ -26,5 +36,62 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          // Vendor chunks for better caching
+          if (id.includes("node_modules")) {
+            // Ant Design - large UI library
+            if (id.includes("antd") || id.includes("@ant-design")) {
+              return "vendor-antd";
+            }
+            // Icons
+            if (id.includes("lucide-react") || id.includes("@ant-design/icons")) {
+              return "vendor-icons";
+            }
+            // React ecosystem
+            if (id.includes("react") || id.includes("react-dom") || id.includes("react-router")) {
+              return "vendor-react";
+            }
+            // State management
+            if (id.includes("zustand")) {
+              return "vendor-state";
+            }
+            // Markdown and syntax highlighting
+            if (id.includes("react-markdown") || id.includes("remark-gfm") || id.includes("react-syntax-highlighter")) {
+              return "vendor-markdown";
+            }
+            // Terminal
+            if (id.includes("@xterm") || id.includes("xterm")) {
+              return "vendor-terminal";
+            }
+            // Charts
+            if (id.includes("chart.js") || id.includes("react-chartjs")) {
+              return "vendor-charts";
+            }
+            // Graph visualization
+            if (id.includes("cytoscape")) {
+              return "vendor-graph";
+            }
+            // i18n
+            if (id.includes("i18next")) {
+              return "vendor-i18n";
+            }
+            // PDF generation
+            if (id.includes("html2pdf")) {
+              return "vendor-pdf";
+            }
+            // Date utilities
+            if (id.includes("date-fns")) {
+              return "vendor-date";
+            }
+            // Other vendor
+            return "vendor";
+          }
+        },
+      },
+    },
+    // Report chunk sizes
+    chunkSizeWarningLimit: 1000,
   },
 });

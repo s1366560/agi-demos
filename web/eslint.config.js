@@ -32,6 +32,19 @@ export default tseslint.config(
           'caughtErrorsIgnorePattern': '^_'
         }
       ],
+      // Discourage barrel imports from component directories
+      // Barrel imports cause entire module trees to be bundled unnecessarily
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['@/components/agent', '@/components/index'],
+              message: 'Avoid barrel imports from component directories. Import directly from the component file instead. Example: import { Button } from "@/components/agent/Button"',
+            },
+          ],
+        },
+      ],
     },
   },
 );
