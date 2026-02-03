@@ -46,7 +46,3 @@ export type {
 // Re-export types with aliases for convenience
 import type { AppHeaderRootProps } from './types'
 export type AppHeaderProps = AppHeaderRootProps
-
-// Legacy AppHeader for backward compatibility
-export { AppHeader as LegacyAppHeader } from '../AppHeader.legacy'
-export type { AppHeaderProps as LegacyAppHeaderProps } from '../AppHeader.legacy'
