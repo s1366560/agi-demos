@@ -18,7 +18,7 @@ import type { AgentSidebarProps } from './types'
  */
 export function AgentSidebar({
   projectId = '',
-  conversationId,
+  // conversationId // Reserved for future use
   defaultCollapsed = false,
   collapsed: controlledCollapsed,
   onCollapseToggle,

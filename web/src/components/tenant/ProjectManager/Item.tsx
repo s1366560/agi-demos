@@ -15,7 +15,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
   onClick,
   onSettingsClick,
   onDeleteClick,
-  variant = 'card',
+  variant: _variant = 'card',
   className = '',
 }) => {
   const context = useProjectManagerContext();

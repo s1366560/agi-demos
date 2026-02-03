@@ -72,7 +72,7 @@ export const Analytics: React.FC = memo(() => {
     const { t } = useTranslation()
     const { currentTenant } = useTenantStore()
     const [projects, setProjects] = useState<Project[]>([])
-    const [loading, setLoading] = useState(true)
+    const [_loading, setLoading] = useState(true)
 
     const fetchProjects = useCallback(async () => {
         if (currentTenant) {
@@ -186,7 +186,7 @@ export const Analytics: React.FC = memo(() => {
                 />
                 <KPICard
                     label={t('tenant.analytics.plan')}
-                    value={currentTenant.plan}
+                    value={currentTenant?.plan ?? '-'}
                     subtext={t('tenant.analytics.quota')}
                     subtextColorClass="text-purple-600"
                 />

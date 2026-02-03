@@ -4,14 +4,12 @@
  * Container component for rendering a list of projects.
  */
 
-import React, { FC } from 'react';
+import { FC } from 'react';
 import { useProjectManagerContext } from './context';
 import type { ProjectManagerListProps } from './types';
-import type { Project } from '@/types/memory';
 
 export const List: FC<ProjectManagerListProps> = ({
   children,
-  onProjectClick,
   layout = 'grid',
   gridCols = 'md:grid-cols-2 lg:grid-cols-3',
   className = '',
@@ -29,15 +27,6 @@ export const List: FC<ProjectManagerListProps> = ({
 
   // Get grid or list layout class
   const layoutClass = layout === 'grid' ? `grid ${gridCols}` : 'flex flex-col space-y-2';
-
-  // Handle project click
-  const handleProjectClick = (project: Project) => {
-    if (onProjectClick) {
-      onProjectClick(project);
-    } else {
-      context.handleProjectSelect(project);
-    }
-  };
 
   return (
     <div className={`gap-4 ${layoutClass} ${className}`} data-testid="project-manager-list">

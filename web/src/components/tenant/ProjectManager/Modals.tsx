@@ -4,8 +4,7 @@
  * Modal components for creating and editing projects.
  */
 
-import React, { FC } from 'react';
-import { X } from 'lucide-react';
+import { FC } from 'react';
 import { useProjectManagerContext } from './context';
 import { ProjectCreateModal } from '../ProjectCreateModal';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
@@ -19,7 +18,7 @@ export const CreateModal: FC<ProjectManagerCreateModalProps> = ({
   isOpen: propIsOpen,
   onClose,
   onSuccess,
-  className = '',
+  className: _className = '',
 }) => {
   const context = useProjectManagerContext();
   const isControlled = propIsOpen !== undefined;
@@ -63,7 +62,7 @@ export const SettingsModal: FC<ProjectManagerSettingsModalProps> = ({
   onClose,
   onSave,
   onDelete,
-  className = '',
+  className: _className = '',
 }) => {
   const context = useProjectManagerContext();
   const isControlled = propIsOpen !== undefined;

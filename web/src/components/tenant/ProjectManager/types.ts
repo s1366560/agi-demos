@@ -323,6 +323,9 @@ export interface ProjectManagerContextValue {
   filterStatus: string;
   setFilterStatus: (filter: string) => void;
 
+  // Error handling
+  clearError: () => void;
+
   // Modal state
   isCreateModalOpen: boolean;
   setIsCreateModalOpen: (open: boolean) => void;

@@ -14,7 +14,6 @@ import { ProjectManagerContext } from './context';
 
 // Import sub-components for full variant rendering
 import { Search } from './Search';
-import { Filters } from './Filters';
 import { List } from './List';
 import { Item } from './Item';
 import { CreateModal, SettingsModal } from './Modals';
@@ -150,6 +149,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
       setSearchTerm,
       filterStatus,
       setFilterStatus,
+      clearError,
       isCreateModalOpen,
       setIsCreateModalOpen,
       isSettingsModalOpen,
@@ -171,6 +171,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
       currentTenant,
       searchTerm,
       filterStatus,
+      clearError,
       isCreateModalOpen,
       isSettingsModalOpen,
       selectedProjectForSettings,

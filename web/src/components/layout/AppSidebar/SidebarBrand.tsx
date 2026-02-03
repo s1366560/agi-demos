@@ -16,7 +16,7 @@ export interface SidebarBrandProps {
 /**
  * Get default brand element for each variant
  */
-function getDefaultBrand(variant?: SidebarVariant): React.ReactNode {
+function getDefaultBrand(_variant?: SidebarVariant): React.ReactNode {
   return (
     <div className="flex items-center gap-3 px-2">
       <div className="bg-primary/10 p-2 rounded-lg border border-primary/20">

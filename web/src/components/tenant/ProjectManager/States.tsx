@@ -4,7 +4,7 @@
  * Components for displaying loading, empty, and error states.
  */
 
-import React, { FC } from 'react';
+import { FC } from 'react';
 import { Folder, AlertCircle, Plus } from 'lucide-react';
 import { useProjectManagerContext } from './context';
 import type { ProjectManagerLoadingProps, ProjectManagerEmptyProps, ProjectManagerErrorProps } from './types';
