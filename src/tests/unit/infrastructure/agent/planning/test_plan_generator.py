@@ -5,19 +5,16 @@ TDD: Tests written first, implementation to follow.
 Tests follow RED-GREEN-REFACTOR cycle.
 """
 
-from unittest.mock import AsyncMock, Mock, patch
-from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
-    ExecutionStep,
-    ExecutionStepStatus,
     ExecutionPlanStatus,
+    ExecutionStepStatus,
 )
 from src.infrastructure.agent.planning.plan_generator import PlanGenerator
-from src.infrastructure.agent.planning.prompts import PLAN_GENERATION_SYSTEM_PROMPT
 
 
 def create_mock_llm(response: str) -> AsyncMock:

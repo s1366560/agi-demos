@@ -4,15 +4,14 @@ Unit tests for ReflectionResult domain model.
 Tests follow TDD: Write first, verify FAIL, implement, verify PASS.
 """
 
-from datetime import datetime, timezone
 
 import pytest
 
 from src.domain.model.agent.reflection_result import (
-    ReflectionResult,
-    ReflectionAssessment,
-    StepAdjustment,
     AdjustmentType,
+    ReflectionAssessment,
+    ReflectionResult,
+    StepAdjustment,
 )
 
 

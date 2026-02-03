@@ -5,19 +5,9 @@ This module provides Temporal workflow definitions for:
 - Episode processing
 - Entity deduplication
 - Community rebuilding
-- Agent execution
 - Project-level agent sessions
 """
 
-from .agent import AgentExecutionWorkflow, AgentInput, AgentState
-from .agent_session import (
-    AgentChatRequest,
-    AgentChatResult,
-    AgentSessionConfig,
-    AgentSessionStatus,
-    AgentSessionWorkflow,
-    get_agent_session_workflow_id,
-)
 from .community import RebuildCommunitiesWorkflow
 from .entity import DeduplicateEntitiesWorkflow
 from .episode import EpisodeProcessingWorkflow, IncrementalRefreshWorkflow
@@ -39,18 +29,7 @@ __all__ = [
     "DeduplicateEntitiesWorkflow",
     # Community workflows
     "RebuildCommunitiesWorkflow",
-    # Agent workflows
-    "AgentExecutionWorkflow",
-    "AgentInput",
-    "AgentState",
-    # Agent Session workflows
-    "AgentSessionWorkflow",
-    "AgentSessionConfig",
-    "AgentChatRequest",
-    "AgentChatResult",
-    "AgentSessionStatus",
-    "get_agent_session_workflow_id",
-    # Project Agent workflows (new)
+    # Project Agent workflows (primary agent interface)
     "ProjectAgentWorkflow",
     "ProjectAgentWorkflowInput",
     "ProjectAgentWorkflowStatus",

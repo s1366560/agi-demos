@@ -19,6 +19,12 @@ from src.domain.model.tenant.tenant import Tenant
 # Project domain model
 from src.domain.model.project.project import Project
 
+# MCP domain models
+from src.domain.model.mcp.server import MCPServer, MCPServerConfig, MCPServerStatus
+from src.domain.model.mcp.tool import MCPTool, MCPToolSchema, MCPToolResult, MCPToolCallRequest
+from src.domain.model.mcp.transport import TransportType, TransportConfig
+from src.domain.model.mcp.connection import ConnectionState, ConnectionInfo, ConnectionMetrics
+
 __all__ = [
     # Memory
     "Memory",
@@ -34,4 +40,17 @@ __all__ = [
     "Tenant",
     # Project
     "Project",
+    # MCP
+    "MCPServer",
+    "MCPServerConfig",
+    "MCPServerStatus",
+    "MCPTool",
+    "MCPToolSchema",
+    "MCPToolResult",
+    "MCPToolCallRequest",
+    "TransportType",
+    "TransportConfig",
+    "ConnectionState",
+    "ConnectionInfo",
+    "ConnectionMetrics",
 ]

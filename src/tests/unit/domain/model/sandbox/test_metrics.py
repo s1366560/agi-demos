@@ -3,22 +3,19 @@
 Tests the metrics collection, storage, and export functionality.
 """
 
-import time
-from unittest.mock import patch
 
-import pytest
 
 from src.domain.model.sandbox.metrics import (
-    MetricType,
-    MetricLabel,
-    Metric,
     HistogramBucket,
     HistogramMetric,
-    PrometheusExporter,
-    StatsDExporter,
+    Metric,
+    MetricLabel,
     MetricsCollector,
-    SandboxMetrics,
+    MetricType,
+    PrometheusExporter,
     SandboxMetricNames,
+    SandboxMetrics,
+    StatsDExporter,
 )
 
 

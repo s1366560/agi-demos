@@ -2,12 +2,13 @@
 Tests for V2 SqlAPIKeyRepository using BaseRepository.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.api_key import APIKey
-from src.infrastructure.adapters.secondary.persistence.models import APIKey as DBAPIKey, User as DBUser
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.adapters.secondary.persistence.v2_sql_api_key_repository import (
     V2SqlAPIKeyRepository,
 )

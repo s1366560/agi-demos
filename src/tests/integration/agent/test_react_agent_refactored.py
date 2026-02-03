@@ -15,9 +15,7 @@ class TestRefactoredArchitectureIntegration:
     def test_event_converter_singleton(self):
         """Test EventConverter singleton pattern."""
         from src.infrastructure.agent.events.converter import (
-            EventConverter,
             get_event_converter,
-            set_event_converter,
         )
 
         converter1 = get_event_converter()
@@ -152,8 +150,6 @@ class TestModuleImports:
         """Test EventConverter module imports."""
         from src.infrastructure.agent.events.converter import (
             EventConverter,
-            get_event_converter,
-            set_event_converter,
         )
         assert EventConverter is not None
 
@@ -161,7 +157,6 @@ class TestModuleImports:
         """Test AttachmentProcessor module imports."""
         from src.infrastructure.agent.attachment.processor import (
             AttachmentProcessor,
-            get_attachment_processor,
         )
         assert AttachmentProcessor is not None
 
@@ -169,9 +164,6 @@ class TestModuleImports:
         """Test SkillOrchestrator module imports."""
         from src.infrastructure.agent.skill.orchestrator import (
             SkillOrchestrator,
-            SkillMatchResult,
-            SkillExecutionMode,
-            create_skill_orchestrator,
         )
         assert SkillOrchestrator is not None
 
@@ -179,8 +171,6 @@ class TestModuleImports:
         """Test SubAgentOrchestrator module imports."""
         from src.infrastructure.agent.routing.subagent_orchestrator import (
             SubAgentOrchestrator,
-            SubAgentRoutingResult,
-            create_subagent_orchestrator,
         )
         assert SubAgentOrchestrator is not None
 
@@ -198,7 +188,6 @@ class TestModuleImports:
         """Test HITLHandler module imports."""
         from src.infrastructure.agent.hitl.handler import (
             HITLHandler,
-            get_hitl_handler,
         )
         assert HITLHandler is not None
 
@@ -206,7 +195,6 @@ class TestModuleImports:
         """Test ArtifactExtractor module imports."""
         from src.infrastructure.agent.artifact.extractor import (
             ArtifactExtractor,
-            get_artifact_extractor,
         )
         assert ArtifactExtractor is not None
 
@@ -214,7 +202,6 @@ class TestModuleImports:
         """Test WorkPlanGenerator module imports."""
         from src.infrastructure.agent.planning.work_plan_generator import (
             WorkPlanGenerator,
-            get_work_plan_generator,
         )
         assert WorkPlanGenerator is not None
 
@@ -227,22 +214,7 @@ class TestModuleImports:
         """Test all agent ports can be imported."""
         from src.domain.ports.agent import (
             LLMInvokerPort,
-            LLMInvocationRequest,
-            LLMInvocationResult,
-            StreamChunk,
-            ToolExecutorPort,
-            ToolExecutionRequest,
-            ToolExecutionResult,
-            SkillOrchestratorPort,
-            SkillMatchRequest,
-            SkillMatchResult,
-            SkillExecutionRequest,
-            SubAgentOrchestratorPort,
-            SubAgentMatchRequest,
-            SubAgentMatchResult,
             ReActLoopPort,
-            ReActLoopConfig,
-            ReActLoopContext,
         )
         assert LLMInvokerPort is not None
         assert ReActLoopPort is not None
@@ -259,10 +231,10 @@ class TestReActAgentIntegration:
 
     def test_react_agent_uses_orchestrators(self):
         """Test ReActAgent has orchestrator attributes."""
-        from src.infrastructure.agent.core.react_agent import ReActAgent
-        
         # Check class has the expected orchestrator imports in __init__
         import inspect
+
+        from src.infrastructure.agent.core.react_agent import ReActAgent
         init_source = inspect.getsource(ReActAgent.__init__)
         
         # Verify orchestrators are used

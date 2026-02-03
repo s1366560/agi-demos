@@ -3,13 +3,13 @@
 import pytest
 
 from src.application.services.sandbox_profile import (
+    SANDBOX_PROFILES,
     SandboxProfile,
     SandboxProfileType,
-    get_profile,
     get_default_profile,
+    get_profile,
     list_profiles,
     register_profile,
-    SANDBOX_PROFILES,
 )
 
 
@@ -178,7 +178,6 @@ class TestSandboxProfileFunctions:
     def test_register_profile(self) -> None:
         """应该能够注册自定义配置."""
         # 使用自定义类型避免污染现有配置
-        from enum import Enum
 
         # 先保存原始配置
         original_lite = SANDBOX_PROFILES.get(SandboxProfileType.LITE)

@@ -13,25 +13,16 @@ Tests cover:
 """
 
 import asyncio
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.domain.events.agent_events import (
     AgentActEvent,
-    AgentCompleteEvent,
     AgentDomainEvent,
-    AgentErrorEvent,
     AgentEventType,
     AgentObserveEvent,
-    AgentStartEvent,
     AgentStepFinishEvent,
-    AgentStepStartEvent,
-    AgentTextDeltaEvent,
-    AgentWorkPlanEvent,
 )
 from src.infrastructure.agent.core.react_loop import (
     LoopConfig,

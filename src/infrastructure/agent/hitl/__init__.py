@@ -47,8 +47,8 @@ from src.infrastructure.agent.hitl.env_var_manager import (
     set_env_var_manager,
 )
 from src.infrastructure.agent.hitl.handler import (
-    HITLHandler,
     HITLContext,
+    HITLHandler,
     HITLToolType,
     ToolPartLike,
     get_hitl_handler,

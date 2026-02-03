@@ -12,18 +12,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.application.services.agent_service import AgentService
-from src.domain.llm_providers.llm_types import (
-    LLMClient,
-    LLMConfig,
-    ChatResponse,
-    Message as LLMMessage,
-)
 from src.domain.model.agent import (
     AgentExecutionEvent,
     Conversation,
     ConversationStatus,
 )
-from src.domain.model.agent.agent_execution_event import USER_MESSAGE, ASSISTANT_MESSAGE
+from src.domain.model.agent.agent_execution_event import ASSISTANT_MESSAGE, USER_MESSAGE
 
 
 class MockLLMClient:

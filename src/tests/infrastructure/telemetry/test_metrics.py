@@ -1,6 +1,5 @@
 """Tests for OpenTelemetry metrics utilities."""
 
-import pytest
 
 from src.infrastructure.telemetry import config, metrics
 

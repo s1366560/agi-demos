@@ -16,7 +16,7 @@ Reference: Extracted from processor.py::_process_tool_artifacts() (lines 1258-14
 import base64
 import logging
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Protocol
+from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
 
 from src.domain.events.agent_events import AgentArtifactCreatedEvent
 

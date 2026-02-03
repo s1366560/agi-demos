@@ -9,15 +9,14 @@ Tests the circuit breaker with:
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.infrastructure.adapters.secondary.common.circuit_breaker import (
     CircuitBreaker,
+    CircuitBreakerConfig,
     CircuitBreakerOpenError,
     CircuitState,
-    CircuitBreakerConfig,
 )
 
 

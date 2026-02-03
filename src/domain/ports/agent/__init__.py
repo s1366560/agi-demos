@@ -5,43 +5,43 @@ These ports define contracts that infrastructure adapters implement.
 Following hexagonal architecture, domain depends on ports (not implementations).
 """
 
-from src.domain.ports.agent.llm_invoker_port import (
-    LLMInvokerPort,
-    LLMInvocationRequest,
-    LLMInvocationResult,
-    StreamChunk,
-)
-from src.domain.ports.agent.tool_executor_port import (
-    ToolExecutorPort,
-    ToolExecutionRequest,
-    ToolExecutionResult,
-)
-from src.domain.ports.agent.skill_orchestrator_port import (
-    SkillOrchestratorPort,
-    SkillMatchRequest,
-    SkillMatchResult,
-    SkillExecutionRequest,
-)
-from src.domain.ports.agent.subagent_orchestrator_port import (
-    SubAgentOrchestratorPort,
-    SubAgentMatchRequest,
-    SubAgentMatchResult,
-)
-from src.domain.ports.agent.react_loop_port import (
-    ReActLoopPort,
-    ReActLoopConfig,
-    ReActLoopContext,
-)
 from src.domain.ports.agent.context_manager_port import (
-    ContextManagerPort,
-    MessageBuilderPort,
+    AttachmentContent,
     AttachmentInjectorPort,
+    AttachmentMetadata,
+    CompressionStrategy,
     ContextBuildRequest,
     ContextBuildResult,
-    AttachmentMetadata,
-    AttachmentContent,
+    ContextManagerPort,
+    MessageBuilderPort,
     MessageInput,
-    CompressionStrategy,
+)
+from src.domain.ports.agent.llm_invoker_port import (
+    LLMInvocationRequest,
+    LLMInvocationResult,
+    LLMInvokerPort,
+    StreamChunk,
+)
+from src.domain.ports.agent.react_loop_port import (
+    ReActLoopConfig,
+    ReActLoopContext,
+    ReActLoopPort,
+)
+from src.domain.ports.agent.skill_orchestrator_port import (
+    SkillExecutionRequest,
+    SkillMatchRequest,
+    SkillMatchResult,
+    SkillOrchestratorPort,
+)
+from src.domain.ports.agent.subagent_orchestrator_port import (
+    SubAgentMatchRequest,
+    SubAgentMatchResult,
+    SubAgentOrchestratorPort,
+)
+from src.domain.ports.agent.tool_executor_port import (
+    ToolExecutionRequest,
+    ToolExecutionResult,
+    ToolExecutorPort,
 )
 
 __all__ = [

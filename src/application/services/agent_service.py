@@ -306,15 +306,10 @@ class AgentService(AgentServicePort):
     ) -> str:
         """Start agent execution workflow in Temporal.
 
-        This method supports two modes:
-        1. Session Workflow (default): Long-running workflow that persists across requests
-           - Uses AgentSessionWorkflow with wait_condition() for persistent agent instances
-           - Sends chat via Temporal update mechanism
-           - 95%+ latency reduction for subsequent requests
-
-        2. Legacy Workflow: Per-request workflow that completes after each request
-           - Uses AgentExecutionWorkflow
-           - Each request creates a new workflow instance
+        Uses ProjectAgentWorkflow - a long-running workflow that persists across requests:
+        - Uses wait_condition() for persistent agent instances
+        - Sends chat via Temporal update mechanism
+        - 95%+ latency reduction for subsequent requests
 
         Args:
             conversation: The conversation entity (already loaded)
@@ -326,37 +321,21 @@ class AgentService(AgentServicePort):
         Returns:
             The workflow ID
         """
-        import os
-
         from src.configuration.config import get_settings
         from src.configuration.temporal_config import get_temporal_settings
 
         settings = get_settings()
         temporal_settings = get_temporal_settings()
 
-        # Check if session workflow mode is enabled (default: True)
-        use_session_workflow = os.getenv("USE_AGENT_SESSION_WORKFLOW", "true").lower() == "true"
-
-        if use_session_workflow:
-            return await self._start_or_get_session_workflow(
-                conversation=conversation,
-                message_id=message_id,
-                user_message=user_message,
-                conversation_context=conversation_context,
-                settings=settings,
-                temporal_settings=temporal_settings,
-                attachment_ids=attachment_ids,
-            )
-        else:
-            return await self._start_legacy_workflow(
-                conversation=conversation,
-                message_id=message_id,
-                user_message=user_message,
-                conversation_context=conversation_context,
-                settings=settings,
-                temporal_settings=temporal_settings,
-                attachment_ids=attachment_ids,
-            )
+        return await self._start_or_get_session_workflow(
+            conversation=conversation,
+            message_id=message_id,
+            user_message=user_message,
+            conversation_context=conversation_context,
+            settings=settings,
+            temporal_settings=temporal_settings,
+            attachment_ids=attachment_ids,
+        )
 
     async def _start_or_get_session_workflow(
         self,
@@ -368,10 +347,10 @@ class AgentService(AgentServicePort):
         temporal_settings,
         attachment_ids: Optional[List[str]] = None,
     ) -> str:
-        """Start or get existing Agent Session Workflow and send chat via update.
+        """Start or get existing Project Agent Workflow and send chat via update.
 
         This implements the long-running workflow pattern similar to MCP Worker:
-        - Workflow ID: agent_{tenant_id}_{project_id}_{agent_mode}
+        - Workflow ID: project_agent_{tenant_id}_{project_id}_{agent_mode}
         - Workflow stays alive via wait_condition()
         - Chat requests sent via Temporal update mechanism
         - Agent instance persists across multiple requests
@@ -385,22 +364,22 @@ class AgentService(AgentServicePort):
             temporal_settings: Temporal settings
 
         Returns:
-            The session workflow ID
+            The workflow ID
         """
         from temporalio.client import WorkflowExecutionStatus
 
         from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-            AgentChatRequest,
-            AgentSessionConfig,
-            get_agent_session_workflow_id,
+        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+            ProjectAgentWorkflowInput,
+            ProjectChatRequest,
+            get_project_agent_workflow_id,
         )
 
         client = await TemporalClientFactory.get_client()
 
-        # Generate session workflow ID (per project + mode)
+        # Generate workflow ID (per project + mode)
         agent_mode = "default"  # Could be extracted from conversation settings
-        workflow_id = get_agent_session_workflow_id(
+        workflow_id = get_project_agent_workflow_id(
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
             agent_mode=agent_mode,
@@ -416,13 +395,13 @@ class AgentService(AgentServicePort):
                 # Workflow exists but not running, start a new one
                 raise Exception("Workflow not running")
 
-            logger.info(f"Using existing Agent Session Workflow: {workflow_id}")
+            logger.info(f"Using existing Project Agent Workflow: {workflow_id}")
 
         except Exception:
             # Workflow doesn't exist or not running, start a new one
-            logger.info(f"Starting new Agent Session Workflow: {workflow_id}")
+            logger.info(f"Starting new Project Agent Workflow: {workflow_id}")
 
-            config = AgentSessionConfig(
+            config = ProjectAgentWorkflowInput(
                 tenant_id=conversation.tenant_id,
                 project_id=conversation.project_id,
                 agent_mode=agent_mode,
@@ -437,7 +416,7 @@ class AgentService(AgentServicePort):
             )
 
             await client.start_workflow(
-                "agent_session",  # Workflow name
+                "project_agent",  # Workflow name
                 config,
                 id=workflow_id,
                 task_queue=temporal_settings.agent_temporal_task_queue,
@@ -459,7 +438,7 @@ class AgentService(AgentServicePort):
                     status = await handle.query("get_status")
                     if status and getattr(status, "is_initialized", False):
                         logger.info(
-                            f"Agent Session Workflow initialized after {waited:.1f}s: {workflow_id}"
+                            f"Project Agent Workflow initialized after {waited:.1f}s: {workflow_id}"
                         )
                         break
                 except Exception:
@@ -470,11 +449,11 @@ class AgentService(AgentServicePort):
                 waited += poll_interval
             else:
                 logger.warning(
-                    f"Timeout waiting for Agent Session Workflow initialization: {workflow_id}"
+                    f"Timeout waiting for Project Agent Workflow initialization: {workflow_id}"
                 )
 
         # Send chat request via Temporal update
-        chat_request = AgentChatRequest(
+        chat_request = ProjectChatRequest(
             conversation_id=conversation.id,
             message_id=message_id,
             user_message=user_message,
@@ -525,73 +504,6 @@ class AgentService(AgentServicePort):
                 f"Agent Session chat failed: workflow={workflow_id}, conversation={conversation_id}, error={e}",
                 exc_info=True,
             )
-
-    async def _start_legacy_workflow(
-        self,
-        conversation: Conversation,
-        message_id: str,
-        user_message: str,
-        conversation_context: list[Dict[str, Any]],
-        settings,
-        temporal_settings,
-        attachment_ids: Optional[List[str]] = None,
-    ) -> str:
-        """Start legacy per-request agent execution workflow.
-
-        This is the original implementation where each chat creates a new workflow.
-
-        Args:
-            conversation: The conversation entity
-            message_id: The user message ID
-            user_message: The user message content
-            conversation_context: Conversation history
-            settings: Application settings
-            temporal_settings: Temporal settings
-            attachment_ids: Optional list of attachment IDs to include with the message
-
-        Returns:
-            The workflow ID
-        """
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.agent import AgentInput
-
-        client = await TemporalClientFactory.get_client()
-
-        # Get available tools (cached in _tool_definitions_cache)
-        tools = await self.get_available_tools(conversation.project_id, conversation.tenant_id)
-
-        # Prepare agent config (tools, model, etc.)
-        agent_config = {
-            "model": self._get_model(settings),
-            "temperature": 0.7,
-            "tools": tools,
-            "api_key": self._get_api_key(settings),
-            "base_url": self._get_base_url(settings),
-        }
-
-        # Include attachment_ids in input if present
-        input_data = AgentInput(
-            conversation_id=conversation.id,
-            message_id=message_id,
-            user_message=user_message,
-            project_id=conversation.project_id,
-            user_id=conversation.user_id,
-            tenant_id=conversation.tenant_id,
-            agent_config=agent_config,
-            conversation_context=conversation_context,
-            attachment_ids=attachment_ids,
-        )
-
-        workflow_id = f"agent-execution-{conversation.id}-{message_id}"
-
-        await client.start_workflow(
-            "AgentExecutionWorkflow",
-            input_data,
-            id=workflow_id,
-            task_queue=temporal_settings.agent_temporal_task_queue,
-        )
-
-        return workflow_id
 
     def _get_api_key(self, settings):
         provider = settings.llm_provider.strip().lower()

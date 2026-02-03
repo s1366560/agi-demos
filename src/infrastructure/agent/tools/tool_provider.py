@@ -88,9 +88,6 @@ def create_mcp_tool_provider(
     Returns:
         A callable that returns MCP tools dict
     """
-    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
-        MCPToolsCacheEntry,
-    )
 
     # Access the MCP tools cache directly (synchronous)
     def provider() -> Dict[str, Any]:

@@ -3,16 +3,15 @@
 Tests the unified event system for SSE streaming and event handling.
 """
 
-from datetime import datetime, timezone
-import pytest
 import json
+from datetime import datetime
 
 from src.infrastructure.agent.events.event_mapper import (
+    AgentDomainEvent,
+    EventBus,
+    EventMapper,
     EventType,
     SSEEvent,
-    AgentDomainEvent,
-    EventMapper,
-    EventBus,
     get_event_bus,
     set_event_bus,
 )

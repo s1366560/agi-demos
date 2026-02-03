@@ -4,12 +4,13 @@ Tests the terminal management tool for starting, stopping, and checking
 the status of web terminal sessions in sandbox environments.
 """
 
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
+
 from src.infrastructure.agent.tools.terminal_tool import (
-    TerminalTool,
     TerminalStatus,
+    TerminalTool,
 )
 
 

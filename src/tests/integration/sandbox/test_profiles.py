@@ -4,7 +4,6 @@ Tests the profile listing and sandbox creation with profile support.
 """
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from src.infrastructure.adapters.primary.web.main import app

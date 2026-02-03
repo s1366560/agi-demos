@@ -4,7 +4,6 @@ import pytest
 
 from src.application.services.sandbox_url_service import (
     SandboxInstanceInfo,
-    SandboxUrls,
     SandboxUrlService,
 )
 

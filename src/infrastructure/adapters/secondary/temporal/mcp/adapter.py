@@ -6,6 +6,11 @@ enabling horizontal scaling and fault tolerance.
 
 The adapter communicates with MCP servers through Temporal Workflows,
 which run in separate MCP Worker processes.
+
+Domain Models:
+- MCPServerStatus is now available in src.domain.model.mcp.server
+- MCPTool is now available in src.domain.model.mcp.tool
+- Use domain_adapter.py for conversions between Temporal and domain models
 """
 
 import logging
@@ -31,7 +36,11 @@ MCP_TASK_QUEUE = "mcp-tasks"
 
 @dataclass
 class MCPServerStatus:
-    """Status of an MCP server."""
+    """Status of an MCP server.
+
+    Note: This is a Temporal-specific dataclass for workflow serialization.
+    For domain model, use src.domain.model.mcp.server.MCPServerStatus
+    """
 
     server_name: str
     tenant_id: str
@@ -44,7 +53,11 @@ class MCPServerStatus:
 
 @dataclass
 class MCPToolInfo:
-    """Information about an MCP tool."""
+    """Information about an MCP tool.
+
+    Note: This is a Temporal-specific dataclass for workflow serialization.
+    For domain model, use src.domain.model.mcp.tool.MCPTool
+    """
 
     name: str
     server_name: str
@@ -360,14 +373,10 @@ class MCPTemporalAdapter:
             error_str = str(e)
             if "no poller seen" in error_str or "workflow not found" in error_str.lower():
                 # Workflow not started yet - expected during startup, log at debug level
-                logger.debug(
-                    f"MCP server '{server_name}' workflow not ready yet: {e}"
-                )
+                logger.debug(f"MCP server '{server_name}' workflow not ready yet: {e}")
             else:
                 # Actual error - log at warning level
-                logger.warning(
-                    f"Error querying MCP server '{server_name}' status: {e}"
-                )
+                logger.warning(f"Error querying MCP server '{server_name}' status: {e}")
             return MCPServerStatus(
                 server_name=server_name,
                 tenant_id=tenant_id,

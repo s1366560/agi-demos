@@ -9,7 +9,7 @@ from typing import Any, Callable, List, Mapping, Optional
 from opentelemetry import metrics
 from opentelemetry.metrics import Counter, Histogram, ObservableGauge
 
-from src.infrastructure.telemetry.config import configure_meter_provider, get_meter as _get_meter
+from src.infrastructure.telemetry.config import get_meter as _get_meter
 
 
 def get_meter(instrumentation_name: str = "memstack-telemetry") -> Optional[metrics.Meter]:

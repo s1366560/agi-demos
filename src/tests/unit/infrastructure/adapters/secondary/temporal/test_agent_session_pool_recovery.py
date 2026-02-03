@@ -6,15 +6,15 @@ the system can properly recover and continue processing chat messages.
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
     AgentSessionContext,
     _agent_session_pool,
-    clear_session_cache,
     clear_all_caches,
+    clear_session_cache,
     compute_tools_hash,
     generate_session_key,
     get_or_create_agent_session,
@@ -116,7 +116,9 @@ class TestAgentSessionPoolRecovery:
     async def test_clear_session_cache_removes_specific_session(self, sample_session):
         """Test that clear_session_cache removes a specific session."""
         # Manually add session to pool
-        from src.infrastructure.adapters.secondary.temporal.agent_session_pool import _agent_session_pool
+        from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+            _agent_session_pool,
+        )
 
         _agent_session_pool[sample_session.session_key] = sample_session
 
@@ -233,7 +235,9 @@ class TestAgentSessionPoolRecovery:
     @pytest.mark.asyncio
     async def test_invalidate_agent_session_with_full_key(self, sample_session):
         """Test invalidate_agent_session with exact key."""
-        from src.infrastructure.adapters.secondary.temporal.agent_session_pool import _agent_session_pool
+        from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+            _agent_session_pool,
+        )
 
         _agent_session_pool[sample_session.session_key] = sample_session
 
@@ -249,7 +253,9 @@ class TestAgentSessionPoolRecovery:
     @pytest.mark.asyncio
     async def test_invalidate_agent_session_with_tenant_only(self, sample_session):
         """Test invalidate_agent_session with tenant prefix."""
-        from src.infrastructure.adapters.secondary.temporal.agent_session_pool import _agent_session_pool
+        from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+            _agent_session_pool,
+        )
 
         # Add multiple sessions for the same tenant
         _agent_session_pool["tenant1:project1:default"] = sample_session
@@ -264,8 +270,8 @@ class TestAgentSessionPoolRecovery:
         """Test that clear_all_caches clears all cache entries."""
         from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
             _agent_session_pool,
-            _tool_definitions_cache,
             _subagent_router_cache,
+            _tool_definitions_cache,
         )
 
         _agent_session_pool[sample_session.session_key] = sample_session

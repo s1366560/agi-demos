@@ -3,22 +3,20 @@
 Tests the retry logic with exponential backoff for sandbox operations.
 """
 
-import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
-from src.domain.model.sandbox.retry_policy import (
-    RetryPolicy,
-    is_retryable_error,
-    max_retries_exceeded,
-    RetryableError,
-)
 from src.domain.model.sandbox.exceptions import (
     SandboxConnectionError,
     SandboxResourceError,
     SandboxTimeoutError,
     SandboxValidationError,
+)
+from src.domain.model.sandbox.retry_policy import (
+    RetryableError,
+    RetryPolicy,
+    is_retryable_error,
+    max_retries_exceeded,
 )
 
 

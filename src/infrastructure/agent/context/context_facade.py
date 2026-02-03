@@ -17,12 +17,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from src.domain.ports.agent.context_manager_port import (
-    AttachmentContent,
-    AttachmentMetadata,
+    CompressionStrategy,
     ContextBuildRequest,
     ContextBuildResult,
     ContextManagerPort,
-    CompressionStrategy,
 )
 from src.infrastructure.agent.context.builder.attachment_injector import (
     AttachmentInjector,

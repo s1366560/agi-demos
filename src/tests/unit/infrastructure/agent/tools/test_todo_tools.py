@@ -4,14 +4,14 @@ Tests for todoread and todowrite tools following OpenCode specification.
 """
 
 import json
+
 import pytest
 
 from src.infrastructure.agent.tools.todo_tools import (
     TodoItem,
-    TodoStorage,
     TodoReadTool,
+    TodoStorage,
     TodoWriteTool,
-    get_todo_storage,
 )
 
 

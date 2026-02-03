@@ -12,8 +12,8 @@ Tests cover:
 import pytest
 
 from src.domain.ports.agent.context_manager_port import (
-    ContextBuildRequest,
     CompressionStrategy,
+    ContextBuildRequest,
 )
 from src.infrastructure.agent.context.context_facade import (
     ContextFacade,

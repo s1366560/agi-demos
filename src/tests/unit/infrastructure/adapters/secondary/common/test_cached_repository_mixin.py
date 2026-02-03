@@ -5,12 +5,10 @@ Tests are written FIRST (TDD RED phase).
 These tests MUST FAIL before implementation exists.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Optional
 from dataclasses import dataclass
+from unittest.mock import AsyncMock
 
-from sqlalchemy.ext.asyncio import AsyncSession
+import pytest
 
 
 @dataclass
@@ -125,10 +123,11 @@ class TestCachedRepositoryMixin:
     @pytest.mark.asyncio
     async def test_cache_get_hit(self, mock_redis):
         """Test cache get returns cached entity."""
+        import json
+
         from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
             CachedRepositoryMixin,
         )
-        import json
 
         class TestRepo(CachedRepositoryMixin):
             async def _deserialize(self, data: str):
@@ -165,10 +164,11 @@ class TestCachedRepositoryMixin:
     @pytest.mark.asyncio
     async def test_cache_set(self, mock_redis):
         """Test cache set stores entity."""
+        import json
+
         from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
             CachedRepositoryMixin,
         )
-        import json
 
         class TestRepo(CachedRepositoryMixin):
             async def _serialize(self, entity):
@@ -265,10 +265,11 @@ class TestCachedRepositoryMixin:
     @pytest.mark.asyncio
     async def test_find_cached_returns_from_cache(self, mock_redis):
         """Test find_cached returns cached entity when available."""
+        import json
+
         from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
             CachedRepositoryMixin,
         )
-        import json
 
         class TestRepo(CachedRepositoryMixin):
             async def _deserialize(self, data: str):
@@ -310,10 +311,11 @@ class TestCachedRepositoryMixin:
     @pytest.mark.asyncio
     async def test_serialize_entity(self, mock_redis):
         """Test entity serialization."""
+        import json
+
         from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
             CachedRepositoryMixin,
         )
-        import json
 
         class TestRepo(CachedRepositoryMixin):
             pass
@@ -331,10 +333,11 @@ class TestCachedRepositoryMixin:
     @pytest.mark.asyncio
     async def test_deserialize_entity(self, mock_redis):
         """Test entity deserialization."""
+        import json
+
         from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
             CachedRepositoryMixin,
         )
-        import json
 
         class TestRepo(CachedRepositoryMixin):
             _entity_class = TestEntity

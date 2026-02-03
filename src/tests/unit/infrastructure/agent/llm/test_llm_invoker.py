@@ -13,8 +13,6 @@ Tests cover:
 """
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,7 +28,6 @@ from src.infrastructure.agent.llm.invoker import (
     get_llm_invoker,
     set_llm_invoker,
 )
-
 
 # ============================================================================
 # Fixtures

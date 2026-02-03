@@ -4,14 +4,14 @@ Tests the desktop management tool for starting, stopping, and checking
 the status of remote desktop sessions in sandbox environments.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.infrastructure.agent.tools.desktop_tool import (
-    DesktopTool,
     DesktopStatus,
+    DesktopTool,
 )
-from src.domain.events.agent_events import AgentEventType
 
 
 class TestDesktopTool:

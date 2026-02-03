@@ -6,7 +6,7 @@ port for persisting unified plan execution entities.
 
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.plan_execution import (

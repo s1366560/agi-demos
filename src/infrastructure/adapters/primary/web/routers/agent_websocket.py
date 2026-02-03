@@ -1246,9 +1246,9 @@ async def handle_subscribe_lifecycle_state(
     from temporalio.client import WorkflowExecutionStatus
 
     from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-        AgentSessionWorkflow,
-        get_agent_session_workflow_id,
+    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+        ProjectAgentWorkflow,
+        get_project_agent_workflow_id,
     )
 
     project_id = message.get("project_id")
@@ -1278,7 +1278,7 @@ async def handle_subscribe_lifecycle_state(
         # Query current agent state and send immediately
         try:
             client = await TemporalClientFactory.get_client()
-            workflow_id = get_agent_session_workflow_id(tenant_id, project_id)
+            workflow_id = get_project_agent_workflow_id(tenant_id, project_id)
             handle = client.get_workflow_handle(workflow_id)
 
             try:
@@ -1286,7 +1286,7 @@ async def handle_subscribe_lifecycle_state(
                 if describe.status == WorkflowExecutionStatus.RUNNING:
                     # Query current status from workflow
                     try:
-                        status = await handle.query(AgentSessionWorkflow.get_status)
+                        status = await handle.query(ProjectAgentWorkflow.get_status)
                         # Derive lifecycle state from status
                         lifecycle_state = "ready"
                         if status.error:
@@ -1425,12 +1425,12 @@ async def monitor_agent_status(
     from src.infrastructure.adapters.secondary.temporal.client import (
         TemporalClientFactory,
     )
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-        AgentSessionStatus,
-        get_agent_session_workflow_id,
+    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+        ProjectAgentWorkflowStatus,
+        get_project_agent_workflow_id,
     )
 
-    workflow_id = get_agent_session_workflow_id(
+    workflow_id = get_project_agent_workflow_id(
         tenant_id=tenant_id,
         project_id=project_id,
         agent_mode="default",
@@ -1467,14 +1467,14 @@ async def monitor_agent_status(
                 if temporal_client:
                     try:
                         handle = temporal_client.get_workflow_handle(workflow_id)
-                        status: AgentSessionStatus = await handle.query("get_status")
+                        status: ProjectAgentWorkflowStatus = await handle.query("get_status")
                         status_data = {
                             "is_initialized": status.is_initialized,
                             "is_active": status.is_active,
                             "total_chats": status.total_chats,
                             "active_chats": status.active_chats,
                             "tool_count": status.tool_count,
-                            "cached_since": status.cached_since,
+                            "cached_since": getattr(status, "created_at", None),
                             "workflow_id": workflow_id,
                         }
                     except Exception:
@@ -1886,9 +1886,9 @@ async def handle_start_agent(
 
     from src.configuration.config import get_settings
     from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-        AgentSessionConfig,
-        get_agent_session_workflow_id,
+    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+        ProjectAgentWorkflowInput,
+        get_project_agent_workflow_id,
     )
 
     project_id = message.get("project_id")
@@ -1953,7 +1953,7 @@ async def handle_start_agent(
             )
 
         settings = get_settings()
-        workflow_id = get_agent_session_workflow_id(
+        workflow_id = get_project_agent_workflow_id(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode="default",
@@ -1982,7 +1982,7 @@ async def handle_start_agent(
             pass
 
         # Start new workflow
-        config = AgentSessionConfig(
+        config = ProjectAgentWorkflowInput(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode="default",
@@ -1996,13 +1996,13 @@ async def handle_start_agent(
         temporal_settings = get_temporal_settings()
 
         await client.start_workflow(
-            "agent_session",
+            "project_agent",
             config,
             id=workflow_id,
             task_queue=temporal_settings.agent_temporal_task_queue,
         )
 
-        logger.info(f"[WS] Started Agent Session: {workflow_id}")
+        logger.info(f"[WS] Started Project Agent: {workflow_id}")
 
         await websocket.send_json(
             {
@@ -2051,9 +2051,9 @@ async def handle_stop_agent(
     from temporalio.client import WorkflowExecutionStatus
 
     from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-        AgentSessionWorkflow,
-        get_agent_session_workflow_id,
+    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+        ProjectAgentWorkflow,
+        get_project_agent_workflow_id,
     )
 
     project_id = message.get("project_id")
@@ -2062,7 +2062,7 @@ async def handle_stop_agent(
         return
 
     try:
-        workflow_id = get_agent_session_workflow_id(
+        workflow_id = get_project_agent_workflow_id(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode="default",
@@ -2100,9 +2100,9 @@ async def handle_stop_agent(
             return
 
         # Send stop signal
-        await handle.signal(AgentSessionWorkflow.stop)
+        await handle.signal(ProjectAgentWorkflow.stop)
 
-        logger.info(f"[WS] Sent stop signal to Agent Session: {workflow_id}")
+        logger.info(f"[WS] Sent stop signal to Project Agent: {workflow_id}")
 
         await websocket.send_json(
             {
@@ -2154,10 +2154,10 @@ async def handle_restart_agent(
 
     from src.configuration.config import get_settings
     from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-        AgentSessionConfig,
-        AgentSessionWorkflow,
-        get_agent_session_workflow_id,
+    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+        ProjectAgentWorkflow,
+        ProjectAgentWorkflowInput,
+        get_project_agent_workflow_id,
     )
 
     project_id = message.get("project_id")
@@ -2229,7 +2229,7 @@ async def handle_restart_agent(
             )
 
         settings = get_settings()
-        workflow_id = get_agent_session_workflow_id(
+        workflow_id = get_project_agent_workflow_id(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode="default",
@@ -2253,14 +2253,14 @@ async def handle_restart_agent(
         try:
             describe = await handle.describe()
             if describe.status == WorkflowExecutionStatus.RUNNING:
-                await handle.signal(AgentSessionWorkflow.restart)
+                await handle.signal(ProjectAgentWorkflow.restart)
                 # Wait for it to stop
                 await asyncio.sleep(2)
         except Exception:
             pass  # Workflow doesn't exist, which is fine
 
         # Start new workflow
-        config = AgentSessionConfig(
+        config = ProjectAgentWorkflowInput(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode="default",
@@ -2274,13 +2274,13 @@ async def handle_restart_agent(
         temporal_settings = get_temporal_settings()
 
         await client.start_workflow(
-            "agent_session",
+            "project_agent",
             config,
             id=workflow_id,
             task_queue=temporal_settings.agent_temporal_task_queue,
         )
 
-        logger.info(f"[WS] Restarted Agent Session: {workflow_id}")
+        logger.info(f"[WS] Restarted Project Agent: {workflow_id}")
 
         await websocket.send_json(
             {

@@ -14,7 +14,6 @@ from src.infrastructure.agent.attachment.processor import (
     set_attachment_processor,
 )
 
-
 # ============================================================
 # Test Fixtures
 # ============================================================

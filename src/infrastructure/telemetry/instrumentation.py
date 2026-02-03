@@ -3,7 +3,6 @@
 This module provides automatic tracing for HTTP clients and databases.
 """
 
-from typing import Optional
 
 from src.infrastructure.telemetry.config import _TRACER_PROVIDER
 
@@ -23,7 +22,7 @@ def instrument_httpx():
     except ImportError:
         # opentelemetry-instrumentation-httpx not installed
         return False
-    except Exception as e:
+    except Exception:
         # Already instrumented or other error
         return False
 
@@ -50,7 +49,7 @@ def instrument_sqlalchemy():
     except ImportError:
         # opentelemetry-instrumentation-sqlalchemy not installed
         return False
-    except Exception as e:
+    except Exception:
         # Already instrumented or other error
         return False
 
@@ -90,6 +89,7 @@ def instrument_fastapi(app):
     """
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
         from src.infrastructure.telemetry.config import _TRACER_PROVIDER
 
         if _TRACER_PROVIDER is None:

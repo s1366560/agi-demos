@@ -10,11 +10,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
-    AgentSessionContext,
     _agent_session_pool,
     cleanup_marked_sessions,
     clear_session_cache,
-    compute_tools_hash,
     generate_session_key,
     get_or_create_agent_session,
 )

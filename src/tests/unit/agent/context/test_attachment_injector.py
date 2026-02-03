@@ -9,17 +9,16 @@ Tests cover:
 - Configuration customization
 """
 
-import pytest
 
 from src.domain.ports.agent.context_manager_port import (
     AttachmentContent,
     AttachmentMetadata,
 )
 from src.infrastructure.agent.context.builder.attachment_injector import (
-    AttachmentInjector,
-    AttachmentInjectorConfig,
     DEFAULT_CONTEXT_TEMPLATE,
     DEFAULT_FILE_TEMPLATE,
+    AttachmentInjector,
+    AttachmentInjectorConfig,
 )
 
 

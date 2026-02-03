@@ -13,7 +13,6 @@ Event Format:
     }
 """
 
-import time
 from typing import Any, Dict, List, Optional
 
 from .agent_events import (

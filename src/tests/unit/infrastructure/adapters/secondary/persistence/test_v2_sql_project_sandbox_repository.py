@@ -2,8 +2,9 @@
 Tests for V2 SqlProjectSandboxRepository using BaseRepository.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.sandbox.project_sandbox import (

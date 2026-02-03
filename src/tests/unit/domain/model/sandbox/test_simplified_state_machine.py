@@ -9,15 +9,16 @@ This test file defines the behavior for the simplified state machine with 4 stat
 - TERMINATED (unchanged)
 """
 
-import pytest
 from enum import Enum
 
+import pytest
+
+from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 from src.domain.model.sandbox.simplified_state_machine import (
+    InvalidStateTransitionError,
     SimplifiedSandboxState,
     SimplifiedSandboxStateMachine,
-    InvalidStateTransitionError,
 )
-from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 
 
 class TestSimplifiedSandboxState:

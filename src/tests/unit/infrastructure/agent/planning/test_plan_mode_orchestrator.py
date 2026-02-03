@@ -6,22 +6,20 @@ Tests follow RED-GREEN-REFACTOR cycle.
 """
 
 import asyncio
-from unittest.mock import AsyncMock, Mock, patch
-from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
+    ExecutionPlanStatus,
     ExecutionStep,
     ExecutionStepStatus,
-    ExecutionPlanStatus,
 )
 from src.domain.model.agent.reflection_result import (
-    ReflectionResult,
-    ReflectionAssessment,
-    StepAdjustment,
     AdjustmentType,
+    ReflectionResult,
+    StepAdjustment,
 )
 from src.infrastructure.agent.planning.plan_mode_orchestrator import PlanModeOrchestrator
 

@@ -17,7 +17,6 @@ import asyncio
 import base64
 import logging
 import uuid
-from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -28,20 +27,19 @@ from src.application.services.sandbox_profile import get_profile as get_sandbox_
 from src.domain.model.sandbox.project_sandbox import (
     ProjectSandbox,
     ProjectSandboxStatus,
-    SandboxType,
 )
 from src.domain.ports.repositories.project_sandbox_repository import (
     ProjectSandboxRepository,
 )
 from src.domain.ports.services.distributed_lock_port import DistributedLockPort
-from src.domain.ports.services.sandbox_resource_port import (
-    SandboxResourcePort,
-    SandboxInfo,
-)
 from src.domain.ports.services.sandbox_port import (
     SandboxConfig,
     SandboxNotFoundError,
     SandboxStatus,
+)
+from src.domain.ports.services.sandbox_resource_port import (
+    SandboxInfo,
+    SandboxResourcePort,
 )
 from src.infrastructure.adapters.secondary.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 

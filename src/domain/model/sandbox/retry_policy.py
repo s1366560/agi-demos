@@ -10,7 +10,8 @@ from typing import Awaitable, Callable, Optional, TypeVar
 
 from src.domain.model.sandbox.exceptions import (
     SandboxConnectionError,
-    SandboxError,
+)
+from src.domain.model.sandbox.exceptions import (
     is_retryable_error as sandbox_is_retryable,
 )
 

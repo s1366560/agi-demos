@@ -2,9 +2,10 @@
 Tests for automatic default project creation on first login.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 from sqlalchemy import select
-from unittest.mock import AsyncMock, MagicMock
 
 from src.infrastructure.adapters.primary.web.routers.auth import _ensure_default_project
 from src.infrastructure.adapters.secondary.persistence.models import (

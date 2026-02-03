@@ -5,7 +5,6 @@ Tests the work plan generation logic extracted from SessionProcessor.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List
 
 import pytest
 
@@ -18,7 +17,6 @@ from src.infrastructure.agent.planning.work_plan_generator import (
     get_work_plan_generator,
     set_work_plan_generator,
 )
-
 
 # ============================================================
 # Test Fixtures

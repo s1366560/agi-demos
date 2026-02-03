@@ -2,8 +2,9 @@
 Tests for V2 SqlHITLRequestRepository using BaseRepository.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
-from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.hitl_request import (

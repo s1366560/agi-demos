@@ -1,8 +1,8 @@
 """Attachment processing package for ReActAgent."""
 
 from src.infrastructure.agent.attachment.processor import (
-    AttachmentProcessor,
     AttachmentContext,
+    AttachmentProcessor,
     ProcessedAttachment,
 )
 

@@ -12,15 +12,15 @@ import pytest
 
 from src.configuration.di_container import DIContainer
 from src.domain.ports.agent.context_manager_port import (
-    ContextBuildRequest,
     CompressionStrategy,
+    ContextBuildRequest,
 )
 from src.infrastructure.agent.context import (
+    AttachmentInjector,
     ContextFacade,
     ContextWindowConfig,
     ContextWindowManager,
     MessageBuilder,
-    AttachmentInjector,
 )
 
 

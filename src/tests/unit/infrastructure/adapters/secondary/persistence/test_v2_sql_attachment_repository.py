@@ -7,8 +7,9 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.attachment import (
@@ -17,7 +18,6 @@ from src.domain.model.agent.attachment import (
     AttachmentPurpose,
     AttachmentStatus,
 )
-from src.infrastructure.adapters.secondary.persistence.attachment_model import AttachmentModel
 from src.infrastructure.adapters.secondary.persistence.v2_sql_attachment_repository import (
     V2SqlAttachmentRepository,
 )

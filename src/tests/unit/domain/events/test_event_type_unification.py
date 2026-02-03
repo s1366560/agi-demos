@@ -17,7 +17,9 @@ class TestEventTypeUnification:
     def test_persistence_imports_from_domain(self):
         """Persistence layer should import AgentEventType from domain events."""
         # Import from persistence layer - should be same as domain
-        from src.domain.model.agent.agent_execution_event import AgentEventType as PersistenceEventType
+        from src.domain.model.agent.agent_execution_event import (
+            AgentEventType as PersistenceEventType,
+        )
 
         # They should be the same enum (same identity)
         assert AgentEventType is PersistenceEventType, \
@@ -88,10 +90,9 @@ class TestAgentExecutionEventImport:
 
     def test_from_domain_event_preserves_type(self):
         """from_domain_event should preserve domain event type."""
-        from datetime import datetime
         from src.domain.events.agent_events import (
-            AgentThoughtEvent,
             AgentActEvent,
+            AgentThoughtEvent,
         )
         from src.domain.model.agent.agent_execution_event import AgentExecutionEvent
 
@@ -120,10 +121,9 @@ class TestAgentExecutionEventImport:
 
     def test_to_sse_format_consistency(self):
         """to_sse_format should produce consistent output."""
-        from datetime import datetime
         from src.domain.events.agent_events import (
-            AgentThoughtEvent,
             AgentEventType,
+            AgentThoughtEvent,
         )
         from src.domain.model.agent.agent_execution_event import AgentExecutionEvent
 

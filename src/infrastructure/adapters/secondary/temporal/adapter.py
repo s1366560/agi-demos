@@ -299,10 +299,10 @@ class TemporalWorkflowEngine(WorkflowEnginePort):
 
         # Lazy import workflow classes
         from src.infrastructure.adapters.secondary.temporal.workflows import (
-            agent,
             community,
             entity,
             episode,
+            project_agent_workflow,
         )
 
         # Register default workflows
@@ -311,7 +311,7 @@ class TemporalWorkflowEngine(WorkflowEnginePort):
             "rebuild_communities": community.RebuildCommunitiesWorkflow,
             "deduplicate_entities": entity.DeduplicateEntitiesWorkflow,
             "incremental_refresh": episode.IncrementalRefreshWorkflow,
-            "agent_execution": agent.AgentExecutionWorkflow,
+            "project_agent": project_agent_workflow.ProjectAgentWorkflow,
         }
 
         if workflow_name not in mapping:

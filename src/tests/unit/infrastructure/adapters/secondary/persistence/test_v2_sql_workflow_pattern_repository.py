@@ -14,12 +14,12 @@ Key features tested:
 - Optional caching support
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.workflow_pattern import PatternStep, WorkflowPattern
-from src.infrastructure.adapters.secondary.persistence.models import WorkflowPattern as DBPattern
 from src.infrastructure.adapters.secondary.persistence.v2_sql_workflow_pattern_repository import (
     V2SqlWorkflowPatternRepository,
 )

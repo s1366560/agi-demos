@@ -16,16 +16,14 @@ Test Cases:
 - test_classify_empty_query_raises_error
 """
 
-import json
-from unittest.mock import AsyncMock, Mock, patch
-from typing import Any, Dict
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.infrastructure.agent.planning.llm_classifier import (
-    LLMClassifier,
     ClassificationError,
     ClassificationResult,
+    LLMClassifier,
 )
 
 

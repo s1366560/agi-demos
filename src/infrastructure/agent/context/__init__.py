@@ -9,21 +9,21 @@ This module provides context window management capabilities:
 - Message building and attachment injection
 """
 
+from .builder import AttachmentInjector, MessageBuilder
 from .compaction import (
-    Message,
-    ModelLimits,
+    OUTPUT_TOKEN_MAX,
     PRUNE_MINIMUM_TOKENS,
     PRUNE_PROTECT_TOKENS,
     PRUNE_PROTECTED_TOOLS,
-    OUTPUT_TOKEN_MAX,
+    Message,
+    ModelLimits,
     TokenCount,
     ToolPart,
     is_overflow,
     prune_tool_outputs,
 )
-from .window_manager import ContextWindowConfig, ContextWindowManager, ContextWindowResult
 from .context_facade import ContextFacade, ContextFacadeConfig
-from .builder import MessageBuilder, AttachmentInjector
+from .window_manager import ContextWindowConfig, ContextWindowManager, ContextWindowResult
 
 __all__ = [
     # Facade (recommended entry point)

@@ -3,16 +3,15 @@
 Tests the exception hierarchy, retry logic, and serialization.
 """
 
-import pytest
 
 from src.domain.model.sandbox.exceptions import (
-    SandboxError,
     SandboxConnectionError,
+    SandboxError,
+    SandboxHealthCheckError,
     SandboxResourceError,
+    SandboxStateTransitionError,
     SandboxTimeoutError,
     SandboxValidationError,
-    SandboxStateTransitionError,
-    SandboxHealthCheckError,
     is_retryable_error,
 )
 

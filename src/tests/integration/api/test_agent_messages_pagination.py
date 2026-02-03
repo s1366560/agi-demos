@@ -4,8 +4,9 @@ Integration tests for Agent conversation messages pagination API.
 TDD: Tests written first (RED phase) for backward pagination support.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 from src.domain.model.agent import AgentExecutionEvent
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (

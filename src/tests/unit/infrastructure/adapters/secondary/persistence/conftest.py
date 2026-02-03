@@ -1,7 +1,8 @@
 """Shared fixtures for V2 repository tests."""
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -123,6 +124,7 @@ def make_hitl_request(
 ) -> dict:
     """Factory for creating HITL request domain objects."""
     from datetime import timedelta
+
     from src.domain.model.agent.hitl_request import (
         HITLRequest,
         HITLRequestStatus,
@@ -220,7 +222,6 @@ def make_plan_execution(
     from src.domain.model.agent.plan_execution import (
         ExecutionMode,
         ExecutionStatus,
-        ExecutionStep,
         PlanExecution,
     )
 
@@ -276,7 +277,7 @@ def make_plan_snapshot(
     name: str = "Initial Snapshot",
 ) -> dict:
     """Factory for creating plan snapshot domain objects."""
-    from src.domain.model.agent.plan_snapshot import PlanSnapshot, StepState
+    from src.domain.model.agent.plan_snapshot import PlanSnapshot
 
     return PlanSnapshot(
         id=snapshot_id,
@@ -530,7 +531,7 @@ def make_work_plan(
     status: str = "planning",
 ) -> dict:
     """Factory for creating work plan domain objects."""
-    from src.domain.model.agent import PlanStatus, PlanStep, WorkPlan
+    from src.domain.model.agent import PlanStatus, WorkPlan
 
     return WorkPlan(
         id=plan_id,

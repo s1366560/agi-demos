@@ -16,9 +16,13 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
 )
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor,
+)
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from src.configuration.config import get_settings

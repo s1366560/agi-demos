@@ -32,10 +32,10 @@ from src.infrastructure.adapters.secondary.persistence.models import Project as 
 from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant,
     UserProject,
+    UserRole,
     UserTenant,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
-from src.infrastructure.adapters.secondary.persistence.models import UserRole
 
 logger = logging.getLogger(__name__)
 

@@ -6,10 +6,10 @@ This file provides backward compatibility for existing imports.
 """
 
 from src.infrastructure.agent.context.compaction import (
+    OUTPUT_TOKEN_MAX,
     PRUNE_MINIMUM_TOKENS,
     PRUNE_PROTECT_TOKENS,
     PRUNE_PROTECTED_TOOLS,
-    OUTPUT_TOKEN_MAX,
     CompactionResult,
     Message,
     MessageInfo,

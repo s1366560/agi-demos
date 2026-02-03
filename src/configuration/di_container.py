@@ -21,9 +21,6 @@ from src.application.services.unified_sandbox_service import (
     UnifiedSandboxService,
 )
 from src.application.services.workflow_learner import WorkflowLearner
-from src.domain.ports.services.sandbox_resource_port import (
-    SandboxResourcePort,
-)
 
 # Agent use cases
 from src.application.use_cases.agent import (
@@ -60,6 +57,9 @@ from src.application.use_cases.task import (
 from src.configuration.config import get_settings
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
+from src.domain.ports.services.sandbox_resource_port import (
+    SandboxResourcePort,
+)
 
 # Workflow Engine Port
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort

@@ -4,9 +4,10 @@ TDD Phase 2: Write failing tests first (RED).
 Tests the sandbox tool registry for managing dynamic tool registration.
 """
 
-import pytest
-from unittest.mock import AsyncMock
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock
+
+import pytest
 
 from src.application.services.sandbox_tool_registry import (
     SandboxToolRegistration,

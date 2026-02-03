@@ -6,8 +6,8 @@ Tests the Human-in-the-Loop tool handling logic extracted from SessionProcessor.
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, Optional
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -18,7 +18,6 @@ from src.infrastructure.agent.hitl.handler import (
     get_hitl_handler,
     set_hitl_handler,
 )
-
 
 # ============================================================
 # Test Fixtures

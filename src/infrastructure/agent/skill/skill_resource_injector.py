@@ -6,9 +6,10 @@ Injects local SKILL resources into remote Sandbox containers via MCP tools.
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from src.domain.ports.services.sandbox_port import SandboxPort
+
 from .skill_resource_loader import SkillResourceLoader
 
 logger = logging.getLogger(__name__)

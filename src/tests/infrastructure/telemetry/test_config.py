@@ -1,6 +1,5 @@
 """Tests for OpenTelemetry configuration module."""
 
-import pytest
 
 from src.infrastructure.telemetry import config
 

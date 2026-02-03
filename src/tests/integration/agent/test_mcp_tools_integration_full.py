@@ -7,7 +7,7 @@ Tests cover:
 - MCP tools being available in ReActAgent
 """
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -259,9 +259,9 @@ class TestMCPToolExecution:
         )
 
         # Create MCP tool adapter
-        from src.infrastructure.mcp.temporal_tool_adapter import MCPTemporalToolAdapter
-
         from dataclasses import dataclass
+
+        from src.infrastructure.mcp.temporal_tool_adapter import MCPTemporalToolAdapter
 
         @dataclass
         class MockToolInfo:

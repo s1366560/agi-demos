@@ -2,8 +2,9 @@
 Tests for V2 SqlMemoryRepository using BaseRepository.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.memory import Memory

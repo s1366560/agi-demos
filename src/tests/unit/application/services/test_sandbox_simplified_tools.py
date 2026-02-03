@@ -8,8 +8,8 @@ This test file defines the simplified behavior for tool management:
 3. Agent can get tools directly from SandboxResourcePort
 """
 
+
 import pytest
-from unittest.mock import AsyncMock
 
 from src.domain.ports.services.sandbox_resource_port import (
     SandboxInfo,

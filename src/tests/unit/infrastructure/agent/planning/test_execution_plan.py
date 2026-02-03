@@ -5,15 +5,14 @@ Tests follow TDD: Write first, verify FAIL, implement, verify PASS.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import Mock
 
 import pytest
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
+    ExecutionPlanStatus,
     ExecutionStep,
     ExecutionStepStatus,
-    ExecutionPlanStatus,
 )
 
 

@@ -5,11 +5,10 @@ Tests are written FIRST (TDD RED phase).
 These tests MUST FAIL before implementation exists.
 """
 
-import pytest
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
 
-from sqlalchemy import Column, String, and_, or_, func, select
+from sqlalchemy import Column, String, select
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import Select
 

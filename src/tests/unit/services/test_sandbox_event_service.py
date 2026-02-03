@@ -3,13 +3,11 @@
 Tests the Sandbox SSE event emission logic.
 """
 
-import pytest
 from unittest.mock import AsyncMock, Mock
 
+import pytest
+
 from src.application.services.sandbox_event_service import SandboxEventPublisher
-from src.domain.events.agent_events import (
-    AgentEventType,
-)
 
 
 class TestSandboxEventPublisher:

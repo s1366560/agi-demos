@@ -16,18 +16,19 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from src.infrastructure.agent.planning.fast_heuristic_detector import (
-    FastHeuristicDetector,
     DetectionResult as HeuristicDetectionResult,
 )
-from src.infrastructure.agent.planning.llm_classifier import (
-    LLMClassifier,
-    ClassificationResult,
-    ClassificationError,
+from src.infrastructure.agent.planning.fast_heuristic_detector import (
+    FastHeuristicDetector,
 )
 from src.infrastructure.agent.planning.llm_cache import LLMResponseCache
+from src.infrastructure.agent.planning.llm_classifier import (
+    ClassificationError,
+    LLMClassifier,
+)
 
 logger = logging.getLogger(__name__)
 

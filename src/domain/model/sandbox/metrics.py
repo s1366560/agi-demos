@@ -4,11 +4,11 @@ This module provides a comprehensive metrics collection and export system
 for sandbox operations, supporting Prometheus and StatsD formats.
 """
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Dict, List, Optional
-import time
+from typing import Dict, List, Optional
 
 
 # Metric name constants for SandboxMetrics

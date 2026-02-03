@@ -18,23 +18,22 @@ Test Cases:
 """
 
 from unittest.mock import AsyncMock, Mock
-from typing import Any, Dict
 
 import pytest
 
-from src.infrastructure.agent.planning.hybrid_plan_mode_detector import (
-    HybridPlanModeDetector,
-    DetectionResult,
-)
 from src.infrastructure.agent.planning.fast_heuristic_detector import (
     FastHeuristicDetector,
 )
-from src.infrastructure.agent.planning.llm_classifier import (
-    LLMClassifier,
-    ClassificationResult,
+from src.infrastructure.agent.planning.hybrid_plan_mode_detector import (
+    DetectionResult,
+    HybridPlanModeDetector,
 )
 from src.infrastructure.agent.planning.llm_cache import (
     LLMResponseCache,
+)
+from src.infrastructure.agent.planning.llm_classifier import (
+    ClassificationResult,
+    LLMClassifier,
 )
 
 

@@ -4,8 +4,9 @@ TDD Phase 1: Write failing tests first (RED).
 Tests the sandbox MCP tool wrapper that namespacing and routing.
 """
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 

@@ -20,10 +20,9 @@ Extracted from processor.py to reduce complexity and improve testability.
 
 import asyncio
 import logging
-import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Protocol
+from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
 
 from src.domain.events.agent_events import (
     AgentCompleteEvent,

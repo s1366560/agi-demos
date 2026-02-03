@@ -5,16 +5,15 @@ TDD: Tests written first, implementation to follow.
 Tests follow RED-GREEN-REFACTOR cycle.
 """
 
-from unittest.mock import AsyncMock, Mock, call
-from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
+    ExecutionPlanStatus,
     ExecutionStep,
     ExecutionStepStatus,
-    ExecutionPlanStatus,
 )
 from src.infrastructure.agent.planning.plan_executor import PlanExecutor
 

@@ -9,7 +9,6 @@ Tests cover:
 - Validation and utilities
 """
 
-import pytest
 
 from src.domain.ports.agent.context_manager_port import AttachmentContent
 from src.infrastructure.agent.context.builder.message_builder import (

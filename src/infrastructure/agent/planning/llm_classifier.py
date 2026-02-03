@@ -270,7 +270,7 @@ Be conservative - if uncertain, prefer should_trigger=false."""
                 response = result
         else:
             raise RuntimeError(
-                f"LLM client has no compatible async method"
+                "LLM client has no compatible async method"
             )
 
         return response

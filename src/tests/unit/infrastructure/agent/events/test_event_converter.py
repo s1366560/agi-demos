@@ -28,9 +28,7 @@ from src.infrastructure.agent.events.converter import (
     EventConverter,
     get_event_converter,
     set_event_converter,
-    SkillLike,
 )
-
 
 # ============================================================
 # Test Fixtures

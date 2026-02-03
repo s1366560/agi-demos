@@ -8,11 +8,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict
 
-from src.domain.shared_kernel import Entity
 from src.domain.events.agent_events import (
     AgentDomainEvent,
     AgentEventType,  # Unified event type from domain events
 )
+from src.domain.shared_kernel import Entity
 
 # Additional event types for persistence layer (timeline-specific)
 USER_MESSAGE = "user_message"

@@ -15,13 +15,13 @@ Key features tested:
 - Count operations
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
 from src.domain.model.agent.skill_source import SkillSource
-from src.infrastructure.adapters.secondary.persistence.models import Skill as DBSkill
 from src.infrastructure.adapters.secondary.persistence.v2_sql_skill_repository import (
     V2SqlSkillRepository,
 )

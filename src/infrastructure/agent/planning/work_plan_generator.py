@@ -16,7 +16,7 @@ Reference: Extracted from processor.py::_generate_work_plan() (lines 370-553)
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Protocol, Set
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 logger = logging.getLogger(__name__)
 

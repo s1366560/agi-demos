@@ -14,13 +14,11 @@ from typing import Any
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
     ExecutionStep,
-    ExecutionStepStatus,
 )
 from src.infrastructure.agent.planning.prompts import (
     PLAN_GENERATION_SYSTEM_PROMPT,
     PLAN_GENERATION_USER_PROMPT_TEMPLATE,
 )
-
 
 # Type alias for exception handling
 Throwable = BaseException | tuple[type[BaseException], BaseException, TracebackType] | None

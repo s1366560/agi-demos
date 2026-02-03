@@ -602,7 +602,7 @@ class ToolExecutor:
         if not context.project_id or not context.tenant_id:
             if self._debug_logging:
                 logger.debug(
-                    f"[ToolExecutor] Missing project_id or tenant_id for artifact processing"
+                    "[ToolExecutor] Missing project_id or tenant_id for artifact processing"
                 )
             return
 

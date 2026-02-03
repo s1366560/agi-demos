@@ -5,7 +5,7 @@ an existing Plan document for context (Plan Mode).
 """
 
 import uuid
-from typing import Any, Optional
+from typing import Optional
 
 from src.domain.model.agent.plan_execution import (
     ExecutionMode,

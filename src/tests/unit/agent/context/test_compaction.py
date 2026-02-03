@@ -12,27 +12,26 @@ Tests cover:
 - CompactionResult operations
 """
 
-import pytest
 from datetime import datetime
 
 from src.infrastructure.agent.context.compaction import (
-    TokenCount,
-    ModelLimits,
-    ToolPart,
-    MessagePart,
-    MessageInfo,
-    Message,
-    PruneResult,
-    CompactionResult,
-    is_overflow,
-    prune_tool_outputs,
-    estimate_tokens,
-    calculate_usable_context,
-    should_compact,
+    OUTPUT_TOKEN_MAX,
     PRUNE_MINIMUM_TOKENS,
     PRUNE_PROTECT_TOKENS,
     PRUNE_PROTECTED_TOOLS,
-    OUTPUT_TOKEN_MAX,
+    CompactionResult,
+    Message,
+    MessageInfo,
+    MessagePart,
+    ModelLimits,
+    PruneResult,
+    TokenCount,
+    ToolPart,
+    calculate_usable_context,
+    estimate_tokens,
+    is_overflow,
+    prune_tool_outputs,
+    should_compact,
 )
 
 

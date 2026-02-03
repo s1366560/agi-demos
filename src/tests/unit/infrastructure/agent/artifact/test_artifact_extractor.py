@@ -5,21 +5,18 @@ Tests the artifact extraction logic extracted from SessionProcessor.
 """
 
 import base64
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.infrastructure.agent.artifact.extractor import (
     ArtifactData,
-    ArtifactExtractor,
     ArtifactExtractionResult,
+    ArtifactExtractor,
     ExtractionContext,
     get_artifact_extractor,
     set_artifact_extractor,
 )
-
 
 # ============================================================
 # Test Fixtures

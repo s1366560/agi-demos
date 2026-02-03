@@ -5,6 +5,17 @@ Defines Pydantic models for MCP server configuration.
 Supports both local (stdio) and remote (HTTP/SSE) connection types.
 
 Reference: OpenCode config/config.ts McpLocal/McpRemote schemas
+
+MIGRATION NOTE:
+===============
+These Pydantic models are being migrated to domain models.
+New code should use:
+- src.domain.model.mcp.transport.TransportConfig (replaces McpLocalConfig, McpRemoteConfig)
+- src.domain.model.mcp.transport.TransportType (replaces type field)
+- src.domain.model.mcp.server.MCPServer (unified server entity)
+
+The models in this file are kept for backward compatibility with
+existing database records and API contracts.
 """
 
 from enum import Enum
@@ -176,6 +187,9 @@ class MCPToolDefinition(BaseModel):
     MCP tool definition returned by listTools().
 
     Reference: @modelcontextprotocol/sdk MCPToolDef
+
+    DEPRECATED: Use src.domain.model.mcp.tool.MCPToolSchema instead.
+    Kept for backward compatibility with existing API contracts.
     """
 
     name: str
@@ -188,6 +202,9 @@ class MCPToolResult(BaseModel):
     Result from MCP tool execution.
 
     Reference: @modelcontextprotocol/sdk CallToolResult
+
+    DEPRECATED: Use src.domain.model.mcp.tool.MCPToolResult instead.
+    Kept for backward compatibility with existing API contracts.
     """
 
     content: List[Dict[str, Any]] = Field(default_factory=list)

@@ -13,20 +13,15 @@ This test file ensures that:
 """
 
 from unittest.mock import AsyncMock, Mock, patch
-from typing import Any, Dict, List
-from datetime import datetime
 
 import pytest
 
 from src.domain.model.agent.skill import Skill, SkillStatus, TriggerPattern, TriggerType
-from src.domain.model.agent.subagent import SubAgent, AgentTrigger
+from src.domain.model.agent.subagent import AgentTrigger, SubAgent
 from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.planning import (
-    FastHeuristicDetector,
-    LLMClassifier,
-    LLMResponseCache,
-    HybridPlanModeDetector,
     DetectionResult,
+    HybridPlanModeDetector,
 )
 
 

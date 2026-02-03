@@ -8,14 +8,14 @@ from typing import Any, Optional
 
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
-    AgentDesktopStoppedEvent,
     AgentDesktopStatusEvent,
+    AgentDesktopStoppedEvent,
     AgentSandboxCreatedEvent,
     AgentSandboxStatusEvent,
     AgentSandboxTerminatedEvent,
     AgentTerminalStartedEvent,
-    AgentTerminalStoppedEvent,
     AgentTerminalStatusEvent,
+    AgentTerminalStoppedEvent,
 )
 
 logger = logging.getLogger(__name__)

@@ -8,10 +8,9 @@ import pytest
 from src.application.services.agent_service import AgentService
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_execution_event import (
-    AgentExecutionEvent,
     USER_MESSAGE,  # Timeline-specific event type values
+    AgentExecutionEvent,
 )
-from src.domain.events.agent_events import AgentEventType
 
 
 class MockAgentService(AgentService):

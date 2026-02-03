@@ -7,19 +7,18 @@ Tests the query monitoring with:
 - Performance dashboard data aggregation
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from sqlalchemy import text
 
 from src.infrastructure.adapters.secondary.common.query_monitor import (
     QueryInfo,
     QueryMonitor,
+    QueryMonitorConfig,
     QueryStats,
     SlowQueryError,
-    QueryMonitorConfig,
 )
 
 

@@ -3,21 +3,20 @@
 Tests the structured exception system for ReActAgent.
 """
 
-import pytest
 from datetime import datetime
 
 from src.infrastructure.agent.errors import (
-    ErrorSeverity,
-    ErrorCategory,
-    ErrorContext,
+    AgentCommunicationError,
     AgentError,
-    AgentValidationError,
     AgentExecutionError,
+    AgentInternalError,
     AgentPermissionError,
     AgentResourceError,
-    AgentCommunicationError,
     AgentTimeoutError,
-    AgentInternalError,
+    AgentValidationError,
+    ErrorCategory,
+    ErrorContext,
+    ErrorSeverity,
     wrap_error,
 )
 

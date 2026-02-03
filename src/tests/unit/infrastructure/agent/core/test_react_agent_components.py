@@ -10,62 +10,43 @@ Tests the integration between all refactored components:
 This is Phase 6 of the refactoring plan.
 """
 
-import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.infrastructure.agent.errors import (
-    AgentError,
-    AgentValidationError,
-    AgentExecutionError,
-    AgentPermissionError,
-    AgentResourceError,
-    AgentCommunicationError,
-    AgentTimeoutError,
-    AgentInternalError,
-    ErrorCategory,
-    ErrorSeverity,
-    ErrorContext,
-    wrap_error,
-)
 from src.infrastructure.agent.config import (
-    ExecutionConfig,
-    PerformanceConfig,
-    CostConfig,
-    PermissionConfig,
-    MonitoringConfig,
     AgentConfig,
     ConfigManager,
+    ExecutionConfig,
     get_config,
     set_config,
 )
+from src.infrastructure.agent.errors import (
+    AgentError,
+    ErrorCategory,
+    ErrorContext,
+    wrap_error,
+)
 from src.infrastructure.agent.events import (
+    AgentDomainEvent,
+    EventBus,
+    EventMapper,
     EventType,
     SSEEvent,
-    AgentDomainEvent,
-    EventMapper,
-    EventBus,
     get_event_bus,
     set_event_bus,
 )
-from src.infrastructure.agent.tools.tool_registry import (
-    ToolStatus,
-    ToolExecutionResult,
-    ToolMetadata,
-    Tool,
-    ToolRegistry,
-    ToolExecutor,
-)
 from src.infrastructure.agent.routing.execution_router import (
     ExecutionPath,
-    RoutingDecision,
     ExecutionRouter,
     SkillMatcher,
-    SubAgentMatcher,
-    PlanEvaluator,
+)
+from src.infrastructure.agent.tools.tool_registry import (
+    Tool,
+    ToolExecutor,
+    ToolMetadata,
+    ToolRegistry,
 )
 
 

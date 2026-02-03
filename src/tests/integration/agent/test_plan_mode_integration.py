@@ -5,28 +5,25 @@ TDD: Tests written first, implementation to follow.
 Tests follow RED-GREEN-REFACTOR cycle.
 """
 
-from unittest.mock import AsyncMock, Mock, patch
-from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
+    ExecutionPlanStatus,
     ExecutionStep,
     ExecutionStepStatus,
-    ExecutionPlanStatus,
 )
 from src.domain.model.agent.reflection_result import (
-    ReflectionResult,
     ReflectionAssessment,
-    StepAdjustment,
-    AdjustmentType,
+    ReflectionResult,
 )
-from src.infrastructure.agent.planning.plan_generator import PlanGenerator
-from src.infrastructure.agent.planning.plan_executor import PlanExecutor
-from src.infrastructure.agent.planning.plan_reflector import PlanReflector
 from src.infrastructure.agent.planning.plan_adjuster import PlanAdjuster
+from src.infrastructure.agent.planning.plan_executor import PlanExecutor
+from src.infrastructure.agent.planning.plan_generator import PlanGenerator
 from src.infrastructure.agent.planning.plan_mode_orchestrator import PlanModeOrchestrator
+from src.infrastructure.agent.planning.plan_reflector import PlanReflector
 
 
 @pytest.mark.integration

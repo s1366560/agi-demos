@@ -13,32 +13,16 @@ This test file ensures that:
 6. Event streaming works end-to-end
 """
 
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
-from typing import Any, Dict, List
-from datetime import datetime
-import asyncio
 import json
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.domain.model.agent.execution_plan import (
-    ExecutionPlan,
-    ExecutionPlanStatus,
-    ExecutionStep,
-    ExecutionStepStatus,
-)
-from src.domain.model.agent.reflection_result import (
-    ReflectionResult,
-    ReflectionAssessment,
-    StepAdjustment,
-)
 from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.planning import (
-    FastHeuristicDetector,
-    LLMClassifier,
-    LLMResponseCache,
-    HybridPlanModeDetector,
     DetectionResult,
+    HybridPlanModeDetector,
 )
 
 

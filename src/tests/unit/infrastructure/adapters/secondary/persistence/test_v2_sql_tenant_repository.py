@@ -2,12 +2,13 @@
 Tests for V2 SqlTenantRepository using BaseRepository.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.tenant.tenant import Tenant
-from src.infrastructure.adapters.secondary.persistence.models import Tenant as DBTenant, User as DBUser
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.adapters.secondary.persistence.v2_sql_tenant_repository import (
     V2SqlTenantRepository,
 )

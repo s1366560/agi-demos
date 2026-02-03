@@ -13,14 +13,14 @@ The interface provides:
 5. get_sandbox_info() - Get sandbox status info
 """
 
-import pytest
 from abc import ABC
-from unittest.mock import AsyncMock
 from datetime import datetime
 
+import pytest
+
 from src.domain.ports.services.sandbox_resource_port import (
-    SandboxResourcePort,
     SandboxInfo,
+    SandboxResourcePort,
 )
 
 

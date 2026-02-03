@@ -17,14 +17,13 @@ Test Cases:
 - test_cache_eviction_uses_lru_policy
 """
 
-from unittest.mock import Mock, patch
 import time
 
 import pytest
 
 from src.infrastructure.agent.planning.llm_cache import (
-    LLMResponseCache,
     CacheEntry,
+    LLMResponseCache,
 )
 
 

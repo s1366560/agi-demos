@@ -3,13 +3,12 @@
 import pytest
 
 from src.domain.events.agent_events import (
-    AgentEventType,
-    AgentThoughtEvent,
     AgentActEvent,
-    AgentObserveEvent,
-    AgentTextDeltaEvent,
     AgentCompleteEvent,
     AgentErrorEvent,
+    AgentObserveEvent,
+    AgentTextDeltaEvent,
+    AgentThoughtEvent,
 )
 
 

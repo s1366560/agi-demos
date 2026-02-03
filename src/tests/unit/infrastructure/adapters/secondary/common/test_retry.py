@@ -8,16 +8,15 @@ Tests the retry mechanism with:
 - Jitter for thundering herd prevention
 """
 
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.infrastructure.adapters.secondary.common.retry import (
-    is_transient_error,
-    retry_with_backoff,
-    retry_decorator,
     MaxRetriesExceededError,
     TransientError,
+    is_transient_error,
+    retry_decorator,
+    retry_with_backoff,
 )
 
 

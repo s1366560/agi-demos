@@ -12,19 +12,18 @@ Tests Sandbox-related events:
 - terminal_status
 """
 
-import pytest
 
 from src.domain.events.agent_events import (
+    AgentDesktopStartedEvent,
+    AgentDesktopStatusEvent,
+    AgentDesktopStoppedEvent,
     AgentEventType,
     AgentSandboxCreatedEvent,
-    AgentSandboxTerminatedEvent,
     AgentSandboxStatusEvent,
-    AgentDesktopStartedEvent,
-    AgentDesktopStoppedEvent,
-    AgentDesktopStatusEvent,
+    AgentSandboxTerminatedEvent,
     AgentTerminalStartedEvent,
-    AgentTerminalStoppedEvent,
     AgentTerminalStatusEvent,
+    AgentTerminalStoppedEvent,
 )
 
 

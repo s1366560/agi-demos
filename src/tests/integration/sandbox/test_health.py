@@ -4,7 +4,6 @@ Tests the health check endpoints with different check levels.
 """
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from src.infrastructure.adapters.primary.web.main import app

@@ -24,7 +24,7 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
 
@@ -510,8 +510,6 @@ class HITLHandler:
             AgentDomainEvent objects for env var request flow
         """
         from ..tools.env_var_tools import (
-            EnvVarField,
-            EnvVarInputType,
             EnvVarRequest,
             get_env_var_manager,
         )

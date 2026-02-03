@@ -6,28 +6,26 @@
 - 连接重试和错误处理
 """
 
-import asyncio
 import logging
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
+
+# Use domain models instead of local duplicates
+from src.domain.model.mcp.connection import ConnectionState
+from src.domain.model.mcp.tool import MCPToolResult as DomainMCPToolResult
 
 logger = logging.getLogger(__name__)
 
 
-class ConnectionState(str, Enum):
-    """MCP 连接状态."""
-    DISCONNECTED = "disconnected"
-    CONNECTING = "connecting"
-    CONNECTED = "connected"
-    ERROR = "error"
-
-
 @dataclass
 class MCPTool:
-    """MCP 工具定义."""
+    """MCP 工具定义.
+
+    Note: This is a simplified local version for the bridge service.
+    For full MCPTool entity, use src.domain.model.mcp.tool.MCPTool
+    """
     name: str
     description: str
     input_schema: Dict[str, Any]
@@ -35,7 +33,10 @@ class MCPTool:
 
 @dataclass
 class MCPToolResult:
-    """MCP 工具执行结果."""
+    """MCP 工具执行结果.
+
+    Wrapper around domain MCPToolResult with additional bridge-specific fields.
+    """
     content: List[Dict[str, Any]]
     is_error: bool
     tool_name: str
@@ -51,6 +52,17 @@ class MCPToolResult:
             "execution_time_ms": self.execution_time_ms,
             "error_message": self.error_message,
         }
+
+    @classmethod
+    def from_domain(cls, result: DomainMCPToolResult, tool_name: str) -> "MCPToolResult":
+        """Create from domain MCPToolResult."""
+        return cls(
+            content=result.content,
+            is_error=result.is_error,
+            tool_name=tool_name,
+            execution_time_ms=result.execution_time_ms or 0,
+            error_message=result.error_message,
+        )
 
 
 @dataclass

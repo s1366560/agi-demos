@@ -7,15 +7,15 @@ TDD Approach:
 """
 
 # Import modules to ensure they are covered by pytest-cov
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from src.configuration.temporal_config import TemporalSettings
 from src.infrastructure.adapters.secondary.temporal.client import (
     TemporalClientFactory,
     create_tracing_interceptor,
 )
-
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 
 @pytest.mark.unit
@@ -24,9 +24,6 @@ class TestTemporalTelemetryConfig:
 
     def test_create_tracing_interceptor_when_telemetry_enabled(self):
         """Test that TracingInterceptor is created when telemetry is enabled."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            create_tracing_interceptor,
-        )
         from src.infrastructure.telemetry.config import configure_tracer_provider
 
         # Arrange: Enable telemetry and configure tracer
@@ -43,9 +40,6 @@ class TestTemporalTelemetryConfig:
 
     def test_create_tracing_interceptor_when_telemetry_disabled(self):
         """Test that no interceptor is created when telemetry is disabled."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            create_tracing_interceptor,
-        )
 
         # Arrange: Reset global state for testing
         from src.infrastructure.telemetry import config
@@ -60,13 +54,11 @@ class TestTemporalTelemetryConfig:
 
     def test_tracing_interceptor_type(self):
         """Test that TracingInterceptor has expected behavior."""
-        from temporalio.contrib.opentelemetry import TracingInterceptor
-
         # Arrange: Create a mock tracer provider
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+        from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+        from temporalio.contrib.opentelemetry import TracingInterceptor
 
         provider = TracerProvider()
         provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
@@ -86,9 +78,6 @@ class TestTemporalClientFactoryWithTelemetry:
     @pytest.mark.asyncio
     async def test_get_client_includes_tracing_interceptor_when_enabled(self):
         """Test that get_client adds tracing interceptor when telemetry is enabled."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
         from src.configuration.temporal_config import TemporalSettings
 
         # Arrange: Enable telemetry
@@ -118,9 +107,6 @@ class TestTemporalClientFactoryWithTelemetry:
     @pytest.mark.asyncio
     async def test_get_client_without_interceptor_when_disabled(self):
         """Test that get_client skips interceptor when telemetry is disabled."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
         from src.configuration.temporal_config import TemporalSettings
 
         # Arrange: Disable telemetry (default)
@@ -154,7 +140,6 @@ class TestTelemetrySettings:
 
     def test_temporal_settings_has_temporal_tracing_enabled_field(self):
         """Test that TemporalSettings includes temporal_tracing_enabled field."""
-        from src.configuration.temporal_config import TemporalSettings
 
         # Act & Assert: Settings should accept temporal_tracing_enabled parameter
         settings = TemporalSettings(
@@ -167,7 +152,6 @@ class TestTelemetrySettings:
 
     def test_temporal_settings_telemetry_defaults_to_false(self):
         """Test that temporal_tracing_enabled defaults to False."""
-        from src.configuration.temporal_config import TemporalSettings
 
         # Act & Assert: Default should be False for safety
         settings = TemporalSettings(
@@ -184,9 +168,6 @@ class TestTracingInterceptorEdgeCases:
 
     def test_create_tracing_interceptor_when_provider_is_none(self):
         """Test that None is returned when tracer provider is None."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            create_tracing_interceptor,
-        )
         from src.infrastructure.telemetry import config
 
         # Arrange: Reset provider to None
@@ -208,7 +189,6 @@ class TestGetTemporalClient:
         """Test that get_temporal_client is a convenience wrapper."""
         from src.infrastructure.adapters.secondary.temporal.client import (
             get_temporal_client,
-            TemporalClientFactory,
         )
 
         # Arrange: Mock the factory
@@ -229,9 +209,6 @@ class TestTemporalClientFactoryUtilities:
     @pytest.mark.asyncio
     async def test_is_connected_returns_true_when_connected(self):
         """Test that is_connected returns True when client exists."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
 
         # Arrange: Set up instance
         TemporalClientFactory._instance = AsyncMock()
@@ -248,9 +225,6 @@ class TestTemporalClientFactoryUtilities:
     @pytest.mark.asyncio
     async def test_is_connected_returns_false_when_not_connected(self):
         """Test that is_connected returns False when no client exists."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
 
         # Arrange: Ensure no instance
         TemporalClientFactory._instance = None
@@ -264,9 +238,6 @@ class TestTemporalClientFactoryUtilities:
     @pytest.mark.asyncio
     async def test_close_resets_instance(self):
         """Test that close resets the client instance."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
 
         # Arrange: Set up instance
         TemporalClientFactory._instance = AsyncMock()
@@ -282,9 +253,6 @@ class TestTemporalClientFactoryUtilities:
     @pytest.mark.asyncio
     async def test_close_when_no_instance_is_noop(self):
         """Test that close does nothing when no instance exists."""
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
 
         # Arrange: Ensure no instance
         TemporalClientFactory._instance = None

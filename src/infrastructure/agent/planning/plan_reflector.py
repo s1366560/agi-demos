@@ -14,10 +14,10 @@ from src.domain.model.agent.execution_plan import (
     ExecutionPlanStatus,
 )
 from src.domain.model.agent.reflection_result import (
-    ReflectionResult,
-    ReflectionAssessment,
-    StepAdjustment,
     AdjustmentType,
+    ReflectionAssessment,
+    ReflectionResult,
+    StepAdjustment,
 )
 from src.infrastructure.agent.planning.prompts import (
     PLAN_REFLECTION_SYSTEM_PROMPT,

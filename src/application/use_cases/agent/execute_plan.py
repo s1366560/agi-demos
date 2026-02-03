@@ -248,8 +248,10 @@ class ExecutePlanUseCase:
         """
         from src.domain.model.agent.execution_plan import (
             ExecutionPlan,
-            ExecutionStep as OldExecutionStep,
             ExecutionStepStatus,
+        )
+        from src.domain.model.agent.execution_plan import (
+            ExecutionStep as OldExecutionStep,
         )
 
         # Convert steps to old format for compatibility

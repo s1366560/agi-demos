@@ -5,18 +5,15 @@ This module provides the PlanAdjuster class that applies
 adjustments to execution plans.
 """
 
-import uuid
 from dataclasses import replace
-from typing import Any
 
 from src.domain.model.agent.execution_plan import (
     ExecutionPlan,
-    ExecutionStep,
     ExecutionStepStatus,
 )
 from src.domain.model.agent.reflection_result import (
-    StepAdjustment,
     AdjustmentType,
+    StepAdjustment,
 )
 
 
@@ -210,7 +207,7 @@ class PlanAdjuster:
         new_step = adjustment.new_step
         if new_step is None:
             raise AdjustmentError(
-                f"new_step required for ADD_BEFORE adjustment",
+                "new_step required for ADD_BEFORE adjustment",
                 step_id=adjustment.step_id,
             )
 
@@ -248,7 +245,7 @@ class PlanAdjuster:
         new_step = adjustment.new_step
         if new_step is None:
             raise AdjustmentError(
-                f"new_step required for ADD_AFTER adjustment",
+                "new_step required for ADD_AFTER adjustment",
                 step_id=adjustment.step_id,
             )
 
@@ -285,7 +282,7 @@ class PlanAdjuster:
         new_step = adjustment.new_step
         if new_step is None:
             raise AdjustmentError(
-                f"new_step required for REPLACE adjustment",
+                "new_step required for REPLACE adjustment",
                 step_id=adjustment.step_id,
             )
 

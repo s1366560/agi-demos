@@ -157,8 +157,8 @@ async def main():
         incremental_refresh_activity,
     )
     from src.infrastructure.adapters.secondary.temporal.activities.community import (
-        rebuild_communities_activity,
         detect_communities_activity,
+        rebuild_communities_activity,
         update_communities_for_entities_activity,
     )
     from src.infrastructure.adapters.secondary.temporal.activities.entity import (
@@ -169,6 +169,7 @@ async def main():
         extract_entities_activity,
         extract_relationships_activity,
     )
+
     # Note: deduplicate_entities_activity is deprecated, using merge activities instead
     from src.infrastructure.adapters.secondary.temporal.workflows import (
         DeduplicateEntitiesWorkflow,

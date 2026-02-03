@@ -5,18 +5,13 @@ Tests the routing logic for determining execution paths.
 
 from typing import Any, Dict, List, Optional
 
-import pytest
-
+from src.infrastructure.agent.config import ExecutionConfig
 from src.infrastructure.agent.routing.execution_router import (
     ExecutionPath,
-    RoutingDecision,
     ExecutionRouter,
-    SkillMatcher,
-    SubAgentMatcher,
-    PlanEvaluator,
+    RoutingDecision,
     create_default_router,
 )
-from src.infrastructure.agent.config import ExecutionConfig
 
 
 class MockSkillMatcher:

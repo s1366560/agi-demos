@@ -18,13 +18,12 @@ from typing import Any, Dict, List, Optional
 
 from temporalio import activity
 
-logger = logging.getLogger(__name__)
-
-# Import project agent types
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
+
+logger = logging.getLogger(__name__)
 
 # Global registry of project agent instances (per-activity-worker)
 # This provides caching at the activity worker level

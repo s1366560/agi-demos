@@ -8,7 +8,7 @@ Tests cover:
 """
 
 from dataclasses import dataclass
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 

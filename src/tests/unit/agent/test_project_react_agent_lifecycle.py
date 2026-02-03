@@ -4,17 +4,16 @@ Unit tests for ProjectReActAgent WebSocketNotifier integration.
 Tests TDD: RED phase - These tests should fail before implementation.
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
+from src.infrastructure.adapters.secondary.websocket_notifier import (
+    WebSocketNotifier,
+)
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
-)
-from src.infrastructure.adapters.secondary.websocket_notifier import (
-    WebSocketNotifier,
-    LifecycleState,
 )
 
 # The correct import path for patching is where the module imports these functions

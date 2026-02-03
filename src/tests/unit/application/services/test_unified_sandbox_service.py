@@ -16,17 +16,21 @@ The unified service provides a single entry point with 6 core methods:
 """
 
 import asyncio
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
-from src.application.services.unified_sandbox_service import (
-    UnifiedSandboxService,
-    SandboxInfo,
-)
-from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus, SandboxType
-from src.domain.ports.services.sandbox_port import SandboxStatus
+import pytest
+
 from src.application.services.sandbox_profile import SandboxProfileType
+from src.application.services.unified_sandbox_service import (
+    SandboxInfo,
+    UnifiedSandboxService,
+)
+from src.domain.model.sandbox.project_sandbox import (
+    ProjectSandbox,
+    ProjectSandboxStatus,
+)
+from src.domain.ports.services.sandbox_port import SandboxStatus
 
 
 class TestSandboxInfo:

@@ -5,14 +5,9 @@ TDD: Tests written first (RED phase).
 
 import pytest
 
-from src.infrastructure.agent.permission.errors import (
-    PermissionDeniedError,
-    PermissionRejectedError,
-)
 from src.infrastructure.agent.permission.manager import PermissionManager
 from src.infrastructure.agent.permission.rules import (
     PermissionAction,
-    PermissionRule,
     evaluate_rules,
     sandbox_mcp_ruleset,
 )

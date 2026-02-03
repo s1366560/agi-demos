@@ -7,15 +7,12 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-import pytest
 from datetime import datetime, timezone
-from typing import Set
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import AgentExecutionEvent
-from src.infrastructure.adapters.secondary.persistence.models import (
-    AgentExecutionEvent as DBAgentExecutionEvent,
-)
 from src.infrastructure.adapters.secondary.persistence.v2_sql_agent_execution_event_repository import (
     V2SqlAgentExecutionEventRepository,
 )

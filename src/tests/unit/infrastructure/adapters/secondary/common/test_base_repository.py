@@ -5,13 +5,13 @@ Tests are written FIRST (TDD RED phase).
 These tests MUST FAIL before implementation exists.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from sqlalchemy import Column, String
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import Column, String, select
 from sqlalchemy.orm import DeclarativeBase
 
 

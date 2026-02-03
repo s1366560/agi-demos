@@ -1,13 +1,11 @@
 """Tests for SandboxHealthService."""
 
-import asyncio
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.application.services.sandbox_health_service import (
-    ComponentHealth,
     HealthCheckLevel,
     HealthCheckResult,
     HealthStatus,

@@ -670,6 +670,19 @@ class ProjectAgentWorkflow:
         # This signal resets activity by triggering a new wait
         # The actual implementation would track extended timeout separately
 
+    @workflow.signal
+    def restart(self):
+        """
+        Signal to restart the project agent.
+
+        This signal sets a stop flag that will cause the workflow to
+        stop. The caller is responsible for starting a new workflow instance.
+        """
+        workflow.logger.info(f"Received restart signal: {self._workflow_id}")
+        self._stop_requested = True
+        # Mark as restart (not error) for proper status reporting
+        self._error = None
+
 
 def get_project_agent_workflow_id(
     tenant_id: str,

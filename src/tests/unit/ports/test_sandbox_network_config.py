@@ -1,8 +1,7 @@
 """Tests for Sandbox network configuration."""
 
-import pytest
 
-from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxProvider
+from src.domain.ports.services.sandbox_port import SandboxConfig
 
 
 class TestSandboxNetworkConfig:

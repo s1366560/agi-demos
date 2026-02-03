@@ -8,11 +8,10 @@ Tests the desktop management endpoints:
 TDD: Tests written before implementation.
 """
 
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, Mock
-from httpx import HTTPStatusError
+from unittest.mock import Mock
 
+import pytest
 
 # --- Test Data ---
 
@@ -31,9 +30,9 @@ def create_mock_sandbox_instance(sandbox_id: str):
     mock_instance.status = SandboxStatus.RUNNING
     mock_instance.config = SandboxConfig(image="sandbox-mcp-server:latest")
     mock_instance.project_path = f"/tmp/{sandbox_id}"
-    mock_instance.endpoint = f"ws://localhost:8765"
+    mock_instance.endpoint = "ws://localhost:8765"
     mock_instance.created_at = datetime.now()
-    mock_instance.websocket_url = f"ws://localhost:8765"
+    mock_instance.websocket_url = "ws://localhost:8765"
     mock_instance.mcp_client = None
     return mock_instance
 

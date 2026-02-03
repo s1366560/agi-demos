@@ -14,8 +14,9 @@ Key features tested:
 - Delete operations
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import Conversation, ConversationStatus

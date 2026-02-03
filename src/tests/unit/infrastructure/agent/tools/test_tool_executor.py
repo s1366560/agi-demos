@@ -11,10 +11,7 @@ Tests cover:
 - Singleton management
 """
 
-import asyncio
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -31,7 +28,6 @@ from src.infrastructure.agent.tools.executor import (
     parse_raw_arguments,
     set_tool_executor,
 )
-
 
 # ============================================================================
 # Fixtures

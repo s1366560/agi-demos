@@ -16,27 +16,29 @@ Work Plan Generation:
 """
 
 from src.infrastructure.agent.planning.fast_heuristic_detector import (
-    FastHeuristicDetector,
     DetectionResult as HeuristicDetectionResult,
 )
-from src.infrastructure.agent.planning.llm_classifier import (
-    LLMClassifier,
-    ClassificationResult,
-    ClassificationError,
-)
-from src.infrastructure.agent.planning.llm_cache import (
-    LLMResponseCache,
-    CacheEntry,
+from src.infrastructure.agent.planning.fast_heuristic_detector import (
+    FastHeuristicDetector,
 )
 from src.infrastructure.agent.planning.hybrid_plan_mode_detector import (
-    HybridPlanModeDetector,
     DetectionResult,
+    HybridPlanModeDetector,
+)
+from src.infrastructure.agent.planning.llm_cache import (
+    CacheEntry,
+    LLMResponseCache,
+)
+from src.infrastructure.agent.planning.llm_classifier import (
+    ClassificationError,
+    ClassificationResult,
+    LLMClassifier,
 )
 from src.infrastructure.agent.planning.work_plan_generator import (
-    WorkPlanGenerator,
-    WorkPlan,
     PlanStep,
     QueryAnalysis,
+    WorkPlan,
+    WorkPlanGenerator,
     classify_tool_by_description,
     get_work_plan_generator,
     set_work_plan_generator,

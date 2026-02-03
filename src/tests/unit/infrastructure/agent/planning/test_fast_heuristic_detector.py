@@ -17,7 +17,6 @@ Test Cases:
 - test_detect_with_low_score_below_threshold
 """
 
-import pytest
 
 from src.infrastructure.agent.planning.fast_heuristic_detector import FastHeuristicDetector
 

@@ -5,7 +5,7 @@ pooling and TLS support for production deployments.
 """
 
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 from temporalio.client import Client, TLSConfig
 
@@ -22,6 +22,7 @@ def create_tracing_interceptor():
     """
     try:
         from temporalio.contrib.opentelemetry import TracingInterceptor
+
         from src.infrastructure.telemetry.config import _TRACER_PROVIDER
 
         if _TRACER_PROVIDER is None:

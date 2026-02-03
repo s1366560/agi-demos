@@ -4,8 +4,9 @@ Tests that tools can be added/removed dynamically at runtime
 without restarting the agent.
 """
 
+from typing import Any, Dict
+
 import pytest
-from typing import Any, Dict, Optional
 
 from src.infrastructure.agent.core.react_agent import ReActAgent
 

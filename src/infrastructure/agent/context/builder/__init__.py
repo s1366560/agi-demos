@@ -6,8 +6,8 @@ Provides components for building LLM-ready messages:
 - AttachmentInjector: Add attachment context to messages
 """
 
-from src.infrastructure.agent.context.builder.message_builder import MessageBuilder
 from src.infrastructure.agent.context.builder.attachment_injector import AttachmentInjector
+from src.infrastructure.agent.context.builder.message_builder import MessageBuilder
 
 __all__ = [
     "MessageBuilder",

@@ -5,22 +5,20 @@ TDD: Tests written first, implementation to follow.
 Tests follow RED-GREEN-REFACTOR cycle.
 """
 
-from unittest.mock import Mock
-from typing import Any
 
 import pytest
 
 from src.domain.events.agent_events import (
-    AgentEventType,
-    AgentPlanExecutionStartEvent,
-    AgentPlanExecutionCompleteEvent,
-    AgentPlanStepReadyEvent,
-    AgentPlanStepCompleteEvent,
-    AgentPlanStepSkippedEvent,
-    AgentPlanSnapshotCreatedEvent,
-    AgentPlanRollbackEvent,
-    AgentReflectionCompleteEvent,
     AgentAdjustmentAppliedEvent,
+    AgentEventType,
+    AgentPlanExecutionCompleteEvent,
+    AgentPlanExecutionStartEvent,
+    AgentPlanRollbackEvent,
+    AgentPlanSnapshotCreatedEvent,
+    AgentPlanStepCompleteEvent,
+    AgentPlanStepReadyEvent,
+    AgentPlanStepSkippedEvent,
+    AgentReflectionCompleteEvent,
 )
 
 

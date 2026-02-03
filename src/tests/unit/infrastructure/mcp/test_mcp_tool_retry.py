@@ -5,7 +5,6 @@ Tests the retry mechanism that handles the startup race condition
 where Agent Worker starts before MCP servers are fully initialized.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

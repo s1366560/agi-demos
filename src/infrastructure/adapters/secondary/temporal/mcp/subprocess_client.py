@@ -5,6 +5,20 @@ that communicate via stdin/stdout using the JSON-RPC protocol.
 
 This client is used by MCP Activities in the Temporal Worker to manage
 MCP server subprocesses independently from the API service.
+
+MIGRATION NOTE:
+===============
+The local dataclasses (MCPToolSchema, MCPToolResult) are duplicates of
+domain models. Use the domain adapter for conversions:
+
+    from src.infrastructure.adapters.secondary.temporal.mcp.domain_adapter import (
+        to_domain_tool_result,
+        to_domain_tool_schema,
+    )
+
+Domain models are in:
+- src.domain.model.mcp.tool.MCPToolSchema
+- src.domain.model.mcp.tool.MCPToolResult
 """
 
 import asyncio
@@ -22,7 +36,11 @@ DEFAULT_TIMEOUT = 30
 
 @dataclass
 class MCPToolSchema:
-    """Schema for an MCP tool."""
+    """Schema for an MCP tool.
+
+    DEPRECATED: Use src.domain.model.mcp.tool.MCPToolSchema instead.
+    Kept for Temporal activity serialization compatibility.
+    """
 
     name: str
     description: Optional[str] = None
@@ -31,7 +49,11 @@ class MCPToolSchema:
 
 @dataclass
 class MCPToolResult:
-    """Result from an MCP tool call."""
+    """Result from an MCP tool call.
+
+    DEPRECATED: Use src.domain.model.mcp.tool.MCPToolResult instead.
+    Kept for Temporal activity serialization compatibility.
+    """
 
     content: List[Dict[str, Any]] = field(default_factory=list)
     isError: bool = False

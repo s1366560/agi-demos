@@ -7,10 +7,8 @@ and managing distributed traces.
 import functools
 from typing import Any, Callable, Mapping, Optional
 
-from opentelemetry import trace
-from opentelemetry.trace import Span, Status, StatusCode
+from opentelemetry.trace import NonRecordingSpan, Span, SpanContext, Status, StatusCode
 from opentelemetry.trace import get_current_span as _get_current_span
-from opentelemetry.trace import NonRecordingSpan, SpanContext
 
 from src.infrastructure.telemetry.config import get_tracer
 

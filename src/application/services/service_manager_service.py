@@ -6,9 +6,9 @@
 
 import json
 import logging
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

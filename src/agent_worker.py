@@ -329,30 +329,17 @@ async def main():
         logger.info("Agent Worker: Prewarm task scheduled")
 
     # Import agent-specific workflows and activities
-    from src.infrastructure.adapters.secondary.temporal.activities.agent import (  # New: uses ReActAgent  # Legacy: hardcoded logic
+    from src.infrastructure.adapters.secondary.temporal.activities.agent import (
         clear_agent_running,
-        execute_react_agent_activity,
-        execute_react_step_activity,
         refresh_agent_running_ttl,
         save_checkpoint_activity,
         save_event_activity,
         set_agent_running,
     )
-    from src.infrastructure.adapters.secondary.temporal.activities.agent_session import (
-        cleanup_agent_session_activity,
-        execute_chat_activity,
-        initialize_agent_session_activity,
-    )
     from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
         cleanup_project_agent_activity,
         execute_project_chat_activity,
         initialize_project_agent_activity,
-    )
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent import (
-        AgentExecutionWorkflow,
-    )
-    from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-        AgentSessionWorkflow,
     )
     from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
         ProjectAgentWorkflow,
@@ -363,25 +350,17 @@ async def main():
         temporal_client,
         task_queue=AGENT_TASK_QUEUE,
         workflows=[
-            # Agent workflows
-            AgentExecutionWorkflow,  # Legacy: per-request workflow
-            AgentSessionWorkflow,  # Long-running session workflow
-            ProjectAgentWorkflow,  # New: project-level persistent workflow
+            # Project Agent workflow (primary agent interface)
+            ProjectAgentWorkflow,
         ],
         activities=[
-            # Legacy agent activities
-            execute_react_agent_activity,  # Uses ReActAgent (recommended)
-            execute_react_step_activity,  # Legacy: hardcoded logic
+            # Common agent activities
             save_event_activity,
             save_checkpoint_activity,
             set_agent_running,
             clear_agent_running,
             refresh_agent_running_ttl,
-            # Agent Session activities
-            initialize_agent_session_activity,
-            execute_chat_activity,
-            cleanup_agent_session_activity,
-            # Project Agent activities (new)
+            # Project Agent activities
             initialize_project_agent_activity,
             execute_project_chat_activity,
             cleanup_project_agent_activity,
@@ -394,7 +373,7 @@ async def main():
         f"Agent Worker: Configured with "
         f"{AGENT_WORKER_CONCURRENCY} concurrent activities, "
         f"{AGENT_WORKER_CONCURRENCY} concurrent workflows, "
-        f"3 workflow types (AgentExecution, AgentSession, ProjectAgent)"
+        f"1 workflow type (ProjectAgent)"
     )
 
     # Install signal handlers

@@ -5,16 +5,17 @@ Tests the unified sandbox service orchestration layer.
 """
 
 import json
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, Mock
 
 from src.application.services.sandbox_orchestrator import (
+    CommandResult,
     DesktopConfig,
     DesktopStatus,
+    SandboxOrchestrator,
     TerminalConfig,
     TerminalStatus,
-    CommandResult,
-    SandboxOrchestrator,
 )
 
 

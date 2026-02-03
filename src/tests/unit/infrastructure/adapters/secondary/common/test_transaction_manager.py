@@ -5,11 +5,9 @@ Tests are written FIRST (TDD RED phase).
 These tests MUST FAIL before implementation exists.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Optional
-from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -357,10 +355,11 @@ class TestTransactionManager:
     @pytest.mark.asyncio
     async def test_retry_on_begin_error(self, mock_session):
         """Test retrying transaction on begin() connection error."""
+        from sqlalchemy.exc import DBAPIError
+
         from src.infrastructure.adapters.secondary.common.transaction_manager import (
             TransactionManager,
         )
-        from sqlalchemy.exc import DBAPIError
 
         # First begin fails with transient error, second succeeds
         call_count = 0
@@ -484,10 +483,11 @@ class TestTransactionManager:
     @pytest.mark.asyncio
     async def test_is_transient_error_detection(self, mock_session):
         """Test transient error detection logic."""
+        from sqlalchemy.exc import DBAPIError
+
         from src.infrastructure.adapters.secondary.common.transaction_manager import (
             TransactionManager,
         )
-        from sqlalchemy.exc import DBAPIError
 
         tm = TransactionManager(mock_session)
 

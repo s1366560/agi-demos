@@ -17,13 +17,11 @@ Test Coverage:
 """
 
 import asyncio
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
-from src.domain.model.memory.episode import Episode, SourceType
 from src.infrastructure.adapters.secondary.common.transaction_manager import TransactionManager
 
 

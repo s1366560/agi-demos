@@ -7,8 +7,9 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.project.project import Project
