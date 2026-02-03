@@ -1,8 +1,37 @@
+## [0.2.0] - 2026-02-03
+
+### Changed
+- **Agent Worker 架构重构**: 统一为 ProjectAgentWorkflow
+  - 删除 AgentExecutionWorkflow (~328 行)
+  - 删除 AgentSessionWorkflow (~655 行)
+  - 删除 agent_session.py activities (~1860 行)
+  - 精简 agent.py (~1650 行删减)
+  - 总计删除约 5000+ 行冗余代码
+
+### Added
+- `activities/_shared/` 共享模块
+  - `artifact_handlers.py`: Artifact 存储处理
+  - `event_persistence.py`: 事件持久化
+- ProjectAgentWorkflow 新增 `restart` 信号
+- OpenTelemetry metrics 集成
+  - `project_agent.init_latency_ms` (Histogram)
+  - `project_agent.chat_total` (Counter)
+  - `project_agent.chat_latency_ms` (Histogram)
+  - `project_agent.chat_errors` (Counter)
+  - `project_agent.active_count` (Gauge)
+
+### Migration
+- WebSocket 端点已迁移至 ProjectAgentWorkflow
+- AgentService 已迁移至 ProjectAgentWorkflow
+- 环境变量 `USE_AGENT_SESSION_WORKFLOW` 不再需要
+
+---
+
 ## [0.1.1] - 2026-01-20
 
 ### Added
 - Agent Temporal工作流集成
-  - AgentExecutionWorkflow: 完整的ReAct代理生命周期管理
+  - AgentExecutionWorkflow: 完整的ReAct代理生命周期管理 (已在 0.2.0 删除)
   - Agent执行活动: execute_react_step_activity, save_event_activity, save_checkpoint_activity
   - Agent执行事件持久化 (AgentExecutionEvent)
   - 执行检查点机制 (ExecutionCheckpoint) 用于故障恢复

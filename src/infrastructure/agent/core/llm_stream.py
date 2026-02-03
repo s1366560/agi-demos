@@ -16,6 +16,7 @@ Reference: OpenCode's LLM.stream() in llm.ts
 
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -26,6 +27,16 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 from src.infrastructure.agent.llm.token_sampler import BatchLogBuffer, TokenDeltaSampler
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Module-level configuration (read once at import time)
+# This avoids os.environ access inside Temporal workflow sandbox
+# ============================================================================
+_LLM_LOG_SAMPLE_RATE = float(os.environ.get("LLM_LOG_SAMPLE_RATE", "0.1"))
+_LLM_LOG_MIN_INTERVAL = float(os.environ.get("LLM_LOG_MIN_INTERVAL", "0.5"))
+_LLM_LOG_BUFFER_SIZE = int(os.environ.get("LLM_LOG_BUFFER_SIZE", "100"))
+_LLM_LOG_BUFFER_INTERVAL = float(os.environ.get("LLM_LOG_BUFFER_INTERVAL", "1.0"))
 
 
 # ============================================================================
@@ -370,20 +381,14 @@ class LLMStream:
 
         # P0-2: Batch logging and token delta sampling
         # Get configuration from environment or use defaults
-        import os
-
-        sample_rate = float(os.environ.get("LLM_LOG_SAMPLE_RATE", "0.1"))
-        min_interval = float(os.environ.get("LLM_LOG_MIN_INTERVAL", "0.5"))
-        buffer_size = int(os.environ.get("LLM_LOG_BUFFER_SIZE", "100"))
-        buffer_interval = float(os.environ.get("LLM_LOG_BUFFER_INTERVAL", "1.0"))
-
+        # Note: Read env vars at module load time to avoid Temporal workflow sandbox issues
         self._token_sampler = TokenDeltaSampler(
-            sample_rate=sample_rate,
-            min_sample_interval=min_interval,
+            sample_rate=_LLM_LOG_SAMPLE_RATE,
+            min_sample_interval=_LLM_LOG_MIN_INTERVAL,
         )
         self._log_buffer = BatchLogBuffer(
-            max_size=buffer_size,
-            flush_interval=buffer_interval,
+            max_size=_LLM_LOG_BUFFER_SIZE,
+            flush_interval=_LLM_LOG_BUFFER_INTERVAL,
         )
 
     async def generate(
@@ -679,6 +684,7 @@ class LLMStream:
                         # Fix 1: Handle unescaped control characters
                         # This is the most common issue - LLM returns literal \n instead of \\n
                         try:
+
                             def escape_control_chars(s):
                                 """Escape control characters in a JSON string."""
                                 s = s.replace("\n", "\\n")
@@ -714,12 +720,9 @@ class LLMStream:
                             # Truncation is indicated by:
                             # 1. finish_reason == "length" (token limit reached)
                             # 2. JSON structure is incomplete (missing closing brackets)
-                            is_truncated = (
-                                self._finish_reason == "length"
-                                or (
-                                    ("Unterminated string" in error_str or "Expecting" in error_str)
-                                    and not raw_args.rstrip().endswith("}")
-                                )
+                            is_truncated = self._finish_reason == "length" or (
+                                ("Unterminated string" in error_str or "Expecting" in error_str)
+                                and not raw_args.rstrip().endswith("}")
                             )
 
                             if is_truncated:

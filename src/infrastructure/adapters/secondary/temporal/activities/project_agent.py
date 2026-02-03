@@ -8,6 +8,13 @@ Activities:
 - initialize_project_agent_activity: Initialize project agent and warm caches
 - execute_project_chat_activity: Execute chat using project agent
 - cleanup_project_agent_activity: Cleanup project agent resources
+
+Metrics (via OpenTelemetry):
+- project_agent.init_latency_ms: Initialization latency histogram
+- project_agent.chat_latency_ms: Chat execution latency histogram
+- project_agent.chat_total: Total chat requests counter
+- project_agent.chat_errors: Chat errors counter
+- project_agent.active_count: Active agent instances gauge
 """
 
 import logging
@@ -18,6 +25,7 @@ from typing import Any, Dict, List, Optional
 
 from temporalio import activity
 
+from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
@@ -156,6 +164,18 @@ async def initialize_project_agent_activity(
             _cache_project_agent(agent)
 
             init_time_ms = (time_module.time() - start_time) * 1000
+
+            # Record metrics
+            agent_metrics.observe(
+                "project_agent.init_latency_ms",
+                init_time_ms,
+                labels={"project_id": config.project_id, "cached": "false"},
+            )
+            agent_metrics.set_gauge(
+                "project_agent.active_count",
+                len(_project_agent_instances),
+            )
+
             logger.info(
                 f"[ProjectAgentActivity] Initialized in {init_time_ms:.1f}ms: "
                 f"tools={agent._status.tool_count}, skills={agent._status.skill_count}"
@@ -168,6 +188,10 @@ async def initialize_project_agent_activity(
                 "cached": False,
             }
         else:
+            agent_metrics.increment(
+                "project_agent.init_errors",
+                labels={"project_id": config.project_id},
+            )
             logger.error(
                 f"[ProjectAgentActivity] Initialization failed: {agent._status.last_error}"
             )
@@ -177,6 +201,7 @@ async def initialize_project_agent_activity(
             }
 
     except Exception as e:
+        agent_metrics.increment("project_agent.init_errors")
         logger.error(f"[ProjectAgentActivity] Initialization error: {e}", exc_info=True)
         return {
             "status": "error",
@@ -295,7 +320,22 @@ async def execute_project_chat_activity(
 
         execution_time_ms = (time_module.time() - start_time) * 1000
 
+        # Record metrics
+        agent_metrics.increment(
+            "project_agent.chat_total",
+            labels={"project_id": project_id},
+        )
+        agent_metrics.observe(
+            "project_agent.chat_latency_ms",
+            execution_time_ms,
+            labels={"project_id": project_id},
+        )
+
         if is_error:
+            agent_metrics.increment(
+                "project_agent.chat_errors",
+                labels={"project_id": project_id},
+            )
             logger.warning(
                 f"[ProjectAgentActivity] Chat failed: {error_message}, "
                 f"time={execution_time_ms:.1f}ms"
@@ -317,6 +357,7 @@ async def execute_project_chat_activity(
 
     except Exception as e:
         execution_time_ms = (time_module.time() - start_time) * 1000
+        agent_metrics.increment("project_agent.chat_errors")
         logger.error(f"[ProjectAgentActivity] Chat error: {e}", exc_info=True)
 
         return {

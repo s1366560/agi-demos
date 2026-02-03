@@ -281,71 +281,76 @@ class ProjectAgentConfig:
     enable_subagents: bool = True           # Enable subagent routing
 ```
 
-## Comparison with Previous Architecture
+## Architecture (Post-Refactoring 2026-02)
 
-### Before (AgentSessionWorkflow)
+> **Note**: As of 2026-02, `AgentExecutionWorkflow` and `AgentSessionWorkflow` have been **removed**.
+> `ProjectAgentWorkflow` is now the **only** agent workflow.
 
-- Workflow ID: `agent_{tenant_id}_{project_id}_{agent_mode}`
-- Session-level caching only
-- Less clear lifecycle management
-- No project-level metrics
+### Current Architecture
 
-### After (ProjectAgentWorkflow)
+- **Workflow ID**: `project_agent_{tenant_id}_{project_id}_{agent_mode}`
+- **Lifecycle states**: initialized, active, paused, stopped
+- **Signals**: stop, pause, resume, extend_timeout, restart
+- **Activities**: initialize, execute_chat, cleanup
 
-- Workflow ID: `project_agent_{tenant_id}_{project_id}_{agent_mode}`
-- Project-level instance caching
-- Clear lifecycle states (initialized, active, paused, stopped)
-- Comprehensive project-level metrics
-- Better resource isolation
+### Metrics (OpenTelemetry)
 
-## Migration Guide
+| Metric | Type | Description |
+|--------|------|-------------|
+| `project_agent.init_latency_ms` | Histogram | Agent initialization latency |
+| `project_agent.init_errors` | Counter | Initialization error count |
+| `project_agent.chat_total` | Counter | Total chat requests |
+| `project_agent.chat_latency_ms` | Histogram | Chat execution latency |
+| `project_agent.chat_errors` | Counter | Chat error count |
+| `project_agent.active_count` | Gauge | Active agent instances |
+
+## Usage Guide
 
 ### For Service Layer
 
-Replace calls to `AgentSessionWorkflow` with `ProjectAgentWorkflow`:
+Use `ProjectAgentWorkflow` for all agent interactions:
 
 ```python
-# Old
-from src.infrastructure.adapters.secondary.temporal.workflows.agent_session import (
-    AgentSessionWorkflow,
-    AgentChatRequest,
+from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+    ProjectAgentWorkflow,
+    ProjectAgentWorkflowInput,
+    ProjectChatRequest,
 )
 
+# Start workflow
 handle = await client.start_workflow(
-    AgentSessionWorkflow.run,
-    config,
-    id=f"agent_{tenant_id}_{project_id}_{agent_mode}",
+    ProjectAgentWorkflow.run,
+    ProjectAgentWorkflowInput(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        agent_mode="default",
+    ),
+    id=f"project_agent_{tenant_id}_{project_id}_default",
 )
 
+# Send chat
 result = await handle.execute_update(
-    AgentSessionWorkflow.chat,
-    AgentChatRequest(...),
+    ProjectAgentWorkflow.chat,
+    ProjectChatRequest(
+        conversation_id=conversation_id,
+        user_message=message,
+    ),
 )
 
-# New
-from src.application.services.project_agent_service import (
-    ProjectAgentService,
-    ProjectAgentStartOptions,
-    ProjectAgentChatOptions,
-)
-
-service = ProjectAgentService(client)
-await service.start_project_agent(ProjectAgentStartOptions(...))
-result = await service.chat(ProjectAgentChatOptions(...))
+# Stop/restart
+await handle.signal(ProjectAgentWorkflow.stop)
+await handle.signal(ProjectAgentWorkflow.restart)
 ```
 
 ### For Worker Configuration
 
-The new workflows and activities are automatically registered in `agent_worker.py`:
+Only `ProjectAgentWorkflow` is registered in `agent_worker.py`:
 
 ```python
 workflows=[
-    AgentExecutionWorkflow,      # Legacy
-    AgentSessionWorkflow,        # Legacy
-    ProjectAgentWorkflow,        # New
+    ProjectAgentWorkflow,  # The only agent workflow
 ],
 activities=[
-    # ... existing activities ...
     initialize_project_agent_activity,
     execute_project_chat_activity,
     cleanup_project_agent_activity,
