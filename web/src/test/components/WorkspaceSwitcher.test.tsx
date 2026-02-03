@@ -7,8 +7,12 @@ import { useTenantStore } from '../../stores/tenant'
 import { useProjectStore } from '../../stores/project'
 
 // Mock stores
-vi.mock('../../stores/tenant')
-vi.mock('../../stores/project')
+vi.mock('../../stores/tenant', () => ({
+  useTenantStore: vi.fn(),
+}))
+vi.mock('../../stores/project', () => ({
+  useProjectStore: vi.fn(),
+}))
 
 describe('WorkspaceSwitcher', () => {
     beforeEach(() => {
@@ -29,12 +33,18 @@ describe('WorkspaceSwitcher', () => {
     describe('Tenant Mode', () => {
         it('renders current tenant name', () => {
             const mockCurrentTenant = { id: 't1', name: 'Test Tenant', plan: 'free' }
-            vi.mocked(useTenantStore).mockReturnValue({
-                currentTenant: mockCurrentTenant,
-                tenants: [mockCurrentTenant],
-                listTenants: vi.fn(),
-                setCurrentTenant: vi.fn(),
-            } as any)
+            vi.mocked(useTenantStore).mockImplementation((selector) => {
+                const state = {
+                    currentTenant: mockCurrentTenant,
+                    tenants: [mockCurrentTenant],
+                    listTenants: vi.fn(),
+                    setCurrentTenant: vi.fn(),
+                }
+                if (typeof selector === 'function') {
+                    return selector(state)
+                }
+                return state
+            })
 
             vi.mocked(useProjectStore).mockReturnValue({
                 projects: [],
@@ -48,11 +58,17 @@ describe('WorkspaceSwitcher', () => {
 
         it('opens dropdown on click', () => {
             const mockCurrentTenant = { id: 't1', name: 'Test Tenant' }
-            vi.mocked(useTenantStore).mockReturnValue({
-                currentTenant: mockCurrentTenant,
-                tenants: [mockCurrentTenant, { id: 't2', name: 'Other Tenant' }],
-                listTenants: vi.fn(),
-            } as any)
+            vi.mocked(useTenantStore).mockImplementation((selector) => {
+                const state = {
+                    currentTenant: mockCurrentTenant,
+                    tenants: [mockCurrentTenant, { id: 't2', name: 'Other Tenant' }],
+                    listTenants: vi.fn(),
+                }
+                if (typeof selector === 'function') {
+                    return selector(state)
+                }
+                return state
+            })
 
             vi.mocked(useProjectStore).mockReturnValue({
                 projects: [],
@@ -69,18 +85,30 @@ describe('WorkspaceSwitcher', () => {
     describe('Project Mode', () => {
         it('renders current project name', () => {
             const mockCurrentProject = { id: 'p1', name: 'Test Project' }
-            vi.mocked(useProjectStore).mockReturnValue({
-                projects: [mockCurrentProject],
-                currentProject: mockCurrentProject,
-                listProjects: vi.fn(),
-            } as any)
+            vi.mocked(useProjectStore).mockImplementation((selector) => {
+                const state = {
+                    projects: [mockCurrentProject],
+                    currentProject: mockCurrentProject,
+                    listProjects: vi.fn(),
+                }
+                if (typeof selector === 'function') {
+                    return selector(state)
+                }
+                return state
+            })
 
             // Mock tenant store for "Back to Tenant" check
-            vi.mocked(useTenantStore).mockReturnValue({
-                currentTenant: { id: 't1', name: 'Test Tenant' },
-                tenants: [{ id: 't1', name: 'Test Tenant' }],
-                listTenants: vi.fn(),
-            } as any)
+            vi.mocked(useTenantStore).mockImplementation((selector) => {
+                const state = {
+                    currentTenant: { id: 't1', name: 'Test Tenant' },
+                    tenants: [{ id: 't1', name: 'Test Tenant' }],
+                    listTenants: vi.fn(),
+                }
+                if (typeof selector === 'function') {
+                    return selector(state)
+                }
+                return state
+            })
 
             renderWithRouter(<WorkspaceSwitcher mode="project" />, { route: '/project/p1' })
 
