@@ -10,11 +10,15 @@ import { MemoryRouter } from 'react-router-dom'
 import { SidebarNavItem } from '@/components/layout/SidebarNavItem'
 import type { NavItem } from '@/config/navigation'
 
-// Mock antd Tooltip
+// Mock antd Tooltip and Empty (used by lazyAntd which is imported transitively)
 vi.mock('antd', () => ({
   Tooltip: ({ children, title }: { children: React.ReactNode; title: string }) => (
     <div title={title}>{children}</div>
   ),
+  Empty: {
+    PRESENTED_IMAGE_SIMPLE: 'simple',
+    PRESENTED_IMAGE_DEFAULT: 'default',
+  },
 }))
 
 function renderItem(
