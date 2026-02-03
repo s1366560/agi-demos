@@ -1,7 +1,22 @@
 /**
  * Artifact Components - Rich output display for sandbox/MCP tool artifacts
  *
- * Provides components for rendering different artifact types:
+ * ## Usage
+ *
+ * ### Compound Components (Recommended)
+ * ```tsx
+ * <ArtifactRenderer artifact={artifact}>
+ *   <ArtifactRenderer.Image />
+ *   <ArtifactRenderer.Meta />
+ * </ArtifactRenderer>
+ * ```
+ *
+ * ### Convenience Usage
+ * ```tsx
+ * <ArtifactRenderer artifact={artifact} />
+ * ```
+ *
+ * ## Available Components
  * - Images with preview and zoom
  * - Videos with player controls
  * - Audio with player
@@ -11,7 +26,21 @@
  */
 
 export { ArtifactRenderer } from "./ArtifactRenderer";
-export type { ArtifactRendererProps } from "./ArtifactRenderer";
+export type {
+  ArtifactRendererRootProps,
+  ArtifactImageProps,
+  ArtifactVideoProps,
+  ArtifactAudioProps,
+  ArtifactCodeProps,
+  ArtifactDocumentProps,
+  ArtifactDownloadProps,
+  ArtifactLoadingProps,
+  ArtifactErrorProps,
+  ArtifactMetaProps,
+  ArtifactHeaderProps,
+  ArtifactActionsProps,
+  LegacyArtifactRendererProps as ArtifactRendererProps,
+} from "./types";
 
 export { ImageViewer } from "./ImageViewer";
 export type { ImageViewerProps } from "./ImageViewer";
