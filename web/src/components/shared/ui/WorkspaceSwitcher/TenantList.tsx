@@ -20,7 +20,6 @@ export const TenantList: React.FC<TenantListProps> = ({
     setFocusedIndex,
     registerMenuItemRef,
     getMenuItemRef,
-    menuItemsCount,
     setMenuItemsCount,
   } = useWorkspaceContext()
 

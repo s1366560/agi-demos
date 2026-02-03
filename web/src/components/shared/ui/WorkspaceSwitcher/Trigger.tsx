@@ -14,7 +14,6 @@ export const WorkspaceSwitcherTrigger = forwardRef<HTMLButtonElement, WorkspaceT
       isOpen,
       setIsOpen,
       triggerButtonRef,
-      focusedIndex,
       setFocusedIndex,
       getMenuItemRef,
       menuItemsCount,
@@ -42,6 +41,7 @@ export const WorkspaceSwitcherTrigger = forwardRef<HTMLButtonElement, WorkspaceT
         }, 0)
         return () => clearTimeout(timeoutId)
       }
+      return undefined
     }, [isOpen, menuItemsCount, setFocusedIndex, getMenuItemRef])
 
     const handleClick = () => {

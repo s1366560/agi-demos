@@ -39,7 +39,7 @@ export interface WorkspaceContextValue {
   setMenuItemsCount: (count: number) => void
   registerMenuItemRef: (index: number, ref: HTMLButtonElement | null) => void
   getMenuItemRef: (index: number) => HTMLButtonElement | null
-  triggerButtonRef: React.RefObject<HTMLButtonElement>
+  triggerButtonRef: React.RefObject<HTMLButtonElement | null>
 }
 
 /**

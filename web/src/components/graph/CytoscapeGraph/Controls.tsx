@@ -4,16 +4,14 @@
  * Provides toolbar controls for graph interaction.
  */
 
-import React, { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useGraphContext } from './CytoscapeGraph'
-import type { NodeData } from './types'
 
 // ========================================
 // Props
 // ========================================
 
 interface ControlsProps {
-    onNodeSelect?: (node: NodeData | null) => void
     setCyInstance?: (cy: any) => void
 }
 
@@ -21,18 +19,20 @@ interface ControlsProps {
 // Main Controls Component
 // ========================================
 
-export function CytoscapeGraphControls({ onNodeSelect, setCyInstance }: ControlsProps) {
+export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
     const context = useGraphContext()
     const { nodeCount, edgeCount, config, actions } = context
 
     // Register cy instance callback
     useEffect(() => {
         if (setCyInstance) {
-            const unregister = window.addEventListener('cytoscape-ready', ((e: any) => {
-                setCyInstance(e.detail)
-            }) as EventListener)
-            return () => window.removeEventListener('cytoscape-ready', unregister as EventListener)
+            const handler = (e: Event) => {
+                setCyInstance((e as CustomEvent<any>).detail)
+            }
+            window.addEventListener('cytoscape-ready', handler)
+            return () => window.removeEventListener('cytoscape-ready', handler)
         }
+        return undefined
     }, [setCyInstance])
 
     if (config.features?.showStats === false) {

@@ -36,9 +36,6 @@ import { WorkspaceSwitcherTrigger } from './Trigger'
 import { WorkspaceSwitcherMenu } from './Menu'
 import { TenantList } from './TenantList'
 import { ProjectList } from './ProjectList'
-import { TenantWorkspaceSwitcher } from './TenantWorkspaceSwitcher'
-import { ProjectWorkspaceSwitcher } from './ProjectWorkspaceSwitcher'
-import { WorkspaceProvider, useWorkspaceContext } from './WorkspaceContext'
 import { WorkspaceSwitcher as LegacyWorkspaceSwitcher } from '../WorkspaceSwitcher.legacy'
 
 // Then export them
@@ -47,9 +44,10 @@ export { WorkspaceSwitcherTrigger } from './Trigger'
 export { WorkspaceSwitcherMenu } from './Menu'
 export { TenantList } from './TenantList'
 export { ProjectList } from './ProjectList'
+
+// Re-export convenience components
 export { TenantWorkspaceSwitcher } from './TenantWorkspaceSwitcher'
 export { ProjectWorkspaceSwitcher } from './ProjectWorkspaceSwitcher'
-export { WorkspaceProvider, useWorkspaceContext } from './WorkspaceContext'
 
 // Re-export types
 export type {
@@ -79,7 +77,7 @@ export const WorkspaceSwitcherNamespace = {
 
 // Legacy WorkspaceSwitcher - exported for backward compatibility
 // @deprecated Use TenantWorkspaceSwitcher or ProjectWorkspaceSwitcher instead.
-export { LegacyWorkspaceSwitcher as WorkspaceSwitcherLegacy }
+export const WorkspaceSwitcherLegacy = LegacyWorkspaceSwitcher
 
 // Main export for backward compatibility - redirects to original implementation
 // @deprecated Use TenantWorkspaceSwitcher or ProjectWorkspaceSwitcher instead.

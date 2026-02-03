@@ -2,7 +2,7 @@
  * WorkspaceContext - Shared state for WorkspaceSwitcher compound components
  */
 
-import { createContext, useContext, useRef, useState, useCallback, type RefObject } from 'react'
+import { createContext, useContext, useRef, useState, useCallback } from 'react'
 import type { WorkspaceContextValue, WorkspaceMode } from './types'
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)

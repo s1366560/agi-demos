@@ -73,19 +73,19 @@ interface NodeInfoPanelMarkerProps {
     className?: string
 }
 
-CytoscapeGraph.Viewport = function CytoscapeGraphViewportMarker(props: ViewportMarkerProps) {
+CytoscapeGraph.Viewport = function CytoscapeGraphViewportMarker(_props: ViewportMarkerProps) {
     // This is a marker component - actual rendering happens in parent
     return null
 }
 ;(CytoscapeGraph.Viewport as any)[VIEWPORT_SYMBOL] = true
 
-CytoscapeGraph.Controls = function CytoscapeGraphControlsMarker(props: ControlsMarkerProps) {
+CytoscapeGraph.Controls = function CytoscapeGraphControlsMarker(_props: ControlsMarkerProps) {
     // This is a marker component - actual rendering happens in parent
     return null
 }
 ;(CytoscapeGraph.Controls as any)[CONTROLS_SYMBOL] = true
 
-CytoscapeGraph.NodeInfoPanel = function CytoscapeGraphNodeInfoPanelMarker(props: NodeInfoPanelMarkerProps) {
+CytoscapeGraph.NodeInfoPanel = function CytoscapeGraphNodeInfoPanelMarker(_props: NodeInfoPanelMarkerProps) {
     // This is a marker component - actual rendering happens in parent
     return null
 }
@@ -209,7 +209,6 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
 
     // Extract props from sub-components
     const viewportProps = viewportChild?.props || {}
-    const controlsProps = controlsChild?.props || {}
     const nodeInfoPanelProps = nodeInfoPanelChild?.props || {}
 
     // Merge viewport props with config
@@ -250,7 +249,6 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
                 <div className="flex flex-col h-full relative">
                     {controlsChild && (
                         <ControlsComponent
-                            onNodeSelect={viewportProps.onNodeClick || handleNodeClick}
                             setCyInstance={setCyInstance}
                         />
                     )}
@@ -275,7 +273,6 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
                     )}
                     {!controlsChild && config.features?.showToolbar !== false && (
                         <ControlsComponent
-                            onNodeSelect={viewportProps.onNodeClick || handleNodeClick}
                             setCyInstance={setCyInstance}
                         />
                     )}
@@ -293,7 +290,6 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
             <div className="flex flex-col h-full">
                 {config.features?.showToolbar !== false && (
                     <ControlsComponent
-                        onNodeSelect={handleNodeClick}
                         setCyInstance={setCyInstance}
                     />
                 )}

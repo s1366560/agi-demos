@@ -4,7 +4,6 @@
  * Displays details about the selected graph node.
  */
 
-import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGraphContext } from './CytoscapeGraph'
 import type { NodeData } from './types'

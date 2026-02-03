@@ -7,7 +7,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { graphService } from '@/services/graphService'
 import { useThemeStore } from '@/stores/theme'
-import { useGraphContext } from './CytoscapeGraph'
 import { toCytoscapeLayoutOptions, generateCytoscapeStyles, THEME_COLORS } from './Config'
 import type { GraphConfig, NodeData } from './types'
 import type { CytoscapeElement } from './types'
