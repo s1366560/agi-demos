@@ -82,6 +82,7 @@ class ProjectAgentWorkflowInput:
     # Session Configuration
     # Note: persistent=True means the workflow runs indefinitely until explicitly stopped
     persistent: bool = True  # Agent runs forever until explicitly stopped
+    idle_timeout_seconds: int = 3600  # 1 hour idle timeout
     max_concurrent_chats: int = 10
 
     # Tool Configuration
@@ -103,6 +104,9 @@ class ProjectChatRequest:
 
     # Conversation context (last N messages)
     conversation_context: List[Dict[str, Any]] = field(default_factory=list)
+
+    # Attachment IDs for this message
+    attachment_ids: Optional[List[str]] = None
 
     # Optional configuration overrides for this request
     temperature: Optional[float] = None
@@ -299,9 +303,10 @@ class ProjectAgentWorkflow:
 
     async def _initialize_agent(self) -> bool:
         """Initialize the project agent via activity."""
-        from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
-            initialize_project_agent_activity,
-        )
+        with workflow.unsafe.imports_passed_through():
+            from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
+                initialize_project_agent_activity,
+            )
 
         workflow.logger.info(f"Initializing project agent: {self._workflow_id}")
 
@@ -389,9 +394,10 @@ class ProjectAgentWorkflow:
 
     async def _cleanup(self) -> None:
         """Cleanup resources before workflow exit."""
-        from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
-            cleanup_project_agent_activity,
-        )
+        with workflow.unsafe.imports_passed_through():
+            from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
+                cleanup_project_agent_activity,
+            )
 
         workflow.logger.info(f"Cleaning up project agent: {self._workflow_id}")
 
@@ -413,9 +419,6 @@ class ProjectAgentWorkflow:
         """Build final workflow status."""
         uptime_seconds = 0.0
         if self._created_at:
-            workflow.now() - workflow.parse_duration(
-                f"PT{(workflow.now() - workflow.datetime.fromisoformat(self._created_at)).total_seconds()}S"
-            )
             uptime_seconds = (
                 workflow.now() - workflow.datetime.fromisoformat(self._created_at)
             ).total_seconds()
@@ -472,9 +475,10 @@ class ProjectAgentWorkflow:
         )
 
         try:
-            from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
-                execute_project_chat_activity,
-            )
+            with workflow.unsafe.imports_passed_through():
+                from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
+                    execute_project_chat_activity,
+                )
 
             # Build config with optional overrides
             config = {

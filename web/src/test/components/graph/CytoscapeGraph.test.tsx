@@ -194,7 +194,7 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
 
         it('should handle node click through composite API', async () => {
             const onNodeClick = vi.fn()
-            let nodeClickHandler: ((node: NodeData | null) => void) | null = null
+            const nodeClickHandler: ((node: NodeData | null) => void) | null = null
 
             // Capture the onNodeClick callback
             // graphService is imported from mocks

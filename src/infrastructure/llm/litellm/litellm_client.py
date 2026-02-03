@@ -518,8 +518,8 @@ class LiteLLMClient(LLMClient):
         elif provider_type == "deepseek":
             return f"deepseek/{model}"
         elif provider_type == "zai":
-            # ZhipuAI uses OpenAI-compatible API
-            return f"openai/{model}"
+            # ZhipuAI requires explicit provider prefix for LiteLLM
+            return f"zhipu/{model}"
         elif provider_type == "kimi":
             # Moonshot AI (Kimi) uses OpenAI-compatible API
             return f"openai/{model}"

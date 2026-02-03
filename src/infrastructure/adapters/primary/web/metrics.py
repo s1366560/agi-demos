@@ -17,17 +17,40 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
-# Try to import OpenTelemetry metrics if available
-try:
-    from src.infrastructure.telemetry import (
-        create_counter,
-        create_histogram,
-        increment_counter,
-        record_histogram_value,
-    )
-    OTEL_AVAILABLE = True
-except ImportError:
-    OTEL_AVAILABLE = False
+# Lazy-loaded OpenTelemetry functions (avoid import at module load for Temporal sandbox compatibility)
+_otel_functions: dict[str, Any] = {}
+_otel_checked = False
+
+
+def _get_otel_function(name: str) -> Callable | None:
+    """Lazy-load OpenTelemetry function to avoid Temporal sandbox import issues."""
+    global _otel_functions, _otel_checked
+
+    if not _otel_checked:
+        _otel_checked = True
+        try:
+            from src.infrastructure.telemetry import (
+                create_counter,
+                create_histogram,
+                increment_counter,
+                record_histogram_value,
+            )
+            _otel_functions = {
+                "create_counter": create_counter,
+                "create_histogram": create_histogram,
+                "increment_counter": increment_counter,
+                "record_histogram_value": record_histogram_value,
+            }
+        except ImportError:
+            _otel_functions = {}
+
+    return _otel_functions.get(name)
+
+
+def _is_otel_available() -> bool:
+    """Check if OpenTelemetry is available (lazy check)."""
+    _get_otel_function("increment_counter")  # Trigger lazy load
+    return bool(_otel_functions)
 
 
 @dataclass
@@ -60,7 +83,7 @@ class AgentMetrics:
         self._gauges: defaultdict[str, list[float]] = defaultdict(list)
         self._histograms: defaultdict[str, list[float]] = defaultdict(list)
         self._labels: dict[str, dict[str, str]] = {}
-        self._enable_otel = enable_otel and OTEL_AVAILABLE
+        self._enable_otel = enable_otel
 
     def increment(self, name: str, value: int = 1, labels: dict[str, str] | None = None):
         """
@@ -75,10 +98,12 @@ class AgentMetrics:
         self._counters[key] += value
         self._labels[key] = labels or {}
 
-        # Also export to OpenTelemetry
-        if self._enable_otel:
-            metric_name = name.replace(".", "_")
-            increment_counter(f"agent_{metric_name}", f"Agent {metric_name}", amount=value, attributes=labels or {})
+        # Also export to OpenTelemetry (lazy load)
+        if self._enable_otel and _is_otel_available():
+            increment_counter_fn = _get_otel_function("increment_counter")
+            if increment_counter_fn:
+                metric_name = name.replace(".", "_")
+                increment_counter_fn(f"agent_{metric_name}", f"Agent {metric_name}", amount=value, attributes=labels or {})
 
     def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None):
         """
@@ -106,10 +131,12 @@ class AgentMetrics:
         self._histograms[key].append(value)
         self._labels[key] = labels or {}
 
-        # Also export to OpenTelemetry
-        if self._enable_otel:
-            metric_name = name.replace(".", "_")
-            record_histogram_value(f"agent_{metric_name}", f"Agent {metric_name}", value, attributes=labels or {})
+        # Also export to OpenTelemetry (lazy load)
+        if self._enable_otel and _is_otel_available():
+            record_histogram_fn = _get_otel_function("record_histogram_value")
+            if record_histogram_fn:
+                metric_name = name.replace(".", "_")
+                record_histogram_fn(f"agent_{metric_name}", f"Agent {metric_name}", value, attributes=labels or {})
 
     def get_counter(self, name: str, labels: dict[str, str] | None = None) -> int:
         """Get counter value."""

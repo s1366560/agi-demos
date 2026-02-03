@@ -104,6 +104,7 @@ class ProjectAgentConfig:
     # Session Configuration
     # Note: Agent now runs persistently until explicitly stopped
     persistent: bool = True  # Agent runs forever until explicitly stopped
+    idle_timeout_seconds: int = 3600  # 1 hour idle timeout
     max_concurrent_chats: int = 10
 
     # Tool Configuration
@@ -282,7 +283,7 @@ class ProjectReActAgent:
             logger.info(f"ProjectReActAgent[{self.project_key}]: Initializing...")
 
             # Import dependencies here to avoid circular imports
-            from src.configuration.di_container import Container
+            from src.configuration.di_container import DIContainer as Container
             from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
                 get_agent_graph_service,
                 get_or_create_agent_session,

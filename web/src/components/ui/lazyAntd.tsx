@@ -43,7 +43,7 @@ function createLazyComponent<T extends ComponentType<any>>(
   return LazyComponent as ComponentType<any>
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 export function withSuspense<P extends object>(
   LazyComponent: ComponentType<P>,
   fallback: ReactNode = <DefaultFallback />
