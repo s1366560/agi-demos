@@ -13,7 +13,6 @@ from src.configuration.factories import create_native_graph_adapter
 from src.infrastructure.adapters.primary.web.dependencies import initialize_default_credentials
 from src.infrastructure.adapters.primary.web.routers import (
     agent,
-    agent_websocket,
     ai_tools,
     artifacts,
     attachments_upload,
@@ -43,6 +42,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenants,
     terminal,
 )
+from src.infrastructure.adapters.primary.web.websocket import router as websocket_router
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
     initialize_database,
@@ -226,7 +226,7 @@ async def lifespan(app: FastAPI):
     app.state.graph_service = graph_service
 
     # Register WebSocket manager for lifecycle state notifications
-    from src.infrastructure.adapters.primary.web.routers.agent_websocket import (
+    from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
         get_connection_manager,
     )
     from src.infrastructure.agent.core.project_react_agent import (
@@ -426,7 +426,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(tenants.router)
     app.include_router(projects.router)
     app.include_router(agent.router)
-    app.include_router(agent_websocket.router)  # WebSocket for agent chat
+    app.include_router(websocket_router)  # WebSocket for agent chat
     app.include_router(shares.router)
     app.include_router(memories.router)
     app.include_router(graph.router)

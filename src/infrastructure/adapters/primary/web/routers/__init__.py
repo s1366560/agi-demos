@@ -1,7 +1,6 @@
 """FastAPI routers for the MemStack API."""
 
 from src.infrastructure.adapters.primary.web.routers import (
-    agent_websocket,
     ai_tools,
     auth,
     background_tasks,
@@ -25,8 +24,10 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenants,
 )
 
+# agent_websocket is imported lazily to avoid circular imports
+# with the new websocket module
+
 __all__ = [
-    "agent_websocket",
     "auth",
     "tenants",
     "projects",

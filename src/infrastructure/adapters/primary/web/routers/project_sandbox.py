@@ -300,8 +300,11 @@ async def ensure_project_sandbox(
 
         # Also broadcast via WebSocket for real-time sync
         try:
-            from src.infrastructure.adapters.primary.web.routers.agent_websocket import manager
+            from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+                get_connection_manager,
+            )
 
+            manager = get_connection_manager()
             await manager.broadcast_sandbox_state(
                 tenant_id=tenant_id,
                 project_id=project_id,
@@ -481,8 +484,11 @@ async def restart_project_sandbox(
 
         # Also broadcast via WebSocket for real-time sync
         try:
-            from src.infrastructure.adapters.primary.web.routers.agent_websocket import manager
+            from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+                get_connection_manager,
+            )
 
+            manager = get_connection_manager()
             # Get tenant_id from current user context
             await manager.broadcast_sandbox_state(
                 tenant_id=current_user.current_tenant_id or "",
@@ -543,8 +549,11 @@ async def terminate_project_sandbox(
 
         # Also broadcast via WebSocket for real-time sync
         try:
-            from src.infrastructure.adapters.primary.web.routers.agent_websocket import manager
+            from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+                get_connection_manager,
+            )
 
+            manager = get_connection_manager()
             await manager.broadcast_sandbox_state(
                 tenant_id=current_user.current_tenant_id or "",
                 project_id=project_id,
