@@ -140,7 +140,7 @@ def _calculate_delay(
         Delay in seconds
     """
     # Exponential backoff: base_delay * 2^attempt
-    delay = base_delay * (2 ** attempt)
+    delay = base_delay * (2**attempt)
 
     # Cap at max_delay
     delay = min(delay, max_delay)
@@ -212,10 +212,7 @@ async def retry_with_backoff(
             # Calculate delay for next retry
             delay = _calculate_delay(attempt, base_delay, max_delay, jitter)
 
-            logger.debug(
-                f"Retry {attempt + 1}/{max_retries} after {delay:.2f}s "
-                f"due to error: {e}"
-            )
+            logger.debug(f"Retry {attempt + 1}/{max_retries} after {delay:.2f}s due to error: {e}")
 
             # Call on_retry callback if provided
             if on_retry:
@@ -261,7 +258,9 @@ def retry_decorator(
             return await risky_operation()
     """
 
-    def decorator(func: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., Coroutine[Any, Any, T]]:
+    def decorator(
+        func: Callable[..., Coroutine[Any, Any, T]],
+    ) -> Callable[..., Coroutine[Any, Any, T]]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             async def bound_func() -> T:

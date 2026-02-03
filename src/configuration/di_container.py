@@ -55,6 +55,12 @@ from src.application.use_cases.task import (
     UpdateTaskUseCase,
 )
 from src.configuration.config import get_settings
+from src.domain.ports.repositories.api_key_repository import APIKeyRepository
+from src.domain.ports.repositories.memory_repository import MemoryRepository
+from src.domain.ports.repositories.project_repository import ProjectRepository
+from src.domain.ports.repositories.task_repository import TaskRepository
+from src.domain.ports.repositories.tenant_repository import TenantRepository
+from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.sandbox_resource_port import (
@@ -63,71 +69,79 @@ from src.domain.ports.services.sandbox_resource_port import (
 
 # Workflow Engine Port
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+
+# V2 Repositories - All using BaseRepository pattern
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
-    SqlAlchemyAgentExecutionEventRepository,
+    SqlAgentExecutionEventRepository,
 )
-
-# Infrastructure adapters
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
-    SqlAlchemyAgentExecutionRepository,
+    SqlAgentExecutionRepository,
 )
-
-# Infrastructure adapters
-# Domain ports
-# Repositories
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
-    SqlAlchemyAPIKeyRepository,
+    SqlAPIKeyRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-    SqlAlchemyConversationRepository,
+    SqlConversationRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
-    SqlAlchemyExecutionCheckpointRepository,
+    SqlExecutionCheckpointRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-    SQLHITLRequestRepository,
+    SqlHITLRequestRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
-    SqlAlchemyMemoryRepository,
+    SqlMemoryRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_plan_execution_repository import (
+    SqlPlanExecutionRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
+    SqlPlanRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_plan_snapshot_repository import (
+    SqlPlanSnapshotRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
-    SqlAlchemyProjectRepository,
+    SqlProjectRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-    SqlAlchemyProjectSandboxRepository,
+    SqlProjectSandboxRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-    SQLSkillRepository,
+    SqlSkillRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
-    SQLSubAgentRepository,
+    SqlSubAgentRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_task_repository import (
-    SqlAlchemyTaskRepository,
+    SqlTaskRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-    SQLTenantAgentConfigRepository,
+    SqlTenantAgentConfigRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_repository import (
-    SqlAlchemyTenantRepository,
+    SqlTenantRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_tenant_skill_config_repository import (
+    SqlTenantSkillConfigRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
-    SQLToolCompositionRepository,
+    SqlToolCompositionRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-    SQLToolEnvironmentVariableRepository,
+    SqlToolEnvironmentVariableRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
-    SqlAlchemyToolExecutionRecordRepository,
+    SqlToolExecutionRecordRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
-    SqlAlchemyUserRepository,
+    SqlUserRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_work_plan_repository import (
-    SQLWorkPlanRepository,
+    SqlWorkPlanRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
-    SQLWorkflowPatternRepository,
+    SqlWorkflowPatternRepository,
 )
 
 # MCP Temporal Infrastructure
@@ -227,105 +241,89 @@ class DIContainer:
             default_cpu_limit=settings.sandbox_cpu_limit,
         )
 
-    # === Repositories ===
+    # === Repositories (All V2 BaseRepository pattern) ===
 
-    def memory_repository(self) -> SqlAlchemyMemoryRepository:
-        return SqlAlchemyMemoryRepository(self._db)
+    def memory_repository(self) -> MemoryRepository:
+        return SqlMemoryRepository(self._db)
 
-    def user_repository(self) -> SqlAlchemyUserRepository:
-        return SqlAlchemyUserRepository(self._db)
+    def user_repository(self) -> UserRepository:
+        return SqlUserRepository(self._db)
 
-    def project_repository(self) -> SqlAlchemyProjectRepository:
-        return SqlAlchemyProjectRepository(self._db)
+    def project_repository(self) -> ProjectRepository:
+        return SqlProjectRepository(self._db)
 
-    def task_repository(self) -> SqlAlchemyTaskRepository:
-        return SqlAlchemyTaskRepository(self._db)
+    def task_repository(self) -> TaskRepository:
+        return SqlTaskRepository(self._db)
 
-    def tenant_repository(self) -> SqlAlchemyTenantRepository:
-        return SqlAlchemyTenantRepository(self._db)
+    def tenant_repository(self) -> TenantRepository:
+        return SqlTenantRepository(self._db)
 
-    def api_key_repository(self) -> SqlAlchemyAPIKeyRepository:
-        return SqlAlchemyAPIKeyRepository(self._db)
+    def api_key_repository(self) -> APIKeyRepository:
+        return SqlAPIKeyRepository(self._db)
 
     # === Agent Repositories ===
 
-    def conversation_repository(self) -> SqlAlchemyConversationRepository:
-        return SqlAlchemyConversationRepository(self._db)
+    def conversation_repository(self) -> SqlConversationRepository:
+        return SqlConversationRepository(self._db)
 
-    def agent_execution_repository(self) -> SqlAlchemyAgentExecutionRepository:
-        return SqlAlchemyAgentExecutionRepository(self._db)
+    def agent_execution_repository(self) -> SqlAgentExecutionRepository:
+        return SqlAgentExecutionRepository(self._db)
 
-    def tool_execution_record_repository(self) -> SqlAlchemyToolExecutionRecordRepository:
-        return SqlAlchemyToolExecutionRecordRepository(self._db)
+    def tool_execution_record_repository(self) -> SqlToolExecutionRecordRepository:
+        return SqlToolExecutionRecordRepository(self._db)
 
-    def agent_execution_event_repository(self) -> SqlAlchemyAgentExecutionEventRepository:
-        return SqlAlchemyAgentExecutionEventRepository(self._db)
+    def agent_execution_event_repository(self) -> SqlAgentExecutionEventRepository:
+        return SqlAgentExecutionEventRepository(self._db)
 
-    def execution_checkpoint_repository(self) -> SqlAlchemyExecutionCheckpointRepository:
-        return SqlAlchemyExecutionCheckpointRepository(self._db)
+    def execution_checkpoint_repository(self) -> SqlExecutionCheckpointRepository:
+        return SqlExecutionCheckpointRepository(self._db)
 
-    def work_plan_repository(self) -> SQLWorkPlanRepository:
-        return SQLWorkPlanRepository(self._db)
+    def work_plan_repository(self) -> SqlWorkPlanRepository:
+        return SqlWorkPlanRepository(self._db)
 
-    def workflow_pattern_repository(self) -> SQLWorkflowPatternRepository:
-        return SQLWorkflowPatternRepository(self._db)
+    def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
+        return SqlWorkflowPatternRepository(self._db)
 
-    def project_sandbox_repository(self) -> SqlAlchemyProjectSandboxRepository:
-        return SqlAlchemyProjectSandboxRepository(self._db)
+    def project_sandbox_repository(self) -> SqlProjectSandboxRepository:
+        return SqlProjectSandboxRepository(self._db)
 
-    def tool_composition_repository(self) -> SQLToolCompositionRepository:
-        return SQLToolCompositionRepository(self._db)
+    def tool_composition_repository(self) -> SqlToolCompositionRepository:
+        return SqlToolCompositionRepository(self._db)
 
-    def tool_environment_variable_repository(self) -> SQLToolEnvironmentVariableRepository:
-        """Get SQLToolEnvironmentVariableRepository for tool env var persistence."""
-        return SQLToolEnvironmentVariableRepository(self._db)
+    def tool_environment_variable_repository(self) -> SqlToolEnvironmentVariableRepository:
+        """Get SqlToolEnvironmentVariableRepository for tool env var persistence."""
+        return SqlToolEnvironmentVariableRepository(self._db)
 
-    def hitl_request_repository(self) -> SQLHITLRequestRepository:
-        """Get SQLHITLRequestRepository for HITL request persistence."""
-        return SQLHITLRequestRepository(self._db)
+    def hitl_request_repository(self) -> SqlHITLRequestRepository:
+        """Get SqlHITLRequestRepository for HITL request persistence."""
+        return SqlHITLRequestRepository(self._db)
 
-    def tenant_agent_config_repository(self) -> SQLTenantAgentConfigRepository:
-        return SQLTenantAgentConfigRepository(self._db)
+    def tenant_agent_config_repository(self) -> SqlTenantAgentConfigRepository:
+        return SqlTenantAgentConfigRepository(self._db)
 
-    def skill_repository(self) -> SQLSkillRepository:
-        """Get SQLSkillRepository for skill persistence."""
-        return SQLSkillRepository(self._db)
+    def skill_repository(self) -> SqlSkillRepository:
+        """Get SqlSkillRepository for skill persistence."""
+        return SqlSkillRepository(self._db)
 
-    def tenant_skill_config_repository(self):
-        """Get SQLTenantSkillConfigRepository for tenant skill config persistence."""
-        from src.infrastructure.adapters.secondary.persistence.sql_tenant_skill_config_repository import (
-            SQLTenantSkillConfigRepository,
-        )
+    def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
+        """Get SqlTenantSkillConfigRepository for tenant skill config persistence."""
+        return SqlTenantSkillConfigRepository(self._db)
 
-        return SQLTenantSkillConfigRepository(self._db)
+    def subagent_repository(self) -> SqlSubAgentRepository:
+        """Get SqlSubAgentRepository for subagent persistence."""
+        return SqlSubAgentRepository(self._db)
 
-    def subagent_repository(self) -> SQLSubAgentRepository:
-        """Get SQLSubAgentRepository for subagent persistence."""
-        return SQLSubAgentRepository(self._db)
-
-    def plan_repository(self):
+    def plan_repository(self) -> SqlPlanRepository:
         """Get SqlPlanRepository for plan document persistence."""
-        from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
-            SqlPlanRepository,
-        )
-
         return SqlPlanRepository(self._db)
 
-    def plan_execution_repository(self):
-        """Get SQLPlanExecutionRepository for unified plan execution persistence."""
-        from src.infrastructure.adapters.secondary.persistence.sql_plan_execution_repository import (
-            SQLPlanExecutionRepository,
-        )
+    def plan_execution_repository(self) -> SqlPlanExecutionRepository:
+        """Get SqlPlanExecutionRepository for unified plan execution persistence."""
+        return SqlPlanExecutionRepository(self._db)
 
-        return SQLPlanExecutionRepository(self._db)
-
-    def plan_snapshot_repository(self):
-        """Get SQLPlanSnapshotRepository for plan snapshot persistence."""
-        from src.infrastructure.adapters.secondary.persistence.sql_plan_snapshot_repository import (
-            SQLPlanSnapshotRepository,
-        )
-
-        return SQLPlanSnapshotRepository(self._db)
+    def plan_snapshot_repository(self) -> SqlPlanSnapshotRepository:
+        """Get SqlPlanSnapshotRepository for plan snapshot persistence."""
+        return SqlPlanSnapshotRepository(self._db)
 
     # === Infrastructure ===
 
@@ -402,10 +400,10 @@ class DIContainer:
     def attachment_repository(self):
         """Get AttachmentRepository for attachment persistence."""
         from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
-            SqlAlchemyAttachmentRepository,
+            SqlAttachmentRepository,
         )
 
-        return SqlAlchemyAttachmentRepository(self._db)
+        return SqlAttachmentRepository(self._db)
 
     def attachment_service(self):
         """Get AttachmentService for file upload handling.

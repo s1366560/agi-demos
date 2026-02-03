@@ -34,9 +34,7 @@ class SlowQueryError(Exception):
         self.query = query
         self.duration_ms = duration_ms
         self.threshold_ms = threshold_ms
-        super().__init__(
-            f"Slow query detected: {duration_ms}ms > {threshold_ms}ms - {query[:100]}"
-        )
+        super().__init__(f"Slow query detected: {duration_ms}ms > {threshold_ms}ms - {query[:100]}")
 
 
 @dataclass
@@ -388,7 +386,9 @@ class QueryMonitor:
             self._query_counts[query_hash] += 1
 
             # Log slow query
-            if self._config.log_slow_queries and query_info.is_slow(self._config.slow_query_threshold_ms):
+            if self._config.log_slow_queries and query_info.is_slow(
+                self._config.slow_query_threshold_ms
+            ):
                 logger.warning(
                     f"Slow query in '{self._name}': {duration_ms:.2f}ms - {query_text[:200]}"
                 )
@@ -410,9 +410,7 @@ class QueryMonitor:
         """
         threshold = threshold_ms or self._config.slow_query_threshold_ms
 
-        slow_queries = [
-            q for q in self._query_history if q.is_slow(threshold)
-        ]
+        slow_queries = [q for q in self._query_history if q.is_slow(threshold)]
 
         # Sort by duration (slowest first)
         slow_queries.sort(key=lambda q: q.duration_ms, reverse=True)
@@ -495,9 +493,7 @@ class QueryMonitor:
                 "failed_queries": self._stats.failed_queries,
                 "avg_duration_ms": round(self._stats.avg_duration_ms, 2),
             },
-            "slow_queries": [
-                q.to_dict() for q in self.get_slowest_queries(5)
-            ],
+            "slow_queries": [q.to_dict() for q in self.get_slowest_queries(5)],
             "frequent_queries": self.get_most_frequent_queries(5),
             "statistics": self._stats.to_dict(),
         }
@@ -596,10 +592,7 @@ class QueryMonitorRegistry:
     async def get_all_dashboard_data(self) -> Dict[str, Any]:
         """Get dashboard data for all monitors."""
         async with self._lock:
-            return {
-                name: monitor.get_dashboard_data()
-                for name, monitor in self._monitors.items()
-            }
+            return {name: monitor.get_dashboard_data() for name, monitor in self._monitors.items()}
 
     async def reset_all(self) -> None:
         """Reset all monitors."""

@@ -1,8 +1,5 @@
 """
-SQLAlchemy implementation of HITLRequestRepository.
-
-Provides persistence for Human-in-the-Loop requests with tenant
-and project-level isolation for multi-tenant support.
+V2 SQLAlchemy implementation of HITLRequestRepository using BaseRepository.
 """
 
 import logging
@@ -20,19 +17,25 @@ from src.domain.model.agent.hitl_request import (
 from src.domain.ports.repositories.hitl_request_repository import (
     HITLRequestRepositoryPort,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SQLHITLRequestRepository(HITLRequestRepositoryPort):
+class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestRepositoryPort):
     """
-    SQLAlchemy implementation of HITLRequestRepository.
+    V2 SQLAlchemy implementation of HITLRequestRepository using BaseRepository.
 
     Provides CRUD operations for HITL requests with
     tenant and project-level isolation.
     """
 
-    def __init__(self, session: AsyncSession):
+    # This repository doesn't use a standard model for CRUD
+    _model_class = None
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
         self._session = session
 
     async def create(self, request: HITLRequest) -> HITLRequest:

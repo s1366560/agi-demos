@@ -12,7 +12,11 @@ This package provides shared functionality for all repository implementations:
 - Query Monitor: Performance tracking and optimization
 """
 
-from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
+from src.infrastructure.adapters.secondary.common.base_repository import (
+    BaseRepository,
+    handle_db_errors,
+    transactional,
+)
 from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
     CachedRepositoryMixin,
 )
@@ -57,6 +61,9 @@ __all__ = [
     "CachedRepositoryMixin",
     "QueryBuilder",
     "TransactionManager",
+    # Decorators
+    "handle_db_errors",
+    "transactional",
     # Health check
     "HealthCheckError",
     "HealthStatus",

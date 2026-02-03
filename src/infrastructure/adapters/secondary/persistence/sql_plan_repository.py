@@ -1,5 +1,5 @@
 """
-SQLAlchemy implementation of PlanRepository.
+V2 SQLAlchemy implementation of PlanRepository using BaseRepository.
 """
 
 import logging
@@ -12,17 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.plan import Plan, PlanDocumentStatus
 from src.domain.ports.repositories.plan_repository import PlanRepository
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import Conversation as DBConversation
 from src.infrastructure.adapters.secondary.persistence.models import PlanDocument as DBPlanDocument
 
 logger = logging.getLogger(__name__)
 
 
-class SqlPlanRepository(PlanRepository):
-    """SQLAlchemy implementation of PlanRepository."""
+class SqlPlanRepository(BaseRepository[Plan, DBPlanDocument], PlanRepository):
+    """V2 SQLAlchemy implementation of PlanRepository using BaseRepository."""
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
+    _model_class = DBPlanDocument
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
 
     async def save(self, plan: Plan) -> None:
         """Save a plan using PostgreSQL upsert (ON CONFLICT DO UPDATE)."""

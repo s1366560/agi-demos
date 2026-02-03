@@ -28,7 +28,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
-    SqlAlchemyAttachmentRepository,
+    SqlAttachmentRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ async def get_attachment_service(
     session: AsyncSession = Depends(get_db),
 ) -> AttachmentService:
     """Get attachment service with per-request database session."""
-    repository = SqlAlchemyAttachmentRepository(session)
+    repository = SqlAttachmentRepository(session)
     return AttachmentService(
         storage_service=_get_storage_service(),
         attachment_repository=repository,

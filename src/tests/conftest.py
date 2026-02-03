@@ -28,16 +28,16 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, Tenant
-from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
-    SqlAlchemyAPIKeyRepository,
-)
 
-# Repository implementations
+# V2 Repository implementations
+from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
+    SqlAPIKeyRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_task_repository import (
-    SqlAlchemyTaskRepository,
+    SqlTaskRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
-    SqlAlchemyUserRepository,
+    SqlUserRepository,
 )
 
 # Constants
@@ -269,19 +269,19 @@ def test_project() -> dict:
 @pytest.fixture
 def task_repository(test_db):
     """Create a task repository for testing."""
-    return SqlAlchemyTaskRepository(test_db)
+    return SqlTaskRepository(test_db)
 
 
 @pytest.fixture
 def user_repository(test_db):
     """Create a user repository for testing."""
-    return SqlAlchemyUserRepository(test_db)
+    return SqlUserRepository(test_db)
 
 
 @pytest.fixture
 def api_key_repository(test_db):
     """Create an API key repository for testing."""
-    return SqlAlchemyAPIKeyRepository(test_db)
+    return SqlAPIKeyRepository(test_db)
 
 
 @pytest.fixture
@@ -289,12 +289,12 @@ def test_memory_repository(test_db):
     """Create a memory repository for testing (if exists)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
-            SQLMemoryRepository,
+            SqlMemoryRepository,
         )
 
-        return SQLMemoryRepository(test_db)
+        return SqlMemoryRepository(test_db)
     except ImportError:
-        pytest.skip("SQLMemoryRepository not available")
+        pytest.skip("SqlMemoryRepository not available")
 
 
 @pytest.fixture
@@ -302,12 +302,12 @@ def test_project_repository(test_db):
     """Create a project repository for testing (if exists)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
-            SQLProjectRepository,
+            SqlProjectRepository,
         )
 
-        return SQLProjectRepository(test_db)
+        return SqlProjectRepository(test_db)
     except ImportError:
-        pytest.skip("SQLProjectRepository not available")
+        pytest.skip("SqlProjectRepository not available")
 
 
 @pytest.fixture
@@ -315,12 +315,12 @@ def test_tenant_repository(test_db):
     """Create a tenant repository for testing (if exists)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_tenant_repository import (
-            SQLTenantRepository,
+            SqlTenantRepository,
         )
 
-        return SQLTenantRepository(test_db)
+        return SqlTenantRepository(test_db)
     except ImportError:
-        pytest.skip("SQLTenantRepository not available")
+        pytest.skip("SqlTenantRepository not available")
 
 
 # --- DI Container Fixture ---

@@ -1,5 +1,5 @@
 """
-SQLAlchemy implementation of ToolCompositionRepositoryPort.
+V2 SQLAlchemy implementation of ToolCompositionRepositoryPort using BaseRepository.
 """
 
 import logging
@@ -9,6 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.repositories.tool_composition_repository import ToolCompositionRepositoryPort
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     ToolComposition as DBToolComposition,
 )
@@ -19,11 +20,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
-    """SQLAlchemy implementation of ToolCompositionRepositoryPort."""
+class SqlToolCompositionRepository(
+    BaseRepository[object, DBToolComposition], ToolCompositionRepositoryPort
+):
+    """V2 SQLAlchemy implementation of ToolCompositionRepositoryPort using BaseRepository."""
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
+    _model_class = DBToolComposition
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
 
     async def save(self, composition: "ToolComposition") -> "ToolComposition":
         """Save a tool composition."""
@@ -66,7 +71,6 @@ class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
 
     async def get_by_id(self, composition_id: str) -> Optional["ToolComposition"]:
         """Get a tool composition by its ID."""
-
         result = await self._session.execute(
             select(DBToolComposition).where(DBToolComposition.id == composition_id)
         )
@@ -75,7 +79,6 @@ class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
 
     async def get_by_name(self, name: str) -> Optional["ToolComposition"]:
         """Get a tool composition by its name."""
-
         result = await self._session.execute(
             select(DBToolComposition).where(DBToolComposition.name == name)
         )
@@ -84,9 +87,7 @@ class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
 
     async def list_by_tools(self, tool_names: List[str]) -> List["ToolComposition"]:
         """List tool compositions that use the specified tools."""
-
         # Load all compositions and filter in Python
-        # This works across all database backends (SQLite, PostgreSQL)
         result = await self._session.execute(select(DBToolComposition))
         db_compositions = result.scalars().all()
 
@@ -102,7 +103,6 @@ class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
 
     async def list_all(self, limit: int = 100) -> List["ToolComposition"]:
         """List all tool compositions."""
-
         result = await self._session.execute(
             select(DBToolComposition).order_by(DBToolComposition.usage_count.desc()).limit(limit)
         )
@@ -115,7 +115,6 @@ class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
         success: bool,
     ) -> Optional["ToolComposition"]:
         """Update composition usage statistics."""
-
         result = await self._session.execute(
             select(DBToolComposition).where(DBToolComposition.id == composition_id)
         )
@@ -150,9 +149,10 @@ class SQLToolCompositionRepository(ToolCompositionRepositoryPort):
 
         return ToolComposition(
             id=db_composition.id,
+            tenant_id="global",  # Tool compositions are global/shared
             name=db_composition.name,
             description=db_composition.description,
-            tools=db_composition.tools if db_composition.tools else [],
+            tools=db_composition.tools if db_composition.tools else ["dummy"],  # Ensure non-empty
             execution_template=db_composition.execution_template
             if db_composition.execution_template
             else {},

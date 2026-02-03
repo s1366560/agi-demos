@@ -30,10 +30,10 @@ from src.infrastructure.adapters.primary.web.routers.event_dispatcher import (
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import UserTenant
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
-    SqlAlchemyAPIKeyRepository,
+    SqlAPIKeyRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
-    SqlAlchemyUserRepository,
+    SqlUserRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -456,8 +456,8 @@ async def authenticate_websocket(token: str, db: AsyncSession) -> Optional[tuple
     try:
         # Create AuthService with repositories
         auth_service = AuthService(
-            user_repository=SqlAlchemyUserRepository(db),
-            api_key_repository=SqlAlchemyAPIKeyRepository(db),
+            user_repository=SqlUserRepository(db),
+            api_key_repository=SqlAPIKeyRepository(db),
         )
 
         # Verify API key
@@ -733,10 +733,10 @@ async def handle_send_message(
         # Check for pending HITL requests - if any, block new messages
         # Only check for non-expired pending requests
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-            SQLHITLRequestRepository,
+            SqlHITLRequestRepository,
         )
 
-        hitl_repo = SQLHITLRequestRepository(db)
+        hitl_repo = SqlHITLRequestRepository(db)
         pending_hitl = await hitl_repo.get_pending_by_conversation(
             conversation_id=conversation_id,
             tenant_id=tenant_id,
@@ -1540,11 +1540,11 @@ async def _start_hitl_stream_bridge(
     try:
         from src.configuration.factories import create_langchain_llm
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-            SQLHITLRequestRepository,
+            SqlHITLRequestRepository,
         )
 
         # Get HITL request from database
-        hitl_repo = SQLHITLRequestRepository(db)
+        hitl_repo = SqlHITLRequestRepository(db)
         hitl_request = await hitl_repo.get_by_id(request_id)
 
         if not hitl_request:
@@ -1905,13 +1905,13 @@ async def handle_start_agent(
                 ProjectSandboxLifecycleService,
             )
             from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-                SqlAlchemyProjectSandboxRepository,
+                SqlProjectSandboxRepository,
             )
             from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
                 MCPSandboxAdapter,
             )
 
-            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            sandbox_repo = SqlProjectSandboxRepository(db)
             sandbox_adapter = MCPSandboxAdapter()
             lifecycle_service = ProjectSandboxLifecycleService(
                 repository=sandbox_repo,
@@ -2174,13 +2174,13 @@ async def handle_restart_agent(
                 ProjectSandboxLifecycleService,
             )
             from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-                SqlAlchemyProjectSandboxRepository,
+                SqlProjectSandboxRepository,
             )
             from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
                 MCPSandboxAdapter,
             )
 
-            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            sandbox_repo = SqlProjectSandboxRepository(db)
             sandbox_adapter = MCPSandboxAdapter()
             lifecycle_service = ProjectSandboxLifecycleService(
                 repository=sandbox_repo,

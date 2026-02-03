@@ -294,10 +294,10 @@ class BaseHITLManager(ABC, Generic[T]):
 
         try:
             from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SQLHITLRequestRepository,
+                SqlHITLRequestRepository,
             )
 
-            repo = SQLHITLRequestRepository(session)
+            repo = SqlHITLRequestRepository(session)
             entity = self._create_domain_entity(
                 request=request,
                 tenant_id=tenant_id,
@@ -333,10 +333,10 @@ class BaseHITLManager(ABC, Generic[T]):
 
         try:
             from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SQLHITLRequestRepository,
+                SqlHITLRequestRepository,
             )
 
-            repo = SQLHITLRequestRepository(session)
+            repo = SqlHITLRequestRepository(session)
             response_str = self._get_response_for_db(response)
             result = await repo.update_response(request_id, response_str, metadata)
             await session.commit()
@@ -359,10 +359,10 @@ class BaseHITLManager(ABC, Generic[T]):
 
         try:
             from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SQLHITLRequestRepository,
+                SqlHITLRequestRepository,
             )
 
-            repo = SQLHITLRequestRepository(session)
+            repo = SqlHITLRequestRepository(session)
             default_str = (
                 self._get_response_for_db(default_response)
                 if default_response is not None
@@ -389,10 +389,10 @@ class BaseHITLManager(ABC, Generic[T]):
 
         try:
             from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SQLHITLRequestRepository,
+                SqlHITLRequestRepository,
             )
 
-            repo = SQLHITLRequestRepository(session)
+            repo = SqlHITLRequestRepository(session)
             result = await repo.mark_completed(request_id)
             await session.commit()
             if result:
@@ -739,10 +739,10 @@ class BaseHITLManager(ABC, Generic[T]):
 
         try:
             from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SQLHITLRequestRepository,
+                SqlHITLRequestRepository,
             )
 
-            repo = SQLHITLRequestRepository(session)
+            repo = SqlHITLRequestRepository(session)
 
             # Get the original request to find conversation context
             original_request = await repo.get_by_id(original_request_id)

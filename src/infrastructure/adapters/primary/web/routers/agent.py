@@ -1477,11 +1477,11 @@ async def get_tenant_agent_config(
     try:
         # Import repository class
         from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-            SQLTenantAgentConfigRepository,
+            SqlTenantAgentConfigRepository,
         )
 
         # Create repository with the session from request
-        config_repo = SQLTenantAgentConfigRepository(db)
+        config_repo = SqlTenantAgentConfigRepository(db)
 
         # Get config or return default
         config = await config_repo.get_by_tenant(tenant_id)
@@ -1566,11 +1566,11 @@ async def update_tenant_agent_config(
 
         from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
         from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
-            SQLTenantAgentConfigRepository,
+            SqlTenantAgentConfigRepository,
         )
 
         # Create repository with the session from request
-        config_repo = SQLTenantAgentConfigRepository(db)
+        config_repo = SqlTenantAgentConfigRepository(db)
 
         # Get existing config or create default
         config = await config_repo.get_by_tenant(tenant_id)
@@ -1721,11 +1721,11 @@ async def list_tool_compositions(
     """
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
-            SQLToolCompositionRepository,
+            SqlToolCompositionRepository,
         )
 
         # Create repository
-        composition_repo = SQLToolCompositionRepository(db)
+        composition_repo = SqlToolCompositionRepository(db)
 
         # Get compositions
         if tools:
@@ -1783,11 +1783,11 @@ async def get_tool_composition(
     """
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_tool_composition_repository import (
-            SQLToolCompositionRepository,
+            SqlToolCompositionRepository,
         )
 
         # Create repository
-        composition_repo = SQLToolCompositionRepository(db)
+        composition_repo = SqlToolCompositionRepository(db)
 
         # Get composition
         composition = await composition_repo.get_by_id(composition_id)
@@ -2002,13 +2002,13 @@ async def get_pending_hitl_requests(
     try:
         # Get tenant_id and project_id from conversation
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlAlchemyConversationRepository,
+            SqlConversationRepository,
         )
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-            SQLHITLRequestRepository,
+            SqlHITLRequestRepository,
         )
 
-        conv_repo = SqlAlchemyConversationRepository(db)
+        conv_repo = SqlConversationRepository(db)
         conversation = await conv_repo.find_by_id(conversation_id)
 
         if not conversation:
@@ -2021,7 +2021,7 @@ async def get_pending_hitl_requests(
         # Query pending requests
         # Note: Don't exclude expired - show all pending requests so users can respond
         # The recovery service will handle requests when Agent is not waiting
-        repo = SQLHITLRequestRepository(db)
+        repo = SqlHITLRequestRepository(db)
         pending = await repo.get_pending_by_conversation(
             conversation_id=conversation_id,
             tenant_id=conversation.tenant_id,
@@ -2082,10 +2082,10 @@ async def get_project_pending_hitl_requests(
     """
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-            SQLHITLRequestRepository,
+            SqlHITLRequestRepository,
         )
 
-        repo = SQLHITLRequestRepository(db)
+        repo = SqlHITLRequestRepository(db)
         pending = await repo.get_pending_by_project(
             tenant_id=current_user.tenant_id,
             project_id=project_id,

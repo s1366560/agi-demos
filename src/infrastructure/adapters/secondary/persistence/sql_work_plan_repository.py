@@ -1,5 +1,5 @@
 """
-SQLAlchemy implementation of WorkPlanRepositoryPort.
+V2 SQLAlchemy implementation of WorkPlanRepositoryPort using BaseRepository.
 """
 
 import logging
@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.repositories.work_plan_repository import WorkPlanRepositoryPort
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import WorkPlan as DBWorkPlan
 
 if TYPE_CHECKING:
@@ -18,11 +19,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SQLWorkPlanRepository(WorkPlanRepositoryPort):
-    """SQLAlchemy implementation of WorkPlanRepositoryPort."""
+class SqlWorkPlanRepository(BaseRepository[object, DBWorkPlan], WorkPlanRepositoryPort):
+    """V2 SQLAlchemy implementation of WorkPlanRepositoryPort using BaseRepository."""
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
+    _model_class = DBWorkPlan
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
 
     async def save(self, plan: "WorkPlan") -> "WorkPlan":
         """Save a work plan."""

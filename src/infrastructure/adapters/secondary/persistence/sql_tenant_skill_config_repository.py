@@ -1,8 +1,5 @@
 """
-SQLAlchemy implementation of TenantSkillConfigRepository.
-
-Provides persistence for tenant skill configurations
-(disable/override system skills).
+V2 SQLAlchemy implementation of TenantSkillConfigRepository using BaseRepository.
 """
 
 import logging
@@ -11,22 +8,28 @@ from typing import Dict, List, Optional
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.agent.tenant_skill_config import TenantSkillAction, TenantSkillConfig
+from src.domain.model.agent.tenant_skill_config import (
+    TenantSkillAction,
+    TenantSkillConfig,
+)
 from src.domain.ports.repositories.tenant_skill_config_repository import (
     TenantSkillConfigRepositoryPort,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SQLTenantSkillConfigRepository(TenantSkillConfigRepositoryPort):
-    """
-    SQLAlchemy implementation of TenantSkillConfigRepository.
+class SqlTenantSkillConfigRepository(
+    BaseRepository[TenantSkillConfig, object], TenantSkillConfigRepositoryPort
+):
+    """V2 SQLAlchemy implementation of TenantSkillConfigRepository using BaseRepository."""
 
-    Stores tenant-level configurations for system skills.
-    """
+    _model_class = None
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
         self._session = session
 
     async def create(self, config: TenantSkillConfig) -> TenantSkillConfig:

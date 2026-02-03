@@ -10,7 +10,7 @@ from typing import Optional
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-    SqlAlchemyProjectSandboxRepository,
+    SqlProjectSandboxRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class SandboxStatusSyncService:
         # Update database
         try:
             async with self._session_factory() as session:
-                repository = SqlAlchemyProjectSandboxRepository(session)
+                repository = SqlProjectSandboxRepository(session)
                 
                 # Find by project ID
                 association = await repository.find_by_project(project_id)

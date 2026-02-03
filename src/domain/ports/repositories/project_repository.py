@@ -8,8 +8,8 @@ class ProjectRepository(ABC):
     """Repository interface for Project entity"""
 
     @abstractmethod
-    async def save(self, project: Project) -> None:
-        """Save a project (create or update)"""
+    async def save(self, project: Project) -> Project:
+        """Save a project (create or update). Returns the saved project."""
         pass
 
     @abstractmethod
@@ -35,6 +35,6 @@ class ProjectRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, project_id: str) -> None:
-        """Delete a project"""
+    async def delete(self, project_id: str) -> bool:
+        """Delete a project. Returns True if deleted, False if not found."""
         pass

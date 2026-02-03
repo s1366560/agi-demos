@@ -122,10 +122,10 @@ async def create_mcp_server(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     try:
         # Create server
@@ -164,10 +164,10 @@ async def list_mcp_servers(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     servers = await repository.list_by_tenant(
         tenant_id=tenant_id,
@@ -188,10 +188,10 @@ async def get_mcp_server(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     server = await repository.get_by_id(server_id)
 
@@ -230,10 +230,10 @@ async def update_mcp_server(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
@@ -334,10 +334,10 @@ async def delete_mcp_server(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
@@ -393,11 +393,11 @@ async def sync_mcp_server_tools(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
     from src.infrastructure.agent.mcp.client import MCPClient
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
@@ -503,11 +503,11 @@ async def test_mcp_server_connection(
     import time
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
     from src.infrastructure.agent.mcp.client import MCPClient
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
@@ -561,10 +561,10 @@ async def list_all_mcp_tools(
     """
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     servers = await repository.get_enabled_servers(tenant_id)
 
@@ -600,11 +600,11 @@ async def call_mcp_tool(
     import time
 
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SQLMCPServerRepository,
+        SqlMCPServerRepository,
     )
     from src.infrastructure.agent.mcp.client import MCPClient
 
-    repository = SQLMCPServerRepository(db)
+    repository = SqlMCPServerRepository(db)
 
     # Verify server exists and tenant ownership
     server = await repository.get_by_id(request_data.server_id)

@@ -283,10 +283,7 @@ class CachedRepositoryMixin:
             return json.dumps(entity)
 
         if hasattr(entity, "__dict__"):
-            return json.dumps({
-                k: v for k, v in entity.__dict__.items()
-                if not k.startswith("_")
-            })
+            return json.dumps({k: v for k, v in entity.__dict__.items() if not k.startswith("_")})
 
         return json.dumps(str(entity))
 

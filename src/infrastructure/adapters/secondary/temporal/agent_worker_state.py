@@ -609,11 +609,11 @@ async def _load_project_sandbox_tools(
             async_session_factory,
         )
         from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-            SqlAlchemyProjectSandboxRepository,
+            SqlProjectSandboxRepository,
         )
 
         async with async_session_factory() as db:
-            sandbox_repo = SqlAlchemyProjectSandboxRepository(db)
+            sandbox_repo = SqlProjectSandboxRepository(db)
             assoc = await sandbox_repo.find_by_project(project_id)
             if assoc and assoc.sandbox_id:
                 project_sandbox_id = assoc.sandbox_id

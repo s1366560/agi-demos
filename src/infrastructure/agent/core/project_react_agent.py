@@ -869,12 +869,12 @@ class ProjectReActAgent:
         """
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
         from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
-            SQLSubAgentRepository,
+            SqlSubAgentRepository,
         )
 
         try:
             async with async_session_factory() as session:
-                repository = SQLSubAgentRepository(session)
+                repository = SqlSubAgentRepository(session)
 
                 # Load enabled subagents for the project
                 subagents = await repository.list_by_project(

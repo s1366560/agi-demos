@@ -1,5 +1,5 @@
 """
-SQLAlchemy implementation of ToolExecutionRecordRepository.
+V2 SQLAlchemy implementation of ToolExecutionRecordRepository using BaseRepository.
 """
 
 import logging
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import ToolExecutionRecord
 from src.domain.ports.repositories.agent_repository import ToolExecutionRecordRepository
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     ToolExecutionRecord as DBToolExecutionRecord,
 )
@@ -18,11 +19,15 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 logger = logging.getLogger(__name__)
 
 
-class SqlAlchemyToolExecutionRecordRepository(ToolExecutionRecordRepository):
-    """SQLAlchemy implementation of ToolExecutionRecordRepository."""
+class SqlToolExecutionRecordRepository(
+    BaseRepository[ToolExecutionRecord, DBToolExecutionRecord], ToolExecutionRecordRepository
+):
+    """V2 SQLAlchemy implementation of ToolExecutionRecordRepository using BaseRepository."""
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
+    _model_class = DBToolExecutionRecord
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
 
     async def save(self, record: ToolExecutionRecord) -> None:
         """Save a tool execution record (create or update)."""

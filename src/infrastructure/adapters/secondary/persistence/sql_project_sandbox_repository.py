@@ -1,4 +1,6 @@
-"""SQLAlchemy implementation of ProjectSandboxRepository."""
+"""
+V2 SQLAlchemy implementation of ProjectSandboxRepository using BaseRepository.
+"""
 
 import hashlib
 import logging
@@ -16,20 +18,23 @@ from src.domain.model.sandbox.project_sandbox import (
 from src.domain.ports.repositories.project_sandbox_repository import (
     ProjectSandboxRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.models import (
-    ProjectSandbox as ProjectSandboxORM,
-)
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
-    """SQLAlchemy-based implementation of ProjectSandboxRepository."""
+class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], ProjectSandboxRepository):
+    """V2 SQLAlchemy implementation of ProjectSandboxRepository using BaseRepository."""
 
-    def __init__(self, session: AsyncSession):
+    # This repository doesn't use a standard model for CRUD
+    _model_class = None
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
         self._session = session
 
-    def _to_domain(self, orm: ProjectSandboxORM) -> ProjectSandbox:
+    def _to_domain(self, orm) -> ProjectSandbox:
         """Convert ORM model to domain entity."""
         return ProjectSandbox(
             id=orm.id,
@@ -45,8 +50,12 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
             metadata=orm.metadata_json or {},
         )
 
-    def _to_orm(self, domain: ProjectSandbox) -> ProjectSandboxORM:
+    def _to_orm(self, domain: ProjectSandbox):
         """Convert domain entity to ORM model."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         return ProjectSandboxORM(
             id=domain.id,
             project_id=domain.project_id,
@@ -63,6 +72,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def save(self, association: ProjectSandbox) -> None:
         """Save or update a project-sandbox association."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         orm = self._to_orm(association)
 
         # Check if exists
@@ -86,6 +99,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def find_by_id(self, association_id: str) -> Optional[ProjectSandbox]:
         """Find a project-sandbox association by its ID."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         result = await self._session.execute(
             select(ProjectSandboxORM).where(ProjectSandboxORM.id == association_id)
         )
@@ -94,6 +111,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def find_by_project(self, project_id: str) -> Optional[ProjectSandbox]:
         """Find the sandbox association for a specific project."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         result = await self._session.execute(
             select(ProjectSandboxORM).where(ProjectSandboxORM.project_id == project_id)
         )
@@ -102,6 +123,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def find_by_sandbox(self, sandbox_id: str) -> Optional[ProjectSandbox]:
         """Find the project association for a specific sandbox."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         result = await self._session.execute(
             select(ProjectSandboxORM).where(ProjectSandboxORM.sandbox_id == sandbox_id)
         )
@@ -116,6 +141,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
         offset: int = 0,
     ) -> List[ProjectSandbox]:
         """List all sandbox associations for a tenant."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         query = select(ProjectSandboxORM).where(ProjectSandboxORM.tenant_id == tenant_id)
 
         if status:
@@ -135,6 +164,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
         offset: int = 0,
     ) -> List[ProjectSandbox]:
         """Find all associations with a specific status."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         query = (
             select(ProjectSandboxORM)
             .where(ProjectSandboxORM.status == status.value)
@@ -153,6 +186,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
         limit: int = 50,
     ) -> List[ProjectSandbox]:
         """Find associations that haven't been accessed recently."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         cutoff_time = datetime.utcnow() - timedelta(seconds=max_idle_seconds)
 
         query = (
@@ -169,6 +206,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def delete(self, association_id: str) -> bool:
         """Delete a project-sandbox association."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         orm = await self._session.get(ProjectSandboxORM, association_id)
         if orm:
             await self._session.delete(orm)
@@ -178,6 +219,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def delete_by_project(self, project_id: str) -> bool:
         """Delete the sandbox association for a project."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         result = await self._session.execute(
             select(ProjectSandboxORM).where(ProjectSandboxORM.project_id == project_id)
         )
@@ -190,6 +235,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
     async def exists_for_project(self, project_id: str) -> bool:
         """Check if a project has a sandbox association."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         result = await self._session.execute(
             select(ProjectSandboxORM).where(ProjectSandboxORM.project_id == project_id)
         )
@@ -202,6 +251,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
     ) -> int:
         """Count sandbox associations for a tenant."""
         from sqlalchemy import func
+
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
 
         query = select(func.count(ProjectSandboxORM.id)).where(
             ProjectSandboxORM.tenant_id == tenant_id
@@ -291,6 +344,10 @@ class SqlAlchemyProjectSandboxRepository(ProjectSandboxRepository):
 
         This prevents TOCTOU race conditions by locking the row while checking.
         """
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            ProjectSandbox as ProjectSandboxORM,
+        )
+
         result = await self._session.execute(
             select(ProjectSandboxORM)
             .where(ProjectSandboxORM.project_id == project_id)

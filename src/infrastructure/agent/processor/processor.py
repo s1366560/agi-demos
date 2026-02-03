@@ -1962,7 +1962,7 @@ class SessionProcessor:
                             async_session_factory,
                         )
                         from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                            SQLToolEnvironmentVariableRepository,
+                            SqlToolEnvironmentVariableRepository,
                         )
                         from src.infrastructure.security.encryption_service import (
                             get_encryption_service,
@@ -1977,7 +1977,7 @@ class SessionProcessor:
                         effective_project_id = project_id if save_to_project else None
 
                         async with async_session_factory() as db_session:
-                            repository = SQLToolEnvironmentVariableRepository(db_session)
+                            repository = SqlToolEnvironmentVariableRepository(db_session)
                             for field_spec in env_var_fields:
                                 var_name = field_spec.variable_name
                                 if var_name in values and values[var_name]:

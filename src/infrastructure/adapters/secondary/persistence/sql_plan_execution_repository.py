@@ -1,7 +1,5 @@
-"""SQL implementation of PlanExecutionRepository.
-
-This module provides the SQLAlchemy-based implementation of the PlanExecutionRepository
-port for persisting unified plan execution entities.
+"""
+V2 SQLAlchemy implementation of PlanExecutionRepository using BaseRepository.
 """
 
 from typing import Optional
@@ -18,20 +16,26 @@ from src.domain.model.agent.plan_execution import (
 from src.domain.ports.repositories.plan_execution_repository import (
     PlanExecutionRepository,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlanExecutionRecord,
 )
 
 
-class SQLPlanExecutionRepository(PlanExecutionRepository):
-    """SQLAlchemy implementation of PlanExecutionRepository."""
+class SqlPlanExecutionRepository(
+    BaseRepository[PlanExecution, PlanExecutionRecord], PlanExecutionRepository
+):
+    """V2 SQLAlchemy implementation of PlanExecutionRepository using BaseRepository."""
 
-    def __init__(self, db: AsyncSession):
+    _model_class = PlanExecutionRecord
+
+    def __init__(self, db: AsyncSession) -> None:
         """Initialize with database session.
 
         Args:
             db: Async SQLAlchemy session
         """
+        super().__init__(db)
         self._db = db
 
     def _to_domain(self, record: PlanExecutionRecord) -> PlanExecution:

@@ -76,9 +76,7 @@ class QueryBuilder:
             Self for chaining
         """
         if value is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column) == value
-            )
+            self._where_conditions.append(getattr(self._model_class, column) == value)
         return self
 
     def where_ne(
@@ -97,9 +95,7 @@ class QueryBuilder:
             Self for chaining
         """
         if value is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column) != value
-            )
+            self._where_conditions.append(getattr(self._model_class, column) != value)
         return self
 
     def where_in(
@@ -118,9 +114,7 @@ class QueryBuilder:
             Self for chaining
         """
         if values:
-            self._where_conditions.append(
-                getattr(self._model_class, column).in_(values)
-            )
+            self._where_conditions.append(getattr(self._model_class, column).in_(values))
         return self
 
     def where_not_in(
@@ -139,9 +133,7 @@ class QueryBuilder:
             Self for chaining
         """
         if values:
-            self._where_conditions.append(
-                getattr(self._model_class, column).notin_(values)
-            )
+            self._where_conditions.append(getattr(self._model_class, column).notin_(values))
         return self
 
     def where_like(
@@ -160,9 +152,7 @@ class QueryBuilder:
             Self for chaining
         """
         if pattern:
-            self._where_conditions.append(
-                getattr(self._model_class, column).like(pattern)
-            )
+            self._where_conditions.append(getattr(self._model_class, column).like(pattern))
         return self
 
     def where_ilike(
@@ -181,9 +171,7 @@ class QueryBuilder:
             Self for chaining
         """
         if pattern:
-            self._where_conditions.append(
-                getattr(self._model_class, column).ilike(pattern)
-            )
+            self._where_conditions.append(getattr(self._model_class, column).ilike(pattern))
         return self
 
     def where_gt(
@@ -202,9 +190,7 @@ class QueryBuilder:
             Self for chaining
         """
         if value is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column) > value
-            )
+            self._where_conditions.append(getattr(self._model_class, column) > value)
         return self
 
     def where_gte(
@@ -223,9 +209,7 @@ class QueryBuilder:
             Self for chaining
         """
         if value is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column) >= value
-            )
+            self._where_conditions.append(getattr(self._model_class, column) >= value)
         return self
 
     def where_lt(
@@ -244,9 +228,7 @@ class QueryBuilder:
             Self for chaining
         """
         if value is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column) < value
-            )
+            self._where_conditions.append(getattr(self._model_class, column) < value)
         return self
 
     def where_lte(
@@ -265,9 +247,7 @@ class QueryBuilder:
             Self for chaining
         """
         if value is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column) <= value
-            )
+            self._where_conditions.append(getattr(self._model_class, column) <= value)
         return self
 
     def where_between(
@@ -288,9 +268,7 @@ class QueryBuilder:
             Self for chaining
         """
         if lower is not None and upper is not None:
-            self._where_conditions.append(
-                getattr(self._model_class, column).between(lower, upper)
-            )
+            self._where_conditions.append(getattr(self._model_class, column).between(lower, upper))
         return self
 
     def where_null(
@@ -306,9 +284,7 @@ class QueryBuilder:
         Returns:
             Self for chaining
         """
-        self._where_conditions.append(
-            getattr(self._model_class, column).is_(None)
-        )
+        self._where_conditions.append(getattr(self._model_class, column).is_(None))
         return self
 
     def where_not_null(
@@ -324,9 +300,7 @@ class QueryBuilder:
         Returns:
             Self for chaining
         """
-        self._where_conditions.append(
-            getattr(self._model_class, column).is_not(None)
-        )
+        self._where_conditions.append(getattr(self._model_class, column).is_not(None))
         return self
 
     # === Logical operators ===

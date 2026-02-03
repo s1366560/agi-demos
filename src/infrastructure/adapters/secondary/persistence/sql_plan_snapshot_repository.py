@@ -1,7 +1,5 @@
-"""SQL implementation of PlanSnapshotRepository.
-
-This module provides the SQLAlchemy-based implementation of the PlanSnapshotRepository
-port for persisting plan snapshot entities.
+"""
+V2 SQLAlchemy implementation of PlanSnapshotRepository using BaseRepository.
 """
 
 from typing import Optional
@@ -13,20 +11,26 @@ from src.domain.model.agent.plan_snapshot import PlanSnapshot, StepState
 from src.domain.ports.repositories.plan_snapshot_repository import (
     PlanSnapshotRepository,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlanSnapshotRecord,
 )
 
 
-class SQLPlanSnapshotRepository(PlanSnapshotRepository):
-    """SQLAlchemy implementation of PlanSnapshotRepository."""
+class SqlPlanSnapshotRepository(
+    BaseRepository[PlanSnapshot, PlanSnapshotRecord], PlanSnapshotRepository
+):
+    """V2 SQLAlchemy implementation of PlanSnapshotRepository using BaseRepository."""
 
-    def __init__(self, db: AsyncSession):
+    _model_class = PlanSnapshotRecord
+
+    def __init__(self, db: AsyncSession) -> None:
         """Initialize with database session.
 
         Args:
             db: Async SQLAlchemy session
         """
+        super().__init__(db)
         self._db = db
 
     def _to_domain(self, record: PlanSnapshotRecord) -> PlanSnapshot:
@@ -38,9 +42,12 @@ class SQLPlanSnapshotRepository(PlanSnapshotRepository):
         Returns:
             Domain entity
         """
-        step_states = {
-            k: StepState(**v) for k, v in record.step_states.items()
-        }
+        step_states = {}
+        for k, v in record.step_states.items():
+            # Ensure step_id is included when deserializing
+            if "step_id" not in v:
+                v["step_id"] = k
+            step_states[k] = StepState(**v)
         return PlanSnapshot(
             id=record.id,
             plan_id=record.execution_id,  # Map execution_id to plan_id
@@ -163,9 +170,7 @@ class SQLPlanSnapshotRepository(PlanSnapshotRepository):
             Number of snapshots deleted
         """
         result = await self._db.execute(
-            select(PlanSnapshotRecord).where(
-                PlanSnapshotRecord.execution_id == execution_id
-            )
+            select(PlanSnapshotRecord).where(PlanSnapshotRecord.execution_id == execution_id)
         )
         records = result.scalars().all()
         count = len(records)

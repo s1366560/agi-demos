@@ -28,10 +28,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
-    SqlAlchemyAPIKeyRepository,
+    SqlAPIKeyRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
-    SqlAlchemyUserRepository,
+    SqlUserRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,8 +148,8 @@ async def verify_api_key_from_header_or_query(
     """
     # Create AuthService with repositories
     auth_service = AuthService(
-        user_repository=SqlAlchemyUserRepository(db),
-        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
     )
 
     try:
@@ -179,8 +179,8 @@ async def get_current_user_from_header_or_query(
     """
     # Create AuthService with repositories
     auth_service = AuthService(
-        user_repository=SqlAlchemyUserRepository(db),
-        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
     )
 
     try:
@@ -222,8 +222,8 @@ async def verify_api_key_dependency(
     """
     # Create AuthService with repositories
     auth_service = AuthService(
-        user_repository=SqlAlchemyUserRepository(db),
-        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
     )
 
     try:
@@ -255,8 +255,8 @@ async def get_current_user(
     """
     # Create AuthService with repositories
     auth_service = AuthService(
-        user_repository=SqlAlchemyUserRepository(db),
-        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
     )
 
     try:
@@ -334,8 +334,8 @@ async def create_api_key(
     """
     # Create AuthService with repositories
     auth_service = AuthService(
-        user_repository=SqlAlchemyUserRepository(db),
-        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
     )
 
     # Create using application service
@@ -361,8 +361,8 @@ async def create_user(db: AsyncSession, email: str, name: str, password: str) ->
     """
     # Create AuthService with repositories
     auth_service = AuthService(
-        user_repository=SqlAlchemyUserRepository(db),
-        api_key_repository=SqlAlchemyAPIKeyRepository(db),
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
     )
 
     # Create using application service

@@ -1,5 +1,5 @@
 """
-SQLAlchemy implementation of MemoryRepository.
+V2 SQLAlchemy implementation of MemoryRepository using BaseRepository.
 """
 
 import logging
@@ -10,19 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.memory import Memory
 from src.domain.ports.repositories.memory_repository import MemoryRepository
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import Memory as DBMemory
 
 logger = logging.getLogger(__name__)
 
 
-class SqlAlchemyMemoryRepository(MemoryRepository):
-    """SQLAlchemy implementation of MemoryRepository"""
+class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
+    """V2 SQLAlchemy implementation of MemoryRepository using BaseRepository."""
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
+    _model_class = DBMemory
+
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
 
     async def save(self, memory: Memory) -> None:
-        """Save a memory (create or update)"""
+        """Save a memory (create or update)."""
         result = await self._session.execute(select(DBMemory).where(DBMemory.id == memory.id))
         db_memory = result.scalar_one_or_none()
 
@@ -43,55 +46,30 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
             db_memory.updated_at = memory.updated_at
         else:
             # Create new memory
-            db_memory = DBMemory(
-                id=memory.id,
-                project_id=memory.project_id,
-                title=memory.title,
-                content=memory.content,
-                content_type=memory.content_type,
-                tags=memory.tags,
-                entities=memory.entities,
-                relationships=memory.relationships,
-                version=memory.version,
-                author_id=memory.author_id,
-                collaborators=memory.collaborators,
-                is_public=memory.is_public,
-                status=memory.status,
-                processing_status=memory.processing_status,
-                meta=memory.metadata,
-                created_at=memory.created_at,
-                updated_at=memory.updated_at,
-            )
+            db_memory = self._to_db(memory)
             self._session.add(db_memory)
 
         await self._session.flush()
 
     async def find_by_id(self, memory_id: str) -> Optional[Memory]:
-        """Find a memory by ID"""
-        result = await self._session.execute(select(DBMemory).where(DBMemory.id == memory_id))
-        db_memory = result.scalar_one_or_none()
-        return self._to_domain(db_memory) if db_memory else None
+        """Find a memory by ID."""
+        return await super().find_by_id(memory_id)
 
     async def list_by_project(
         self, project_id: str, limit: int = 50, offset: int = 0
     ) -> List[Memory]:
-        """List all memories for a project"""
-        result = await self._session.execute(
-            select(DBMemory).where(DBMemory.project_id == project_id).offset(offset).limit(limit)
-        )
-        db_memories = result.scalars().all()
-        return [self._to_domain(m) for m in db_memories]
+        """List all memories for a project."""
+        return await self.list_all(limit=limit, offset=offset, project_id=project_id)
 
     async def delete(self, memory_id: str) -> None:
-        """Delete a memory"""
-        result = await self._session.execute(select(DBMemory).where(DBMemory.id == memory_id))
-        db_memory = result.scalar_one_or_none()
-        if db_memory:
-            await self._session.delete(db_memory)
-            await self._session.flush()
+        """Delete a memory."""
+        await super().delete(memory_id)
 
-    def _to_domain(self, db_memory: DBMemory) -> Memory:
-        """Convert database model to domain model"""
+    def _to_domain(self, db_memory: Optional[DBMemory]) -> Optional[Memory]:
+        """Convert database model to domain model."""
+        if db_memory is None:
+            return None
+
         return Memory(
             id=db_memory.id,
             project_id=db_memory.project_id,
@@ -110,4 +88,26 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
             metadata=db_memory.meta,
             created_at=db_memory.created_at,
             updated_at=db_memory.updated_at,
+        )
+
+    def _to_db(self, domain_entity: Memory) -> DBMemory:
+        """Convert domain entity to database model."""
+        return DBMemory(
+            id=domain_entity.id,
+            project_id=domain_entity.project_id,
+            title=domain_entity.title,
+            content=domain_entity.content,
+            content_type=domain_entity.content_type,
+            tags=domain_entity.tags,
+            entities=domain_entity.entities,
+            relationships=domain_entity.relationships,
+            version=domain_entity.version,
+            author_id=domain_entity.author_id,
+            collaborators=domain_entity.collaborators,
+            is_public=domain_entity.is_public,
+            status=domain_entity.status,
+            processing_status=domain_entity.processing_status,
+            meta=domain_entity.metadata,
+            created_at=domain_entity.created_at,
+            updated_at=domain_entity.updated_at,
         )

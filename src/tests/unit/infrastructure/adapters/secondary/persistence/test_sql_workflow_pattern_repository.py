@@ -1,8 +1,17 @@
 """
-Unit tests for SQLWorkflowPatternRepository (T066)
+Tests for V2 SqlWorkflowPatternRepository using BaseRepository.
 
-Tests the SQL implementation of WorkflowPattern repository.
-Updated to match actual implementation API.
+TDD Approach: RED -> GREEN -> REFACTOR
+
+These tests verify that the migrated repository maintains 100% compatibility
+with the original implementation while leveraging the BaseRepository.
+
+Key features tested:
+- CRUD operations
+- List by tenant
+- Find by name
+- Increment usage count
+- Optional caching support
 """
 
 from datetime import datetime, timezone
@@ -12,275 +21,397 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.workflow_pattern import PatternStep, WorkflowPattern
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
-    SQLWorkflowPatternRepository,
+    SqlWorkflowPatternRepository,
 )
 
 
-@pytest.mark.asyncio
-class TestSQLWorkflowPatternRepository:
-    """Tests for SQLWorkflowPatternRepository."""
+@pytest.fixture
+async def v2_pattern_repo(db_session: AsyncSession) -> SqlWorkflowPatternRepository:
+    """Create a V2 workflow pattern repository for testing."""
+    return SqlWorkflowPatternRepository(db_session)
 
-    async def test_create_pattern(self, test_db: AsyncSession):
-        """Test creating a new workflow pattern."""
-        repo = SQLWorkflowPatternRepository(test_db)
 
-        pattern = WorkflowPattern(
-            id="pattern-1",
-            tenant_id="tenant-1",
-            name="Test Pattern",
-            description="A test pattern",
-            steps=[
-                PatternStep(
-                    step_number=1,
-                    description="Step 1",
-                    tool_name="tool1",
-                    expected_output_format="text",
-                    similarity_threshold=0.8,
-                )
-            ],
-            success_rate=1.0,
-            usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
+def create_test_pattern(
+    pattern_id: str,
+    tenant_id: str = "tenant-1",
+    name: str = "Test Pattern",
+    description: str = "Test description",
+    usage_count: int = 5,
+) -> WorkflowPattern:
+    """Helper to create a test pattern."""
+    return WorkflowPattern(
+        id=pattern_id,
+        tenant_id=tenant_id,
+        name=name,
+        description=description,
+        steps=[
+            PatternStep(
+                step_number=1,
+                description="Step 1",
+                tool_name="search",
+                expected_output_format="text",
+            ),
+            PatternStep(
+                step_number=2,
+                description="Step 2",
+                tool_name="analyze",
+                expected_output_format="json",
+            ),
+        ],
+        success_rate=0.8,
+        usage_count=usage_count,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        metadata={"key": "value"},
+    )
 
-        created = await repo.create(pattern)
 
-        assert created.id == pattern.id
-        assert created.name == "Test Pattern"
-        assert created.tenant_id == "tenant-1"
+class TestSqlWorkflowPatternRepositoryCreate:
+    """Tests for creating new patterns."""
 
-    async def test_get_pattern_by_id(self, test_db: AsyncSession):
-        """Test retrieving a pattern by ID."""
-        repo = SQLWorkflowPatternRepository(test_db)
+    @pytest.mark.asyncio
+    async def test_create_new_pattern(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test creating a new pattern."""
+        pattern = create_test_pattern("pattern-test-1")
 
-        pattern = WorkflowPattern(
-            id="pattern-2",
-            tenant_id="tenant-1",
-            name="Get Test",
-            description="Test get by id",
-            steps=[],
-            success_rate=1.0,
-            usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
+        result = await v2_pattern_repo.create(pattern)
 
-        await repo.create(pattern)
-        retrieved = await repo.get_by_id("pattern-2")
+        assert result.id == "pattern-test-1"
+        assert result.name == "Test Pattern"
 
+        # Verify was saved
+        retrieved = await v2_pattern_repo.get_by_id("pattern-test-1")
         assert retrieved is not None
-        assert retrieved.id == "pattern-2"
-        assert retrieved.name == "Get Test"
+        assert retrieved.name == "Test Pattern"
 
-    async def test_get_pattern_returns_none_for_not_found(self, test_db: AsyncSession):
-        """Test that get_by_id returns None for non-existent pattern."""
-        repo = SQLWorkflowPatternRepository(test_db)
 
-        retrieved = await repo.get_by_id("non-existent")
+class TestSqlWorkflowPatternRepositoryFind:
+    """Tests for finding patterns."""
 
+    @pytest.mark.asyncio
+    async def test_get_by_id_existing(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test finding an existing pattern by ID."""
+        pattern = create_test_pattern("pattern-find-1")
+        await v2_pattern_repo.create(pattern)
+
+        retrieved = await v2_pattern_repo.get_by_id("pattern-find-1")
+        assert retrieved is not None
+        assert retrieved.id == "pattern-find-1"
+        assert retrieved.name == "Test Pattern"
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_not_found(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test finding a non-existent pattern returns None."""
+        retrieved = await v2_pattern_repo.get_by_id("non-existent")
         assert retrieved is None
 
-    async def test_list_patterns_by_tenant(self, test_db: AsyncSession):
-        """Test listing all patterns for a tenant."""
-        repo = SQLWorkflowPatternRepository(test_db)
-
-        # Create patterns for two tenants
-        pattern1 = WorkflowPattern(
-            id="pattern-1",
-            tenant_id="tenant-1",
-            name="Tenant 1 Pattern 1",
-            description="Pattern for tenant 1",
-            steps=[],
-            success_rate=1.0,
-            usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-
-        pattern2 = WorkflowPattern(
-            id="pattern-2",
-            tenant_id="tenant-1",
-            name="Tenant 1 Pattern 2",
-            description="Another pattern for tenant 1",
-            steps=[],
-            success_rate=0.9,
-            usage_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-
-        pattern3 = WorkflowPattern(
-            id="pattern-3",
-            tenant_id="tenant-2",
-            name="Tenant 2 Pattern",
-            description="Pattern for tenant 2",
-            steps=[],
-            success_rate=1.0,
-            usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-
-        await repo.create(pattern1)
-        await repo.create(pattern2)
-        await repo.create(pattern3)
-
-        # List patterns for tenant-1
-        tenant1_patterns = await repo.list_by_tenant("tenant-1")
-
-        assert len(tenant1_patterns) == 2
-        assert all(p.tenant_id == "tenant-1" for p in tenant1_patterns)
-
-        # List patterns for tenant-2
-        tenant2_patterns = await repo.list_by_tenant("tenant-2")
-
-        assert len(tenant2_patterns) == 1
-        assert tenant2_patterns[0].id == "pattern-3"
-
-    async def test_list_patterns_ordered_by_usage_count(self, test_db: AsyncSession):
-        """Test that patterns are ordered by usage count descending."""
-        repo = SQLWorkflowPatternRepository(test_db)
-
-        patterns = [
-            WorkflowPattern(
-                id=f"pattern-{i}",
-                tenant_id="tenant-1",
-                name=f"Pattern {i}",
-                description=f"Pattern {i}",
-                steps=[],
-                success_rate=0.5 + (i * 0.1),
-                usage_count=i * 10,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
-            )
-            for i in range(5)
-        ]
-
-        for pattern in patterns:
-            await repo.create(pattern)
-
-        result = await repo.list_by_tenant("tenant-1")
-
-        # Should be ordered by usage_count descending
-        usage_counts = [p.usage_count for p in result]
-        assert usage_counts == sorted(usage_counts, reverse=True)
-
-    async def test_find_by_name(self, test_db: AsyncSession):
+    @pytest.mark.asyncio
+    async def test_find_by_name_existing(self, v2_pattern_repo: SqlWorkflowPatternRepository):
         """Test finding a pattern by name within a tenant."""
-        repo = SQLWorkflowPatternRepository(test_db)
+        pattern = create_test_pattern("pattern-name-1", name="Unique Name")
+        await v2_pattern_repo.create(pattern)
 
-        pattern = WorkflowPattern(
-            id="pattern-1",
-            tenant_id="tenant-1",
-            name="Financial Analysis",
-            description="Pattern for analyzing financial data",
-            steps=[],
-            success_rate=0.95,
-            usage_count=10,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
+        retrieved = await v2_pattern_repo.find_by_name("tenant-1", "Unique Name")
+        assert retrieved is not None
+        assert retrieved.id == "pattern-name-1"
+        assert retrieved.name == "Unique Name"
 
-        await repo.create(pattern)
+    @pytest.mark.asyncio
+    async def test_find_by_name_not_found(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test finding a non-existent pattern by name returns None."""
+        retrieved = await v2_pattern_repo.find_by_name("tenant-1", "Nonexistent")
+        assert retrieved is None
 
-        # Find by name
-        found = await repo.find_by_name("tenant-1", "Financial Analysis")
+    @pytest.mark.asyncio
+    async def test_exists_true(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test exists returns True for existing pattern."""
+        pattern = create_test_pattern("pattern-exists-1")
+        await v2_pattern_repo.create(pattern)
 
-        assert found is not None
-        assert found.id == "pattern-1"
-        assert found.name == "Financial Analysis"
+        assert await v2_pattern_repo.exists("pattern-exists-1") is True
 
-        # Find non-existent name
-        not_found = await repo.find_by_name("tenant-1", "Non Existent")
-        assert not_found is None
+    @pytest.mark.asyncio
+    async def test_exists_false(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test exists returns False for non-existent pattern."""
+        assert await v2_pattern_repo.exists("non-existent") is False
 
-    async def test_update_pattern(self, test_db: AsyncSession):
+
+class TestSqlWorkflowPatternRepositoryUpdate:
+    """Tests for updating patterns."""
+
+    @pytest.mark.asyncio
+    async def test_update_existing_pattern(self, v2_pattern_repo: SqlWorkflowPatternRepository):
         """Test updating an existing pattern."""
-        repo = SQLWorkflowPatternRepository(test_db)
-
-        pattern = WorkflowPattern(
-            id="pattern-1",
-            tenant_id="tenant-1",
-            name="Original Name",
-            description="Original description",
-            steps=[],
-            success_rate=0.8,
-            usage_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-
-        await repo.create(pattern)
+        pattern = create_test_pattern("pattern-update-1")
+        await v2_pattern_repo.create(pattern)
 
         # Update the pattern
-        updated = WorkflowPattern(
-            id="pattern-1",
+        updated_pattern = WorkflowPattern(
+            id="pattern-update-1",
             tenant_id="tenant-1",
             name="Updated Name",
             description="Updated description",
-            steps=[],
+            steps=[
+                PatternStep(
+                    step_number=1,
+                    description="New Step",
+                    tool_name="new_tool",
+                    expected_output_format="text",
+                ),
+            ],
             success_rate=0.9,
-            usage_count=6,
+            usage_count=10,
             created_at=pattern.created_at,
             updated_at=datetime.now(timezone.utc),
+            metadata={"updated": True},
         )
 
-        await repo.update(updated)
+        result = await v2_pattern_repo.update(updated_pattern)
 
-        # Verify the update
-        retrieved = await repo.get_by_id("pattern-1")
+        assert result.name == "Updated Name"
+
+        # Verify updates
+        retrieved = await v2_pattern_repo.get_by_id("pattern-update-1")
         assert retrieved.name == "Updated Name"
         assert retrieved.description == "Updated description"
-        assert retrieved.success_rate == 0.9
-        assert retrieved.usage_count == 6
+        assert len(retrieved.steps) == 1
+        assert retrieved.steps[0].tool_name == "new_tool"
 
-    async def test_delete_pattern(self, test_db: AsyncSession):
-        """Test deleting a pattern."""
-        repo = SQLWorkflowPatternRepository(test_db)
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_raises_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test updating a non-existent pattern raises ValueError."""
+        pattern = create_test_pattern("non-existent")
 
-        pattern = WorkflowPattern(
-            id="pattern-1",
-            tenant_id="tenant-1",
-            name="To Delete",
-            description="Will be deleted",
-            steps=[],
-            success_rate=1.0,
-            usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
+        with pytest.raises(ValueError, match="Pattern not found"):
+            await v2_pattern_repo.update(pattern)
 
-        await repo.create(pattern)
 
-        # Delete the pattern
-        await repo.delete("pattern-1")
+class TestSqlWorkflowPatternRepositoryList:
+    """Tests for listing patterns."""
 
-        # Verify it's gone
-        retrieved = await repo.get_by_id("pattern-1")
+    @pytest.mark.asyncio
+    async def test_list_by_tenant(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test listing patterns by tenant."""
+        # Create patterns for different tenants
+        for i in range(3):
+            pattern = create_test_pattern(f"pattern-tenant-1-{i}", tenant_id="tenant-1")
+            await v2_pattern_repo.create(pattern)
+
+        # Add pattern for different tenant
+        other_pattern = create_test_pattern("pattern-tenant-2", tenant_id="tenant-2")
+        await v2_pattern_repo.create(other_pattern)
+
+        # List tenant-1 patterns
+        patterns = await v2_pattern_repo.list_by_tenant("tenant-1")
+        assert len(patterns) == 3
+        assert all(p.tenant_id == "tenant-1" for p in patterns)
+
+    @pytest.mark.asyncio
+    async def test_list_by_tenant_orders_by_usage(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test that patterns are ordered by usage_count desc, then created_at desc."""
+        # Create patterns with different usage counts
+        pattern1 = create_test_pattern("pattern-order-1", usage_count=5)
+        await v2_pattern_repo.create(pattern1)
+
+        pattern2 = create_test_pattern("pattern-order-2", usage_count=10)
+        await v2_pattern_repo.create(pattern2)
+
+        pattern3 = create_test_pattern("pattern-order-3", usage_count=10)
+        await v2_pattern_repo.create(pattern3)
+
+        patterns = await v2_pattern_repo.list_by_tenant("tenant-1")
+
+        # Should be ordered by usage_count desc
+        assert patterns[0].usage_count >= patterns[1].usage_count
+        assert patterns[1].usage_count >= patterns[2].usage_count
+
+
+class TestSqlWorkflowPatternRepositoryDelete:
+    """Tests for deleting patterns."""
+
+    @pytest.mark.asyncio
+    async def test_delete_existing_pattern(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test deleting an existing pattern."""
+        pattern = create_test_pattern("pattern-delete-1")
+        await v2_pattern_repo.create(pattern)
+
+        # Delete
+        await v2_pattern_repo.delete("pattern-delete-1")
+
+        # Verify deleted
+        retrieved = await v2_pattern_repo.get_by_id("pattern-delete-1")
         assert retrieved is None
 
-    async def test_increment_usage_count(self, test_db: AsyncSession):
-        """Test incrementing pattern usage count."""
-        repo = SQLWorkflowPatternRepository(test_db)
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_raises_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test deleting a non-existent pattern raises ValueError."""
+        with pytest.raises(ValueError, match="Pattern not found"):
+            await v2_pattern_repo.delete("non-existent")
 
-        pattern = WorkflowPattern(
-            id="pattern-1",
-            tenant_id="tenant-1",
-            name="Test",
-            description="Test",
-            steps=[],
-            success_rate=1.0,
-            usage_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+
+class TestSqlWorkflowPatternRepositoryIncrementUsage:
+    """Tests for incrementing usage count."""
+
+    @pytest.mark.asyncio
+    async def test_increment_usage_count(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test incrementing the usage count for a pattern."""
+        pattern = create_test_pattern("pattern-increment-1", usage_count=5)
+        await v2_pattern_repo.create(pattern)
+
+        # Increment
+        result = await v2_pattern_repo.increment_usage_count("pattern-increment-1")
+
+        assert result.usage_count == 6
+        assert result.updated_at > pattern.updated_at
+
+        # Verify in DB
+        retrieved = await v2_pattern_repo.get_by_id("pattern-increment-1")
+        assert retrieved.usage_count == 6
+
+    @pytest.mark.asyncio
+    async def test_increment_nonexistent_raises_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test incrementing a non-existent pattern raises ValueError."""
+        with pytest.raises(ValueError, match="Pattern not found"):
+            await v2_pattern_repo.increment_usage_count("non-existent")
+
+
+class TestSqlWorkflowPatternRepositoryToDomain:
+    """Tests for _to_domain conversion."""
+
+    @pytest.mark.asyncio
+    async def test_to_domain_converts_all_fields(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test that _to_domain correctly converts all DB fields."""
+        pattern = create_test_pattern("pattern-domain-1")
+        await v2_pattern_repo.create(pattern)
+
+        retrieved = await v2_pattern_repo.get_by_id("pattern-domain-1")
+        assert retrieved.id == "pattern-domain-1"
+        assert retrieved.tenant_id == "tenant-1"
+        assert retrieved.name == "Test Pattern"
+        assert retrieved.description == "Test description"
+        assert len(retrieved.steps) == 2
+        assert retrieved.steps[0].step_number == 1
+        assert retrieved.steps[0].tool_name == "search"
+        assert retrieved.success_rate == 0.8
+        assert retrieved.usage_count == 5
+
+    @pytest.mark.asyncio
+    async def test_to_domain_with_none_db_model(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test that _to_domain returns None for None input."""
+        result = v2_pattern_repo._to_domain(None)
+        assert result is None
+
+
+class TestSqlWorkflowPatternRepositoryStepConversion:
+    """Tests for step conversion helpers."""
+
+    def test_step_to_dict(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test converting PatternStep to dictionary."""
+        step = PatternStep(
+            step_number=1,
+            description="Test Step",
+            tool_name="test_tool",
+            expected_output_format="json",
+            similarity_threshold=0.9,
+            tool_parameters={"key": "value"},
         )
 
-        await repo.create(pattern)
+        result = v2_pattern_repo._step_to_dict(step)
 
-        # Increment usage count
-        await repo.increment_usage_count("pattern-1")
+        assert result["step_number"] == 1
+        assert result["description"] == "Test Step"
+        assert result["tool_name"] == "test_tool"
+        assert result["expected_output_format"] == "json"
+        assert result["similarity_threshold"] == 0.9
+        assert result["tool_parameters"] == {"key": "value"}
 
-        # Verify increment
-        retrieved = await repo.get_by_id("pattern-1")
-        assert retrieved.usage_count == 6
+    def test_step_from_dict(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test converting dictionary to PatternStep."""
+        data = {
+            "step_number": 2,
+            "description": "From Dict",
+            "tool_name": "dict_tool",
+            "expected_output_format": "text",
+            "similarity_threshold": 0.7,
+            "tool_parameters": {"param": "value"},
+        }
+
+        result = v2_pattern_repo._step_from_dict(data)
+
+        assert result.step_number == 2
+        assert result.description == "From Dict"
+        assert result.tool_name == "dict_tool"
+        assert result.expected_output_format == "text"
+        assert result.similarity_threshold == 0.7
+        assert result.tool_parameters == {"param": "value"}
+
+    def test_step_from_dict_with_defaults(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test converting dictionary with missing optional fields."""
+        data = {
+            "step_number": 3,
+            "description": "Minimal Step",
+            "tool_name": "minimal_tool",
+        }
+
+        result = v2_pattern_repo._step_from_dict(data)
+
+        assert result.step_number == 3
+        assert result.expected_output_format == "text"  # default
+        assert result.similarity_threshold == 0.8  # default
+        assert result.tool_parameters is None
+
+
+class TestSqlWorkflowPatternRepositoryTransaction:
+    """Tests for transaction support."""
+
+    @pytest.mark.asyncio
+    async def test_transaction_context_manager(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test using transaction context manager."""
+        async with v2_pattern_repo.transaction():
+            pattern1 = create_test_pattern("pattern-tx-1")
+            await v2_pattern_repo.create(pattern1)
+
+            pattern2 = create_test_pattern("pattern-tx-2")
+            await v2_pattern_repo.create(pattern2)
+
+        # Verify both were saved
+        p1 = await v2_pattern_repo.get_by_id("pattern-tx-1")
+        p2 = await v2_pattern_repo.get_by_id("pattern-tx-2")
+        assert p1 is not None
+        assert p2 is not None
+
+    @pytest.mark.asyncio
+    async def test_transaction_rollback_on_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test that transaction rolls back on error."""
+        try:
+            async with v2_pattern_repo.transaction():
+                pattern1 = create_test_pattern("pattern-tx-rollback-1")
+                await v2_pattern_repo.create(pattern1)
+
+                # Raise error to trigger rollback
+                raise ValueError("Test error")
+        except ValueError:
+            pass
+
+        # Verify rollback occurred
+        p1 = await v2_pattern_repo.get_by_id("pattern-tx-rollback-1")
+        assert p1 is None
+
+
+class TestSqlWorkflowPatternRepositoryCount:
+    """Tests for counting patterns."""
+
+    @pytest.mark.asyncio
+    async def test_count_all(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+        """Test counting all patterns."""
+        # Initially empty
+        count = await v2_pattern_repo.count()
+        assert count == 0
+
+        # Add patterns
+        for i in range(3):
+            pattern = create_test_pattern(f"pattern-count-{i}")
+            await v2_pattern_repo.create(pattern)
+
+        count = await v2_pattern_repo.count()
+        assert count == 3

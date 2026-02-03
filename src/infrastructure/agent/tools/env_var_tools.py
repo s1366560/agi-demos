@@ -164,11 +164,11 @@ class GetEnvVarTool(AgentTool):
             # If we have a session_factory, create a new session for this operation
             if self._session_factory:
                 from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                    SQLToolEnvironmentVariableRepository,
+                    SqlToolEnvironmentVariableRepository,
                 )
 
                 async with self._session_factory() as db_session:
-                    repository = SQLToolEnvironmentVariableRepository(db_session)
+                    repository = SqlToolEnvironmentVariableRepository(db_session)
                     env_var = await repository.get(
                         tenant_id=self._tenant_id,
                         tool_name=tool_name,
@@ -235,11 +235,11 @@ class GetEnvVarTool(AgentTool):
         # If we have a session_factory, create a new session for this operation
         if self._session_factory:
             from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                SQLToolEnvironmentVariableRepository,
+                SqlToolEnvironmentVariableRepository,
             )
 
             async with self._session_factory() as db_session:
-                repository = SQLToolEnvironmentVariableRepository(db_session)
+                repository = SqlToolEnvironmentVariableRepository(db_session)
                 env_vars = await repository.get_for_tool(
                     tenant_id=self._tenant_id,
                     tool_name=tool_name,
@@ -528,11 +528,11 @@ class RequestEnvVarTool(AgentTool):
             # If we have a session_factory, create a new session for database operations
             if self._session_factory:
                 from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                    SQLToolEnvironmentVariableRepository,
+                    SqlToolEnvironmentVariableRepository,
                 )
 
                 async with self._session_factory() as db_session:
-                    repository = SQLToolEnvironmentVariableRepository(db_session)
+                    repository = SqlToolEnvironmentVariableRepository(db_session)
                     for field_spec in env_var_fields:
                         var_name = field_spec.variable_name
                         if var_name in values and values[var_name]:
@@ -750,11 +750,11 @@ class CheckEnvVarsTool(AgentTool):
             # This is needed when running in worker context where sessions aren't managed externally
             if self._session_factory:
                 from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                    SQLToolEnvironmentVariableRepository,
+                    SqlToolEnvironmentVariableRepository,
                 )
 
                 async with self._session_factory() as db_session:
-                    repository = SQLToolEnvironmentVariableRepository(db_session)
+                    repository = SqlToolEnvironmentVariableRepository(db_session)
                     env_vars = await repository.get_for_tool(
                         tenant_id=self._tenant_id,
                         tool_name=tool_name,

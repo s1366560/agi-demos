@@ -8,8 +8,8 @@ class TenantRepository(ABC):
     """Repository interface for Tenant entity"""
 
     @abstractmethod
-    async def save(self, tenant: Tenant) -> None:
-        """Save a tenant (create or update)"""
+    async def save(self, tenant: Tenant) -> Tenant:
+        """Save a tenant (create or update). Returns the saved tenant."""
         pass
 
     @abstractmethod
@@ -33,6 +33,6 @@ class TenantRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, tenant_id: str) -> None:
-        """Delete a tenant"""
+    async def delete(self, tenant_id: str) -> bool:
+        """Delete a tenant. Returns True if deleted, False if not found."""
         pass

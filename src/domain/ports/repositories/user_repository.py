@@ -8,8 +8,8 @@ class UserRepository(ABC):
     """Repository interface for User entity"""
 
     @abstractmethod
-    async def save(self, user: User) -> None:
-        """Save a user (create or update)"""
+    async def save(self, user: User) -> User:
+        """Save a user (create or update). Returns the saved user."""
         pass
 
     @abstractmethod
@@ -28,6 +28,6 @@ class UserRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, user_id: str) -> None:
-        """Delete a user"""
+    async def delete(self, user_id: str) -> bool:
+        """Delete a user. Returns True if deleted, False if not found."""
         pass

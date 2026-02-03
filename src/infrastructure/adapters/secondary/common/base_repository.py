@@ -7,6 +7,7 @@ This foundation class implements the Repository pattern with:
 - Query building with filters and pagination
 - Bulk operations for performance
 - Context manager support for automatic commit/rollback
+- Exception mapping from SQLAlchemy to domain exceptions
 
 All concrete repositories should inherit from BaseRepository and implement:
 - _model_class: The SQLAlchemy model class
@@ -18,16 +19,127 @@ All concrete repositories should inherit from BaseRepository and implement:
 import logging
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from functools import wraps
+from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload  # noqa: F401 - available for subclasses
 from sqlalchemy.sql import Select
+
+from src.domain.exceptions import (
+    ConnectionError as DomainConnectionError,
+)
+from src.domain.exceptions import (
+    DuplicateEntityError,
+    RepositoryError,
+    TransactionError,
+)
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")  # Domain entity type
 M = TypeVar("M")  # Database model type
+
+
+def handle_db_errors(entity_type: str = "Entity") -> Callable:
+    """
+    Decorator to handle database errors and convert to domain exceptions.
+
+    Args:
+        entity_type: Name of the entity type for error messages
+
+    Returns:
+        Decorated function that maps SQLAlchemy errors to domain exceptions
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except IntegrityError as e:
+                error_str = str(e.orig) if e.orig else str(e)
+                # Check for unique constraint violation
+                if "unique" in error_str.lower() or "duplicate" in error_str.lower():
+                    # Try to extract field name from error message
+                    field_name = "id"  # default
+                    if "Key" in error_str and "=" in error_str:
+                        # PostgreSQL format: Key (field)=(value) already exists
+                        try:
+                            field_name = error_str.split("Key (")[1].split(")")[0]
+                        except (IndexError, AttributeError):
+                            pass
+                    raise DuplicateEntityError(
+                        entity_type=entity_type,
+                        field_name=field_name,
+                        field_value="<unknown>",
+                        message=f"Duplicate {entity_type} detected",
+                    ) from e
+                raise RepositoryError(
+                    f"Integrity error while operating on {entity_type}",
+                    original_error=e,
+                ) from e
+            except DBAPIError as e:
+                error_str = str(e).lower()
+                if "connection" in error_str or "timeout" in error_str:
+                    raise DomainConnectionError(
+                        database="PostgreSQL",
+                        message=f"Database connection error while operating on {entity_type}",
+                        original_error=e,
+                    ) from e
+                raise RepositoryError(
+                    f"Database error while operating on {entity_type}",
+                    original_error=e,
+                ) from e
+
+        return wrapper
+
+    return decorator
+
+
+def transactional(func: Callable) -> Callable:
+    """
+    Decorator to wrap a repository method in a transaction.
+
+    Automatically commits on success, rolls back on error.
+    Works with methods that have 'self' as the first argument
+    where self has a '_session' attribute.
+
+    Example:
+        class MyRepository(BaseRepository):
+            @transactional
+            async def complex_operation(self, entity):
+                await self.save(entity)
+                await self._do_related_work(entity)
+                # Auto-commits if no exception
+    """
+
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        session = getattr(self, "_session", None)
+        if session is None:
+            raise RepositoryError("No session available for transaction")
+
+        try:
+            if not session.in_transaction():
+                await session.begin()
+
+            result = await func(self, *args, **kwargs)
+            await session.commit()
+            return result
+        except Exception as e:
+            await session.rollback()
+            if isinstance(e, (RepositoryError, DuplicateEntityError, DomainConnectionError)):
+                raise
+            raise TransactionError(
+                operation="execute",
+                message=f"Transaction failed: {str(e)}",
+                original_error=e,
+            ) from e
+
+    return wrapper
 
 
 class BaseRepository(ABC, Generic[T, M]):
@@ -36,10 +148,16 @@ class BaseRepository(ABC, Generic[T, M]):
 
     Implements Template Method pattern where subclasses provide
     the specific model class and conversion logic.
+
+    Attributes:
+        _model_class: SQLAlchemy model class (must be set by subclasses)
+        _entity_name: Human-readable entity name for error messages
     """
 
     # Subclasses must define their SQLAlchemy model class
     _model_class: type[M] = None
+    # Optional: override for custom entity name in error messages
+    _entity_name: Optional[str] = None
 
     def __init__(self, session: AsyncSession) -> None:
         """
@@ -56,6 +174,35 @@ class BaseRepository(ABC, Generic[T, M]):
     def session(self) -> AsyncSession:
         """Get the database session."""
         return self._session
+
+    @property
+    def entity_name(self) -> str:
+        """Get the entity name for error messages."""
+        if self._entity_name:
+            return self._entity_name
+        if self._model_class:
+            return self._model_class.__name__
+        return "Entity"
+
+    def _eager_load_options(self) -> list:
+        """
+        Return eager loading options for queries.
+
+        Override this method to specify relationships to load eagerly.
+        Use joinedload for single-object relationships (many-to-one, one-to-one).
+        Use selectinload for collection relationships (one-to-many, many-to-many).
+
+        Returns:
+            List of SQLAlchemy loader options
+
+        Example:
+            def _eager_load_options(self) -> list:
+                return [
+                    joinedload(DBUser.tenant),
+                    selectinload(DBUser.projects),
+                ]
+        """
+        return []
 
     # === Abstract methods (must be implemented by subclasses) ===
 
@@ -136,13 +283,62 @@ class BaseRepository(ABC, Generic[T, M]):
 
         Raises:
             ValueError: If entity_id is empty
+            RepositoryError: If database operation fails
         """
         if not entity_id:
             raise ValueError("ID cannot be empty")
 
-        query = select(self._model_class).where(
-            getattr(self._model_class, "id") == entity_id
-        )
+        query = select(self._model_class).where(getattr(self._model_class, "id") == entity_id)
+        # Apply eager loading options
+        for option in self._eager_load_options():
+            query = query.options(option)
+        result = await self._session.execute(query)
+        db_model = result.scalar_one_or_none()
+        return self._to_domain(db_model)
+
+    async def find_by_ids(self, entity_ids: List[str]) -> List[T]:
+        """
+        Find multiple entities by their IDs.
+
+        Args:
+            entity_ids: List of entity IDs to find
+
+        Returns:
+            List of domain entities (may be shorter than input if some not found)
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        if not entity_ids:
+            return []
+
+        query = select(self._model_class).where(getattr(self._model_class, "id").in_(entity_ids))
+        # Apply eager loading options
+        for option in self._eager_load_options():
+            query = query.options(option)
+        result = await self._session.execute(query)
+        db_models = result.scalars().all()
+        return [self._to_domain(m) for m in db_models if m is not None]
+
+    async def find_one(self, **filters: Any) -> Optional[T]:
+        """
+        Find a single entity matching the given filters.
+
+        Args:
+            **filters: Filter criteria
+
+        Returns:
+            Domain entity or None if not found
+
+        Raises:
+            RepositoryError: If database operation fails
+        """
+        query = select(self._model_class)
+        query = self._apply_filters(query, **filters)
+        # Apply eager loading options
+        for option in self._eager_load_options():
+            query = query.options(option)
+        query = query.limit(1)
         result = await self._session.execute(query)
         db_model = result.scalar_one_or_none()
         return self._to_domain(db_model)
@@ -160,8 +356,10 @@ class BaseRepository(ABC, Generic[T, M]):
         if not entity_id:
             return False
 
-        query = select(func.count()).select_from(self._model_class).where(
-            getattr(self._model_class, "id") == entity_id
+        query = (
+            select(func.count())
+            .select_from(self._model_class)
+            .where(getattr(self._model_class, "id") == entity_id)
         )
         result = await self._session.execute(query)
         count = result.scalar()
@@ -196,9 +394,7 @@ class BaseRepository(ABC, Generic[T, M]):
 
     async def _find_db_model_by_id(self, entity_id: str) -> Optional[M]:
         """Find database model by ID (internal helper)."""
-        query = select(self._model_class).where(
-            getattr(self._model_class, "id") == entity_id
-        )
+        query = select(self._model_class).where(getattr(self._model_class, "id") == entity_id)
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
@@ -251,6 +447,7 @@ class BaseRepository(ABC, Generic[T, M]):
 
         Raises:
             ValueError: If limit is negative
+            RepositoryError: If database operation fails
         """
         if limit < 0:
             raise ValueError("Limit must be non-negative")
@@ -259,6 +456,9 @@ class BaseRepository(ABC, Generic[T, M]):
             return []
 
         query = self._build_query(filters=filters)
+        # Apply eager loading options
+        for option in self._eager_load_options():
+            query = query.options(option)
         query = query.offset(offset).limit(limit)
 
         result = await self._session.execute(query)
@@ -311,9 +511,7 @@ class BaseRepository(ABC, Generic[T, M]):
         if not entity_ids:
             return 0
 
-        query = delete(self._model_class).where(
-            getattr(self._model_class, "id").in_(entity_ids)
-        )
+        query = delete(self._model_class).where(getattr(self._model_class, "id").in_(entity_ids))
         result = await self._session.execute(query)
         await self._session.flush()
         return result.rowcount

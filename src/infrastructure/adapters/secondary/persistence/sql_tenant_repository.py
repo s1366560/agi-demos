@@ -1,8 +1,9 @@
 """
-SQLAlchemy implementation of TenantRepository.
+V2 SQLAlchemy implementation of TenantRepository using BaseRepository.
 """
 
 import logging
+import re
 from typing import List, Optional
 
 from sqlalchemy import select
@@ -10,94 +11,88 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.tenant.tenant import Tenant
 from src.domain.ports.repositories.tenant_repository import TenantRepository
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import Tenant as DBTenant
 
 logger = logging.getLogger(__name__)
 
 
-class SqlAlchemyTenantRepository(TenantRepository):
-    """SQLAlchemy implementation of TenantRepository"""
+def _generate_slug(name: str) -> str:
+    """Generate a URL-friendly slug from a name."""
+    # Convert to lowercase and replace spaces/special chars with hyphens
+    slug = re.sub(r"[^\w\s-]", "", name.lower())
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = slug.strip("-")
+    return slug
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
 
-    async def save(self, tenant: Tenant) -> None:
-        """Save a tenant (create or update)"""
-        result = await self._session.execute(select(DBTenant).where(DBTenant.id == tenant.id))
-        db_tenant = result.scalar_one_or_none()
+class SqlTenantRepository(BaseRepository[Tenant, DBTenant], TenantRepository):
+    """V2 SQLAlchemy implementation of TenantRepository using BaseRepository."""
 
-        if db_tenant:
-            # Update existing tenant
-            db_tenant.name = tenant.name
-            db_tenant.description = tenant.description
-            # db_tenant.plan = tenant.plan
-            # db_tenant.max_projects = tenant.max_projects
-            # db_tenant.max_users = tenant.max_users
-            # db_tenant.max_storage = tenant.max_storage
-            db_tenant.updated_at = tenant.updated_at
-        else:
-            # Create new tenant
-            db_tenant = DBTenant(
-                id=tenant.id,
-                name=tenant.name,
-                owner_id=tenant.owner_id,
-                description=tenant.description,
-                # plan=tenant.plan,  # DB model does not have plan yet
-                # max_projects=tenant.max_projects, # DB model does not have max_projects yet
-                # max_users=tenant.max_users, # DB model does not have max_users yet
-                # max_storage=tenant.max_storage, # DB model does not have max_storage yet
-                created_at=tenant.created_at,
-                updated_at=tenant.updated_at,
-            )
-            self._session.add(db_tenant)
+    _model_class = DBTenant
 
-        await self._session.flush()
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
 
-    async def find_by_id(self, tenant_id: str) -> Optional[Tenant]:
-        """Find a tenant by ID"""
-        result = await self._session.execute(select(DBTenant).where(DBTenant.id == tenant_id))
-        db_tenant = result.scalar_one_or_none()
-        return self._to_domain(db_tenant) if db_tenant else None
+    # === Interface implementation ===
 
     async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> List[Tenant]:
-        """List all tenants owned by a user"""
-        result = await self._session.execute(
-            select(DBTenant).where(DBTenant.owner_id == owner_id).offset(offset).limit(limit)
-        )
+        """List all tenants owned by a user."""
+        query = select(DBTenant).where(DBTenant.owner_id == owner_id).offset(offset).limit(limit)
+        result = await self._session.execute(query)
         db_tenants = result.scalars().all()
         return [self._to_domain(t) for t in db_tenants]
 
     async def find_by_name(self, name: str) -> Optional[Tenant]:
-        """Find a tenant by name"""
-        result = await self._session.execute(select(DBTenant).where(DBTenant.name == name))
+        """Find a tenant by name."""
+        query = select(DBTenant).where(DBTenant.name == name)
+        result = await self._session.execute(query)
         db_tenant = result.scalar_one_or_none()
-        return self._to_domain(db_tenant) if db_tenant else None
+        return self._to_domain(db_tenant)
 
     async def list_all(self, limit: int = 50, offset: int = 0) -> List[Tenant]:
-        """List all tenants with pagination"""
-        result = await self._session.execute(select(DBTenant).offset(offset).limit(limit))
-        db_tenants = result.scalars().all()
-        return [self._to_domain(t) for t in db_tenants]
+        """List all tenants with pagination."""
+        return await super().list_all(limit=limit, offset=offset)
 
     async def delete(self, tenant_id: str) -> None:
-        """Delete a tenant"""
-        result = await self._session.execute(select(DBTenant).where(DBTenant.id == tenant_id))
-        db_tenant = result.scalar_one_or_none()
+        """Delete a tenant."""
+        db_tenant = await self._find_db_model_by_id(tenant_id)
         if db_tenant:
             await self._session.delete(db_tenant)
             await self._session.flush()
 
-    def _to_domain(self, db_tenant: DBTenant) -> Tenant:
-        """Convert database model to domain model"""
+    # === Conversion methods ===
+
+    def _to_domain(self, db_tenant: Optional[DBTenant]) -> Optional[Tenant]:
+        """Convert database model to domain model."""
+        if db_tenant is None:
+            return None
+
         return Tenant(
             id=db_tenant.id,
             name=db_tenant.name,
             owner_id=db_tenant.owner_id,
             description=db_tenant.description,
-            # plan=db_tenant.plan,
-            # max_projects=db_tenant.max_projects,
-            # max_users=db_tenant.max_users,
-            # max_storage=db_tenant.max_storage,
             created_at=db_tenant.created_at,
             updated_at=db_tenant.updated_at,
         )
+
+    def _to_db(self, domain_entity: Tenant) -> DBTenant:
+        """Convert domain entity to database model."""
+        return DBTenant(
+            id=domain_entity.id,
+            name=domain_entity.name,
+            slug=_generate_slug(domain_entity.name),
+            owner_id=domain_entity.owner_id,
+            description=domain_entity.description,
+            created_at=domain_entity.created_at,
+            updated_at=domain_entity.updated_at,
+        )
+
+    def _update_fields(self, db_model: DBTenant, domain_entity: Tenant) -> None:
+        """Update database model fields from domain entity."""
+        db_model.name = domain_entity.name
+        db_model.slug = _generate_slug(domain_entity.name)
+        db_model.description = domain_entity.description
+        db_model.updated_at = domain_entity.updated_at

@@ -1,5 +1,5 @@
 """
-SQL implementation of Message Execution Status Repository.
+V2 SQLAlchemy implementation of MessageExecutionStatusRepository using BaseRepository.
 
 This repository manages the message execution status in PostgreSQL,
 enabling event stream recovery after page refresh.
@@ -20,31 +20,35 @@ from src.domain.model.agent.execution_status import AgentExecution, AgentExecuti
 from src.domain.ports.repositories.agent_execution_repository import (
     AgentExecutionRepositoryPort,
 )
-from src.infrastructure.adapters.secondary.persistence.models import (
-    MessageExecutionStatus as MessageExecutionStatusModel,
-)
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
+class SqlMessageExecutionStatusRepository(
+    BaseRepository[AgentExecution, object], AgentExecutionRepositoryPort
+):
     """
-    SQL implementation of message execution status tracking.
+    V2 SQLAlchemy implementation of message execution status tracking using BaseRepository.
 
     This repository tracks the overall message generation status,
     enabling event stream recovery after page refresh.
     """
 
-    def __init__(self, session: AsyncSession):
+    # This repository doesn't use a standard model for CRUD
+    _model_class = None
+
+    def __init__(self, session: AsyncSession) -> None:
         """
         Initialize the repository.
 
         Args:
             session: SQLAlchemy async session
         """
+        super().__init__(session)
         self._session = session
 
-    def _to_domain(self, model: MessageExecutionStatusModel) -> AgentExecution:
+    def _to_domain(self, model) -> AgentExecution:
         """Convert database model to domain entity."""
         return AgentExecution(
             id=model.id,
@@ -59,8 +63,12 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
             project_id=model.project_id,
         )
 
-    def _to_model(self, entity: AgentExecution) -> MessageExecutionStatusModel:
+    def _to_model(self, entity: AgentExecution):
         """Convert domain entity to database model."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         return MessageExecutionStatusModel(
             id=entity.id,
             conversation_id=entity.conversation_id,
@@ -87,6 +95,10 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
 
     async def get_by_id(self, execution_id: str) -> Optional[AgentExecution]:
         """Get execution by ID."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         result = await self._session.execute(
             select(MessageExecutionStatusModel).where(
                 MessageExecutionStatusModel.id == execution_id
@@ -101,6 +113,10 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
         conversation_id: Optional[str] = None,
     ) -> Optional[AgentExecution]:
         """Get execution by message ID."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         query = select(MessageExecutionStatusModel).where(
             MessageExecutionStatusModel.message_id == message_id
         )
@@ -116,6 +132,10 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
         conversation_id: str,
     ) -> Optional[AgentExecution]:
         """Get the currently running execution for a conversation."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         result = await self._session.execute(
             select(MessageExecutionStatusModel)
             .where(MessageExecutionStatusModel.conversation_id == conversation_id)
@@ -133,6 +153,10 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
         error_message: Optional[str] = None,
     ) -> Optional[AgentExecution]:
         """Update execution status."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         update_data = {
             "status": status.value,
         }
@@ -168,6 +192,10 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
         sequence: int,
     ) -> Optional[AgentExecution]:
         """Update the last event sequence number."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         result = await self._session.execute(
             update(MessageExecutionStatusModel)
             .where(MessageExecutionStatusModel.id == execution_id)
@@ -180,6 +208,10 @@ class SQLMessageExecutionStatusRepository(AgentExecutionRepositoryPort):
 
     async def delete(self, execution_id: str) -> bool:
         """Delete an execution record."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            MessageExecutionStatus as MessageExecutionStatusModel,
+        )
+
         result = await self._session.execute(
             select(MessageExecutionStatusModel).where(
                 MessageExecutionStatusModel.id == execution_id

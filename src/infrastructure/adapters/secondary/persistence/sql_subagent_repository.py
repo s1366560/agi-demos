@@ -1,7 +1,5 @@
 """
-SQLAlchemy implementation of SubAgentRepository.
-
-Provides persistence for subagents with tenant-level scoping.
+V2 SQLAlchemy implementation of SubAgentRepository using BaseRepository.
 """
 
 import logging
@@ -13,19 +11,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SQLSubAgentRepository(SubAgentRepositoryPort):
+class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepositoryPort):
     """
-    SQLAlchemy implementation of SubAgentRepository.
+    V2 SQLAlchemy implementation of SubAgentRepository using BaseRepository.
 
     Uses JSON columns to store trigger info and allowed tools/skills.
     Implements tenant-level scoping.
     """
 
-    def __init__(self, session: AsyncSession):
+    # This repository doesn't use a standard model for CRUD
+    _model_class = None
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
         self._session = session
 
     async def create(self, subagent: SubAgent) -> SubAgent:

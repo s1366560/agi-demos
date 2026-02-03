@@ -58,11 +58,11 @@ class HITLRecoveryService:
                 async_session_factory,
             )
             from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-                SQLHITLRequestRepository,
+                SqlHITLRequestRepository,
             )
 
             async with async_session_factory() as session:
-                repo = SQLHITLRequestRepository(session)
+                repo = SqlHITLRequestRepository(session)
                 requests = await repo.get_unprocessed_answered_requests(limit=100)
 
                 if not requests:

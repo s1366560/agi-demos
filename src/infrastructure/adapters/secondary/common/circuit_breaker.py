@@ -304,8 +304,7 @@ class CircuitBreaker:
         self._state.half_open_call_count = 0
         self._stats.open_count += 1
         logger.warning(
-            f"Circuit breaker '{self._name}' opened after "
-            f"{self._state.failure_count} failures"
+            f"Circuit breaker '{self._name}' opened after {self._state.failure_count} failures"
         )
 
     def _transition_to_half_open(self) -> None:

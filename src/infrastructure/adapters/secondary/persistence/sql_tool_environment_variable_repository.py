@@ -1,8 +1,5 @@
 """
-SQLAlchemy implementation of ToolEnvironmentVariableRepository.
-
-Provides persistence for tool environment variables with tenant
-and project-level isolation for multi-tenant support.
+V2 SQLAlchemy implementation of ToolEnvironmentVariableRepository using BaseRepository.
 """
 
 import logging
@@ -18,19 +15,27 @@ from src.domain.model.agent.tool_environment_variable import (
 from src.domain.ports.repositories.tool_environment_variable_repository import (
     ToolEnvironmentVariableRepositoryPort,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SQLToolEnvironmentVariableRepository(ToolEnvironmentVariableRepositoryPort):
+class SqlToolEnvironmentVariableRepository(
+    BaseRepository[ToolEnvironmentVariable, object], ToolEnvironmentVariableRepositoryPort
+):
     """
-    SQLAlchemy implementation of ToolEnvironmentVariableRepository.
+    V2 SQLAlchemy implementation of ToolEnvironmentVariableRepository using BaseRepository.
 
     Provides CRUD operations for tool environment variables with
     tenant and project-level isolation.
     """
 
-    def __init__(self, session: AsyncSession):
+    # This repository doesn't use a standard model for CRUD
+    _model_class = None
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
         self._session = session
 
     async def create(self, env_var: ToolEnvironmentVariable) -> ToolEnvironmentVariable:
@@ -145,9 +150,7 @@ class SQLToolEnvironmentVariableRepository(ToolEnvironmentVariableRepositoryPort
             ToolEnvironmentVariableRecord.tool_name == tool_name,
         )
         tenant_result = await self._session.execute(tenant_query)
-        tenant_vars = {
-            r.variable_name: self._to_domain(r) for r in tenant_result.scalars().all()
-        }
+        tenant_vars = {r.variable_name: self._to_domain(r) for r in tenant_result.scalars().all()}
 
         if project_id:
             # Get project-level variables and merge (project overrides tenant)

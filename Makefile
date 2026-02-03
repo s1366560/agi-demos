@@ -565,6 +565,31 @@ db-schema: ## Initialize database schema (create tables)
 		"import asyncio; from src.infrastructure.adapters.secondary.persistence.database import initialize_database; asyncio.run(initialize_database())"
 	@echo "✅ Schema initialized"
 
+db-migrate: ## Run Alembic migrations (upgrade to latest)
+	@echo "🔄 Running database migrations..."
+	PYTHONPATH=. uv run alembic upgrade head
+	@echo "✅ Migrations applied"
+
+db-migrate-new: ## Generate new Alembic migration (usage: make db-migrate-new MSG="add_users_table")
+	@echo "📝 Generating new migration..."
+	PYTHONPATH=. uv run alembic revision --autogenerate -m "$(MSG)"
+	@echo "✅ Migration generated. Please review the generated file in alembic/versions/"
+
+db-migrate-rollback: ## Rollback last migration
+	@echo "⏪ Rolling back last migration..."
+	PYTHONPATH=. uv run alembic downgrade -1
+	@echo "✅ Rollback completed"
+
+db-status: ## Show Alembic migration status
+	@echo "📊 Migration status:"
+	@PYTHONPATH=. uv run alembic current
+	@echo ""
+	@echo "📜 Pending migrations:"
+	@PYTHONPATH=. uv run alembic history --verbose | head -20
+
+db-history: ## Show full migration history
+	@PYTHONPATH=. uv run alembic history --verbose
+
 db-migrate-messages: ## Migrate messages table to unified event timeline (one-time migration)
 	@echo "🔄 Migrating messages to unified event timeline..."
 	@PYTHONPATH=. uv run python -c \

@@ -1,7 +1,5 @@
 """
-SQLAlchemy implementation of MCPServerRepository.
-
-Provides persistence for MCP server configurations with tenant-level scoping.
+V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
 """
 
 import logging
@@ -13,20 +11,27 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.repositories.mcp_server_repository import MCPServerRepositoryPort
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
+from src.infrastructure.adapters.secondary.persistence.models import MCPServer as DBMCPServer
 
 logger = logging.getLogger(__name__)
 
 
-class SQLMCPServerRepository(MCPServerRepositoryPort):
+class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerRepositoryPort):
     """
-    SQLAlchemy implementation of MCPServerRepository.
+    V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
 
-    Uses JSON columns to store transport configuration and discovered tools.
-    Implements tenant-level scoping.
+    Note: This repository uses dict as the domain type since MCPServer
+    is represented as a dictionary in the current architecture.
     """
 
-    def __init__(self, session: AsyncSession):
-        self._session = session
+    _model_class = DBMCPServer
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
+
+    # === Interface implementation ===
 
     async def create(
         self,
@@ -38,11 +43,9 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
         enabled: bool = True,
     ) -> str:
         """Create a new MCP server configuration."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
         server_id = str(uuid.uuid4())
 
-        db_server = MCPServer(
+        db_server = DBMCPServer(
             id=server_id,
             tenant_id=tenant_id,
             name=name,
@@ -62,23 +65,22 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
 
     async def get_by_id(self, server_id: str) -> Optional[dict]:
         """Get an MCP server by its ID."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
-        result = await self._session.execute(select(MCPServer).where(MCPServer.id == server_id))
+        query = select(DBMCPServer).where(DBMCPServer.id == server_id)
+        result = await self._session.execute(query)
         db_server = result.scalar_one_or_none()
 
-        return self._to_dict(db_server) if db_server else None
+        return self._to_domain(db_server) if db_server else None
 
     async def get_by_name(self, tenant_id: str, name: str) -> Optional[dict]:
         """Get an MCP server by name within a tenant."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
-        result = await self._session.execute(
-            select(MCPServer).where(MCPServer.tenant_id == tenant_id).where(MCPServer.name == name)
+        query = select(DBMCPServer).where(
+            DBMCPServer.tenant_id == tenant_id,
+            DBMCPServer.name == name,
         )
 
+        result = await self._session.execute(query)
         db_server = result.scalar_one_or_none()
-        return self._to_dict(db_server) if db_server else None
+        return self._to_domain(db_server) if db_server else None
 
     async def list_by_tenant(
         self,
@@ -86,17 +88,15 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
         enabled_only: bool = False,
     ) -> List[dict]:
         """List all MCP servers for a tenant."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
-        query = select(MCPServer).where(MCPServer.tenant_id == tenant_id)
+        query = select(DBMCPServer).where(DBMCPServer.tenant_id == tenant_id)
 
         if enabled_only:
-            query = query.where(MCPServer.enabled.is_(True))
+            query = query.where(DBMCPServer.enabled.is_(True))
 
-        result = await self._session.execute(query.order_by(MCPServer.created_at.desc()))
+        result = await self._session.execute(query.order_by(DBMCPServer.created_at.desc()))
         db_servers = result.scalars().all()
 
-        return [self._to_dict(server) for server in db_servers]
+        return [self._to_domain(server) for server in db_servers]
 
     async def update(
         self,
@@ -108,9 +108,7 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
         enabled: Optional[bool] = None,
     ) -> bool:
         """Update an MCP server configuration."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
-        result = await self._session.execute(select(MCPServer).where(MCPServer.id == server_id))
+        result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
         db_server = result.scalar_one_or_none()
 
         if not db_server:
@@ -142,9 +140,7 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
         last_sync_at: datetime,
     ) -> bool:
         """Update the discovered tools for an MCP server."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
-        result = await self._session.execute(select(MCPServer).where(MCPServer.id == server_id))
+        result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
         db_server = result.scalar_one_or_none()
 
         if not db_server:
@@ -162,9 +158,7 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
 
     async def delete(self, server_id: str) -> bool:
         """Delete an MCP server."""
-        from src.infrastructure.adapters.secondary.persistence.models import MCPServer
-
-        result = await self._session.execute(delete(MCPServer).where(MCPServer.id == server_id))
+        result = await self._session.execute(delete(DBMCPServer).where(DBMCPServer.id == server_id))
 
         if result.rowcount == 0:
             logger.warning(f"MCP server not found: {server_id}")
@@ -177,8 +171,13 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
         """Get all enabled MCP servers for a tenant."""
         return await self.list_by_tenant(tenant_id, enabled_only=True)
 
-    def _to_dict(self, db_server) -> dict:
+    # === Conversion methods ===
+
+    def _to_domain(self, db_server: Optional[DBMCPServer]) -> Optional[dict]:
         """Convert database model to dictionary."""
+        if db_server is None:
+            return None
+
         return {
             "id": db_server.id,
             "tenant_id": db_server.tenant_id,
@@ -192,3 +191,36 @@ class SQLMCPServerRepository(MCPServerRepositoryPort):
             "created_at": db_server.created_at,
             "updated_at": db_server.updated_at,
         }
+
+    def _to_db(self, domain_entity: dict) -> DBMCPServer:
+        """Convert dictionary to database model."""
+        return DBMCPServer(
+            id=domain_entity.get("id"),
+            tenant_id=domain_entity.get("tenant_id"),
+            name=domain_entity.get("name"),
+            description=domain_entity.get("description"),
+            server_type=domain_entity.get("server_type"),
+            transport_config=domain_entity.get("transport_config", {}),
+            enabled=domain_entity.get("enabled", True),
+            discovered_tools=domain_entity.get("discovered_tools", []),
+            last_sync_at=domain_entity.get("last_sync_at"),
+            created_at=domain_entity.get("created_at"),
+            updated_at=domain_entity.get("updated_at"),
+        )
+
+    def _update_fields(self, db_model: DBMCPServer, domain_entity: dict) -> None:
+        """Update database model fields from dictionary."""
+        if "name" in domain_entity:
+            db_model.name = domain_entity["name"]
+        if "description" in domain_entity:
+            db_model.description = domain_entity["description"]
+        if "server_type" in domain_entity:
+            db_model.server_type = domain_entity["server_type"]
+        if "transport_config" in domain_entity:
+            db_model.transport_config = domain_entity["transport_config"]
+        if "enabled" in domain_entity:
+            db_model.enabled = domain_entity["enabled"]
+        if "discovered_tools" in domain_entity:
+            db_model.discovered_tools = domain_entity["discovered_tools"]
+        if "last_sync_at" in domain_entity:
+            db_model.last_sync_at = domain_entity["last_sync_at"]

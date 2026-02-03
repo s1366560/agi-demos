@@ -1,7 +1,5 @@
 """
-SQLAlchemy implementation of TenantAgentConfigRepository (T095).
-
-Provides persistence for tenant-level agent configuration.
+V2 SQLAlchemy implementation of TenantAgentConfigRepository using BaseRepository.
 """
 
 import logging
@@ -14,19 +12,28 @@ from src.domain.model.agent.tenant_agent_config import ConfigType, TenantAgentCo
 from src.domain.ports.repositories.tenant_agent_config_repository import (
     TenantAgentConfigRepositoryPort,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 
 logger = logging.getLogger(__name__)
 
 
-class SQLTenantAgentConfigRepository(TenantAgentConfigRepositoryPort):
+class SqlTenantAgentConfigRepository(
+    BaseRepository[TenantAgentConfig, object], TenantAgentConfigRepositoryPort
+):
     """
-    SQLAlchemy implementation of TenantAgentConfigRepository.
+    V2 SQLAlchemy implementation of TenantAgentConfigRepository using BaseRepository.
 
     Each tenant has at most one configuration record.
     If no custom config exists, default values are returned.
     """
 
-    def __init__(self, session: AsyncSession):
+    # This repository doesn't use a standard model for CRUD
+    # We'll implement the methods directly
+    _model_class = None
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Initialize the repository."""
+        super().__init__(session)
         self._session = session
 
     async def get_by_tenant(self, tenant_id: str) -> Optional[TenantAgentConfig]:
@@ -44,7 +51,6 @@ class SQLTenantAgentConfigRepository(TenantAgentConfigRepositoryPort):
             return self._to_domain(db_config)
 
         # Return None to indicate no custom config exists
-        # Caller should use default config
         return None
 
     async def save(self, config: TenantAgentConfig) -> TenantAgentConfig:
@@ -116,8 +122,11 @@ class SQLTenantAgentConfigRepository(TenantAgentConfigRepositoryPort):
 
         return result.scalar_one_or_none() is not None
 
-    def _to_domain(self, db_config) -> TenantAgentConfig:
+    def _to_domain(self, db_config) -> Optional[TenantAgentConfig]:
         """Convert database model to domain entity."""
+        if db_config is None:
+            return None
+
         return TenantAgentConfig(
             id=db_config.id,
             tenant_id=db_config.tenant_id,
