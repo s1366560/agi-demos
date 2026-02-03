@@ -7,6 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
+from src.infrastructure.adapters.primary.web.middleware import configure_exception_handlers
 from src.infrastructure.adapters.primary.web.routers import (
     ai_tools,
     artifacts,
@@ -243,6 +244,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # Configure rate limiting
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    # Configure domain exception handlers
+    configure_exception_handlers(app)
 
     @app.get("/health")
     async def health_check():
