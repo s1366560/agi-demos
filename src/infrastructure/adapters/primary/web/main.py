@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,9 +7,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from src.configuration.config import get_settings
-from src.configuration.di_container import DIContainer
-from src.configuration.factories import create_native_graph_adapter
-from src.infrastructure.adapters.primary.web.dependencies import initialize_default_credentials
 from src.infrastructure.adapters.primary.web.routers import (
     ai_tools,
     artifacts,
@@ -42,18 +38,22 @@ from src.infrastructure.adapters.primary.web.routers import (
     terminal,
 )
 from src.infrastructure.adapters.primary.web.routers.agent import router as agent_router
+from src.infrastructure.adapters.primary.web.startup import (
+    initialize_container,
+    initialize_database_schema,
+    initialize_docker_services,
+    initialize_graph_service,
+    initialize_llm_providers,
+    initialize_redis_client,
+    initialize_telemetry,
+    initialize_temporal_services,
+    initialize_websocket_manager,
+    shutdown_docker_services,
+    shutdown_telemetry_services,
+)
+from src.infrastructure.adapters.primary.web.startup.graph import shutdown_graph_service
 from src.infrastructure.adapters.primary.web.websocket import router as websocket_router
-from src.infrastructure.adapters.secondary.persistence.database import (
-    async_session_factory,
-    initialize_database,
-)
-from src.infrastructure.adapters.secondary.temporal import TemporalWorkflowEngine
-from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
 from src.infrastructure.middleware.rate_limit import limiter
-from src.infrastructure.telemetry import (
-    instrument_all,
-    shutdown_telemetry,
-)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -65,105 +65,27 @@ for _logger_name in _litellm_loggers:
     _litellm_logger = logging.getLogger(_logger_name)
     _litellm_logger.propagate = False
 
-# Trigger reload 10
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
 
-    # Initialize OpenTelemetry (FastAPI is instrumented in create_app, before routes)
-    if settings.enable_telemetry:
-        logger.info("Initializing OpenTelemetry...")
-        try:
-            # Configure metrics (tracing configured in create_app)
-            from src.infrastructure.telemetry.config import configure_meter_provider
+    # Initialize OpenTelemetry and Langfuse
+    await initialize_telemetry()
 
-            configure_meter_provider()
-
-            # Auto-instrument other libraries (httpx, sqlalchemy, redis)
-            instrumentation_results = instrument_all(auto_instrument=True)
-
-            logger.info(f"OpenTelemetry auto-instrumentation: {instrumentation_results}")
-            logger.info(
-                f"OpenTelemetry initialized (service={settings.service_name}, "
-                f"environment={settings.environment})"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to initialize OpenTelemetry: {e}")
-    else:
-        logger.info("OpenTelemetry disabled")
-
-    # Initialize Database Schema
-    logger.info("Initializing database schema...")
-    await initialize_database()
-    logger.info("Database schema initialized")
-
-    # Initialize Default Credentials (Admin/User/Tenant)
-    logger.info("Initializing default credentials...")
-    await initialize_default_credentials()
-    logger.info("Default credentials initialized")
+    # Initialize Database Schema and Default Credentials
+    await initialize_database_schema()
 
     # Initialize Default LLM Provider from environment
-    logger.info("Initializing default LLM provider...")
-    from src.infrastructure.llm.initializer import initialize_default_llm_providers
-
-    provider_created = await initialize_default_llm_providers()
-    if provider_created:
-        logger.info("Default LLM provider created from environment configuration")
-    else:
-        logger.info("LLM provider initialization skipped (providers already exist or no config)")
-
-    # Initialize Langfuse LLM Observability (if enabled)
-    if settings.langfuse_enabled:
-        try:
-            import litellm
-
-            # Set environment variables for LiteLLM Langfuse callback
-            if settings.langfuse_public_key:
-                os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
-            if settings.langfuse_secret_key:
-                os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
-            os.environ["LANGFUSE_HOST"] = settings.langfuse_host
-
-            # Enable Langfuse callback for all LiteLLM calls
-            litellm.success_callback = ["langfuse"]
-            litellm.failure_callback = ["langfuse"]
-
-            logger.info(
-                f"Langfuse LLM observability enabled (host: {settings.langfuse_host}, "
-                f"sample_rate: {settings.langfuse_sample_rate})"
-            )
-        except Exception as e:
-            logger.warning(
-                f"Failed to initialize Langfuse callback: {e}. Tracing will be disabled."
-            )
-    else:
-        logger.info("Langfuse LLM observability disabled")
+    await initialize_llm_providers()
 
     # Initialize NativeGraphAdapter (self-developed knowledge graph engine)
-    logger.info("Creating NativeGraphAdapter...")
-    try:
-        graph_service = await create_native_graph_adapter()
-        logger.info("NativeGraphAdapter created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create NativeGraphAdapter: {e}")
-        logger.error("Neo4j is required for MemStack to function. Please ensure Neo4j is running.")
-        raise
+    graph_service = await initialize_graph_service()
 
-    # Initialize Temporal Workflow Engine
-    logger.info("Initializing Temporal Workflow Engine...")
-    temporal_client = None
-    workflow_engine = None
-    try:
-        temporal_client = await TemporalClientFactory.get_client()
-        workflow_engine = TemporalWorkflowEngine(client=temporal_client)
-        logger.info("Temporal Workflow Engine initialized")
-    except Exception as e:
-        logger.warning(
-            f"Failed to connect to Temporal server: {e}. Workflow engine will be unavailable."
-        )
+    # Initialize Temporal Workflow Engine and MCP Temporal Adapter
+    temporal_client, workflow_engine, mcp_temporal_adapter = await initialize_temporal_services()
 
     # Initialize Background Task Manager
     from src.infrastructure.adapters.secondary.background_tasks import task_manager
@@ -171,107 +93,27 @@ async def lifespan(app: FastAPI):
     task_manager.start_cleanup()
     logger.info("Background task manager started")
 
-    # Initialize MCP Temporal Adapter (if Temporal is available)
-    mcp_temporal_adapter = None
-    logger.info(f"Checking Temporal client availability: {temporal_client is not None}")
-    if temporal_client:
-        try:
-            from src.infrastructure.adapters.secondary.temporal.mcp.adapter import (
-                MCPTemporalAdapter,
-            )
-
-            mcp_temporal_adapter = MCPTemporalAdapter(temporal_client)
-            logger.info("MCP Temporal Adapter initialized successfully")
-        except Exception as e:
-            logger.warning(f"Failed to initialize MCP Temporal Adapter: {e}")
-
     # Initialize Redis client for event bus
-    redis_client = None
-    try:
-        import redis.asyncio as redis
+    redis_client = await initialize_redis_client()
 
-        redis_client = redis.from_url(settings.redis_url, decode_responses=True)
-        logger.info("Redis client initialized for event bus")
-
-        # Clean up stale agent running states on startup
-        # This handles cases where the server was restarted while agents were running
-        try:
-            stale_keys = []
-            async for key in redis_client.scan_iter(match="agent:running:*"):
-                stale_keys.append(key)
-            if stale_keys:
-                await redis_client.delete(*stale_keys)
-                logger.info(
-                    f"Cleaned up {len(stale_keys)} stale agent running states from previous session"
-                )
-        except Exception as cleanup_error:
-            logger.warning(f"Failed to clean up stale agent running states: {cleanup_error}")
-    except Exception as e:
-        logger.warning(f"Failed to initialize Redis client: {e}")
-
-    # Initialize Container with NativeGraphAdapter as graph_service
-    logger.info("Initializing DI container...")
-    container = DIContainer(
-        session_factory=async_session_factory,
+    # Initialize DI Container
+    container = initialize_container(
         graph_service=graph_service,
         redis_client=redis_client,
         workflow_engine=workflow_engine,
-        temporal_client=temporal_client if workflow_engine else None,
+        temporal_client=temporal_client,
         mcp_temporal_adapter=mcp_temporal_adapter,
     )
-    logger.info("DI container initialized")
 
     app.state.container = container
     app.state.workflow_engine = workflow_engine
     app.state.graph_service = graph_service
 
     # Register WebSocket manager for lifecycle state notifications
-    from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
-        get_connection_manager,
-    )
-    from src.infrastructure.agent.core.project_react_agent import (
-        register_websocket_manager,
-    )
+    initialize_websocket_manager()
 
-    ws_manager = get_connection_manager()
-    register_websocket_manager(ws_manager)
-    logger.info("WebSocket manager registered for lifecycle state notifications")
-
-    # Sync existing sandbox containers from Docker
-    logger.info("Syncing existing sandbox containers from Docker...")
-    try:
-        from src.infrastructure.adapters.primary.web.routers.sandbox import (
-            ensure_sandbox_sync,
-        )
-
-        await ensure_sandbox_sync()
-    except Exception as e:
-        logger.warning(f"Failed to sync sandbox containers from Docker: {e}")
-
-    # Start Docker event monitor for real-time container status updates
-    docker_event_monitor = None
-    try:
-        from src.application.services.sandbox_status_sync_service import SandboxStatusSyncService
-        from src.infrastructure.adapters.secondary.sandbox.docker_event_monitor import (
-            start_docker_event_monitor,
-        )
-
-        # Get event publisher from container (already configured with Redis event bus)
-        event_publisher = container.sandbox_event_publisher()
-
-        # Create status sync service
-        sync_service = SandboxStatusSyncService(
-            session_factory=async_session_factory,
-            event_publisher=event_publisher,
-        )
-
-        # Start monitor with sync service callback
-        docker_event_monitor = await start_docker_event_monitor(
-            on_status_change=sync_service.handle_status_change
-        )
-        logger.info("Docker event monitor started for real-time container status updates")
-    except Exception as e:
-        logger.warning(f"Failed to start Docker event monitor: {e}")
+    # Initialize Docker services (sandbox sync and event monitor)
+    await initialize_docker_services(container)
 
     yield
 
@@ -279,28 +121,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
 
     # Stop Docker event monitor
-    if docker_event_monitor:
-        try:
-            from src.infrastructure.adapters.secondary.sandbox.docker_event_monitor import (
-                stop_docker_event_monitor,
-            )
-
-            await stop_docker_event_monitor()
-            logger.info("Docker event monitor stopped")
-        except Exception as e:
-            logger.warning(f"Error stopping Docker event monitor: {e}")
+    await shutdown_docker_services()
 
     # Shutdown OpenTelemetry
-    if settings.enable_telemetry:
-        try:
-            shutdown_telemetry()
-            logger.info("OpenTelemetry shutdown complete")
-        except Exception as e:
-            logger.warning(f"Error shutting down OpenTelemetry: {e}")
+    shutdown_telemetry_services()
 
     # Close Neo4j connection
-    if hasattr(graph_service, "client") and hasattr(graph_service.client, "close"):
-        await graph_service.client.close()
+    await shutdown_graph_service(graph_service)
 
 
 def create_app() -> FastAPI:
