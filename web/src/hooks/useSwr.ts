@@ -25,7 +25,8 @@
 
 import useSWR, { SWRConfiguration, mutate as globalMutate } from 'swr'
 import { httpClient } from '@/services/client/httpClient'
-import type { MemoryListResponse, Project } from '@/types/memory'
+import type { MemoryListResponse, Project, SchemaEntityType, SchemaEdgeType, EdgeMapping } from '@/types/memory'
+import { schemaAPI } from '@/services/api'
 
 /**
  * SWR Configuration Options
@@ -213,6 +214,141 @@ export function useProject(
 }
 
 /**
+ * useEntityTypes Hook
+ *
+ * Fetches entity types for a project schema.
+ *
+ * @param projectId - The project ID to fetch entity types for
+ * @param config - Optional SWR configuration overrides
+ * @returns SWR response with entity types
+ */
+export function useEntityTypes(
+  projectId: string | null | undefined,
+  config?: SWRConfiguration
+): SwrHookResponse<SchemaEntityType[]> {
+  const cacheKey = projectId ? `/projects/${projectId}/schema/entities` : null
+
+  const swrResponse = useSWR<SchemaEntityType[]>(
+    cacheKey,
+    () => schemaAPI.listEntityTypes(projectId!),
+    { ...swrConfig, ...config }
+  )
+
+  return {
+    data: swrResponse.data,
+    error: swrResponse.error,
+    isLoading: swrResponse.isLoading,
+    isValidating: swrResponse.isValidating,
+    mutate: swrResponse.mutate,
+  }
+}
+
+/**
+ * useEdgeTypes Hook
+ *
+ * Fetches edge types for a project schema.
+ *
+ * @param projectId - The project ID to fetch edge types for
+ * @param config - Optional SWR configuration overrides
+ * @returns SWR response with edge types
+ */
+export function useEdgeTypes(
+  projectId: string | null | undefined,
+  config?: SWRConfiguration
+): SwrHookResponse<SchemaEdgeType[]> {
+  const cacheKey = projectId ? `/projects/${projectId}/schema/edges` : null
+
+  const swrResponse = useSWR<SchemaEdgeType[]>(
+    cacheKey,
+    () => schemaAPI.listEdgeTypes(projectId!),
+    { ...swrConfig, ...config }
+  )
+
+  return {
+    data: swrResponse.data,
+    error: swrResponse.error,
+    isLoading: swrResponse.isLoading,
+    isValidating: swrResponse.isValidating,
+    mutate: swrResponse.mutate,
+  }
+}
+
+/**
+ * useEdgeMaps Hook
+ *
+ * Fetches edge maps for a project schema.
+ *
+ * @param projectId - The project ID to fetch edge maps for
+ * @param config - Optional SWR configuration overrides
+ * @returns SWR response with edge maps
+ */
+export function useEdgeMaps(
+  projectId: string | null | undefined,
+  config?: SWRConfiguration
+): SwrHookResponse<EdgeMapping[]> {
+  const cacheKey = projectId ? `/projects/${projectId}/schema/edge-maps` : null
+
+  const swrResponse = useSWR<EdgeMapping[]>(
+    cacheKey,
+    () => schemaAPI.listEdgeMaps(projectId!),
+    { ...swrConfig, ...config }
+  )
+
+  return {
+    data: swrResponse.data,
+    error: swrResponse.error,
+    isLoading: swrResponse.isLoading,
+    isValidating: swrResponse.isValidating,
+    mutate: swrResponse.mutate,
+  }
+}
+
+/**
+ * useSchemaData Hook
+ *
+ * Fetches all schema data (entities, edges, mappings) for a project.
+ * Combines multiple hooks for efficient parallel fetching with automatic deduplication.
+ *
+ * @param projectId - The project ID to fetch schema data for
+ * @param config - Optional SWR configuration overrides
+ * @returns Combined SWR response with all schema data
+ */
+export function useSchemaData(
+  projectId: string | null | undefined,
+  config?: SWRConfiguration
+): {
+  entities: SchemaEntityType[] | undefined
+  edges: SchemaEdgeType[] | undefined
+  mappings: EdgeMapping[] | undefined
+  isLoading: boolean
+  isValidating: boolean
+  error: Error | undefined
+  mutate: {
+    entities: (data?: SchemaEntityType[] | Promise<SchemaEntityType[]>) => Promise<SchemaEntityType[] | undefined>
+    edges: (data?: SchemaEdgeType[] | Promise<SchemaEdgeType[]>) => Promise<SchemaEdgeType[] | undefined>
+    mappings: (data?: EdgeMapping[] | Promise<EdgeMapping[]>) => Promise<EdgeMapping[] | undefined>
+  }
+} {
+  const entities = useEntityTypes(projectId, config)
+  const edges = useEdgeTypes(projectId, config)
+  const mappings = useEdgeMaps(projectId, config)
+
+  return {
+    entities: entities.data,
+    edges: edges.data,
+    mappings: mappings.data,
+    isLoading: entities.isLoading || edges.isLoading || mappings.isLoading,
+    isValidating: entities.isValidating || edges.isValidating || mappings.isValidating,
+    error: entities.error || edges.error || mappings.error,
+    mutate: {
+      entities: entities.mutate,
+      edges: edges.mutate,
+      mappings: mappings.mutate,
+    },
+  }
+}
+
+/**
  * Global revalidation utilities
  */
 export const swrUtils = {
@@ -245,6 +381,27 @@ export interface ProjectStats {
   active_nodes: number
   collaborators: number
 }
+
+/**
+ * Schema Types Response
+ */
+export interface EntityTypesResponse {
+  entities: SchemaEntityType[]
+  total: number
+}
+
+export interface EdgeTypesResponse {
+  edges: SchemaEdgeType[]
+  total: number
+}
+
+export interface EdgeMapsResponse {
+  mappings: EdgeMapping[]
+  total: number
+}
+
+// Re-export schema types from memory.ts for convenience
+export type { SchemaEntityType as EntityType, SchemaEdgeType as EdgeType, EdgeMapping as EdgeMap }
 
 /**
  * SWR Mutator Callback Type

@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useMemo, memo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { schemaAPI } from '../../../services/api';
+import { useSchemaData } from '../../../hooks/useSwr';
 import {
     Code,
     Download,
@@ -167,33 +167,9 @@ EdgeAttributes.displayName = 'EdgeAttributes';
 export default function SchemaOverview() {
     const { projectId } = useParams<{ projectId: string }>();
     const { t } = useTranslation();
-    const [entities, setEntities] = useState<any[]>([]);
-    const [edges, setEdges] = useState<any[]>([]);
-    const [mappings, setMappings] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { entities = [], edges = [], mappings = [], isLoading } = useSchemaData(projectId);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!projectId) return;
-            try {
-                const [fetchedEntities, fetchedEdges, fetchedMappings] = await Promise.all([
-                    schemaAPI.listEntityTypes(projectId),
-                    schemaAPI.listEdgeTypes(projectId),
-                    schemaAPI.listEdgeMaps(projectId)
-                ]);
-                setEntities(fetchedEntities);
-                setEdges(fetchedEdges);
-                setMappings(fetchedMappings);
-            } catch (error) {
-                console.error('Failed to fetch schema data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [projectId]);
-
-    if (loading) {
+    if (isLoading) {
         return <div className="p-8 text-center text-slate-500 dark:text-gray-500">{t('common.loading')}</div>;
     }
 
