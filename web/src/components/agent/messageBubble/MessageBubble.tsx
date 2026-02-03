@@ -26,8 +26,7 @@ import type {
   ArtifactCreatedEvent,
 } from '../../../types/agent';
 // Import types without type qualifier
-import {
-  MessageBubbleCompound,
+import type {
   UserMessageProps,
   AssistantMessageProps,
   TextDeltaProps,
@@ -201,7 +200,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  code({ node, inline, className, children, ...props }: any) {
+                  code({ inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
                     return !inline && match ? (
                       <CodeBlock language={match[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>

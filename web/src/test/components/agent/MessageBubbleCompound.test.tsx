@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-// Mock heavy dependencies BEFORE importing
+// Mock heavy dependencies
 vi.mock('react-markdown', () => ({
   default: ({ children }: any) => <div data-testid="markdown">{children}</div>,
 }))
@@ -24,8 +24,8 @@ vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
   vscDarkPlus: {},
 }))
 
-// Mock lazy antd components - use relative path from component
-vi.mock('../../components/ui/lazyAntd', () => ({
+// Mock lazy antd components
+vi.mock('@/components/ui/lazyAntd', () => ({
   LazyAvatar: ({ children, className }: any) => (
     <div data-testid="avatar" className={className}>
       {children}
@@ -38,8 +38,8 @@ vi.mock('../../components/ui/lazyAntd', () => ({
   ),
 }))
 
-// Import AFTER mocks
-import { MessageBubble } from '../../../components/agent/messageBubble'
+// Import from the MessageBubble.tsx file directly
+import { MessageBubble } from '../../../components/agent/MessageBubble'
 
 // Mock timeline events
 const mockUserEvent: any = {
