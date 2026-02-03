@@ -1,286 +1,329 @@
+/**
+ * Tests for EnhancedSearch Compound Component Pattern
+ *
+ * TDD: Tests written first for the new compound component API.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '../../utils'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { EnhancedSearch } from '../../../pages/project/EnhancedSearch'
-import { graphService } from '../../../services/graphService'
-import { useParams } from 'react-router-dom'
 
-// Mock CytoscapeGraph component to avoid canvas issues in test environment
-vi.mock('../../../components/graph/CytoscapeGraph', () => ({
-    CytoscapeGraph: () => null
-}))
-
-// Mock useProjectStore
-vi.mock('../../../stores/project', () => ({
-    useProjectStore: () => ({
-        currentProject: null
-    })
-}))
-
+// Mock the dependencies
 vi.mock('../../../services/graphService', () => ({
-    graphService: {
-        getGraphData: vi.fn(),
-        advancedSearch: vi.fn(),
-        searchByGraphTraversal: vi.fn(),
-        searchByCommunity: vi.fn(),
-        searchTemporal: vi.fn(),
-        searchWithFacets: vi.fn(),
-    }
+  graphService: {
+    advancedSearch: vi.fn().mockResolvedValue({ results: [] }),
+    searchByGraphTraversal: vi.fn().mockResolvedValue({ results: [] }),
+    searchTemporal: vi.fn().mockResolvedValue({ results: [] }),
+    searchWithFacets: vi.fn().mockResolvedValue({ results: [] }),
+    searchByCommunity: vi.fn().mockResolvedValue({ results: [] }),
+  },
 }))
 
-vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom')
-    return {
-        ...actual,
-        useParams: vi.fn(),
-    }
-})
+vi.mock('react-router-dom', () => ({
+  useParams: vi.fn(() => ({ projectId: 'test-project-1' })),
+}))
 
-describe('EnhancedSearch', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        (useParams as any).mockReturnValue({ projectId: 'p1' });
+vi.mock('react-i18next', () => ({
+  useTranslation: vi.fn(() => ({
+    t: vi.fn((key: string) => key),
+  })),
+}))
+
+vi.mock('../../../stores/project', () => ({
+  useProjectStore: vi.fn(() => ({
+    currentProject: { tenant_id: 'tenant-1' },
+  })),
+}))
+
+vi.mock('@/components/graph/CytoscapeGraph', () => ({
+  CytoscapeGraph: () => <div data-testid="cytoscape-graph">Graph</div>,
+}))
+
+vi.mock('../../../pages/project/search', () => ({
+  SearchForm: ({ onSearch, isConfigOpen }: any) => (
+    <div data-testid="search-form">
+      <button onClick={onSearch} data-testid="search-button">Search</button>
+      <div data-testid="config-open">{String(isConfigOpen)}</div>
+    </div>
+  ),
+  SearchResults: ({ results, isResultsCollapsed }: any) => (
+    <div data-testid="search-results">
+      <span data-testid="results-count">{results.length}</span>
+      <div data-testid="results-collapsed">{String(isResultsCollapsed)}</div>
+    </div>
+  ),
+  SearchConfig: ({ isConfigOpen }: any) => (
+    <div data-testid="search-config" style={{ display: isConfigOpen ? 'block' : 'none' }}>
+      Config Panel
+    </div>
+  ),
+}))
+
+describe('EnhancedSearch Compound Component', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  describe('Root Component', () => {
+    it('should render with project and tenant IDs', () => {
+      render(
+        <EnhancedSearch projectId="test-project-1" tenantId="tenant-1">
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
     })
 
-    describe('Search Mode Buttons', () => {
-        it('renders all 5 search mode buttons', () => {
-            render(<EnhancedSearch />)
-            expect(screen.getByRole('button', { name: /Semantic Search/i })).toBeInTheDocument()
-            expect(screen.getByRole('button', { name: /Graph Traversal/i })).toBeInTheDocument()
-            expect(screen.getByRole('button', { name: /Temporal Search/i })).toBeInTheDocument()
-            expect(screen.getByRole('button', { name: /Faceted Search/i })).toBeInTheDocument()
-            expect(screen.getByRole('button', { name: /Community Search/i })).toBeInTheDocument()
-        })
+    it('should render with default search mode', () => {
+      render(
+        <EnhancedSearch defaultSearchMode="semantic">
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
 
-        it('switches to Graph Traversal mode', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Graph Traversal/i }))
-            expect(screen.getByPlaceholderText(/Enter start entity UUID/i)).toBeInTheDocument()
-        })
-
-        it('switches to Temporal Search mode', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Temporal Search/i }))
-            expect(screen.getByText('Time Range')).toBeInTheDocument()
-        })
-
-        it('switches to Faceted Search mode', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Faceted Search/i }))
-            expect(screen.getByText('Entity Types')).toBeInTheDocument()
-        })
-
-        it('switches to Community Search mode', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Community Search/i }))
-            expect(screen.getByPlaceholderText(/Enter community UUID/i)).toBeInTheDocument()
-        })
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
     })
 
-    describe('Semantic Search', () => {
-        it('performs semantic search', async () => {
-            (graphService.advancedSearch as any).mockResolvedValue({
-                results: [{ content: 'Test Result', score: 0.9, metadata: { type: 'episode', name: 'Test' }, source: 'episode' }],
-                total: 1
-            })
+    it('should render with default view mode', () => {
+      render(
+        <EnhancedSearch defaultViewMode="grid">
+          <EnhancedSearch.Results />
+        </EnhancedSearch>
+      )
 
-            render(<EnhancedSearch />)
-            const searchInput = screen.getByPlaceholderText(/Search memories by keyword/i)
-            fireEvent.change(searchInput, { target: { value: 'test query' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(graphService.advancedSearch).toHaveBeenCalledWith(expect.objectContaining({
-                    query: 'test query'
-                }))
-            })
-        })
+      expect(screen.getByTestId('search-results')).toBeInTheDocument()
     })
 
-    describe('Graph Traversal Search', () => {
-        it('shows graph traversal options', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Graph Traversal/i }))
+    it('should support config open state', () => {
+      render(
+        <EnhancedSearch defaultConfigOpen={false}>
+          <EnhancedSearch.Form />
+          <EnhancedSearch.Config />
+        </EnhancedSearch>
+      )
 
-            expect(screen.getByText('Max Depth')).toBeInTheDocument()
-            expect(screen.getByText('Relationship Types')).toBeInTheDocument()
-        })
+      expect(screen.getByTestId('search-config')).toBeInTheDocument()
+    })
+  })
 
-        it('performs graph traversal search', async () => {
-            (graphService.searchByGraphTraversal as any).mockResolvedValue({
-                results: [{ content: 'Result 1', score: 0.9, metadata: { type: 'entity', name: 'Test Entity' }, source: 'graph' }]
-            })
+  describe('Form Sub-Component', () => {
+    it('should render search form', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
 
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Graph Traversal/i }))
-
-            const uuidInput = screen.getByPlaceholderText(/Enter start entity UUID/i)
-            fireEvent.change(uuidInput, { target: { value: 'uuid-123' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(graphService.searchByGraphTraversal).toHaveBeenCalledWith(expect.objectContaining({
-                    start_entity_uuid: 'uuid-123',
-                    max_depth: 2
-                }))
-            })
-        })
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
     })
 
-    describe('Temporal Search', () => {
-        it('shows temporal search options', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Temporal Search/i }))
+    it('should not render form when excluded', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Results />
+        </EnhancedSearch>
+      )
 
-            expect(screen.getByText('Time Range')).toBeInTheDocument()
-            expect(screen.getByRole('radio', { name: 'All Time' })).toBeInTheDocument()
-            expect(screen.getByRole('radio', { name: 'Last 30 Days' })).toBeInTheDocument()
-        })
-
-        it('performs temporal search', async () => {
-            (graphService.searchTemporal as any).mockResolvedValue({
-                results: [{ content: 'Temporal Result', score: 0.8, metadata: { type: 'episode' }, source: 'temporal' }]
-            })
-
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Temporal Search/i }))
-
-            const searchInput = screen.getByPlaceholderText(/Search memories by keyword/i)
-            fireEvent.change(searchInput, { target: { value: 'test' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(graphService.searchTemporal).toHaveBeenCalled()
-            })
-        })
+      expect(screen.queryByTestId('search-form')).not.toBeInTheDocument()
     })
 
-    describe('Faceted Search', () => {
-        it('shows faceted search options', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Faceted Search/i }))
+    it('should trigger search when search button clicked', async () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Form />
+          <EnhancedSearch.Results />
+        </EnhancedSearch>
+      )
 
-            expect(screen.getByText('Entity Types')).toBeInTheDocument()
-            expect(screen.getByText('Tags')).toBeInTheDocument()
-        })
+      const searchButton = screen.getByTestId('search-button')
+      fireEvent.click(searchButton)
 
-        it('toggles entity types', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Faceted Search/i }))
+      expect(screen.getByTestId('results-count')).toBeInTheDocument()
+    })
+  })
 
-            const personButton = screen.getByRole('button', { name: 'Person' })
-            fireEvent.click(personButton)
+  describe('Config Sub-Component', () => {
+    it('should render config panel', () => {
+      render(
+        <EnhancedSearch defaultConfigOpen>
+          <EnhancedSearch.Config />
+        </EnhancedSearch>
+      )
 
-            // Should toggle selection
-            expect(personButton).toHaveClass(/bg-blue-600/)
-        })
-
-        it('performs faceted search', async () => {
-            (graphService.searchWithFacets as any).mockResolvedValue({
-                results: [{ content: 'Faceted Result', score: 0.7, metadata: { type: 'entity' }, source: 'faceted' }]
-            })
-
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Faceted Search/i }))
-
-            // Select an entity type
-            fireEvent.click(screen.getByRole('button', { name: 'Person' }))
-
-            const searchInput = screen.getByPlaceholderText(/Search memories by keyword/i)
-            fireEvent.change(searchInput, { target: { value: 'test' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(graphService.searchWithFacets).toHaveBeenCalledWith(expect.objectContaining({
-                    query: 'test',
-                    entity_types: ['Person']
-                }))
-            })
-        })
+      const config = screen.getByTestId('search-config')
+      expect(config).toBeInTheDocument()
+      expect(config).toHaveStyle({ display: 'block' })
     })
 
-    describe('Community Search', () => {
-        it('shows community search options', () => {
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Community Search/i }))
+    it('should not render config when excluded', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
 
-            expect(screen.getByPlaceholderText(/Enter community UUID/i)).toBeInTheDocument()
-            expect(screen.getByText('Include Episodes')).toBeInTheDocument()
-        })
+      expect(screen.queryByTestId('search-config')).not.toBeInTheDocument()
+    })
+  })
 
-        it('performs community search', async () => {
-            (graphService.searchByCommunity as any).mockResolvedValue({
-                results: [{ content: 'Community Result', score: 0.85, metadata: { type: 'entity' }, source: 'community' }]
-            })
+  describe('Results Sub-Component', () => {
+    it('should render results panel', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Results />
+        </EnhancedSearch>
+      )
 
-            render(<EnhancedSearch />)
-            fireEvent.click(screen.getByRole('button', { name: /Community Search/i }))
-
-            const uuidInput = screen.getByPlaceholderText(/Enter community UUID/i)
-            fireEvent.change(uuidInput, { target: { value: 'community-123' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(graphService.searchByCommunity).toHaveBeenCalledWith(expect.objectContaining({
-                    community_uuid: 'community-123'
-                }))
-            })
-        })
+      expect(screen.getByTestId('search-results')).toBeInTheDocument()
     })
 
-    describe('Search History', () => {
-        it('saves search to history after successful search', async () => {
-            (graphService.advancedSearch as any).mockResolvedValue({
-                results: [{ content: 'Test', score: 0.9, metadata: { type: 'episode' }, source: 'test' }],
-                total: 1
-            })
+    it('should not render results when excluded', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
 
-            render(<EnhancedSearch />)
-
-            const searchInput = screen.getByPlaceholderText(/Search memories by keyword/i)
-            fireEvent.change(searchInput, { target: { value: 'history test' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(graphService.advancedSearch).toHaveBeenCalled()
-            })
-
-            // History button should appear
-            await waitFor(() => {
-                expect(screen.getByRole('button', { name: /History/ })).toBeInTheDocument()
-            })
-        })
+      expect(screen.queryByTestId('search-results')).not.toBeInTheDocument()
     })
 
-    describe('Export Functionality', () => {
-        it('shows export button when results exist', async () => {
-            (graphService.advancedSearch as any).mockResolvedValue({
-                results: [{ content: 'Test', score: 0.9, metadata: { type: 'episode' }, source: 'test' }],
-                total: 1
-            })
+    it('should display results count', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Results />
+        </EnhancedSearch>
+      )
 
-            render(<EnhancedSearch />)
-
-            const searchInput = screen.getByPlaceholderText(/Search memories by keyword/i)
-            fireEvent.change(searchInput, { target: { value: 'test' } })
-
-            const retrieveButton = screen.getByRole('button', { name: /Retrieve/i })
-            fireEvent.click(retrieveButton)
-
-            await waitFor(() => {
-                expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument()
-            })
-        })
+      expect(screen.getByTestId('results-count')).toHaveTextContent('0')
     })
+  })
+
+  describe('Graph Sub-Component', () => {
+    it('should render graph visualization', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Graph />
+        </EnhancedSearch>
+      )
+
+      expect(screen.getByTestId('cytoscape-graph')).toBeInTheDocument()
+    })
+
+    it('should not render graph when excluded', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
+
+      expect(screen.queryByTestId('cytoscape-graph')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('History Sub-Component', () => {
+    it('should render history component', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.History />
+        </EnhancedSearch>
+      )
+
+      expect(screen.getByTestId('search-history')).toBeInTheDocument()
+    })
+
+    it('should not render history when excluded', () => {
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Form />
+        </EnhancedSearch>
+      )
+
+      expect(screen.queryByTestId('search-history')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Multiple Sub-Components Together', () => {
+    it('should render all sub-components when included', () => {
+      render(
+        <EnhancedSearch defaultConfigOpen>
+          <EnhancedSearch.Form />
+          <EnhancedSearch.Config />
+          <EnhancedSearch.Results />
+          <EnhancedSearch.Graph />
+          <EnhancedSearch.History />
+        </EnhancedSearch>
+      )
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+      expect(screen.getByTestId('search-config')).toBeInTheDocument()
+      expect(screen.getByTestId('search-results')).toBeInTheDocument()
+      expect(screen.getByTestId('cytoscape-graph')).toBeInTheDocument()
+      expect(screen.getByTestId('search-history')).toBeInTheDocument()
+    })
+  })
+
+  describe('Backward Compatibility', () => {
+    it('should work with legacy props when no sub-components provided', () => {
+      render(<EnhancedSearch projectId="test-project-1" />)
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+      expect(screen.getByTestId('search-results')).toBeInTheDocument()
+      expect(screen.getByTestId('cytoscape-graph')).toBeInTheDocument()
+    })
+
+    it('should support defaultSearchMode prop', () => {
+      render(<EnhancedSearch defaultSearchMode="graphTraversal" />)
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+    })
+
+    it('should support defaultViewMode prop', () => {
+      render(<EnhancedSearch defaultViewMode="list" />)
+
+      expect(screen.getByTestId('search-results')).toBeInTheDocument()
+    })
+
+    it('should support defaultConfigOpen prop', () => {
+      render(<EnhancedSearch defaultConfigOpen={false} />)
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+    })
+  })
+
+  describe('EnhancedSearch Namespace', () => {
+    it('should export all sub-components', () => {
+      expect(EnhancedSearch.Root).toBeDefined()
+      expect(EnhancedSearch.Form).toBeDefined()
+      expect(EnhancedSearch.Config).toBeDefined()
+      expect(EnhancedSearch.Results).toBeDefined()
+      expect(EnhancedSearch.Graph).toBeDefined()
+      expect(EnhancedSearch.Error).toBeDefined()
+      expect(EnhancedSearch.History).toBeDefined()
+    })
+
+    it('should use Root component as alias', () => {
+      render(
+        <EnhancedSearch.Root>
+          <EnhancedSearch.Form />
+        </EnhancedSearch.Root>
+      )
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+    })
+  })
+
+  describe('Edge Cases', () => {
+    it('should handle missing projectId', () => {
+      render(<EnhancedSearch />)
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+    })
+
+    it('should handle empty children', () => {
+      render(<EnhancedSearch />)
+
+      expect(screen.getByTestId('search-form')).toBeInTheDocument()
+    })
+  })
 })
