@@ -8,6 +8,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import React from 'react';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+// Get the correct path to the source file
+const chatAreaPath = path.resolve(__dirname, '../../components/agent/chat/ChatArea.tsx');
 
 // Mock antd Spin component
 vi.mock('antd', () => ({
@@ -142,31 +147,29 @@ describe('ChatArea Performance', () => {
     it('should use useMemo for sorted timeline', async () => {
       // Read the ChatArea source to verify useMemo usage
       // Dynamic import to avoid require() statement
-      import('fs').then((fs) => {
-        const chatAreaContent = fs.readFileSync(
-          '../../components/agent/chat/ChatArea.tsx',
-          'utf-8'
-        );
+      const fs = await import('fs');
+      const chatAreaContent = fs.readFileSync(
+        chatAreaPath,
+        'utf-8'
+      );
 
-        // Verify useMemo is used for sortedTimeline
-        expect(chatAreaContent).toContain('useMemo');
-        expect(chatAreaContent).toContain('sortedTimeline');
-      });
+      // Verify useMemo is used for sortedTimeline
+      expect(chatAreaContent).toContain('useMemo');
+      expect(chatAreaContent).toContain('sortedTimeline');
     });
 
     it('should not re-sort timeline on every render', async () => {
       // Dynamic import to avoid require() statement
-      import('fs').then((fs) => {
-        const chatAreaContent = fs.readFileSync(
-          '../../components/agent/chat/ChatArea.tsx',
-          'utf-8'
-        );
+      const fs = await import('fs');
+      const chatAreaContent = fs.readFileSync(
+        chatAreaPath,
+        'utf-8'
+      );
 
-        // Verify that sortedTimeline depends only on timeline array
-        // Just check for useMemo usage with timeline as dependency
-        expect(chatAreaContent).toContain('useMemo');
-        expect(chatAreaContent).toContain('[timeline]');
-      });
+      // Verify that sortedTimeline depends only on timeline array
+      // Just check for useMemo usage with timeline as dependency
+      expect(chatAreaContent).toContain('useMemo');
+      expect(chatAreaContent).toContain('[timeline]');
     });
   });
 
@@ -246,18 +249,17 @@ describe('ChatArea Performance', () => {
   describe('Re-render Triggers', () => {
     it('should only re-render when relevant props change', async () => {
       // Dynamic import to avoid require() statement
-      import('fs').then((fs) => {
-        const chatAreaContent = fs.readFileSync(
-          '../../components/agent/chat/ChatArea.tsx',
-          'utf-8'
-        );
+      const fs = await import('fs');
+      const chatAreaContent = fs.readFileSync(
+        chatAreaPath,
+        'utf-8'
+      );
 
-        // Check for memo with custom comparison or proper prop handling
-        // Component should use memo() to prevent unnecessary re-renders
-        expect(chatAreaContent).toContain('memo(');
-        // Also check for custom comparison function
-        expect(chatAreaContent).toContain('areChatAreaPropsEqual');
-      });
+      // Check for memo with custom comparison or proper prop handling
+      // Component should use memo() to prevent unnecessary re-renders
+      expect(chatAreaContent).toContain('memo(');
+      // Also check for custom comparison function
+      expect(chatAreaContent).toContain('areChatAreaPropsEqual');
     });
   });
 });

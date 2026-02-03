@@ -14,6 +14,11 @@ import { render, screen } from '@testing-library/react';
 import { VirtualTimelineEventList } from '../../components/agent/VirtualTimelineEventList';
 import type { TimelineEvent } from '../../types/agent';
 
+// Helper to query by data-index attribute
+function queryByDataIndex(container: HTMLElement, index: string): Element | null {
+  return container.querySelector(`[data-index="${index}"]`);
+}
+
 // Mock @tanstack/react-virtual
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: vi.fn((options) => ({
@@ -31,6 +36,7 @@ vi.mock('@tanstack/react-virtual', () => ({
       return items;
     },
     getTotalSize: () => options.count * 100,
+    scrollToIndex: vi.fn(),
   })),
 }));
 
@@ -89,15 +95,15 @@ describe('VirtualTimelineEventList', () => {
 
   describe('Virtual Scrolling', () => {
     it('should create virtual rows for each event group', () => {
-      render(
+      const { container } = render(
         <VirtualTimelineEventList
           timeline={mockTimeline}
           isStreaming={false}
         />
       );
 
-      // Should have virtual rows (one per event group)
-      expect(screen.getByTestId('virtual-row-0')).toBeInTheDocument();
+      // Should have virtual rows with data-index attribute (one per event group)
+      expect(queryByDataIndex(container, '0')).toBeInTheDocument();
     });
 
     it('should handle large timelines with virtual scrolling', () => {
@@ -110,21 +116,21 @@ describe('VirtualTimelineEventList', () => {
         role: i % 2 === 0 ? 'user' : 'assistant',
       } as TimelineEvent));
 
-      render(
+      const { container } = render(
         <VirtualTimelineEventList
           timeline={largeTimeline}
           isStreaming={false}
         />
       );
 
-      expect(screen.getByTestId('virtual-row-0')).toBeInTheDocument();
-      expect(screen.getByTestId('virtual-row-99')).toBeInTheDocument();
+      expect(queryByDataIndex(container, '0')).toBeInTheDocument();
+      expect(queryByDataIndex(container, '99')).toBeInTheDocument();
     });
   });
 
   describe('Streaming Behavior', () => {
     it('should re-render when timeline changes', () => {
-      const { rerender } = render(
+      const { container, rerender } = render(
         <VirtualTimelineEventList
           timeline={mockTimeline.slice(0, 1)}
           isStreaming={false}
@@ -132,8 +138,8 @@ describe('VirtualTimelineEventList', () => {
       );
 
       // Should have 1 virtual row initially
-      expect(screen.getByTestId('virtual-row-0')).toBeInTheDocument();
-      expect(screen.queryByTestId('virtual-row-1')).not.toBeInTheDocument();
+      expect(queryByDataIndex(container, '0')).toBeInTheDocument();
+      expect(queryByDataIndex(container, '1')).not.toBeInTheDocument();
 
       // Add more events
       rerender(
@@ -144,7 +150,7 @@ describe('VirtualTimelineEventList', () => {
       );
 
       // Should have more virtual rows
-      expect(screen.getByTestId('virtual-row-2')).toBeInTheDocument();
+      expect(queryByDataIndex(container, '2')).toBeInTheDocument();
     });
   });
 });

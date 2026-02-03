@@ -91,10 +91,8 @@ export const Analytics: React.FC = memo(() => {
         fetchProjects()
     }, [fetchProjects])
 
-    if (!currentTenant) return <div className="p-8 text-center text-slate-500">{t('tenant.analytics.no_workspace')}</div>
-    if (loading) return <LoadingState message={t('tenant.analytics.loading')} />
-
     // Memoize chart data to prevent recalculation on re-renders
+    // Must be called before any conditional returns (Rules of Hooks)
     const chartData = useMemo(() => {
         const memoryGrowthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul']
         const memoryGrowthData = {
