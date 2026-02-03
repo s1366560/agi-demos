@@ -7,7 +7,6 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, memo } from 'react'
 import { useParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { logger } from '../../../utils/logger'
 import { graphService } from '../../../services/graphService'
 import { TaskList } from '../../../components/tasks/TaskList'
@@ -16,18 +15,63 @@ import { VirtualGrid } from '../../../components/common'
 import type { Community, Entity, BackgroundTask } from './types'
 
 // ========================================
+// Constants
+// ========================================
+
+const TEXTS = {
+  title: 'Communities',
+  subtitle: 'Automatically detected groups of related entities in the knowledge graph',
+  rebuild: 'Rebuild Communities',
+  rebuilding: 'Rebuilding...',
+  refresh: 'Refresh',
+  confirmRebuild: 'This will rebuild all communities from scratch. Continue?',
+  cancel: 'Cancel',
+  dismiss: 'Dismiss',
+  progress: 'Progress',
+  communitiesCount: 'Communities',
+  connectionsCount: 'Connections',
+  error: 'Error',
+  taskError: 'Error',
+  showing: 'Showing {{count}} of {{total}} communities',
+  page: 'Page {{current}} of {{total}}',
+  loading: 'Loading communities...',
+  emptyTitle: 'No communities found',
+  emptyDesc: 'Add more episodes to enable community detection',
+  communityDetails: 'Community Details',
+  name: 'Name',
+  members: 'Members',
+  summary: 'Summary',
+  uuid: 'UUID',
+  created: 'Created',
+  tasks: 'Tasks',
+  communityMembers: 'Community Members',
+  noMembers: 'No members loaded',
+  selectPrompt: 'Select a community to view details',
+  clickPrompt: 'Click on any community card to see its members',
+  infoTitle: 'About Communities',
+  infoDesc: 'Communities are automatically detected groups of related entities.',
+} as const
+
+// Helper function for simple interpolation
+function formatTemplate(template: string, values: Record<string, string | number>): string {
+  return Object.entries(values).reduce(
+    (result, [key, value]) => result.replace(`{{${key}}}`, String(value)),
+    template
+  )
+}
+
+// ========================================
 // Marker Symbols
 // ========================================
 
-const HeaderMarker = Symbol('CommunitiesList.Header')
-const StatsMarker = Symbol('CommunitiesList.Stats')
-const ListMarker = Symbol('CommunitiesList.List')
-const PaginationMarker = Symbol('CommunitiesList.Pagination')
-const DetailMarker = Symbol('CommunitiesList.Detail')
-const TaskStatusMarker = Symbol('CommunitiesList.TaskStatus')
-const ErrorMarker = Symbol('CommunitiesList.Error')
-const LoadingMarker = Symbol('CommunitiesList.Loading')
-const EmptyMarker = Symbol('CommunitiesList.Empty')
+const _HeaderMarker = Symbol('CommunitiesList.Header')
+const _StatsMarker = Symbol('CommunitiesList.Stats')
+const _ListMarker = Symbol('CommunitiesList.List')
+const _PaginationMarker = Symbol('CommunitiesList.Pagination')
+const _DetailMarker = Symbol('CommunitiesList.Detail')
+const _TaskStatusMarker = Symbol('CommunitiesList.TaskStatus')
+const _ErrorMarker = Symbol('CommunitiesList.Error')
+const _InfoMarker = Symbol('CommunitiesList.Info')
 
 // ========================================
 // Context
@@ -99,7 +143,6 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
   projectId: propProjectId,
   limit: propLimit = 20
 }) => {
-  const { t } = useTranslation()
   const { projectId: urlProjectId } = useParams()
   const projectId = propProjectId || urlProjectId
 
@@ -134,7 +177,6 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
       logger.debug('Communities loaded:', {
         count: result.communities.length,
         total: result.total,
-        communities: result.communities
       })
 
       setCommunities(result.communities)
@@ -163,7 +205,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
     const eventSource = new EventSource(streamUrl)
 
     eventSource.onopen = () => {
-      logger.debug('✅ SSE connection opened')
+      logger.debug('SSE connection opened')
     }
 
     eventSource.addEventListener('progress', (e: MessageEvent) => {
@@ -245,7 +287,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
     })
 
     eventSource.onerror = () => {
-      logger.error('❌ SSE connection error')
+      logger.error('SSE connection error')
       if (eventSource.readyState === 2) {
         eventSource.close()
         setRebuilding(false)
@@ -258,7 +300,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
 
   // Rebuild communities
   const rebuildCommunities = useCallback(async () => {
-    if (!confirm(t('project.graph.communities.confirm_rebuild'))) {
+    if (!confirm(TEXTS.confirmRebuild)) {
       return
     }
 
@@ -266,7 +308,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
     setError(null)
 
     try {
-      logger.debug(`🔄 Starting community rebuild for project: ${projectId}`)
+      logger.debug(`Starting community rebuild for project: ${projectId}`)
 
       const result = await graphService.rebuildCommunities(true, projectId)
 
@@ -278,12 +320,12 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
         setRebuilding(false)
       }
     } catch (err: any) {
-      logger.error('❌ Failed to rebuild communities:', err)
+      logger.error('Failed to rebuild communities:', err)
       const errorMsg = err.response?.data?.detail || err.message || 'Failed to start community rebuild'
       setError(`Failed to rebuild: ${errorMsg}`)
       setRebuilding(false)
     }
-  }, [projectId, streamTaskStatus, loadCommunities, t])
+  }, [projectId, streamTaskStatus, loadCommunities])
 
   // Cancel task
   const cancelTask = useCallback(async () => {
@@ -331,11 +373,6 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(({
   useEffect(() => {
     loadCommunities()
   }, [loadCommunities])
-
-  // Get community color
-  const getCommunityColor = useCallback((index: number) => {
-    return COMMUNITY_COLORS[index % COMMUNITY_COLORS.length]
-  }, [])
 
   const contextValue = useMemo<CommunitiesListContextValue>(() => ({
     communities,
@@ -399,16 +436,16 @@ CommunitiesListProvider.displayName = 'CommunitiesListProvider'
 // ========================================
 
 const Header: React.FC = memo(() => {
-  const { t, rebuildCommunities, loadCommunities, loading, rebuilding } = useCommunitiesListContext()
+  const { rebuildCommunities, loadCommunities, loading, rebuilding } = useCommunitiesListContext()
 
   return (
     <div className="flex justify-between items-start">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          {t('project.graph.communities.title')}
+          {TEXTS.title}
         </h1>
         <p className="text-slate-600 dark:text-slate-400 mt-1">
-          {t('project.graph.communities.subtitle')}
+          {TEXTS.subtitle}
         </p>
       </div>
       <div className="flex gap-2">
@@ -420,7 +457,7 @@ const Header: React.FC = memo(() => {
           <span className="material-symbols-outlined">
             {rebuilding ? 'progress_activity' : 'refresh'}
           </span>
-          {rebuilding ? t('project.graph.communities.rebuilding') : t('project.graph.communities.rebuild')}
+          {rebuilding ? TEXTS.rebuilding : TEXTS.rebuild}
         </button>
         <button
           onClick={loadCommunities}
@@ -428,7 +465,7 @@ const Header: React.FC = memo(() => {
           className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
         >
           <span className="material-symbols-outlined">refresh</span>
-          {t('project.graph.communities.refresh')}
+          {TEXTS.refresh}
         </button>
       </div>
     </div>
@@ -437,19 +474,25 @@ const Header: React.FC = memo(() => {
 Header.displayName = 'CommunitiesList.Header'
 
 const Stats: React.FC = memo(() => {
-  const { t, communities, totalCount, page, limit } = useCommunitiesListContext()
+  const { communities, totalCount, page, limit } = useCommunitiesListContext()
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
       <div className="flex items-center justify-between">
         <div className="flex gap-6 text-sm">
           <span className="text-slate-600 dark:text-slate-400">
-            {t('project.graph.communities.stats.showing', { count: communities.length, total: totalCount.toLocaleString() })}
+            {formatTemplate(TEXTS.showing, {
+              count: communities.length,
+              total: totalCount.toLocaleString()
+            })}
           </span>
         </div>
         {totalCount > limit && (
           <div className="text-sm text-slate-500 dark:text-slate-400">
-            {t('project.graph.communities.stats.page', { current: page + 1, total: Math.ceil(totalCount / limit) })}
+            {formatTemplate(TEXTS.page, {
+              current: page + 1,
+              total: Math.ceil(totalCount / limit)
+            })}
           </div>
         )}
       </div>
@@ -459,8 +502,7 @@ const Stats: React.FC = memo(() => {
 Stats.displayName = 'CommunitiesList.Stats'
 
 const List: React.FC = memo(() => {
-  const { communities, selectedCommunity, selectCommunity, loading, totalCount, limit } = useCommunitiesListContext()
-  const { t } = useTranslation()
+  const { communities, selectedCommunity, selectCommunity, loading } = useCommunitiesListContext()
 
   if (loading) {
     return (
@@ -468,7 +510,7 @@ const List: React.FC = memo(() => {
         <span className="material-symbols-outlined text-4xl text-slate-400 animate-spin">
           progress_activity
         </span>
-        <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.loading')}</p>
+        <p className="text-slate-500 mt-2">{TEXTS.loading}</p>
       </div>
     )
   }
@@ -519,9 +561,9 @@ const List: React.FC = memo(() => {
       emptyComponent={
         <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
           <span className="material-symbols-outlined text-4xl text-slate-400">groups</span>
-          <p className="text-slate-500 mt-2">{t('project.graph.communities.empty.title')}</p>
+          <p className="text-slate-500 mt-2">{TEXTS.emptyTitle}</p>
           <p className="text-sm text-slate-400 mt-1">
-            {t('project.graph.communities.empty.desc')}
+            {TEXTS.emptyDesc}
           </p>
         </div>
       }
@@ -568,9 +610,9 @@ const Detail: React.FC = memo(() => {
     return (
       <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-12 text-center sticky top-6">
         <span className="material-symbols-outlined text-4xl text-slate-400">groups</span>
-        <p className="text-slate-500 mt-2">Select a community to view details</p>
+        <p className="text-slate-500 mt-2">{TEXTS.selectPrompt}</p>
         <p className="text-sm text-slate-400 mt-1">
-          Click on any community card to see its members
+          {TEXTS.clickPrompt}
         </p>
       </div>
     )
@@ -580,7 +622,7 @@ const Detail: React.FC = memo(() => {
     <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-6 sticky top-6">
       <div className="flex items-start justify-between mb-4">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-          Community Details
+          {TEXTS.communityDetails}
         </h2>
         <button
           onClick={closeDetail}
@@ -592,14 +634,14 @@ const Detail: React.FC = memo(() => {
 
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">Name</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.name}</label>
           <p className="text-slate-900 dark:text-white font-medium mt-1">
             {selectedCommunity.name || 'Unnamed Community'}
           </p>
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">Members</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.members}</label>
           <p className="text-2xl font-bold text-purple-600">
             {selectedCommunity.member_count}
           </p>
@@ -607,7 +649,7 @@ const Detail: React.FC = memo(() => {
 
         {selectedCommunity.summary && (
           <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase">Summary</label>
+            <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.summary}</label>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
               {selectedCommunity.summary}
             </p>
@@ -615,7 +657,7 @@ const Detail: React.FC = memo(() => {
         )}
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">UUID</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.uuid}</label>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-mono break-all mt-1">
             {selectedCommunity.uuid}
           </p>
@@ -623,7 +665,7 @@ const Detail: React.FC = memo(() => {
 
         {selectedCommunity.created_at && (
           <div>
-            <label className="text-xs font-semibold text-slate-500 uppercase">Created</label>
+            <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.created}</label>
             <p className="text-sm text-slate-600 dark:text-slate-400">
               {new Date(selectedCommunity.created_at).toLocaleString()}
             </p>
@@ -631,7 +673,7 @@ const Detail: React.FC = memo(() => {
         )}
 
         <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase">Tasks</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase">{TEXTS.tasks}</label>
           <div className="mt-2">
             <TaskList entityId={selectedCommunity.uuid} entityType="community" embedded />
           </div>
@@ -639,7 +681,7 @@ const Detail: React.FC = memo(() => {
 
         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">
-            Community Members ({members.length})
+            {formatTemplate(TEXTS.communityMembers, { count: members.length })}
           </h3>
           {members.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -668,7 +710,7 @@ const Detail: React.FC = memo(() => {
               )}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No members loaded</p>
+            <p className="text-sm text-slate-500">{TEXTS.noMembers}</p>
           )}
         </div>
       </div>
@@ -678,7 +720,7 @@ const Detail: React.FC = memo(() => {
 Detail.displayName = 'CommunitiesList.Detail'
 
 const TaskStatus: React.FC = memo(() => {
-  const { t, currentTask, cancelTask, dismissTask } = useCommunitiesListContext()
+  const { currentTask, cancelTask, dismissTask } = useCommunitiesListContext()
 
   if (!currentTask) return null
 
@@ -717,7 +759,7 @@ const TaskStatus: React.FC = memo(() => {
                 onClick={cancelTask}
                 className="px-3 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
               >
-                {t('project.graph.communities.task.cancel')}
+                {TEXTS.cancel}
               </button>
             )}
             {currentTask.status === 'failed' && (
@@ -725,7 +767,7 @@ const TaskStatus: React.FC = memo(() => {
                 onClick={dismissTask}
                 className="px-3 py-1 text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
               >
-                {t('project.graph.communities.task.dismiss')}
+                {TEXTS.dismiss}
               </button>
             )}
           </div>
@@ -739,7 +781,7 @@ const TaskStatus: React.FC = memo(() => {
           {currentTask.status === 'running' && currentTask.progress > 0 && (
             <div className="mt-2">
               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mb-1">
-                <span>{t('project.graph.communities.task.progress')}</span>
+                <span>{TEXTS.progress}</span>
                 <span>{currentTask.progress}%</span>
               </div>
               <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
@@ -754,13 +796,13 @@ const TaskStatus: React.FC = memo(() => {
             <div className="mt-3 p-3 bg-white dark:bg-slate-900 rounded-md">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400">{t('project.graph.communities.task.communities_count')}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{TEXTS.communitiesCount}</span>
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {currentTask.result.communities_count || 0}
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400">{t('project.graph.communities.task.connections_count')}</span>
+                  <span className="text-slate-500 dark:text-slate-400">{TEXTS.connectionsCount}</span>
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {currentTask.result.edges_count || 0}
                   </p>
@@ -770,7 +812,7 @@ const TaskStatus: React.FC = memo(() => {
           )}
           {currentTask.error && currentTask.status === 'failed' && (
             <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-sm text-red-800 dark:text-red-400">
-              <strong>{t('project.graph.communities.task.error')}:</strong> {currentTask.error}
+              <strong>{TEXTS.taskError}:</strong> {currentTask.error}
             </div>
           )}
           <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -792,7 +834,7 @@ const Error: React.FC = memo(() => {
     <div data-testid="error-message" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
       <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
       <div>
-        <h3 className="font-semibold text-red-900 dark:text-red-300">Error</h3>
+        <h3 className="font-semibold text-red-900 dark:text-red-300">{TEXTS.error}</h3>
         <p className="text-sm text-red-800 dark:text-red-400">{error}</p>
       </div>
       <button
@@ -811,18 +853,16 @@ Error.displayName = 'CommunitiesList.Error'
 // ========================================
 
 const Info: React.FC = memo(() => {
-  const { t } = useTranslation()
-
   return (
     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
       <div className="flex gap-3">
         <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">info</span>
         <div>
           <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300">
-            {t('project.graph.communities.info.title')}
+            {TEXTS.infoTitle}
           </h3>
           <p className="text-sm text-blue-800 dark:text-blue-400 mt-1">
-            {t('project.graph.communities.info.desc')}
+            {TEXTS.infoDesc}
           </p>
         </div>
       </div>
@@ -872,7 +912,7 @@ Root.displayName = 'CommunitiesList'
 // Compound Component Assembly
 // ========================================
 
-const CommunitiesList = Root as CommunitiesListCompound
+const CommunitiesList = Root as any
 
 CommunitiesList.Header = Header
 CommunitiesList.Stats = Stats
@@ -886,18 +926,3 @@ CommunitiesList.Root = Root
 CommunitiesList.Provider = CommunitiesListProvider
 
 export { CommunitiesList }
-export type { CommunitiesListCompound }
-
-// Type definition for compound component interface
-interface CommunitiesListCompound extends React.FC<RootProps> {
-  Header: React.FC
-  Stats: React.FC
-  List: React.FC
-  Pagination: React.FC
-  Detail: React.FC
-  TaskStatus: React.FC
-  Error: React.FC
-  Info: React.FC
-  Root: React.FC<RootProps>
-  Provider: React.FC<CommunitiesListProviderProps>
-}
