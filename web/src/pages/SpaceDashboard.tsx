@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -76,6 +76,16 @@ export const SpaceDashboard: React.FC = () => {
             ]
         }
     ];
+
+    // Optimize: sample memory history labels without creating intermediate array (js-combine-iterations)
+    const sampledHistoryLabels = useMemo(() => {
+        if (!stats?.memory_history) return [];
+        const result: typeof stats.memory_history = [];
+        for (let i = 0; i < stats.memory_history.length; i += 7) {
+            result.push(stats.memory_history[i]);
+        }
+        return result;
+    }, [stats?.memory_history]);
 
     const BackButton = (
         <button
@@ -232,7 +242,7 @@ export const SpaceDashboard: React.FC = () => {
                                 </svg>
                                 {/* X-Axis Labels */}
                                 <div className="absolute bottom-0 left-8 right-0 flex justify-between text-xs text-gray-400 dark:text-slate-500 pt-2">
-                                    {stats.memory_history.filter((_: any, i: number) => i % 7 === 0).map((point: any) => (
+                                    {sampledHistoryLabels.map((point: any) => (
                                         <span key={point.date}>{point.date}</span>
                                     ))}
                                 </div>
