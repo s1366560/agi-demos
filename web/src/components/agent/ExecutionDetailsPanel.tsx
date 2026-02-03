@@ -1,44 +1,31 @@
 /**
- * ExecutionDetailsPanel Component - Multi-view execution details panel
+ * ExecutionDetailsPanel - Compound Component for Execution Details Display
  *
- * Integrates new visualization components with backward-compatible ThinkingChain.
- * Provides tab switching between different views of agent execution data.
+ * ## Usage
  *
- * @component
- *
- * @features
- * - Multiple view modes: Thinking, Activity, Tools, Tokens
- * - Automatic view availability detection
- * - Backward compatible with original ThinkingChain
- * - Memoized data transformations for performance
- * - Compact mode support for smaller displays
- * - Auto-switches to available view when current is not available
- *
- * @views
- * - **thinking**: Original ThinkingChain with thoughts and tool calls
- * - **activity**: Atomic-level ActivityTimeline with time visualization
- * - **tools**: ToolCallVisualization with Grid/Timeline/Flow modes
- * - **tokens**: TokenUsageChart with cost breakdown
- *
- * @example
+ * ### Convenience Usage (Default rendering)
  * ```tsx
- * import { ExecutionDetailsPanel } from '@/components/agent/ExecutionDetailsPanel'
+ * <ExecutionDetailsPanel message={message} />
+ * ```
  *
- * function PlanPanel() {
- *   const { currentMessage } = useAgentV3Store()
+ * ### Compound Components (Custom rendering)
+ * ```tsx
+ * <ExecutionDetailsPanel message={message}>
+ *   <ExecutionDetailsPanel.Thinking />
+ *   <ExecutionDetailsPanel.Activity />
+ *   <ExecutionDetailsPanel.Tools />
+ * </ExecutionDetailsPanel>
+ * ```
  *
- *   return (
- *     <ExecutionDetailsPanel
- *       message={currentMessage}
- *       isStreaming={true}
- *       defaultView="activity"
- *     />
- *   )
- * }
+ * ### Namespace Usage
+ * ```tsx
+ * <ExecutionDetailsPanel.Root message={message}>
+ *   <ExecutionDetailsPanel.Tokens />
+ * </ExecutionDetailsPanel.Root>
  * ```
  */
 
-import React, { useMemo, useState, memo, useCallback } from "react";
+import React, { useMemo, useState, memo, useCallback, Children } from "react";
 import { Segmented } from "antd";
 import {
   BulbOutlined,
@@ -64,46 +51,50 @@ import {
   extractTokenData,
   hasExecutionData,
 } from "../../utils/agentDataAdapters";
-import type { Message } from "../../types/agent";
 
-/** Available view types for the execution details panel */
-export type ViewType = "thinking" | "activity" | "tools" | "tokens";
+import type {
+  ViewType,
+  ExecutionDetailsPanelRootProps,
+  ExecutionThinkingProps,
+  ExecutionActivityProps,
+  ExecutionToolsProps,
+  ExecutionTokensProps,
+  ExecutionViewSelectorProps,
+  ExecutionDetailsPanelCompound,
+} from "./executionTypes";
 
-/**
- * Props for ExecutionDetailsPanel component
- */
-export interface ExecutionDetailsPanelProps {
-  /** Message data from store containing execution metadata */
-  message: Message;
-  /** Whether the message is currently streaming */
-  isStreaming?: boolean;
-  /** Compact mode for smaller displays (reduced padding, smaller text) */
-  compact?: boolean;
-  /** Default view to show on first render */
-  defaultView?: ViewType;
-  /** Whether to show the view selector tabs */
-  showViewSelector?: boolean;
-}
+// ========================================
+// Marker Symbols for Sub-Components
+// ========================================
 
-/**
- * View option configuration
- */
+const THINKING_SYMBOL = Symbol("ExecutionDetailsPanelThinking");
+const ACTIVITY_SYMBOL = Symbol("ExecutionDetailsPanelActivity");
+const TOOLS_SYMBOL = Symbol("ExecutionDetailsPanelTools");
+const TOKENS_SYMBOL = Symbol("ExecutionDetailsPanelTokens");
+const SELECTOR_SYMBOL = Symbol("ExecutionDetailsPanelViewSelector");
+
+// ========================================
+// View Option Configuration
+// ========================================
+
 interface ViewOption {
-  /** View type identifier */
   value: ViewType;
-  /** Display label for the view */
   label: string;
-  /** Icon component for the view tab */
   icon: React.ReactNode;
-  /** Whether this view has data to display */
   available: boolean;
 }
-export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(({
+
+// ========================================
+// Main Component
+// ========================================
+
+const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   message,
   isStreaming = false,
   compact = false,
   defaultView = "thinking",
   showViewSelector = true,
+  children,
 }) => {
   const [currentView, setCurrentView] = useState<ViewType>(defaultView);
 
@@ -134,6 +125,47 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     };
   }, [message, isStreaming]);
 
+  // Parse children to detect sub-components
+  const childrenArray = Children.toArray(children);
+  const thinkingChild = childrenArray.find(
+    (child: any) => child?.type?.[THINKING_SYMBOL]
+  ) as any;
+  const activityChild = childrenArray.find(
+    (child: any) => child?.type?.[ACTIVITY_SYMBOL]
+  ) as any;
+  const toolsChild = childrenArray.find(
+    (child: any) => child?.type?.[TOOLS_SYMBOL]
+  ) as any;
+  const tokensChild = childrenArray.find(
+    (child: any) => child?.type?.[TOKENS_SYMBOL]
+  ) as any;
+  const selectorChild = childrenArray.find(
+    (child: any) => child?.type?.[SELECTOR_SYMBOL]
+  ) as any;
+
+  // Determine if using compound mode
+  const hasSubComponents =
+    thinkingChild || activityChild || toolsChild || tokensChild || selectorChild;
+
+  // In legacy mode, include all views by default
+  // In compound mode, only include explicitly specified views
+  const includeThinking = hasSubComponents ? !!thinkingChild : true;
+  const includeActivity = hasSubComponents ? !!activityChild : true;
+  const includeTools = hasSubComponents ? !!toolsChild : true;
+  const includeTokens = hasSubComponents ? !!tokensChild : true;
+
+  // Count included views for selector logic
+  const includedViewCount = [includeThinking, includeActivity, includeTools, includeTokens]
+    .filter(Boolean).length;
+
+  // View selector logic:
+  // - In legacy mode: respect showViewSelector
+  // - In compound mode with ViewSelector: respect showViewSelector
+  // - In compound mode without ViewSelector: show only if multiple views included and prop is true
+  const includeSelector = !hasSubComponents || !!selectorChild
+    ? showViewSelector
+    : showViewSelector && includedViewCount > 1;
+
   // Determine which views are available
   const viewOptions = useMemo<ViewOption[]>(() => {
     const hasTimeline = timelineData.timeline.length > 0;
@@ -141,7 +173,8 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     const hasToolCalls = (message.tool_calls?.length || 0) > 0;
     const hasTokens = tokenInfo.tokenData !== undefined;
 
-    return [
+    // All potential views
+    const allViews = [
       {
         value: "thinking" as ViewType,
         label: "Thinking",
@@ -167,7 +200,25 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
         available: hasTokens,
       },
     ];
+
+    // In compound mode, only include views for which sub-components are provided
+    if (hasSubComponents) {
+      return allViews.filter((view) => {
+        if (view.value === "thinking") return !!thinkingChild;
+        if (view.value === "activity") return !!activityChild;
+        if (view.value === "tools") return !!toolsChild;
+        if (view.value === "tokens") return !!tokensChild;
+        return false;
+      });
+    }
+
+    return allViews;
   }, [
+    hasSubComponents,
+    thinkingChild,
+    activityChild,
+    toolsChild,
+    tokensChild,
     timelineData,
     thinkingChainProps,
     message.tool_calls,
@@ -191,8 +242,55 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     return availableViews[0]?.value || "thinking";
   }, [currentView, availableViews]);
 
-  // Memoized segmented options to avoid re-creation on every render
-  // Must be before any early returns to follow rules of hooks
+  // Handle view change
+  const handleViewChange = useCallback((value: string | number) => {
+    setCurrentView(value as ViewType);
+  }, []);
+
+  // Render view content based on effectiveView
+  const renderViewContent = () => {
+    switch (effectiveView) {
+      case "thinking":
+        return includeThinking ? <ThinkingChain {...thinkingChainProps} /> : null;
+
+      case "activity":
+        return includeActivity ? (
+          <ActivityTimeline
+            timeline={timelineData.timeline}
+            toolExecutions={timelineData.toolExecutions}
+            toolResults={timelineData.toolResults}
+            isActive={isStreaming}
+            compact={compact}
+            autoScroll={isStreaming}
+          />
+        ) : null;
+
+      case "tools":
+        return includeTools ? (
+          <ToolCallVisualization
+            toolExecutions={toolVisualizationData}
+            mode="grid"
+            showDetails={true}
+            allowModeSwitch={!compact}
+            compact={compact}
+          />
+        ) : null;
+
+      case "tokens":
+        return includeTokens && tokenInfo.tokenData ? (
+          <TokenUsageChart
+            tokenData={tokenInfo.tokenData as TokenData}
+            costData={tokenInfo.costData as CostData | undefined}
+            variant={compact ? "compact" : "detailed"}
+          />
+        ) : null;
+
+      default:
+        return <ThinkingChain {...thinkingChainProps} />;
+    }
+  };
+
+  // Memoized segmented options
   const segmentedOptions = useMemo(() =>
     availableViews.map((opt) => ({
       value: opt.value,
@@ -206,85 +304,94 @@ export const ExecutionDetailsPanel: React.FC<ExecutionDetailsPanelProps> = memo(
     [availableViews, compact]
   );
 
-  // Handle view change with useCallback for optimization
-  const handleViewChange = useCallback((value: string | number) => {
-    setCurrentView(value as ViewType);
-  }, []);
-
-  // Memoized view content to avoid re-creation on every render
-  // Must be before any early returns to follow rules of hooks
-  const viewContent = useMemo(() => {
-    switch (effectiveView) {
-      case "thinking":
-        return <ThinkingChain {...thinkingChainProps} />;
-
-      case "activity":
-        return (
-          <ActivityTimeline
-            timeline={timelineData.timeline}
-            toolExecutions={timelineData.toolExecutions}
-            toolResults={timelineData.toolResults}
-            isActive={isStreaming}
-            compact={compact}
-            autoScroll={isStreaming}
-          />
-        );
-
-      case "tools":
-        return (
-          <ToolCallVisualization
-            toolExecutions={toolVisualizationData}
-            mode="grid"
-            showDetails={true}
-            allowModeSwitch={!compact}
-            compact={compact}
-          />
-        );
-
-      case "tokens":
-        if (!tokenInfo.tokenData) return null;
-        return (
-          <TokenUsageChart
-            tokenData={tokenInfo.tokenData as TokenData}
-            costData={tokenInfo.costData as CostData | undefined}
-            variant={compact ? "compact" : "detailed"}
-          />
-        );
-
-      default:
-        return <ThinkingChain {...thinkingChainProps} />;
-    }
-  }, [effectiveView, thinkingChainProps, timelineData, isStreaming, compact, toolVisualizationData, tokenInfo]);
-
   // Don't render if no execution data and not streaming
   if (!hasData && !isStreaming) {
     return null;
   }
 
+  const viewContent = renderViewContent();
+
+  // No content to render
+  if (!viewContent) {
+    return null;
+  }
+
   // Single view mode (no selector)
-  if (!showViewSelector || availableViews.length <= 1) {
+  if (!includeSelector || availableViews.length <= 1) {
     return <div className="w-full">{viewContent}</div>;
   }
 
   return (
     <div className="w-full space-y-3">
       {/* View selector */}
-      <div className="flex justify-start">
-        <Segmented
-          size="small"
-          value={effectiveView}
-          onChange={handleViewChange}
-          options={segmentedOptions}
-          className="bg-slate-100 dark:bg-slate-800"
-        />
-      </div>
+      {includeSelector && (
+        <div className="flex justify-start">
+          <Segmented
+            size="small"
+            value={effectiveView}
+            onChange={handleViewChange}
+            options={segmentedOptions}
+            className="bg-slate-100 dark:bg-slate-800"
+          />
+        </div>
+      )}
 
       {/* View content */}
       <div className="w-full">{viewContent}</div>
     </div>
   );
-});
+};
 
-ExecutionDetailsPanel.displayName = 'ExecutionDetailsPanel';
+// ========================================
+// Sub-Components (Marker Components)
+// ========================================
+
+const ThinkingMarker = function ExecutionDetailsPanelThinkingMarker(_props: ExecutionThinkingProps) {
+  return null;
+};
+(ThinkingMarker as any)[THINKING_SYMBOL] = true;
+
+const ActivityMarker = function ExecutionDetailsPanelActivityMarker(_props: ExecutionActivityProps) {
+  return null;
+};
+(ActivityMarker as any)[ACTIVITY_SYMBOL] = true;
+
+const ToolsMarker = function ExecutionDetailsPanelToolsMarker(_props: ExecutionToolsProps) {
+  return null;
+};
+(ToolsMarker as any)[TOOLS_SYMBOL] = true;
+
+const TokensMarker = function ExecutionDetailsPanelTokensMarker(_props: ExecutionTokensProps) {
+  return null;
+};
+(TokensMarker as any)[TOKENS_SYMBOL] = true;
+
+const ViewSelectorMarker = function ExecutionDetailsPanelViewSelectorMarker(_props: ExecutionViewSelectorProps) {
+  return null;
+};
+(ViewSelectorMarker as any)[SELECTOR_SYMBOL] = true;
+
+// Set display names for testing
+(ThinkingMarker as any).displayName = "ExecutionDetailsPanelThinking";
+(ActivityMarker as any).displayName = "ExecutionDetailsPanelActivity";
+(ToolsMarker as any).displayName = "ExecutionDetailsPanelTools";
+(TokensMarker as any).displayName = "ExecutionDetailsPanelTokens";
+(ViewSelectorMarker as any).displayName = "ExecutionDetailsPanelViewSelector";
+
+// Create compound component with sub-components
+const ExecutionDetailsPanelMemo = memo(ExecutionDetailsPanelInner);
+ExecutionDetailsPanelMemo.displayName = "ExecutionDetailsPanel";
+
+// Create compound component object
+const ExecutionDetailsPanelCompound = ExecutionDetailsPanelMemo as unknown as ExecutionDetailsPanelCompound;
+ExecutionDetailsPanelCompound.Thinking = ThinkingMarker;
+ExecutionDetailsPanelCompound.Activity = ActivityMarker;
+ExecutionDetailsPanelCompound.Tools = ToolsMarker;
+ExecutionDetailsPanelCompound.Tokens = TokensMarker;
+ExecutionDetailsPanelCompound.ViewSelector = ViewSelectorMarker;
+ExecutionDetailsPanelCompound.Root = ExecutionDetailsPanelMemo;
+
+// Export compound component
+export const ExecutionDetailsPanel = ExecutionDetailsPanelCompound;
 
 export default ExecutionDetailsPanel;
