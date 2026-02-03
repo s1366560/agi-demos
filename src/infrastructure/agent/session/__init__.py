@@ -1,6 +1,11 @@
-"""Session management package for Agent conversations."""
+"""Session management package for Agent conversations.
 
-from src.infrastructure.agent.session.compaction import (
+DEPRECATED: This module has been moved to src.infrastructure.agent.context.
+This file provides backward compatibility for existing imports.
+"""
+
+# Re-export from new location for backward compatibility
+from src.infrastructure.agent.context.compaction import (
     PRUNE_MINIMUM_TOKENS,
     PRUNE_PROTECT_TOKENS,
     PRUNE_PROTECTED_TOOLS,

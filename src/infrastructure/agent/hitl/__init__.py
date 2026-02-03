@@ -8,6 +8,7 @@ Architecture:
 - BaseHITLManager: Abstract base class for all HITL managers
 - BaseHITLRequest: Abstract base class for HITL request objects
 - Concrete implementations: DecisionManager, ClarificationManager, EnvVarManager
+- HITLHandler: Unified handler for HITL tool execution
 
 Features:
 - Redis Streams for reliable cross-process communication
@@ -45,6 +46,14 @@ from src.infrastructure.agent.hitl.env_var_manager import (
     get_env_var_manager,
     set_env_var_manager,
 )
+from src.infrastructure.agent.hitl.handler import (
+    HITLHandler,
+    HITLContext,
+    HITLToolType,
+    ToolPartLike,
+    get_hitl_handler,
+    set_hitl_handler,
+)
 
 __all__ = [
     # Base classes
@@ -72,4 +81,11 @@ __all__ = [
     "EnvVarRequest",
     "get_env_var_manager",
     "set_env_var_manager",
+    # HITL Handler
+    "HITLHandler",
+    "HITLContext",
+    "HITLToolType",
+    "ToolPartLike",
+    "get_hitl_handler",
+    "set_hitl_handler",
 ]

@@ -370,6 +370,8 @@ def sandbox_mcp_ruleset() -> List[PermissionRule]:
         tools are denied for pure read-only access.
     """
     return [
+        # Default rule: ask for unknown sandbox tools (must be first - last match wins)
+        PermissionRule("*", "*", PermissionAction.ASK),
         # Read-type tools: allow by default
         PermissionRule("read", "read", PermissionAction.ALLOW),
         PermissionRule("read", "file_read", PermissionAction.ALLOW),
@@ -394,6 +396,4 @@ def sandbox_mcp_ruleset() -> List[PermissionRule]:
         PermissionRule("bash", "python", PermissionAction.ASK),
         PermissionRule("bash", "sh", PermissionAction.ASK),
         PermissionRule("bash", "shell", PermissionAction.ASK),
-        # Default rule: ask for unknown sandbox tools
-        PermissionRule("*", "*", PermissionAction.ASK),
     ]

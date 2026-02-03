@@ -1,0 +1,15 @@
+"""
+Builder module for context management.
+
+Provides components for building LLM-ready messages:
+- MessageBuilder: Convert domain messages to OpenAI format
+- AttachmentInjector: Add attachment context to messages
+"""
+
+from src.infrastructure.agent.context.builder.message_builder import MessageBuilder
+from src.infrastructure.agent.context.builder.attachment_injector import AttachmentInjector
+
+__all__ = [
+    "MessageBuilder",
+    "AttachmentInjector",
+]

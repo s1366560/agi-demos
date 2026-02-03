@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.infrastructure.agent.session.compaction import (
+from src.infrastructure.agent.context.compaction import (
     ModelLimits,
     TokenCount,
     calculate_usable_context,

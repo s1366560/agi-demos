@@ -629,6 +629,144 @@ class DIContainer:
             db_session=self._db,
         )
 
+    # === Agent Orchestrators (Hexagonal Architecture Adapters) ===
+
+    def event_converter(self):
+        """Get EventConverter for domain event to SSE conversion.
+
+        Part of the refactored ReActAgent architecture (Phase 1.1).
+        """
+        from src.infrastructure.agent.events.converter import get_event_converter
+
+        return get_event_converter()
+
+    def skill_orchestrator(self):
+        """Get SkillOrchestrator for skill matching and execution.
+
+        Part of the refactored ReActAgent architecture (Phase 1.3).
+        Implements SkillOrchestratorPort.
+        """
+        from src.infrastructure.agent.skill.orchestrator import create_skill_orchestrator
+
+        return create_skill_orchestrator()
+
+    def subagent_orchestrator(self):
+        """Get SubAgentOrchestrator for sub-agent routing.
+
+        Part of the refactored ReActAgent architecture (Phase 1.4).
+        Implements SubAgentOrchestratorPort.
+        """
+        from src.infrastructure.agent.routing.subagent_orchestrator import (
+            create_subagent_orchestrator,
+        )
+
+        return create_subagent_orchestrator()
+
+    def attachment_processor(self):
+        """Get AttachmentProcessor for handling chat attachments.
+
+        Part of the refactored ReActAgent architecture (Phase 1.2).
+        """
+        from src.infrastructure.agent.attachment.processor import get_attachment_processor
+
+        return get_attachment_processor()
+
+    def llm_invoker(self, llm):
+        """Get LLMInvoker for LLM invocation with streaming.
+
+        Part of the refactored ReActAgent architecture (Phase 2.1).
+        Implements LLMInvokerPort.
+        """
+        from src.infrastructure.agent.llm.invoker import LLMInvoker
+
+        return LLMInvoker(llm_client=llm)
+
+    def tool_executor(self, tools: dict):
+        """Get ToolExecutor for tool execution with permission checking.
+
+        Part of the refactored ReActAgent architecture (Phase 2.2).
+        Implements ToolExecutorPort.
+        """
+        from src.infrastructure.agent.tools.executor import ToolExecutor
+
+        return ToolExecutor(tools=tools)
+
+    def hitl_handler(self):
+        """Get HITLHandler for human-in-the-loop tool handling.
+
+        Part of the refactored ReActAgent architecture (Phase 2.3).
+        """
+        from src.infrastructure.agent.hitl.handler import get_hitl_handler
+
+        return get_hitl_handler()
+
+    def artifact_extractor(self):
+        """Get ArtifactExtractor for extracting artifacts from tool results.
+
+        Part of the refactored ReActAgent architecture (Phase 2.4).
+        """
+        from src.infrastructure.agent.artifact.extractor import get_artifact_extractor
+
+        return get_artifact_extractor()
+
+    def work_plan_generator(self, llm):
+        """Get WorkPlanGenerator for generating agent work plans.
+
+        Part of the refactored ReActAgent architecture (Phase 2.5).
+        """
+        from src.infrastructure.agent.planning.work_plan_generator import WorkPlanGenerator
+
+        return WorkPlanGenerator(llm_client=llm)
+
+    def react_loop(self, llm, tools: dict):
+        """Get ReActLoop for core reasoning loop.
+
+        Part of the refactored ReActAgent architecture (Phase 2.6).
+        Implements ReActLoopPort.
+        """
+        from src.infrastructure.agent.core.react_loop import ReActLoop
+
+        return ReActLoop(
+            llm_invoker=self.llm_invoker(llm),
+            tool_executor=self.tool_executor(tools),
+        )
+
+    # === Context Management (Phase 5 refactoring) ===
+
+    def message_builder(self):
+        """Get MessageBuilder for converting messages to LLM format.
+
+        Part of context management refactoring.
+        Implements MessageBuilderPort.
+        """
+        from src.infrastructure.agent.context.builder import MessageBuilder
+
+        return MessageBuilder()
+
+    def attachment_injector(self):
+        """Get AttachmentInjector for injecting attachment context.
+
+        Part of context management refactoring.
+        Implements AttachmentInjectorPort.
+        """
+        from src.infrastructure.agent.context.builder import AttachmentInjector
+
+        return AttachmentInjector()
+
+    def context_facade(self, window_manager=None):
+        """Get ContextFacade for unified context management.
+
+        Part of context management refactoring.
+        Implements ContextManagerPort.
+        """
+        from src.infrastructure.agent.context import ContextFacade
+
+        return ContextFacade(
+            message_builder=self.message_builder(),
+            attachment_injector=self.attachment_injector(),
+            window_manager=window_manager,
+        )
+
     # === Agent Use Cases ===
 
     def create_conversation_use_case(self, llm) -> CreateConversationUseCase:

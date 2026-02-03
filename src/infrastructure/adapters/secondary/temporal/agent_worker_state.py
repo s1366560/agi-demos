@@ -89,6 +89,11 @@ __all__ = [
     "prewarm_agent_session",
     # Utilities
     "generate_session_key",
+    # Tools cache access (hot-plug support)
+    "get_cached_tools",
+    "get_cached_tools_for_project",
+    "invalidate_tools_cache",
+    "get_or_create_tools",
 ]
 
 # Global state for agent worker
@@ -733,6 +738,22 @@ async def _load_project_sandbox_tools(
 def get_cached_tools() -> Dict[str, Dict[str, Any]]:
     """Get all cached tool sets (for debugging/monitoring)."""
     return dict(_tools_cache)
+
+
+def get_cached_tools_for_project(project_id: str) -> Optional[Dict[str, Any]]:
+    """Get cached tools for a specific project (synchronous, for hot-plug support).
+
+    This is used by ReActAgent's tool_provider to get current tools without
+    async overhead. Returns None if tools not yet cached (caller should use
+    get_or_create_tools() first to populate cache).
+
+    Args:
+        project_id: Project ID to get tools for
+
+    Returns:
+        Dictionary of tool name -> tool instance, or None if not cached
+    """
+    return _tools_cache.get(project_id)
 
 
 def invalidate_tools_cache(project_id: Optional[str] = None) -> None:

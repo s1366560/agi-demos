@@ -39,10 +39,14 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
-from ..context import ContextWindowConfig, ContextWindowManager
+from ..context import ContextWindowConfig, ContextWindowManager, ContextFacade
+from ..events import EventConverter
 from ..permission import PermissionManager
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
+from ..routing import SubAgentOrchestrator, SubAgentOrchestratorConfig, SubAgentRoutingResult
+from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
@@ -92,7 +96,7 @@ class ReActAgent:
     def __init__(
         self,
         model: str,
-        tools: Dict[str, Any],  # Tool name -> Tool instance
+        tools: Optional[Dict[str, Any]] = None,  # Tool name -> Tool instance (static)
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         temperature: float = 0.0,
@@ -121,6 +125,12 @@ class ReActAgent:
         # Artifact service for rich output handling
         artifact_service: Optional["ArtifactService"] = None,
         # ====================================================================
+        # Hot-plug support: Optional tool provider function for dynamic tools
+        # When provided, tools are fetched at each stream() call instead of
+        # being fixed at initialization time.
+        # ====================================================================
+        tool_provider: Optional[callable] = None,
+        # ====================================================================
         # Agent Session Pool: Pre-cached components for performance optimization
         # These are internal parameters set by execute_react_agent_activity
         # when using the Agent Session Pool for component reuse.
@@ -134,7 +144,7 @@ class ReActAgent:
 
         Args:
             model: LLM model name (e.g., "gpt-4", "claude-3-opus")
-            tools: Dictionary of tool name -> tool instance
+            tools: Dictionary of tool name -> tool instance (static, mutually exclusive with tool_provider)
             api_key: Optional API key for LLM
             base_url: Optional base URL for LLM provider
             temperature: LLM temperature (default: 0.0)
@@ -155,15 +165,23 @@ class ReActAgent:
             agent_mode: Agent mode for skill filtering (default: "default")
             project_root: Optional project root path for custom rules loading
             artifact_service: Optional artifact service for handling rich tool outputs
+            tool_provider: Optional callable that returns Dict[str, Any] of tools. When provided,
+                tools are fetched dynamically at each stream() call, enabling hot-plug functionality.
+                Mutually exclusive with 'tools' parameter.
             _cached_tool_definitions: Pre-cached tool definitions from Session Pool
             _cached_system_prompt_manager: Pre-cached SystemPromptManager singleton
             _cached_subagent_router: Pre-cached SubAgentRouter with built index
         """
+        # Validate mutually exclusive tools parameters
+        if tools is None and tool_provider is None and _cached_tool_definitions is None:
+            raise ValueError("Either 'tools', 'tool_provider', or '_cached_tool_definitions' must be provided")
+
         # Default sandbox workspace path - Agent should only see sandbox, not host filesystem
         DEFAULT_SANDBOX_WORKSPACE = Path("/workspace")
 
         self.model = model
-        self.raw_tools = tools
+        self._tool_provider = tool_provider  # Hot-plug: callable returning tools dict
+        self.raw_tools = tools or {}  # Static tools (may be empty if using tool_provider)
         self.api_key = api_key
         self.base_url = base_url
         self.temperature = temperature
@@ -194,6 +212,9 @@ class ReActAgent:
                 )
             )
 
+        # Context Facade - unified entry point for context building
+        self.context_facade = ContextFacade(window_manager=self.context_manager)
+
         # Skill System (L2)
         self.skills = skills or []
         self.skill_match_threshold = skill_match_threshold
@@ -216,14 +237,57 @@ class ReActAgent:
         else:
             self.subagent_router = None
 
+        # ====================================================================
+        # Phase 3 Refactoring: Initialize orchestrators for modular components
+        # ====================================================================
+
+        # Event Converter for domain event -> SSE conversion
+        self._event_converter = EventConverter(debug_logging=False)
+
+        # Skill Orchestrator for skill matching and execution
+        self._skill_orchestrator = SkillOrchestrator(
+            skills=skills,
+            skill_executor=self.skill_executor,
+            tools=tools,
+            config=SkillExecutionConfig(
+                match_threshold=skill_match_threshold,
+                direct_execute_threshold=skill_direct_execute_threshold,
+                fallback_on_error=skill_fallback_on_error,
+                execution_timeout=skill_execution_timeout,
+            ),
+            agent_mode=agent_mode,
+            debug_logging=False,
+        )
+
+        # SubAgent Orchestrator for subagent routing
+        self._subagent_orchestrator = SubAgentOrchestrator(
+            router=self.subagent_router,
+            config=SubAgentOrchestratorConfig(
+                default_confidence_threshold=subagent_match_threshold,
+                emit_routing_events=True,
+            ),
+            base_model=model,
+            base_api_key=api_key,
+            base_url=base_url,
+            debug_logging=False,
+        )
+
         # Convert tools to ToolDefinition - use cached definitions if provided
+        # Hot-plug mode: tool_definitions will be set to None, and fetched dynamically in _get_current_tools()
         if _cached_tool_definitions is not None:
             self.tool_definitions = _cached_tool_definitions
+            self._use_dynamic_tools = False
             logger.debug(
                 f"ReActAgent: Using {len(_cached_tool_definitions)} cached tool definitions"
             )
+        elif self._tool_provider is not None:
+            # Hot-plug mode: defer tool conversion to runtime
+            self.tool_definitions = []  # Will be populated dynamically
+            self._use_dynamic_tools = True
+            logger.debug("ReActAgent: Using dynamic tool_provider (hot-plug enabled)")
         else:
-            self.tool_definitions = self._convert_tools(tools)
+            self.tool_definitions = self._convert_tools(self.raw_tools)
+            self._use_dynamic_tools = False
 
         # Create processor config
         self.config = ProcessorConfig(
@@ -234,6 +298,23 @@ class ReActAgent:
             max_tokens=max_tokens,
             max_steps=max_steps,
         )
+
+    def _get_current_tools(self) -> tuple[Dict[str, Any], List[ToolDefinition]]:
+        """
+        Get current tools - either from static tools or dynamic tool_provider.
+
+        Returns:
+            Tuple of (raw_tools dict, tool_definitions list)
+        """
+        if self._use_dynamic_tools and self._tool_provider is not None:
+            # Hot-plug mode: fetch tools dynamically
+            raw_tools = self._tool_provider()
+            tool_definitions = self._convert_tools(raw_tools)
+            logger.debug(f"ReActAgent: Dynamically loaded {len(tool_definitions)} tools")
+            return raw_tools, tool_definitions
+        else:
+            # Static mode: use pre-converted tools
+            return self.raw_tools, self.tool_definitions
 
     def _convert_tools(self, tools: Dict[str, Any]) -> List[ToolDefinition]:
         """
@@ -306,56 +387,32 @@ class ReActAgent:
         """
         Match query against available skills, filtered by agent_mode.
 
+        Delegates to SkillOrchestrator for modular implementation.
+
         Args:
             query: User query
 
         Returns:
             Tuple of (best matching skill or None, match score)
         """
-        logger.info(f"[ReActAgent] _match_skill called with query: {query}")
-        logger.info(
-            f"[ReActAgent] Number of skills available: {len(self.skills) if self.skills else 0}"
-        )
-        logger.info(f"[ReActAgent] Agent mode: {self.agent_mode}")
+        # Delegate to SkillOrchestrator
+        result = self._skill_orchestrator.match(query)
 
-        if not self.skills:
-            logger.info("[ReActAgent] No skills available for matching")
-            return None, 0.0
-
-        best_skill = None
-        best_score = 0.0
-
-        for skill in self.skills:
-            logger.debug(f"[ReActAgent] Checking skill: {skill.name}, status: {skill.status.value}")
-
-            # Check agent mode accessibility
-            if not skill.is_accessible_by_agent(self.agent_mode):
-                logger.debug(
-                    f"[ReActAgent] Skill {skill.name} not accessible by agent_mode={self.agent_mode}"
-                )
-                continue
-
-            if skill.status.value != "active":
-                continue
-
-            # Use skill's matches_query method
-            score = skill.matches_query(query)
-            logger.debug(f"[ReActAgent] Skill {skill.name} match score: {score}")
-
-            if score > best_score:
-                best_score = score
-                best_skill = skill
-
-        if best_skill:
-            logger.info(f"Matched skill: {best_skill.name} with score {best_score:.2f}")
+        if result.matched:
+            logger.info(
+                f"[ReActAgent] Matched skill: {result.skill.name} "
+                f"with score {result.score:.2f} (mode={result.mode.value})"
+            )
+            return result.skill, result.score
         else:
-            logger.info("[ReActAgent] No skill matched for query")
-
-        return best_skill, best_score
+            logger.debug("[ReActAgent] No skill matched for query")
+            return None, 0.0
 
     def _match_subagent(self, query: str) -> SubAgentMatch:
         """
         Match query against available subagents.
+
+        Delegates to SubAgentOrchestrator for modular implementation.
 
         Args:
             query: User query
@@ -363,18 +420,22 @@ class ReActAgent:
         Returns:
             SubAgentMatch result
         """
-        if not self.subagent_router:
-            return SubAgentMatch(subagent=None, confidence=0.0, match_reason="No router")
+        # Delegate to SubAgentOrchestrator
+        result = self._subagent_orchestrator.match(query)
 
-        match = self.subagent_router.match(query, self.subagent_match_threshold)
-
-        if match.subagent:
+        if result.matched:
             logger.info(
-                f"Matched subagent: {match.subagent.name} "
-                f"with confidence {match.confidence:.2f} ({match.match_reason})"
+                f"[ReActAgent] Matched subagent: {result.subagent.name} "
+                f"with confidence {result.confidence:.2f} ({result.match_reason})"
             )
-
-        return match
+            # Convert to legacy SubAgentMatch for backward compatibility
+            return SubAgentMatch(
+                subagent=result.subagent,
+                confidence=result.confidence,
+                match_reason=result.match_reason,
+            )
+        else:
+            return SubAgentMatch(subagent=None, confidence=0.0, match_reason=result.match_reason)
 
     async def _build_system_prompt(
         self,
@@ -430,8 +491,9 @@ class ReActAgent:
                 "prompt_template": matched_skill.prompt_template,
             }
 
-        # Convert tool definitions to dict format
-        tool_defs = [{"name": t.name, "description": t.description} for t in self.tool_definitions]
+        # Convert tool definitions to dict format - use current tools (hot-plug support)
+        _, current_tool_definitions = self._get_current_tools()
+        tool_defs = [{"name": t.name, "description": t.description} for t in current_tool_definitions]
 
         # Build prompt context
         context = PromptContext(
@@ -727,128 +789,26 @@ class ReActAgent:
             tenant_id=tenant_id,
         )
 
-        # Convert conversation context to OpenAI format
-        context_messages = []
-        for msg in conversation_context:
-            context_messages.append(
-                {
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", ""),
-                }
-            )
-
-        # Build attachment context prompt for Agent awareness
-        # This tells the Agent exactly which files were uploaded in THIS SPECIFIC turn
-        # Using a structured format that's easy for LLM to parse and distinguish from history
-        attachment_context_prompt = ""
-        if attachment_metadata:
-            file_lines = []
-            for meta in attachment_metadata:
-                filename = meta.get("filename", "unknown")
-                sandbox_path = meta.get("sandbox_path", f"/workspace/{filename}")
-                mime_type = meta.get("mime_type", "unknown")
-                size_bytes = meta.get("size_bytes", 0)
-                # Format file size for readability
-                if size_bytes < 1024:
-                    size_str = f"{size_bytes} bytes"
-                elif size_bytes < 1024 * 1024:
-                    size_str = f"{size_bytes / 1024:.1f} KB"
-                else:
-                    size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-                file_lines.append(
-                    f"  📄 文件名: {filename}\n"
-                    f"     沙箱路径: {sandbox_path}\n"
-                    f"     类型: {mime_type}\n"
-                    f"     大小: {size_str}"
-                )
-
-            if file_lines:
-                # Use clear delimiters and explicit instructions
-                attachment_context_prompt = (
-                    "╔══════════════════════════════════════════════════════════════╗\n"
-                    "║  📎 用户本次消息上传的文件 (CURRENT MESSAGE ATTACHMENTS)    ║\n"
-                    "╚══════════════════════════════════════════════════════════════╝\n\n"
-                    + "\n\n".join(file_lines)
-                    + "\n\n"
-                    "⚠️ 重要提示:\n"
-                    "1. 以上是用户在【本条消息】中上传的文件，不是历史文件\n"
-                    "2. 文件已同步到沙箱，请直接使用【沙箱路径】访问\n"
-                    "3. 如需读取文件内容，请使用 bash 工具执行: cat <沙箱路径>\n"
-                    "4. 请勿猜测或修改路径，直接使用上面列出的沙箱路径\n\n"
-                    "════════════════════════════════════════════════════════════════\n\n"
-                )
-                logger.info(
-                    f"[ReActAgent] Injecting attachment context for {len(file_lines)} files: "
-                    f"{[m.get('filename') for m in attachment_metadata]}"
-                )
-
-        # Prepend attachment context to user message
-        enhanced_user_message = attachment_context_prompt + user_message
-
-        # Add current user message (with optional multimodal attachments)
-        if attachment_content:
-            # Build multimodal content array for LLM
-            # Format: [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {...}}]
-            user_content = [{"type": "text", "text": enhanced_user_message}]
-            for attachment in attachment_content:
-                att_type = attachment.get("type", "")
-                if att_type == "image_url":
-                    # Image attachment from attachment_service.prepare_for_llm
-                    image_url_data = attachment.get("image_url", {})
-                    if image_url_data:
-                        user_content.append(
-                            {
-                                "type": "image_url",
-                                "image_url": image_url_data,
-                            }
-                        )
-                elif att_type == "image":
-                    # Legacy format: image attachment with base64 data URL
-                    image_url = attachment.get("content", "")
-                    if image_url:
-                        user_content.append(
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": image_url,
-                                    "detail": attachment.get("detail", "auto"),
-                                },
-                            }
-                        )
-                elif att_type == "text":
-                    # Text attachment: append as text content
-                    text_content = attachment.get("text", "") or attachment.get("content", "")
-                    if text_content:
-                        filename = attachment.get("filename", "attachment")
-                        user_content.append(
-                            {
-                                "type": "text",
-                                "text": f"\n\n--- Attached file: {filename} ---\n{text_content}\n--- End of file ---",
-                            }
-                        )
-            context_messages.append(
-                {
-                    "role": "user",
-                    "content": user_content,
-                }
-            )
-            logger.info(f"[ReActAgent] Added {len(attachment_content)} attachments to user message")
-        else:
-            context_messages.append(
-                {
-                    "role": "user",
-                    "content": enhanced_user_message,
-                }
-            )
-
-        # Use ContextWindowManager for dynamic context sizing
-        context_result = await self.context_manager.build_context_window(
+        # Build context using ContextFacade - replaces inline message building
+        # and attachment injection (was ~115 lines, now ~10 lines)
+        context_request = ContextBuildRequest(
             system_prompt=system_prompt,
-            messages=context_messages,
-            llm_client=None,  # TODO: Pass LLM client for summary generation
+            conversation_context=conversation_context,
+            user_message=user_message,
+            attachment_metadata=attachment_metadata,
+            attachment_content=attachment_content,
         )
-
+        context_result = await self.context_facade.build_context(context_request)
         messages = context_result.messages
+
+        # Log attachment info if present
+        if attachment_metadata:
+            logger.info(
+                f"[ReActAgent] Context built with {len(attachment_metadata)} attachments: "
+                f"{[m.get('filename') for m in attachment_metadata]}"
+            )
+        if attachment_content:
+            logger.info(f"[ReActAgent] Added {len(attachment_content)} multimodal attachments")
 
         # Emit context_compressed event if compression occurred
         if context_result.was_compressed:
@@ -863,14 +823,15 @@ class ReActAgent:
                 f"strategy: {context_result.compression_strategy.value}"
             )
 
-        # Determine tools to use
-        tools_to_use = self.tool_definitions
+        # Determine tools to use - hot-plug support: fetch current tools
+        current_raw_tools, current_tool_definitions = self._get_current_tools()
+        tools_to_use = current_tool_definitions
 
         if active_subagent and self.subagent_router:
             # Filter tools based on SubAgent permissions
             filtered_tools = self.subagent_router.filter_tools(
                 active_subagent,
-                self.raw_tools,
+                current_raw_tools,
             )
             tools_to_use = self._convert_tools(filtered_tools)
 
@@ -989,10 +950,9 @@ class ReActAgent:
         tenant_id: str,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Execute skill directly via SkillExecutor.
+        Execute skill directly via SkillOrchestrator.
 
-        This method handles the direct execution path where we bypass the LLM
-        and execute the skill's tool chain directly.
+        Delegates to SkillOrchestrator for modular implementation.
 
         Args:
             skill: Matched skill to execute
@@ -1004,239 +964,22 @@ class ReActAgent:
         Yields:
             Event dictionaries for skill execution progress
         """
-        if not self.skill_executor:
-            raise ValueError("SkillExecutor not initialized")
+        # Delegate to SkillOrchestrator
+        context = SkillExecutionContext(
+            project_id=project_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            query=query,
+        )
 
-        logger.info(f"[ReActAgent] Direct executing skill: {skill.name}")
-
-        # Build execution context
-        context = {
-            "project_id": project_id,
-            "user_id": user_id,
-            "tenant_id": tenant_id,
-        }
-
-        # Try to extract sandbox_id from tools
-        # Sandbox tools have a sandbox_id attribute on the wrapper
-        sandbox_id = None
-        for tool_name in skill.tools:
-            if tool_name in self.tools and hasattr(self.tools[tool_name], "sandbox_id"):
-                # Found a sandbox tool with explicit sandbox_id attribute
-                sandbox_id = self.tools[tool_name].sandbox_id
-                break
-
-        # Emit skill execution start event
-        yield {
-            "type": "skill_execution_start",
-            "data": {
-                "skill_id": skill.id,
-                "skill_name": skill.name,
-                "tools": list(skill.tools),
-                "total_steps": len(skill.tools),
-            },
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-        tool_results = []
-        current_step = 0
-
-        # Execute skill and convert events (pass sandbox_id if available)
-        async for domain_event in self.skill_executor.execute(
-            skill, query, context, sandbox_id=sandbox_id
-        ):
-            # Convert SkillExecutor Domain events to our format
-            converted_event = self._convert_skill_domain_event(domain_event, skill, current_step)
-
-            if converted_event:
-                yield converted_event
-
-            # Track tool results from observe events (outside if block)
-            if domain_event.event_type == AgentEventType.OBSERVE:
-                tool_results.append(
-                    {
-                        "tool_name": domain_event.tool_name,
-                        "result": domain_event.result,
-                        "error": domain_event.error,
-                        "duration_ms": domain_event.duration_ms,
-                        "status": domain_event.status,
-                    }
-                )
-                current_step += 1
-
-            # Handle completion event (outside if block since converted_event is None for COMPLETE)
-            if domain_event.event_type == AgentEventType.SKILL_EXECUTION_COMPLETE:
-                # Type check for safety
-                if isinstance(domain_event, AgentSkillExecutionCompleteEvent):
-                    success = domain_event.success
-                    error = domain_event.error
-                    execution_time_ms = domain_event.execution_time_ms
-
-                    # Generate summary from tool results
-                    summary = self._summarize_skill_results(skill, tool_results, success, error)
-
-                    # Emit skill execution complete event
-                    yield {
-                        "type": "skill_execution_complete",
-                        "data": {
-                            "skill_id": skill.id,
-                            "skill_name": skill.name,
-                            "success": success,
-                            "summary": summary,
-                            "tool_results": tool_results,
-                            "execution_time_ms": execution_time_ms,
-                            "error": error,
-                        },
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-
-    def _convert_skill_domain_event(
-        self,
-        domain_event: AgentDomainEvent,
-        skill: Skill,
-        current_step: int,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Convert SkillExecutor Domain event to ReActAgent event format.
-
-        Args:
-            domain_event: Domain event from SkillExecutor
-            skill: The skill being executed
-            current_step: Current step index in the skill execution
-
-        Returns:
-            Converted event dict or None to skip
-        """
-        event_type = domain_event.event_type
-        timestamp = datetime.fromtimestamp(domain_event.timestamp).isoformat()
-
-        if event_type == AgentEventType.THOUGHT:
-            # Assuming AgentThoughtEvent
-            if isinstance(domain_event, AgentThoughtEvent):
-                thought_level = domain_event.thought_level
-
-                # Map skill thoughts to appropriate event types
-                if thought_level == "skill":
-                    return {
-                        "type": "thought",
-                        "data": {
-                            "thought": domain_event.content,
-                            "thought_level": "skill",
-                            "skill_id": skill.id,
-                        },
-                        "timestamp": timestamp,
-                    }
-                elif thought_level == "skill_complete":
-                    # Skill completion thought - handled separately
-                    return None
-
-                return {
-                    "type": "thought",
-                    "data": {
-                        "thought": domain_event.content,
-                        "thought_level": thought_level,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.ACT:
-            if isinstance(domain_event, AgentActEvent):
-                return {
-                    "type": "skill_tool_start",
-                    "data": {
-                        "skill_id": skill.id,
-                        "skill_name": skill.name,
-                        "tool_name": domain_event.tool_name,
-                        "tool_input": domain_event.tool_input or {},
-                        "step_index": current_step,
-                        "total_steps": len(skill.tools),
-                        "status": domain_event.status,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.OBSERVE:
-            if isinstance(domain_event, AgentObserveEvent):
-                return {
-                    "type": "skill_tool_result",
-                    "data": {
-                        "skill_id": skill.id,
-                        "skill_name": skill.name,
-                        "tool_name": domain_event.tool_name,
-                        "result": domain_event.result,
-                        "error": domain_event.error,
-                        "duration_ms": domain_event.duration_ms or 0,
-                        "step_index": current_step,
-                        "total_steps": len(skill.tools),
-                        "status": domain_event.status,
-                    },
-                    "timestamp": timestamp,
-                }
-
-        elif event_type == AgentEventType.SKILL_EXECUTION_COMPLETE:
-            # Completion handled in _execute_skill_directly
-            return None
-
-        # Skip other event types
-        return None
-
-    def _summarize_skill_results(
-        self,
-        skill: Skill,
-        tool_results: List[Dict[str, Any]],
-        success: bool,
-        error: Optional[str] = None,
-    ) -> str:
-        """
-        Generate a summary from skill execution results.
-
-        Args:
-            skill: Executed skill
-            tool_results: List of tool execution results
-            success: Whether execution was successful
-            error: Optional error message
-
-        Returns:
-            Human-readable summary string
-        """
-        if not success:
-            failed_tool = None
-            for result in tool_results:
-                if result.get("status") == "error" or result.get("error"):
-                    failed_tool = result.get("tool_name", "unknown")
-                    break
-
-            if error:
-                return f"Skill '{skill.name}' failed: {error}"
-            elif failed_tool:
-                return f"Skill '{skill.name}' failed at tool '{failed_tool}'"
-            else:
-                return f"Skill '{skill.name}' execution failed"
-
-        # Build summary from successful results
-        summary_parts = [f"Completed skill '{skill.name}':"]
-
-        for result in tool_results:
-            tool_name = result.get("tool_name", "unknown")
-            tool_result = result.get("result")
-
-            if tool_result:
-                # Truncate long results
-                result_str = str(tool_result)
-                if len(result_str) > 200:
-                    result_str = result_str[:200] + "..."
-                summary_parts.append(f"- {tool_name}: {result_str}")
-
-        if len(summary_parts) == 1:
-            return f"Skill '{skill.name}' completed successfully"
-
-        return "\n".join(summary_parts)
+        async for event in self._skill_orchestrator.execute_directly(skill, context):
+            yield event
 
     def _convert_domain_event(self, domain_event: AgentDomainEvent) -> Optional[Dict[str, Any]]:
         """
         Convert AgentDomainEvent to event dictionary format.
 
-        Uses the unified to_event_dict() method with minimal customization
-        for backward compatibility.
+        Delegates to EventConverter for modular implementation.
 
         Args:
             domain_event: AgentDomainEvent from processor
@@ -1244,95 +987,8 @@ class ReActAgent:
         Returns:
             Event dict or None to skip
         """
-        event_type = domain_event.event_type
-
-        # Debug log to track event conversion
-        logger.info(f"[ReActAgent] Converting Domain event: type={event_type}")
-
-        # Use unified serialization for most events
-        event_dict = domain_event.to_event_dict()
-
-        # Special handling for specific events to maintain backward compatibility
-
-        # COMPLETE event is handled separately in stream()
-        if event_type == AgentEventType.COMPLETE:
-            return None
-
-        # OBSERVE event: add redundant 'observation' field for legacy compat
-        # Also ensure 'error' field is included for proper error handling in frontend
-        if event_type == AgentEventType.OBSERVE and isinstance(domain_event, AgentObserveEvent):
-            observation = (
-                domain_event.result
-                if domain_event.result is not None
-                else (domain_event.error or "")
-            )
-            event_dict["data"]["observation"] = observation
-            # Include error field if present - frontend uses this to determine success/failure
-            if domain_event.error:
-                event_dict["data"]["error"] = domain_event.error
-
-        # DOOM_LOOP_DETECTED: rename to 'doom_loop' for frontend compatibility
-        if event_type == AgentEventType.DOOM_LOOP_DETECTED:
-            event_dict["type"] = "doom_loop"
-
-        # WORK_PLAN: data should be the plan directly
-        if event_type == AgentEventType.WORK_PLAN and isinstance(domain_event, AgentWorkPlanEvent):
-            event_dict["data"] = domain_event.plan
-
-        # STEP_START: rename step_index to step_number
-        if event_type == AgentEventType.STEP_START and isinstance(
-            domain_event, AgentStepStartEvent
-        ):
-            event_dict["data"] = {
-                "step_number": domain_event.step_index,
-                "description": domain_event.description,
-            }
-
-        # STEP_END: rename step_index to step_number, add success flag
-        if event_type == AgentEventType.STEP_END and isinstance(domain_event, AgentStepEndEvent):
-            event_dict["data"] = {
-                "step_number": domain_event.step_index,
-                "success": domain_event.status == "completed",
-            }
-
-        # THOUGHT: rename content to thought
-        if event_type == AgentEventType.THOUGHT and isinstance(domain_event, AgentThoughtEvent):
-            event_dict["data"] = {
-                "thought": domain_event.content,
-                "thought_level": domain_event.thought_level,
-            }
-
-        # ACT: normalize call_id and tool_input
-        if event_type == AgentEventType.ACT and isinstance(domain_event, AgentActEvent):
-            event_dict["data"] = {
-                "tool_name": domain_event.tool_name,
-                "tool_input": domain_event.tool_input or {},
-                "call_id": domain_event.call_id or "",
-                "status": domain_event.status,
-            }
-
-        # ERROR: provide default code
-        if event_type == AgentEventType.ERROR and isinstance(domain_event, AgentErrorEvent):
-            event_dict["data"]["code"] = domain_event.code or "UNKNOWN"
-
-        # ARTIFACT_CREATED: forward artifact info to frontend
-        if event_type == AgentEventType.ARTIFACT_CREATED:
-            from src.domain.events.agent_events import AgentArtifactCreatedEvent
-
-            if isinstance(domain_event, AgentArtifactCreatedEvent):
-                event_dict["data"] = {
-                    "artifact_id": domain_event.artifact_id,
-                    "filename": domain_event.filename,
-                    "mime_type": domain_event.mime_type,
-                    "category": domain_event.category,
-                    "size_bytes": domain_event.size_bytes,
-                    "url": domain_event.url,
-                    "preview_url": domain_event.preview_url,
-                    "tool_execution_id": domain_event.tool_execution_id,
-                    "source_tool": domain_event.source_tool,
-                }
-
-        return event_dict
+        # Delegate to EventConverter
+        return self._event_converter.convert(domain_event)
 
     async def _execute_plan_mode(
         self,
@@ -1395,10 +1051,13 @@ class ReActAgent:
             base_url=self.base_url,
         )
 
+        # Get current tools (hot-plug support)
+        _, current_tool_definitions = self._get_current_tools()
+
         # Create Plan Mode components
         generator = PlanGenerator(
             llm_client=llm_client,
-            available_tools=self.tool_definitions,
+            available_tools=current_tool_definitions,
         )
 
         # Create a simple session processor wrapper for tool execution
@@ -1431,8 +1090,8 @@ class ReActAgent:
                 except Exception as e:
                     return f"Error executing {tool_name}: {str(e)}"
 
-        # Create wrapper instance
-        session_processor = SessionProcessorWrapper(self.tool_definitions, self.permission_manager)
+        # Create wrapper instance (use current_tool_definitions from above)
+        session_processor = SessionProcessorWrapper(current_tool_definitions, self.permission_manager)
 
         # Event emitter for Plan Mode events
         plan_events = []
