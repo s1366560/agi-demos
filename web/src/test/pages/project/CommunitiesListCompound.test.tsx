@@ -27,6 +27,13 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+  initReactI18next: { type: '3rdParty', init: () => {} },
+}))
+
 vi.mock('../../../components/tasks/TaskList', () => ({
   TaskList: ({ entityId, entityType }: any) => (
     <div data-testid="task-list" data-entity-id={entityId} data-entity-type={entityType}>

@@ -1,0 +1,316 @@
+"""Event replay and execution status endpoints for Agent API.
+
+Provides endpoints for event management and execution monitoring:
+- get_conversation_events: Get SSE events for replay
+- get_execution_status: Get current execution status
+- resume_execution: Resume from checkpoint
+- get_workflow_status: Get Temporal workflow status
+"""
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+)
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+
+from .schemas import (
+    EventReplayResponse,
+    ExecutionStatusResponse,
+    RecoveryInfo,
+    WorkflowStatusResponse,
+)
+from .utils import get_container_with_db
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+@router.get("/conversations/{conversation_id}/events", response_model=EventReplayResponse)
+async def get_conversation_events(
+    conversation_id: str,
+    from_sequence: int = Query(0, ge=0, description="Starting sequence number"),
+    limit: int = Query(1000, ge=1, le=10000, description="Maximum events to return"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> EventReplayResponse:
+    """
+    Get SSE events for a conversation, used for replaying execution state.
+
+    This endpoint returns persisted SSE events starting from a given sequence number,
+    allowing clients to replay the execution timeline when reconnecting or switching
+    between conversations.
+    """
+    try:
+        container = get_container_with_db(request, db)
+        event_repo = container.agent_execution_event_repository()
+
+        if not event_repo:
+            # Event replay not configured
+            return EventReplayResponse(events=[], has_more=False)
+
+        events = await event_repo.get_events(
+            conversation_id=conversation_id,
+            from_sequence=from_sequence,
+            limit=limit,
+        )
+
+        # Convert events to SSE format
+        event_dicts = [event.to_sse_format() for event in events]
+
+        return EventReplayResponse(
+            events=event_dicts,
+            has_more=len(events) == limit,
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting conversation events: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get events: {str(e)}")
+
+
+@router.get(
+    "/conversations/{conversation_id}/execution-status", response_model=ExecutionStatusResponse
+)
+async def get_execution_status(
+    conversation_id: str,
+    include_recovery: bool = Query(
+        False, description="Include recovery information for stream resumption"
+    ),
+    from_sequence: int = Query(
+        0, description="Client's last known sequence (for recovery calculation)"
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> ExecutionStatusResponse:
+    """
+    Get the current execution status of a conversation with optional recovery info.
+
+    When include_recovery=true, also returns information needed to
+    recover event stream after page refresh:
+    - can_recover: Whether recovery is possible
+    - stream_exists: Whether Redis Stream exists
+    - recovery_source: "stream", "database", or "none"
+    - missed_events_count: Events missed since from_sequence
+    """
+    try:
+        container = get_container_with_db(request, db)
+        event_repo = container.agent_execution_event_repository()
+        redis_client = container.redis()
+
+        if not event_repo:
+            # Event replay not configured
+            return ExecutionStatusResponse(
+                is_running=False,
+                last_sequence=0,
+                current_message_id=None,
+                conversation_id=conversation_id,
+            )
+
+        # Get last sequence number
+        last_sequence = await event_repo.get_last_sequence(conversation_id)
+
+        # Check Redis for active execution
+        is_running = False
+        current_message_id = None
+
+        if redis_client:
+            running_key = f"agent:running:{conversation_id}"
+            running_message_id = await redis_client.get(running_key)
+            logger.warning(
+                f"[ExecutionStatus] Redis check for {running_key}: "
+                f"value={running_message_id}, is_running={bool(running_message_id)}"
+            )
+            if running_message_id:
+                is_running = True
+                current_message_id = (
+                    running_message_id.decode()
+                    if isinstance(running_message_id, bytes)
+                    else running_message_id
+                )
+
+        # If not running from Redis check, get current message ID from last event
+        if not current_message_id and last_sequence > 0:
+            events = await event_repo.get_events(
+                conversation_id=conversation_id,
+                from_sequence=max(0, last_sequence - 1),
+                limit=1,
+            )
+            if events:
+                current_message_id = events[-1].message_id
+
+        # Build response
+        response = ExecutionStatusResponse(
+            is_running=is_running,
+            last_sequence=last_sequence,
+            current_message_id=current_message_id,
+            conversation_id=conversation_id,
+        )
+
+        # Include recovery info if requested
+        if include_recovery:
+            recovery_info = RecoveryInfo(
+                can_recover=last_sequence > from_sequence,
+                recovery_source="database" if last_sequence > 0 else "none",
+                missed_events_count=max(0, last_sequence - from_sequence),
+            )
+
+            # Check Redis Stream for live events
+            if redis_client and current_message_id:
+                import redis.asyncio as redis
+
+                if isinstance(redis_client, redis.Redis):
+                    stream_key = f"agent:events:{conversation_id}"
+                    try:
+                        # Check if stream exists
+                        stream_info = await redis_client.xinfo_stream(stream_key)
+                        if stream_info:
+                            recovery_info.stream_exists = True
+                            recovery_info.recovery_source = "stream"
+                            # Get last entry to find last sequence
+                            last_entry = await redis_client.xrevrange(stream_key, count=1)
+                            if last_entry:
+                                _, fields = last_entry[0]
+                                seq_raw = fields.get(b"seq") or fields.get("seq")
+                                if seq_raw:
+                                    stream_seq = int(seq_raw)
+                                    if stream_seq > last_sequence:
+                                        recovery_info.missed_events_count = max(
+                                            0, stream_seq - from_sequence
+                                        )
+                                        recovery_info.can_recover = True
+                    except redis.ResponseError:
+                        # Stream doesn't exist
+                        pass
+
+            response.recovery = recovery_info
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Error getting execution status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {str(e)}")
+
+
+@router.post("/conversations/{conversation_id}/resume", status_code=202)
+async def resume_execution(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """
+    Resume agent execution from the last checkpoint.
+
+    This endpoint retrieves the latest checkpoint for a conversation and
+    resumes the agent execution from that point. If no checkpoint exists,
+    returns 404.
+    """
+    try:
+        container = get_container_with_db(request, db)
+        checkpoint_repo = container.execution_checkpoint_repository()
+
+        if not checkpoint_repo:
+            raise HTTPException(status_code=501, detail="Execution checkpoint not configured")
+
+        # Get latest checkpoint
+        checkpoint = await checkpoint_repo.get_latest(conversation_id)
+
+        if not checkpoint:
+            raise HTTPException(status_code=404, detail="No checkpoint found for this conversation")
+
+        # TODO: Implement actual resumption logic
+        # This would involve:
+        # 1. Create a new ReActAgent instance
+        # 2. Restore state from checkpoint.execution_state
+        # 3. Continue execution from the checkpoint point
+        # For now, we just return the checkpoint info
+
+        return {
+            "status": "resuming",
+            "checkpoint_id": checkpoint.id,
+            "checkpoint_type": checkpoint.checkpoint_type,
+            "step_number": checkpoint.step_number,
+            "message": f"Resuming from {checkpoint.checkpoint_type} checkpoint at step {checkpoint.step_number}",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resuming execution: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to resume execution: {str(e)}")
+
+
+@router.get(
+    "/conversations/{conversation_id}/workflow-status", response_model=WorkflowStatusResponse
+)
+async def get_workflow_status(
+    conversation_id: str,
+    message_id: Optional[str] = Query(None, description="Message ID to get workflow status for"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> WorkflowStatusResponse:
+    """
+    Get the Temporal workflow status for an agent execution.
+
+    This endpoint queries the Temporal server for the current status of the
+    agent execution workflow, including whether it's running, completed, or failed.
+    """
+    try:
+        container = get_container_with_db(request, db)
+
+        # Get Temporal client (if available)
+        temporal_client = await container.temporal_client()
+        if not temporal_client:
+            raise HTTPException(status_code=501, detail="Temporal workflow engine not configured")
+
+        # Determine workflow ID from message_id or conversation
+        workflow_id = f"agent-exec-{conversation_id}"
+        if message_id:
+            workflow_id = f"agent-exec-{conversation_id}-{message_id}"
+
+        # Query Temporal for workflow status
+        try:
+            handle = temporal_client.get_workflow_handle(workflow_id)
+            desc = await handle.describe()
+
+            # Map Temporal status to string
+            status_map = {
+                "RUNNING": "RUNNING",
+                "COMPLETED": "COMPLETED",
+                "FAILED": "FAILED",
+                "CANCELED": "CANCELED",
+                "TERMINATED": "TERMINATED",
+                "TIMED_OUT": "TIMED_OUT",
+            }
+            status = status_map.get(str(desc.status), "UNKNOWN")
+
+            return WorkflowStatusResponse(
+                workflow_id=workflow_id,
+                run_id=desc.run_id,
+                status=status,
+                started_at=desc.start_time,
+                completed_at=desc.close_time,
+            )
+
+        except Exception as e:
+            # Workflow not found or other Temporal error
+            if "not found" in str(e).lower() or "workflow not found" in str(e).lower():
+                raise HTTPException(
+                    status_code=404, detail=f"No workflow found for conversation {conversation_id}"
+                )
+            raise
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting workflow status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {str(e)}")
