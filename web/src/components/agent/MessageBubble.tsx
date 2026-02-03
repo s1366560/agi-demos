@@ -15,7 +15,7 @@
  * <MessageBubble.ToolExecution event={actEvent} observeEvent={observeEvent} />
  */
 
-export { MessageBubble } from './messageBubble';
+export { MessageBubble } from './messageBubble/MessageBubble';
 export type {
   MessageBubbleProps,
   MessageBubbleRootProps,
