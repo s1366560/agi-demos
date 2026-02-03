@@ -12,7 +12,6 @@ from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_native_graph_adapter
 from src.infrastructure.adapters.primary.web.dependencies import initialize_default_credentials
 from src.infrastructure.adapters.primary.web.routers import (
-    agent,
     ai_tools,
     artifacts,
     attachments_upload,
@@ -42,6 +41,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenants,
     terminal,
 )
+from src.infrastructure.adapters.primary.web.routers.agent import router as agent_router
 from src.infrastructure.adapters.primary.web.websocket import router as websocket_router
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
@@ -425,7 +425,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(tenants.router)
     app.include_router(projects.router)
-    app.include_router(agent.router)
+    app.include_router(agent_router)  # Modular agent router
     app.include_router(websocket_router)  # WebSocket for agent chat
     app.include_router(shares.router)
     app.include_router(memories.router)
