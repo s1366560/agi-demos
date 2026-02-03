@@ -1,14 +1,38 @@
 /**
  * MessageArea - Modern message display area with aggressive preloading
  *
- * Features:
- * - Aggressive preloading for seamless backward pagination (用户几乎感知不到加载)
+ * ## Usage
+ *
+ * ### Convenience Usage (Default rendering)
+ * ```tsx
+ * <MessageArea
+ *   timeline={timeline}
+ *   isStreaming={false}
+ *   isLoading={false}
+ *   planModeStatus={null}
+ *   onViewPlan={handleViewPlan}
+ *   onExitPlanMode={handleExitPlanMode}
+ * />
+ * ```
+ *
+ * ### Compound Components (Custom rendering)
+ * ```tsx
+ * <MessageArea timeline={timeline} ...>
+ *   <MessageArea.PlanBanner />
+ *   <MessageArea.ScrollIndicator />
+ *   <MessageArea.Content />
+ *   <MessageArea.ScrollButton />
+ * </MessageArea>
+ * ```
+ *
+ * ## Features
+ * - Aggressive preloading for seamless backward pagination
  * - Scroll position restoration without jumping
  * - Auto-scroll to bottom for new messages
  * - Scroll to bottom button when user scrolls up
  */
 
-import { useRef, useEffect, useCallback, useState, memo } from 'react';
+import { useRef, useEffect, useCallback, useState, memo, Children, createContext } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { LoadingOutlined } from '@ant-design/icons';
@@ -17,25 +41,139 @@ import { PlanModeBanner } from './PlanModeBanner';
 import { StreamingThoughtBubble } from './StreamingThoughtBubble';
 import type { TimelineEvent, PlanModeStatus } from '../../types/agent';
 
-interface MessageAreaProps {
+// Import and re-export types from separate file
+export type {
+  MessageAreaRootProps,
+  MessageAreaContextValue,
+  MessageAreaLoadingProps,
+  MessageAreaEmptyProps,
+  MessageAreaScrollIndicatorProps,
+  MessageAreaScrollButtonProps,
+  MessageAreaContentProps,
+  MessageAreaPlanBannerProps,
+  MessageAreaStreamingContentProps,
+  MessageAreaCompound,
+} from './message/types';
+
+// Define local type aliases to avoid TS6192 (unused imports)
+// These reference the same types as exported above
+interface _MessageAreaRootProps {
   timeline: TimelineEvent[];
   streamingContent?: string;
   streamingThought?: string;
   isStreaming: boolean;
   isThinkingStreaming?: boolean;
-  isLoading: boolean;  // 初始加载状态（显示 loading spinner）
+  isLoading: boolean;
   planModeStatus: PlanModeStatus | null;
   onViewPlan: () => void;
   onExitPlanMode: () => void;
-  // Pagination props
   hasEarlierMessages?: boolean;
   onLoadEarlier?: () => void;
-  isLoadingEarlier?: boolean;  // 分页加载状态（不影响初始 loading）
-  // Preload configuration
-  preloadItemCount?: number; // 当剩余消息数少于此值时触发预加载
-  // Conversation ID for scroll reset on conversation change
+  isLoadingEarlier?: boolean;
+  preloadItemCount?: number;
   conversationId?: string | null;
+  children?: React.ReactNode;
 }
+
+interface _MessageAreaScrollState {
+  showScrollButton: boolean;
+  showLoadingIndicator: boolean;
+  scrollToBottom: () => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+interface _MessageAreaContextValue {
+  timeline: TimelineEvent[];
+  streamingContent?: string;
+  streamingThought?: string;
+  isStreaming: boolean;
+  isThinkingStreaming?: boolean;
+  isLoading: boolean;
+  planModeStatus: PlanModeStatus | null;
+  onViewPlan: () => void;
+  onExitPlanMode: () => void;
+  hasEarlierMessages: boolean;
+  onLoadEarlier?: () => void;
+  isLoadingEarlier: boolean;
+  preloadItemCount: number;
+  conversationId?: string | null;
+  scroll: _MessageAreaScrollState;
+}
+
+interface _MessageAreaLoadingProps {
+  className?: string;
+  message?: string;
+}
+
+interface _MessageAreaEmptyProps {
+  className?: string;
+  title?: string;
+  subtitle?: string;
+}
+
+interface _MessageAreaScrollIndicatorProps {
+  className?: string;
+  label?: string;
+}
+
+interface _MessageAreaScrollButtonProps {
+  className?: string;
+  title?: string;
+}
+
+interface _MessageAreaContentProps {
+  className?: string;
+}
+
+interface _MessageAreaPlanBannerProps {
+  className?: string;
+}
+
+interface _MessageAreaStreamingContentProps {
+  className?: string;
+}
+
+interface _MessageAreaCompound extends React.FC<_MessageAreaRootProps> {
+  Provider: React.FC<{ children: React.ReactNode }>;
+  Loading: React.FC<_MessageAreaLoadingProps>;
+  Empty: React.FC<_MessageAreaEmptyProps>;
+  ScrollIndicator: React.FC<_MessageAreaScrollIndicatorProps>;
+  ScrollButton: React.FC<_MessageAreaScrollButtonProps>;
+  Content: React.FC<_MessageAreaContentProps>;
+  PlanBanner: React.FC<_MessageAreaPlanBannerProps>;
+  StreamingContent: React.FC<_MessageAreaStreamingContentProps>;
+  Root: React.FC<_MessageAreaRootProps>;
+}
+
+// ========================================
+// Marker Symbols for Sub-Components
+// ========================================
+
+const LOADING_SYMBOL = Symbol('MessageAreaLoading');
+const EMPTY_SYMBOL = Symbol('MessageAreaEmpty');
+const SCROLL_INDICATOR_SYMBOL = Symbol('MessageAreaScrollIndicator');
+const SCROLL_BUTTON_SYMBOL = Symbol('MessageAreaScrollButton');
+const CONTENT_SYMBOL = Symbol('MessageAreaContent');
+const PLAN_BANNER_SYMBOL = Symbol('MessageAreaPlanBanner');
+const STREAMING_CONTENT_SYMBOL = Symbol('MessageAreaStreamingContent');
+
+// ========================================
+// Context
+// ========================================
+
+const MessageAreaContext = createContext<_MessageAreaContextValue | null>(null);
+
+export const useMessageArea = () => {
+  const context = MessageAreaContext;
+  if (!context) {
+    throw new Error('useMessageArea must be used within MessageArea');
+  }
+  return context;
+};
+
+// ========================================
+// Utility Functions
+// ========================================
 
 // Check if scroll is near bottom
 const isNearBottom = (element: HTMLElement, threshold = 100): boolean => {
@@ -43,8 +181,86 @@ const isNearBottom = (element: HTMLElement, threshold = 100): boolean => {
   return scrollHeight - scrollTop - clientHeight < threshold;
 };
 
-// Memoized MessageArea to prevent unnecessary re-renders (rerender-memo)
-export const MessageArea = memo<MessageAreaProps>(({
+// ========================================
+// Sub-Components (Marker Components)
+// ========================================
+
+function LoadingMarker(_props: _MessageAreaLoadingProps) {
+  return null;
+}
+function EmptyMarker(_props: _MessageAreaEmptyProps) {
+  return null;
+}
+function ScrollIndicatorMarker(_props: _MessageAreaScrollIndicatorProps) {
+  return null;
+}
+function ScrollButtonMarker(_props: _MessageAreaScrollButtonProps) {
+  return null;
+}
+function ContentMarker(_props: _MessageAreaContentProps) {
+  return null;
+}
+function PlanBannerMarker(_props: _MessageAreaPlanBannerProps) {
+  return null;
+}
+function StreamingContentMarker(_props: _MessageAreaStreamingContentProps) {
+  return null;
+}
+
+// Attach symbols
+;(LoadingMarker as any)[LOADING_SYMBOL] = true;
+;(EmptyMarker as any)[EMPTY_SYMBOL] = true;
+;(ScrollIndicatorMarker as any)[SCROLL_INDICATOR_SYMBOL] = true;
+;(ScrollButtonMarker as any)[SCROLL_BUTTON_SYMBOL] = true;
+;(ContentMarker as any)[CONTENT_SYMBOL] = true;
+;(PlanBannerMarker as any)[PLAN_BANNER_SYMBOL] = true;
+;(StreamingContentMarker as any)[STREAMING_CONTENT_SYMBOL] = true;
+
+// Set display names for testing
+;(LoadingMarker as any).displayName = 'MessageAreaLoading';
+;(EmptyMarker as any).displayName = 'MessageAreaEmpty';
+;(ScrollIndicatorMarker as any).displayName = 'MessageAreaScrollIndicator';
+;(ScrollButtonMarker as any).displayName = 'MessageAreaScrollButton';
+;(ContentMarker as any).displayName = 'MessageAreaContent';
+;(PlanBannerMarker as any).displayName = 'MessageAreaPlanBanner';
+;(StreamingContentMarker as any).displayName = 'MessageAreaStreamingContent';
+
+// ========================================
+// Actual Sub-Component Implementations
+// ========================================
+
+// Internal Loading component
+const InternalLoading: React.FC<_MessageAreaLoadingProps & { context: _MessageAreaContextValue }> = ({ message, context }) => {
+  if (!context.isLoading) return null;
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center">
+        <LoadingOutlined className="text-4xl text-primary mb-4" spin />
+        <p className="text-slate-500">{message || 'Loading conversation...'}</p>
+      </div>
+    </div>
+  );
+};
+
+// Internal Empty component
+const InternalEmpty: React.FC<_MessageAreaEmptyProps & { context: _MessageAreaContextValue }> = ({ title, subtitle, context }) => {
+  if (context.isLoading) return null;
+  if (context.timeline.length > 0) return null;
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center text-slate-400">
+        <p>{title || 'No messages yet'}</p>
+        <p className="text-sm">{subtitle || 'Start a conversation to see messages here'}</p>
+      </div>
+    </div>
+  );
+};
+
+// ========================================
+// Main Component
+// ========================================
+
+const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(({
   timeline,
   streamingContent,
   streamingThought,
@@ -57,13 +273,38 @@ export const MessageArea = memo<MessageAreaProps>(({
   hasEarlierMessages = false,
   onLoadEarlier,
   isLoadingEarlier: propIsLoadingEarlier = false,
-  preloadItemCount = 10, // 当用户看到前10条消息时就开始加载更多
+  preloadItemCount = 10,
   conversationId,
+  children,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
-  
+
+  // Parse children to detect sub-components
+  const childrenArray = Children.toArray(children);
+  const loadingChild = childrenArray.find((child: any) => child?.type?.[LOADING_SYMBOL]) as any;
+  const emptyChild = childrenArray.find((child: any) => child?.type?.[EMPTY_SYMBOL]) as any;
+  const scrollIndicatorChild = childrenArray.find((child: any) => child?.type?.[SCROLL_INDICATOR_SYMBOL]) as any;
+  const scrollButtonChild = childrenArray.find((child: any) => child?.type?.[SCROLL_BUTTON_SYMBOL]) as any;
+  const contentChild = childrenArray.find((child: any) => child?.type?.[CONTENT_SYMBOL]) as any;
+  const planBannerChild = childrenArray.find((child: any) => child?.type?.[PLAN_BANNER_SYMBOL]) as any;
+  const streamingContentChild = childrenArray.find((child: any) => child?.type?.[STREAMING_CONTENT_SYMBOL]) as any;
+
+  // Determine if using compound mode
+  const hasSubComponents = loadingChild || emptyChild || scrollIndicatorChild ||
+    scrollButtonChild || contentChild || planBannerChild || streamingContentChild;
+
+  // In legacy mode, include all sections by default
+  // In compound mode, only include explicitly specified sections
+  const includeLoading = hasSubComponents ? !!loadingChild : true;
+  const includeEmpty = hasSubComponents ? !!emptyChild : true;
+  const includeScrollIndicator = hasSubComponents ? !!scrollIndicatorChild : true;
+  const includeScrollButton = hasSubComponents ? !!scrollButtonChild : true;
+  const includeContent = hasSubComponents ? !!contentChild : true;
+  const includePlanBanner = hasSubComponents ? !!planBannerChild : true;
+  const includeStreamingContent = hasSubComponents ? !!streamingContentChild : true;
+
   // Pagination state refs
   const prevTimelineLengthRef = useRef(timeline.length);
   const previousScrollHeightRef = useRef(0);
@@ -73,16 +314,47 @@ export const MessageArea = memo<MessageAreaProps>(({
   const hasScrolledInitiallyRef = useRef(false);
   const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastLoadTimeRef = useRef(0);
-  
+
   // Track if user has manually scrolled up during streaming
-  // This is used to disable auto-scroll if user explicitly scrolls up to read
   const userScrolledUpRef = useRef(false);
+
+  // Context value
+  const contextValue: _MessageAreaContextValue = {
+    timeline,
+    streamingContent,
+    streamingThought,
+    isStreaming,
+    isThinkingStreaming,
+    isLoading,
+    planModeStatus,
+    onViewPlan,
+    onExitPlanMode,
+    hasEarlierMessages,
+    onLoadEarlier,
+    isLoadingEarlier: propIsLoadingEarlier,
+    preloadItemCount,
+    conversationId,
+    scroll: {
+      showScrollButton,
+      showLoadingIndicator,
+      scrollToBottom: useCallback(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth',
+        });
+        setShowScrollButton(false);
+      }, []),
+      containerRef,
+    },
+  };
 
   // Save scroll position before loading earlier messages
   const saveScrollPosition = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    
+
     previousScrollHeightRef.current = container.scrollHeight;
     previousScrollTopRef.current = container.scrollTop;
   }, []);
@@ -94,18 +366,16 @@ export const MessageArea = memo<MessageAreaProps>(({
 
     const newScrollHeight = container.scrollHeight;
     const heightDifference = newScrollHeight - previousScrollHeightRef.current;
-    
-    // Restore scroll position: new position = old position + height of new content
+
     const targetScrollTop = previousScrollTopRef.current + heightDifference;
-    
+
     container.scrollTop = targetScrollTop;
-    
-    // Clear saved values
+
     previousScrollHeightRef.current = 0;
     previousScrollTopRef.current = 0;
   }, []);
 
-  // 核心优化：激进的预加载逻辑
+  // Aggressive preload logic
   const checkAndPreload = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -117,38 +387,30 @@ export const MessageArea = memo<MessageAreaProps>(({
       onLoadEarlier
     ) {
       const { scrollTop } = container;
-      
-      // 计算平均消息高度（估算）
-      const avgMessageHeight = 100; // 平均每条消息约100px
+
+      const avgMessageHeight = 100;
       const visibleItemsFromTop = Math.ceil(scrollTop / avgMessageHeight);
-      
-      // 当从顶部可见的消息数少于阈值时，触发预加载
-      // 这意味着用户还没滚动到顶部，但已经"接近"顶部了
+
       if (visibleItemsFromTop < preloadItemCount) {
-        // 防抖动：确保两次加载之间至少有 300ms 间隔
         const now = Date.now();
         if (now - lastLoadTimeRef.current < 300) return;
-        
-        // Save current scroll position BEFORE new content loads
+
         saveScrollPosition();
-        
+
         isLoadingEarlierRef.current = true;
         lastLoadTimeRef.current = now;
 
-        // 延迟显示 loading 指示器，如果加载很快用户就看不到
         loadingIndicatorTimeoutRef.current = setTimeout(() => {
           setShowLoadingIndicator(true);
         }, 300);
 
         onLoadEarlier();
 
-        // Reset loading flag after a delay
         setTimeout(() => {
           isLoadingEarlierRef.current = false;
         }, 500);
       }
     }
-  // Note: isLoading is used inside checkAndPreload but the effect should re-run when hasEarlierMessages changes
   }, [hasEarlierMessages, onLoadEarlier, preloadItemCount, saveScrollPosition, propIsLoadingEarlier]);
 
   // Handle scroll events
@@ -156,14 +418,11 @@ export const MessageArea = memo<MessageAreaProps>(({
     const container = containerRef.current;
     if (!container || isLoading) return;
 
-    // 检查是否需要预加载
     checkAndPreload();
 
     const atBottom = isNearBottom(container, 100);
     setShowScrollButton(!atBottom && timeline.length > 0);
-    
-    // Track if user has manually scrolled up during streaming
-    // This disables auto-scroll until they scroll back down
+
     if (isStreaming && !atBottom) {
       userScrolledUpRef.current = true;
     } else if (isStreaming && atBottom) {
@@ -181,11 +440,10 @@ export const MessageArea = memo<MessageAreaProps>(({
     const hasNewMessages = currentTimelineLength > previousTimelineLength;
     const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
 
-    // Initial load - scroll to bottom once
     if (isInitialLoad && !hasScrolledInitiallyRef.current) {
       hasScrolledInitiallyRef.current = true;
       isInitialLoadRef.current = false;
-      
+
       requestAnimationFrame(() => {
         if (containerRef.current) {
           containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -195,22 +453,18 @@ export const MessageArea = memo<MessageAreaProps>(({
       return;
     }
 
-    // Loading earlier messages - restore scroll position
     if (hasNewMessages && !isLoading && previousScrollHeightRef.current > 0) {
       restoreScrollPosition();
       prevTimelineLengthRef.current = currentTimelineLength;
 
-      // 隐藏 loading 指示器 - use timeout to avoid sync setState
       if (loadingIndicatorTimeoutRef.current) {
         clearTimeout(loadingIndicatorTimeoutRef.current);
         loadingIndicatorTimeoutRef.current = null;
       }
-      // Queue state update to avoid synchronous setState in effect
       setTimeout(() => setShowLoadingIndicator(false), 0);
       return;
     }
 
-    // New messages arriving while streaming or user is at bottom - auto scroll
     if (hasNewMessages) {
       if (isStreaming || isNearBottom(container, 200)) {
         requestAnimationFrame(() => {
@@ -218,10 +472,8 @@ export const MessageArea = memo<MessageAreaProps>(({
             containerRef.current.scrollTop = containerRef.current.scrollHeight;
           }
         });
-        // Queue state update to avoid sync setState in effect
         setTimeout(() => setShowScrollButton(false), 0);
       } else {
-        // User is scrolled up and new messages arrived - show button
         setTimeout(() => setShowScrollButton(true), 0);
       }
     }
@@ -229,13 +481,11 @@ export const MessageArea = memo<MessageAreaProps>(({
     prevTimelineLengthRef.current = currentTimelineLength;
   }, [timeline.length, isStreaming, isLoading, restoreScrollPosition]);
 
-  // Auto-scroll when streaming content or thought updates (for real-time streaming)
+  // Auto-scroll when streaming content updates
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Always auto-scroll during streaming unless user has explicitly scrolled up
-    // This ensures real-time content is always visible
     if (isStreaming && !userScrolledUpRef.current) {
       requestAnimationFrame(() => {
         if (containerRef.current) {
@@ -247,16 +497,14 @@ export const MessageArea = memo<MessageAreaProps>(({
 
   // Reset scroll state when conversation changes
   useEffect(() => {
-    // Reset all scroll-related refs when conversationId changes
     isInitialLoadRef.current = true;
     hasScrolledInitiallyRef.current = false;
     prevTimelineLengthRef.current = 0;
     previousScrollHeightRef.current = 0;
     previousScrollTopRef.current = 0;
     isLoadingEarlierRef.current = false;
-    userScrolledUpRef.current = false; // Reset user scroll state
-    
-    // Scroll to bottom after a short delay to ensure rendering is complete
+    userScrolledUpRef.current = false;
+
     const timeoutId = setTimeout(() => {
       const container = containerRef.current;
       if (container && timeline.length > 0) {
@@ -266,9 +514,9 @@ export const MessageArea = memo<MessageAreaProps>(({
         prevTimelineLengthRef.current = timeline.length;
       }
     }, 100);
-    
+
     return () => clearTimeout(timeoutId);
-  }, [conversationId]); // Only trigger when conversationId changes
+  }, [conversationId]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -286,129 +534,130 @@ export const MessageArea = memo<MessageAreaProps>(({
     }
   }, [isStreaming]);
 
-  // Scroll to bottom handler
-  const scrollToBottom = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth',
-    });
-    setShowScrollButton(false);
-  }, []);
-
-  // Loading state
-  if (isLoading && timeline.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <LoadingOutlined className="text-4xl text-primary mb-4" spin />
-          <p className="text-slate-500">Loading conversation...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Empty state
-  if (timeline.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center text-slate-400">
-          <p>No messages yet</p>
-          <p className="text-sm">Start a conversation to see messages here</p>
-        </div>
-      </div>
-    );
-  }
-
-  // 判断是否应该显示 loading 指示器
+  // Determine states
   const shouldShowLoading = (propIsLoadingEarlier && hasEarlierMessages) || (showLoadingIndicator && hasEarlierMessages);
+  const showLoadingState = isLoading && timeline.length === 0;
+  const showEmptyState = !isLoading && timeline.length === 0;
 
   return (
-    <div className="h-full w-full relative flex flex-col overflow-hidden">
-      {/* Plan Mode Banner */}
-      {planModeStatus?.is_in_plan_mode && (
-        <div className="flex-shrink-0">
-          <PlanModeBanner
-            status={planModeStatus}
-            onViewPlan={onViewPlan}
-            onExit={onExitPlanMode}
-          />
-        </div>
-      )}
+    <MessageAreaContext.Provider value={contextValue}>
+      <div className="h-full w-full relative flex flex-col overflow-hidden">
 
-      {/* Loading indicator for earlier messages - 更加低调的样式 */}
-      {shouldShowLoading && (
-        <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
-          <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
-            <LoadingOutlined className="text-primary mr-2" spin />
-            <span className="text-xs text-slate-500">加载中...</span>
+        {/* Plan Mode Banner */}
+        {includePlanBanner && planModeStatus?.is_in_plan_mode && (
+          <div className="flex-shrink-0">
+            <PlanModeBanner
+              status={planModeStatus}
+              onViewPlan={onViewPlan}
+              onExit={onExitPlanMode}
+            />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Message List */}
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 pb-24 min-h-0"
-      >
-        <div className="w-full space-y-3">
-          {timeline.map((event, index) => (
-            <MessageBubble
-              key={event.id || `event-${index}`}
-              event={event}
-              isStreaming={isStreaming && index === timeline.length - 1}
-              allEvents={timeline}
-            />
-          ))}
-          {/* Streaming thought indicator - shows thought_delta content in real-time */}
-          {/* Rendered BEFORE streaming content to maintain correct order: thought -> response */}
-          {(isThinkingStreaming || streamingThought) && (
-            <StreamingThoughtBubble 
-              content={streamingThought || ''} 
-              isStreaming={!!isThinkingStreaming} 
-            />
-          )}
+        {/* Loading state */}
+        {includeLoading && showLoadingState && <InternalLoading context={contextValue} {...loadingChild?.props} />}
 
-          {/* Streaming content indicator - shows text_delta content in real-time */}
-          {/* Only show when streaming AND we have content AND NOT thinking (to avoid showing response before thought) */}
-          {isStreaming && streamingContent && !isThinkingStreaming && (
-            <div className="flex items-start gap-3 animate-slide-up">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
-                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                  <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {streamingContent}
-                    </ReactMarkdown>
+        {/* Empty state */}
+        {includeEmpty && showEmptyState && <InternalEmpty context={contextValue} {...emptyChild?.props} />}
+
+        {/* Scroll indicator for earlier messages */}
+        {includeScrollIndicator && shouldShowLoading && (
+          <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none" data-testid="scroll-indicator">
+            <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
+              <LoadingOutlined className="text-primary mr-2" spin />
+              <span className="text-xs text-slate-500">{scrollIndicatorChild?.props?.label || '加载中...'}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Message Container with Content */}
+        {includeContent && !showLoadingState && !showEmptyState && (
+          <div
+            ref={containerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 pb-24 min-h-0"
+            data-testid="message-container"
+          >
+            <div className="w-full space-y-3">
+              {timeline.map((event, index) => (
+                <MessageBubble
+                  key={event.id || `event-${index}`}
+                  event={event}
+                  isStreaming={isStreaming && index === timeline.length - 1}
+                  allEvents={timeline}
+                />
+              ))}
+
+              {/* Streaming thought indicator */}
+              {includeStreamingContent && (isThinkingStreaming || streamingThought) && (
+                <StreamingThoughtBubble
+                  content={streamingThought || ''}
+                  isStreaming={!!isThinkingStreaming}
+                />
+              )}
+
+              {/* Streaming content indicator */}
+              {includeStreamingContent && isStreaming && streamingContent && !isThinkingStreaming && (
+                <div className="flex items-start gap-3 animate-slide-up">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                      <div className="prose prose-sm dark:prose-invert max-w-none font-sans">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {streamingContent}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Scroll to bottom button */}
-      {showScrollButton && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-all animate-fade-in"
-          title="Scroll to bottom"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
-        </button>
-      )}
-    </div>
+        {/* Scroll to bottom button */}
+        {includeScrollButton && showScrollButton && (
+          <button
+            onClick={contextValue.scroll.scrollToBottom}
+            className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-all animate-fade-in"
+            title={scrollButtonChild?.props?.title || 'Scroll to bottom'}
+            data-testid="scroll-button"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </MessageAreaContext.Provider>
   );
 });
 
-MessageArea.displayName = 'MessageArea';
+MessageAreaInner.displayName = 'MessageAreaInner';
+
+// Create compound component with sub-components
+const MessageAreaMemo = memo(MessageAreaInner);
+MessageAreaMemo.displayName = 'MessageArea';
+
+// Create compound component object
+const MessageAreaCompound = MessageAreaMemo as unknown as _MessageAreaCompound;
+MessageAreaCompound.Provider = ({ children }: { children: React.ReactNode }) => (
+  <MessageAreaContext.Provider value={null as any}>{children}</MessageAreaContext.Provider>
+);
+MessageAreaCompound.Loading = LoadingMarker;
+MessageAreaCompound.Empty = EmptyMarker;
+MessageAreaCompound.ScrollIndicator = ScrollIndicatorMarker;
+MessageAreaCompound.ScrollButton = ScrollButtonMarker;
+MessageAreaCompound.Content = ContentMarker;
+MessageAreaCompound.PlanBanner = PlanBannerMarker;
+MessageAreaCompound.StreamingContent = StreamingContentMarker;
+MessageAreaCompound.Root = MessageAreaMemo;
+
+// Export compound component
+export const MessageArea = MessageAreaCompound;
+
+export default MessageArea;
