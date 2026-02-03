@@ -1,0 +1,27 @@
+/**
+ * AppHeader.WorkspaceSwitcher - Compound Component
+ *
+ * Workspace switcher wrapper.
+ */
+
+import * as React from 'react'
+import { WorkspaceSwitcher as BaseWorkspaceSwitcher } from '@/components/shared/ui/WorkspaceSwitcher'
+
+export interface WorkspaceSwitcherProps {
+  mode: 'tenant' | 'project'
+  as?: React.ElementType
+}
+
+export const WorkspaceSwitcher = React.memo(function WorkspaceSwitcher({
+  mode,
+  as: Component = BaseWorkspaceSwitcher,
+}: WorkspaceSwitcherProps) {
+  const widthClass = mode === 'project' ? 'w-48' : 'w-56'
+  return (
+    <div className={widthClass}>
+      <Component mode={mode} />
+    </div>
+  )
+})
+
+WorkspaceSwitcher.displayName = 'AppHeader.WorkspaceSwitcher'

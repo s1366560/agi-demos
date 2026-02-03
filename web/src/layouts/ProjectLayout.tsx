@@ -84,22 +84,21 @@ export const ProjectLayout: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark">
         {/* Header Bar */}
-        <AppHeader
-          context="project"
-          basePath={basePath}
-          showMobileMenu={false}
-          showSearch={true}
-          showNotifications={true}
-          showThemeToggle={true}
-          showLanguageSwitcher={true}
-          showWorkspaceSwitcher={true}
-          workspaceMode="project"
-          primaryAction={{
-            label: "nav.newMemory",
-            to: `${basePath}/memories/new`,
-            icon: <Plus className="w-4 h-4" />,
-          }}
-        />
+        <AppHeader context="project" basePath={basePath}>
+          <AppHeader.Search />
+          <AppHeader.Tools>
+            <AppHeader.ThemeToggle />
+            <AppHeader.LanguageSwitcher />
+          </AppHeader.Tools>
+          <AppHeader.Notifications />
+          <AppHeader.WorkspaceSwitcher mode="project" />
+          <AppHeader.PrimaryAction
+            label="nav.newMemory"
+            to={`${basePath}/memories/new`}
+            icon={<Plus className="w-4 h-4" />}
+          />
+          <AppHeader.UserMenu />
+        </AppHeader>
 
         {/* Scrollable Page Content */}
         <div className="flex-1 overflow-y-auto p-6 lg:p-8">

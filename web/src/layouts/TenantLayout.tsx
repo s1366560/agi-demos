@@ -238,8 +238,8 @@ export const TenantLayout: React.FC = () => {
     <>
       <div className="flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark">
         {/* Sidebar - Agent Conversation History (Primary Navigation) */}
-        <TenantChatSidebar 
-          tenantId={tenantId} 
+        <TenantChatSidebar
+          tenantId={tenantId}
           collapsed={sidebarCollapsed}
           onCollapsedChange={setSidebarCollapsed}
         />
@@ -247,23 +247,21 @@ export const TenantLayout: React.FC = () => {
         {/* Main Content */}
         <main className="flex flex-col flex-1 h-full overflow-hidden relative">
           {/* Header - with Tenant Navigation Menu and Sidebar Toggle */}
-          <AppHeader
-            context="tenant"
-            basePath={basePath}
-            showSidebarToggle={true}
-            sidebarCollapsed={sidebarCollapsed}
-            onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-            showMobileMenu={false}
-            showSearch={true}
-            showNotifications={true}
-            showThemeToggle={true}
-            showLanguageSwitcher={true}
-            showWorkspaceSwitcher={true}
-            workspaceMode="tenant"
-            extraActions={
+          <AppHeader context="tenant" basePath={basePath}>
+            <AppHeader.SidebarToggle
+              collapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            />
+            <AppHeader.Search />
+            <AppHeader.Tools>
               <TenantNavMenu tenantId={tenantId} mode="dropdown" />
-            }
-          />
+              <AppHeader.ThemeToggle />
+              <AppHeader.LanguageSwitcher />
+            </AppHeader.Tools>
+            <AppHeader.Notifications />
+            <AppHeader.WorkspaceSwitcher mode="tenant" />
+            <AppHeader.UserMenu />
+          </AppHeader>
 
           {/* Page Content */}
           <div 
