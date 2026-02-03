@@ -1,8 +1,8 @@
 /**
- * AgentSidebar Component
+ * AgentSidebar Component (Refactored)
  *
- * Agent-level sidebar wrapper that provides navigation configuration
- * and state management for the agent layout.
+ * Agent-level sidebar variant component.
+ * Explicit variant with embedded configuration and state management.
  */
 
 import { useNavigate } from 'react-router-dom'
@@ -11,47 +11,45 @@ import { AppSidebar } from './AppSidebar'
 import { getAgentConfig } from '@/config/navigation'
 import { useAuthStore } from '@/stores/auth'
 import type { NavUser } from '@/config/navigation'
-
-export interface AgentSidebarProps {
-  /** Current project ID for navigation */
-  projectId?: string
-  /** Current conversation ID for navigation */
-  conversationId?: string
-  /** Initial collapsed state */
-  defaultCollapsed?: boolean
-  /** Controlled collapsed state */
-  collapsed?: boolean
-  /** Callback when collapse is toggled */
-  onCollapseToggle?: () => void
-}
+import type { AgentSidebarProps } from './types'
 
 /**
  * Agent sidebar component with configuration and state management
  */
 export function AgentSidebar({
   projectId = '',
+  conversationId,
   defaultCollapsed = false,
   collapsed: controlledCollapsed,
   onCollapseToggle,
-}: AgentSidebarProps) {
-  const { t } = useTranslation()
-  const { user, logout } = useAuthStore()
+  user: externalUser,
+  onLogout: externalLogout,
+  t: externalT,
+}: AgentSidebarProps & {
+  collapsed?: boolean
+  onCollapseToggle?: () => void
+  user?: NavUser
+  onLogout?: () => void
+  t?: (key: string) => string
+}) {
+  const { t: useT } = useTranslation()
+  const { user: authUser, logout: authLogout } = useAuthStore()
   const navigate = useNavigate()
 
   // Agent sidebar basePath is the project level
-  // Navigation items use relative paths from there
-  // This avoids double slashes when conversationId is empty
   const basePath = projectId ? `/project/${projectId}` : '/project'
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = externalLogout ?? (() => {
+    authLogout()
     navigate('/login')
+  })
+
+  const navUser: NavUser = externalUser ?? {
+    name: authUser?.name || 'User',
+    email: authUser?.email || 'user@example.com',
   }
 
-  const navUser: NavUser = {
-    name: user?.name || 'User',
-    email: user?.email || 'user@example.com',
-  }
+  const t = externalT ?? useT
 
   // Agent sidebar has a flat structure without collapsible groups
   const config = getAgentConfig().sidebar
@@ -63,7 +61,7 @@ export function AgentSidebar({
     <AppSidebar
       config={config}
       basePath={basePath}
-      context="agent"
+      variant="agent"
       collapsed={isCollapsed}
       onCollapseToggle={onCollapseToggle}
       user={navUser}
