@@ -782,12 +782,14 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(({
     // SSE format with snake_case (request_id, allow_custom). Use adapter functions to convert.
     case 'clarification_asked': {
       const clarificationData = toClarificationData(event);
-      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string; answered?: boolean; answer?: string };
       return (
         <InlineHITLCard
           hitlType="clarification"
           requestId={e.requestId || clarificationData?.request_id || ''}
           clarificationData={clarificationData}
+          isAnswered={e.answered === true}
+          answeredValue={e.answer}
           expiresAt={e.expiresAt}
           createdAt={e.createdAt || String(event.timestamp)}
         />
@@ -810,12 +812,14 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(({
 
     case 'decision_asked': {
       const decisionData = toDecisionData(event);
-      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string; answered?: boolean; decision?: string };
       return (
         <InlineHITLCard
           hitlType="decision"
           requestId={e.requestId || decisionData?.request_id || ''}
           decisionData={decisionData}
+          isAnswered={e.answered === true}
+          answeredValue={e.decision}
           expiresAt={e.expiresAt}
           createdAt={e.createdAt || String(event.timestamp)}
         />
@@ -837,12 +841,14 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(({
 
     case 'env_var_requested': {
       const envVarData = toEnvVarData(event);
-      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string; answered?: boolean; values?: Record<string, string> };
       return (
         <InlineHITLCard
           hitlType="env_var"
           requestId={e.requestId || envVarData?.request_id || ''}
           envVarData={envVarData}
+          isAnswered={e.answered === true}
+          answeredValue={e.values ? Object.keys(e.values).join(', ') : undefined}
           expiresAt={e.expiresAt}
           createdAt={e.createdAt || String(event.timestamp)}
         />
@@ -864,12 +870,14 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(({
 
     case 'permission_asked': {
       const permissionData = toPermissionData(event);
-      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string; answered?: boolean; granted?: boolean };
       return (
         <InlineHITLCard
           hitlType="permission"
           requestId={e.requestId || permissionData?.request_id || ''}
           permissionData={permissionData}
+          isAnswered={e.answered === true}
+          answeredValue={e.granted !== undefined ? (e.granted ? 'Granted' : 'Denied') : undefined}
           expiresAt={e.expiresAt}
           createdAt={e.createdAt || String(event.timestamp)}
         />
@@ -877,6 +885,36 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(({
     }
 
     case 'permission_replied': {
+      const e = event as TimelineEvent & { requestId?: string; granted?: boolean; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="permission"
+          requestId={e.requestId || ''}
+          isAnswered={true}
+          answeredValue={e.granted ? '已允许' : '已拒绝'}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    // DB format permission events (same handling as SSE format)
+    case 'permission_requested': {
+      const permissionData = toPermissionData(event);
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string; answered?: boolean; granted?: boolean };
+      return (
+        <InlineHITLCard
+          hitlType="permission"
+          requestId={e.requestId || permissionData?.request_id || ''}
+          permissionData={permissionData}
+          isAnswered={e.answered === true}
+          answeredValue={e.granted !== undefined ? (e.granted ? 'Granted' : 'Denied') : undefined}
+          expiresAt={e.expiresAt}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'permission_granted': {
       const e = event as TimelineEvent & { requestId?: string; granted?: boolean; createdAt?: string };
       return (
         <InlineHITLCard

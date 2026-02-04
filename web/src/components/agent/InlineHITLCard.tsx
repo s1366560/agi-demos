@@ -569,20 +569,29 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(({
   decisionData,
   envVarData,
   permissionData,
-  isAnswered = false,
-  answeredValue,
+  isAnswered: isAnsweredProp = false,
+  answeredValue: answeredValueProp,
   createdAt,
   expiresAt,
   timeoutSeconds = 300,
 }) => {
   // Use useShallow to avoid infinite re-renders from object selector
-  const { submitResponse, isSubmitting, submittingRequestId } = useUnifiedHITLStore(
+  const { submitResponse, isSubmitting, submittingRequestId, requestStatuses } = useUnifiedHITLStore(
     useShallow((state) => ({
       submitResponse: state.submitResponse,
       isSubmitting: state.isSubmitting,
       submittingRequestId: state.submittingRequestId,
+      requestStatuses: state.requestStatuses,
     }))
   );
+
+  // Check if answered from either props (history) or store (real-time)
+  const storeStatus = requestId ? requestStatuses.get(requestId) : undefined;
+  const isAnsweredFromStore = storeStatus === 'answered' || storeStatus === 'completed';
+  const isAnswered = isAnsweredProp || isAnsweredFromStore;
+
+  // For real-time answered, we don't have the value yet, use prop or placeholder
+  const answeredValue = answeredValueProp || (isAnsweredFromStore ? '已提交' : undefined);
 
   const isCurrentlySubmitting = isSubmitting && submittingRequestId === requestId;
 

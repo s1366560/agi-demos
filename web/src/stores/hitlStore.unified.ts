@@ -34,6 +34,9 @@ interface UnifiedHITLState {
   /** Map of conversation ID → Set of request IDs */
   requestsByConversation: Map<string, Set<string>>;
   
+  /** Map of request ID → status (for tracking answered state) */
+  requestStatuses: Map<string, HITLStatus>;
+  
   /** History of completed requests (limited) */
   completedHistory: UnifiedHITLRequest[];
   
@@ -98,6 +101,7 @@ type UnifiedHITLStore = UnifiedHITLState & UnifiedHITLActions;
 const initialState: UnifiedHITLState = {
   pendingRequests: new Map(),
   requestsByConversation: new Map(),
+  requestStatuses: new Map(),
   completedHistory: [],
   maxHistorySize: 100,
   isSubmitting: false,
@@ -166,15 +170,22 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
 
       updateRequestStatus: (requestId: string, status: HITLStatus) => {
         set((state) => {
+          // Always update the status map (even if request not in pendingRequests)
+          const newStatuses = new Map(state.requestStatuses);
+          newStatuses.set(requestId, status);
+
           const request = state.pendingRequests.get(requestId);
-          if (!request) return state;
+          if (!request) {
+            // Request not in pending (maybe from history), just update status
+            return { requestStatuses: newStatuses };
+          }
 
           const updatedRequest = { ...request, status };
           const newPending = new Map(state.pendingRequests);
 
           if (status === 'pending') {
             newPending.set(requestId, updatedRequest);
-            return { pendingRequests: newPending };
+            return { pendingRequests: newPending, requestStatuses: newStatuses };
           }
 
           // Move to history for non-pending states
@@ -197,6 +208,7 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
             pendingRequests: newPending,
             requestsByConversation: newByConv,
             completedHistory: newHistory,
+            requestStatuses: newStatuses,
           };
         }, false, 'hitl/updateRequestStatus');
       },

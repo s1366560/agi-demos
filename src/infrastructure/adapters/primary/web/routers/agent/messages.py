@@ -123,7 +123,7 @@ async def get_conversation_messages(
                 hitl_answered_map[request_id] = {"decision": data.get("decision", "")}
             elif event_type == "env_var_provided" and request_id:
                 hitl_answered_map[request_id] = {"values": data.get("values", {})}
-            elif event_type == "permission_granted" and request_id:
+            elif event_type in ("permission_granted", "permission_replied") and request_id:
                 hitl_answered_map[request_id] = {"granted": data.get("granted", False)}
 
         # Also query HITL requests table for status (handles cases where answered event
@@ -279,12 +279,18 @@ async def get_conversation_messages(
                 item["requestId"] = data.get("request_id", "")
                 item["variables"] = list(data.get("values", {}).keys())
 
-            elif event_type == "permission_requested":
+            elif event_type in ("permission_requested", "permission_asked"):
                 request_id = data.get("request_id", "")
                 item["requestId"] = request_id
                 item["action"] = data.get("action", "")
                 item["resource"] = data.get("resource", "")
                 item["reason"] = data.get("reason", "")
+                # SSE format fields
+                item["toolName"] = data.get("tool_name", "")
+                item["toolDisplayName"] = data.get("tool_display_name", "")
+                item["riskLevel"] = data.get("risk_level", "medium")
+                item["description"] = data.get("description", "")
+                item["allowRemember"] = data.get("allow_remember", True)
                 # Check if answered
                 answered = False
                 granted = None
@@ -300,7 +306,7 @@ async def get_conversation_messages(
                 item["answered"] = answered
                 item["granted"] = granted
 
-            elif event_type == "permission_granted":
+            elif event_type in ("permission_granted", "permission_replied"):
                 item["requestId"] = data.get("request_id", "")
                 item["granted"] = data.get("granted", False)
 
