@@ -129,9 +129,14 @@ class HITLStateStore:
         """
         self._redis = redis_client
 
-    def _make_key(self, conversation_id: str, message_id: str) -> str:
-        """Generate Redis key for state storage."""
-        return f"{self.KEY_PREFIX}{conversation_id}:{message_id}"
+    def _make_key(self, conversation_id: str, request_id: str) -> str:
+        """Generate Redis key for state storage.
+        
+        Note: Uses request_id (not message_id) to ensure each HITL request
+        has a unique state key. This prevents issues when multiple HITL
+        requests occur for the same message.
+        """
+        return f"{self.KEY_PREFIX}{conversation_id}:{request_id}"
 
     def _make_key_from_request(self, request_id: str) -> str:
         """Generate Redis key from HITL request ID."""
@@ -152,7 +157,7 @@ class HITLStateStore:
         Returns:
             State key for later retrieval
         """
-        state_key = self._make_key(state.conversation_id, state.message_id)
+        state_key = self._make_key(state.conversation_id, state.hitl_request_id)
         request_key = self._make_key_from_request(state.hitl_request_id)
 
         # Calculate TTL

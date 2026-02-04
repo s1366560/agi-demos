@@ -19,10 +19,7 @@
 
 .PHONY: help install update clean init reset fresh restart
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
-.PHONY: sandbox-build sandbox-build-lite sandbox-run sandbox-run-lite sandbox-run-tigervnc sandbox-stop sandbox-stop-lite sandbox-restart sandbox-logs sandbox-shell sandbox-root-shell sandbox-status sandbox-status-lite sandbox-ps sandbox-test sandbox-clean sandbox-reset
-.PHONY: sandbox-desktop-start sandbox-desktop-stop sandbox-desktop-status sandbox-desktop-logs
-.PHONY: sandbox-terminal-start sandbox-terminal-stop sandbox-terminal-status sandbox-terminal-logs
-.PHONY: sandbox-start-all sandbox-stop-all sandbox-all-status
+.PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 
 # =============================================================================
 # Default Target
@@ -33,119 +30,125 @@ help: ## Show this help message
 	@echo "============================="
 	@echo ""
 	@echo "🚀 Quick Start:"
-	@echo "  make init             - First time setup (install + infra)"
-	@echo "  make dev              - Start all services (API + workers + web)"
-	@echo "  make dev-web          - Start web frontend only"
-	@echo "  make reset            - Complete reset (stop + clean + reinit)"
-	@echo "  make fresh            - Fresh start from zero"
-	@echo "  make restart          - Quick restart services"
+	@echo "  init      - First time setup (install + infra)"
+	@echo "  dev       - Start all services (API + workers + web)"
+	@echo "  stop      - Stop all services"
+	@echo "  status    - Show service status"
+	@echo "  restart   - Quick restart services"
 	@echo ""
-	@echo "Setup & Installation:"
-	@echo "  make install          - Install all dependencies (backend + web)"
-	@echo "  make install-backend  - Install backend dependencies only"
-	@echo "  make install-web      - Install web dependencies only"
-	@echo "  make update           - Update all dependencies"
+	@echo "📦 Development:"
+	@echo "  dev-backend    - Start API server (foreground)"
+	@echo "  dev-worker     - Start data worker (foreground)"
+	@echo "  dev-web        - Start web frontend (foreground)"
+	@echo "  infra          - Start infrastructure only"
+	@echo "  logs           - View all service logs"
 	@echo ""
-	@echo "Development:"
-	@echo "  make dev              - Start all services (API + workers + web + infra)"
-	@echo "  make dev-stop         - Stop all background services"
-	@echo "  make dev-logs         - View all service logs"
-	@echo "  make dev-backend      - Start API server only (foreground)"
-	@echo "  make dev-worker       - Start data processing worker only (foreground)"
-	@echo "  make dev-agent-worker - Start agent worker only (foreground)"
-	@echo "  make dev-mcp-worker   - Start MCP worker service only (foreground)"
-	@echo "  make dev-web          - Start web development server only (foreground)"
-	@echo "  make dev-web-stop     - Stop web development server"
-	@echo "  make dev-infra        - Start infrastructure services (Neo4j, Postgres, Redis)"
+	@echo "🧪 Testing & Quality:"
+	@echo "  test      - Run all tests"
+	@echo "  lint      - Lint all code"
+	@echo "  format    - Format all code"
+	@echo "  check     - Run format + lint + test"
 	@echo ""
-	@echo "Testing:"
-	@echo "  make test             - Run all tests"
-	@echo "  make test-unit        - Run unit tests only"
-	@echo "  make test-integration - Run integration tests only"
-	@echo "  make test-backend     - Run backend tests"
-	@echo "  make test-web         - Run web tests"
-	@echo "  make test-e2e         - Run end-to-end tests (Playwright)"
-	@echo "  make test-coverage    - Run tests with coverage report"
+	@echo "🗄️ Database:"
+	@echo "  db-init   - Initialize database"
+	@echo "  db-reset  - Reset database (WARNING: deletes data)"
+	@echo "  db-shell  - Open PostgreSQL shell"
 	@echo ""
-	@echo "Code Quality:"
-	@echo "  make format           - Format all code (Python + TypeScript)"
-	@echo "  make format-backend   - Format Python code with ruff"
-	@echo "  make format-web       - Format TypeScript code"
-	@echo "  make lint             - Lint all code"
-	@echo "  make lint-backend     - Lint Python code (ruff + mypy)"
-	@echo "  make lint-web         - Lint TypeScript code"
-	@echo "  make type-check       - Type check all code"
-	@echo "  make check            - Run all quality checks (format + lint + test)"
+	@echo "🖥️ Sandbox:"
+	@echo "  sandbox-build   - Build sandbox image"
+	@echo "  sandbox-run     - Start sandbox (VNC=x11vnc for fallback)"
+	@echo "  sandbox-stop    - Stop sandbox"
+	@echo "  sandbox-status  - Show sandbox status"
+	@echo "  sandbox-shell   - Open sandbox shell"
 	@echo ""
-	@echo "Database:"
-	@echo "  make db-init          - Initialize database (create if not exists)"
-	@echo "  make db-reset         - Reset database (WARNING: deletes all data)"
-	@echo "  make db-shell         - Open PostgreSQL shell"
-	@echo "  make db-migrate       - Run Alembic migrations (upgrade to latest)"
-	@echo "  make db-status        - Show Alembic migration status"
-	@echo "  make db-history       - Show migration history"
+	@echo "Use 'make help-full' for all commands"
+
+help-full: ## Show all available commands
+	@echo "MemStack - All Commands"
+	@echo "======================="
 	@echo ""
-	@echo "Docker:"
-	@echo "  make docker-up        - Start all Docker services"
-	@echo "  make docker-down      - Stop all Docker services"
-	@echo "  make docker-logs      - Show Docker service logs"
-	@echo "  make docker-build     - Build Docker images"
-	@echo "  make docker-clean     - Clean up containers, volumes, and orphans"
+	@echo "🚀 Quick Start:"
+	@echo "  init             - First time setup (install + infra)"
+	@echo "  dev              - Start all services (API + workers + web)"
+	@echo "  stop             - Stop all services (alias: dev-stop)"
+	@echo "  status           - Show service status"
+	@echo "  restart          - Quick restart services"
+	@echo "  reset            - Complete reset (stop + clean)"
+	@echo "  fresh            - Fresh start (reset + init + dev)"
 	@echo ""
-	@echo "Observability:"
-	@echo "  make obs-start        - Start observability stack (Jaeger, OTel, Prometheus, Grafana)"
-	@echo "  make obs-stop         - Stop observability services"
-	@echo "  make obs-status       - Show observability service status"
-	@echo "  make obs-logs         - Show observability service logs"
-	@echo "  make obs-ui           - Show observability UI URLs"
+	@echo "📦 Setup & Installation:"
+	@echo "  install          - Install all dependencies"
+	@echo "  install-backend  - Install backend dependencies"
+	@echo "  install-web      - Install web dependencies"
+	@echo "  update           - Update all dependencies"
 	@echo ""
-	@echo "Sandbox (All-in-one Dev Environment):"
-	@echo "  make sandbox-build          - Build full sandbox Docker image (with desktop)"
-	@echo "  make sandbox-build-lite     - Build lite sandbox image (no desktop, MCP+Terminal only)"
-	@echo "  make sandbox-run            - Start full sandbox (XFCE desktop, TigerVNC)"
-	@echo "  make sandbox-run-lite       - Start lite sandbox (no desktop, MCP+Terminal only)"
-	@echo "  make sandbox-run-tigervnc   - Start sandbox with TigerVNC (experimental)"
-	@echo "  make sandbox-stop           - Stop sandbox container"
-	@echo "  make sandbox-stop-lite      - Stop lite sandbox container"
-	@echo "  make sandbox-restart        - Restart sandbox container"
-	@echo "  make sandbox-status         - Show status, VNC type, processes"
-	@echo "  make sandbox-status-lite    - Show lite sandbox status"
-	@echo "  make sandbox-logs           - Show and follow logs"
-	@echo "  make sandbox-shell          - Open sandbox shell (sandbox user)"
-	@echo "  make sandbox-root-shell     - Open root shell in sandbox"
-	@echo "  make sandbox-ps             - Show all running processes"
-	@echo "  make sandbox-test           - Run VNC config validation test"
-	@echo "  make sandbox-test-complete  - Run complete XFCE 4.20 + VNC verification"
-	@echo "  make sandbox-clean          - Remove container and volume"
-	@echo "  make sandbox-reset          - Clean and rebuild sandbox"
+	@echo "🔧 Development:"
+	@echo "  dev-backend      - Start API server (foreground)"
+	@echo "  dev-worker       - Start data worker (foreground)"
+	@echo "  dev-agent-worker - Start agent worker (foreground)"
+	@echo "  dev-mcp-worker   - Start MCP worker (foreground)"
+	@echo "  dev-web          - Start web frontend (foreground)"
+	@echo "  infra            - Start infrastructure (alias: dev-infra)"
+	@echo "  logs             - View all logs (alias: dev-logs)"
 	@echo ""
-	@echo "Sandbox Desktop (XFCE4 + noVNC):"
-	@echo "  make sandbox-desktop-status  - Show desktop & VNC processes"
-	@echo "  make sandbox-desktop-logs    - Show desktop & VNC logs"
+	@echo "🧪 Testing:"
+	@echo "  test             - Run all tests"
+	@echo "  test-unit        - Unit tests only"
+	@echo "  test-integration - Integration tests only"
+	@echo "  test-backend     - Backend tests"
+	@echo "  test-web         - Web tests"
+	@echo "  test-e2e         - End-to-end tests"
+	@echo "  test-coverage    - Tests with coverage"
 	@echo ""
-	@echo "Sandbox Terminal (ttyd):"
-	@echo "  make sandbox-terminal-status - Show terminal process"
-	@echo "  make sandbox-terminal-logs   - Show terminal logs"
+	@echo "✨ Code Quality:"
+	@echo "  format           - Format all code"
+	@echo "  format-backend   - Format Python"
+	@echo "  format-web       - Format TypeScript"
+	@echo "  lint             - Lint all code"
+	@echo "  lint-backend     - Lint Python"
+	@echo "  lint-web         - Lint TypeScript"
+	@echo "  check            - Run format + lint + test"
 	@echo ""
-	@echo "Production:"
-	@echo "  make build            - Build all for production"
-	@echo "  make build-backend    - Build backend"
-	@echo "  make build-web        - Build web frontend"
-	@echo "  make serve            - Start production server"
+	@echo "🗄️ Database:"
+	@echo "  db-init          - Initialize database"
+	@echo "  db-reset         - Reset database"
+	@echo "  db-shell         - PostgreSQL shell"
+	@echo "  db-migrate       - Run migrations"
+	@echo "  db-status        - Migration status"
 	@echo ""
-	@echo "Utilities:"
-	@echo "  make clean            - Remove all generated files and caches"
-	@echo "  make clean-backend    - Clean backend build artifacts"
-	@echo "  make clean-web        - Clean web build artifacts"
-	@echo "  make clean-docker     - Clean Docker volumes"
-	@echo "  make clean-logs       - Clean log files"
-	@echo "  make shell            - Open Python shell in project environment"
-	@echo "  make get-api-key      - Show API key information"
-	@echo "  make test-data        - Generate test data (default: 50 episodes)"
-	@echo "  make hooks-install    - Install git hooks (pre-commit runs 'make check')"
-	@echo "  make hooks-uninstall  - Uninstall git hooks"
+	@echo "🐳 Docker:"
+	@echo "  docker-up        - Start Docker services"
+	@echo "  docker-down      - Stop Docker services"
+	@echo "  docker-logs      - Show Docker logs"
+	@echo "  docker-clean     - Clean containers/volumes"
 	@echo ""
-	@echo "Use 'make help' to show this message"
+	@echo "📊 Observability:"
+	@echo "  obs-start        - Start observability stack"
+	@echo "  obs-stop         - Stop observability"
+	@echo "  obs-status       - Show observability status"
+	@echo "  obs-ui           - Show UI URLs"
+	@echo ""
+	@echo "🖥️ Sandbox:"
+	@echo "  sandbox-build    - Build sandbox image"
+	@echo "  sandbox-run      - Start sandbox (VNC=x11vnc|tigervnc)"
+	@echo "  sandbox-stop     - Stop sandbox"
+	@echo "  sandbox-restart  - Restart sandbox"
+	@echo "  sandbox-status   - Show status & processes"
+	@echo "  sandbox-logs     - Show sandbox logs"
+	@echo "  sandbox-shell    - Open shell (ROOT=1 for root)"
+	@echo "  sandbox-clean    - Remove container/volume"
+	@echo "  sandbox-reset    - Clean and rebuild"
+	@echo "  sandbox-test     - Run validation tests"
+	@echo ""
+	@echo "🏭 Production:"
+	@echo "  build            - Build all for production"
+	@echo "  serve            - Start production server"
+	@echo ""
+	@echo "🧹 Utilities:"
+	@echo "  clean            - Remove generated files"
+	@echo "  shell            - Python shell"
+	@echo "  get-api-key      - Show API key info"
+	@echo "  hooks-install    - Install git hooks"
 
 # =============================================================================
 # Quick Start Commands (Environment Reset & Initialization)
@@ -191,8 +194,13 @@ fresh: reset init dev ## Fresh start: reset everything and start development
 	@echo ""
 	@echo "✅ Fresh environment ready!"
 
-restart: dev-stop dev ## Quick restart: stop and start services
+restart: stop dev ## Quick restart: stop and start services
 	@echo "✅ Services restarted"
+
+# Convenience aliases
+stop: dev-stop ## Stop all services (alias for dev-stop)
+logs: dev-logs ## View logs (alias for dev-logs)
+infra: dev-infra ## Start infrastructure (alias for dev-infra)
 
 reset-db: ## Reset only the database (keep Docker volumes)
 	@echo "🗄️  Resetting database only..."
@@ -274,58 +282,23 @@ dev-all: dev-infra db-init
 
 dev-stop: ## Stop all background services
 	@echo "🛑 Stopping background services..."
-	@# Stop API (with port 8000 fallback)
-	@if [ -f logs/api.pid ]; then \
-		PID=$$(cat logs/api.pid); \
-		kill -TERM -- -$$PID 2>/dev/null || kill -TERM $$PID 2>/dev/null || true; \
-		rm -f logs/api.pid; \
-	fi; \
-	PORT_PID=$$(lsof -ti :8000 2>/dev/null); \
-	if [ -n "$$PORT_PID" ]; then \
-		kill -TERM $$PORT_PID 2>/dev/null || true; \
-		sleep 0.5; \
-		kill -9 $$PORT_PID 2>/dev/null || true; \
-	fi; \
-	echo "✅ API stopped"
-	@# Stop Web (with port 3000 fallback)
-	@if [ -f logs/web.pid ]; then \
-		PID=$$(cat logs/web.pid); \
-		kill -TERM -- -$$PID 2>/dev/null || kill -TERM $$PID 2>/dev/null || true; \
-		rm -f logs/web.pid; \
-	fi; \
-	PORT_PID=$$(lsof -ti :3000 2>/dev/null); \
-	if [ -n "$$PORT_PID" ]; then \
-		kill -TERM $$PORT_PID 2>/dev/null || true; \
-		sleep 0.5; \
-		kill -9 $$PORT_PID 2>/dev/null || true; \
-	fi; \
-	echo "✅ Web stopped"
-	@# Stop Data Worker
-	@if [ -f logs/worker.pid ]; then \
-		PID=$$(cat logs/worker.pid); \
-		kill -TERM -- -$$PID 2>/dev/null || kill -TERM $$PID 2>/dev/null || true; \
-		rm -f logs/worker.pid; \
-	fi; \
-	echo "✅ Data Worker stopped"
-	@# Stop Agent Worker
-	@if [ -f logs/agent-worker.pid ]; then \
-		PID=$$(cat logs/agent-worker.pid); \
-		kill -TERM -- -$$PID 2>/dev/null || kill -TERM $$PID 2>/dev/null || true; \
-		rm -f logs/agent-worker.pid; \
-	fi; \
-	echo "✅ Agent Worker stopped"
-	@# Stop MCP Worker
-	@if [ -f logs/mcp-worker.pid ]; then \
-		PID=$$(cat logs/mcp-worker.pid); \
-		kill -TERM -- -$$PID 2>/dev/null || kill -TERM $$PID 2>/dev/null || true; \
-		rm -f logs/mcp-worker.pid; \
-	fi; \
-	echo "✅ MCP Worker stopped"
-	@# Fallback: kill any remaining worker processes by name
+	@# Stop services by PID file and port
+	@for svc in api web worker agent-worker mcp-worker; do \
+		if [ -f logs/$$svc.pid ]; then \
+			PID=$$(cat logs/$$svc.pid); \
+			kill -TERM $$PID 2>/dev/null || true; \
+			rm -f logs/$$svc.pid; \
+		fi; \
+	done
+	@# Kill processes on known ports
+	@for port in 8000 3000; do \
+		PID=$$(lsof -ti :$$port 2>/dev/null); \
+		[ -n "$$PID" ] && kill -9 $$PID 2>/dev/null || true; \
+	done
+	@# Fallback: kill remaining processes by pattern
 	@pkill -9 -f "src/worker_temporal.py" 2>/dev/null || true
 	@pkill -9 -f "src/agent_worker.py" 2>/dev/null || true
 	@pkill -9 -f "src/worker_mcp.py" 2>/dev/null || true
-	@pkill -9 -f "uv run python src/" 2>/dev/null || true
 	@pkill -9 -f "uvicorn src.infrastructure" 2>/dev/null || true
 	@pkill -9 -f "vite" 2>/dev/null || true
 	@echo "✅ All services stopped"
@@ -685,226 +658,91 @@ obs-ui: ## Show observability UI URLs
 # Sandbox MCP Server - All-in-one development environment
 # =============================================================================
 # Services: MCP Server (8765), noVNC Desktop (6080), Web Terminal (7681)
-# Desktop: XFCE4 (lightweight, container-friendly)
-# VNC: x11vnc (default, no-password) or TigerVNC (experimental)
+# Usage: VNC=x11vnc make sandbox-run  (for x11vnc fallback)
 # =============================================================================
 
 SANDBOX_PORT?=8765
 SANDBOX_DESKTOP_PORT?=6080
 SANDBOX_TERMINAL_PORT?=7681
 SANDBOX_NAME?=sandbox-mcp-server
-SANDBOX_VNC?=tigervnc  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
+SANDBOX_VNC?=tigervnc
+DESKTOP_RESOLUTION?=1920x1080
+ROOT?=0
 
-sandbox-build: ## Build sandbox MCP server Docker image (full version with desktop)
-	@echo "🏗️  Building sandbox MCP server image (full)..."
+sandbox-build: ## Build sandbox Docker image
+	@echo "🏗️  Building sandbox image..."
 	cd sandbox-mcp-server && docker build -t $(SANDBOX_NAME):latest .
 	@echo "✅ Sandbox image built"
-	@docker images | grep $(SANDBOX_NAME) | head -1
 
-sandbox-build-lite: ## Build lightweight sandbox image (no desktop, MCP + Terminal only)
-	@echo "🏗️  Building sandbox MCP server image (lite)..."
-	cd sandbox-mcp-server && docker build -f Dockerfile.lite -t $(SANDBOX_NAME):lite .
-	@echo "✅ Sandbox lite image built"
-	@docker images | grep $(SANDBOX_NAME) | head -2
-
-sandbox-run: ## Start sandbox container (with XFCE desktop, TigerVNC by default)
-	@echo "🚀 Starting sandbox MCP server with XFCE Desktop ($(SANDBOX_VNC) VNC)..."
+sandbox-run: ## Start sandbox (VNC=x11vnc for fallback)
+	@echo "🚀 Starting sandbox (VNC: $(SANDBOX_VNC))..."
 	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)$$"; then \
-		echo "⚠️  Sandbox already running. Stop with: make sandbox-stop"; \
+		echo "⚠️  Already running. Stop with: make sandbox-stop"; \
 	else \
-		if docker run -d --name $(SANDBOX_NAME) \
+		docker run -d --name $(SANDBOX_NAME) \
 			-p $(SANDBOX_PORT):8765 \
 			-p $(SANDBOX_DESKTOP_PORT):6080 \
 			-p $(SANDBOX_TERMINAL_PORT):7681 \
 			-v sandbox-workspace:/workspace \
 			-e VNC_SERVER_TYPE=$(SANDBOX_VNC) \
 			-e DESKTOP_RESOLUTION=$(DESKTOP_RESOLUTION) \
-			--memory=4g --cpus=3 \
-			--shm-size=1g \
-			$(SANDBOX_NAME):latest; then \
-			sleep 5; \
-			echo "✅ Sandbox started"; \
-			echo ""; \
-			echo "   Service Endpoints:"; \
-			echo "   • MCP Server:    ws://localhost:$(SANDBOX_PORT)"; \
-			echo "   • Health Check:  http://localhost:$(SANDBOX_PORT)/health"; \
-			echo "   • Remote Desktop: http://localhost:$(SANDBOX_DESKTOP_PORT)/vnc.html"; \
-			echo "   • Web Terminal:  ws://localhost:$(SANDBOX_TERMINAL_PORT)"; \
-			echo ""; \
-			echo "   VNC Server: $(SANDBOX_VNC)"; \
-			echo ""; \
-			curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || true; \
-		else \
-			echo "❌ Failed to start sandbox container"; \
-			exit 1; \
-		fi \
+			--memory=4g --cpus=3 --shm-size=1g \
+			$(SANDBOX_NAME):latest && \
+		sleep 3 && \
+		echo "✅ Sandbox started" && \
+		echo "   MCP:     ws://localhost:$(SANDBOX_PORT)" && \
+		echo "   Desktop: http://localhost:$(SANDBOX_DESKTOP_PORT)/vnc.html" && \
+		echo "   Terminal: http://localhost:$(SANDBOX_TERMINAL_PORT)"; \
 	fi
 
-sandbox-stop: ## Stop sandbox MCP server container
-	@echo "🛑 Stopping sandbox..."
-	@docker stop $(SANDBOX_NAME) 2>/dev/null && docker rm $(SANDBOX_NAME) 2>/dev/null && echo "✅ Sandbox stopped" || echo "ℹ️  Sandbox not running"
+sandbox-stop: ## Stop sandbox container
+	@docker stop $(SANDBOX_NAME) 2>/dev/null && docker rm $(SANDBOX_NAME) 2>/dev/null && echo "✅ Sandbox stopped" || echo "ℹ️  Not running"
 
-sandbox-restart: sandbox-stop sandbox-run ## Restart sandbox container
+sandbox-restart: sandbox-stop sandbox-run ## Restart sandbox
 
-# Run with specific VNC server types
-sandbox-run-x11vnc: ## Start sandbox with x11vnc (stable fallback)
-	@echo "🚀 Starting sandbox with x11vnc (stable fallback)..."
-	@$(MAKE) sandbox-run SANDBOX_VNC=x11vnc
-
-sandbox-run-tigervnc: ## Start sandbox with TigerVNC (default)
-	@echo "🚀 Starting sandbox with TigerVNC (default, high-performance)..."
-	@$(MAKE) sandbox-run SANDBOX_VNC=tigervnc
-
-sandbox-run-lite: ## Start lightweight sandbox (no desktop, MCP + Terminal only)
-	@echo "🚀 Starting lightweight sandbox (no desktop)..."
-	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)-lite$$"; then \
-		echo "⚠️  Lite sandbox already running. Stop with: make sandbox-stop-lite"; \
-	else \
-		if docker run -d --name $(SANDBOX_NAME)-lite \
-			-p $(SANDBOX_PORT):8765 \
-			-p $(SANDBOX_TERMINAL_PORT):7681 \
-			-v sandbox-workspace-lite:/workspace \
-			-e DESKTOP_ENABLED=false \
-			$(SANDBOX_NAME):lite; then \
-			echo "✅ Lite sandbox started"; \
-			echo "📡 MCP: http://localhost:$(SANDBOX_PORT)"; \
-			echo "🖥️  Terminal: http://localhost:$(SANDBOX_TERMINAL_PORT)"; \
-			sleep 2; \
-			$(MAKE) sandbox-status-lite; \
-		else \
-			echo "❌ Failed to start lite sandbox"; \
-		fi; \
-	fi
-
-sandbox-stop-lite: ## Stop lightweight sandbox container
-	@echo "🛑 Stopping lite sandbox..."
-	@if docker stop $(SANDBOX_NAME)-lite 2>/dev/null; then \
-		docker rm $(SANDBOX_NAME)-lite 2>/dev/null; \
-		echo "✅ Lite sandbox stopped"; \
-	else \
-		echo "ℹ️  Lite sandbox was not running"; \
-	fi
-
-sandbox-status-lite: ## Show lightweight sandbox status
-	@echo "📊 Lite Sandbox Status"
-	@echo "====================="
-	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)-lite$$"; then \
-		echo "Status: ✅ Running"; \
-		echo ""; \
-		docker exec $(SANDBOX_NAME)-lite ps aux | grep -E "mcp|ttyd" | grep -v grep || echo "No services found"; \
-		echo ""; \
-		curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || echo "Health check: failed"; \
-	else \
-		echo "Status: ❌ Not running"; \
-		echo "Start with: make sandbox-run-lite"; \
-	fi
-
-sandbox-logs: ## Show sandbox container logs
-	@docker logs -f $(SANDBOX_NAME) 2>/dev/null || echo "ℹ️  Sandbox not running"
-
-sandbox-shell: ## Open shell in sandbox container
-	@echo "🐚 Opening sandbox shell..."
-	@docker exec -it $(SANDBOX_NAME) bash 2>/dev/null || echo "ℹ️  Sandbox not running. Start with: make sandbox-run"
-
-sandbox-status: ## Show sandbox status, services, and VNC type
+sandbox-status: ## Show sandbox status and processes
 	@echo "📊 Sandbox Status"
 	@echo "================"
 	@if docker ps --format '{{.Names}}' | grep -q "^$(SANDBOX_NAME)$$"; then \
 		echo "Status: ✅ Running"; \
+		docker exec $(SANDBOX_NAME) bash -c 'echo "VNC: $$VNC_SERVER_TYPE"' 2>/dev/null; \
 		echo ""; \
-		docker exec $(SANDBOX_NAME) bash -c 'echo "VNC Server: $$VNC_SERVER_TYPE"' 2>/dev/null || echo "VNC: unknown"; \
+		echo "Processes:"; \
+		docker exec $(SANDBOX_NAME) ps aux | grep -E "vnc|xfce|ttyd|mcp" | grep -v grep || true; \
 		echo ""; \
-		docker exec $(SANDBOX_NAME) ps aux | grep -E "vnc|xfce|ttyd" | grep -v grep || echo "No services found"; \
-		echo ""; \
-		curl -s http://localhost:$(SANDBOX_PORT)/health | jq . 2>/dev/null || echo "Health check: failed"; \
+		echo "Health:"; \
+		curl -s http://localhost:$(SANDBOX_PORT)/health | jq -c . 2>/dev/null || echo "  Health check failed"; \
 	else \
 		echo "Status: ❌ Not running"; \
-		echo ""; \
-		echo "Start with: make sandbox-run"; \
 	fi
 
-sandbox-clean: ## Remove sandbox container and volume
-	@echo "🧹 Cleaning sandbox..."
+sandbox-logs: ## Show sandbox logs
+	@docker logs -f $(SANDBOX_NAME) 2>/dev/null || echo "ℹ️  Not running"
+
+sandbox-shell: ## Open shell (ROOT=1 for root)
+	@if [ "$(ROOT)" = "1" ]; then \
+		docker exec -it -u root $(SANDBOX_NAME) bash 2>/dev/null || echo "ℹ️  Not running"; \
+	else \
+		docker exec -it $(SANDBOX_NAME) bash 2>/dev/null || echo "ℹ️  Not running"; \
+	fi
+
+sandbox-clean: ## Remove container and volume
 	@docker stop $(SANDBOX_NAME) 2>/dev/null || true
 	@docker rm $(SANDBOX_NAME) 2>/dev/null || true
 	@docker volume rm sandbox-workspace 2>/dev/null || true
 	@echo "✅ Sandbox cleaned"
 
-sandbox-reset: sandbox-clean sandbox-build ## Reset sandbox (clean + rebuild)
+sandbox-reset: sandbox-clean sandbox-build ## Clean and rebuild
 
-sandbox-ps: ## Show all running processes in sandbox
-	@echo "📋 Sandbox Processes"
-	@echo "==================="
-	@docker exec $(SANDBOX_NAME) ps aux 2>/dev/null || echo "Sandbox not running"
-
-sandbox-root-shell: ## Open root shell in sandbox container
-	@echo "🔓 Opening root shell in sandbox..."
-	@docker exec -it -u root $(SANDBOX_NAME) bash 2>/dev/null || echo "ℹ️  Sandbox not running. Start with: make sandbox-run"
-
-sandbox-test: ## Run VNC configuration validation test
-	@echo "🧪 Running VNC config validation..."
-	@docker exec $(SANDBOX_NAME) bash /etc/vnc/test-vnc-config.sh 2>/dev/null || echo "Sandbox not running or test script not found"
-
-sandbox-test-complete: ## Run complete XFCE 4.20 + VNC setup verification
-	@echo "🧪 Running complete setup verification..."
-	@docker exec $(SANDBOX_NAME) bash /etc/vnc/test-complete-setup.sh 2>/dev/null || echo "Sandbox not running or test script not found"
-
-# =============================================================================
-# Sandbox Desktop (noVNC) - Remote Desktop Access
-# =============================================================================
-
-DESKTOP_PORT?=6080
-DESKTOP_DISPLAY?=:0
-DESKTOP_RESOLUTION?=1920x1080
-
-sandbox-desktop-start: ## (Deprecated) Desktop starts automatically with container
-	@echo "ℹ️  Desktop starts automatically with the container. Use 'make sandbox-run'."
-
-sandbox-desktop-stop: ## (Deprecated) Desktop stops when container stops
-	@echo "ℹ️  Desktop stops when container stops. Use 'make sandbox-stop'."
-
-sandbox-desktop-status: ## Show desktop component status in sandbox
-	@echo "📊 Desktop Component Status"
-	@echo "==========================="
-	@docker exec $(SANDBOX_NAME) ps aux | grep -E "xfce|Xvnc|x11vnc|vncserver" | grep -v grep || echo "No desktop processes. Sandbox running?"
-
-sandbox-desktop-logs: ## Show desktop & VNC logs from sandbox
-	@echo "📋 Desktop & VNC logs..."
-	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -iE "vnc|xfce|desktop" | tail -30 || echo "No desktop logs. Sandbox running?"
-
-# =============================================================================
-# Sandbox Terminal (ttyd) - Web Terminal Access
-# =============================================================================
-
-TERMINAL_PORT?=7681
-
-sandbox-terminal-start: ## (Deprecated) Terminal starts automatically with container
-	@echo "ℹ️  Terminal starts automatically with the container. Use 'make sandbox-run'."
-
-sandbox-terminal-stop: ## (Deprecated) Terminal stops when container stops
-	@echo "ℹ️  Terminal stops when container stops. Use 'make sandbox-stop'."
-
-sandbox-terminal-status: ## Show web terminal status
-	@echo "📊 Terminal Status"
-	@echo "================"
-	@if docker exec $(SANDBOX_NAME) ps aux | grep -q ttyd; then \
-		echo "Status: ✅ Running"; \
-		docker exec $(SANDBOX_NAME) ps aux | grep ttyd | grep -v grep; \
-	else \
-		echo "Status: ❌ Not running"; \
-	fi
-
-sandbox-terminal-logs: ## Show terminal logs from sandbox container
-	@echo "📋 Terminal logs..."
-	@docker logs $(SANDBOX_NAME) 2>/dev/null | grep -i ttyd || echo "No terminal logs found. Sandbox running?"
-
-sandbox-start-all: sandbox-run ## Start all sandbox services (alias for sandbox-run)
-	@echo "✅ All sandbox services started"
-
-sandbox-stop-all: sandbox-stop ## Stop all sandbox services (alias for sandbox-stop)
-	@echo "✅ All sandbox services stopped"
-
-sandbox-all-status: sandbox-status ## Show all sandbox services status (alias for sandbox-status)
+sandbox-test: ## Run validation tests
+	@echo "🧪 Running sandbox validation..."
+	@docker exec $(SANDBOX_NAME) bash -c '\
+		echo "=== VNC Config ===" && \
+		test -f /etc/vnc/test-vnc-config.sh && bash /etc/vnc/test-vnc-config.sh || echo "VNC test not found"; \
+		echo ""; \
+		echo "=== Complete Setup ===" && \
+		test -f /etc/vnc/test-complete-setup.sh && bash /etc/vnc/test-complete-setup.sh || echo "Setup test not found"' \
+		2>/dev/null || echo "ℹ️  Sandbox not running"
 
 # =============================================================================
 # Production
@@ -1032,20 +870,8 @@ sdk-build: ## Build SDK package
 # CI/CD Support
 # =============================================================================
 
-ci-install: install ## Install dependencies for CI
-	@echo "✅ CI dependencies installed"
-
-ci-lint: lint ## Run linting for CI
-	@echo "✅ CI linting passed"
-
-ci-test: test ## Run tests for CI
-	@echo "✅ CI tests passed"
-
-ci-build: build ## Build for CI
-	@echo "✅ CI build completed"
-
-ci: ci-lint ci-test ci-build ## Run complete CI pipeline
-	@echo "✅ CI pipeline completed successfully"
+ci: lint test build ## Run complete CI pipeline (lint + test + build)
+	@echo "✅ CI pipeline completed"
 
 # =============================================================================
 # Miscellaneous

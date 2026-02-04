@@ -61,6 +61,7 @@ make status        # 检查服务状态
 
 **环境重置 / Environment Reset:**
 ```bash
+make stop          # 停止所有服务 (alias: dev-stop)
 make restart       # 快速重启服务
 make reset         # 完整重置 (停止 + 清理 Docker + 清理缓存)
 make fresh         # 从零开始 (reset + init + dev)
@@ -79,14 +80,14 @@ make fresh         # 从零开始 (reset + init + dev)
 | Command | Description |
 |---------|-------------|
 | `make dev` | Start all backend services (API + workers + infra) |
-| `make dev-stop` | Stop all background services |
-| `make dev-logs` | View all service logs |
+| `make stop` | Stop all services (alias: dev-stop) |
+| `make logs` | View all logs (alias: dev-logs) |
+| `make infra` | Start infrastructure only (alias: dev-infra) |
 | `make dev-backend` | Start API server only (foreground, port 8000) |
 | `make dev-worker` | Start data processing worker only |
 | `make dev-agent-worker` | Start Agent worker only |
 | `make dev-mcp-worker` | Start MCP worker only |
 | `make dev-web` | Start web frontend (port 3000) |
-| `make dev-infra` | Start infrastructure (Neo4j, Postgres, Redis, MinIO, Temporal) |
 | `make status` | Show all service status |
 
 ### 测试 / Testing
@@ -118,6 +119,7 @@ uv run pytest src/tests/ -m "integration" -v
 | `make format` | Format all code (ruff + eslint) |
 | `make lint` | Lint all code |
 | `make check` | Run all checks (format + lint + test) |
+| `make ci` | Run CI pipeline (lint + test + build) |
 
 ### 数据库 / Database
 
@@ -145,11 +147,12 @@ PYTHONPATH=. uv run alembic revision --autogenerate -m "description"  # Generate
 | `make docker-up` | Start all Docker services |
 | `make docker-down` | Stop Docker services |
 | `make docker-clean` | Clean containers, volumes, orphans |
-| `make sandbox-build` | Build sandbox image (with desktop) |
-| `make sandbox-build-lite` | Build lightweight sandbox (no desktop) |
-| `make sandbox-run` | Start sandbox (XFCE + TigerVNC) |
+| `make sandbox-build` | Build sandbox image |
+| `make sandbox-run` | Start sandbox (VNC=x11vnc for fallback) |
 | `make sandbox-stop` | Stop sandbox |
 | `make sandbox-status` | Show sandbox status |
+| `make sandbox-shell` | Open shell (ROOT=1 for root) |
+| `make sandbox-test` | Run validation tests |
 
 ### 可观测性 / Observability
 

@@ -242,6 +242,9 @@ class SessionProcessor:
         tenant_id = ctx.get("tenant_id", "unknown")
         project_id = ctx.get("project_id", "unknown")
         message_id = ctx.get("message_id")
+        
+        # Get pre-injected HITL response for resume case (used once only)
+        hitl_response = ctx.pop("hitl_response", None) if isinstance(ctx, dict) else None
 
         # Create new handler if needed or context changed
         if self._hitl_handler is None or self._hitl_handler.conversation_id != conversation_id:
@@ -250,7 +253,12 @@ class SessionProcessor:
                 tenant_id=tenant_id,
                 project_id=project_id,
                 message_id=message_id,
+                preinjected_response=hitl_response,
             )
+        elif hitl_response:
+            # Update existing handler with new response if one was provided
+            # This happens only once per resume cycle
+            self._hitl_handler._preinjected_response = hitl_response
 
         return self._hitl_handler
 

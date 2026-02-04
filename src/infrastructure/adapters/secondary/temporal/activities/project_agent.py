@@ -677,6 +677,15 @@ async def continue_project_chat_activity(
                 f"[ProjectAgentActivity] Another HITL pending: request_id={hitl_ex.request_id}"
             )
 
+            # Persist events collected so far (including observe events from this step)
+            if events:
+                await _persist_events(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    events=events,
+                    correlation_id=correlation_id,
+                )
+
             # Save new state
             new_state = HITLAgentState(
                 conversation_id=conversation_id,

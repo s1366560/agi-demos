@@ -179,10 +179,10 @@ class TestHITLStateStore:
         """Test saving state to Redis."""
         key = await state_store.save_state(sample_state)
 
-        # Check key format
+        # Check key format - now uses request_id instead of message_id
         assert key.startswith("hitl:agent_state:")
         assert "conv-sample" in key
-        assert "msg-sample" in key
+        assert "sample_123" in key  # request_id, not message_id
 
         # Check Redis was called
         assert mock_redis.setex.called
@@ -192,7 +192,7 @@ class TestHITLStateStore:
         # Setup mock to return serialized state
         mock_redis.get.return_value = json.dumps(sample_state.to_dict())
 
-        loaded = await state_store.load_state("hitl:agent_state:conv-sample:msg-sample")
+        loaded = await state_store.load_state("hitl:agent_state:conv-sample:sample_123")
 
         assert loaded is not None
         assert loaded.conversation_id == "conv-sample"
@@ -210,7 +210,7 @@ class TestHITLStateStore:
         """Test loading state by request ID."""
         # Setup mock to return the main key, then the state
         mock_redis.get.side_effect = [
-            "hitl:agent_state:conv-sample:msg-sample",  # First call returns the key
+            "hitl:agent_state:conv-sample:sample_123",  # First call returns the key
             json.dumps(sample_state.to_dict()),  # Second call returns the state
         ]
 
@@ -221,7 +221,7 @@ class TestHITLStateStore:
 
     async def test_delete_state(self, state_store, mock_redis):
         """Test deleting state from Redis."""
-        result = await state_store.delete_state("hitl:agent_state:conv-del:msg-del")
+        result = await state_store.delete_state("hitl:agent_state:conv-del:req-del")
 
         assert result is True
         assert mock_redis.delete.called

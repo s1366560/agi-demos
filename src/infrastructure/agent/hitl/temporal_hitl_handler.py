@@ -417,6 +417,7 @@ class TemporalHITLHandler:
         message_id: Optional[str] = None,
         default_timeout: float = 300.0,
         emit_sse_callback: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
+        preinjected_response: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the HITL handler.
@@ -428,6 +429,8 @@ class TemporalHITLHandler:
             message_id: Current message ID (optional)
             default_timeout: Default timeout in seconds
             emit_sse_callback: Callback for emitting SSE events (fallback)
+            preinjected_response: Optional pre-injected HITL response for resume
+                Format: {"request_id": "...", "hitl_type": "...", "response_data": {...}}
         """
         self.conversation_id = conversation_id
         self.tenant_id = tenant_id
@@ -435,6 +438,9 @@ class TemporalHITLHandler:
         self.message_id = message_id
         self.default_timeout = default_timeout
         self._emit_sse_callback = emit_sse_callback
+        
+        # Pre-injected response for HITL resume (used once then cleared)
+        self._preinjected_response = preinjected_response
 
         # Track pending requests
         self._pending_requests: Dict[str, HITLRequest] = {}
@@ -634,10 +640,11 @@ class TemporalHITLHandler:
         Execute an HITL request through Temporal.
 
         This is the core method that:
-        1. Creates the HITL request
-        2. Emits SSE event via Temporal Activity
-        3. Waits for response via Temporal Signal
-        4. Returns the response value
+        1. Checks for pre-injected response (resume case)
+        2. Creates the HITL request
+        3. Emits SSE event via Temporal Activity
+        4. Waits for response via Temporal Signal
+        5. Returns the response value
 
         Args:
             hitl_type: Type of HITL request
@@ -648,6 +655,30 @@ class TemporalHITLHandler:
             Response value (type depends on hitl_type)
         """
         strategy = self._get_strategy(hitl_type)
+        
+        # Check for pre-injected response (HITL resume case)
+        # This happens when continue_project_chat_activity restores agent state
+        # and the tool is called again - we should return the cached response
+        if self._preinjected_response:
+            preinjected = self._preinjected_response
+            preinjected_type = preinjected.get("hitl_type", "")
+            preinjected_data = preinjected.get("response_data", {})
+            
+            # Type must match (clarification, decision, env_var, permission)
+            if preinjected_type == hitl_type.value:
+                logger.info(
+                    f"[TemporalHITL] Using pre-injected response for {hitl_type.value}: "
+                    f"request_id={preinjected.get('request_id')}"
+                )
+                # Clear the pre-injected response (use once only)
+                self._preinjected_response = None
+                # Extract and return the response value
+                return strategy.extract_response_value(preinjected_data)
+            else:
+                logger.warning(
+                    f"[TemporalHITL] Pre-injected response type mismatch: "
+                    f"expected={hitl_type.value}, got={preinjected_type}"
+                )
 
         # Create the request
         request = strategy.create_request(

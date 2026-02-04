@@ -88,71 +88,76 @@ async def _handle_hitl_response(
     
     Uses Temporal Signals to communicate with the running workflow.
     """
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
     from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
         SqlHITLRequestRepository,
     )
 
-    # Get HITL request from database
-    repo = SqlHITLRequestRepository(context.db)
-    hitl_request = await repo.get_by_id(request_id)
+    # Use a fresh session to ensure we see the latest data from other processes
+    # (the HITL request was created by the agent worker in a different process)
+    async with async_session_factory() as session:
+        repo = SqlHITLRequestRepository(session)
+        hitl_request = await repo.get_by_id(request_id)
 
-    if not hitl_request:
-        await context.send_error(f"HITL request {request_id} not found")
-        return
+        if not hitl_request:
+            await context.send_error(f"HITL request {request_id} not found")
+            return
 
-    # Check if already answered
-    from src.domain.model.agent.hitl_request import HITLRequestStatus
+        # Check if already answered
+        from src.domain.model.agent.hitl_request import HITLRequestStatus
 
-    if hitl_request.status != HITLRequestStatus.PENDING:
-        await context.send_error(
-            f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})"
-        )
-        return
+        if hitl_request.status != HITLRequestStatus.PENDING:
+            await context.send_error(
+                f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})"
+            )
+            return
 
-    # Send Temporal Signal
-    signal_sent = await _send_hitl_signal_to_workflow(
-        tenant_id=hitl_request.tenant_id,
-        project_id=hitl_request.project_id,
-        request_id=request_id,
-        hitl_type=hitl_type,
-        response_data=response_data,
-        user_id=context.user_id,
-    )
-
-    if signal_sent:
-        # Update database record
-        response_str = (
-            response_data.get("answer")
-            or response_data.get("decision")
-            or str(response_data.get("values", {}))
-        )
-        await repo.update_response(request_id, response_str)
-        await repo.mark_completed(request_id)
-        await context.db.commit()
-
-        logger.info(
-            f"[WS HITL] User {context.user_id} responded to {hitl_type} {request_id} "
-            "via Temporal Signal"
-        )
-
-        await context.send_json(
-            {
-                "type": ack_type,
-                "request_id": request_id,
-                "success": True,
-            }
-        )
-
-        # Start streaming agent events after HITL response
-        await _start_hitl_stream_bridge(
-            context=context,
+        # Send Temporal Signal
+        signal_sent = await _send_hitl_signal_to_workflow(
+            tenant_id=hitl_request.tenant_id,
+            project_id=hitl_request.project_id,
             request_id=request_id,
+            hitl_type=hitl_type,
+            response_data=response_data,
+            user_id=context.user_id,
         )
-    else:
-        await context.send_error(
-            f"Failed to send HITL response for {request_id}. "
-            "The agent workflow may have terminated."
-        )
+
+        if signal_sent:
+            # Update database record
+            response_str = (
+                response_data.get("answer")
+                or response_data.get("decision")
+                or str(response_data.get("values", {}))
+            )
+            await repo.update_response(request_id, response_str)
+            await repo.mark_completed(request_id)
+            await session.commit()
+
+            logger.info(
+                f"[WS HITL] User {context.user_id} responded to {hitl_type} {request_id} "
+                "via Temporal Signal"
+            )
+
+            await context.send_json(
+                {
+                    "type": ack_type,
+                    "request_id": request_id,
+                    "success": True,
+                }
+            )
+
+            # Start streaming agent events after HITL response
+            await _start_hitl_stream_bridge(
+                context=context,
+                request_id=request_id,
+            )
+        else:
+            await context.send_error(
+                f"Failed to send HITL response for {request_id}. "
+                "The agent workflow may have terminated."
+            )
 
 
 class ClarificationRespondHandler(WebSocketMessageHandler):
