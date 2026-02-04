@@ -280,8 +280,16 @@ DIRECT_SKILL → SUBAGENT → PLAN_MODE → REACT_LOOP
 **Formatting & Linting:**
 - Line length: 100 characters
 - Formatter: `ruff format`
-- Linter: `ruff check`
+- Linter: `ruff check` (E, F, I, N, UP, B, C4, SIM, RUF rules)
 - Type checker: `mypy` (permissive mode)
+
+**Commands:**
+```bash
+make format-backend    # Format Python code
+make lint-backend      # Lint Python code
+uv run ruff check src/ # Check specific directory
+uv run ruff format src/ --check  # Check formatting without changes
+```
 
 **Naming Conventions:**
 | Type | Convention | Example |
@@ -291,40 +299,125 @@ DIRECT_SKILL → SUBAGENT → PLAN_MODE → REACT_LOOP
 | Constants | UPPER_SNAKE_CASE | `MAX_RETRIES`, `DEFAULT_TIMEOUT` |
 | Private members | _leading_underscore | `_internal_method`, `_session` |
 
-**Import Order:**
-1. Standard library (`datetime`, `typing`, `uuid`)
-2. Third-party (`fastapi`, `sqlalchemy`, `pydantic`)
-3. Application (`src.domain`, `src.application`)
-4. Relative imports (`.models`, `..ports`)
-
-**DDD Patterns:**
+**Import Order (Auto-enforced by Ruff):**
 ```python
-# Entity - mutable, has unique identity
+# 1. Future imports
+from __future__ import annotations
+
+# 2. Standard library
+import logging
+from datetime import datetime
+from typing import Optional
+
+# 3. Third-party
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# 4. First-party (src.*)
+from src.domain.model.user import User
+from src.domain.ports.repositories import UserRepository
+
+# 5. Local/relative
+from .models import UserModel
+```
+
+**Domain Model Template:**
+```python
+"""Domain model for Entity."""
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
+import uuid
+
+
 @dataclass(kw_only=True)
-class User:
+class Entity:
+    """Represents an entity in the system.
+    
+    Attributes:
+        id: Unique identifier.
+        name: Entity name.
+        created_at: Creation timestamp.
+    """
+    
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    email: str
     name: str
-    
-    def change_email(self, new_email: str) -> None:
-        self.email = new_email  # Business logic inside entity
+    description: Optional[str] = None
+    created_at: datetime = field(default_factory=datetime.utcnow)
 
-# Value Object - immutable
-@dataclass(frozen=True)
-class Email:
-    value: str
-    
-    def __post_init__(self):
-        if '@' not in self.value:
-            raise ValueError("Invalid email")
+    def update_name(self, new_name: str) -> None:
+        """Update the entity name."""
+        if not new_name:
+            raise ValueError("Name cannot be empty")
+        self.name = new_name
+```
 
-# Repository interface - defined in domain/ports/
-class UserRepository(ABC):
-    @abstractmethod
-    async def save(self, user: User) -> None: ...
-    
-    @abstractmethod
-    async def find_by_id(self, user_id: str) -> User | None: ...
+**Repository Template:**
+```python
+"""Repository implementation for Entity."""
+from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.model.entity import Entity
+from src.domain.ports.repositories import EntityRepository
+from src.infrastructure.adapters.secondary.persistence.base import BaseRepository
+from src.infrastructure.adapters.secondary.persistence.models import EntityModel
+
+
+class SqlEntityRepository(BaseRepository[Entity, EntityModel], EntityRepository):
+    """SQLAlchemy implementation of EntityRepository."""
+
+    _model_class = EntityModel
+
+    async def find_by_id(self, entity_id: str) -> Optional[Entity]:
+        """Find entity by ID."""
+        query = select(EntityModel).where(EntityModel.id == entity_id)
+        result = await self._session.execute(query)
+        db_entity = result.scalar_one_or_none()
+        return self._to_domain(db_entity) if db_entity else None
+
+    def _to_domain(self, db_entity: EntityModel) -> Entity:
+        """Convert database model to domain entity."""
+        return Entity(id=db_entity.id, name=db_entity.name)
+
+    def _to_db(self, entity: Entity) -> EntityModel:
+        """Convert domain entity to database model."""
+        return EntityModel(id=entity.id, name=entity.name)
+```
+
+**Service Template:**
+```python
+"""Application service for Entity operations."""
+import logging
+from typing import Optional
+
+from src.domain.model.entity import Entity
+from src.domain.ports.repositories import EntityRepository
+
+logger = logging.getLogger(__name__)
+
+
+class EntityService:
+    """Service for managing Entity lifecycle."""
+
+    def __init__(self, entity_repo: EntityRepository) -> None:
+        self._entity_repo = entity_repo
+
+    async def create(self, name: str) -> Entity:
+        """Create a new entity."""
+        if not name:
+            raise ValueError("Name cannot be empty")
+        
+        entity = Entity(name=name)
+        await self._entity_repo.save(entity)
+        logger.info(f"Created entity {entity.id}")
+        return entity
+
+    async def get_by_id(self, entity_id: str) -> Optional[Entity]:
+        """Get entity by ID."""
+        return await self._entity_repo.find_by_id(entity_id)
 ```
 
 ### TypeScript/React (Frontend)
