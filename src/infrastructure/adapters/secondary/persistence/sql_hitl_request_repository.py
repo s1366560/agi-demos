@@ -86,6 +86,23 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         return self._to_domain(db_record) if db_record else None
 
+    async def get_by_conversation(
+        self,
+        conversation_id: str,
+    ) -> List[HITLRequest]:
+        """Get all HITL requests for a conversation (regardless of status)."""
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            HITLRequest as HITLRequestRecord,
+        )
+
+        result = await self._session.execute(
+            select(HITLRequestRecord)
+            .where(HITLRequestRecord.conversation_id == conversation_id)
+            .order_by(HITLRequestRecord.created_at.desc())
+        )
+
+        return [self._to_domain(r) for r in result.scalars().all()]
+
     async def get_pending_by_conversation(
         self,
         conversation_id: str,

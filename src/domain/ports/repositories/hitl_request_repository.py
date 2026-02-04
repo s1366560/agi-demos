@@ -50,6 +50,22 @@ class HITLRequestRepositoryPort(ABC):
         pass
 
     @abstractmethod
+    async def get_by_conversation(
+        self,
+        conversation_id: str,
+    ) -> List[HITLRequest]:
+        """
+        Get all HITL requests for a conversation (regardless of status).
+
+        Args:
+            conversation_id: Conversation ID
+
+        Returns:
+            List of HITL requests
+        """
+        pass
+
+    @abstractmethod
     async def get_pending_by_conversation(
         self,
         conversation_id: str,

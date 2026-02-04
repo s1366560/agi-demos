@@ -110,6 +110,34 @@ async def get_conversation_messages(
                 "duration": te.duration_ms,
             }
 
+        # Build HITL answered map: collect all answered events by request_id
+        # This allows us to determine if a *_asked event has been answered
+        hitl_answered_map: dict = {}  # request_id -> answer data
+        for event in events:
+            event_type = event.event_type
+            data = event.event_data or {}
+            request_id = data.get("request_id", "")
+            if event_type == "clarification_answered" and request_id:
+                hitl_answered_map[request_id] = {"answer": data.get("answer", "")}
+            elif event_type == "decision_answered" and request_id:
+                hitl_answered_map[request_id] = {"decision": data.get("decision", "")}
+            elif event_type == "env_var_provided" and request_id:
+                hitl_answered_map[request_id] = {"values": data.get("values", {})}
+            elif event_type == "permission_granted" and request_id:
+                hitl_answered_map[request_id] = {"granted": data.get("granted", False)}
+
+        # Also query HITL requests table for status (handles cases where answered event
+        # might not be in current page, or HITL was answered but agent hasn't resumed)
+        hitl_repo = container.hitl_request_repository()
+        hitl_requests = await hitl_repo.get_by_conversation(conversation_id)
+        hitl_status_map: dict = {}  # request_id -> status info
+        for req in hitl_requests:
+            hitl_status_map[req.id] = {
+                "status": req.status.value if hasattr(req.status, "value") else req.status,
+                "response": req.response,
+                "response_metadata": req.response_metadata or {},
+            }
+
         timeline = []
         for event in events:
             event_type = event.event_type
@@ -172,51 +200,105 @@ async def get_conversation_messages(
                 item["sourceTool"] = data.get("source_tool", "")
                 item["metadata"] = data.get("metadata", {})
 
-            # HITL events
+            # HITL events - determine answered status from:
+            # 1. Corresponding *_answered event in timeline
+            # 2. HITL request status from database
             elif event_type == "clarification_asked":
-                item["requestId"] = data.get("request_id", "")
+                request_id = data.get("request_id", "")
+                item["requestId"] = request_id
                 item["question"] = data.get("question", "")
                 item["options"] = data.get("options", [])
                 item["allowCustom"] = data.get("allow_custom", True)
-                item["answered"] = data.get("answered", False)
-                item["answer"] = data.get("answer")
+                # Check if answered
+                answered = False
+                answer = None
+                if request_id in hitl_answered_map:
+                    answered = True
+                    answer = hitl_answered_map[request_id].get("answer")
+                elif request_id in hitl_status_map:
+                    status_info = hitl_status_map[request_id]
+                    if status_info["status"] in ("answered", "completed"):
+                        answered = True
+                        # response holds the raw answer, response_metadata may have structured data
+                        answer = status_info.get("response") or status_info.get("response_metadata", {}).get("answer")
+                item["answered"] = answered
+                item["answer"] = answer
 
             elif event_type == "clarification_answered":
                 item["requestId"] = data.get("request_id", "")
                 item["answer"] = data.get("answer", "")
 
             elif event_type == "decision_asked":
-                item["requestId"] = data.get("request_id", "")
+                request_id = data.get("request_id", "")
+                item["requestId"] = request_id
                 item["question"] = data.get("question", "")
                 item["options"] = data.get("options", [])
                 item["decisionType"] = data.get("decision_type", "branch")
                 item["allowCustom"] = data.get("allow_custom", False)
                 item["defaultOption"] = data.get("default_option")
-                item["answered"] = data.get("answered", False)
-                item["decision"] = data.get("decision")
+                # Check if answered
+                answered = False
+                decision = None
+                if request_id in hitl_answered_map:
+                    answered = True
+                    decision = hitl_answered_map[request_id].get("decision")
+                elif request_id in hitl_status_map:
+                    status_info = hitl_status_map[request_id]
+                    if status_info["status"] in ("answered", "completed"):
+                        answered = True
+                        # response holds the raw decision, response_metadata may have structured data
+                        decision = status_info.get("response") or status_info.get("response_metadata", {}).get("decision")
+                item["answered"] = answered
+                item["decision"] = decision
 
             elif event_type == "decision_answered":
                 item["requestId"] = data.get("request_id", "")
                 item["decision"] = data.get("decision", "")
 
             elif event_type == "env_var_requested":
-                item["requestId"] = data.get("request_id", "")
+                request_id = data.get("request_id", "")
+                item["requestId"] = request_id
                 item["variables"] = data.get("variables", [])
                 item["reason"] = data.get("reason", "")
-                item["answered"] = data.get("answered", False)
-                item["values"] = data.get("values", {})
+                # Check if answered
+                answered = False
+                values = {}
+                if request_id in hitl_answered_map:
+                    answered = True
+                    values = hitl_answered_map[request_id].get("values", {})
+                elif request_id in hitl_status_map:
+                    status_info = hitl_status_map[request_id]
+                    if status_info["status"] in ("answered", "completed"):
+                        answered = True
+                        # For env_var, values are stored in response_metadata
+                        values = status_info.get("response_metadata", {}).get("values", {})
+                item["answered"] = answered
+                item["values"] = values
 
             elif event_type == "env_var_provided":
                 item["requestId"] = data.get("request_id", "")
                 item["variables"] = list(data.get("values", {}).keys())
 
             elif event_type == "permission_requested":
-                item["requestId"] = data.get("request_id", "")
+                request_id = data.get("request_id", "")
+                item["requestId"] = request_id
                 item["action"] = data.get("action", "")
                 item["resource"] = data.get("resource", "")
                 item["reason"] = data.get("reason", "")
-                item["answered"] = data.get("answered", False)
-                item["granted"] = data.get("granted")
+                # Check if answered
+                answered = False
+                granted = None
+                if request_id in hitl_answered_map:
+                    answered = True
+                    granted = hitl_answered_map[request_id].get("granted")
+                elif request_id in hitl_status_map:
+                    status_info = hitl_status_map[request_id]
+                    if status_info["status"] in ("answered", "completed"):
+                        answered = True
+                        # For permission, granted is stored in response_metadata
+                        granted = status_info.get("response_metadata", {}).get("granted")
+                item["answered"] = answered
+                item["granted"] = granted
 
             elif event_type == "permission_granted":
                 item["requestId"] = data.get("request_id", "")
