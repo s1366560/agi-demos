@@ -383,7 +383,7 @@ async def stop_task_endpoint(
     return {"message": "Task marked as stopped"}
 
 
-@router.get("/{task_id}/stream")
+@router.get("/{task_id}/stream", response_class=EventSourceResponse)
 async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
     """Stream task status updates using Server-Sent Events (SSE).
 
