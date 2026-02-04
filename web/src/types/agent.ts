@@ -1847,6 +1847,8 @@ export type TimelineEventType =
     | "env_var_provided"
     | "permission_asked"
     | "permission_replied"
+    | "permission_requested" // DB format
+    | "permission_granted" // DB format
     // Sandbox event types
     | "sandbox_created"
     | "sandbox_terminated"
@@ -2075,10 +2077,34 @@ export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
 }
 
 /**
+ * Permission requested event (DB format - same as permission_asked)
+ */
+export interface PermissionRequestedTimelineEvent extends BaseTimelineEvent {
+    type: "permission_requested";
+    requestId: string;
+    action?: string;
+    resource?: string;
+    reason?: string;
+    riskLevel?: "low" | "medium" | "high";
+    context?: Record<string, unknown>;
+    answered?: boolean;
+    granted?: boolean;
+}
+
+/**
  * Permission replied event (user granted or denied permission)
  */
 export interface PermissionRepliedTimelineEvent extends BaseTimelineEvent {
     type: "permission_replied";
+    requestId: string;
+    granted: boolean;
+}
+
+/**
+ * Permission granted event (DB format - same as permission_replied)
+ */
+export interface PermissionGrantedTimelineEvent extends BaseTimelineEvent {
+    type: "permission_granted";
     requestId: string;
     granted: boolean;
 }
@@ -2107,6 +2133,8 @@ export type TimelineEvent =
     | EnvVarProvidedTimelineEvent
     | PermissionAskedTimelineEvent
     | PermissionRepliedTimelineEvent
+    | PermissionRequestedTimelineEvent // DB format
+    | PermissionGrantedTimelineEvent // DB format
     // Sandbox events
     | DesktopStartedEvent
     | DesktopStoppedEvent

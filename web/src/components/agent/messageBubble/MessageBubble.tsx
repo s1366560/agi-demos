@@ -28,6 +28,8 @@ import type {
   DecisionAskedEventData,
   EnvVarRequestedEventData,
   PermissionAskedEventData,
+  PermissionAskedTimelineEvent,
+  PermissionRequestedTimelineEvent,
 } from '../../../types/agent';
 // Import types without type qualifier
 import type {
@@ -119,25 +121,32 @@ const toEnvVarData = (event: TimelineEvent): EnvVarRequestedEventData | undefine
 
 /**
  * Convert PermissionAskedTimelineEvent to PermissionAskedEventData (snake_case)
+ * Supports both 'permission_asked' (SSE) and 'permission_requested' (DB) event types
  */
 const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | undefined => {
-  if (event.type !== 'permission_asked') return undefined;
-  const e = event as TimelineEvent & {
-    requestId: string;
-    toolName: string;
-    permissionType: "allow" | "deny" | "ask";
-    description: string;
-    riskLevel?: "low" | "medium" | "high";
-    context?: Record<string, unknown>;
-  };
-  return {
-    request_id: e.requestId,
-    tool_name: e.toolName,
-    permission_type: e.permissionType,
-    description: e.description,
-    risk_level: e.riskLevel,
-    context: e.context,
-  };
+  if (event.type !== 'permission_asked' && event.type !== 'permission_requested') return undefined;
+  const e = event as PermissionAskedTimelineEvent | PermissionRequestedTimelineEvent;
+  if (event.type === 'permission_asked') {
+    const asked = e as PermissionAskedTimelineEvent;
+    return {
+      request_id: asked.requestId,
+      tool_name: asked.toolName,
+      permission_type: 'ask',
+      description: asked.description,
+      risk_level: asked.riskLevel,
+      context: asked.context,
+    };
+  } else {
+    const requested = e as PermissionRequestedTimelineEvent;
+    return {
+      request_id: requested.requestId,
+      tool_name: requested.resource || 'unknown',
+      permission_type: 'ask',
+      description: requested.reason || requested.action || '',
+      risk_level: requested.riskLevel,
+      context: requested.context,
+    };
+  }
 };
 
 // ========================================
