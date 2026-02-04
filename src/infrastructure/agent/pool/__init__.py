@@ -6,6 +6,8 @@ Agent Pool - ReActAgent 池化管理模块.
 - 完整生命周期管理
 - 健康监控与自动恢复
 - 动态扩缩容
+- 容器化隔离 (Docker/K8s)
+- 高可用 (状态恢复、故障自愈)
 
 Usage:
     from src.infrastructure.agent.pool import AgentPoolManager
@@ -21,6 +23,7 @@ Usage:
 from .backends import Backend, BackendType
 from .backends.ondemand_backend import OnDemandBackend, OnDemandConfig
 from .backends.shared_pool_backend import SharedPoolBackend, SharedPoolConfig
+from .backends.container_backend import ContainerBackend, ContainerConfig
 
 # Circuit Breaker
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError
@@ -55,6 +58,22 @@ from .types import (
     RecoveryAction,
     ResourceUsage,
     TierMigration,
+)
+
+# High Availability
+from .ha import (
+    StateRecoveryService,
+    StateCheckpoint,
+    CheckpointType,
+    RecoveryResult,
+    FailureRecoveryService,
+    FailureEvent,
+    FailureType,
+    AutoScalingService,
+    ScalingPolicy,
+    ScalingMetrics,
+    ScalingDecision,
+    ScalingDirection,
 )
 
 __all__ = [
@@ -100,6 +119,8 @@ __all__ = [
     "SharedPoolConfig",
     "OnDemandBackend",
     "OnDemandConfig",
+    "ContainerBackend",
+    "ContainerConfig",
     # Prewarm
     "PrewarmPool",
     "PrewarmConfig",
@@ -113,9 +134,35 @@ __all__ = [
     "create_pooled_adapter",
     "get_global_adapter",
     "shutdown_global_adapter",
+    # High Availability
+    "StateRecoveryService",
+    "StateCheckpoint",
+    "CheckpointType",
+    "RecoveryResult",
+    "FailureRecoveryService",
+    "FailureEvent",
+    "FailureType",
+    "AutoScalingService",
+    "ScalingPolicy",
+    "ScalingMetrics",
+    "ScalingDecision",
+    "ScalingDirection",
+    # Orchestrator
+    "PoolOrchestrator",
+    "OrchestratorConfig",
+    "create_orchestrator",
+    "get_global_orchestrator",
+    "shutdown_global_orchestrator",
+    # Feature Flags
+    "FeatureFlags",
+    "FeatureFlagConfig",
+    "RolloutStrategy",
+    "get_feature_flags",
 ]
 
 # Integration (lazy import to avoid circular dependencies)
+# API
+from .api import create_pool_router
 from .integration import PooledAgentSessionAdapter
 from .integration.session_adapter import (
     AdapterConfig,
@@ -124,3 +171,29 @@ from .integration.session_adapter import (
     get_global_adapter,
     shutdown_global_adapter,
 )
+
+# Metrics
+from .metrics import PoolMetricsCollector, get_metrics_collector
+
+# Orchestrator
+from .orchestrator import (
+    OrchestratorConfig,
+    PoolOrchestrator,
+    create_orchestrator,
+    get_global_orchestrator,
+    shutdown_global_orchestrator,
+)
+
+# Feature Flags
+from .feature_flags import (
+    FeatureFlagConfig,
+    FeatureFlags,
+    RolloutStrategy,
+    get_feature_flags,
+)
+
+__all__ += [
+    "PoolMetricsCollector",
+    "get_metrics_collector",
+    "create_pool_router",
+]

@@ -140,3 +140,77 @@ class TestAgentExecutionEventImport:
         assert "data" in sse_format
         assert "timestamp" in sse_format
         assert sse_format["type"] == AgentEventType.THOUGHT.value
+
+
+class TestSingleSourceOfTruth:
+    """Test that types.py is the single source of truth for event types."""
+
+    def test_types_module_is_source(self):
+        """AgentEventType should be defined in types.py."""
+        from src.domain.events.types import AgentEventType as TypesEventType
+        from src.domain.events.agent_events import AgentEventType as AgentEventsEventType
+        from src.domain.ports.services.agent_event_bus_port import AgentEventType as PortEventType
+
+        # All should be the same enum
+        assert TypesEventType is AgentEventsEventType
+        assert TypesEventType is PortEventType
+
+    def test_event_category_mapping(self):
+        """All event types should have category mappings."""
+        from src.domain.events.types import (
+            AgentEventType,
+            get_event_category,
+            EventCategory,
+        )
+
+        for event_type in AgentEventType:
+            category = get_event_category(event_type)
+            assert isinstance(category, EventCategory)
+
+    def test_terminal_events_utility(self):
+        """is_terminal_event should correctly identify terminal events."""
+        from src.domain.events.types import (
+            AgentEventType,
+            is_terminal_event,
+            TERMINAL_EVENT_TYPES,
+        )
+
+        # These should be terminal
+        assert is_terminal_event(AgentEventType.COMPLETE)
+        assert is_terminal_event(AgentEventType.ERROR)
+        assert is_terminal_event(AgentEventType.CANCELLED)
+
+        # These should not be terminal
+        assert not is_terminal_event(AgentEventType.THOUGHT)
+        assert not is_terminal_event(AgentEventType.ACT)
+
+    def test_delta_events_utility(self):
+        """is_delta_event should correctly identify delta events."""
+        from src.domain.events.types import (
+            AgentEventType,
+            is_delta_event,
+        )
+
+        # These should be delta
+        assert is_delta_event(AgentEventType.THOUGHT_DELTA)
+        assert is_delta_event(AgentEventType.TEXT_DELTA)
+
+        # These should not be delta
+        assert not is_delta_event(AgentEventType.THOUGHT)
+        assert not is_delta_event(AgentEventType.ACT)
+
+    def test_hitl_events_utility(self):
+        """is_hitl_event should correctly identify HITL events."""
+        from src.domain.events.types import (
+            AgentEventType,
+            is_hitl_event,
+        )
+
+        # These should be HITL
+        assert is_hitl_event(AgentEventType.CLARIFICATION_ASKED)
+        assert is_hitl_event(AgentEventType.DECISION_ASKED)
+        assert is_hitl_event(AgentEventType.ENV_VAR_REQUESTED)
+
+        # These should not be HITL
+        assert not is_hitl_event(AgentEventType.THOUGHT)
+        assert not is_hitl_event(AgentEventType.COMPLETE)

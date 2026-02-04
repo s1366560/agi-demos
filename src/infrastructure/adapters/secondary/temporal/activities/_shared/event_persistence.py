@@ -2,11 +2,17 @@
 
 This module provides common event storage and persistence functionality
 used across Agent activities.
+
+Includes:
+- WAL (Write-Ahead Log) pattern for event persistence
+- TextDeltaSampler for efficient text_delta handling
+- Atomic sequence number generation
 """
 
+import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -31,6 +37,76 @@ NOISY_EVENT_TYPES = {
     "cost_update",
     "pattern_match",
 }
+
+
+class TextDeltaSampler:
+    """
+    Sample text_delta events for persistence.
+
+    Strategy:
+    - Save every Nth delta (default: every 10th)
+    - Always save first delta
+    - Merge adjacent deltas for efficiency
+    - Finalize on text_end to capture complete text
+    """
+
+    SAMPLE_INTERVAL = 10  # Save every 10th delta
+    MAX_BUFFER_SIZE = 100  # Max deltas to buffer before force-save
+
+    def __init__(self):
+        self._buffer: List[str] = []
+        self._count = 0
+        self._last_saved_content = ""
+
+    def add_delta(self, delta: str) -> Optional[str]:
+        """
+        Add a delta and return merged content if should save.
+
+        Args:
+            delta: The delta text to add
+
+        Returns:
+            Merged content to save, or None if not saving yet
+        """
+        self._buffer.append(delta)
+        self._count += 1
+
+        # Save conditions:
+        # 1. First delta (count == 1)
+        # 2. Every Nth delta
+        # 3. Buffer full
+        should_save = (
+            self._count == 1
+            or self._count % self.SAMPLE_INTERVAL == 0
+            or len(self._buffer) >= self.MAX_BUFFER_SIZE
+        )
+
+        if should_save:
+            return self._flush()
+
+        return None
+
+    def _flush(self) -> str:
+        """Flush buffer and return merged content."""
+        merged = "".join(self._buffer)
+        self._buffer = []
+
+        # Return full accumulated content since last save
+        result = self._last_saved_content + merged
+        self._last_saved_content = result
+
+        return result
+
+    def finalize(self) -> str:
+        """Get final content (call on text_end)."""
+        if self._buffer:
+            return self._flush()
+        return self._last_saved_content
+
+    @property
+    def total_count(self) -> int:
+        """Get total number of deltas processed."""
+        return self._count
 
 
 async def save_event_to_db(
@@ -289,3 +365,195 @@ async def sync_sequence_number_from_db(
         logger.error(f"Failed to sync sequence_number from DB: {e}")
         # Fall back to state value if DB query fails
         return state_sequence_number
+
+
+async def persist_and_publish_event(
+    conversation_id: str,
+    message_id: str,
+    event: Dict[str, Any],
+    correlation_id: Optional[str] = None,
+) -> int:
+    """
+    Write-Ahead Log pattern: DB first, then Redis.
+
+    1. Get sequence number atomically
+    2. Write to DB (source of truth)
+    3. Publish to Redis (notification layer)
+
+    If Redis fails, event is still in DB and can be recovered.
+
+    Args:
+        conversation_id: Conversation ID
+        message_id: Message ID
+        event: Event to persist
+        correlation_id: Optional request correlation ID
+
+    Returns:
+        The sequence number assigned to this event
+    """
+    import redis.asyncio as aioredis
+    from sqlalchemy.dialects.postgresql import insert
+
+    from src.configuration.config import get_settings
+    from src.infrastructure.adapters.secondary.messaging.redis_sequence_service import (
+        RedisSequenceService,
+    )
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentExecutionEvent as AgentExecutionEventModel,
+    )
+
+    settings = get_settings()
+    redis_client = None
+
+    try:
+        # 1. Get atomic sequence
+        redis_client = aioredis.from_url(settings.redis_url)
+        sequence_service = RedisSequenceService(redis_client)
+        seq = await sequence_service.get_next_sequence(conversation_id)
+
+        event_type = event.get("type", "unknown")
+        event_data = event.get("data", {})
+
+        # 2. Write to DB first (synchronous, must succeed)
+        async with async_session_factory() as session:
+            async with session.begin():
+                stmt = (
+                    insert(AgentExecutionEventModel)
+                    .values(
+                        id=str(uuid.uuid4()),
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        event_type=event_type,
+                        event_data=event_data,
+                        sequence_number=seq,
+                        correlation_id=correlation_id,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                    .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+                )
+                await session.execute(stmt)
+
+        # 3. Publish to Redis (async, can fail)
+        try:
+            stream_key = f"agent:events:{conversation_id}"
+            redis_event = {
+                "type": event_type,
+                "seq": str(seq),
+                "data": json.dumps(event_data, default=str),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "conversation_id": conversation_id,
+                "message_id": message_id,
+            }
+            if correlation_id:
+                redis_event["correlation_id"] = correlation_id
+
+            await redis_client.xadd(stream_key, redis_event, maxlen=1000)
+
+        except Exception as e:
+            # Log but don't fail - Redis is notification layer only
+            logger.warning(f"Failed to publish event to Redis: {e}")
+
+        return seq
+
+    finally:
+        if redis_client:
+            await redis_client.close()
+
+
+async def save_sampled_text_delta(
+    conversation_id: str,
+    message_id: str,
+    accumulated_content: str,
+    sequence_number: int,
+    correlation_id: Optional[str] = None,
+) -> None:
+    """
+    Save sampled text delta to TextDeltaBuffer table.
+
+    This provides short-term recovery for text_delta events without
+    storing every individual delta.
+
+    Args:
+        conversation_id: Conversation ID
+        message_id: Message ID
+        accumulated_content: Accumulated text content so far
+        sequence_number: Current sequence number
+        correlation_id: Optional request correlation ID
+    """
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.models import TextDeltaBuffer
+
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    try:
+        async with async_session_factory() as session:
+            async with session.begin():
+                buffer = TextDeltaBuffer(
+                    id=str(uuid.uuid4()),
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    event_type="text_delta_sample",
+                    delta_content=accumulated_content,
+                    event_data={"accumulated": True, "correlation_id": correlation_id},
+                    sequence_number=sequence_number,
+                    expires_at=expires_at,
+                )
+                session.add(buffer)
+
+    except Exception as e:
+        logger.warning(f"Failed to save sampled text delta: {e}")
+
+
+async def publish_event_to_redis(
+    conversation_id: str,
+    message_id: str,
+    event: Dict[str, Any],
+    sequence_number: int,
+    correlation_id: Optional[str] = None,
+) -> None:
+    """
+    Publish an event to Redis Stream only (no DB write).
+
+    Used for streaming events that don't need DB persistence.
+
+    Args:
+        conversation_id: Conversation ID
+        message_id: Message ID
+        event: Event to publish
+        sequence_number: Sequence number
+        correlation_id: Optional correlation ID
+    """
+    import redis.asyncio as aioredis
+
+    from src.configuration.config import get_settings
+
+    settings = get_settings()
+    redis_client = None
+
+    try:
+        redis_client = aioredis.from_url(settings.redis_url)
+        stream_key = f"agent:events:{conversation_id}"
+
+        event_type = event.get("type", "unknown")
+        event_data = event.get("data", {})
+
+        redis_event = {
+            "type": event_type,
+            "seq": str(sequence_number),
+            "data": json.dumps(event_data, default=str),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+        }
+        if correlation_id:
+            redis_event["correlation_id"] = correlation_id
+
+        await redis_client.xadd(stream_key, redis_event, maxlen=1000)
+
+    except Exception as e:
+        logger.warning(f"Failed to publish event to Redis: {e}")
+
+    finally:
+        if redis_client:
+            await redis_client.close()

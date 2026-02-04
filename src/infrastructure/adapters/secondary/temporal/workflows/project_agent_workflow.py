@@ -108,6 +108,9 @@ class ProjectChatRequest:
     # Attachment IDs for this message
     attachment_ids: Optional[List[str]] = None
 
+    # Request correlation ID for event tracking
+    correlation_id: Optional[str] = None
+
     # Optional configuration overrides for this request
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None

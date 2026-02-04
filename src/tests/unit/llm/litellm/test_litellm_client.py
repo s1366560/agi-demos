@@ -304,23 +304,23 @@ class TestLiteLLMClientZhipu:
 
             assert response == {"content": "ZhipuAI response"}
             mock_acompletion.assert_called_once()
-            # Check that the model has the openai prefix (ZAI uses OpenAI-compatible API)
+            # Check that the model has the zai prefix (LiteLLM official prefix for ZhipuAI)
             call_kwargs = mock_acompletion.call_args.kwargs
-            assert "openai/" in call_kwargs["model"]
+            assert "zai/" in call_kwargs["model"]
 
     @pytest.mark.asyncio
     async def test_zhipu_get_model_for_size_small(self, zhipu_client):
         """Test model selection for small size with ZhipuAI."""
         model = zhipu_client._get_model_for_size(ModelSize.small)
-        # ZAI uses OpenAI-compatible API, so model has openai/ prefix
-        assert model == "openai/glm-4-flash"
+        # ZAI uses zai/ prefix for LiteLLM
+        assert model == "zai/glm-4-flash"
 
     @pytest.mark.asyncio
     async def test_zhipu_get_model_for_size_medium(self, zhipu_client):
         """Test model selection for medium size with ZhipuAI."""
         model = zhipu_client._get_model_for_size(ModelSize.medium)
-        # ZAI uses OpenAI-compatible API, so model has openai/ prefix
-        assert model == "openai/glm-4-plus"
+        # ZAI uses zai/ prefix for LiteLLM
+        assert model == "zai/glm-4-plus"
 
     @pytest.mark.asyncio
     async def test_zhipu_get_provider_type(self, zhipu_client):

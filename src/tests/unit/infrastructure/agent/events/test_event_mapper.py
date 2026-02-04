@@ -1,46 +1,53 @@
 """Tests for Event Mapper and Event Bus.
 
 Tests the unified event system for SSE streaming and event handling.
+
+NOTE: This test file uses AgentEventType from the unified domain events types.
+EventType is now an alias for AgentEventType for backward compatibility.
 """
 
 import json
 from datetime import datetime
 
+from src.domain.events.types import AgentEventType
 from src.infrastructure.agent.events.event_mapper import (
     AgentDomainEvent,
     EventBus,
     EventMapper,
-    EventType,
+    EventType,  # Alias for AgentEventType
     SSEEvent,
     get_event_bus,
     set_event_bus,
 )
 
 
-class TestEventType:
-    """Tests for EventType enum."""
+class TestAgentEventType:
+    """Tests for AgentEventType enum (unified event types)."""
 
     def test_message_events(self) -> None:
         """Should have message event types."""
-        assert EventType.USER_MESSAGE.value == "user_message"
-        assert EventType.ASSISTANT_MESSAGE.value == "assistant_message"
-        assert EventType.SYSTEM_MESSAGE.value == "system_message"
+        assert AgentEventType.USER_MESSAGE.value == "user_message"
+        assert AgentEventType.ASSISTANT_MESSAGE.value == "assistant_message"
 
-    def test_tool_events(self) -> None:
-        """Should have tool event types."""
-        assert EventType.TOOL_START.value == "tool_start"
-        assert EventType.TOOL_END.value == "tool_end"
-        assert EventType.TOOL_ERROR.value == "tool_error"
+    def test_action_events(self) -> None:
+        """Should have action event types."""
+        assert AgentEventType.ACT.value == "act"
+        assert AgentEventType.OBSERVE.value == "observe"
+        assert AgentEventType.THOUGHT.value == "thought"
 
-    def test_state_events(self) -> None:
-        """Should have state event types."""
-        assert EventType.STATE_CHANGE.value == "state_change"
-        assert EventType.PROGRESS.value == "progress"
+    def test_status_events(self) -> None:
+        """Should have status event types."""
+        assert AgentEventType.STATUS.value == "status"
+        assert AgentEventType.START.value == "start"
+        assert AgentEventType.COMPLETE.value == "complete"
 
     def test_error_events(self) -> None:
         """Should have error event types."""
-        assert EventType.ERROR.value == "error"
-        assert EventType.VALIDATION_ERROR.value == "validation_error"
+        assert AgentEventType.ERROR.value == "error"
+    
+    def test_event_type_is_alias(self) -> None:
+        """EventType should be an alias for AgentEventType."""
+        assert EventType is AgentEventType
 
 
 class TestSSEEvent:
@@ -50,7 +57,7 @@ class TestSSEEvent:
         """Should convert to SSE format string."""
         event = SSEEvent(
             id="1",
-            event=EventType.USER_MESSAGE,
+            event=AgentEventType.USER_MESSAGE,
             data={"message": "Hello"},
         )
 
@@ -65,7 +72,7 @@ class TestSSEEvent:
         """Should include retry if specified."""
         event = SSEEvent(
             id="2",
-            event=EventType.TOOL_START,
+            event=AgentEventType.ACT,
             data={"tool": "bash"},
             retry=3000,
         )
@@ -78,7 +85,7 @@ class TestSSEEvent:
         """Should not include id if not provided."""
         event = SSEEvent(
             id="",
-            event=EventType.PROGRESS,
+            event=AgentEventType.STATUS,
             data={"progress": 50},
         )
 
@@ -93,7 +100,7 @@ class TestSSEEvent:
         """Should properly serialize data as JSON."""
         event = SSEEvent(
             id="3",
-            event=EventType.ERROR,
+            event=AgentEventType.ERROR,
             data={"error": "Test error", "code": 500},
         )
 
@@ -114,10 +121,10 @@ class TestAgentDomainEvent:
     def test_create_minimal_event(self) -> None:
         """Should create event with minimal fields."""
         event = AgentDomainEvent(
-            event_type=EventType.USER_MESSAGE,
+            event_type=AgentEventType.USER_MESSAGE,
         )
 
-        assert event.event_type == EventType.USER_MESSAGE
+        assert event.event_type == AgentEventType.USER_MESSAGE
         assert event.data == {}
         assert event.conversation_id is None
         assert isinstance(event.timestamp, datetime)
@@ -125,7 +132,7 @@ class TestAgentDomainEvent:
     def test_create_full_event(self) -> None:
         """Should create event with all fields."""
         event = AgentDomainEvent(
-            event_type=EventType.TOOL_START,
+            event_type=AgentEventType.ACT,
             conversation_id="conv-123",
             sandbox_id="sb-456",
             data={"tool": "bash", "args": ["ls"]},
@@ -138,7 +145,7 @@ class TestAgentDomainEvent:
     def test_to_sse(self) -> None:
         """Should convert to SSE event."""
         domain_event = AgentDomainEvent(
-            event_type=EventType.ASSISTANT_MESSAGE,
+            event_type=AgentEventType.ASSISTANT_MESSAGE,
             conversation_id="conv-123",
             data={"message": "Hello!"},
         )
@@ -146,7 +153,7 @@ class TestAgentDomainEvent:
         sse_event = domain_event.to_sse("evt-1")
 
         assert sse_event.id == "evt-1"
-        assert sse_event.event == EventType.ASSISTANT_MESSAGE
+        assert sse_event.event == AgentEventType.ASSISTANT_MESSAGE
         assert sse_event.data["message"] == "Hello!"
         assert "conversation_id" in sse_event.data
         assert sse_event.data["conversation_id"] == "conv-123"
@@ -179,7 +186,7 @@ class TestEventMapper:
         """Should include all fields when configured."""
         mapper = EventMapper()
         event = AgentDomainEvent(
-            event_type=EventType.PROGRESS,
+            event_type=AgentEventType.STATUS,
             conversation_id="conv-123",
             sandbox_id="sb-456",
             data={"progress": 50},
@@ -199,7 +206,7 @@ class TestEventMapper:
             include_sandbox_id=False,
         )
         event = AgentDomainEvent(
-            event_type=EventType.ERROR,
+            event_type=AgentEventType.ERROR,
             conversation_id="conv-123",
             sandbox_id="sb-456",
             data={"error": "Test"},
@@ -215,7 +222,7 @@ class TestEventMapper:
         """Should remove None values from data."""
         mapper = EventMapper()
         event = AgentDomainEvent(
-            event_type=EventType.TOOL_END,
+            event_type=AgentEventType.OBSERVE,
             data={"tool": "bash", "output": None, "exit_code": 0},
         )
 
@@ -229,14 +236,14 @@ class TestEventMapper:
         """Should apply custom transformer."""
         mapper = EventMapper()
 
-        def transform_progress(event: AgentDomainEvent) -> dict:
+        def transform_status(event: AgentDomainEvent) -> dict:
             progress = event.data.get("progress", 0)
             return {"progress_pct": f"{progress}%", "status": "running"}
 
-        mapper.register_transformer(EventType.PROGRESS, transform_progress)
+        mapper.register_transformer(AgentEventType.STATUS, transform_status)
 
         event = AgentDomainEvent(
-            event_type=EventType.PROGRESS,
+            event_type=AgentEventType.STATUS,
             data={"progress": 75},
         )
 
@@ -249,25 +256,25 @@ class TestEventMapper:
         """Should filter out events that don't match filter."""
         mapper = EventMapper()
 
-        # Only allow progress events
-        def progress_only(event: AgentDomainEvent) -> bool:
-            return event.event_type == EventType.PROGRESS
+        # Only allow status events
+        def status_only(event: AgentDomainEvent) -> bool:
+            return event.event_type == AgentEventType.STATUS
 
-        mapper.register_filter(progress_only)
+        mapper.register_filter(status_only)
 
-        tool_event = AgentDomainEvent(event_type=EventType.TOOL_START)
-        progress_event = AgentDomainEvent(event_type=EventType.PROGRESS)
+        act_event = AgentDomainEvent(event_type=AgentEventType.ACT)
+        status_event = AgentDomainEvent(event_type=AgentEventType.STATUS)
 
-        assert mapper.to_sse(tool_event, "evt-1") is None
-        assert mapper.to_sse(progress_event, "evt-2") is not None
+        assert mapper.to_sse(act_event, "evt-1") is None
+        assert mapper.to_sse(status_event, "evt-2") is not None
 
     def test_to_sse_batch(self) -> None:
         """Should convert multiple events to SSE."""
         mapper = EventMapper()
         events = [
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"value": 1}),
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"value": 2}),
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"value": 3}),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"value": 1}),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"value": 2}),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"value": 3}),
         ]
 
         sse_events = mapper.to_sse_batch(events)
@@ -286,9 +293,9 @@ class TestEventMapper:
         mapper.register_filter(odd_only)
 
         events = [
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"value": 1}),
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"value": 2}),
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"value": 3}),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"value": 1}),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"value": 2}),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"value": 3}),
         ]
 
         sse_events = mapper.to_sse_batch(events)
@@ -300,18 +307,18 @@ class TestEventMapper:
         """Should create complete SSE stream string."""
         mapper = EventMapper()
         events = [
-            AgentDomainEvent(event_type=EventType.STREAM_START),
-            AgentDomainEvent(event_type=EventType.PROGRESS, data={"msg": "Processing"}),
-            AgentDomainEvent(event_type=EventType.STREAM_END),
+            AgentDomainEvent(event_type=AgentEventType.START),
+            AgentDomainEvent(event_type=AgentEventType.STATUS, data={"msg": "Processing"}),
+            AgentDomainEvent(event_type=AgentEventType.COMPLETE),
         ]
 
         stream = mapper.create_sse_stream(events)
 
         # Verify SSE format
         lines = stream.strip().split("\n")
-        assert any("event: stream_start" in l for l in lines)
-        assert any("event: progress" in l for l in lines)
-        assert any("event: stream_end" in l for l in lines)
+        assert any("event: start" in l for l in lines)
+        assert any("event: status" in l for l in lines)
+        assert any("event: complete" in l for l in lines)
         # Each event should end with blank line
         assert stream.count("\n\n") >= 3
 
@@ -329,8 +336,8 @@ class TestEventBus:
 
         unsubscribe = bus.subscribe(callback=callback)
 
-        event1 = AgentDomainEvent(event_type=EventType.PROGRESS)
-        event2 = AgentDomainEvent(event_type=EventType.ERROR)
+        event1 = AgentDomainEvent(event_type=AgentEventType.STATUS)
+        event2 = AgentDomainEvent(event_type=AgentEventType.ERROR)
 
         bus.publish(event1)
         bus.publish(event2)
@@ -350,13 +357,13 @@ class TestEventBus:
         def callback(event):
             received.append(event)
 
-        bus.subscribe(event_type=EventType.PROGRESS, callback=callback)
+        bus.subscribe(event_type=AgentEventType.STATUS, callback=callback)
 
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS))
-        bus.publish(AgentDomainEvent(event_type=EventType.ERROR))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.ERROR))
 
         assert len(received) == 1
-        assert received[0].event_type == EventType.PROGRESS
+        assert received[0].event_type == AgentEventType.STATUS
 
     def test_unsubscribe_removes_subscriber(self) -> None:
         """Unsubscribe should stop receiving events."""
@@ -366,12 +373,12 @@ class TestEventBus:
         def callback(event):
             received.append(event)
 
-        unsubscribe = bus.subscribe(event_type=EventType.PROGRESS, callback=callback)
+        unsubscribe = bus.subscribe(event_type=AgentEventType.STATUS, callback=callback)
 
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS))
         unsubscribe()  # Unsubscribe after first
 
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS))
 
         assert len(received) == 1
 
@@ -379,8 +386,8 @@ class TestEventBus:
         """Should get all event history."""
         bus = EventBus()
 
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS, data={"v": 1}))
-        bus.publish(AgentDomainEvent(event_type=EventType.ERROR, data={"e": 1}))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS, data={"v": 1}))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.ERROR, data={"e": 1}))
 
         history = bus.get_history()
 
@@ -390,14 +397,14 @@ class TestEventBus:
         """Should filter history by event type."""
         bus = EventBus()
 
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS, data={"v": 1}))
-        bus.publish(AgentDomainEvent(event_type=EventType.ERROR, data={"e": 1}))
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS, data={"v": 2}))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS, data={"v": 1}))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.ERROR, data={"e": 1}))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS, data={"v": 2}))
 
-        history = bus.get_history(event_type=EventType.PROGRESS)
+        history = bus.get_history(event_type=AgentEventType.STATUS)
 
         assert len(history) == 2
-        assert all(e.event_type == EventType.PROGRESS for e in history)
+        assert all(e.event_type == AgentEventType.STATUS for e in history)
 
     def test_get_history_limit(self) -> None:
         """Should limit history size."""
@@ -405,7 +412,7 @@ class TestEventBus:
 
         for i in range(150):
             bus.publish(AgentDomainEvent(
-                event_type=EventType.PROGRESS,
+                event_type=AgentEventType.STATUS,
                 data={"v": i},
             ))
 
@@ -419,8 +426,8 @@ class TestEventBus:
         """Should clear event history."""
         bus = EventBus()
 
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS))
-        bus.publish(AgentDomainEvent(event_type=EventType.ERROR))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.ERROR))
 
         assert len(bus.get_history()) == 2
 
@@ -454,7 +461,7 @@ class TestEventBus:
         bus.subscribe(callback=bad_callback)
 
         # Should not raise
-        bus.publish(AgentDomainEvent(event_type=EventType.PROGRESS))
+        bus.publish(AgentDomainEvent(event_type=AgentEventType.STATUS))
 
     def test_max_history_enforced(self) -> None:
         """Should enforce max history limit."""
@@ -463,7 +470,7 @@ class TestEventBus:
         # Publish more than default max_history (1000)
         for i in range(1100):
             bus.publish(AgentDomainEvent(
-                event_type=EventType.PROGRESS,
+                event_type=AgentEventType.STATUS,
                 data={"v": i},
             ))
 
@@ -515,15 +522,15 @@ class TestEventIntegration:
 
         # Publish events
         bus.publish(AgentDomainEvent(
-            event_type=EventType.STREAM_START,
+            event_type=AgentEventType.START,
             conversation_id="conv-123",
         ))
         bus.publish(AgentDomainEvent(
-            event_type=EventType.PROGRESS,
+            event_type=AgentEventType.STATUS,
             data={"progress": 50},
         ))
         bus.publish(AgentDomainEvent(
-            event_type=EventType.STREAM_END,
+            event_type=AgentEventType.COMPLETE,
         ))
 
         # Create stream
@@ -531,26 +538,26 @@ class TestEventIntegration:
         stream = mapper.create_sse_stream(bus.get_history())
 
         # Verify stream format
-        assert "event: stream_start" in stream
-        assert "event: progress" in stream
-        assert "event: stream_end" in stream
+        assert "event: start" in stream
+        assert "event: status" in stream
+        assert "event: complete" in stream
 
     def test_filtered_stream(self) -> None:
         """Should create filtered SSE stream."""
         bus = EventBus()
         mapper = EventMapper()
 
-        # Filter out system messages
-        mapper.register_filter(lambda e: e.event_type != EventType.SYSTEM_MESSAGE)
+        # Filter out thought events
+        mapper.register_filter(lambda e: e.event_type != AgentEventType.THOUGHT)
 
         events = [
-            AgentDomainEvent(event_type=EventType.USER_MESSAGE),
-            AgentDomainEvent(event_type=EventType.SYSTEM_MESSAGE),
-            AgentDomainEvent(event_type=EventType.ASSISTANT_MESSAGE),
+            AgentDomainEvent(event_type=AgentEventType.USER_MESSAGE),
+            AgentDomainEvent(event_type=AgentEventType.THOUGHT),
+            AgentDomainEvent(event_type=AgentEventType.ASSISTANT_MESSAGE),
         ]
 
         stream = mapper.create_sse_stream(events)
 
         assert "user_message" in stream
-        assert "system_message" not in stream
+        assert "thought" not in stream
         assert "assistant_message" in stream

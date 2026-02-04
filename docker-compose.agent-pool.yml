@@ -1,0 +1,181 @@
+# Agent Pool - Docker Compose Orchestration
+# This file extends the main docker-compose.yml for HOT tier container management
+
+version: "3.8"
+
+networks:
+  memstack-agent-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+services:
+  # ============================================================================
+  # Agent Pool Manager Service
+  # ============================================================================
+  agent-pool-manager:
+    build:
+      context: .
+      dockerfile: src/infrastructure/agent/pool/container/Dockerfile.agent
+    container_name: memstack-agent-pool-manager
+    environment:
+      - AGENT_POOL_ENABLED=true
+      - AGENT_POOL_MODE=manager
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NEO4J_URI=bolt://neo4j:7687
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      # LLM Providers (from .env)
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+    ports:
+      - "8090:8080"  # Health/metrics
+      - "50051:50051"  # gRPC
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - memstack-agent-network
+      - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+
+  # ============================================================================
+  # HOT Tier Agent Worker Template
+  # Use `docker-compose up --scale agent-hot-worker=N` to scale
+  # ============================================================================
+  agent-hot-worker:
+    build:
+      context: .
+      dockerfile: src/infrastructure/agent/pool/container/Dockerfile.agent
+    environment:
+      - AGENT_POOL_ENABLED=true
+      - AGENT_POOL_MODE=worker
+      - AGENT_POOL_TIER=hot
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NEO4J_URI=bolt://neo4j:7687
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      # LLM Providers (from .env)
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+    expose:
+      - "8080"   # Health
+      - "50051"  # gRPC
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - agent-pool-manager
+    networks:
+      - memstack-agent-network
+      - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      mode: replicated
+      replicas: 0  # Start with 0, scale on demand
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+
+  # ============================================================================
+  # WARM Tier Shared Worker Pool
+  # Fixed pool of shared workers
+  # ============================================================================
+  agent-warm-worker:
+    build:
+      context: .
+      dockerfile: src/infrastructure/agent/pool/container/Dockerfile.agent
+    environment:
+      - AGENT_POOL_ENABLED=true
+      - AGENT_POOL_MODE=worker
+      - AGENT_POOL_TIER=warm
+      - AGENT_POOL_SHARED_POOL_SIZE=4
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NEO4J_URI=bolt://neo4j:7687
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - TEMPORAL_HOST=temporal
+      - TEMPORAL_PORT=7233
+      # LLM Providers (from .env)
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ZHIPUAI_API_KEY=${ZHIPUAI_API_KEY}
+    expose:
+      - "8080"   # Health
+      - "50051"  # gRPC
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - agent-pool-manager
+    networks:
+      - memstack-agent-network
+      - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      mode: replicated
+      replicas: 2  # Fixed pool of 2 shared workers
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4.0"
+        reservations:
+          memory: 1G
+          cpus: "1.0"
+
+# ============================================================================
+# Volumes for persistent data
+# ============================================================================
+volumes:
+  agent-logs:
+    driver: local

@@ -1,0 +1,249 @@
+// Agent Pool gRPC Protocol Definition
+// 
+// This protocol defines the communication interface between the pool manager
+// and isolated agent worker containers (HOT tier).
+//
+// Generate Python code:
+//   python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. agent_pool.proto
+
+syntax = "proto3";
+
+package memstack.agent.pool;
+
+option go_package = "github.com/memstack/agent/pool";
+
+// ============================================================================
+// Agent Worker Service
+// ============================================================================
+
+// AgentWorkerService runs inside each isolated agent container
+service AgentWorkerService {
+    // Initialize the agent with configuration
+    rpc Initialize(InitializeRequest) returns (InitializeResponse);
+    
+    // Execute a chat request (streaming response)
+    rpc Execute(ExecuteRequest) returns (stream AgentEvent);
+    
+    // Pause the agent (stop accepting new requests)
+    rpc Pause(PauseRequest) returns (PauseResponse);
+    
+    // Resume the agent
+    rpc Resume(ResumeRequest) returns (ResumeResponse);
+    
+    // Shutdown the agent gracefully
+    rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+    
+    // Get current status
+    rpc GetStatus(GetStatusRequest) returns (AgentStatus);
+    
+    // Health check
+    rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ============================================================================
+// Initialize
+// ============================================================================
+
+message InitializeRequest {
+    string instance_id = 1;
+    string tenant_id = 2;
+    string project_id = 3;
+    string agent_mode = 4;
+    AgentConfig config = 5;
+}
+
+message AgentConfig {
+    int32 max_steps = 1;
+    int32 max_concurrent_requests = 2;
+    int32 memory_limit_mb = 3;
+    int32 timeout_seconds = 4;
+    map<string, string> llm_config = 5;
+    repeated string enabled_tools = 6;
+    repeated string disabled_tools = 7;
+}
+
+message InitializeResponse {
+    bool success = 1;
+    string message = 2;
+    int32 tool_count = 3;
+    int32 skill_count = 4;
+}
+
+// ============================================================================
+// Execute (Chat Request)
+// ============================================================================
+
+message ExecuteRequest {
+    string conversation_id = 1;
+    string message = 2;
+    map<string, string> context = 3;
+    ExecuteOptions options = 4;
+}
+
+message ExecuteOptions {
+    bool stream = 1;
+    int32 timeout_seconds = 2;
+    int32 max_steps = 3;
+}
+
+// Agent event types for streaming response
+message AgentEvent {
+    string event_type = 1;
+    string event_id = 2;
+    int64 timestamp = 3;
+    oneof payload {
+        TextDelta text_delta = 10;
+        ThoughtEvent thought = 11;
+        ToolCallEvent tool_call = 12;
+        ToolResultEvent tool_result = 13;
+        WorkPlanEvent work_plan = 14;
+        StepEvent step = 15;
+        ErrorEvent error = 16;
+        CompleteEvent complete = 17;
+    }
+}
+
+message TextDelta {
+    string content = 1;
+    bool is_final = 2;
+}
+
+message ThoughtEvent {
+    string thought = 1;
+    int32 step_index = 2;
+}
+
+message ToolCallEvent {
+    string tool_name = 1;
+    string tool_call_id = 2;
+    string arguments_json = 3;
+}
+
+message ToolResultEvent {
+    string tool_call_id = 1;
+    string result_json = 2;
+    bool success = 3;
+    string error = 4;
+}
+
+message WorkPlanEvent {
+    string plan_id = 1;
+    string title = 2;
+    repeated PlanStep steps = 3;
+}
+
+message PlanStep {
+    int32 index = 1;
+    string description = 2;
+    string status = 3;
+}
+
+message StepEvent {
+    int32 step_index = 1;
+    string status = 2;  // started, completed, failed
+    string description = 3;
+}
+
+message ErrorEvent {
+    string code = 1;
+    string message = 2;
+    bool recoverable = 3;
+}
+
+message CompleteEvent {
+    string final_response = 1;
+    int32 total_steps = 2;
+    int32 total_tokens = 3;
+    double cost = 4;
+}
+
+// ============================================================================
+// Pause / Resume
+// ============================================================================
+
+message PauseRequest {
+    bool drain_requests = 1;  // Wait for in-flight requests to complete
+    int32 timeout_seconds = 2;
+}
+
+message PauseResponse {
+    bool success = 1;
+    string message = 2;
+    int32 pending_requests = 3;
+}
+
+message ResumeRequest {}
+
+message ResumeResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// ============================================================================
+// Shutdown
+// ============================================================================
+
+message ShutdownRequest {
+    bool graceful = 1;
+    int32 timeout_seconds = 2;
+}
+
+message ShutdownResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// ============================================================================
+// Status
+// ============================================================================
+
+message GetStatusRequest {}
+
+message AgentStatus {
+    string instance_id = 1;
+    string lifecycle_state = 2;  // initializing, ready, executing, paused, error, shutting_down
+    bool is_healthy = 3;
+    ResourceUsage resources = 4;
+    ExecutionMetrics metrics = 5;
+    string error_message = 6;
+    int64 uptime_seconds = 7;
+}
+
+message ResourceUsage {
+    double memory_used_mb = 1;
+    double memory_limit_mb = 2;
+    double cpu_percent = 3;
+    int32 active_requests = 4;
+    int32 queued_requests = 5;
+}
+
+message ExecutionMetrics {
+    int64 total_requests = 1;
+    int64 successful_requests = 2;
+    int64 failed_requests = 3;
+    double avg_latency_ms = 4;
+    double p99_latency_ms = 5;
+    int64 total_tokens = 6;
+    double total_cost = 7;
+}
+
+// ============================================================================
+// Health Check
+// ============================================================================
+
+message HealthCheckRequest {
+    bool include_details = 1;
+}
+
+message HealthCheckResponse {
+    string status = 1;  // healthy, degraded, unhealthy
+    repeated ComponentHealth components = 2;
+    int64 timestamp = 3;
+}
+
+message ComponentHealth {
+    string name = 1;
+    string status = 2;
+    string message = 3;
+    double latency_ms = 4;
+}

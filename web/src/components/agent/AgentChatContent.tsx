@@ -295,6 +295,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       projectId={projectId || ''}
       tenantId={tenantId}
       messageCount={timeline.length}
+      enablePoolManagement
     />
   ), [projectId, tenantId, timeline.length]);
 

@@ -505,6 +505,15 @@ check: format lint test ## Run all quality checks
 	@echo "✅ All quality checks passed"
 
 # =============================================================================
+# Code Generation
+# =============================================================================
+
+generate-event-types: ## Generate TypeScript event types from Python
+	@echo "🔄 Generating TypeScript event types..."
+	python scripts/generate_event_types.py
+	@echo "✅ TypeScript event types generated"
+
+# =============================================================================
 # Git Hooks
 # =============================================================================
 .PHONY: hooks-install hooks-uninstall

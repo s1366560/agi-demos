@@ -164,7 +164,8 @@
         "administration": "管理",
         "billing": "账单",
         "profile": "个人资料",
-        "mcpServers": "MCP 服务器"
+        "mcpServers": "MCP 服务器",
+        "pool": "智能体池"
     },
     "user": {
         "profile": "个人资料",

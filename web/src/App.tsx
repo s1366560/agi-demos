@@ -89,6 +89,9 @@ const AgentWorkspace = lazy(() =>
     }))
 );
 
+// Admin pages
+const PoolDashboard = lazy(() => import("./pages/admin/PoolDashboard"));
+
 // Project pages
 const ProjectOverview = lazy(() =>
     import("./pages/project/ProjectOverview").then((m) => ({
@@ -510,6 +513,14 @@ function App() {
                             element={
                                 <Suspense fallback={<PageLoader />}>
                                     <McpServerList />
+                                </Suspense>
+                            }
+                        />
+                        <Route
+                            path=":tenantId/pool"
+                            element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <PoolDashboard />
                                 </Suspense>
                             }
                         />

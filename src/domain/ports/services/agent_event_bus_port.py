@@ -14,49 +14,17 @@ Key Features:
 - Sequence-based consumption
 - Consumer group support
 - Automatic cleanup after completion
+
+Note: AgentEventType is imported from types.py (Single Source of Truth).
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-
-class AgentEventType(str, Enum):
-    """Type of agent event."""
-
-    # Thinking events
-    THOUGHT = "thought"
-    THOUGHT_DELTA = "thought_delta"
-
-    # Text streaming events
-    TEXT_START = "text_start"
-    TEXT_DELTA = "text_delta"
-    TEXT_END = "text_end"
-
-    # Tool execution events
-    ACT = "act"
-    OBSERVE = "observe"
-
-    # Planning events
-    WORK_PLAN = "work_plan"
-    STEP_START = "step_start"
-    STEP_END = "step_end"
-
-    # HITL events
-    CLARIFICATION_ASKED = "clarification_asked"
-    DECISION_ASKED = "decision_asked"
-    ENV_VAR_REQUESTED = "env_var_requested"
-
-    # Control events
-    COMPLETE = "complete"
-    ERROR = "error"
-    CANCELLED = "cancelled"
-
-    # Message events
-    USER_MESSAGE = "user_message"
-    ASSISTANT_MESSAGE = "assistant_message"
+# Import AgentEventType from the unified types module (Single Source of Truth)
+from src.domain.events.types import AgentEventType, is_terminal_event
 
 
 @dataclass

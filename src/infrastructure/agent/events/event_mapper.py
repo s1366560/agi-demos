@@ -1,57 +1,23 @@
 """Event Mapper for ReActAgent SSE Streaming.
 
 Handles conversion of AgentDomainEvent to SSE format for client streaming.
+
+REFACTORED: This module now uses AgentEventType from src.domain.events.types
+as the single source of truth. The legacy EventType is provided as an alias
+for backward compatibility.
 """
 
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
+# Import unified types - SINGLE SOURCE OF TRUTH
+from src.domain.events.types import AgentEventType
 
-class EventType(Enum):
-    """Types of agent events for SSE streaming."""
-    # Message events
-    USER_MESSAGE = "user_message"
-    ASSISTANT_MESSAGE = "assistant_message"
-    SYSTEM_MESSAGE = "system_message"
-
-    # Tool execution
-    TOOL_START = "tool_start"
-    TOOL_END = "tool_end"
-    TOOL_ERROR = "tool_error"
-
-    # Thought/reasoning
-    THOUGHT = "thought"
-    OBSERVATION = "observation"
-
-    # State changes
-    STATE_CHANGE = "state_change"
-    PROGRESS = "progress"
-
-    # Errors
-    ERROR = "error"
-    VALIDATION_ERROR = "validation_error"
-
-    # Lifecycle
-    STREAM_START = "stream_start"
-    STREAM_END = "stream_end"
-
-    # Planning
-    PLAN_STEP = "plan_step"
-    PLAN_COMPLETE = "plan_complete"
-
-    # Cost tracking
-    COST_UPDATE = "cost_update"
-
-    # Permission
-    PERMISSION_REQUEST = "permission_request"
-    PERMISSION_GRANTED = "permission_grANTED"
-    PERMISSION_DENIED = "permission_denied"
-
-    # Doom loop detection
-    DOOM_LOOP_DETECTED = "doom_loop_detected"
+# Legacy alias for backward compatibility
+# DEPRECATED: Use AgentEventType directly in new code
+EventType = AgentEventType
 
 
 @dataclass
@@ -59,7 +25,7 @@ class SSEEvent:
     """Server-Sent Event format for streaming."""
 
     id: str
-    event: EventType
+    event: AgentEventType  # Now uses unified type
     data: Dict[str, Any]
     retry: Optional[int] = None
 
@@ -82,9 +48,13 @@ class SSEEvent:
 
 @dataclass
 class AgentDomainEvent:
-    """Base class for domain events in the agent system."""
+    """Base class for domain events in the agent system.
 
-    event_type: EventType
+    Note: This is a lightweight event class used by EventMapper/EventBus.
+    For the full domain event classes, see src.domain.events.agent_events.
+    """
+
+    event_type: AgentEventType  # Now uses unified type
     timestamp: datetime = field(default_factory=datetime.utcnow)
     conversation_id: Optional[str] = None
     sandbox_id: Optional[str] = None
@@ -136,7 +106,7 @@ class EventMapper:
         self._include_conversation_id = include_conversation_id
         self._include_sandbox_id = include_sandbox_id
         self._event_filters: List[Callable[[AgentDomainEvent], bool]] = []
-        self._event_transformers: Dict[EventType, Callable[[AgentDomainEvent], Dict[str, Any]]] = {}
+        self._event_transformers: Dict[AgentEventType, Callable[[AgentDomainEvent], Dict[str, Any]]] = {}
 
     def register_filter(self, filter_fn: Callable[[AgentDomainEvent], bool]) -> None:
         """Register an event filter.
@@ -148,7 +118,7 @@ class EventMapper:
 
     def register_transformer(
         self,
-        event_type: EventType,
+        event_type: AgentEventType,
         transformer: Callable[[AgentDomainEvent], Dict[str, Any]],
     ) -> None:
         """Register a custom transformer for an event type.
@@ -259,14 +229,14 @@ class EventBus:
             mapper: Optional event mapper for SSE conversion
         """
         self._mapper = mapper or EventMapper()
-        self._subscribers: Dict[EventType, List[Callable]] = {}
+        self._subscribers: Dict[AgentEventType, List[Callable]] = {}
         self._global_subscribers: List[Callable] = []
         self._event_history: List[AgentDomainEvent] = []
         self._max_history = 1000
 
     def subscribe(
         self,
-        event_type: Optional[EventType] = None,
+        event_type: Optional[AgentEventType] = None,
         callback: Optional[Callable[[AgentDomainEvent], None]] = None,
     ) -> Callable[[], None]:
         """Subscribe to events.
@@ -325,7 +295,7 @@ class EventBus:
 
     def get_history(
         self,
-        event_type: Optional[EventType] = None,
+        event_type: Optional[AgentEventType] = None,
         limit: int = 100,
     ) -> List[AgentDomainEvent]:
         """Get events from history.

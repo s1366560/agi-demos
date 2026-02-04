@@ -115,6 +115,8 @@ class ReActAgent:
         plan_mode_detector: Optional["HybridPlanModeDetector"] = None,
         # Artifact service for rich output handling
         artifact_service: Optional["ArtifactService"] = None,
+        # LLM client for unified resilience (circuit breaker + rate limiter)
+        llm_client: Optional[Any] = None,
         # ====================================================================
         # Hot-plug support: Optional tool provider function for dynamic tools
         # When provided, tools are fetched at each stream() call instead of
@@ -156,6 +158,7 @@ class ReActAgent:
             agent_mode: Agent mode for skill filtering (default: "default")
             project_root: Optional project root path for custom rules loading
             artifact_service: Optional artifact service for handling rich tool outputs
+            llm_client: Optional LiteLLMClient for unified resilience (circuit breaker + rate limiter)
             tool_provider: Optional callable that returns Dict[str, Any] of tools. When provided,
                 tools are fetched dynamically at each stream() call, enabling hot-plug functionality.
                 Mutually exclusive with 'tools' parameter.
@@ -184,6 +187,7 @@ class ReActAgent:
         self.project_root = project_root or DEFAULT_SANDBOX_WORKSPACE
         self.plan_mode_detector = plan_mode_detector  # Plan Mode detection
         self.artifact_service = artifact_service  # Artifact service for rich outputs
+        self._llm_client = llm_client  # LLM client for unified resilience
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -280,7 +284,7 @@ class ReActAgent:
             self.tool_definitions = self._convert_tools(self.raw_tools)
             self._use_dynamic_tools = False
 
-        # Create processor config
+        # Create processor config with llm_client for unified resilience
         self.config = ProcessorConfig(
             model=model,
             api_key=api_key,
@@ -288,6 +292,7 @@ class ReActAgent:
             temperature=temperature,
             max_tokens=max_tokens,
             max_steps=max_steps,
+            llm_client=self._llm_client,
         )
 
     def _get_current_tools(self) -> tuple[Dict[str, Any], List[ToolDefinition]]:
@@ -845,6 +850,7 @@ class ReActAgent:
                 temperature=subagent_config.get("temperature", self.temperature),
                 max_tokens=subagent_config.get("max_tokens", self.max_tokens),
                 max_steps=subagent_config.get("max_iterations", self.max_steps),
+                llm_client=self._llm_client,  # Pass client to subagent processor
             )
 
         # Create processor with artifact service for rich output handling

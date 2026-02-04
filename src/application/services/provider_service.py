@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 from src.application.services.provider_resolution_service import get_provider_resolution_service
 from src.domain.llm_providers.models import (
+    CircuitBreakerState,
     LLMUsageLog,
     LLMUsageLogCreate,
     ModelMetadata,
@@ -23,10 +24,17 @@ from src.domain.llm_providers.models import (
     ProviderConfigResponse,
     ProviderConfigUpdate,
     ProviderHealth,
+    ProviderType,
+    RateLimitStats,
+    ResilienceStatus,
     TenantProviderMapping,
     get_default_model_metadata,
 )
 from src.domain.llm_providers.repositories import ProviderRepository
+from src.infrastructure.llm.resilience import (
+    get_circuit_breaker_registry,
+    get_provider_rate_limiter,
+)
 from src.infrastructure.persistence.llm_providers_repository import SQLAlchemyProviderRepository
 from src.infrastructure.security.encryption_service import get_encryption_service
 
@@ -101,13 +109,13 @@ class ProviderService:
 
     async def get_provider_response(self, provider_id: UUID) -> Optional[ProviderConfigResponse]:
         """
-        Get provider for API response (with masked API key and health status).
+        Get provider for API response (with masked API key, health status, and resilience info).
 
         Args:
             provider_id: Provider ID
 
         Returns:
-            Provider configuration with masked API key and health status
+            Provider configuration with masked API key, health status, and resilience status
         """
         provider = await self.repository.get_by_id(provider_id)
         if not provider:
@@ -118,6 +126,9 @@ class ProviderService:
 
         # Mask API key (show only last 4 characters)
         api_key_masked = self._mask_api_key(provider.api_key_encrypted)
+
+        # Get resilience status
+        resilience = self._get_resilience_status(provider.provider_type)
 
         return ProviderConfigResponse(
             id=provider.id,
@@ -138,6 +149,7 @@ class ProviderService:
             health_last_check=health.last_check if health else None,
             response_time_ms=health.response_time_ms if health else None,
             error_message=health.error_message if health else None,
+            resilience=resilience,
         )
 
     async def update_provider(
@@ -492,6 +504,54 @@ class ProviderService:
         except Exception as e:
             logger.error(f"Unexpected error decrypting API key for masking: {e}", exc_info=True)
             return "sk-[ERROR]"
+
+    def _get_resilience_status(self, provider_type: ProviderType) -> ResilienceStatus:
+        """
+        Get resilience status for a provider (circuit breaker + rate limiter).
+
+        Args:
+            provider_type: Provider type
+
+        Returns:
+            ResilienceStatus with circuit breaker and rate limiter info
+        """
+        try:
+            # Get circuit breaker status
+            cb_registry = get_circuit_breaker_registry()
+            circuit_breaker = cb_registry.get(provider_type)
+            cb_status = circuit_breaker.get_status()
+
+            # Map circuit breaker state
+            cb_state_map = {
+                "closed": CircuitBreakerState.CLOSED,
+                "open": CircuitBreakerState.OPEN,
+                "half_open": CircuitBreakerState.HALF_OPEN,
+            }
+            cb_state = cb_state_map.get(cb_status["state"], CircuitBreakerState.CLOSED)
+
+            # Get rate limiter stats
+            rate_limiter = get_provider_rate_limiter()
+            rate_stats = rate_limiter.get_stats(provider_type)
+            stats_data = rate_stats.get("stats", {})
+
+            rate_limit = RateLimitStats(
+                current_concurrent=stats_data.get("current_concurrent", 0),
+                max_concurrent=stats_data.get("max_concurrent", 50),
+                total_requests=stats_data.get("total_requests", 0),
+                requests_per_minute=stats_data.get("current_minute_requests", 0),
+                max_rpm=stats_data.get("max_rpm"),
+            )
+
+            return ResilienceStatus(
+                circuit_breaker_state=cb_state,
+                failure_count=cb_status.get("failure_count", 0),
+                success_count=cb_status.get("success_count", 0),
+                rate_limit=rate_limit,
+                can_execute=circuit_breaker.can_execute(),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to get resilience status for {provider_type}: {e}")
+            return ResilienceStatus()
 
 
 # Singleton instance for dependency injection

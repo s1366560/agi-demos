@@ -5,7 +5,6 @@ Implements LLMClient interface using LiteLLM library.
 Provides unified access to 100+ LLM providers.
 """
 
-import asyncio
 import logging
 from typing import Any
 
@@ -20,20 +19,11 @@ from src.domain.llm_providers.llm_types import (
     RateLimitError,
 )
 from src.domain.llm_providers.models import ProviderConfig
+from src.infrastructure.llm.resilience import (
+    get_circuit_breaker_registry,
+    get_provider_rate_limiter,
+)
 from src.infrastructure.security.encryption_service import get_encryption_service
-
-# Global semaphore for rate limiting across all client instances
-_llm_semaphore = None
-
-
-def _get_llm_semaphore() -> asyncio.Semaphore:
-    """Get or create the global LLM semaphore."""
-    global _llm_semaphore
-    if _llm_semaphore is None:
-        settings = get_settings()
-        _llm_semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
-    return _llm_semaphore
-
 
 logger = logging.getLogger(__name__)
 
@@ -195,9 +185,25 @@ class LiteLLMClient(LLMClient):
         settings = get_settings()
         completion_kwargs["num_retries"] = settings.llm_max_retries
 
-        # Acquire semaphore for concurrency control
-        async with _get_llm_semaphore():
-            response = await litellm.acompletion(**completion_kwargs)
+        # Use per-provider rate limiting and circuit breaker
+        rate_limiter = get_provider_rate_limiter()
+        circuit_breaker_registry = get_circuit_breaker_registry()
+        provider_type = self.provider_config.provider_type
+        circuit_breaker = circuit_breaker_registry.get(provider_type)
+
+        # Check circuit breaker before making request
+        if not circuit_breaker.can_execute():
+            raise RateLimitError(
+                f"Circuit breaker open for {provider_type.value}, provider is temporarily unavailable"
+            )
+
+        try:
+            async with await rate_limiter.acquire(provider_type):
+                response = await litellm.acompletion(**completion_kwargs)
+            circuit_breaker.record_success()
+        except Exception:
+            circuit_breaker.record_failure()
+            raise
 
         if not response.choices:
             raise ValueError("No choices in response")
@@ -287,15 +293,30 @@ class LiteLLMClient(LLMClient):
         settings = get_settings()
         completion_kwargs["num_retries"] = settings.llm_max_retries
 
+        # Use per-provider rate limiting and circuit breaker
+        rate_limiter = get_provider_rate_limiter()
+        circuit_breaker_registry = get_circuit_breaker_registry()
+        provider_type = self.provider_config.provider_type
+        circuit_breaker = circuit_breaker_registry.get(provider_type)
+
+        # Check circuit breaker before making request
+        if not circuit_breaker.can_execute():
+            raise RateLimitError(
+                f"Circuit breaker open for {provider_type.value}, provider is temporarily unavailable"
+            )
+
         try:
-            # Call LiteLLM with streaming and concurrency control
-            async with _get_llm_semaphore():
+            # Call LiteLLM with streaming and per-provider concurrency control
+            async with await rate_limiter.acquire(provider_type):
                 response = await litellm.acompletion(**completion_kwargs)
 
                 async for chunk in response:
                     yield chunk
 
+            circuit_breaker.record_success()
+
         except Exception as e:
+            circuit_breaker.record_failure()
             error_message = str(e).lower()
             # Check for rate limit errors
             if any(
@@ -410,10 +431,24 @@ class LiteLLMClient(LLMClient):
         settings = get_settings()
         kwargs["num_retries"] = settings.llm_max_retries
 
+        # Use per-provider rate limiting and circuit breaker
+        rate_limiter = get_provider_rate_limiter()
+        circuit_breaker_registry = get_circuit_breaker_registry()
+        provider_type = self.provider_config.provider_type
+        circuit_breaker = circuit_breaker_registry.get(provider_type)
+
+        # Check circuit breaker before making request
+        if not circuit_breaker.can_execute():
+            raise RateLimitError(
+                f"Circuit breaker open for {provider_type.value}, provider is temporarily unavailable"
+            )
+
         try:
-            # Call LiteLLM with concurrency control
-            async with _get_llm_semaphore():
+            # Call LiteLLM with per-provider concurrency control
+            async with await rate_limiter.acquire(provider_type):
                 response = await litellm.acompletion(**kwargs)
+
+            circuit_breaker.record_success()
 
             # Extract content
             if not response.choices:
@@ -451,6 +486,7 @@ class LiteLLMClient(LLMClient):
             return {"content": content}
 
         except Exception as e:
+            circuit_breaker.record_failure()
             error_message = str(e).lower()
             # Check for rate limit errors
             if any(
@@ -518,8 +554,8 @@ class LiteLLMClient(LLMClient):
         elif provider_type == "deepseek":
             return f"deepseek/{model}"
         elif provider_type == "zai":
-            # ZhipuAI requires explicit provider prefix for LiteLLM
-            return f"zhipu/{model}"
+            # ZhipuAI uses 'zai/' prefix in LiteLLM (not 'zhipu/')
+            return f"zai/{model}"
         elif provider_type == "kimi":
             # Moonshot AI (Kimi) uses OpenAI-compatible API
             return f"openai/{model}"

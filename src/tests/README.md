@@ -103,8 +103,13 @@ src/tests/
 │   │   └── test_incremental_refresh_handler.py
 │   │
 │   └── llm/                   # LLM client tests
-│       ├── test_qwen_clients.py
-│       └── test_gemini_clients.py
+│       ├── litellm/           # LiteLLM unified client tests
+│       │   ├── test_litellm_client.py
+│       │   ├── test_litellm_embedder.py
+│       │   ├── test_litellm_reranker.py
+│       │   └── test_unified_llm_client.py
+│       ├── test_enhanced_features.py
+│       └── test_resilience.py
 │
 ├── integration/               # Integration tests (real deps)
 │   ├── api/                   # API endpoint integration

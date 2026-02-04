@@ -641,6 +641,8 @@ class AgentExecutionEvent(Base):
         Index("ix_agent_events_conv_seq", "conversation_id", "sequence_number"),
         # Index for message-scoped replay
         Index("ix_agent_events_msg_seq", "message_id", "sequence_number"),
+        # Index for correlation_id queries
+        Index("ix_agent_events_corr_id", "correlation_id"),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -652,6 +654,8 @@ class AgentExecutionEvent(Base):
     event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     event_data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # correlation_id links all events from a single user request
+    correlation_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     conversation: Mapped["Conversation"] = relationship(foreign_keys=[conversation_id])

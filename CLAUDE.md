@@ -139,7 +139,10 @@ src/
 │   │   ├── primary/    # 驱动适配器 (web API)
 │   │   └── secondary/  # 被驱动适配器 (数据库, 外部 API)
 │   ├── agent/          # ReAct Agent 系统
-│   ├── llm/            # LLM 客户端 (LiteLLM)
+│   ├── llm/            # LLM 统一客户端 (LiteLLM only)
+│   │   ├── litellm/   # LiteLLM adapter (client, embedder, reranker)
+│   │   ├── resilience/ # 熔断器、限流器、健康检查
+│   │   └── cache.py   # 响应缓存
 │   ├── graph/          # 知识图谱引擎
 │   └── security/       # 认证授权
 │
@@ -153,7 +156,7 @@ src/
 **后端**: Python 3.12+, FastAPI 0.110+, Pydantic 2.5+, SQLAlchemy 2.0+
 **数据库**: Neo4j 5.26+ (知识图谱), PostgreSQL 16+ (元数据), Redis 7+ (缓存)
 **工作流**: Temporal.io (企业级工作流编排)
-**LLM**: LiteLLM (多提供商: Gemini, Qwen, Deepseek, ZhipuAI, OpenAI)
+**LLM**: LiteLLM 统一接口 (支持 Gemini, Qwen, Deepseek, ZhipuAI, OpenAI, Anthropic, Cohere, Mistral 等)
 
 **前端**: React 19.2+, TypeScript 5.9+, Vite 7.3+, Ant Design 6.1+, Zustand 5.0+
 **测试**: pytest 9.0+, Vitest 4.0+, Playwright 1.57+ (目标 80%+ 覆盖率)
@@ -286,11 +289,23 @@ PYTHONPATH=. uv run alembic revision --autogenerate -m "描述"  # 生成迁移
 | **PostgreSQL** | `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | 元数据数据库 |
 | **Redis** | `REDIS_HOST`, `REDIS_PORT` | 缓存 |
 | **Temporal** | `TEMPORAL_HOST`, `TEMPORAL_PORT`, `TEMPORAL_NAMESPACE` | 工作流编排 |
-| **LLM** | `LLM_PROVIDER` | 提供商: `gemini`, `qwen`, `openai`, `deepseek`, `zhipu` |
-| **LLM Keys** | `GEMINI_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY`, etc. | LLM API 密钥 |
+| **LLM** | `LLM_PROVIDER` | 提供商: `gemini`, `qwen`, `openai`, `deepseek`, `zai` |
+| **LLM Keys** | `GEMINI_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY`, `ZAI_API_KEY`, etc. | LLM API 密钥 |
 | **Sandbox** | `SANDBOX_DEFAULT_PROVIDER`, `SANDBOX_TIMEOUT_SECONDS` | 代码执行环境 |
 | **MCP** | `MCP_ENABLED`, `MCP_DEFAULT_TIMEOUT` | Model Context Protocol |
 | **前端** | `VITE_API_URL` | 前端连接的 API 地址 |
+
+### LiteLLM Provider 前缀映射
+
+| Provider | 环境变量 | LiteLLM 模型前缀 |
+|----------|---------|-----------------|
+| OpenAI | `OPENAI_API_KEY` | 无前缀或 `openai/` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/` |
+| Gemini | `GEMINI_API_KEY` | `gemini/` |
+| Qwen/Dashscope | `DASHSCOPE_API_KEY` | `dashscope/` |
+| Deepseek | `DEEPSEEK_API_KEY` | `deepseek/` |
+| **ZhipuAI** | `ZAI_API_KEY` | `zai/` |
+| Cohere | `COHERE_API_KEY` | `cohere/` |
 
 ## 测试模式
 
@@ -325,6 +340,8 @@ uv run pytest src/tests/ -m "integration" -v
 
 ## 最近更新
 
+- **2026-02-03**: LLM Provider 统一架构 (移除原生客户端, 全面使用 LiteLLM)
+- **2026-02-03**: Provider 管理 UI 重构 (卡片布局 + 健康监控仪表板)
 - **2026-01-29**: Sandbox 桌面环境集成 (XFCE + VNC + noVNC)
 - **2026-01-28**: 前端重构完成 (React 19.2+ 最佳实践)
 - **2026-01-17**: Temporal.io 企业级任务调度

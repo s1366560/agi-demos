@@ -94,9 +94,9 @@ class SendMessageHandler(WebSocketMessageHandler):
             await context.connection_manager.subscribe(context.session_id, conversation_id)
 
             # Create LLM and agent service
-            from src.configuration.factories import create_langchain_llm
+            from src.configuration.factories import create_llm_client
 
-            llm = create_langchain_llm(context.tenant_id)
+            llm = create_llm_client(context.tenant_id)
             agent_service = container.agent_service(llm)
 
             # Send acknowledgment

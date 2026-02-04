@@ -153,6 +153,7 @@ class InvocationConfig:
     temperature: float = 0.7
     max_tokens: int = 4096
     max_attempts: int = 3
+    llm_client: Optional[Any] = None  # Optional LiteLLMClient for unified resilience
 
 
 @dataclass
@@ -273,8 +274,8 @@ class LLMInvoker:
             tools=tools_for_llm,
         )
 
-        # Create LLM stream
-        llm_stream = LLMStream(stream_config)
+        # Create LLM stream with optional client for unified resilience
+        llm_stream = LLMStream(stream_config, llm_client=config.llm_client)
 
         # Track state for this step
         result = InvocationResult()

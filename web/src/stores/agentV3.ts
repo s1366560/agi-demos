@@ -49,28 +49,128 @@ import { logger } from "../utils/logger";
 const TOKEN_BATCH_INTERVAL_MS = 50; // Batch tokens every 50ms for smooth streaming
 const THOUGHT_BATCH_INTERVAL_MS = 50; // Same for thought deltas
 
-// Token batching state (outside store to avoid triggering renders)
-let textDeltaBuffer = '';
-let textDeltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
-let thoughtDeltaBuffer = '';
-let thoughtDeltaFlushTimer: ReturnType<typeof setTimeout> | null = null;
+/**
+ * Per-conversation delta buffer state
+ * Using Map to isolate buffers per conversation, preventing cross-conversation contamination
+ */
+interface DeltaBufferState {
+    textDeltaBuffer: string;
+    textDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
+    thoughtDeltaBuffer: string;
+    thoughtDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const deltaBuffers = new Map<string, DeltaBufferState>();
 
 /**
- * Clear all delta buffers and timers
+ * Get or create delta buffer state for a conversation
+ */
+function getDeltaBuffer(conversationId: string): DeltaBufferState {
+    let buffer = deltaBuffers.get(conversationId);
+    if (!buffer) {
+        buffer = {
+            textDeltaBuffer: '',
+            textDeltaFlushTimer: null,
+            thoughtDeltaBuffer: '',
+            thoughtDeltaFlushTimer: null,
+        };
+        deltaBuffers.set(conversationId, buffer);
+    }
+    return buffer;
+}
+
+/**
+ * Clear delta buffers for a specific conversation
  * IMPORTANT: Call this before starting any new streaming session to prevent
  * stale buffer content from being flushed into the new session
  */
+function clearDeltaBuffers(conversationId: string): void {
+    const buffer = deltaBuffers.get(conversationId);
+    if (buffer) {
+        if (buffer.textDeltaFlushTimer) {
+            clearTimeout(buffer.textDeltaFlushTimer);
+            buffer.textDeltaFlushTimer = null;
+        }
+        if (buffer.thoughtDeltaFlushTimer) {
+            clearTimeout(buffer.thoughtDeltaFlushTimer);
+            buffer.thoughtDeltaFlushTimer = null;
+        }
+        buffer.textDeltaBuffer = '';
+        buffer.thoughtDeltaBuffer = '';
+    }
+}
+
+/**
+ * Clear all delta buffers across all conversations
+ * Used when switching conversations or on cleanup
+ */
 function clearAllDeltaBuffers(): void {
-    if (textDeltaFlushTimer) {
-        clearTimeout(textDeltaFlushTimer);
-        textDeltaFlushTimer = null;
+    deltaBuffers.forEach((buffer, conversationId) => {
+        clearDeltaBuffers(conversationId);
+    });
+    deltaBuffers.clear();
+}
+
+/**
+ * Pending save state for beforeunload flush
+ */
+const pendingSaves = new Map<string, NodeJS.Timeout>();
+const SAVE_DEBOUNCE_MS = 500;
+
+/**
+ * Schedule a debounced save for a conversation
+ */
+function scheduleSave(conversationId: string, state: ConversationState): void {
+    // Clear existing timer
+    const existingTimer = pendingSaves.get(conversationId);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
     }
-    if (thoughtDeltaFlushTimer) {
-        clearTimeout(thoughtDeltaFlushTimer);
-        thoughtDeltaFlushTimer = null;
-    }
-    textDeltaBuffer = '';
-    thoughtDeltaBuffer = '';
+    
+    // Schedule new save
+    const timer = setTimeout(() => {
+        saveConversationState(conversationId, state).catch(console.error);
+        pendingSaves.delete(conversationId);
+    }, SAVE_DEBOUNCE_MS);
+    
+    pendingSaves.set(conversationId, timer);
+}
+
+/**
+ * Flush all pending saves immediately (for beforeunload)
+ */
+async function flushPendingSaves(): Promise<void> {
+    // Clear all timers
+    pendingSaves.forEach((timer) => clearTimeout(timer));
+    pendingSaves.clear();
+    
+    // Get current store state and save all conversation states
+    const state = useAgentV3Store.getState();
+    const savePromises: Promise<void>[] = [];
+    
+    state.conversationStates.forEach((convState, conversationId) => {
+        savePromises.push(
+            saveConversationState(conversationId, convState).catch(console.error)
+        );
+    });
+    
+    await Promise.all(savePromises);
+}
+
+// Register beforeunload handler for reliable persistence
+if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+        // Use synchronous approach for beforeunload
+        // Note: IndexedDB operations may not complete, but we try our best
+        flushPendingSaves();
+    });
+    
+    // Also handle visibilitychange for mobile browsers
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            flushPendingSaves();
+        }
+    });
 }
 
 /**
@@ -336,10 +436,10 @@ export const useAgentV3Store = create<AgentV3State>()(
                         return { conversationStates: newStates };
                     });
 
-                    // Persist to IndexedDB (debounced)
+                    // Persist to IndexedDB (debounced with beforeunload flush support)
                     const fullState = get().conversationStates.get(conversationId);
                     if (fullState) {
-                        saveConversationState(conversationId, fullState).catch(console.error);
+                        scheduleSave(conversationId, fullState);
                     }
                 },
 
@@ -539,6 +639,21 @@ export const useAgentV3Store = create<AgentV3State>()(
                 deleteConversation: async (conversationId, projectId) => {
                     try {
                         await agentService.deleteConversation(conversationId, projectId);
+                        
+                        // Unsubscribe handler to prevent memory leaks
+                        agentService.unsubscribe(conversationId);
+                        
+                        // Clear delta buffers for this conversation
+                        clearDeltaBuffers(conversationId);
+                        deltaBuffers.delete(conversationId);
+                        
+                        // Cancel any pending save for this conversation
+                        const pendingTimer = pendingSaves.get(conversationId);
+                        if (pendingTimer) {
+                            clearTimeout(pendingTimer);
+                            pendingSaves.delete(conversationId);
+                        }
+                        
                         // Remove from local state and conversation states map
                         set((state) => {
                             const newStates = new Map(state.conversationStates);
@@ -1043,15 +1158,18 @@ export const useAgentV3Store = create<AgentV3State>()(
                             const delta = event.data.delta;
                             if (!delta) return;
 
+                            // Get per-conversation buffer
+                            const buffer = getDeltaBuffer(handlerConversationId);
+                            
                             // Accumulate deltas in buffer
-                            thoughtDeltaBuffer += delta;
+                            buffer.thoughtDeltaBuffer += delta;
 
                             // Flush buffer on timer to batch rapid updates
-                            if (!thoughtDeltaFlushTimer) {
-                                thoughtDeltaFlushTimer = setTimeout(() => {
-                                    const bufferedContent = thoughtDeltaBuffer;
-                                    thoughtDeltaBuffer = '';
-                                    thoughtDeltaFlushTimer = null;
+                            if (!buffer.thoughtDeltaFlushTimer) {
+                                buffer.thoughtDeltaFlushTimer = setTimeout(() => {
+                                    const bufferedContent = buffer.thoughtDeltaBuffer;
+                                    buffer.thoughtDeltaBuffer = '';
+                                    buffer.thoughtDeltaFlushTimer = null;
 
                                     if (bufferedContent) {
                                         const { activeConversationId, updateConversationState, getConversationState } = get();
@@ -1372,15 +1490,18 @@ export const useAgentV3Store = create<AgentV3State>()(
                             const delta = event.data.delta;
                             if (!delta) return;
 
+                            // Get per-conversation buffer
+                            const buffer = getDeltaBuffer(handlerConversationId);
+
                             // Accumulate deltas in buffer
-                            textDeltaBuffer += delta;
+                            buffer.textDeltaBuffer += delta;
 
                             // Flush buffer on timer to batch rapid updates
-                            if (!textDeltaFlushTimer) {
-                                textDeltaFlushTimer = setTimeout(() => {
-                                    const bufferedContent = textDeltaBuffer;
-                                    textDeltaBuffer = '';
-                                    textDeltaFlushTimer = null;
+                            if (!buffer.textDeltaFlushTimer) {
+                                buffer.textDeltaFlushTimer = setTimeout(() => {
+                                    const bufferedContent = buffer.textDeltaBuffer;
+                                    buffer.textDeltaBuffer = '';
+                                    buffer.textDeltaFlushTimer = null;
 
                                     if (bufferedContent) {
                                         const { activeConversationId, updateConversationState, getConversationState } = get();
@@ -1406,13 +1527,14 @@ export const useAgentV3Store = create<AgentV3State>()(
                         onTextEnd: (event) => {
                             const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                            // Flush any remaining buffered content before applying final text
-                            if (textDeltaFlushTimer) {
-                                clearTimeout(textDeltaFlushTimer);
-                                textDeltaFlushTimer = null;
+                            // Get per-conversation buffer and flush any remaining buffered content
+                            const buffer = getDeltaBuffer(handlerConversationId);
+                            if (buffer.textDeltaFlushTimer) {
+                                clearTimeout(buffer.textDeltaFlushTimer);
+                                buffer.textDeltaFlushTimer = null;
                             }
-                            const remainingBuffer = textDeltaBuffer;
-                            textDeltaBuffer = '';
+                            const remainingBuffer = buffer.textDeltaBuffer;
+                            buffer.textDeltaBuffer = '';
 
                             const convState = getConversationState(handlerConversationId);
                             const fullText = event.data.full_text;
@@ -1623,25 +1745,24 @@ export const useAgentV3Store = create<AgentV3State>()(
                             tabSync.broadcastStreamingStateChanged(handlerConversationId, false, 'idle');
                         },
                         onError: (event) => {
-                            const { activeConversationId, updateConversationState } = get();
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
 
-                            // Clear all delta buffers on error
-                            if (textDeltaFlushTimer) {
-                                clearTimeout(textDeltaFlushTimer);
-                                textDeltaFlushTimer = null;
-                            }
-                            if (thoughtDeltaFlushTimer) {
-                                clearTimeout(thoughtDeltaFlushTimer);
-                                thoughtDeltaFlushTimer = null;
-                            }
-                            textDeltaBuffer = '';
-                            thoughtDeltaBuffer = '';
+                            // Clear delta buffers for this conversation on error
+                            clearDeltaBuffers(handlerConversationId);
 
-                            // Always update per-conversation state
+                            // Get current state for cleanup
+                            const convState = getConversationState(handlerConversationId);
+
+                            // Always update per-conversation state with full cleanup
                             updateConversationState(handlerConversationId, {
                                 error: event.data.message,
                                 isStreaming: false,
                                 streamStatus: "error",
+                                // Clear pending tools and streaming state
+                                pendingToolsStack: [],
+                                streamingAssistantContent: convState.streamingAssistantContent || '',
+                                streamingThought: '',
+                                isThinkingStreaming: false,
                             });
 
                             // Only update global state if this is the active conversation
@@ -1650,23 +1771,17 @@ export const useAgentV3Store = create<AgentV3State>()(
                                     error: event.data.message,
                                     isStreaming: false,
                                     streamStatus: "error",
+                                    pendingToolsStack: [],
+                                    streamingThought: '',
+                                    isThinkingStreaming: false,
                                 });
                             }
                         },
                         onClose: () => {
                             const { activeConversationId, updateConversationState } = get();
 
-                            // Clear all delta buffers on close
-                            if (textDeltaFlushTimer) {
-                                clearTimeout(textDeltaFlushTimer);
-                                textDeltaFlushTimer = null;
-                            }
-                            if (thoughtDeltaFlushTimer) {
-                                clearTimeout(thoughtDeltaFlushTimer);
-                                thoughtDeltaFlushTimer = null;
-                            }
-                            textDeltaBuffer = '';
-                            thoughtDeltaBuffer = '';
+                            // Clear delta buffers for this conversation on close
+                            clearDeltaBuffers(handlerConversationId);
 
                             // Always update per-conversation state
                             updateConversationState(handlerConversationId, {

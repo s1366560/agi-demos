@@ -211,6 +211,20 @@ class DIContainer:
         """Get the Redis client for cache operations."""
         return self._redis_client
 
+    def sequence_service(self):
+        """Get RedisSequenceService for atomic sequence number generation.
+
+        Returns the Redis-based atomic sequence service used for
+        generating event sequence numbers without race conditions.
+        """
+        if not self._redis_client:
+            return None
+        from src.infrastructure.adapters.secondary.messaging.redis_sequence_service import (
+            RedisSequenceService,
+        )
+
+        return RedisSequenceService(self._redis_client)
+
     def hitl_message_bus(self) -> Optional[HITLMessageBusPort]:
         """Get the HITL message bus for cross-process communication.
 
@@ -625,6 +639,7 @@ class DIContainer:
             storage_service=self.storage_service(),
             mcp_temporal_adapter=self.get_mcp_temporal_adapter_sync(),
             db_session=self._db,
+            sequence_service=self.sequence_service(),
         )
 
     # === Agent Orchestrators (Hexagonal Architecture Adapters) ===

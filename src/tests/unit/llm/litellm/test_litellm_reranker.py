@@ -154,9 +154,14 @@ class TestLiteLLMReranker:
 
             ranked = await reranker.rank(query, passages)
 
-            # Should pad with neutral scores
+            # Should pad with neutral scores and return all 4 passages
             assert len(ranked) == 4
-            assert ranked[-1][1] == 0.5  # Padding score
+            # Check that all 4 original passages are present
+            passages_returned = [p for p, _ in ranked]
+            assert set(passages_returned) == set(passages)
+            # Check that we have the expected scores (including 0.5 padding)
+            scores = [s for _, s in ranked]
+            assert 0.5 in scores  # Padding score should be present
 
     @pytest.mark.asyncio
     async def test_rank_handles_api_error(self, reranker):

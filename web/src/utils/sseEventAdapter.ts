@@ -9,11 +9,16 @@
  * - SSE streaming events → TimelineEvent
  * - Historical API → TimelineEvent (already correct)
  *
+ * Supports both legacy format and new EventEnvelope format:
+ * - Legacy: { type: string, data: T }
+ * - Envelope: { schema_version, event_id, event_type, payload, ... }
+ *
  * @module utils/sseEventAdapter
  */
 
 import type {
     AgentEvent,
+    AgentEventType,
     TimelineEvent,
     MessageEventData,
     ThoughtEventData,
@@ -45,6 +50,8 @@ import type {
     ArtifactCreatedEventData,
     ArtifactCategory,
 } from '../types/agent';
+import type { EventEnvelope } from '../types/generated/eventEnvelope';
+import { isEventEnvelope } from '../types/generated/eventEnvelope';
 
 /**
  * Sequence number counter for timeline events
@@ -675,4 +682,185 @@ export function isSupportedEventType(eventType: string): boolean {
     ];
 
     return supportedTypes.includes(eventType);
+}
+
+// =============================================================================
+// EventEnvelope Support
+// =============================================================================
+
+/**
+ * Correlation tracking metadata for timeline events
+ */
+export interface CorrelationMetadata {
+    /** Event envelope ID (if from envelope) */
+    envelopeId?: string;
+    /** Correlation ID for tracing related events */
+    correlationId?: string;
+    /** Causation ID (parent event that caused this) */
+    causationId?: string;
+    /** Schema version of the source event */
+    schemaVersion?: string;
+}
+
+/**
+ * Extended TimelineEvent with correlation tracking
+ */
+export type TimelineEventWithCorrelation = TimelineEvent & CorrelationMetadata;
+
+/**
+ * Convert an EventEnvelope to a TimelineEvent
+ * 
+ * This function unwraps the envelope and converts the payload to a TimelineEvent,
+ * preserving correlation information.
+ *
+ * @param envelope - The EventEnvelope to convert
+ * @param sequenceNumber - The sequence number for this event
+ * @returns A TimelineEvent with correlation info, or null if unsupported
+ */
+export function envelopeToTimeline(
+    envelope: EventEnvelope<unknown>,
+    sequenceNumber: number
+): TimelineEventWithCorrelation | null {
+    // Convert envelope to legacy AgentEvent format for processing
+    const legacyEvent: AgentEvent<unknown> = {
+        type: envelope.event_type as AgentEventType,
+        data: envelope.payload,
+    };
+
+    // Use existing conversion logic
+    const baseEvent = sseEventToTimeline(legacyEvent, sequenceNumber);
+    
+    if (!baseEvent) {
+        return null;
+    }
+
+    // Enhance with correlation information
+    return {
+        ...baseEvent,
+        envelopeId: envelope.event_id,
+        correlationId: envelope.correlation_id,
+        causationId: envelope.causation_id,
+        schemaVersion: envelope.schema_version,
+    };
+}
+
+/**
+ * Parse raw SSE data and convert to TimelineEvent
+ * 
+ * Automatically detects and handles both formats:
+ * - New EventEnvelope format (with schema_version, event_id, etc.)
+ * - Legacy AgentEvent format (with type and data)
+ *
+ * @param rawData - Raw JSON data (string or parsed object)
+ * @param sequenceNumber - The sequence number for this event
+ * @returns TimelineEvent with optional correlation info, or null if unsupported
+ */
+export function parseAndConvertEvent(
+    rawData: unknown,
+    sequenceNumber: number
+): TimelineEventWithCorrelation | null {
+    // Handle string input
+    let data: unknown;
+    if (typeof rawData === 'string') {
+        try {
+            data = JSON.parse(rawData);
+        } catch {
+            console.warn('Failed to parse event data:', rawData);
+            return null;
+        }
+    } else {
+        data = rawData;
+    }
+
+    // Check if it's an envelope format
+    if (isEventEnvelope(data)) {
+        return envelopeToTimeline(data as EventEnvelope<unknown>, sequenceNumber);
+    }
+
+    // Check if it's legacy format
+    const legacy = data as { type?: string; data?: unknown };
+    if (typeof legacy.type === 'string' && legacy.data !== undefined) {
+        const event: AgentEvent<unknown> = {
+            type: legacy.type as AgentEventType,
+            data: legacy.data,
+        };
+        const baseEvent = sseEventToTimeline(event, sequenceNumber);
+        return baseEvent as TimelineEventWithCorrelation;
+    }
+
+    console.warn('Unknown event format:', data);
+    return null;
+}
+
+/**
+ * Convert a batch of mixed events (envelopes or legacy) to TimelineEvents
+ *
+ * @param events - Array of raw events (can be mixed formats)
+ * @returns Array of TimelineEvents with correlation info
+ */
+export function batchConvertMixedEvents(
+    events: unknown[]
+): TimelineEventWithCorrelation[] {
+    resetSequenceCounter();
+    
+    const timelineEvents: TimelineEventWithCorrelation[] = [];
+
+    for (const event of events) {
+        const sequenceNumber = getNextSequenceNumber();
+        const timelineEvent = parseAndConvertEvent(event, sequenceNumber);
+
+        if (timelineEvent) {
+            timelineEvents.push(timelineEvent);
+        }
+    }
+
+    return timelineEvents;
+}
+
+/**
+ * Group timeline events by correlation ID
+ * 
+ * Useful for visualizing event chains and debugging.
+ *
+ * @param events - Array of timeline events with correlation info
+ * @returns Map of correlation ID → array of related events
+ */
+export function groupByCorrelation(
+    events: TimelineEventWithCorrelation[]
+): Map<string, TimelineEventWithCorrelation[]> {
+    const groups = new Map<string, TimelineEventWithCorrelation[]>();
+
+    for (const event of events) {
+        const key = event.correlationId || 'uncorrelated';
+        const existing = groups.get(key) || [];
+        existing.push(event);
+        groups.set(key, existing);
+    }
+
+    return groups;
+}
+
+/**
+ * Build a causation tree from events
+ * 
+ * Returns a map of event ID → child events, useful for tracing
+ * the chain of events.
+ *
+ * @param events - Array of timeline events with correlation info
+ * @returns Map of parent event ID → child events
+ */
+export function buildCausationTree(
+    events: TimelineEventWithCorrelation[]
+): Map<string, TimelineEventWithCorrelation[]> {
+    const tree = new Map<string, TimelineEventWithCorrelation[]>();
+
+    for (const event of events) {
+        if (event.causationId) {
+            const existing = tree.get(event.causationId) || [];
+            existing.push(event);
+            tree.set(event.causationId, existing);
+        }
+    }
+
+    return tree;
 }

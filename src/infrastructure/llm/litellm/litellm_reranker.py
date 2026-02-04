@@ -1,28 +1,65 @@
 """
 LiteLLM Reranker Adapter for Knowledge Graph System
 
-Implements CrossEncoderClient interface using LiteLLM library.
-Provides LLM-based reranking for improved relevance scoring.
+Implements BaseReranker interface using LiteLLM library.
+Provides unified reranking across providers:
+- Cohere: Uses native rerank API (best quality)
+- Others: Uses LLM-based relevance scoring
+
+Usage:
+    provider_config = ProviderConfig(...)
+    reranker = LiteLLMReranker(config=provider_config)
+    ranked_passages = await reranker.rank(query, passages)
 """
 
+import asyncio
 import json
 import logging
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
-from src.domain.llm_providers.llm_types import CrossEncoderClient
-from src.domain.llm_providers.models import ProviderConfig
+from src.domain.llm_providers.base import BaseReranker
+from src.domain.llm_providers.llm_types import RateLimitError
+from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
 
 
-class LiteLLMReranker(CrossEncoderClient):
-    """
-    LiteLLM-based implementation of CrossEncoderClient.
+# Providers with native rerank API
+NATIVE_RERANK_PROVIDERS = {
+    ProviderType.COHERE,
+}
 
-    Uses LLM-based reranking to score passages by relevance to a query.
-    This approach is more flexible than traditional cross-encoder models
-    and works with any LLM provider supported by LiteLLM.
+# Default rerank models by provider
+DEFAULT_RERANK_MODELS = {
+    ProviderType.COHERE: "rerank-english-v3.0",
+    ProviderType.OPENAI: "gpt-4o-mini",
+    ProviderType.ANTHROPIC: "claude-3-5-haiku-20241022",
+    ProviderType.GEMINI: "gemini-1.5-flash",
+    ProviderType.QWEN: "qwen-turbo",
+    ProviderType.DEEPSEEK: "deepseek-chat",
+    ProviderType.ZAI: "glm-4-flash",
+    ProviderType.MISTRAL: "mistral-small-latest",
+}
+
+
+@dataclass
+class LiteLLMRerankerConfig:
+    """Configuration for LiteLLM Reranker."""
+
+    model: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    provider_type: Optional[ProviderType] = None
+
+
+class LiteLLMReranker(BaseReranker):
+    """
+    LiteLLM-based implementation of BaseReranker.
+
+    For Cohere, uses the native rerank API for best quality.
+    For other providers, uses LLM-based relevance scoring.
 
     Usage:
         provider_config = ProviderConfig(...)
@@ -30,71 +67,177 @@ class LiteLLMReranker(CrossEncoderClient):
         ranked_passages = await reranker.rank(query, passages)
     """
 
-    def __init__(self, config: ProviderConfig):
+    def __init__(
+        self,
+        config: ProviderConfig | LiteLLMRerankerConfig,
+    ):
         """
         Initialize LiteLLM reranker.
 
         Args:
-            config: Provider configuration with reranker_model specified
+            config: Provider configuration or reranker config
         """
-        self.config = config
-        self.encryption_service = get_encryption_service()
+        if isinstance(config, LiteLLMRerankerConfig):
+            self._model = config.model
+            self._api_key = config.api_key
+            self._base_url = config.base_url
+            self._provider_type = config.provider_type
+        else:
+            self._provider_config = config
+            self._provider_type = config.provider_type
+            self._model = config.reranker_model or self._get_default_model(config.provider_type)
+            self._base_url = config.base_url
 
-        # Configure LiteLLM for reranking
+            # Decrypt API key
+            encryption_service = get_encryption_service()
+            self._api_key = encryption_service.decrypt(config.api_key_encrypted)
+
+        self._use_native_rerank = self._provider_type in NATIVE_RERANK_PROVIDERS
+
+        # Configure LiteLLM
         self._configure_litellm()
 
-        # Validate reranker model is configured
-        if not config.reranker_model:
-            logger.warning("No reranker_model configured, will use llm_model as fallback")
-            self.reranker_model = config.llm_model
-        else:
-            self.reranker_model = config.reranker_model
+    def _get_default_model(self, provider_type: ProviderType) -> str:
+        """Get default rerank model for provider."""
+        return DEFAULT_RERANK_MODELS.get(provider_type, "gpt-4o-mini")
 
     def _configure_litellm(self):
         """Configure LiteLLM with provider credentials."""
         import os
 
-        # Decrypt API key
-        api_key = self.encryption_service.decrypt(self.config.api_key_encrypted)
+        if not self._api_key:
+            logger.warning("No API key provided for reranker")
+            return
+
+        provider_type = self._provider_type.value if self._provider_type else "openai"
 
         # Set environment variable for this provider type
-        provider_type = self.config.provider_type.value
         if provider_type == "openai":
-            os.environ["OPENAI_API_KEY"] = api_key
-            if self.config.base_url:
-                os.environ["OPENAI_API_BASE"] = self.config.base_url
+            os.environ["OPENAI_API_KEY"] = self._api_key
+            if self._base_url:
+                os.environ["OPENAI_API_BASE"] = self._base_url
+        elif provider_type == "cohere":
+            os.environ["COHERE_API_KEY"] = self._api_key
         elif provider_type == "qwen":
-            os.environ["DASHSCOPE_API_KEY"] = api_key
-            if self.config.base_url:
-                os.environ["OPENAI_BASE_URL"] = self.config.base_url
+            os.environ["DASHSCOPE_API_KEY"] = self._api_key
+            if self._base_url:
+                os.environ["OPENAI_BASE_URL"] = self._base_url
         elif provider_type == "gemini":
-            os.environ["GOOGLE_API_KEY"] = api_key
+            os.environ["GOOGLE_API_KEY"] = self._api_key
         elif provider_type == "zai":
-            os.environ["ZAI_API_KEY"] = api_key
-            if self.config.base_url:
-                os.environ["ZAI_API_BASE"] = self.config.base_url
+            os.environ["ZAI_API_KEY"] = self._api_key
+            if self._base_url:
+                os.environ["ZAI_API_BASE"] = self._base_url
         elif provider_type == "deepseek":
-            os.environ["DEEPSEEK_API_KEY"] = api_key
-            if self.config.base_url:
-                os.environ["DEEPSEEK_API_BASE"] = self.config.base_url
-        # Add more providers as needed
+            os.environ["DEEPSEEK_API_KEY"] = self._api_key
+            if self._base_url:
+                os.environ["DEEPSEEK_API_BASE"] = self._base_url
+        elif provider_type == "anthropic":
+            os.environ["ANTHROPIC_API_KEY"] = self._api_key
+        elif provider_type == "mistral":
+            os.environ["MISTRAL_API_KEY"] = self._api_key
 
         logger.debug(f"Configured LiteLLM reranker for provider: {provider_type}")
 
-    async def rank(self, query: str, passages: List[str]) -> List[Tuple[str, float]]:
+    async def rank(
+        self,
+        query: str,
+        passages: List[str],
+        top_n: Optional[int] = None,
+    ) -> List[Tuple[str, float]]:
         """
-        Rank passages by relevance to query using LLM.
-
-        This method uses an LLM to score each passage's relevance to the query.
-        The scoring is done by asking the LLM to provide a relevance score
-        from 0 to 1 for each passage.
+        Rank passages by relevance to query.
 
         Args:
-            query: The search query
+            query: Search query
             passages: List of passages to rank
+            top_n: Optional limit on number of results
 
         Returns:
             List of (passage, score) tuples sorted by relevance (descending)
+        """
+        if not passages:
+            return []
+
+        if len(passages) == 1:
+            return [(passages[0], 1.0)]
+
+        if top_n is None:
+            top_n = len(passages)
+
+        try:
+            if self._use_native_rerank:
+                return await self._cohere_rerank(query, passages, top_n)
+            else:
+                return await self._llm_rerank(query, passages, top_n)
+        except RateLimitError:
+            raise
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}")
+            # Fallback to original order with neutral scores
+            return [(p, 0.5) for p in passages[:top_n]]
+
+    async def _cohere_rerank(
+        self,
+        query: str,
+        passages: List[str],
+        top_n: int,
+    ) -> List[Tuple[str, float]]:
+        """
+        Rerank using Cohere's native rerank API.
+
+        Args:
+            query: Search query
+            passages: Passages to rank
+            top_n: Number of results to return
+
+        Returns:
+            Ranked results with scores
+        """
+        import litellm
+
+        try:
+            # Use LiteLLM's rerank function (wraps Cohere API)
+            response = await asyncio.to_thread(
+                litellm.rerank,
+                model=f"cohere/{self._model}",
+                query=query,
+                documents=passages,
+                top_n=top_n,
+            )
+
+            results = []
+            for item in response.results:
+                idx = item.index
+                score = item.relevance_score
+                if 0 <= idx < len(passages):
+                    results.append((passages[idx], float(score)))
+
+            logger.debug(f"Cohere rerank: {len(passages)} passages -> {len(results)} results")
+            return results
+
+        except Exception as e:
+            error_msg = str(e).lower()
+            if any(kw in error_msg for kw in ["rate limit", "quota", "429"]):
+                raise RateLimitError(f"Cohere rerank rate limit: {e}")
+            raise
+
+    async def _llm_rerank(
+        self,
+        query: str,
+        passages: List[str],
+        top_n: int,
+    ) -> List[Tuple[str, float]]:
+        """
+        Rerank using LLM-based relevance scoring.
+
+        Args:
+            query: Search query
+            passages: Passages to rank
+            top_n: Number of results to return
+
+        Returns:
+            Ranked results with scores
         """
         import litellm
 
@@ -109,20 +252,15 @@ class LiteLLMReranker(CrossEncoderClient):
 
             litellm.acompletion = _noop_acompletion
 
-        if not passages:
-            return []
-
-        # If only one passage, return it with perfect score
-        if len(passages) == 1:
-            return [(passages[0], 1.0)]
-
         # Build reranking prompt
         prompt = self._build_rerank_prompt(query, passages)
 
+        # Get LiteLLM model name
+        model = self._get_litellm_model_name()
+
         try:
-            # Call LiteLLM for reranking
             response = await litellm.acompletion(
-                model=self.reranker_model,
+                model=model,
                 messages=[
                     {
                         "role": "system",
@@ -131,29 +269,55 @@ class LiteLLMReranker(CrossEncoderClient):
                     },
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0,  # Deterministic scoring
+                temperature=0,
                 response_format={"type": "json_object"},
             )
 
             # Extract and parse response
-            content = response.choices[0].message["content"]
-            scores, padded = self._parse_rerank_response(content, len(passages))
+            message = response.choices[0].message
+            # Handle both dict and object formats
+            content = message.get("content") if isinstance(message, dict) else message.content
+            scores, _ = self._parse_rerank_response(content, len(passages))
 
-            # Combine passages with scores
+            # Combine passages with scores and sort
             passage_scores = list(zip(passages, scores))
-            # Sort only if counts match; if padded, keep original order so padding remains at the end
-            if not padded:
-                passage_scores.sort(key=lambda x: x[1], reverse=True)
+            passage_scores.sort(key=lambda x: x[1], reverse=True)
 
-            logger.debug(f"Reranked {len(passages)} passages for query: {query[:50]}...")
+            # Limit to top_n
+            passage_scores = passage_scores[:top_n]
 
+            logger.debug(f"LLM rerank: {len(passages)} passages -> {len(passage_scores)} results")
             return passage_scores
 
         except Exception as e:
-            logger.error(f"LiteLLM reranking error: {e}")
-            # Fallback: return passages in original order with neutral scores
-            logger.warning("Falling back to original order with neutral scores")
-            return [(p, 0.5) for p in passages]
+            error_msg = str(e).lower()
+            if any(kw in error_msg for kw in ["rate limit", "quota", "429"]):
+                raise RateLimitError(f"LLM rerank rate limit: {e}")
+            raise
+
+    def _get_litellm_model_name(self) -> str:
+        """Get model name in LiteLLM format."""
+        model = self._model
+        provider_type = self._provider_type.value if self._provider_type else None
+
+        # Add provider prefix if needed
+        if provider_type == "gemini" and not model.startswith("gemini/"):
+            return f"gemini/{model}"
+        elif provider_type == "anthropic" and not model.startswith("anthropic/"):
+            return f"anthropic/{model}"
+        elif provider_type == "mistral" and not model.startswith("mistral/"):
+            return f"mistral/{model}"
+        elif provider_type == "deepseek" and not model.startswith("deepseek/"):
+            return f"deepseek/{model}"
+        elif provider_type == "qwen":
+            if not model.startswith("openai/"):
+                return f"openai/{model}"
+        elif provider_type == "zai":
+            # ZhipuAI uses 'zai/' prefix in LiteLLM
+            if not model.startswith("zai/"):
+                return f"zai/{model}"
+
+        return model
 
     def _build_rerank_prompt(self, query: str, passages: List[str]) -> str:
         """
@@ -166,9 +330,10 @@ class LiteLLMReranker(CrossEncoderClient):
         Returns:
             Prompt string for LLM
         """
-        # Format passages with indices
+        # Format passages with indices, truncate if too long
         passages_text = "\n\n".join(
-            [f"Passage {i}: {passage}" for i, passage in enumerate(passages)]
+            f"Passage {i}: {p[:500]}..." if len(p) > 500 else f"Passage {i}: {p}"
+            for i, p in enumerate(passages)
         )
 
         prompt = f"""Given the following query and passages, rate the relevance of each passage to the query on a scale from 0.0 to 1.0.
@@ -201,17 +366,14 @@ Ensure:
             expected_count: Expected number of scores
 
         Returns:
-            List of scores
+            Tuple of (scores list, was_padded bool)
         """
         try:
             # Strip markdown code blocks if present
             cleaned_response = response.strip()
             if cleaned_response.startswith("```"):
-                # Remove opening code block
                 lines = cleaned_response.split("\n")
-                # Remove first line (```json or ```)
                 lines = lines[1:]
-                # Find closing ``` and remove it
                 for i in range(len(lines) - 1, -1, -1):
                     if lines[i].strip() == "```":
                         lines = lines[:i]
@@ -240,7 +402,6 @@ Ensure:
                 logger.warning(
                     f"Expected {expected_count} scores, got {len(scores)}. Padding or truncating..."
                 )
-                # Pad or truncate to expected count
                 while len(scores) < expected_count:
                     scores.append(0.5)
                 scores = scores[:expected_count]
@@ -249,14 +410,11 @@ Ensure:
             # Validate score values
             normalized_scores = []
             for score in scores:
-                # Ensure score is float
                 try:
                     score_float = float(score)
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid score {score}, using 0.5")
                     score_float = 0.5
-
-                # Clamp to [0, 1]
                 score_float = max(0.0, min(1.0, score_float))
                 normalized_scores.append(score_float)
 
@@ -264,15 +422,27 @@ Ensure:
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {e}")
-            logger.error(f"Raw response: {response}")
-            # Return neutral scores
             return [0.5] * expected_count, True
 
         except Exception as e:
             logger.error(f"Error parsing rerank response: {e}")
-            logger.error(f"Raw response: {response}")
-            # Return neutral scores
             return [0.5] * expected_count, True
+
+    async def score(self, query: str, passage: str) -> float:
+        """
+        Score single passage relevance to query.
+
+        Args:
+            query: Search query
+            passage: Passage to score
+
+        Returns:
+            Relevance score in [0, 1] range
+        """
+        results = await self.rank(query, [passage], top_n=1)
+        if results:
+            return results[0][1]
+        return 0.0
 
 
 def create_litellm_reranker(

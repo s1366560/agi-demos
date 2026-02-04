@@ -128,6 +128,9 @@ class ProcessorConfig:
     # Cost tracking
     context_limit: int = 200000  # Token limit before compaction warning
 
+    # LLM Client (optional, provides circuit breaker + rate limiter)
+    llm_client: Optional[Any] = None
+
 
 @dataclass
 class ToolDefinition:
@@ -200,6 +203,9 @@ class SessionProcessor:
 
         # Artifact service for rich output handling
         self._artifact_service = artifact_service
+
+        # LLM client for streaming (with circuit breaker + rate limiter)
+        self._llm_client = config.llm_client
 
         # Session state
         self._state = ProcessorState.IDLE
@@ -615,8 +621,8 @@ class SessionProcessor:
             f"[Processor] Created StreamConfig, model={self.config.model}, step={self._step_count}"
         )
 
-        # Create LLM stream
-        llm_stream = LLMStream(stream_config)
+        # Create LLM stream with optional client (provides circuit breaker + rate limiter)
+        llm_stream = LLMStream(stream_config, llm_client=self._llm_client)
         logger.warning(f"[Processor] Created LLMStream, step={self._step_count}")
 
         # Track state for this step

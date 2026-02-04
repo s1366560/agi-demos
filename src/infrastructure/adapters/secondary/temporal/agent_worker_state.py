@@ -94,6 +94,10 @@ __all__ = [
     "get_cached_tools_for_project",
     "invalidate_tools_cache",
     "get_or_create_tools",
+    # Pool Manager (new 3-tier architecture)
+    "set_pool_adapter",
+    "get_pool_adapter",
+    "is_pool_enabled",
 ]
 
 # Global state for agent worker
@@ -101,6 +105,7 @@ _agent_graph_service: Optional[Any] = None
 _redis_pool: Optional[redis.ConnectionPool] = None
 _mcp_temporal_adapter: Optional[Any] = None
 _mcp_sandbox_adapter: Optional[Any] = None
+_pool_adapter: Optional[Any] = None  # PooledAgentSessionAdapter (when enabled)
 
 # LLM client cache (by provider:model key)
 _llm_client_cache: Dict[str, Any] = {}
@@ -220,6 +225,43 @@ def get_mcp_sandbox_adapter() -> Optional[Any]:
         The MCPSandboxAdapter instance or None if not initialized
     """
     return _mcp_sandbox_adapter
+
+
+# ============================================================================
+# Agent Pool Adapter State (NEW: 3-tier architecture)
+# ============================================================================
+
+
+def set_pool_adapter(adapter: Any) -> None:
+    """Set the global Pool Adapter instance for agent worker.
+
+    Called during Agent Worker initialization when AGENT_POOL_ENABLED=true.
+    The adapter provides pooled instance management with tier-based isolation.
+
+    Args:
+        adapter: The PooledAgentSessionAdapter instance
+    """
+    global _pool_adapter
+    _pool_adapter = adapter
+    logger.info("Agent Worker: Pool Adapter registered for Activities")
+
+
+def get_pool_adapter() -> Optional[Any]:
+    """Get the global Pool Adapter instance for agent worker.
+
+    Returns:
+        The PooledAgentSessionAdapter instance or None if not initialized/disabled
+    """
+    return _pool_adapter
+
+
+def is_pool_enabled() -> bool:
+    """Check if pool-based architecture is enabled.
+
+    Returns:
+        True if pool adapter is available and started
+    """
+    return _pool_adapter is not None and _pool_adapter._running
 
 
 async def get_redis_pool() -> redis.ConnectionPool:

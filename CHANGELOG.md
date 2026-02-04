@@ -1,3 +1,57 @@
+## [0.2.2] - 2026-02-03
+
+### Changed
+- **LiteLLM 升级至 1.81.6**: 支持 Z.AI (ZhipuAI) 原生 provider
+  - 升级 `litellm>=1.81.0` (从 1.80.0)
+  - 升级 `openai>=2.8.0` (从 1.77.0)
+  - 新增 `zai/` provider 前缀支持
+  
+- **ZhipuAI Provider 前缀标准化**
+  - 模型前缀: `zhipu/` → `zai/` (符合 LiteLLM 官方标准)
+  - 环境变量: `ZHIPU_API_KEY` → `ZAI_API_KEY` (保留向后兼容)
+  - 模型示例: `zai/glm-4.7`, `zai/glm-4.5-flash`
+
+### Fixed
+- 修复 ZhipuAI 模型调用时 "LLM Provider NOT provided" 错误
+
+### Documentation
+- 更新 `.env.example` 使用 `ZAI_*` 配置
+- 更新 `CLAUDE.md` 添加 LiteLLM Provider 前缀映射表
+
+---
+
+## [0.2.1] - 2026-02-03
+
+### Changed
+- **LLM Provider 架构统一**: 全面迁移至 LiteLLM
+  - 移除所有原生 LLM 客户端 (Qwen/Gemini/Deepseek/OpenAI/ZAI)
+  - 统一使用 LiteLLM adapter 支持所有 provider
+  - 增强 LiteLLMEmbedder 支持自动 embedding 维度检测
+  - 增强 LiteLLMReranker 支持 Cohere 原生 rerank API 及 LLM-based fallback
+
+### Added
+- Provider 管理 UI 重构
+  - `ProviderCard.tsx`: 现代卡片式 Provider 显示
+  - `ProviderHealthPanel.tsx`: 健康监控仪表板
+  - 卡片/表格视图切换
+  - 实时健康状态、熔断器状态、响应时间显示
+
+### Removed
+- 原生 LLM 客户端目录
+  - `src/infrastructure/llm/qwen/`
+  - `src/infrastructure/llm/gemini/`
+  - `src/infrastructure/llm/deepseek/`
+  - `src/infrastructure/llm/openai/`
+  - `src/infrastructure/llm/zai/`
+- 对应的测试文件
+
+### Migration
+- 所有 provider 现在通过 LiteLLM 统一接口访问
+- 无需更改环境变量配置，现有 API key 继续有效
+- Provider 管理 UI 自动升级，无需额外操作
+
+---
+
 ## [0.2.0] - 2026-02-03
 
 ### Changed

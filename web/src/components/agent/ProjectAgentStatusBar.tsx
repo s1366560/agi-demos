@@ -2,6 +2,7 @@
  * ProjectAgentStatusBar - Project ReAct Agent Lifecycle Status Bar
  *
  * Displays the complete lifecycle state of the ProjectReActAgent:
+ * - Pool tier (HOT/WARM/COLD) when pool management is enabled
  * - Sandbox status (with click-to-start and metrics popover)
  * - Lifecycle state (uninitialized, initializing, ready, executing, paused, error, shutting_down)
  * - Resource counts (tools, skills, subagents)
@@ -9,13 +10,14 @@
  * - Health status (uptime, last error)
  * - Lifecycle control buttons (start, stop, restart)
  *
- * This component now uses the unified agent status hook for consolidated state management.
+ * This component now uses the unified agent status hook for consolidated state management,
+ * with optional pool-based lifecycle management integration.
  *
  * @module components/agent/ProjectAgentStatusBar
  */
 
 import type { FC } from 'react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 import {
   Zap,
@@ -35,10 +37,16 @@ import {
   Square,
   RefreshCw,
   Plug,
+  Flame,
+  Cloud,
+  Snowflake,
+  Layers,
+  Heart,
 } from 'lucide-react';
 import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
 import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
 import { agentService } from '../../services/agentService';
+import { poolService, type PoolInstance, type ProjectTier, type InstanceStatus } from '../../services/poolService';
 
 interface ProjectAgentStatusBarProps {
   /** Project ID */
@@ -47,6 +55,37 @@ interface ProjectAgentStatusBarProps {
   tenantId: string;
   /** Number of messages */
   messageCount?: number;
+  /** Enable pool management integration */
+  enablePoolManagement?: boolean;
+}
+
+/**
+ * Map pool instance status to lifecycle state
+ */
+function mapPoolStatusToLifecycle(status: InstanceStatus | undefined): ProjectAgentLifecycleState {
+  if (!status) return 'uninitialized';
+  
+  switch (status) {
+    case 'created':
+    case 'initializing':
+      return 'initializing';
+    case 'initialization_failed':
+    case 'unhealthy':
+    case 'degraded':
+      return 'error';
+    case 'ready':
+      return 'ready';
+    case 'executing':
+      return 'executing';
+    case 'paused':
+      return 'paused';
+    case 'terminating':
+      return 'shutting_down';
+    case 'terminated':
+      return 'uninitialized';
+    default:
+      return 'uninitialized';
+  }
 }
 
 /**
@@ -118,6 +157,42 @@ const lifecycleConfig: Record<
 };
 
 /**
+ * Tier configuration for pool-based management
+ */
+const tierConfig: Record<
+  ProjectTier,
+  {
+    label: string;
+    icon: React.ElementType;
+    color: string;
+    bgColor: string;
+    description: string;
+  }
+> = {
+  hot: {
+    label: 'HOT',
+    icon: Flame,
+    color: 'text-orange-500',
+    bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+    description: '高频项目 - 独立资源池，优先响应',
+  },
+  warm: {
+    label: 'WARM',
+    icon: Cloud,
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+    description: '中频项目 - 共享资源池，LRU 缓存',
+  },
+  cold: {
+    label: 'COLD',
+    icon: Snowflake,
+    color: 'text-slate-500',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    description: '低频项目 - 按需创建，节省资源',
+  },
+};
+
+/**
  * ProjectAgentStatusBar - Refactored to use unified status hook
  *
  * This component now uses the useUnifiedAgentStatus hook which consolidates:
@@ -126,24 +201,93 @@ const lifecycleConfig: Record<
  * - Plan mode state (from planModeStore)
  * - Streaming state (from streamingStore)
  * - Sandbox connection (from sandboxStore)
+ * - Pool instance state (from poolService - when enabled)
+ *
+ * When pool management is enabled, lifecycle state is derived from pool instance status.
+ * When disabled, falls back to WebSocket-based lifecycle state.
  */
 export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   projectId,
   tenantId,
   messageCount = 0,
+  enablePoolManagement = false,
 }) => {
-  // Use the unified status hook for consolidated state (WebSocket-based)
-  const { status, isLoading, error, isStreaming } = useUnifiedAgentStatus({
+  // Use the unified status hook for consolidated state (WebSocket-based fallback)
+  const { status, isLoading, error: wsError, isStreaming } = useUnifiedAgentStatus({
     projectId,
     tenantId,
-    enabled: !!projectId,
+    // Disable WebSocket lifecycle subscription when pool is enabled
+    enabled: !!projectId && !enablePoolManagement,
   });
+
+  // Pool instance state (primary when pool management is enabled)
+  const [poolInstance, setPoolInstance] = useState<PoolInstance | null>(null);
+  const [poolEnabled, setPoolEnabled] = useState(false);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const [poolError, setPoolError] = useState<string | null>(null);
+
+  // Fetch pool instance status when pool management is enabled
+  useEffect(() => {
+    if (!enablePoolManagement || !tenantId || !projectId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchPoolInstance = async () => {
+      setPoolLoading(true);
+      setPoolError(null);
+      try {
+        // First check if pool is enabled
+        const statusResponse = await poolService.getStatus();
+        if (!isMounted) return;
+        
+        setPoolEnabled(statusResponse.enabled);
+        
+        if (statusResponse.enabled) {
+          // Fetch instance for this project
+          const instanceKey = `${tenantId}:${projectId}:chat`;
+          const instances = await poolService.listInstances({ page: 1, page_size: 100 });
+          if (!isMounted) return;
+          
+          const instance = instances.instances.find((i: PoolInstance) => i.instance_key === instanceKey);
+          setPoolInstance(instance || null);
+        }
+      } catch (err) {
+        // Pool service might not be available
+        if (isMounted) {
+          setPoolEnabled(false);
+          setPoolInstance(null);
+          setPoolError(err instanceof Error ? err.message : 'Pool service unavailable');
+        }
+      } finally {
+        if (isMounted) {
+          setPoolLoading(false);
+        }
+      }
+    };
+
+    fetchPoolInstance();
+
+    // Refresh pool status every 5 seconds for more responsive updates
+    const interval = setInterval(fetchPoolInstance, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [enablePoolManagement, tenantId, projectId]);
 
   // Lifecycle control state
   const [isActionPending, setIsActionPending] = useState(false);
 
-  const lifecycleState = status.lifecycle;
+  // Determine lifecycle state based on pool status or WebSocket
+  const lifecycleState: ProjectAgentLifecycleState = enablePoolManagement && poolEnabled
+    ? mapPoolStatusToLifecycle(poolInstance?.status)
+    : status.lifecycle;
+  
   const config = lifecycleConfig[lifecycleState];
+  const error = enablePoolManagement ? poolError : wsError;
 
   const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
@@ -154,35 +298,177 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const canStop = lifecycleState === 'ready' || lifecycleState === 'executing' || lifecycleState === 'paused';
   // Check if agent can be restarted (exists)
   const canRestart = lifecycleState !== 'uninitialized' && lifecycleState !== 'shutting_down' && lifecycleState !== 'initializing';
+  // Check if agent can be paused (pool mode only)
+  const canPause = enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'ready';
+  // Check if agent can be resumed (pool mode only)
+  const canResume = enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'paused';
 
-  // Lifecycle control handlers
-  const handleStartAgent = useCallback(() => {
-    setIsActionPending(true);
-    agentService.startAgent(projectId);
-    message.info('正在启动 Agent...');
-    // Reset pending state after a delay (actual state will be updated via WebSocket)
-    setTimeout(() => setIsActionPending(false), 3000);
-  }, [projectId]);
+  // Get instance key for pool operations
+  const instanceKey = `${tenantId}:${projectId}:chat`;
 
-  const handleStopAgent = useCallback(() => {
+  // Lifecycle control handlers - use pool API when enabled, fallback to WebSocket
+  const handleStartAgent = useCallback(async () => {
     setIsActionPending(true);
-    agentService.stopAgent(projectId);
-    message.info('正在停止 Agent...');
-    setTimeout(() => setIsActionPending(false), 3000);
-  }, [projectId]);
+    try {
+      // For pool mode, starting is handled automatically on first request
+      // For WebSocket mode, send start signal
+      if (!enablePoolManagement || !poolEnabled) {
+        agentService.startAgent(projectId);
+      }
+      message.info('正在启动 Agent...');
+    } finally {
+      setTimeout(() => setIsActionPending(false), 3000);
+    }
+  }, [projectId, enablePoolManagement, poolEnabled]);
 
-  const handleRestartAgent = useCallback(() => {
+  const handleStopAgent = useCallback(async () => {
     setIsActionPending(true);
-    agentService.restartAgent(projectId);
-    message.info('正在重启 Agent...');
-    setTimeout(() => setIsActionPending(false), 5000);
-  }, [projectId]);
+    try {
+      if (enablePoolManagement && poolEnabled && poolInstance) {
+        // Use pool API to terminate instance
+        await poolService.terminateInstance(instanceKey, false);
+        message.info('正在终止 Agent 实例...');
+      } else {
+        // Fallback to WebSocket
+        agentService.stopAgent(projectId);
+        message.info('正在停止 Agent...');
+      }
+    } catch (err) {
+      message.error('停止 Agent 失败');
+    } finally {
+      setTimeout(() => setIsActionPending(false), 3000);
+    }
+  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
+
+  const handleRestartAgent = useCallback(async () => {
+    setIsActionPending(true);
+    try {
+      if (enablePoolManagement && poolEnabled && poolInstance) {
+        // Terminate and let auto-create handle restart
+        await poolService.terminateInstance(instanceKey, true);
+        message.info('正在重启 Agent 实例...');
+      } else {
+        agentService.restartAgent(projectId);
+        message.info('正在重启 Agent...');
+      }
+    } catch (err) {
+      message.error('重启 Agent 失败');
+    } finally {
+      setTimeout(() => setIsActionPending(false), 5000);
+    }
+  }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
+
+  const handlePauseAgent = useCallback(async () => {
+    if (!poolInstance) return;
+    setIsActionPending(true);
+    try {
+      await poolService.pauseInstance(instanceKey);
+      message.info('正在暂停 Agent 实例...');
+    } catch (err) {
+      message.error('暂停 Agent 失败');
+    } finally {
+      setTimeout(() => setIsActionPending(false), 2000);
+    }
+  }, [poolInstance, instanceKey]);
+
+  const handleResumeAgent = useCallback(async () => {
+    if (!poolInstance) return;
+    setIsActionPending(true);
+    try {
+      await poolService.resumeInstance(instanceKey);
+      message.info('正在恢复 Agent 实例...');
+    } catch (err) {
+      message.error('恢复 Agent 失败');
+    } finally {
+      setTimeout(() => setIsActionPending(false), 2000);
+    }
+  }, [poolInstance, instanceKey]);
+
+  // Get pool tier config
+  const poolTierConfig = poolInstance?.tier ? tierConfig[poolInstance.tier] : null;
+  const TierIcon = poolTierConfig?.icon ?? Layers;
 
   return (
     <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-      {/* Left: Sandbox Status, Lifecycle Status & Resources */}
+      {/* Left: Pool Tier, Sandbox Status, Lifecycle Status & Resources */}
       <div className="flex items-center gap-3">
-        {/* Sandbox Status Indicator (First Column) */}
+        {/* Pool Tier Indicator (shown when pool management is enabled) */}
+        {enablePoolManagement && poolEnabled && (
+          <>
+            <LazyTooltip
+              title={
+                <div className="space-y-2 max-w-xs">
+                  <div className="font-medium flex items-center gap-2">
+                    <Layers size={14} />
+                    <span>Agent 池管理</span>
+                  </div>
+                  {poolInstance ? (
+                    <>
+                      <div className="text-xs">
+                        <div className="flex justify-between">
+                          <span className="opacity-70">层级:</span>
+                          <span className={poolTierConfig?.color}>{poolTierConfig?.label}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="opacity-70">状态:</span>
+                          <span>{poolInstance.status}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="opacity-70">健康:</span>
+                          <span className={poolInstance.health_status === 'healthy' ? 'text-emerald-400' : 'text-amber-400'}>
+                            {poolInstance.health_status}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="opacity-70">活跃请求:</span>
+                          <span>{poolInstance.active_requests}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="opacity-70">总请求:</span>
+                          <span>{poolInstance.total_requests}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="opacity-70">内存:</span>
+                          <span>{poolInstance.memory_used_mb} MB</span>
+                        </div>
+                      </div>
+                      <div className="text-xs opacity-70 pt-1 border-t border-gray-600 mt-1">
+                        {poolTierConfig?.description}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs opacity-70">
+                      尚未创建实例 - 首次请求时自动分配
+                    </div>
+                  )}
+                </div>
+              }
+            >
+              <div
+                className={`
+                  flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+                  ${poolTierConfig?.bgColor ?? 'bg-slate-100 dark:bg-slate-800'} 
+                  ${poolTierConfig?.color ?? 'text-slate-500'}
+                  transition-all duration-300 cursor-help
+                `}
+              >
+                {poolLoading ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <TierIcon size={12} />
+                )}
+                <span>{poolInstance ? poolTierConfig?.label ?? 'POOL' : '待分配'}</span>
+                {poolInstance?.health_status === 'healthy' && (
+                  <Heart size={10} className="text-emerald-500 fill-emerald-500" />
+                )}
+              </div>
+            </LazyTooltip>
+            {/* Separator */}
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+          </>
+        )}
+
+        {/* Sandbox Status Indicator */}
         <SandboxStatusIndicator
           projectId={projectId}
           tenantId={tenantId}
@@ -344,17 +630,68 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             </LazyTooltip>
           )}
 
+          {/* Pause Button - pool mode only, shown when agent is ready */}
+          {canPause && (
+            <LazyTooltip title="暂停 Agent (停止接收新请求)">
+              <button
+                type="button"
+                onClick={handlePauseAgent}
+                disabled={isActionPending}
+                className={`
+                  p-1 rounded transition-colors
+                  ${isActionPending 
+                    ? 'text-slate-400 cursor-not-allowed' 
+                    : 'text-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30'
+                  }
+                `}
+              >
+                {isActionPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <PauseCircle size={14} />
+                )}
+              </button>
+            </LazyTooltip>
+          )}
+
+          {/* Resume Button - pool mode only, shown when agent is paused */}
+          {canResume && (
+            <LazyTooltip title="恢复 Agent">
+              <button
+                type="button"
+                onClick={handleResumeAgent}
+                disabled={isActionPending}
+                className={`
+                  p-1 rounded transition-colors
+                  ${isActionPending 
+                    ? 'text-slate-400 cursor-not-allowed' 
+                    : 'text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                  }
+                `}
+              >
+                {isActionPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Play size={14} />
+                )}
+              </button>
+            </LazyTooltip>
+          )}
+
           {/* Stop Button - shown when agent is running */}
           {canStop && (
             <LazyPopconfirm
               title="停止 Agent"
-              description="确定要停止 Agent 吗？正在进行的任务将被中断。"
+              description={enablePoolManagement && poolEnabled 
+                ? "确定要终止 Agent 实例吗？实例将被释放。" 
+                : "确定要停止 Agent 吗？正在进行的任务将被中断。"
+              }
               onConfirm={handleStopAgent}
               okText="停止"
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
-              <LazyTooltip title="停止 Agent">
+              <LazyTooltip title={enablePoolManagement && poolEnabled ? "终止实例" : "停止 Agent"}>
                 <button
                   type="button"
                   disabled={isActionPending}

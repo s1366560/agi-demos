@@ -2,120 +2,20 @@
 
 This module defines the strongly-typed domain events emitted by the Agent during execution.
 These events are decoupled from infrastructure concerns (like SSE or Database storage).
+
+Note: AgentEventType is imported from types.py (Single Source of Truth).
 """
 
 import time
-from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+# Import AgentEventType from the unified types module (Single Source of Truth)
+from src.domain.events.types import AgentEventType, get_frontend_event_types
 
-class AgentEventType(str, Enum):
-    """Event types for agent communication."""
-
-    # Status events
-    STATUS = "status"
-    START = "start"
-    COMPLETE = "complete"
-    ERROR = "error"
-
-    # Thinking events
-    THOUGHT = "thought"
-    THOUGHT_DELTA = "thought_delta"
-
-    # Work plan events (multi-level thinking)
-    WORK_PLAN = "work_plan"
-    STEP_START = "step_start"
-    STEP_END = "step_end"
-    STEP_FINISH = "step_finish"
-
-    # Tool events
-    ACT = "act"
-    OBSERVE = "observe"
-
-    # Text events
-    TEXT_START = "text_start"
-    TEXT_DELTA = "text_delta"
-    TEXT_END = "text_end"
-
-    # Message events
-    MESSAGE = "message"
-    USER_MESSAGE = "user_message"
-    ASSISTANT_MESSAGE = "assistant_message"
-
-    # Permission events
-    PERMISSION_ASKED = "permission_asked"
-    PERMISSION_REPLIED = "permission_replied"
-
-    # Doom loop events
-    DOOM_LOOP_DETECTED = "doom_loop_detected"
-    DOOM_LOOP_INTERVENED = "doom_loop_intervened"
-
-    # Human interaction events
-    CLARIFICATION_ASKED = "clarification_asked"
-    CLARIFICATION_ANSWERED = "clarification_answered"
-    DECISION_ASKED = "decision_asked"
-    DECISION_ANSWERED = "decision_answered"
-
-    # Environment variable events
-    ENV_VAR_REQUESTED = "env_var_requested"
-    ENV_VAR_PROVIDED = "env_var_provided"
-
-    # Cost events
-    COST_UPDATE = "cost_update"
-
-    # Retry events
-    RETRY = "retry"
-
-    # Context events
-    COMPACT_NEEDED = "compact_needed"
-    CONTEXT_COMPRESSED = "context_compressed"
-
-    # Pattern events
-    PATTERN_MATCH = "pattern_match"
-
-    # Skill execution events (L2 layer direct execution)
-    SKILL_MATCHED = "skill_matched"
-    SKILL_EXECUTION_START = "skill_execution_start"
-    SKILL_EXECUTION_COMPLETE = "skill_execution_complete"
-    SKILL_FALLBACK = "skill_fallback"
-
-    # Plan Mode events
-    PLAN_MODE_ENTER = "plan_mode_enter"
-    PLAN_MODE_EXIT = "plan_mode_exit"
-    PLAN_CREATED = "plan_created"
-    PLAN_UPDATED = "plan_updated"
-    PLAN_STATUS_CHANGED = "plan_status_changed"
-    PLAN_EXECUTION_START = "plan_execution_start"
-    PLAN_EXECUTION_COMPLETE = "plan_execution_complete"
-    PLAN_STEP_READY = "plan_step_ready"
-    PLAN_STEP_COMPLETE = "plan_step_complete"
-    PLAN_STEP_SKIPPED = "plan_step_skipped"
-    PLAN_SNAPSHOT_CREATED = "plan_snapshot_created"
-    PLAN_ROLLBACK = "plan_rollback"
-    REFLECTION_COMPLETE = "reflection_complete"
-    ADJUSTMENT_APPLIED = "adjustment_applied"
-
-    # Title generation events
-    TITLE_GENERATED = "title_generated"
-
-    # Sandbox events
-    SANDBOX_CREATED = "sandbox_created"
-    SANDBOX_TERMINATED = "sandbox_terminated"
-    SANDBOX_STATUS = "sandbox_status"
-    DESKTOP_STARTED = "desktop_started"
-    DESKTOP_STOPPED = "desktop_stopped"
-    DESKTOP_STATUS = "desktop_status"
-    TERMINAL_STARTED = "terminal_started"
-    TERMINAL_STOPPED = "terminal_stopped"
-    TERMINAL_STATUS = "terminal_status"
-
-    # Artifact events (rich output display)
-    ARTIFACT_CREATED = "artifact_created"
-    ARTIFACT_READY = "artifact_ready"
-    ARTIFACT_ERROR = "artifact_error"
-    ARTIFACTS_BATCH = "artifacts_batch"
+# Re-export for backward compatibility
+__all__ = ["AgentEventType", "AgentDomainEvent", "get_frontend_event_types"]
 
 
 class AgentDomainEvent(BaseModel):
@@ -788,26 +688,7 @@ class AgentArtifactsBatchEvent(AgentDomainEvent):
 # Event Type Utilities
 # =========================================================================
 
-
-def get_frontend_event_types() -> List[str]:
-    """Get all event type values for frontend TypeScript generation.
-
-    This function is used to generate the TypeScript AgentEventType type
-    to ensure Python and TypeScript are always in sync.
-
-    Returns:
-        List of event type strings that should be exposed to frontend
-
-    Example:
-        >>> get_frontend_event_types()
-        ['status', 'start', 'complete', 'error', 'thought', ...]
-    """
-    # Internal events that should not be exposed to frontend
-    internal_events = {
-        AgentEventType.COMPACT_NEEDED,  # Internal compression signal
-    }
-
-    return [et.value for et in AgentEventType if et not in internal_events]
+# get_frontend_event_types is imported from types.py (Single Source of Truth)
 
 
 def get_event_type_docstring() -> str:

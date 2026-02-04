@@ -192,7 +192,7 @@ async def _start_hitl_stream_bridge(
     3. Only starts a new bridge if needed (page refresh scenario)
     """
     try:
-        from src.configuration.factories import create_langchain_llm
+        from src.configuration.factories import create_llm_client
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
             SqlHITLRequestRepository,
         )
@@ -234,7 +234,7 @@ async def _start_hitl_stream_bridge(
 
         # Create agent service
         container = context.get_scoped_container()
-        llm = create_langchain_llm(context.tenant_id)
+        llm = create_llm_client(context.tenant_id)
         agent_service = container.agent_service(llm)
 
         # Import here to avoid circular imports

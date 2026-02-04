@@ -356,6 +356,38 @@ class ProviderConfig(ProviderConfigBase):
         from_attributes = True
 
 
+class CircuitBreakerState(str, Enum):
+    """Circuit breaker state."""
+
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+class RateLimitStats(BaseModel):
+    """Rate limiter statistics."""
+
+    current_concurrent: int = Field(0, description="Current concurrent requests")
+    max_concurrent: int = Field(50, description="Maximum concurrent requests")
+    total_requests: int = Field(0, description="Total requests made")
+    requests_per_minute: int = Field(0, description="Requests in current minute window")
+    max_rpm: Optional[int] = Field(None, description="Maximum requests per minute")
+
+
+class ResilienceStatus(BaseModel):
+    """Provider resilience status combining circuit breaker and rate limiter."""
+
+    circuit_breaker_state: CircuitBreakerState = Field(
+        CircuitBreakerState.CLOSED, description="Circuit breaker state"
+    )
+    failure_count: int = Field(0, description="Current failure count")
+    success_count: int = Field(0, description="Success count in half-open state")
+    rate_limit: RateLimitStats = Field(
+        default_factory=RateLimitStats, description="Rate limit statistics"
+    )
+    can_execute: bool = Field(True, description="Whether requests can be executed")
+
+
 class ProviderConfigResponse(ProviderConfigBase):
     """Provider configuration for API responses (API key masked)"""
 
@@ -367,6 +399,10 @@ class ProviderConfigResponse(ProviderConfigBase):
     health_last_check: Optional[datetime] = None
     response_time_ms: Optional[int] = None
     error_message: Optional[str] = None
+    # New resilience fields
+    resilience: Optional[ResilienceStatus] = Field(
+        None, description="Provider resilience status (circuit breaker + rate limiter)"
+    )
 
 
 # ============================================================================

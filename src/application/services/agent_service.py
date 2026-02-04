@@ -93,6 +93,7 @@ class AgentService(AgentServicePort):
         storage_service=None,
         mcp_temporal_adapter: "Optional[Any]" = None,
         db_session=None,
+        sequence_service=None,
     ):
         """
         Initialize the agent service.
@@ -118,6 +119,7 @@ class AgentService(AgentServicePort):
             storage_service: Optional StorageServicePort for file storage (used by CodeExecutorTool)
             mcp_temporal_adapter: Optional MCPTemporalAdapter for Temporal MCP integration
             db_session: Optional database session (reserved for future use)
+            sequence_service: Optional RedisSequenceService for atomic sequence generation
         """
         self._conversation_repo = conversation_repository
         self._execution_repo = execution_repository
@@ -139,6 +141,7 @@ class AgentService(AgentServicePort):
         self._storage_service = storage_service
         self._mcp_temporal_adapter = mcp_temporal_adapter
         self._db_session = db_session
+        self._sequence_service = sequence_service
 
         # Tool definitions cache (static tool descriptions don't change)
         self._tool_definitions_cache: Dict[str, list[Dict[str, Any]]] | None = None
@@ -207,6 +210,9 @@ class AgentService(AgentServicePort):
             # Create user message event (unified event timeline - no messages table)
             user_msg_id = str(uuid.uuid4())
 
+            # Generate correlation ID for this request (used to track all events from this request)
+            correlation_id = f"req_{uuid.uuid4().hex[:12]}"
+
             # Use Domain Event - include attachment_ids at creation time (model is frozen)
             user_domain_event = AgentMessageEvent(
                 role="user",
@@ -214,8 +220,14 @@ class AgentService(AgentServicePort):
                 attachment_ids=attachment_ids if attachment_ids else None,
             )
 
-            # Get next sequence number
-            next_seq = await self._agent_execution_event_repo.get_last_sequence(conversation_id) + 1
+            # Get next sequence number atomically
+            # Use Redis sequence service if available (atomic), fall back to DB query
+            if self._sequence_service:
+                next_seq = await self._sequence_service.get_next_sequence(conversation_id)
+            else:
+                next_seq = (
+                    await self._agent_execution_event_repo.get_last_sequence(conversation_id) + 1
+                )
 
             # Convert to persistent entity
             user_msg_event = AgentExecutionEvent.from_domain_event(
@@ -224,6 +236,9 @@ class AgentService(AgentServicePort):
                 message_id=user_msg_id,
                 sequence_number=next_seq,
             )
+
+            # Set correlation_id on the event
+            user_msg_event.correlation_id = correlation_id
 
             # Ensure ID is set (from_domain_event might not set it or might set None)
             if not user_msg_event.id:
@@ -249,6 +264,7 @@ class AgentService(AgentServicePort):
             yield {
                 "type": "message",
                 "data": user_event_data,
+                "correlation_id": correlation_id,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -276,6 +292,7 @@ class AgentService(AgentServicePort):
                 user_message=user_message,
                 conversation_context=conversation_context,
                 attachment_ids=attachment_ids,
+                correlation_id=correlation_id,
             )
             logger.info(
                 f"[AgentService] Started workflow {workflow_id} for conversation {conversation_id}"
@@ -286,6 +303,8 @@ class AgentService(AgentServicePort):
                 conversation_id,
                 message_id=user_msg_id,
             ):
+                # Add correlation_id to streamed events
+                event["correlation_id"] = correlation_id
                 yield event
 
         except Exception as e:
@@ -303,6 +322,7 @@ class AgentService(AgentServicePort):
         user_message: str,
         conversation_context: list[Dict[str, Any]],
         attachment_ids: Optional[List[str]] = None,
+        correlation_id: Optional[str] = None,
     ) -> str:
         """Start agent execution workflow in Temporal.
 
@@ -317,6 +337,7 @@ class AgentService(AgentServicePort):
             user_message: The user message content
             conversation_context: Pre-filtered conversation history (excludes current user message)
             attachment_ids: Optional list of attachment IDs to include with the message
+            correlation_id: Optional correlation ID for event tracking
 
         Returns:
             The workflow ID
@@ -335,6 +356,7 @@ class AgentService(AgentServicePort):
             settings=settings,
             temporal_settings=temporal_settings,
             attachment_ids=attachment_ids,
+            correlation_id=correlation_id,
         )
 
     async def _start_or_get_session_workflow(
@@ -346,6 +368,7 @@ class AgentService(AgentServicePort):
         settings,
         temporal_settings,
         attachment_ids: Optional[List[str]] = None,
+        correlation_id: Optional[str] = None,
     ) -> str:
         """Start or get existing Project Agent Workflow and send chat via update.
 
@@ -460,6 +483,7 @@ class AgentService(AgentServicePort):
             user_id=conversation.user_id,
             conversation_context=conversation_context,
             attachment_ids=attachment_ids,
+            correlation_id=correlation_id,
         )
 
         # Execute update asynchronously to avoid blocking first token streaming

@@ -342,7 +342,7 @@ class ProjectReActAgent:
             else:
                 self._subagents = []
 
-            # Create processor config
+            # Create processor config with llm_client for unified resilience
             processor_config = ProcessorConfig(
                 model=provider_config.llm_model,
                 api_key="",  # Will be set from provider_config
@@ -350,6 +350,7 @@ class ProjectReActAgent:
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
                 max_steps=self.config.max_steps,
+                llm_client=llm_client,  # Pass cached LiteLLMClient for circuit breaker + rate limiter
             )
 
             # Store artifact_service for use in ReActAgent
@@ -379,6 +380,7 @@ class ProjectReActAgent:
                 skills=self._skills,
                 subagents=self._subagents,
                 artifact_service=self._artifact_service,  # Pass artifact service
+                llm_client=llm_client,  # Pass cached LiteLLMClient
                 # Use cached components from session pool
                 _cached_tool_definitions=self._session_context.tool_definitions,
                 _cached_system_prompt_manager=self._session_context.system_prompt_manager,

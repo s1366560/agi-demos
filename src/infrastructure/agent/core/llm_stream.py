@@ -359,14 +359,18 @@ class LLMStream:
                 # Execute tool...
     """
 
-    def __init__(self, config: StreamConfig):
+    def __init__(self, config: StreamConfig, llm_client: Optional[Any] = None):
         """
         Initialize LLM stream.
 
         Args:
             config: Stream configuration
+            llm_client: Optional LiteLLMClient instance for unified resilience.
+                        When provided, uses client's rate limiter & circuit breaker.
+                        When None, falls back to direct litellm calls with basic rate limiting.
         """
         self.config = config
+        self._llm_client = llm_client
 
         # Accumulated state during streaming
         self._text_buffer: str = ""
@@ -400,6 +404,9 @@ class LLMStream:
         """
         Generate streaming response from LLM.
 
+        Uses injected LiteLLMClient if available (provides circuit breaker + rate limiting),
+        otherwise falls back to direct litellm calls with basic rate limiting.
+
         Args:
             messages: List of messages in OpenAI format
             request_id: Optional request ID for tracing
@@ -413,19 +420,127 @@ class LLMStream:
         Yields:
             StreamEvent objects as response is generated
         """
-        import litellm
-
-        # Import rate limiter for concurrency control
-        from src.infrastructure.llm.rate_limiter import (
-            ProviderType,
-            RateLimitError,
-            get_rate_limiter,
-        )
-
         request_id = request_id or str(uuid.uuid4())
 
         # Reset state
         self._reset_state()
+
+        logger.debug(f"Starting LLM stream: model={self.config.model}, request_id={request_id}")
+
+        start_time = time.time()
+
+        try:
+            # Use injected client if available (preferred path with full resilience)
+            if self._llm_client:
+                async for event in self._generate_with_client(
+                    messages, request_id, langfuse_context
+                ):
+                    yield event
+            else:
+                # Fallback: direct litellm calls with basic rate limiting
+                async for event in self._generate_direct(
+                    messages, request_id, langfuse_context
+                ):
+                    yield event
+
+            elapsed = time.time() - start_time
+            logger.debug(f"LLM stream completed: request_id={request_id}, elapsed={elapsed:.2f}s")
+
+        except Exception as e:
+            logger.error(f"LLM stream error: {e}", exc_info=True)
+            yield StreamEvent.error(str(e), code=type(e).__name__)
+
+    async def _generate_with_client(
+        self,
+        messages: List[Dict[str, Any]],
+        request_id: str,
+        langfuse_context: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """
+        Generate using injected LiteLLMClient (has circuit breaker + rate limiter).
+
+        Args:
+            messages: List of messages in OpenAI format
+            request_id: Request ID for tracing
+            langfuse_context: Optional Langfuse context
+
+        Yields:
+            StreamEvent objects
+        """
+        from src.domain.llm_providers.llm_types import RateLimitError
+
+        # Build langfuse context for client
+        client_langfuse_context = None
+        if langfuse_context:
+            client_langfuse_context = {
+                "trace_name": "agent_chat",
+                "trace_id": langfuse_context.get("conversation_id", request_id),
+                "tags": [langfuse_context.get("tenant_id", "default")],
+                "extra": {
+                    "user_id": langfuse_context.get("user_id"),
+                    "project_id": langfuse_context.get("project_id"),
+                    **(langfuse_context.get("extra", {})),
+                },
+            }
+
+        # Prepare additional kwargs from config
+        extra_kwargs = {}
+        if self.config.tools:
+            extra_kwargs["tools"] = self.config.tools
+            if self.config.tool_choice:
+                extra_kwargs["tool_choice"] = self.config.tool_choice
+        if self.config.temperature:
+            extra_kwargs["temperature"] = self.config.temperature
+
+        try:
+            # Use client's generate_stream (has circuit breaker + rate limiter)
+            async for chunk in self._llm_client.generate_stream(
+                messages=messages,
+                max_tokens=self.config.max_tokens,
+                langfuse_context=client_langfuse_context,
+                **extra_kwargs,
+            ):
+                # Process raw LiteLLM chunk
+                async for event in self._process_chunk(chunk):
+                    yield event
+
+            # Finalize any pending state
+            async for event in self._finalize():
+                yield event
+
+        except RateLimitError as e:
+            logger.warning(f"Rate limit error via client: {e}")
+            yield StreamEvent.error(
+                "Rate limit exceeded. Please wait a moment and try again.", code="RATE_LIMIT"
+            )
+
+    async def _generate_direct(
+        self,
+        messages: List[Dict[str, Any]],
+        request_id: str,
+        langfuse_context: Optional[Dict[str, Any]] = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """
+        Generate using direct litellm calls with basic rate limiting.
+
+        Fallback path when no LiteLLMClient is injected.
+
+        Args:
+            messages: List of messages in OpenAI format
+            request_id: Request ID for tracing
+            langfuse_context: Optional Langfuse context
+
+        Yields:
+            StreamEvent objects
+        """
+        import litellm
+
+        # Import rate limiter for concurrency control
+        from src.domain.llm_providers.models import ProviderType
+        from src.infrastructure.llm.resilience import (
+            RateLimitExceededError,
+            get_provider_rate_limiter,
+        )
 
         # Prepare kwargs
         kwargs = self.config.to_litellm_kwargs()
@@ -446,12 +561,8 @@ class LLMStream:
             # Merge with existing metadata
             kwargs["metadata"] = {**kwargs.get("metadata", {}), **langfuse_metadata}
 
-        logger.debug(f"Starting LLM stream: model={self.config.model}, request_id={request_id}")
-
-        start_time = time.time()
-
         # Get rate limiter and provider type
-        rate_limiter = get_rate_limiter()
+        rate_limiter = get_provider_rate_limiter()
         provider_name = self.config.get_provider()
         provider_type = ProviderType(provider_name)
 
@@ -471,17 +582,11 @@ class LLMStream:
                 async for event in self._finalize():
                     yield event
 
-            elapsed = time.time() - start_time
-            logger.debug(f"LLM stream completed: request_id={request_id}, elapsed={elapsed:.2f}s")
-
-        except RateLimitError as e:
+        except RateLimitExceededError as e:
             logger.warning(f"Rate limit exceeded for {provider_name}: {e}")
             yield StreamEvent.error(
                 "Rate limit exceeded. Please wait a moment and try again.", code="RATE_LIMIT"
             )
-        except Exception as e:
-            logger.error(f"LLM stream error: {e}", exc_info=True)
-            yield StreamEvent.error(str(e), code=type(e).__name__)
 
     def _reset_state(self) -> None:
         """Reset accumulated state for new generation."""

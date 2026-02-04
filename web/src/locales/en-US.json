@@ -164,7 +164,8 @@
         "administration": "Administration",
         "billing": "Billing",
         "profile": "Profile",
-        "mcpServers": "MCP Servers"
+        "mcpServers": "MCP Servers",
+        "pool": "Agent Pool"
     },
     "user": {
         "profile": "Profile",

@@ -988,7 +988,7 @@ ModalInternal.displayName = 'EdgeTypeList.Modal';
 // Attach Sub-Components to Main Component
 // ============================================================================
 
-const attachMarker = <P extends object>(component: React.FC<P>, marker: Symbol) => {
+const attachMarker = <P extends object>(component: React.FC<P>, marker: symbol) => {
   (component as any)[marker] = true;
   return component;
 };

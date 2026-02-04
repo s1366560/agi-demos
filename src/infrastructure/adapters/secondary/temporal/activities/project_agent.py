@@ -240,6 +240,7 @@ async def execute_project_chat_activity(
         user_message = input_data.get("user_message", "")
         user_id = input_data.get("user_id", "")
         conversation_context = input_data.get("conversation_context", [])
+        correlation_id = input_data.get("correlation_id")  # Request correlation ID
         config = input_data.get("config", {})
 
         tenant_id = config.get("tenant_id", "")
@@ -248,7 +249,7 @@ async def execute_project_chat_activity(
 
         logger.info(
             f"[ProjectAgentActivity] Executing chat: conversation={conversation_id}, "
-            f"message={message_id}, project={project_id}"
+            f"message={message_id}, project={project_id}, correlation={correlation_id}"
         )
 
         # Get cached agent
@@ -311,11 +312,12 @@ async def execute_project_chat_activity(
                 is_error = True
                 error_message = event.get("data", {}).get("message", "Unknown error")
 
-        # Persist events to database
+        # Persist events to database with correlation_id
         sequence_number = await _persist_events(
             conversation_id=conversation_id,
             message_id=message_id,
             events=events,
+            correlation_id=correlation_id,
         )
 
         execution_time_ms = (time_module.time() - start_time) * 1000
@@ -359,6 +361,17 @@ async def execute_project_chat_activity(
         execution_time_ms = (time_module.time() - start_time) * 1000
         agent_metrics.increment("project_agent.chat_errors")
         logger.error(f"[ProjectAgentActivity] Chat error: {e}", exc_info=True)
+
+        # Publish error event to Redis so frontend receives it
+        try:
+            await _publish_error_event(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                error_message=str(e),
+                correlation_id=correlation_id,
+            )
+        except Exception as pub_error:
+            logger.warning(f"[ProjectAgentActivity] Failed to publish error event: {pub_error}")
 
         return {
             "content": "",
@@ -431,6 +444,7 @@ async def _persist_events(
     conversation_id: str,
     message_id: str,
     events: List[Dict[str, Any]],
+    correlation_id: Optional[str] = None,
 ) -> int:
     """
     Persist agent events to database.
@@ -439,6 +453,7 @@ async def _persist_events(
         conversation_id: Conversation ID
         message_id: Message ID
         events: List of events to persist
+        correlation_id: Optional request correlation ID
 
     Returns:
         Last sequence number
@@ -480,6 +495,7 @@ async def _persist_events(
                             event_type=event_type,
                             event_data=event_data,
                             sequence_number=sequence_number,
+                            correlation_id=correlation_id,
                             created_at=datetime.now(timezone.utc),
                         )
                         .on_conflict_do_nothing(
@@ -503,3 +519,63 @@ async def _persist_events(
         logger.error(f"Failed to persist events: {e}")
         # Don't raise - event persistence is not critical
         return sequence_number
+
+
+async def _publish_error_event(
+    conversation_id: str,
+    message_id: str,
+    error_message: str,
+    correlation_id: Optional[str] = None,
+) -> None:
+    """
+    Publish error event to Redis Stream for frontend notification.
+
+    When an Activity fails unexpectedly, the frontend needs to receive
+    an error event to stop waiting and display the error to the user.
+
+    Args:
+        conversation_id: Conversation ID
+        message_id: Message ID
+        error_message: Error message to display
+        correlation_id: Optional request correlation ID
+    """
+    import json
+    from datetime import datetime, timezone
+
+    import redis.asyncio as aioredis
+
+    from src.configuration.config import get_settings
+
+    settings = get_settings()
+
+    try:
+        redis_client = aioredis.from_url(settings.redis_url)
+        try:
+            stream_key = f"agent:events:{conversation_id}"
+
+            # Build error event matching frontend expected format
+            error_event = {
+                "type": "error",
+                "seq": "999999",  # High sequence to ensure it's processed
+                "data": json.dumps({
+                    "message": error_message,
+                    "code": "ACTIVITY_ERROR",
+                }),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "conversation_id": conversation_id,
+                "message_id": message_id,
+            }
+            if correlation_id:
+                error_event["correlation_id"] = correlation_id
+
+            # Publish to Redis Stream
+            await redis_client.xadd(stream_key, error_event, maxlen=1000)
+            logger.info(
+                f"[ProjectAgentActivity] Published error event to {stream_key}: {error_message[:100]}"
+            )
+
+        finally:
+            await redis_client.close()
+
+    except Exception as e:
+        logger.error(f"[ProjectAgentActivity] Failed to publish error to Redis: {e}")

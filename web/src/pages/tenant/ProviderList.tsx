@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { providerAPI } from '../../services/api'
-import { ProviderConfig, ProviderType, ProviderStatus } from '../../types/memory'
-import { ProviderModal } from '@/components/tenant/ProviderModal'
+import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory'
+import { ProviderCard, ProviderHealthPanel, ProviderConfigModal } from '@/components/provider'
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
     openai: 'OpenAI',
@@ -19,6 +19,8 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
     zai: 'ZhipuAI',
 }
 
+type ViewMode = 'cards' | 'table'
+
 export const ProviderList: React.FC = () => {
     const { t } = useTranslation()
     const [providers, setProviders] = useState<ProviderConfig[]>([])
@@ -30,35 +32,9 @@ export const ProviderList: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingProvider, setEditingProvider] = useState<ProviderConfig | null>(null)
     const [checkingHealth, setCheckingHealth] = useState<string | null>(null)
-
-    const getStatusBadge = (status?: ProviderStatus) => {
-        switch (status) {
-            case 'healthy':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span> {t('common.status.healthy')}
-                    </span>
-                )
-            case 'degraded':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500"></span> {t('common.status.degraded')}
-                    </span>
-                )
-            case 'unhealthy':
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-500"></span> {t('common.status.unhealthy')}
-                    </span>
-                )
-            default:
-                return (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300">
-                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span> {t('common.status.unknown')}
-                    </span>
-                )
-        }
-    }
+    const [systemStatus, setSystemStatus] = useState<SystemResilienceStatus | null>(null)
+    const [resettingCircuitBreaker, setResettingCircuitBreaker] = useState<string | null>(null)
+    const [viewMode, setViewMode] = useState<ViewMode>('cards')
 
     const loadProviders = useCallback(async () => {
         setIsLoading(true)
@@ -69,7 +45,6 @@ export const ProviderList: React.FC = () => {
                 params.provider_type = typeFilter
             }
             const response = await providerAPI.list(params)
-            // providerAPI.list returns ProviderConfig[] directly
             setProviders(response)
         } catch (err) {
             console.error('Failed to load providers:', err)
@@ -79,19 +54,43 @@ export const ProviderList: React.FC = () => {
         }
     }, [typeFilter, t])
 
+    const loadSystemStatus = useCallback(async () => {
+        try {
+            const status = await providerAPI.getSystemStatus()
+            setSystemStatus(status)
+        } catch (err) {
+            console.error('Failed to load system status:', err)
+        }
+    }, [])
+
     useEffect(() => {
         loadProviders()
-    }, [loadProviders])
+        loadSystemStatus()
+    }, [loadProviders, loadSystemStatus])
 
     const handleCheckHealth = async (providerId: string) => {
         setCheckingHealth(providerId)
         try {
             await providerAPI.checkHealth(providerId)
-            await loadProviders() // Reload to get updated health status
+            await loadProviders()
         } catch (err) {
             console.error('Health check failed:', err)
         } finally {
             setCheckingHealth(null)
+        }
+    }
+
+    const handleResetCircuitBreaker = async (providerType: string) => {
+        setResettingCircuitBreaker(providerType)
+        try {
+            await providerAPI.resetCircuitBreaker(providerType)
+            await loadProviders()
+            await loadSystemStatus()
+        } catch (err) {
+            console.error('Failed to reset circuit breaker:', err)
+            alert(t('common.error'))
+        } finally {
+            setResettingCircuitBreaker(null)
         }
     }
 
@@ -138,12 +137,8 @@ export const ProviderList: React.FC = () => {
         return matchesSearch && matchesType && matchesStatus
     })
 
-    const activeCount = providers.filter(p => p.is_active).length
-    const healthyCount = providers.filter(p => p.health_status === 'healthy').length
-    const defaultProvider = providers.find(p => p.is_default)
-
     return (
-        <div className="max-w-full mx-auto w-full flex flex-col gap-8">
+        <div className="max-w-full mx-auto w-full flex flex-col gap-6">
             {/* Header Area */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -159,46 +154,12 @@ export const ProviderList: React.FC = () => {
                 </button>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
-                    <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">{t('common.stats.totalProviders')}</p>
-                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{providers.length}</h3>
-                        <p className="text-xs text-slate-400 mt-1">{activeCount} {t('common.status.active')}</p>
-                    </div>
-                    <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary">
-                        <span className="material-symbols-outlined">smart_toy</span>
-                    </div>
-                </div>
-                <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
-                    <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">{t('common.stats.healthStatus')}</p>
-                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{healthyCount}<span className="text-lg text-slate-400 font-normal">/{providers.length}</span></h3>
-                        <p className="text-xs text-green-600 font-medium mt-1 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                            {providers.length > 0 ? Math.round((healthyCount / providers.length) * 100) : 0}% {t('common.status.healthy')}
-                        </p>
-                    </div>
-                    <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600">
-                        <span className="material-symbols-outlined">monitor_heart</span>
-                    </div>
-                </div>
-                <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm flex items-start justify-between">
-                    <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">{t('common.stats.defaultProvider')}</p>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white truncate max-w-[200px]">
-                            {defaultProvider?.name || t('common.status.unknown')}
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-1">
-                            {defaultProvider ? PROVIDER_TYPE_LABELS[defaultProvider.provider_type] : 'Configure a default'}
-                        </p>
-                    </div>
-                    <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600">
-                        <span className="material-symbols-outlined">star</span>
-                    </div>
-                </div>
-            </div>
+            {/* Health Dashboard */}
+            <ProviderHealthPanel
+                providers={providers}
+                systemStatus={systemStatus}
+                isLoading={isLoading}
+            />
 
             {/* Error State */}
             {error && (
@@ -239,8 +200,9 @@ export const ProviderList: React.FC = () => {
                                 <option value="anthropic">Anthropic</option>
                                 <option value="gemini">Google Gemini</option>
                                 <option value="qwen">Qwen</option>
+                                <option value="deepseek">Deepseek</option>
+                                <option value="zai">ZhipuAI</option>
                                 <option value="groq">Groq</option>
-                                <option value="azure_openai">Azure OpenAI</option>
                                 <option value="cohere">Cohere</option>
                                 <option value="mistral">Mistral</option>
                             </select>
@@ -264,49 +226,81 @@ export const ProviderList: React.FC = () => {
                                 <span className="material-symbols-outlined text-[16px]">expand_more</span>
                             </div>
                         </div>
+                        
+                        {/* View Mode Toggle */}
+                        <div className="flex items-center bg-white dark:bg-surface-dark border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden">
+                            <button
+                                onClick={() => setViewMode('cards')}
+                                className={`p-2 transition-colors ${viewMode === 'cards' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                                title="Card View"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('table')}
+                                className={`p-2 transition-colors ${viewMode === 'table' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                                title="Table View"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">view_list</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                {/* Table */}
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                        <thead className="bg-slate-50 dark:bg-slate-800">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Provider</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.forms.type')}</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.forms.model')}</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.forms.status')}</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.stats.healthStatus')}</th>
-                                <th className="relative px-6 py-3" scope="col">
-                                    <span className="sr-only">Actions</span>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-surface-light dark:bg-surface-dark divide-y divide-slate-200 dark:divide-slate-700">
-                            {isLoading ? (
+                {/* Content Area */}
+                {isLoading ? (
+                    <div className="p-8 text-center text-slate-500">
+                        <span className="material-symbols-outlined animate-spin mr-2">progress_activity</span>
+                        {t('common.loading')}
+                    </div>
+                ) : filteredProviders.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500">
+                        <div className="flex flex-col items-center gap-2">
+                            <span className="material-symbols-outlined text-4xl text-slate-300">smart_toy</span>
+                            <p>{t('tenant.providers.noProviders')}</p>
+                            <button
+                                onClick={handleCreate}
+                                className="text-primary hover:text-primary-dark text-sm font-medium"
+                            >
+                                {t('tenant.providers.addFirstProvider')}
+                            </button>
+                        </div>
+                    </div>
+                ) : viewMode === 'cards' ? (
+                    /* Card View */
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {filteredProviders.map((provider) => (
+                            <ProviderCard
+                                key={provider.id}
+                                provider={provider}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                onCheckHealth={handleCheckHealth}
+                                onResetCircuitBreaker={handleResetCircuitBreaker}
+                                isCheckingHealth={checkingHealth === provider.id}
+                                isResettingCircuitBreaker={resettingCircuitBreaker === provider.provider_type}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    /* Table View */
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
+                            <thead className="bg-slate-50 dark:bg-slate-800">
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                                        <span className="material-symbols-outlined animate-spin mr-2">progress_activity</span>
-                                        {t('common.loading')}
-                                    </td>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Provider</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.forms.type')}</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.forms.model')}</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.forms.status')}</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">{t('common.stats.healthStatus')}</th>
+                                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider" scope="col">Circuit Breaker</th>
+                                    <th className="relative px-6 py-3" scope="col">
+                                        <span className="sr-only">Actions</span>
+                                    </th>
                                 </tr>
-                            ) : filteredProviders.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <span className="material-symbols-outlined text-4xl text-slate-300">smart_toy</span>
-                                            <p>{t('tenant.providers.noProviders')}</p>
-                                            <button
-                                                onClick={handleCreate}
-                                                className="text-primary hover:text-primary-dark text-sm font-medium"
-                                            >
-                                                {t('tenant.providers.addFirstProvider')}
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredProviders.map((provider) => (
+                            </thead>
+                            <tbody className="bg-surface-light dark:bg-surface-dark divide-y divide-slate-200 dark:divide-slate-700">
+                                {filteredProviders.map((provider) => (
                                     <tr key={provider.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
@@ -347,9 +341,58 @@ export const ProviderList: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center gap-2">
-                                                {getStatusBadge(provider.health_status)}
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                    provider.health_status === 'healthy' 
+                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                        : provider.health_status === 'degraded'
+                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                                        : provider.health_status === 'unhealthy'
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                        : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
+                                                }`}>
+                                                    <span className={`h-1.5 w-1.5 rounded-full ${
+                                                        provider.health_status === 'healthy' ? 'bg-green-500'
+                                                        : provider.health_status === 'degraded' ? 'bg-yellow-500'
+                                                        : provider.health_status === 'unhealthy' ? 'bg-red-500'
+                                                        : 'bg-slate-400'
+                                                    }`}></span>
+                                                    {provider.health_status || t('common.status.unknown')}
+                                                </span>
                                                 {provider.response_time_ms && (
                                                     <span className="text-xs text-slate-400">{provider.response_time_ms}ms</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                    provider.resilience?.circuit_breaker_state === 'closed'
+                                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                        : provider.resilience?.circuit_breaker_state === 'open'
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                        : provider.resilience?.circuit_breaker_state === 'half_open'
+                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
+                                                }`}>
+                                                    <span className={`h-1.5 w-1.5 rounded-full ${
+                                                        provider.resilience?.circuit_breaker_state === 'closed' ? 'bg-green-500'
+                                                        : provider.resilience?.circuit_breaker_state === 'open' ? 'bg-red-500'
+                                                        : provider.resilience?.circuit_breaker_state === 'half_open' ? 'bg-yellow-500'
+                                                        : 'bg-slate-400'
+                                                    }`}></span>
+                                                    {provider.resilience?.circuit_breaker_state || 'Unknown'}
+                                                </span>
+                                                {provider.resilience && provider.resilience.circuit_breaker_state !== 'closed' && (
+                                                    <button
+                                                        onClick={() => handleResetCircuitBreaker(provider.provider_type)}
+                                                        disabled={resettingCircuitBreaker === provider.provider_type}
+                                                        className="p-1 text-slate-400 hover:text-primary transition-colors disabled:opacity-50"
+                                                        title="Reset Circuit Breaker"
+                                                    >
+                                                        <span className={`material-symbols-outlined text-[14px] ${resettingCircuitBreaker === provider.provider_type ? 'animate-spin' : ''}`}>
+                                                            {resettingCircuitBreaker === provider.provider_type ? 'progress_activity' : 'refresh'}
+                                                        </span>
+                                                    </button>
                                                 )}
                                             </div>
                                         </td>
@@ -382,12 +425,13 @@ export const ProviderList: React.FC = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                {/* Pagination */}
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                
+                {/* Footer */}
                 <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between sm:px-6">
                     <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                         <div>
@@ -399,8 +443,8 @@ export const ProviderList: React.FC = () => {
                 </div>
             </div>
 
-            {/* Provider Modal */}
-            <ProviderModal
+            {/* Provider Config Modal - New Step-by-Step Wizard */}
+            <ProviderConfigModal
                 isOpen={isModalOpen}
                 onClose={handleModalClose}
                 onSuccess={handleModalSuccess}
@@ -409,4 +453,3 @@ export const ProviderList: React.FC = () => {
         </div>
     )
 }
-

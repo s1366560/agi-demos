@@ -234,22 +234,28 @@ class TestValidatedEmbedderWithRealProviders:
 
     @pytest.mark.asyncio
     async def test_qwen_embedder_with_validated_wrapper(self):
-        """Test Qwen embedder wrapped with ValidatedEmbedder."""
+        """Test Qwen embedder wrapped with ValidatedEmbedder via LiteLLM."""
         # Skip if no API key
         import os
 
-        from src.infrastructure.llm.qwen.qwen_embedder import QwenEmbedder, QwenEmbedderConfig
+        from src.domain.llm_providers.models import ProviderType
+        from src.infrastructure.llm.litellm.litellm_embedder import (
+            LiteLLMEmbedder,
+            LiteLLMEmbedderConfig,
+        )
 
         if not os.environ.get("DASHSCOPE_API_KEY") and not os.environ.get("QWEN_API_KEY"):
             pytest.skip("No Qwen API key available")
 
-        config = QwenEmbedderConfig(
+        # Create LiteLLM embedder config
+        config = LiteLLMEmbedderConfig(
             embedding_dim=DIM_1024,
             embedding_model="text-embedding-v3",
+            provider_type=ProviderType.QWEN,
             api_key=os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("QWEN_API_KEY"),
         )
 
-        base_embedder = QwenEmbedder(config=config)
+        base_embedder = LiteLLMEmbedder(config=config)
         validated_embedder = ValidatedEmbedder(base_embedder=base_embedder, config=config)
 
         # Test single embedding
@@ -259,7 +265,30 @@ class TestValidatedEmbedderWithRealProviders:
 
     @pytest.mark.asyncio
     async def test_gemini_embedder_with_validated_wrapper(self):
-        """Test Gemini embedder wrapped with ValidatedEmbedder."""
-        # Skip - requires graphiti_core dependency which has been removed
-        # TODO: Rewrite this test to use GeminiEmbedderWrapper with ProviderConfig
-        pytest.skip("Test requires rewrite - graphiti_core dependency removed")
+        """Test Gemini embedder wrapped with ValidatedEmbedder via LiteLLM."""
+        import os
+
+        from src.domain.llm_providers.models import ProviderType
+        from src.infrastructure.llm.litellm.litellm_embedder import (
+            LiteLLMEmbedder,
+            LiteLLMEmbedderConfig,
+        )
+
+        if not os.environ.get("GEMINI_API_KEY"):
+            pytest.skip("No Gemini API key available")
+
+        # Create LiteLLM embedder config for Gemini
+        config = LiteLLMEmbedderConfig(
+            embedding_dim=DIM_768,
+            embedding_model="text-embedding-004",
+            provider_type=ProviderType.GEMINI,
+            api_key=os.environ.get("GEMINI_API_KEY"),
+        )
+
+        base_embedder = LiteLLMEmbedder(config=config)
+        validated_embedder = ValidatedEmbedder(base_embedder=base_embedder, config=config)
+
+        # Test single embedding
+        result = await validated_embedder.create("test text for embedding")
+
+        assert len(result) == DIM_768

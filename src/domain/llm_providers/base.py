@@ -3,72 +3,13 @@ Abstract base classes for LLM provider implementations.
 
 This module defines the contracts that all LLM provider implementations must follow,
 ensuring consistency and enabling easy extension for new providers.
+
+For LLM clients, use LLMClient from llm_types.py:
+    from src.domain.llm_providers.llm_types import LLMClient
 """
 
 from abc import ABC, abstractmethod
 from typing import Any, Optional
-
-from pydantic import BaseModel
-
-from src.domain.llm_providers.llm_types import Message, ModelSize
-
-
-class BaseLLMClient(ABC):
-    """
-    Abstract base class for LLM clients.
-
-    All LLM provider implementations must inherit from this class
-    and implement the required methods.
-    """
-
-    @abstractmethod
-    async def generate_response(
-        self,
-        messages: list[Message],
-        response_model: Optional[type[BaseModel]] = None,
-        max_tokens: int = 4096,
-        model_size: ModelSize = ModelSize.medium,
-    ) -> dict[str, Any]:
-        """
-        Generate response from LLM.
-
-        Args:
-            messages: List of messages (system, user, assistant)
-            response_model: Optional Pydantic model for structured output
-            max_tokens: Maximum tokens in response
-            model_size: Which model to use (small or medium)
-
-        Returns:
-            Dictionary with response content or parsed structured data
-
-        Raises:
-            RateLimitError: If provider rate limit is hit
-            Exception: For other errors
-        """
-        pass
-
-    @abstractmethod
-    def _get_model_for_size(self, model_size: ModelSize) -> str:
-        """
-        Get model name for requested size.
-
-        Args:
-            model_size: Small or medium
-
-        Returns:
-            Model name string
-        """
-        pass
-
-    @abstractmethod
-    def _get_provider_type(self) -> str:
-        """
-        Return provider type identifier for observability.
-
-        Returns:
-            Provider type string (e.g., "openai", "qwen", "deepseek")
-        """
-        pass
 
 
 class BaseEmbedder(ABC):

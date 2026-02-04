@@ -31,6 +31,7 @@ import type {
     SchemaEntityType,
     SchemaEdgeType,
     EdgeMapping,
+    SystemResilienceStatus,
 } from '../types/memory';
 
 // Use centralized HTTP client instead of creating a new axios instance
@@ -297,6 +298,14 @@ export const providerAPI = {
     },
     unassignFromTenant: async (id: string, tenantId: string): Promise<void> => {
         await api.delete(`/llm-providers/${id}/assign/${tenantId}`);
+    },
+    // System-wide resilience status
+    getSystemStatus: async (): Promise<SystemResilienceStatus> => {
+        return await api.get('/llm-providers/system/status');
+    },
+    // Reset circuit breaker for a provider type
+    resetCircuitBreaker: async (providerType: string): Promise<{ message: string; new_state: unknown }> => {
+        return await api.post(`/llm-providers/system/reset-circuit-breaker/${providerType}`);
     },
 };
 

@@ -49,12 +49,19 @@ class Settings(BaseSettings):
         default="qwen", alias="LLM_PROVIDER"
     )  # 'gemini', 'qwen', 'openai', 'deepseek', 'zai', 'kimi', 'anthropic'
 
-    # Native SDK Integration
-    # Note: use_litellm now enables database provider resolution with native SDKs (not LiteLLM)
-    # LiteLLM has been removed in favor of native SDK implementations
+    # Database Provider Resolution
+    # When True, resolves LLM providers from database configuration (llm_provider_configs table)
+    # When False, uses environment variables directly
+    # Note: LiteLLM is still used internally as the unified adapter layer
+    use_db_provider_resolution: bool = Field(
+        default=True, alias="USE_DB_PROVIDER_RESOLUTION"
+    )
+
+    # Legacy alias for backward compatibility (deprecated, use USE_DB_PROVIDER_RESOLUTION)
+    # TODO: Remove in next major version
     use_litellm: bool = Field(
-        default=True, alias="USE_LITELM"
-    )  # Enable database provider resolution
+        default=True, alias="USE_LITELLM"
+    )
 
     # LLM Provider API Key Encryption
     # 32-byte (256-bit) encryption key as hex string (64 hex characters)
@@ -241,6 +248,26 @@ class Settings(BaseSettings):
     agent_max_tokens: int = Field(
         default=16384, alias="AGENT_MAX_TOKENS"
     )  # Maximum output tokens for LLM responses (increased for large file writes)
+
+    # Agent Pool Management (NEW: 3-tier pooled architecture)
+    agent_pool_enabled: bool = Field(
+        default=False, alias="AGENT_POOL_ENABLED"
+    )  # Enable new pooled architecture
+    agent_pool_default_tier: str = Field(
+        default="warm", alias="AGENT_POOL_DEFAULT_TIER"
+    )  # Default tier for new projects: hot, warm, cold
+    agent_pool_warm_max_instances: int = Field(
+        default=100, alias="AGENT_POOL_WARM_MAX_INSTANCES"
+    )  # Max WARM tier instances
+    agent_pool_cold_max_instances: int = Field(
+        default=200, alias="AGENT_POOL_COLD_MAX_INSTANCES"
+    )  # Max COLD tier instances
+    agent_pool_cold_idle_timeout_seconds: int = Field(
+        default=300, alias="AGENT_POOL_COLD_IDLE_TIMEOUT"
+    )  # COLD tier idle timeout (5 min)
+    agent_pool_health_check_interval_seconds: int = Field(
+        default=30, alias="AGENT_POOL_HEALTH_CHECK_INTERVAL"
+    )  # Health check interval
 
     # Monitoring
     enable_metrics: bool = Field(default=True, alias="ENABLE_METRICS")

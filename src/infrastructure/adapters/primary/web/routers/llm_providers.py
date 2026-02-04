@@ -393,3 +393,91 @@ async def get_provider_usage(
         "tenant_id": tenant_id,
         "statistics": [s.model_dump() for s in stats],
     }
+
+
+# System Status Endpoints
+
+
+@router.get("/system/status")
+async def get_system_resilience_status(
+    current_user: User = Depends(require_admin),
+):
+    """
+    Get system-wide resilience status for all LLM providers.
+
+    Returns circuit breaker states, rate limiter stats, and health status
+    for all registered provider types. Requires admin access.
+    """
+    from src.infrastructure.llm.resilience import (
+        get_circuit_breaker_registry,
+        get_health_checker,
+        get_provider_rate_limiter,
+    )
+    from src.domain.llm_providers.models import ProviderType
+
+    cb_registry = get_circuit_breaker_registry()
+    rate_limiter = get_provider_rate_limiter()
+    health_checker = get_health_checker()
+
+    status = {}
+    for provider_type in ProviderType:
+        circuit_breaker = cb_registry.get(provider_type)
+        cb_status = circuit_breaker.get_status()
+        rate_stats = rate_limiter.get_stats(provider_type)
+
+        status[provider_type.value] = {
+            "circuit_breaker": {
+                "state": cb_status["state"],
+                "failure_count": cb_status["failure_count"],
+                "success_count": cb_status["success_count"],
+                "can_execute": circuit_breaker.can_execute(),
+            },
+            "rate_limiter": rate_stats.get("stats", {}),
+            "health": {
+                "status": health_checker._current_status.get(
+                    provider_type, "unknown"
+                ).value if hasattr(health_checker._current_status.get(provider_type, "unknown"), "value") else "unknown",
+            },
+        }
+
+    return {
+        "providers": status,
+        "summary": {
+            "total_providers": len(ProviderType),
+            "healthy_count": sum(
+                1 for p in status.values()
+                if p["circuit_breaker"]["can_execute"]
+            ),
+        },
+    }
+
+
+@router.post("/system/reset-circuit-breaker/{provider_type}")
+async def reset_circuit_breaker(
+    provider_type: str,
+    current_user: User = Depends(require_admin),
+):
+    """
+    Reset circuit breaker for a specific provider type.
+
+    This forces the circuit breaker back to CLOSED state,
+    allowing requests to the provider again.
+    Requires admin access.
+    """
+    from src.infrastructure.llm.resilience import get_circuit_breaker_registry
+
+    try:
+        cb_registry = get_circuit_breaker_registry()
+        circuit_breaker = cb_registry.get(provider_type)
+        circuit_breaker.reset()
+
+        logger.info(f"Circuit breaker reset for {provider_type} by user {current_user.id}")
+        return {
+            "message": f"Circuit breaker reset for {provider_type}",
+            "new_state": circuit_breaker.get_status(),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to reset circuit breaker: {e}",
+        )

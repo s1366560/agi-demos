@@ -267,6 +267,27 @@ export interface UserProject {
 export type ProviderType = 'openai' | 'qwen' | 'gemini' | 'anthropic' | 'groq' | 'azure_openai' | 'cohere' | 'mistral' | 'bedrock' | 'vertex' | 'deepseek' | 'zai';
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
 
+// Circuit breaker state enum
+export type CircuitBreakerState = 'closed' | 'open' | 'half_open';
+
+// Rate limiter statistics
+export interface RateLimitStats {
+    current_concurrent: number;
+    max_concurrent: number;
+    total_requests: number;
+    requests_per_minute: number;
+    max_rpm?: number;
+}
+
+// Provider resilience status
+export interface ResilienceStatus {
+    circuit_breaker_state: CircuitBreakerState;
+    failure_count: number;
+    success_count: number;
+    rate_limit: RateLimitStats;
+    can_execute: boolean;
+}
+
 export interface ProviderConfig {
     id: string;
     name: string;
@@ -286,6 +307,8 @@ export interface ProviderConfig {
     health_last_check?: string;
     response_time_ms?: number;
     error_message?: string;
+    // Resilience status (circuit breaker + rate limiter)
+    resilience?: ResilienceStatus;
 }
 
 export interface ProviderCreate {
@@ -319,6 +342,26 @@ export interface ProviderUpdate {
 export interface ProviderListResponse {
     providers: ProviderConfig[];
     total: number;
+}
+
+// System-wide resilience status
+export interface SystemResilienceStatus {
+    providers: Record<string, {
+        circuit_breaker: {
+            state: CircuitBreakerState;
+            failure_count: number;
+            success_count: number;
+            can_execute: boolean;
+        };
+        rate_limiter: RateLimitStats;
+        health: {
+            status: string;
+        };
+    }>;
+    summary: {
+        total_providers: number;
+        healthy_count: number;
+    };
 }
 
 export interface ProviderUsageStats {

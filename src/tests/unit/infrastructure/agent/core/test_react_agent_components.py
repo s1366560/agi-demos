@@ -8,6 +8,9 @@ Tests the integration between all refactored components:
 - Execution routing (ExecutionRouter)
 
 This is Phase 6 of the refactoring plan.
+
+NOTE: This test file uses AgentEventType from the unified domain events types.
+EventType is now an alias for AgentEventType for backward compatibility.
 """
 
 from datetime import datetime
@@ -15,6 +18,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+from src.domain.events.types import AgentEventType
 from src.infrastructure.agent.config import (
     AgentConfig,
     ConfigManager,
@@ -32,7 +36,7 @@ from src.infrastructure.agent.events import (
     AgentDomainEvent,
     EventBus,
     EventMapper,
-    EventType,
+    EventType,  # Alias for AgentEventType
     SSEEvent,
     get_event_bus,
     set_event_bus,
@@ -130,7 +134,7 @@ class TestEventAndConfigIntegration:
         # Register config change callback
         def on_change(tenant_id: str, config: AgentConfig) -> None:
             bus.publish(AgentDomainEvent(
-                event_type=EventType.STATE_CHANGE,
+                event_type=AgentEventType.STATUS,
                 data={"tenant": tenant_id, "config_changed": True},
             ))
 
@@ -140,7 +144,7 @@ class TestEventAndConfigIntegration:
         ))
 
         assert len(events) == 1
-        assert events[0].event_type == EventType.STATE_CHANGE
+        assert events[0].event_type == AgentEventType.STATUS
 
 
 class TestToolAndEventIntegration:
@@ -165,20 +169,20 @@ class TestToolAndEventIntegration:
 
         # Emit events manually (in real implementation, executor would do this)
         bus.publish(AgentDomainEvent(
-            event_type=EventType.TOOL_START,
-            data={"tool": "test_tool"},
+            event_type=AgentEventType.ACT,
+            data={"tool": "test_tool", "phase": "start"},
         ))
 
         result = await executor.execute("test_tool", {})
 
         bus.publish(AgentDomainEvent(
-            event_type=EventType.TOOL_END,
+            event_type=AgentEventType.OBSERVE,
             data={"tool": "test_tool", "result": result.result},
         ))
 
         assert len(events) == 2
-        assert events[0].event_type == EventType.TOOL_START
-        assert events[1].event_type == EventType.TOOL_END
+        assert events[0].event_type == AgentEventType.ACT
+        assert events[1].event_type == AgentEventType.OBSERVE
 
     @pytest.mark.asyncio
     async def test_tool_error_emits_error_event(self) -> None:
@@ -281,7 +285,7 @@ class TestFullIntegration:
 
         # 2. Emit start event
         event_bus.publish(AgentDomainEvent(
-            event_type=EventType.STREAM_START,
+            event_type=AgentEventType.START,
             data={"message": "Say hello"},
         ))
 
@@ -290,7 +294,7 @@ class TestFullIntegration:
 
         # 4. Emit end event
         event_bus.publish(AgentDomainEvent(
-            event_type=EventType.STREAM_END,
+            event_type=AgentEventType.COMPLETE,
             data={"success": result.success},
         ))
 
@@ -326,7 +330,7 @@ class TestFullIntegration:
         errors = []
 
         def capture_errors(event: AgentDomainEvent) -> None:
-            if event.event_type in (EventType.ERROR, EventType.TOOL_ERROR):
+            if event.event_type == AgentEventType.ERROR:
                 errors.append(event)
 
         event_bus.subscribe(callback=capture_errors)
@@ -344,19 +348,19 @@ class TestFullIntegration:
 
         # Create events from different components
         events = [
-            # Config event
+            # Status event
             AgentDomainEvent(
-                event_type=EventType.STATE_CHANGE,
+                event_type=AgentEventType.STATUS,
                 data={"max_iterations": 10},
             ),
-            # Tool event
+            # Act event
             AgentDomainEvent(
-                event_type=EventType.TOOL_START,
+                event_type=AgentEventType.ACT,
                 data={"tool": "test_tool"},
             ),
             # Error event
             AgentDomainEvent(
-                event_type=EventType.ERROR,
+                event_type=AgentEventType.ERROR,
                 data={"error": "Test error"},
             ),
         ]
@@ -365,8 +369,8 @@ class TestFullIntegration:
         stream = mapper.create_sse_stream(events)
 
         # Verify format
-        assert "event: state_change" in stream
-        assert "event: tool_start" in stream
+        assert "event: status" in stream
+        assert "event: act" in stream
         assert "event: error" in stream
         assert "data: " in stream
 
@@ -420,13 +424,13 @@ class TestEventScenarios:
         # Publish different types of events
         for i in range(5):
             bus.publish(AgentDomainEvent(
-                event_type=EventType.TOOL_START,
+                event_type=AgentEventType.ACT,
                 data={"index": i},
             ))
 
         for i in range(3):
             bus.publish(AgentDomainEvent(
-                event_type=EventType.PROGRESS,
+                event_type=AgentEventType.STATUS,
                 data={"index": i},
             ))
 
@@ -435,17 +439,17 @@ class TestEventScenarios:
         assert len(all_history) == 8
 
         # Filter by type
-        tool_events = bus.get_history(event_type=EventType.TOOL_START)
-        assert len(tool_events) == 5
+        act_events = bus.get_history(event_type=AgentEventType.ACT)
+        assert len(act_events) == 5
 
-        progress_events = bus.get_history(event_type=EventType.PROGRESS)
-        assert len(progress_events) == 3
+        status_events = bus.get_history(event_type=AgentEventType.STATUS)
+        assert len(status_events) == 3
 
     def test_custom_event_transformer(self) -> None:
         """Should apply custom transformer to events."""
         mapper = EventMapper()
 
-        def transform_tool_start(event: AgentDomainEvent) -> dict:
+        def transform_act(event: AgentDomainEvent) -> dict:
             tool_name = event.data.get("tool", "unknown")
             return {
                 "action": "executing",
@@ -453,10 +457,10 @@ class TestEventScenarios:
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-        mapper.register_transformer(EventType.TOOL_START, transform_tool_start)
+        mapper.register_transformer(AgentEventType.ACT, transform_act)
 
         event = AgentDomainEvent(
-            event_type=EventType.TOOL_START,
+            event_type=AgentEventType.ACT,
             data={"tool": "read_file"},
         )
 
@@ -608,7 +612,7 @@ class TestSSEFormat:
         """Should generate correct SSE format."""
         event = SSEEvent(
             id="123",
-            event=EventType.TOOL_START,
+            event=AgentEventType.ACT,
             data={"tool": "test", "args": ["a", "b"]},
             retry=3000,
         )
@@ -616,7 +620,7 @@ class TestSSEFormat:
         sse = event.to_sse_format()
 
         assert "id: 123" in sse
-        assert "event: tool_start" in sse
+        assert "event: act" in sse
         assert "retry: 3000" in sse
         assert "data: " in sse
         assert sse.endswith("\n\n")
@@ -625,7 +629,7 @@ class TestSSEFormat:
         """Should handle SSE event without optional fields."""
         event = SSEEvent(
             id="",
-            event=EventType.PROGRESS,
+            event=AgentEventType.STATUS,
             data={"value": 50},
         )
 
@@ -634,4 +638,4 @@ class TestSSEFormat:
         # Should not have id or retry
         assert "id: " not in sse or sse.count("id:") == 0
         assert "retry:" not in sse
-        assert "event: progress" in sse
+        assert "event: status" in sse

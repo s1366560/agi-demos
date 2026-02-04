@@ -1,4 +1,8 @@
-"""Events package for ReActAgent SSE streaming."""
+"""Events package for ReActAgent SSE streaming.
+
+REFACTORED: This package now uses AgentEventType from src.domain.events.types
+as the single source of truth. EventType is provided as a deprecated alias.
+"""
 
 from src.infrastructure.agent.events.converter import (
     EventConverter,
@@ -10,16 +14,19 @@ from src.infrastructure.agent.events.event_mapper import (
     AgentDomainEvent,
     EventBus,
     EventMapper,
-    EventType,
+    EventType,  # Deprecated alias for AgentEventType
     SSEEvent,
     get_event_bus,
     set_event_bus,
 )
+# Re-export unified type for explicit access
+from src.domain.events.types import AgentEventType
 
 __all__ = [
-    # Event types and models
-    "EventType",
-    "event_type",
+    # Event types (unified)
+    "AgentEventType",  # Preferred
+    "EventType",  # Deprecated alias for backward compatibility
+    # SSE models
     "SSEEvent",
     "AgentDomainEvent",
     # Event Mapper (legacy)

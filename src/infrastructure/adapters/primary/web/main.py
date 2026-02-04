@@ -301,6 +301,17 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     # Attachments (File upload for agent chat)
     app.include_router(attachments_upload.router)
 
+    # Agent Pool Admin API (always registered, returns disabled status when pool not enabled)
+    from src.infrastructure.agent.pool import create_pool_router
+    from src.infrastructure.adapters.primary.web.routers import admin_dlq
+
+    app.include_router(create_pool_router())
+    logger.info("Agent Pool Admin API registered at /api/v1/admin/pool")
+
+    # DLQ Admin API (Dead Letter Queue management)
+    app.include_router(admin_dlq.router, prefix="/api/v1")
+    logger.info("DLQ Admin API registered at /api/v1/admin/dlq")
+
     return app
 
 

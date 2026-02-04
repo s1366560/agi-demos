@@ -29,13 +29,13 @@ dependencies = [
     "opentelemetry-exporter-otlp>=1.22.0",
     "dashscope>=1.20.0",
     "greenlet>=3.3.0",
-    "openai>=1.77.0,<2.0.0",
+    "openai>=2.8.0",
     "aiosqlite>=0.22.1",
     "psycopg2-binary>=2.9.11",
     # ZhipuAI (Z.AI) official SDK
     "zai-sdk>=0.2.0",
-    # LiteLLM for multi-provider LLM support
-    "litellm>=1.0.0",
+    # LiteLLM for multi-provider LLM support (1.81+ for zai provider)
+    "litellm>=1.81.0",
     # Web search and scraping tools
     "tavily-python>=0.5.0",
     "playwright>=1.45.0",

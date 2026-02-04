@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.factories import create_langchain_llm
+from src.configuration.factories import create_llm_client
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -47,7 +47,7 @@ async def get_conversation_messages(
     """
     try:
         container = get_container_with_db(request, db)
-        llm = create_langchain_llm(tenant_id)
+        llm = create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         conversation = await agent_service.get_conversation(
@@ -218,7 +218,7 @@ async def get_conversation_execution(
     """Get the agent execution history for a conversation."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_langchain_llm(tenant_id)
+        llm = create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         executions = await agent_service.get_execution_history(
@@ -432,7 +432,7 @@ async def get_execution_stats(
     """Get execution statistics for a conversation."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_langchain_llm(tenant_id)
+        llm = create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         executions = await agent_service.get_execution_history(

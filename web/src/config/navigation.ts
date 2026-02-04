@@ -178,6 +178,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
       title: 'nav.administration',
       collapsible: false,
       items: [
+        { id: 'pool', icon: 'memory', label: 'nav.pool', path: '/pool' },
         { id: 'billing', icon: 'credit_card', label: 'nav.billing', path: '/billing' },
         { id: 'settings', icon: 'settings', label: 'nav.settings', path: '/settings' },
       ],

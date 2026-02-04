@@ -41,6 +41,8 @@ agent_graph_service = None
 temporal_client = None
 worker = None
 cleanup_task = None  # Background cleanup task for Agent Session Pool
+pool_adapter = None  # Agent Pool Adapter (when enabled)
+pool_orchestrator = None  # Pool Orchestrator (with HA services)
 
 # Agent worker-specific settings
 AGENT_TASK_QUEUE = os.getenv("AGENT_TEMPORAL_TASK_QUEUE", "memstack-agent-tasks")
@@ -153,9 +155,9 @@ async def shutdown(signal_enum=None):
 
     Implements a two-phase shutdown:
     1. Stop worker (wait for in-flight tasks with timeout)
-    2. Close resources in dependency order: Redis -> Graph Service -> State
+    2. Close resources in dependency order: Pool -> Redis -> Graph Service -> State
     """
-    global worker, temporal_client, cleanup_task
+    global worker, temporal_client, cleanup_task, pool_adapter, pool_orchestrator
 
     if signal_enum:
         logger.info(f"Agent Worker: Received exit signal {signal_enum.name}...")
@@ -170,6 +172,25 @@ async def shutdown(signal_enum=None):
         except asyncio.CancelledError:
             pass
         logger.info("Agent Worker: Cleanup task cancelled")
+
+    # Shutdown Agent Pool Orchestrator (if enabled)
+    if pool_orchestrator:
+        try:
+            await asyncio.wait_for(pool_orchestrator.stop(), timeout=15.0)
+            logger.info("Agent Worker: Pool Orchestrator stopped")
+        except asyncio.TimeoutError:
+            logger.warning("Agent Worker: Pool Orchestrator stop timed out")
+        except Exception as e:
+            logger.warning(f"Agent Worker: Error stopping Pool Orchestrator: {e}")
+    elif pool_adapter:
+        # Legacy: Shutdown Agent Pool Manager (if enabled but no orchestrator)
+        try:
+            await asyncio.wait_for(pool_adapter.stop(), timeout=10.0)
+            logger.info("Agent Worker: Pool Manager stopped")
+        except asyncio.TimeoutError:
+            logger.warning("Agent Worker: Pool Manager stop timed out")
+        except Exception as e:
+            logger.warning(f"Agent Worker: Error stopping Pool Manager: {e}")
 
     # Phase 1: Shutdown worker with timeout
     if worker:
@@ -327,6 +348,95 @@ async def main():
     if settings.agent_session_prewarm_enabled:
         asyncio.create_task(prewarm_agent_sessions())
         logger.info("Agent Worker: Prewarm task scheduled")
+
+    # Optional: Initialize Agent Pool with Orchestrator (new 3-tier architecture with HA)
+    global pool_adapter, pool_orchestrator
+    if settings.agent_pool_enabled:
+        try:
+            from src.infrastructure.agent.pool import PoolConfig
+            from src.infrastructure.agent.pool.config import TierConfig
+            from src.infrastructure.agent.pool.feature_flags import get_feature_flags
+            from src.infrastructure.agent.pool.orchestrator import (
+                OrchestratorConfig,
+                PoolOrchestrator,
+            )
+            from src.infrastructure.agent.pool.types import ProjectTier
+
+            # Check feature flags for HA components
+            flags = get_feature_flags()
+
+            # Create pool config from settings
+            pool_config = PoolConfig(
+                default_tier=ProjectTier(settings.agent_pool_default_tier),
+                tier_configs={
+                    ProjectTier.WARM: TierConfig(
+                        tier=ProjectTier.WARM,
+                        max_instances=settings.agent_pool_warm_max_instances,
+                    ),
+                    ProjectTier.COLD: TierConfig(
+                        tier=ProjectTier.COLD,
+                        max_instances=settings.agent_pool_cold_max_instances,
+                        eviction_idle_seconds=settings.agent_pool_cold_idle_timeout_seconds,
+                    ),
+                },
+                health_check_interval_seconds=settings.agent_pool_health_check_interval_seconds,
+            )
+
+            # Create orchestrator config with HA features
+            orchestrator_config = OrchestratorConfig(
+                pool_config=pool_config,
+                enable_health_monitor=await flags.is_enabled("agent_pool_health_monitor"),
+                enable_failure_recovery=await flags.is_enabled("agent_pool_failure_recovery"),
+                enable_auto_scaling=await flags.is_enabled("agent_pool_auto_scaling"),
+                enable_state_recovery=await flags.is_enabled("agent_pool_state_recovery"),
+                enable_metrics=await flags.is_enabled("agent_pool_metrics"),
+                redis_url=settings.redis_url if hasattr(settings, "redis_url") else None,
+                health_check_interval_seconds=settings.agent_pool_health_check_interval_seconds,
+            )
+
+            # Initialize orchestrator
+            pool_orchestrator = PoolOrchestrator(orchestrator_config)
+            await pool_orchestrator.start()
+
+            # Create adapter wrapper for legacy compatibility
+            from src.infrastructure.agent.pool import create_pooled_adapter
+
+            pool_adapter = create_pooled_adapter(pool_config=pool_config)
+            pool_adapter._pool_manager = pool_orchestrator.pool_manager
+            pool_adapter._is_running = True
+
+            # Register pool adapter in worker state for Activities
+            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                set_pool_adapter,
+            )
+
+            set_pool_adapter(pool_adapter)
+
+            # Log enabled features
+            enabled_features = []
+            if orchestrator_config.enable_health_monitor:
+                enabled_features.append("health")
+            if orchestrator_config.enable_failure_recovery:
+                enabled_features.append("recovery")
+            if orchestrator_config.enable_auto_scaling:
+                enabled_features.append("scaling")
+            if orchestrator_config.enable_state_recovery:
+                enabled_features.append("checkpoints")
+            if orchestrator_config.enable_metrics:
+                enabled_features.append("metrics")
+
+            logger.info(
+                f"Agent Worker: Pool Orchestrator initialized "
+                f"(default_tier={settings.agent_pool_default_tier}, "
+                f"warm_max={settings.agent_pool_warm_max_instances}, "
+                f"cold_max={settings.agent_pool_cold_max_instances}, "
+                f"ha_features=[{', '.join(enabled_features)}])"
+            )
+        except Exception as e:
+            logger.warning(f"Agent Worker: Failed to initialize Pool Orchestrator: {e}")
+            pool_adapter = None
+            pool_orchestrator = None
+            pool_adapter = None
 
     # Import agent-specific workflows and activities
     from src.infrastructure.adapters.secondary.temporal.activities.agent import (
