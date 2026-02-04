@@ -3,13 +3,14 @@
 Provides endpoints for human intervention during agent execution:
 - get_pending_hitl_requests: Get pending requests for a conversation
 - get_project_pending_hitl_requests: Get pending requests for a project
-- respond_to_clarification: Respond to clarification request
-- respond_to_decision: Respond to decision request
-- respond_to_env_var_request: Respond to environment variable request
-- respond_to_doom_loop: Respond to doom loop intervention
+- respond_to_hitl: Unified endpoint to respond to any HITL request (Temporal Signal)
+
+Architecture:
+    Frontend → POST /hitl/respond → Temporal Signal → Workflow → Agent
 """
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,11 +29,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_reposito
 )
 
 from .schemas import (
-    ClarificationResponseRequest,
-    DecisionResponseRequest,
-    DoomLoopResponseRequest,
-    EnvVarResponseRequest,
+    HITLCancelRequest,
     HITLRequestResponse,
+    HITLResponseRequest,
     HumanInteractionResponse,
     PendingHITLResponse,
 )
@@ -43,7 +42,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/conversations/{conversation_id}/hitl/pending",
+    "/conversations/{conversation_id}/pending",
     response_model=PendingHITLResponse,
 )
 async def get_pending_hitl_requests(
@@ -109,7 +108,7 @@ async def get_pending_hitl_requests(
         )
 
 
-@router.get("/projects/{project_id}/hitl/pending", response_model=PendingHITLResponse)
+@router.get("/projects/{project_id}/pending", response_model=PendingHITLResponse)
 async def get_project_pending_hitl_requests(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -159,172 +158,288 @@ async def get_project_pending_hitl_requests(
         )
 
 
-@router.post("/clarification/respond", response_model=HumanInteractionResponse)
-async def respond_to_clarification(
-    request: ClarificationResponseRequest,
+# =============================================================================
+# Unified HITL Response Endpoint (Temporal-based)
+# =============================================================================
+
+
+@router.post("/respond", response_model=HumanInteractionResponse)
+async def respond_to_hitl(
+    request: HITLResponseRequest,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
 ) -> HumanInteractionResponse:
     """
-    Respond to a pending clarification request.
+    Unified endpoint to respond to any HITL request.
 
-    This endpoint allows users to provide answers to clarification questions
-    asked by the agent during the planning phase.
+    This endpoint sends a Temporal Signal to the running workflow,
+    replacing the legacy manager-based approach.
+
+    Request body:
+    - request_id: The HITL request ID
+    - hitl_type: Type of request ("clarification", "decision", "env_var", "permission")
+    - response_data: Type-specific response data
+        - clarification: {"answer": "user answer"}
+        - decision: {"decision": "option_id"}
+        - env_var: {"values": {"VAR_NAME": "value"}, "save": true}
+        - permission: {"action": "allow", "remember": false}
     """
+
+    logger.info(
+        f"HITL respond request: request_id={request.request_id}, "
+        f"hitl_type={request.hitl_type}, response_data={request.response_data}"
+    )
+
     try:
-        from src.infrastructure.agent.tools.clarification import get_clarification_manager
-
-        manager = get_clarification_manager()
-        success = await manager.respond(request.request_id, request.answer)
-
-        if not success:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Clarification request {request.request_id} not found or already answered",
-            )
-
-        logger.info(f"User {current_user.id} responded to clarification {request.request_id}")
-
-        return HumanInteractionResponse(
-            success=True,
-            request_id=request.request_id,
-            message="Clarification response received",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error responding to clarification: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to respond to clarification: {str(e)}")
-
-
-@router.post("/decision/respond", response_model=HumanInteractionResponse)
-async def respond_to_decision(
-    request: DecisionResponseRequest,
-    current_user: User = Depends(get_current_user),
-) -> HumanInteractionResponse:
-    """
-    Respond to a pending decision request.
-
-    This endpoint allows users to provide decisions at critical execution points
-    when the agent requires user confirmation or choice between options.
-    """
-    try:
-        from src.infrastructure.agent.tools.decision import get_decision_manager
-
-        manager = get_decision_manager()
-        success = await manager.respond(request.request_id, request.decision)
-
-        if not success:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Decision request {request.request_id} not found or already answered",
-            )
-
-        logger.info(f"User {current_user.id} responded to decision {request.request_id}")
-
-        return HumanInteractionResponse(
-            success=True,
-            request_id=request.request_id,
-            message="Decision response received",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error responding to decision: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to respond to decision: {str(e)}")
-
-
-@router.post("/env-var/respond", response_model=HumanInteractionResponse)
-async def respond_to_env_var_request(
-    request: EnvVarResponseRequest,
-    current_user: User = Depends(get_current_user),
-) -> HumanInteractionResponse:
-    """
-    Respond to a pending environment variable request.
-
-    This endpoint allows users to provide environment variable values
-    requested by the agent for tool configuration.
-    """
-    try:
-        from src.infrastructure.agent.tools.env_var_tools import get_env_var_manager
-
-        manager = get_env_var_manager()
-        success = await manager.respond(request.request_id, request.values)
-
-        if not success:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Environment variable request {request.request_id} not found or already answered",
-            )
-
-        logger.info(
-            f"User {current_user.id} provided env vars for request {request.request_id}: "
-            f"{list(request.values.keys())}"
-        )
-
-        return HumanInteractionResponse(
-            success=True,
-            request_id=request.request_id,
-            message="Environment variables received and saved",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error responding to env var request: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to respond to env var request: {str(e)}"
-        )
-
-
-@router.post("/doom-loop/respond", response_model=HumanInteractionResponse)
-async def respond_to_doom_loop(
-    request: DoomLoopResponseRequest,
-    current_user: User = Depends(get_current_user),
-) -> HumanInteractionResponse:
-    """
-    Respond to a pending doom loop intervention request.
-
-    This endpoint allows users to intervene when the agent is detected
-    to be in a repetitive loop, choosing to continue or stop execution.
-    """
-    try:
-        if request.action not in ["continue", "stop"]:
+        # Validate HITL type
+        valid_types = ["clarification", "decision", "env_var", "permission"]
+        if request.hitl_type not in valid_types:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid action '{request.action}'. Must be 'continue' or 'stop'.",
+                detail=f"Invalid hitl_type '{request.hitl_type}'. Must be one of: {valid_types}",
             )
 
-        from src.infrastructure.agent.permission import get_permission_manager
+        # Get the HITL request from database to find the conversation
+        repo = SqlHITLRequestRepository(db)
+        hitl_request = await repo.get_by_id(request.request_id)
 
-        # Doom loop interventions are handled through the permission system
-        manager = get_permission_manager()
-
-        # Check if request exists
-        if request.request_id not in manager.pending:
+        if not hitl_request:
+            logger.warning(f"HITL request not found in database: {request.request_id}")
             raise HTTPException(
                 status_code=404,
-                detail=f"Doom loop request {request.request_id} not found or already answered",
+                detail=f"HITL request {request.request_id} not found",
             )
 
-        # Map action to permission response: continue -> once, stop -> reject
-        permission_response = "once" if request.action == "continue" else "reject"
+        logger.info(
+            f"Found HITL request: id={hitl_request.id}, tenant={hitl_request.tenant_id}, "
+            f"project={hitl_request.project_id}, status={hitl_request.status}"
+        )
 
-        await manager.reply(request.request_id, permission_response)
+        # Verify tenant access
+        if hitl_request.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied to this HITL request",
+            )
+
+        # Check if already answered
+        from src.domain.model.agent.hitl_request import HITLRequestStatus
+
+        if hitl_request.status != HITLRequestStatus.PENDING:
+            raise HTTPException(
+                status_code=400,
+                detail=f"HITL request {request.request_id} is no longer pending (status: {hitl_request.status.value})",
+            )
+
+        # Get project_id for workflow lookup
+        project_id = hitl_request.project_id
+
+        # Try to send Temporal Signal
+        signal_sent = await _send_hitl_signal_to_workflow(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            request_id=request.request_id,
+            hitl_type=request.hitl_type,
+            response_data=request.response_data,
+            user_id=str(current_user.id),
+        )
+
+        if signal_sent:
+            # Update database record
+            response_str = (
+                request.response_data.get("answer")
+                or request.response_data.get("decision")
+                or str(request.response_data.get("values", {}))
+                or request.response_data.get("action")
+            )
+            await repo.update_response(request.request_id, response_str)
+            await repo.mark_completed(request.request_id)
+            await db.commit()
+
+            logger.info(
+                f"User {current_user.id} responded to HITL {request.request_id} "
+                f"(type={request.hitl_type}) via Temporal Signal"
+            )
+
+            return HumanInteractionResponse(
+                success=True,
+                message=f"{request.hitl_type.capitalize()} response received",
+            )
+        else:
+            # Workflow not found - no fallback
+            logger.warning(
+                f"Failed to send HITL signal for request {request.request_id}. "
+                f"Workflow may have terminated. tenant={tenant_id}, project={project_id}"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workflow not found for HITL request {request.request_id}. "
+                "The agent workflow may have terminated or timed out.",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error responding to HITL request: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to respond to HITL request: {str(e)}",
+        )
+
+
+@router.post("/cancel", response_model=HumanInteractionResponse)
+async def cancel_hitl_request(
+    request: HITLCancelRequest,
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> HumanInteractionResponse:
+    """
+    Cancel a pending HITL request.
+
+    This sends a cancellation signal to the workflow.
+    """
+    try:
+        repo = SqlHITLRequestRepository(db)
+        hitl_request = await repo.get_by_id(request.request_id)
+
+        if not hitl_request:
+            raise HTTPException(
+                status_code=404,
+                detail=f"HITL request {request.request_id} not found",
+            )
+
+        if hitl_request.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied to this HITL request",
+            )
+
+        # Send cancel signal to workflow
+        await _send_hitl_cancel_signal_to_workflow(
+            tenant_id=tenant_id,
+            project_id=hitl_request.project_id,
+            request_id=request.request_id,
+            reason=request.reason,
+        )
+
+        # Update database
+        await repo.mark_cancelled(request.request_id, request.reason)
+        await db.commit()
 
         logger.info(
-            f"User {current_user.id} responded to doom loop {request.request_id}: {request.action}"
+            f"User {current_user.id} cancelled HITL {request.request_id}: {request.reason}"
         )
 
         return HumanInteractionResponse(
             success=True,
-            request_id=request.request_id,
-            message=f"Doom loop intervention: {request.action}",
+            message="HITL request cancelled",
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error responding to doom loop: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to respond to doom loop: {str(e)}")
+        logger.error(f"Error cancelling HITL request: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel HITL request: {str(e)}",
+        )
+
+
+async def _send_hitl_signal_to_workflow(
+    tenant_id: str,
+    project_id: str,
+    request_id: str,
+    hitl_type: str,
+    response_data: dict,
+    user_id: str,
+) -> bool:
+    """Send HITL response signal to the Temporal workflow."""
+    from datetime import datetime
+
+    try:
+        from temporalio.client import Client
+
+        from src.configuration.temporal_config import get_temporal_settings
+        from src.domain.model.agent.hitl_types import HITL_RESPONSE_SIGNAL
+        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+            get_project_agent_workflow_id,
+        )
+
+        temporal_settings = get_temporal_settings()
+
+        # Get Temporal client
+        client = await Client.connect(
+            temporal_settings.temporal_host,
+            namespace=temporal_settings.temporal_namespace,
+        )
+
+        # Get workflow ID
+        workflow_id = get_project_agent_workflow_id(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+
+        logger.info(f"Attempting to send HITL signal to workflow: {workflow_id}")
+
+        # Build signal payload
+        signal_payload = {
+            "request_id": request_id,
+            "hitl_type": hitl_type,
+            "response_data": response_data,
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+        # Get workflow handle and send signal
+        handle = client.get_workflow_handle(workflow_id)
+        await handle.signal(HITL_RESPONSE_SIGNAL, signal_payload)
+
+        logger.info(f"Sent HITL signal to workflow {workflow_id}: {request_id}")
+        return True
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to send HITL signal to workflow: {e}. "
+            f"tenant={tenant_id}, project={project_id}, request={request_id}"
+        )
+        return False
+
+
+async def _send_hitl_cancel_signal_to_workflow(
+    tenant_id: str,
+    project_id: str,
+    request_id: str,
+    reason: Optional[str],
+) -> bool:
+    """Send HITL cancellation signal to the Temporal workflow."""
+    try:
+        from temporalio.client import Client
+
+        from src.configuration.temporal_config import get_temporal_settings
+        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
+            get_project_agent_workflow_id,
+        )
+
+        temporal_settings = get_temporal_settings()
+
+        client = await Client.connect(
+            temporal_settings.temporal_host,
+            namespace=temporal_settings.temporal_namespace,
+        )
+
+        workflow_id = get_project_agent_workflow_id(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+
+        handle = client.get_workflow_handle(workflow_id)
+        await handle.signal("cancel_hitl_request", request_id, reason)
+
+        logger.info(f"Sent HITL cancel signal to workflow {workflow_id}: {request_id}")
+        return True
+
+    except Exception as e:
+        logger.warning(f"Failed to send HITL cancel signal: {e}")
+        return False

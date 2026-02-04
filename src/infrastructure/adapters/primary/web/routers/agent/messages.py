@@ -72,6 +72,15 @@ async def get_conversation_messages(
             "step_start",
             "step_end",
             "artifact_created",
+            # HITL (Human-in-the-Loop) events
+            "clarification_asked",
+            "clarification_answered",
+            "decision_asked",
+            "decision_answered",
+            "env_var_requested",
+            "env_var_provided",
+            "permission_requested",
+            "permission_granted",
         }
 
         calculated_from_sequence = from_sequence
@@ -162,6 +171,56 @@ async def get_conversation_messages(
                 item["previewUrl"] = data.get("preview_url", "")
                 item["sourceTool"] = data.get("source_tool", "")
                 item["metadata"] = data.get("metadata", {})
+
+            # HITL events
+            elif event_type == "clarification_asked":
+                item["requestId"] = data.get("request_id", "")
+                item["question"] = data.get("question", "")
+                item["options"] = data.get("options", [])
+                item["allowCustom"] = data.get("allow_custom", True)
+                item["answered"] = data.get("answered", False)
+                item["answer"] = data.get("answer")
+
+            elif event_type == "clarification_answered":
+                item["requestId"] = data.get("request_id", "")
+                item["answer"] = data.get("answer", "")
+
+            elif event_type == "decision_asked":
+                item["requestId"] = data.get("request_id", "")
+                item["question"] = data.get("question", "")
+                item["options"] = data.get("options", [])
+                item["decisionType"] = data.get("decision_type", "branch")
+                item["allowCustom"] = data.get("allow_custom", False)
+                item["defaultOption"] = data.get("default_option")
+                item["answered"] = data.get("answered", False)
+                item["decision"] = data.get("decision")
+
+            elif event_type == "decision_answered":
+                item["requestId"] = data.get("request_id", "")
+                item["decision"] = data.get("decision", "")
+
+            elif event_type == "env_var_requested":
+                item["requestId"] = data.get("request_id", "")
+                item["variables"] = data.get("variables", [])
+                item["reason"] = data.get("reason", "")
+                item["answered"] = data.get("answered", False)
+                item["values"] = data.get("values", {})
+
+            elif event_type == "env_var_provided":
+                item["requestId"] = data.get("request_id", "")
+                item["variables"] = list(data.get("values", {}).keys())
+
+            elif event_type == "permission_requested":
+                item["requestId"] = data.get("request_id", "")
+                item["action"] = data.get("action", "")
+                item["resource"] = data.get("resource", "")
+                item["reason"] = data.get("reason", "")
+                item["answered"] = data.get("answered", False)
+                item["granted"] = data.get("granted")
+
+            elif event_type == "permission_granted":
+                item["requestId"] = data.get("request_id", "")
+                item["granted"] = data.get("granted", False)
 
             timeline.append(item)
 

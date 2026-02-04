@@ -28,9 +28,6 @@ import {
   InputBar,
   RightPanel,
   ProjectAgentStatusBar,
-  EnvVarInputModal,
-  ClarificationDialog,
-  DecisionModal,
 } from './index';
 import { EmptyState } from './EmptyState';
 
@@ -91,10 +88,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     executionPlan,
     isPlanMode,
     showPlanPanel,
-    pendingClarification,
-    pendingDecision,
+    // HITL state now rendered inline in timeline via InlineHITLCard
+    // pendingClarification, pendingDecision, pendingEnvVarRequest removed
     doomLoopDetected,
-    pendingEnvVarRequest,
     hasEarlier,
     loadConversations,
     loadMessages,
@@ -105,9 +101,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     abortStream,
     togglePlanMode,
     togglePlanPanel,
-    respondToClarification,
-    respondToDecision,
-    respondToEnvVar,
+    // HITL response methods still available but not used directly
+    // respondToClarification, respondToDecision, respondToEnvVar
     loadPendingHITL,
     clearError,
     error,
@@ -131,6 +126,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Get tenant ID from current project
   const currentProject = useProjectStore((state) => state.currentProject);
   const tenantId = currentProject?.tenant_id || 'default-tenant';
+
+  // Note: HITL is now rendered inline in the message timeline via InlineHITLCard.
+  // The useUnifiedHITL hook and modal rendering have been removed.
 
   // Local UI state
   const [panelCollapsed, setPanelCollapsed] = useState(!showPlanPanel);
@@ -382,41 +380,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         {!panelCollapsed && rightPanel}
       </aside>
 
-      {/* Clarification Dialog */}
-      {pendingClarification && (
-        <ClarificationDialog
-          data={pendingClarification}
-          onRespond={respondToClarification}
-          onCancel={() => {
-            // Cancel clarification by sending empty answer
-            respondToClarification(pendingClarification.request_id, '');
-          }}
-        />
-      )}
-
-      {/* Decision Modal */}
-      {pendingDecision && (
-        <DecisionModal
-          data={pendingDecision}
-          onRespond={respondToDecision}
-          onCancel={() => {
-            // Cancel decision by sending 'rejected'
-            respondToDecision(pendingDecision.request_id, 'rejected');
-          }}
-        />
-      )}
-
-      {/* Environment Variable Input Modal */}
-      {pendingEnvVarRequest && (
-        <EnvVarInputModal
-          data={pendingEnvVarRequest}
-          onSubmit={respondToEnvVar}
-          onCancel={() => {
-            // Cancel the env var request by sending empty values
-            respondToEnvVar(pendingEnvVarRequest.request_id, {});
-          }}
-        />
-      )}
+      {/* 
+        HITL is now rendered inline in the message timeline via MessageBubble.
+        The UnifiedHITLPanel modal has been removed to prevent:
+        1. History refresh issues when modal opens
+        2. State conflicts between modal and timeline
+        3. Unnatural conversation flow interruption
+        
+        HITL events (clarification_asked, decision_asked, etc.) are rendered
+        as InlineHITLCard components directly in the timeline.
+      */}
     </div>
   );
 };

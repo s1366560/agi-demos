@@ -31,6 +31,9 @@ vi.mock('../../services/agentService', () => ({
       Promise.resolve({ id: 'new-conv', project_id: 'proj-123' })
     ),
     deleteConversation: vi.fn(() => Promise.resolve()),
+    getExecutionStatus: vi.fn(() =>
+      Promise.resolve({ is_running: false, last_sequence: 0 })
+    ),
   },
 }));
 
@@ -382,6 +385,139 @@ describe('agentV3 Store - Timeline Field', () => {
 
       // messages field should still exist
       expect(Array.isArray(result.current.messages)).toBe(true);
+    });
+  });
+
+  describe('loadMessages - Timeline Sorting', () => {
+    it('should sort timeline by sequence number even if API returns unsorted', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+
+      // Mock API returning unsorted timeline (simulating potential backend issue)
+      const unsortedTimeline: TimelineEvent[] = [
+        {
+          id: 'assistant-2',
+          type: 'assistant_message',
+          sequenceNumber: 3,
+          timestamp: Date.now() + 2000,
+          content: 'Second response',
+          role: 'assistant',
+        },
+        {
+          id: 'user-1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: Date.now(),
+          content: 'First message',
+          role: 'user',
+        },
+        {
+          id: 'assistant-1',
+          type: 'assistant_message',
+          sequenceNumber: 2,
+          timestamp: Date.now() + 1000,
+          content: 'First response',
+          role: 'assistant',
+        },
+      ];
+
+      vi.mocked(
+        (await import('../../services/agentService')).agentService
+      ).getConversationMessages.mockResolvedValue({
+        conversationId: 'conv-123',
+        timeline: unsortedTimeline,
+        total: 3,
+        has_more: false,
+        first_sequence: 1,
+        last_sequence: 3,
+      });
+
+      await act(async () => {
+        useAgentV3Store.setState({ activeConversationId: 'conv-123' });
+        await result.current.loadMessages('conv-123', 'proj-123');
+      });
+
+      // Timeline should be sorted by sequence number
+      expect(result.current.timeline.length).toBe(3);
+      expect(result.current.timeline[0].sequenceNumber).toBe(1);
+      expect(result.current.timeline[1].sequenceNumber).toBe(2);
+      expect(result.current.timeline[2].sequenceNumber).toBe(3);
+      expect(result.current.timeline[0].type).toBe('user_message');
+      expect(result.current.timeline[1].type).toBe('assistant_message');
+      expect(result.current.timeline[2].type).toBe('assistant_message');
+    });
+
+    it('should maintain sort order when loading earlier messages', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+
+      // Set initial state with some timeline events
+      const existingTimeline: TimelineEvent[] = [
+        {
+          id: 'user-3',
+          type: 'user_message',
+          sequenceNumber: 5,
+          timestamp: Date.now(),
+          content: 'Latest message',
+          role: 'user',
+        },
+        {
+          id: 'assistant-3',
+          type: 'assistant_message',
+          sequenceNumber: 6,
+          timestamp: Date.now() + 1000,
+          content: 'Latest response',
+          role: 'assistant',
+        },
+      ];
+
+      act(() => {
+        useAgentV3Store.setState({
+          activeConversationId: 'conv-123',
+          timeline: existingTimeline,
+          earliestLoadedSequence: 5,
+        });
+      });
+
+      // Mock earlier messages API response
+      const earlierTimeline: TimelineEvent[] = [
+        {
+          id: 'user-1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: Date.now() - 2000,
+          content: 'First message',
+          role: 'user',
+        },
+        {
+          id: 'assistant-1',
+          type: 'assistant_message',
+          sequenceNumber: 2,
+          timestamp: Date.now() - 1000,
+          content: 'First response',
+          role: 'assistant',
+        },
+      ];
+
+      vi.mocked(
+        (await import('../../services/agentService')).agentService
+      ).getConversationMessages.mockResolvedValue({
+        conversationId: 'conv-123',
+        timeline: earlierTimeline,
+        total: 2,
+        has_more: false,
+        first_sequence: 1,
+        last_sequence: 2,
+      });
+
+      await act(async () => {
+        await result.current.loadEarlierMessages('conv-123', 'proj-123');
+      });
+
+      // Combined timeline should be sorted
+      expect(result.current.timeline.length).toBe(4);
+      expect(result.current.timeline[0].sequenceNumber).toBe(1);
+      expect(result.current.timeline[1].sequenceNumber).toBe(2);
+      expect(result.current.timeline[2].sequenceNumber).toBe(5);
+      expect(result.current.timeline[3].sequenceNumber).toBe(6);
     });
   });
 });

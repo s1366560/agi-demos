@@ -128,9 +128,11 @@ def get_message_router() -> MessageRouter:
             StopSessionHandler,
             SubscribeHandler,
             SubscribeLifecycleStateHandler,
+            SubscribeSandboxHandler,
             SubscribeStatusHandler,
             UnsubscribeHandler,
             UnsubscribeLifecycleStateHandler,
+            UnsubscribeSandboxHandler,
             UnsubscribeStatusHandler,
         )
 
@@ -152,6 +154,9 @@ def get_message_router() -> MessageRouter:
                 StartAgentHandler(),
                 StopAgentHandler(),
                 RestartAgentHandler(),
+                # Sandbox
+                SubscribeSandboxHandler(),
+                UnsubscribeSandboxHandler(),
                 # HITL
                 ClarificationRespondHandler(),
                 DecisionRespondHandler(),

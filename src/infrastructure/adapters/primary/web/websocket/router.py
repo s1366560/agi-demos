@@ -81,6 +81,10 @@ async def agent_websocket_endpoint(
       {type: 'subscribe_lifecycle_state', project_id: str}
     - unsubscribe_lifecycle_state: Unsubscribe from lifecycle state
       {type: 'unsubscribe_lifecycle_state', project_id: str}
+    - subscribe_sandbox: Subscribe to sandbox events (unified WebSocket)
+      {type: 'subscribe_sandbox', project_id: str}
+    - unsubscribe_sandbox: Unsubscribe from sandbox events
+      {type: 'unsubscribe_sandbox', project_id: str}
     - start_agent: Start agent workflow
       {type: 'start_agent', project_id: str}
     - stop_agent: Stop agent workflow
@@ -115,6 +119,8 @@ async def agent_websocket_endpoint(
       {type: 'lifecycle_state_change', project_id: str, data: {...}}
     - agent_lifecycle_ack: Agent lifecycle action acknowledgment
       {type: 'agent_lifecycle_ack', action: str, project_id: str, status: str}
+    - sandbox_event: Sandbox lifecycle/service event (unified WebSocket)
+      {type: 'sandbox_event', routing_key: str, project_id: str, data: {...}}
     """
     # Authenticate
     auth_result = await authenticate_websocket(token, db)

@@ -4,7 +4,7 @@
  * Type definitions for the ProjectSettings compound component pattern.
  */
 
-import type { Project } from '../../../types';
+import type { Project } from '../../../types/memory';
 
 // ============================================================================
 // Settings Data Types

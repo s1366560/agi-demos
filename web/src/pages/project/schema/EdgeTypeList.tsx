@@ -216,9 +216,20 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     if (!projectId) return;
     try {
       const data = await schemaAPI.listEdgeTypes(projectId);
-      setEdges(data);
-      if (data.length > 0 && !selectedEdgeId) {
-        setSelectedEdgeId(data[0].id);
+      // Convert SchemaEdgeType to EdgeType
+      const edgeTypes: EdgeType[] = data.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description || '',
+        schema: {},
+        status: 'ENABLED' as const,
+        source: 'user' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      setEdges(edgeTypes);
+      if (edgeTypes.length > 0 && !selectedEdgeId) {
+        setSelectedEdgeId(edgeTypes[0].id);
       }
     } catch (error) {
       console.error('Failed to load edge types:', error);
@@ -405,12 +416,7 @@ interface HeaderProps {
   onCreate?: () => void;
 }
 
-const HeaderInternal: React.FC<HeaderProps> = (props) => {
-  const hasProps = props.onCreate !== undefined;
-  const context = hasProps ? null : useEdgeTypeListContextOptional();
-  const actions = context?.actions;
-  const handleCreate = props.onCreate ?? actions?.handleOpenModal;
-
+const HeaderInternal: React.FC<HeaderProps> = () => {
   return (
     <div className="w-full flex-none pt-6 pb-4 px-8 border-b border-slate-200 dark:border-[#2a324a]/50 bg-white dark:bg-[#121521]">
       <div className="max-w-[1600px] mx-auto flex flex-col gap-4">

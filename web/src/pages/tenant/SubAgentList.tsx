@@ -182,8 +182,8 @@ const SubAgentListInternal: React.FC<SubAgentListProps> = ({ className = '' }) =
   const subagentsData = useSubAgentData();
   const filtersData = useSubAgentFiltersData();
   const templates = useSubAgentTemplates();
-  const { isLoadingSubAgents, isLoadingTemplates } = useSubAgentLoading();
-  const isTemplatesLoading = useSubAgentTemplatesLoading();
+  const isLoadingSubAgents = useSubAgentLoading();
+  const isLoadingTemplates = useSubAgentTemplatesLoading();
   const error = useSubAgentError();
   const enabledCount = useEnabledSubAgentsCount();
   const avgSuccessRate = useAverageSuccessRate();
@@ -381,7 +381,7 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
           <div className="text-xs text-slate-500">{template.description}</div>
         </div>
       ),
-      onClick: () => handleCreateFromTemplate(template.name),
+      onClick: () => handleCreateFromTemplate?.(template.name),
     }));
   }, [templates, handleCreateFromTemplate]);
 

@@ -16,7 +16,11 @@ import type {
     ClarificationAskedEventData,
     DecisionAskedEventData,
     EnvVarRequestedEventData,
+    PermissionAskedEventData,
+    DoomLoopDetectedEventData,
 } from './agent';
+// Re-export CostUpdateEventData for consumers that need to map to CostTrackingState
+export type { CostUpdateEventData } from './agent';
 
 /**
  * Agent execution state for a conversation
@@ -26,7 +30,8 @@ export type AgentState =
     | 'thinking'
     | 'acting'
     | 'observing'
-    | 'awaiting_input';
+    | 'awaiting_input'
+    | 'retrying';
 
 /**
  * Stream connection status
@@ -40,7 +45,7 @@ export type StreamStatus =
 /**
  * HITL (Human-In-The-Loop) request type for UI display
  */
-export type HITLType = 'clarification' | 'decision' | 'env_var';
+export type HITLType = 'clarification' | 'decision' | 'env_var' | 'permission';
 
 /**
  * HITL request summary for conversation list display
@@ -56,6 +61,24 @@ export interface HITLSummary {
     createdAt: string;
     /** Whether this request has expired */
     isExpired: boolean;
+}
+
+/**
+ * Cost tracking state for a conversation
+ */
+export interface CostTrackingState {
+    /** Total input tokens used */
+    inputTokens: number;
+    /** Total output tokens used */
+    outputTokens: number;
+    /** Total tokens used */
+    totalTokens: number;
+    /** Total cost in USD */
+    costUsd: number;
+    /** Model used */
+    model: string;
+    /** Last update timestamp */
+    lastUpdated: string;
 }
 
 /**
@@ -115,10 +138,16 @@ export interface ConversationState {
     pendingDecision: DecisionAskedEventData | null;
     /** Pending environment variable request */
     pendingEnvVarRequest: EnvVarRequestedEventData | null;
+    /** Pending permission request */
+    pendingPermission: PermissionAskedEventData | null;
     /** Doom loop detection state */
-    doomLoopDetected: unknown | null;
+    doomLoopDetected: DoomLoopDetectedEventData | null;
     /** Summary of pending HITL for sidebar display */
     pendingHITLSummary: HITLSummary | null;
+
+    // ===== Cost Tracking =====
+    /** Cost tracking state */
+    costTracking: CostTrackingState | null;
 }
 
 /**
@@ -154,8 +183,12 @@ export function createDefaultConversationState(): ConversationState {
         pendingClarification: null,
         pendingDecision: null,
         pendingEnvVarRequest: null,
+        pendingPermission: null,
         doomLoopDetected: null,
         pendingHITLSummary: null,
+
+        // Cost tracking
+        costTracking: null,
     };
 }
 
@@ -192,6 +225,15 @@ export function getHITLSummaryFromState(state: ConversationState): HITLSummary |
             requestId: state.pendingEnvVarRequest.request_id,
             type: 'env_var',
             title: 'Awaiting input',
+            createdAt: new Date().toISOString(),
+            isExpired: false,
+        };
+    }
+    if (state.pendingPermission) {
+        return {
+            requestId: state.pendingPermission.request_id,
+            type: 'permission',
+            title: `Permission: ${state.pendingPermission.tool_name}`,
             createdAt: new Date().toISOString(),
             isExpired: false,
         };

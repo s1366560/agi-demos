@@ -107,6 +107,20 @@ async def subscribe_sandbox_events(
     """
     SSE endpoint for sandbox events.
 
+    **DEPRECATED**: This SSE endpoint is deprecated. Please migrate to WebSocket.
+    Use the unified WebSocket endpoint at `/api/v1/agent/ws` with message type
+    `subscribe_sandbox` for sandbox event subscriptions.
+
+    Migration example:
+    ```javascript
+    // Old SSE approach (deprecated)
+    const es = new EventSource('/api/v1/sandbox/events/proj-123?token=xxx');
+
+    // New WebSocket approach (recommended)
+    ws.send(JSON.stringify({ type: 'subscribe_sandbox', project_id: 'proj-123' }));
+    // Events arrive as: { type: 'sandbox_event', routing_key: 'sandbox:proj-123', data: {...} }
+    ```
+
     Subscribes to sandbox lifecycle events (created, terminated, status)
     and service events (desktop_started, desktop_stopped, terminal_started, etc.).
 
@@ -138,5 +152,8 @@ async def subscribe_sandbox_events(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "Deprecation": "true",
+            "Sunset": "2026-06-01",
+            "Link": '</api/v1/agent/ws>; rel="successor-version"',
         },
     )

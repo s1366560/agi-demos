@@ -1,10 +1,12 @@
 """Unit tests for Environment Variable Tools.
 
-Tests the GetEnvVarTool, RequestEnvVarTool, and CheckEnvVarsTool
-for managing agent tool environment variables.
+Tests the GetEnvVarTool and CheckEnvVarsTool for managing agent tool
+environment variables. 
+
+NOTE: RequestEnvVarTool is now tested via TemporalHITLHandler tests.
+See src/tests/unit/agent/test_temporal_hitl_handler.py for HITL-related tests.
 """
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
@@ -16,120 +18,8 @@ from src.domain.model.agent.tool_environment_variable import (
 )
 from src.infrastructure.agent.tools.env_var_tools import (
     CheckEnvVarsTool,
-    EnvVarField,
-    EnvVarInputType,
-    EnvVarManager,
-    EnvVarRequest,
     GetEnvVarTool,
-    RequestEnvVarTool,
 )
-
-
-class TestEnvVarField:
-    """Tests for EnvVarField data class."""
-
-    def test_basic_field_creation(self):
-        """Test creating a basic env var field."""
-        field = EnvVarField(
-            variable_name="API_KEY",
-            display_name="API Key",
-        )
-        assert field.variable_name == "API_KEY"
-        assert field.display_name == "API Key"
-        assert field.is_required is True
-        assert field.is_secret is True
-        assert field.input_type == EnvVarInputType.TEXT
-
-    def test_field_to_dict(self):
-        """Test converting field to dict for SSE."""
-        field = EnvVarField(
-            variable_name="SECRET_TOKEN",
-            display_name="Secret Token",
-            description="Your secret API token",
-            input_type=EnvVarInputType.PASSWORD,
-            is_required=True,
-            is_secret=True,
-        )
-        result = field.to_dict()
-
-        # Field names are mapped to frontend format:
-        # variable_name -> name, display_name -> label, is_required -> required
-        assert result["name"] == "SECRET_TOKEN"
-        assert result["label"] == "Secret Token"
-        assert result["description"] == "Your secret API token"
-        assert result["input_type"] == "password"
-        assert result["required"] is True
-        assert result["is_secret"] is True
-
-
-class TestEnvVarManager:
-    """Tests for EnvVarManager."""
-
-    @pytest.fixture
-    def manager(self):
-        """Create a fresh EnvVarManager instance."""
-        return EnvVarManager()
-
-    @pytest.mark.asyncio
-    async def test_respond_to_request(self, manager, mocker):
-        """Test responding to an env var request."""
-        # Mock database update to return True (simulating successful DB update)
-        mocker.patch.object(manager, "_update_db_response", return_value=True)
-
-        # Create a request
-        request_id = "test-123"
-        request = EnvVarRequest(
-            request_id=request_id,
-            tool_name="web_search",
-            fields=[EnvVarField("API_KEY", "API Key")],
-        )
-
-        async with manager._lock:
-            manager._pending_requests[request_id] = request
-
-        # Respond
-        values = {"API_KEY": "secret-value"}
-        success = await manager.respond(request_id, values)
-
-        assert success is True
-        assert request.future.done()
-        assert await request.future == values
-
-    @pytest.mark.asyncio
-    async def test_respond_to_nonexistent_request(self, manager):
-        """Test responding to a request that doesn't exist."""
-        success = await manager.respond("nonexistent", {"KEY": "value"})
-        assert success is False
-
-    @pytest.mark.asyncio
-    async def test_cancel_request(self, manager):
-        """Test cancelling a request."""
-        request_id = "test-cancel"
-        request = EnvVarRequest(
-            request_id=request_id,
-            tool_name="test_tool",
-            fields=[],
-        )
-
-        async with manager._lock:
-            manager._pending_requests[request_id] = request
-
-        success = await manager.cancel_request(request_id)
-
-        assert success is True
-        assert request_id not in manager._pending_requests
-        assert request.future.cancelled()
-
-    def test_get_pending_requests(self, manager):
-        """Test getting all pending requests."""
-        request1 = EnvVarRequest("r1", "tool1", [])
-        request2 = EnvVarRequest("r2", "tool2", [])
-
-        manager._pending_requests = {"r1": request1, "r2": request2}
-
-        pending = manager.get_pending_requests()
-
-        assert len(pending) == 2
 
 
 class TestGetEnvVarTool:
@@ -251,118 +141,6 @@ class TestGetEnvVarTool:
         assert len(result) == 2
         assert "API_KEY" in result
         assert "ENDPOINT" in result
-
-
-class TestRequestEnvVarTool:
-    """Tests for RequestEnvVarTool."""
-
-    @pytest.fixture
-    def mock_repository(self):
-        """Create a mock repository."""
-        repo = AsyncMock()
-        repo.upsert.return_value = MagicMock()
-        return repo
-
-    @pytest.fixture
-    def mock_encryption_service(self):
-        """Create a mock encryption service."""
-        service = MagicMock()
-        service.encrypt.return_value = "encrypted-value"
-        return service
-
-    @pytest.fixture
-    def mock_event_publisher(self):
-        """Create a mock event publisher."""
-        return MagicMock()
-
-    @pytest.fixture
-    def request_env_tool(self, mock_repository, mock_encryption_service, mock_event_publisher):
-        """Create RequestEnvVarTool with mocked dependencies."""
-        manager = EnvVarManager()
-        tool = RequestEnvVarTool(
-            repository=mock_repository,
-            encryption_service=mock_encryption_service,
-            manager=manager,
-            event_publisher=mock_event_publisher,
-            tenant_id="tenant-123",
-            project_id="project-456",
-        )
-        return tool
-
-    def test_tool_initialization(self, request_env_tool):
-        """Test tool is initialized with correct name and description."""
-        assert request_env_tool.name == "request_env_var"
-        assert "environment variable" in request_env_tool.description.lower()
-
-    def test_validate_args_valid(self, request_env_tool):
-        """Test validation passes with valid args."""
-        assert (
-            request_env_tool.validate_args(
-                tool_name="web_search",
-                fields=[{"variable_name": "API_KEY", "display_name": "API Key"}],
-            )
-            is True
-        )
-
-    def test_validate_args_empty_fields(self, request_env_tool):
-        """Test validation fails with empty fields."""
-        assert (
-            request_env_tool.validate_args(
-                tool_name="web_search",
-                fields=[],
-            )
-            is False
-        )
-
-    @pytest.mark.asyncio
-    async def test_execute_emits_event(
-        self,
-        request_env_tool,
-        mock_event_publisher,
-        mock_repository,
-        mock_encryption_service,
-        mocker,
-    ):
-        """Test that executing the tool emits an SSE event."""
-        # Mock database update to return True (simulating successful DB update)
-        mocker.patch.object(request_env_tool._manager, "_update_db_response", return_value=True)
-
-        # Create a background task that will respond after a short delay
-        async def respond_later():
-            await asyncio.sleep(0.05)
-            for req_id in list(request_env_tool._manager._pending_requests.keys()):
-                await request_env_tool._manager.respond(req_id, {"API_KEY": "user-provided-value"})
-
-        asyncio.create_task(respond_later())
-
-        result = await request_env_tool.execute(
-            tool_name="web_search",
-            fields=[{"variable_name": "API_KEY", "display_name": "API Key"}],
-            timeout=1.0,
-        )
-
-        # Verify events were published (first call is request, second is provided)
-        assert mock_event_publisher.call_count >= 1
-        first_call_args = mock_event_publisher.call_args_list[0][0][0]
-        assert first_call_args["type"] == "env_var_requested"
-
-        # Verify the value was encrypted and saved
-        result_data = json.loads(result)
-        assert result_data["status"] == "success"
-        assert "API_KEY" in result_data["saved_variables"]
-        mock_encryption_service.encrypt.assert_called_with("user-provided-value")
-
-    @pytest.mark.asyncio
-    async def test_execute_timeout(self, request_env_tool):
-        """Test that execution times out when no response."""
-        result = await request_env_tool.execute(
-            tool_name="web_search",
-            fields=[{"variable_name": "API_KEY", "display_name": "API Key"}],
-            timeout=0.1,  # Very short timeout
-        )
-
-        result_data = json.loads(result)
-        assert result_data["status"] == "timeout"
 
 
 class TestCheckEnvVarsTool:

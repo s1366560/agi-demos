@@ -6,28 +6,16 @@ These tools allow the agent to:
 2. RequestEnvVarTool: Request missing environment variables from the user
 3. CheckEnvVarsTool: Check if required environment variables are configured
 
-Cross-Process Communication:
-- Uses Redis Streams for reliable cross-process HITL responses (primary)
-- Falls back to Redis Pub/Sub for backward compatibility
-- Worker process subscribes to Redis Stream for responses
-- API process publishes responses to Redis Stream
+Architecture (NEW - Temporal-based for HITL):
+- RequestEnvVarTool uses TemporalHITLHandler for unified HITL handling
+- Temporal Signals for reliable cross-process communication
+- SSE events for real-time frontend updates
 
-Database Persistence:
-- Stores HITL requests in database for recovery after page refresh
-- Enables frontend to query pending requests on reconnection
-
-Architecture:
-- EnvVarManager inherits from BaseHITLManager for common HITL infrastructure
-- EnvVarRequest extends BaseHITLRequest for type-specific request handling
-
-NOTE: This file re-exports from the new HITL infrastructure for backward compatibility.
-New code should import directly from src.infrastructure.agent.hitl.
+GetEnvVarTool and CheckEnvVarsTool do NOT use HITL, they just read from database.
 """
 
-import asyncio
 import json
 import logging
-import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 from src.domain.model.agent.tool_environment_variable import (
@@ -37,16 +25,7 @@ from src.domain.model.agent.tool_environment_variable import (
 from src.domain.ports.repositories.tool_environment_variable_repository import (
     ToolEnvironmentVariableRepositoryPort,
 )
-
-# Re-export from new HITL infrastructure for backward compatibility
-from src.infrastructure.agent.hitl.env_var_manager import (
-    EnvVarField,
-    EnvVarInputType,
-    EnvVarManager,
-    EnvVarRequest,
-    get_env_var_manager,
-    set_env_var_manager,
-)
+from src.infrastructure.agent.hitl.temporal_hitl_handler import TemporalHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.security.encryption_service import (
     EncryptionService,
@@ -55,22 +34,11 @@ from src.infrastructure.security.encryption_service import (
 
 logger = logging.getLogger(__name__)
 
-# Re-export for backward compatibility
 __all__ = [
-    "EnvVarInputType",
-    "EnvVarField",
-    "EnvVarRequest",
-    "EnvVarManager",
-    "get_env_var_manager",
-    "set_env_var_manager",
     "GetEnvVarTool",
     "RequestEnvVarTool",
     "CheckEnvVarsTool",
 ]
-
-
-# NOTE: EnvVarInputType, EnvVarField, EnvVarRequest, EnvVarManager are imported from hitl module above
-# The following Tool classes use those imported types
 
 
 class GetEnvVarTool(AgentTool):
@@ -300,7 +268,7 @@ class RequestEnvVarTool(AgentTool):
     values are then encrypted and stored in the database.
 
     Usage:
-        request_env = RequestEnvVarTool(repository, encryption_service, ...)
+        request_env = RequestEnvVarTool(hitl_handler, repository, encryption_service, ...)
         result = await request_env.execute(
             tool_name="web_search",
             fields=[
@@ -317,9 +285,9 @@ class RequestEnvVarTool(AgentTool):
 
     def __init__(
         self,
+        hitl_handler: Optional[TemporalHITLHandler] = None,
         repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
         encryption_service: Optional[EncryptionService] = None,
-        manager: Optional[EnvVarManager] = None,
         event_publisher: Optional[Callable[[Dict[str, Any]], None]] = None,
         tenant_id: Optional[str] = None,
         project_id: Optional[str] = None,
@@ -329,10 +297,10 @@ class RequestEnvVarTool(AgentTool):
         Initialize the request env var tool.
 
         Args:
+            hitl_handler: TemporalHITLHandler instance (required for execution)
             repository: Repository for env var persistence (optional if session_factory provided)
             encryption_service: Service for encryption (defaults to singleton)
-            manager: EnvVar manager (defaults to global instance)
-            event_publisher: Function to publish SSE events
+            event_publisher: Function to publish SSE events (optional, handler emits SSE)
             tenant_id: Current tenant ID (can be set later via context)
             project_id: Current project ID (can be set later via context)
             session_factory: Async session factory for creating database sessions
@@ -345,9 +313,9 @@ class RequestEnvVarTool(AgentTool):
                 "be securely stored for future use."
             ),
         )
+        self._hitl_handler = hitl_handler
         self._repository = repository
         self._encryption_service = encryption_service or get_encryption_service()
-        self._manager = manager or get_env_var_manager()
         self._event_publisher = event_publisher
         self._tenant_id = tenant_id
         self._project_id = project_id
@@ -425,6 +393,10 @@ class RequestEnvVarTool(AgentTool):
         if event_publisher:
             self._event_publisher = event_publisher
 
+    def set_hitl_handler(self, handler: TemporalHITLHandler) -> None:
+        """Set the HITL handler (for late binding)."""
+        self._hitl_handler = handler
+
     def validate_args(self, **kwargs: Any) -> bool:
         """Validate arguments."""
         if not self._tenant_id:
@@ -454,13 +426,16 @@ class RequestEnvVarTool(AgentTool):
 
         Args:
             tool_name: Name of the tool that needs the variables
-            fields: List of field specifications (see EnvVarField)
+            fields: List of field specifications
             context: Additional context to display to the user
             save_to_project: If True, save to project level; else tenant level
             timeout: Maximum wait time in seconds
 
         Returns:
             JSON string with status and saved variables
+
+        Raises:
+            RuntimeError: If HITL handler not set
         """
         if not self.validate_args(tool_name=tool_name, fields=fields):
             return json.dumps(
@@ -470,53 +445,58 @@ class RequestEnvVarTool(AgentTool):
                 }
             )
 
-        # Convert field dicts to EnvVarField objects
-        env_var_fields = []
+        if self._hitl_handler is None:
+            raise RuntimeError("HITL handler not set. Call set_hitl_handler() first.")
+
+        # Convert fields to format expected by TemporalHITLHandler
+        hitl_fields = []
+        field_specs = {}  # Track original specs for saving
         for f in fields:
-            env_var_fields.append(
-                EnvVarField(
-                    variable_name=f["variable_name"],
-                    display_name=f.get("display_name", f["variable_name"]),
-                    description=f.get("description"),
-                    input_type=EnvVarInputType(f.get("input_type", "text")),
-                    is_required=f.get("is_required", True),
-                    is_secret=f.get("is_secret", True),
-                    default_value=f.get("default_value"),
-                    options=f.get("options"),
-                )
-            )
+            # Map old field format to new format
+            input_type = f.get("input_type", "text")
+            is_secret = f.get("is_secret", True)
+            if input_type == "password" or is_secret:
+                input_type = "password"
 
-        # Create the request
-        request_id = str(uuid.uuid4())
-        request = EnvVarRequest(
-            request_id=request_id,
-            tool_name=tool_name,
-            fields=env_var_fields,
-            context=context or {},
-        )
+            hitl_field = {
+                "name": f["variable_name"],
+                "label": f.get("display_name", f["variable_name"]),
+                "description": f.get("description"),
+                "required": f.get("is_required", True),
+                "secret": is_secret,
+                "input_type": input_type,
+                "default_value": f.get("default_value"),
+                "placeholder": f.get("placeholder"),
+            }
+            hitl_fields.append(hitl_field)
 
-        # Store in manager
-        async with self._manager._lock:
-            self._manager._pending_requests[request_id] = request
+            # Store original spec for later use
+            field_specs[f["variable_name"]] = {
+                "description": f.get("description"),
+                "is_required": f.get("is_required", True),
+                "is_secret": is_secret,
+            }
 
-        # Publish SSE event for frontend
-        if self._event_publisher:
-            from src.domain.events.agent_events import AgentEventType
-
-            self._event_publisher(
-                {
-                    "type": AgentEventType.ENV_VAR_REQUESTED.value,
-                    "data": request.to_dict(),
-                }
-            )
-
-        logger.info(
-            f"Requesting env vars for tool={tool_name}: {[f.variable_name for f in env_var_fields]}"
-        )
+        logger.info(f"Requesting env vars for tool={tool_name}: {[f['name'] for f in hitl_fields]}")
 
         try:
-            # Wait for user response
-            values = await asyncio.wait_for(request.future, timeout=timeout)
+            # Use TemporalHITLHandler to request env vars
+            values = await self._hitl_handler.request_env_vars(
+                tool_name=tool_name,
+                fields=hitl_fields,
+                message=context.get("message") if context else None,
+                timeout_seconds=timeout,
+                allow_save=True,
+            )
+
+            # If empty or cancelled, return appropriate response
+            if not values:
+                return json.dumps(
+                    {
+                        "status": "cancelled",
+                        "message": "User did not provide the requested environment variables",
+                    }
+                )
 
             # Encrypt and save each value
             saved_vars = []
@@ -533,11 +513,11 @@ class RequestEnvVarTool(AgentTool):
 
                 async with self._session_factory() as db_session:
                     repository = SqlToolEnvironmentVariableRepository(db_session)
-                    for field_spec in env_var_fields:
-                        var_name = field_spec.variable_name
-                        if var_name in values and values[var_name]:
+                    for var_name, var_value in values.items():
+                        if var_value:
+                            spec = field_specs.get(var_name, {})
                             # Encrypt the value
-                            encrypted_value = self._encryption_service.encrypt(values[var_name])
+                            encrypted_value = self._encryption_service.encrypt(var_value)
 
                             # Create domain entity
                             env_var = ToolEnvironmentVariable(
@@ -546,9 +526,9 @@ class RequestEnvVarTool(AgentTool):
                                 tool_name=tool_name,
                                 variable_name=var_name,
                                 encrypted_value=encrypted_value,
-                                description=field_spec.description,
-                                is_required=field_spec.is_required,
-                                is_secret=field_spec.is_secret,
+                                description=spec.get("description"),
+                                is_required=spec.get("is_required", True),
+                                is_secret=spec.get("is_secret", True),
                                 scope=scope,
                             )
 
@@ -558,12 +538,12 @@ class RequestEnvVarTool(AgentTool):
 
                             logger.info(f"Saved env var: {tool_name}/{var_name}")
                     await db_session.commit()
-            else:
-                for field_spec in env_var_fields:
-                    var_name = field_spec.variable_name
-                    if var_name in values and values[var_name]:
+            elif self._repository:
+                for var_name, var_value in values.items():
+                    if var_value:
+                        spec = field_specs.get(var_name, {})
                         # Encrypt the value
-                        encrypted_value = self._encryption_service.encrypt(values[var_name])
+                        encrypted_value = self._encryption_service.encrypt(var_value)
 
                         # Create domain entity
                         env_var = ToolEnvironmentVariable(
@@ -572,9 +552,9 @@ class RequestEnvVarTool(AgentTool):
                             tool_name=tool_name,
                             variable_name=var_name,
                             encrypted_value=encrypted_value,
-                            description=field_spec.description,
-                            is_required=field_spec.is_required,
-                            is_secret=field_spec.is_secret,
+                            description=spec.get("description"),
+                            is_required=spec.get("is_required", True),
+                            is_secret=spec.get("is_secret", True),
                             scope=scope,
                         )
 
@@ -584,21 +564,6 @@ class RequestEnvVarTool(AgentTool):
 
                         logger.info(f"Saved env var: {tool_name}/{var_name}")
 
-            # Publish success event
-            if self._event_publisher:
-                from src.domain.events.agent_events import AgentEventType
-
-                self._event_publisher(
-                    {
-                        "type": AgentEventType.ENV_VAR_PROVIDED.value,
-                        "data": {
-                            "request_id": request_id,
-                            "tool_name": tool_name,
-                            "saved_variables": saved_vars,
-                        },
-                    }
-                )
-
             return json.dumps(
                 {
                     "status": "success",
@@ -607,8 +572,8 @@ class RequestEnvVarTool(AgentTool):
                 }
             )
 
-        except asyncio.TimeoutError:
-            logger.warning(f"Env var request {request_id} timed out")
+        except TimeoutError:
+            logger.warning(f"Env var request for {tool_name} timed out")
             return json.dumps(
                 {
                     "status": "timeout",
@@ -616,28 +581,14 @@ class RequestEnvVarTool(AgentTool):
                 }
             )
 
-        except asyncio.CancelledError:
-            logger.warning(f"Env var request {request_id} was cancelled")
-            return json.dumps(
-                {
-                    "status": "cancelled",
-                    "message": "Request was cancelled",
-                }
-            )
-
         except Exception as e:
-            logger.error(f"Error in env var request {request_id}: {e}")
+            logger.error(f"Error in env var request for {tool_name}: {e}")
             return json.dumps(
                 {
                     "status": "error",
                     "message": str(e),
                 }
             )
-
-        finally:
-            # Clean up
-            async with self._manager._lock:
-                self._manager._pending_requests.pop(request_id, None)
 
     def get_output_schema(self) -> Dict[str, Any]:
         """Get output schema for tool composition."""

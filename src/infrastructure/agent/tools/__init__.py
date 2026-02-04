@@ -10,13 +10,8 @@ from src.infrastructure.agent.tools.decision import DecisionTool
 from src.infrastructure.agent.tools.desktop_tool import DesktopStatus, DesktopTool
 from src.infrastructure.agent.tools.env_var_tools import (
     CheckEnvVarsTool,
-    EnvVarField,
-    EnvVarInputType,
-    EnvVarManager,
-    EnvVarRequest,
     GetEnvVarTool,
     RequestEnvVarTool,
-    get_env_var_manager,
 )
 from src.infrastructure.agent.tools.plan_enter import PlanEnterTool
 from src.infrastructure.agent.tools.plan_exit import PlanExitTool
@@ -42,13 +37,8 @@ __all__ = [
     "DesktopStatus",
     # Environment Variable Tools
     "CheckEnvVarsTool",
-    "EnvVarField",
-    "EnvVarInputType",
-    "EnvVarManager",
-    "EnvVarRequest",
     "GetEnvVarTool",
     "RequestEnvVarTool",
-    "get_env_var_manager",
     # Plan Tools
     "PlanEnterTool",
     "PlanExitTool",

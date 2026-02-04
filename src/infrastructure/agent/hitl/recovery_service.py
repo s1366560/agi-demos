@@ -1,20 +1,17 @@
 """
 HITL Recovery Service - Recovers unprocessed HITL responses after Worker restart.
 
-When Agent-worker is a stateless service and restarts:
-1. In-memory futures are lost
-2. HITL requests that were ANSWERED but not processed need recovery
-3. This service scans for such requests and re-triggers Agent execution
+NOTE: With Temporal-based HITL architecture, this service is largely obsolete.
+Temporal Workflows automatically persist and recover state, so HITL requests
+that are waiting for user response will resume automatically when the workflow
+is replayed.
 
-Usage:
-    Called during Worker startup to recover pending work.
+This service is kept for backward compatibility but performs minimal operations.
 """
 
-import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Optional
-
-from src.domain.model.agent.hitl_request import HITLRequest
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +20,9 @@ class HITLRecoveryService:
     """
     Service to recover unprocessed HITL responses after Worker restart.
 
-    Recovery flow:
-    1. Scan database for ANSWERED requests (user responded, Agent didn't process)
-    2. For each request, trigger Agent to continue execution
-    3. Agent reads response from database and continues workflow
+    NOTE: With Temporal-based architecture, most recovery is handled automatically
+    by Temporal Workflow replay. This service now only handles edge cases where
+    responses were stored in the database but the Temporal Signal wasn't processed.
     """
 
     def __init__(self):
@@ -40,11 +36,14 @@ class HITLRecoveryService:
         """
         Scan and recover all unprocessed HITL responses.
 
+        With Temporal architecture, this mainly marks any orphaned PENDING requests
+        as EXPIRED so they don't block future operations.
+
         Args:
             max_concurrent: Maximum concurrent recovery operations
 
         Returns:
-            Number of requests recovered
+            Number of requests processed
         """
         if self._recovery_in_progress:
             logger.warning("HITL recovery already in progress, skipping")
@@ -63,35 +62,26 @@ class HITLRecoveryService:
 
             async with async_session_factory() as session:
                 repo = SqlHITLRequestRepository(session)
+
+                # Mark any old PENDING requests as expired
+                # With Temporal, if a workflow is running, it will create new requests
+                now = datetime.now(timezone.utc)
+                expired_count = await repo.mark_expired_requests(before=now)
+                if expired_count > 0:
+                    await session.commit()
+                    logger.info(
+                        f"HITL Recovery: Marked {expired_count} expired PENDING requests"
+                    )
+                    self._recovered_count = expired_count
+
+                # Check for ANSWERED but unprocessed requests (edge case)
                 requests = await repo.get_unprocessed_answered_requests(limit=100)
-
-                if not requests:
-                    logger.info("HITL Recovery: No unprocessed requests found")
-                    return 0
-
-                logger.info(
-                    f"HITL Recovery: Found {len(requests)} unprocessed requests, "
-                    f"starting recovery (max_concurrent={max_concurrent})"
-                )
-
-                # Use semaphore for concurrency control
-                sem = asyncio.Semaphore(max_concurrent)
-
-                async def recover_one(req: HITLRequest):
-                    async with sem:
-                        success = await self._recover_single_request(req)
-                        if success:
-                            self._recovered_count += 1
-
-                # Run recovery for all requests
-                await asyncio.gather(
-                    *[recover_one(req) for req in requests],
-                    return_exceptions=True,
-                )
-
-                logger.info(
-                    f"HITL Recovery: Completed, recovered {self._recovered_count}/{len(requests)} requests"
-                )
+                if requests:
+                    logger.info(
+                        f"HITL Recovery: Found {len(requests)} ANSWERED but unprocessed requests. "
+                        "These should be handled by Temporal Workflow replay. "
+                        "No action needed - Temporal will process them when workflows resume."
+                    )
 
                 return self._recovered_count
 
@@ -100,113 +90,6 @@ class HITLRecoveryService:
             return self._recovered_count
         finally:
             self._recovery_in_progress = False
-
-    async def _recover_single_request(self, request: HITLRequest) -> bool:
-        """
-        Recover a single HITL request by triggering Agent continuation.
-
-        Args:
-            request: The HITL request to recover
-
-        Returns:
-            True if recovery was successful
-        """
-        try:
-            logger.info(
-                f"HITL Recovery: Recovering request {request.id} "
-                f"(type={request.request_type.value}, conversation={request.conversation_id})"
-            )
-
-            # Publish the response to Redis Streams
-            # The Agent listening for this conversation will pick it up
-            await self._publish_recovery_response(request)
-
-            logger.info(f"HITL Recovery: Published recovery for {request.id}")
-            return True
-
-        except Exception as e:
-            logger.error(
-                f"HITL Recovery: Failed to recover {request.id}: {e}",
-                exc_info=True,
-            )
-            return False
-
-    async def _publish_recovery_response(self, request: HITLRequest) -> None:
-        """
-        Publish the HITL response to Redis Streams for Agent to pick up.
-
-        This mimics what happens when a user responds to HITL,
-        but uses the already-stored response from the database.
-        """
-        # Get the appropriate manager based on request type
-        from src.domain.model.agent.hitl_request import HITLRequestType
-        from src.infrastructure.agent.hitl.clarification_manager import (
-            ClarificationManager,
-        )
-        from src.infrastructure.agent.hitl.decision_manager import DecisionManager
-        from src.infrastructure.agent.hitl.env_var_manager import EnvVarManager
-
-        if request.request_type == HITLRequestType.CLARIFICATION:
-            manager = ClarificationManager()
-            response_key = "answer"
-        elif request.request_type == HITLRequestType.DECISION:
-            manager = DecisionManager()
-            response_key = "decision"
-        elif request.request_type == HITLRequestType.ENV_VAR:
-            manager = EnvVarManager()
-            response_key = "env_vars"
-        else:
-            logger.warning(f"Unknown request type: {request.request_type}")
-            return
-
-        # Get message bus and publish
-        message_bus = await manager._get_message_bus()
-        if message_bus and request.response:
-            # Parse response for env_var type (stored as JSON string)
-            response_value = request.response
-            if request.request_type == HITLRequestType.ENV_VAR:
-                import json
-
-                try:
-                    response_value = json.loads(request.response)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-            await message_bus.publish_response(
-                request_id=request.id,
-                response_key=response_key,
-                response_value=response_value,
-            )
-            logger.debug(
-                f"HITL Recovery: Published to stream for {request.id} (response_key={response_key})"
-            )
-        else:
-            # Fallback to Pub/Sub
-            import json
-
-            import redis.asyncio as redis_lib
-
-            from src.configuration.config import get_settings
-
-            settings = get_settings()
-            redis_client = redis_lib.from_url(
-                settings.redis_url,
-                encoding="utf-8",
-                decode_responses=True,
-            )
-
-            try:
-                channel = f"hitl:{request.request_type.value}:{request.id}"
-                message = json.dumps(
-                    {
-                        "request_id": request.id,
-                        response_key: request.response,
-                    }
-                )
-                await redis_client.publish(channel, message)
-                logger.debug(f"HITL Recovery: Published to Pub/Sub for {request.id}")
-            finally:
-                await redis_client.aclose()
 
 
 # Global instance for use in worker startup

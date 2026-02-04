@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from src.domain.model.agent.hitl_types import HITLPendingException
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 
@@ -522,6 +523,7 @@ class ProjectReActAgent:
         conversation_context: Optional[List[Dict[str, str]]] = None,
         tenant_id: Optional[str] = None,
         message_id: Optional[str] = None,
+        hitl_response: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -543,6 +545,7 @@ class ProjectReActAgent:
             conversation_context: Optional conversation history
             tenant_id: Optional tenant ID (defaults to config.tenant_id)
             message_id: Optional message ID for HITL request persistence
+            hitl_response: Optional HITL response for resuming from HITL pause
 
         Yields:
             Event dictionaries for streaming
@@ -613,6 +616,7 @@ class ProjectReActAgent:
             logger.info(
                 f"ProjectReActAgent[{self.project_key}]: Executing chat "
                 f"conversation={conversation_id}, user={user_id}"
+                + (f", hitl_response={hitl_response.get('request_id')}" if hitl_response else "")
             )
 
             # Execute ReActAgent stream
@@ -624,6 +628,7 @@ class ProjectReActAgent:
                 tenant_id=effective_tenant_id,
                 conversation_context=conversation_context or [],
                 message_id=message_id,
+                hitl_response=hitl_response,
             ):
                 event_count += 1
 
@@ -656,6 +661,11 @@ class ProjectReActAgent:
                     f"ProjectReActAgent[{self.project_key}]: Chat completed in {execution_time_ms:.1f}ms, "
                     f"events={event_count}"
                 )
+
+        except HITLPendingException:
+            # Let HITLPendingException bubble up to Activity layer
+            # The Workflow will wait for user response and resume execution
+            raise
 
         except Exception as e:
             is_error = True

@@ -448,6 +448,7 @@ async def main():
     )
     from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
         cleanup_project_agent_activity,
+        continue_project_chat_activity,
         execute_project_chat_activity,
         initialize_project_agent_activity,
     )
@@ -473,6 +474,7 @@ async def main():
             # Project Agent activities
             initialize_project_agent_activity,
             execute_project_chat_activity,
+            continue_project_chat_activity,
             cleanup_project_agent_activity,
         ],
         max_concurrent_activities=AGENT_WORKER_CONCURRENCY,

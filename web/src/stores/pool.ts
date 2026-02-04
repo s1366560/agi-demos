@@ -15,6 +15,7 @@ import {
   type PoolInstance,
   type MetricsResponse,
   type ProjectTier,
+  type InstanceStatus,
   type ListInstancesParams,
 } from "../services/poolService";
 
@@ -38,7 +39,7 @@ export interface PoolState {
 
   // Filters
   tierFilter: ProjectTier | null;
-  statusFilter: string | null;
+  statusFilter: InstanceStatus | null;
 
   // Metrics
   metrics: MetricsResponse | null;
@@ -59,7 +60,7 @@ export interface PoolActions {
   setPage: (page: number) => void;
   setPageSize: (size: number) => void;
   setTierFilter: (tier: ProjectTier | null) => void;
-  setStatusFilter: (status: string | null) => void;
+  setStatusFilter: (status: InstanceStatus | null) => void;
 
   // Instance operations
   pauseInstance: (instanceKey: string) => Promise<boolean>;
@@ -190,7 +191,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
         get().fetchInstances({ page: 1, tier: tier ?? undefined });
       },
 
-      setStatusFilter: (status: string | null) => {
+      setStatusFilter: (status: InstanceStatus | null) => {
         set({ statusFilter: status, currentPage: 1 });
         get().fetchInstances({ page: 1, status: status ?? undefined });
       },

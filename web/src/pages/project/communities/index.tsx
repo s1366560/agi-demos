@@ -61,19 +61,6 @@ function formatTemplate(template: string, values: Record<string, string | number
 }
 
 // ========================================
-// Marker Symbols
-// ========================================
-
-const _HeaderMarker = Symbol('CommunitiesList.Header')
-const _StatsMarker = Symbol('CommunitiesList.Stats')
-const _ListMarker = Symbol('CommunitiesList.List')
-const _PaginationMarker = Symbol('CommunitiesList.Pagination')
-const _DetailMarker = Symbol('CommunitiesList.Detail')
-const _TaskStatusMarker = Symbol('CommunitiesList.TaskStatus')
-const _ErrorMarker = Symbol('CommunitiesList.Error')
-const _InfoMarker = Symbol('CommunitiesList.Info')
-
-// ========================================
 // Context
 // ========================================
 
@@ -111,7 +98,7 @@ const CommunitiesListContext = createContext<CommunitiesListContextValue | null>
 function useCommunitiesListContext(): CommunitiesListContextValue {
   const context = useContext(CommunitiesListContext)
   if (!context) {
-    throw new Error('CommunitiesList sub-components must be used within CommunitiesList')
+    throw Error('CommunitiesList sub-components must be used within CommunitiesList')
   }
   return context
 }
@@ -580,7 +567,7 @@ const Pagination: React.FC = memo(() => {
   return (
     <div className="flex items-center justify-center gap-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
       <button
-        onClick={() => setPage(p => Math.max(0, p - 1))}
+        onClick={() => setPage(Math.max(0, page - 1))}
         disabled={!hasPrevPage}
         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
@@ -591,7 +578,7 @@ const Pagination: React.FC = memo(() => {
         Page {page + 1} of {totalPages}
       </span>
       <button
-        onClick={() => setPage(p => p + 1)}
+        onClick={() => setPage(page + 1)}
         disabled={!hasNextPage}
         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >

@@ -704,15 +704,6 @@ class DIContainer:
 
         return ToolExecutor(tools=tools)
 
-    def hitl_handler(self):
-        """Get HITLHandler for human-in-the-loop tool handling.
-
-        Part of the refactored ReActAgent architecture (Phase 2.3).
-        """
-        from src.infrastructure.agent.hitl.handler import get_hitl_handler
-
-        return get_hitl_handler()
-
     def artifact_extractor(self):
         """Get ArtifactExtractor for extracting artifacts from tool results.
 

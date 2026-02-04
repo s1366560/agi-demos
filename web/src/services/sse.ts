@@ -1,9 +1,16 @@
 /**
  * SSE Event Emitter
  *
- * Global event emitter for Server-Sent Events (SSE).
- * Used by hooks and components to listen to SSE events.
+ * **DEPRECATED**: This module is deprecated. Plan mode events should be handled
+ * directly through agentService WebSocket handlers instead of this global emitter.
  *
+ * Migration:
+ * - Instead of sseEmitter.onPlanEvent(), use agentService.subscribe() with
+ *   plan mode callbacks (onPlanModeEnter, onPlanCreated, etc.)
+ *
+ * This emitter is kept for backward compatibility but will be removed in a future version.
+ *
+ * @deprecated Use agentService WebSocket handlers instead
  * @module services/sse
  */
 
@@ -11,16 +18,17 @@ import type { AgentEvent } from '../types/agent';
 
 /**
  * Browser-compatible EventEmitter implementation
+ * @deprecated
  */
 class BrowserEventEmitter {
-  private listeners: Map<string, Set<(...args: any[]) => void>> = new Map();
+  private listeners: Map<string, Set<(...args: unknown[]) => void>> = new Map();
   private maxListeners: number = 10;
 
   setMaxListeners(n: number): void {
     this.maxListeners = n;
   }
 
-  on(event: string, listener: (...args: any[]) => void): this {
+  on(event: string, listener: (...args: unknown[]) => void): this {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
@@ -34,7 +42,7 @@ class BrowserEventEmitter {
     return this;
   }
 
-  off(event: string, listener: (...args: any[]) => void): this {
+  off(event: string, listener: (...args: unknown[]) => void): this {
     const eventListeners = this.listeners.get(event);
     if (eventListeners) {
       eventListeners.delete(listener);
@@ -42,7 +50,7 @@ class BrowserEventEmitter {
     return this;
   }
 
-  emit(event: string, ...args: any[]): boolean {
+  emit(event: string, ...args: unknown[]): boolean {
     const eventListeners = this.listeners.get(event);
     if (!eventListeners || eventListeners.size === 0) {
       return false;
@@ -71,20 +79,21 @@ class BrowserEventEmitter {
 /**
  * SSE Event Emitter singleton
  *
- * Emits events received from SSE connections.
- * Components can register listeners for specific event types.
+ * @deprecated Use agentService WebSocket handlers instead of this emitter.
+ * Plan mode events (plan_mode_enter, plan_created, etc.) are now delivered
+ * directly through the WebSocket connection.
  */
 class SSEEmitter extends BrowserEventEmitter {
   constructor() {
     super();
     // Increase max listeners to support multiple components
     this.setMaxListeners(100);
+    console.warn('[SSEEmitter] DEPRECATED: sseEmitter is deprecated. Use agentService WebSocket handlers.');
   }
 
   /**
    * Emit a plan mode event
-   *
-   * @param event - The SSE event to emit
+   * @deprecated
    */
   emitPlanEvent(event: AgentEvent<unknown>): void {
     this.emit('plan_event', event);
@@ -92,21 +101,20 @@ class SSEEmitter extends BrowserEventEmitter {
 
   /**
    * Register a listener for plan events
-   *
-   * @param listener - Callback function for plan events
-   * @returns Function to remove the listener
+   * @deprecated Use agentService.subscribe() with plan mode handlers instead
    */
   onPlanEvent(listener: (event: AgentEvent<unknown>) => void): () => void {
-    this.on('plan_event', listener);
+    this.on('plan_event', listener as (...args: unknown[]) => void);
 
     // Return cleanup function
     return () => {
-      this.off('plan_event', listener);
+      this.off('plan_event', listener as (...args: unknown[]) => void);
     };
   }
 
   /**
    * Remove all listeners (useful for cleanup)
+   * @deprecated
    */
   removeAllPlanListeners(): void {
     this.removeAllListeners('plan_event');
@@ -115,11 +123,13 @@ class SSEEmitter extends BrowserEventEmitter {
 
 /**
  * Global SSE emitter instance
+ * @deprecated Use agentService WebSocket handlers instead
  */
 export const sseEmitter = new SSEEmitter();
 
 /**
  * Type for plan mode event handlers
+ * @deprecated Use AgentStreamHandler from types/agent instead
  */
 export interface PlanModeEventHandlers {
   onPlanModeEntered?: (data: {
@@ -128,17 +138,17 @@ export interface PlanModeEventHandlers {
     plan_title: string;
   }) => void;
   onPlanGenerated?: (data: {
-    plan: any;
+    plan: unknown;
   }) => void;
   onStepUpdated?: (data: {
     step_id: string;
-    step: any;
+    step: unknown;
   }) => void;
   onReflectionComplete?: (data: {
-    reflection: any;
+    reflection: unknown;
   }) => void;
   onPlanAdjusted?: (data: {
-    adjustments: any[];
+    adjustments: unknown[];
   }) => void;
   onPlanCompleted?: (data: {
     plan_id: string;

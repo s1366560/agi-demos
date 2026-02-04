@@ -266,6 +266,11 @@ export type AgentEventType =
     | "artifact_ready" // Artifact ready for download
     | "artifact_error" // Artifact processing error
     | "artifacts_batch" // Batch of artifacts
+    // Plan step events
+    | "plan_step_ready" // Plan step ready for execution
+    | "plan_step_skipped" // Plan step skipped
+    | "plan_snapshot_created" // Plan snapshot created
+    | "plan_rollback" // Plan rolled back to snapshot
     // System events
     | "start" // Stream started
     | "status" // Status update
@@ -387,6 +392,15 @@ export interface ErrorEventData {
     message: string;
     isReconnectable?: boolean;
     code?: string;
+}
+
+/**
+ * Retry event data (sent when LLM is retrying after a transient error)
+ */
+export interface RetryEventData {
+    attempt: number;
+    delay_ms: number;
+    message: string;
 }
 
 /**
@@ -543,6 +557,132 @@ export interface DoomLoopDetectedEventData {
 export interface DoomLoopIntervenedEventData {
     request_id: string;
     action: string;
+}
+
+/**
+ * Permission asked event data
+ */
+export interface PermissionAskedEventData {
+    request_id: string;
+    tool_name: string;
+    permission_type: "allow" | "deny" | "ask";
+    description: string;
+    risk_level?: "low" | "medium" | "high";
+    context?: Record<string, unknown>;
+}
+
+/**
+ * Permission replied event data
+ */
+export interface PermissionRepliedEventData {
+    request_id: string;
+    tool_name: string;
+    granted: boolean;
+    remember?: boolean;
+}
+
+/**
+ * Cost update event data
+ */
+export interface CostUpdateEventData {
+    conversation_id: string;
+    message_id?: string;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+    model: string;
+    cumulative_tokens?: number;
+    cumulative_cost_usd?: number;
+}
+
+/**
+ * Plan status changed event data
+ */
+export interface PlanStatusChangedEventData {
+    plan_id: string;
+    old_status: string;
+    new_status: string;
+    reason?: string;
+}
+
+/**
+ * Plan step ready event data
+ */
+export interface PlanStepReadyEventData {
+    plan_id: string;
+    step_id: string;
+    step_number: number;
+    description: string;
+}
+
+/**
+ * Plan step complete event data  
+ */
+export interface PlanStepCompleteEventData {
+    plan_id: string;
+    step_id: string;
+    step_number: number;
+    status: "completed" | "failed" | "skipped";
+    result?: unknown;
+    error?: string;
+}
+
+/**
+ * Plan step skipped event data
+ */
+export interface PlanStepSkippedEventData {
+    plan_id: string;
+    step_id: string;
+    step_number: number;
+    reason: string;
+}
+
+/**
+ * Plan snapshot created event data
+ */
+export interface PlanSnapshotCreatedEventData {
+    plan_id: string;
+    snapshot_id: string;
+    step_number: number;
+    reason: string;
+}
+
+/**
+ * Plan rollback event data
+ */
+export interface PlanRollbackEventData {
+    plan_id: string;
+    snapshot_id: string;
+    from_step: number;
+    to_step: number;
+    reason: string;
+}
+
+/**
+ * Adjustment applied event data
+ */
+export interface AdjustmentAppliedEventData {
+    plan_id: string;
+    adjustment_type: string;
+    description: string;
+    affected_steps: number[];
+}
+
+/**
+ * Sandbox event data (unified for all sandbox events)
+ */
+export interface SandboxEventData {
+    sandbox_id?: string;
+    project_id: string;
+    event_type: string;
+    status?: "creating" | "running" | "stopping" | "stopped" | "error";
+    endpoint?: string;
+    websocket_url?: string;
+    desktop_url?: string;
+    terminal_url?: string;
+    error_message?: string;
+    timestamp: string;
 }
 
 /**
@@ -760,8 +900,32 @@ export interface AgentStreamHandler {
     onPlanExecutionStart?: (event: AgentEvent<PlanExecutionStartEvent>) => void;
     onPlanExecutionComplete?: (event: AgentEvent<PlanExecutionCompleteEvent>) => void;
     onReflectionComplete?: (event: AgentEvent<ReflectionCompleteEvent>) => void;
+    // Extended Plan Mode handlers (full coverage)
+    onPlanStatusChanged?: (event: AgentEvent<PlanStatusChangedEventData>) => void;
+    onPlanStepReady?: (event: AgentEvent<PlanStepReadyEventData>) => void;
+    onPlanStepComplete?: (event: AgentEvent<PlanStepCompleteEventData>) => void;
+    onPlanStepSkipped?: (event: AgentEvent<PlanStepSkippedEventData>) => void;
+    onPlanSnapshotCreated?: (event: AgentEvent<PlanSnapshotCreatedEventData>) => void;
+    onPlanRollback?: (event: AgentEvent<PlanRollbackEventData>) => void;
+    onAdjustmentApplied?: (event: AgentEvent<AdjustmentAppliedEventData>) => void;
+    // Permission handlers
+    onPermissionAsked?: (event: AgentEvent<PermissionAskedEventData>) => void;
+    onPermissionReplied?: (event: AgentEvent<PermissionRepliedEventData>) => void;
+    // Cost tracking handlers
+    onCostUpdate?: (event: AgentEvent<CostUpdateEventData>) => void;
+    // Sandbox handlers (unified WebSocket)
+    onSandboxCreated?: (event: AgentEvent<SandboxEventData>) => void;
+    onSandboxTerminated?: (event: AgentEvent<SandboxEventData>) => void;
+    onSandboxStatus?: (event: AgentEvent<SandboxEventData>) => void;
+    onDesktopStarted?: (event: AgentEvent<SandboxEventData>) => void;
+    onDesktopStopped?: (event: AgentEvent<SandboxEventData>) => void;
+    onTerminalStarted?: (event: AgentEvent<SandboxEventData>) => void;
+    onTerminalStopped?: (event: AgentEvent<SandboxEventData>) => void;
+    // Terminal handlers
     onComplete?: (event: AgentEvent<CompleteEventData>) => void;
     onError?: (event: AgentEvent<ErrorEventData>) => void;
+    /** Called when LLM is retrying after a transient error (e.g., rate limit) */
+    onRetry?: (event: AgentEvent<RetryEventData>) => void;
     onClose?: () => void;
 }
 
@@ -1655,12 +1819,6 @@ export interface PlanUpdatedEventData {
     version: number;
 }
 
-export interface PlanStatusChangedEventData {
-    plan_id: string;
-    old_status: PlanDocumentStatus;
-    new_status: PlanDocumentStatus;
-}
-
 // ============================================
 // Timeline Event Types (Unified Event Stream)
 // ============================================
@@ -1687,6 +1845,8 @@ export type TimelineEventType =
     | "decision_answered"
     | "env_var_requested"
     | "env_var_provided"
+    | "permission_asked"
+    | "permission_replied"
     // Sandbox event types
     | "sandbox_created"
     | "sandbox_terminated"
@@ -1900,6 +2060,30 @@ export interface EnvVarProvidedTimelineEvent extends BaseTimelineEvent {
 }
 
 /**
+ * Permission asked event (agent requests permission from user)
+ */
+export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
+    type: "permission_asked";
+    requestId: string;
+    toolName: string;
+    description: string;
+    riskLevel?: "low" | "medium" | "high";
+    parameters?: Record<string, unknown>;
+    context?: Record<string, unknown>;
+    answered?: boolean;
+    granted?: boolean;
+}
+
+/**
+ * Permission replied event (user granted or denied permission)
+ */
+export interface PermissionRepliedTimelineEvent extends BaseTimelineEvent {
+    type: "permission_replied";
+    requestId: string;
+    granted: boolean;
+}
+
+/**
  * Union type for all timeline events
  */
 export type TimelineEvent =
@@ -1921,6 +2105,8 @@ export type TimelineEvent =
     | DecisionAnsweredTimelineEvent
     | EnvVarRequestedTimelineEvent
     | EnvVarProvidedTimelineEvent
+    | PermissionAskedTimelineEvent
+    | PermissionRepliedTimelineEvent
     // Sandbox events
     | DesktopStartedEvent
     | DesktopStoppedEvent

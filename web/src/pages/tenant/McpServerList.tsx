@@ -44,6 +44,7 @@ import type {
 import type {
   McpServerListHeaderProps,
   McpServerListStatsProps,
+  McpServerListStatsCardProps,
   McpServerListFiltersProps,
   McpServerCardProps,
   ServerTypeBadgeProps,
@@ -167,14 +168,7 @@ const Header: React.FC<McpServerListHeaderProps> = ({ onCreate }) => (
 Header.displayName = 'McpServerList.Header';
 
 // Stats Card Component
-const StatsCard: React.FC<McpServerListStatsProps & {
-  title: string;
-  value: string | number;
-  icon: string;
-  iconColor?: string;
-  valueColor?: string;
-  extra?: React.ReactNode;
-}> = ({
+const StatsCard: React.FC<McpServerListStatsCardProps> = ({
   title,
   value,
   icon,

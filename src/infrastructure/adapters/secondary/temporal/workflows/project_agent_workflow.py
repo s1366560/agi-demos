@@ -13,6 +13,7 @@ Key Features:
 - Independent configuration per project
 - Resource isolation between projects
 - Graceful shutdown and recovery
+- Human-in-the-Loop (HITL) support via Temporal Signals
 
 Usage:
     # Start project agent workflow
@@ -43,6 +44,16 @@ Usage:
 
     # Stop workflow
     await handle.signal(ProjectAgentWorkflow.stop)
+
+    # Send HITL response
+    await handle.signal(
+        ProjectAgentWorkflow.hitl_response,
+        HITLSignalPayload(
+            request_id="clar_12345678",
+            hitl_type="clarification",
+            response_data={"answer": "User's answer"},
+        ),
+    )
 """
 
 import asyncio
@@ -56,6 +67,9 @@ from temporalio.common import RetryPolicy
 
 # Import workflow-safe types
 with workflow.unsafe.imports_passed_through():
+    from src.domain.model.agent.hitl_types import (
+        HITL_RESPONSE_SIGNAL,
+    )
     from src.infrastructure.agent.core.project_react_agent import (
         ProjectAgentConfig,
     )
@@ -224,6 +238,12 @@ class ProjectAgentWorkflow:
         # Recovery tracking
         self._recovery_attempts = 0
         self._max_recovery_attempts = 3
+
+        # HITL (Human-in-the-Loop) state
+        # Maps request_id -> response payload
+        self._hitl_responses: Dict[str, Dict[str, Any]] = {}
+        # Maps request_id -> pending request info
+        self._pending_hitl_requests: Dict[str, Dict[str, Any]] = {}
 
     def _should_attempt_recovery(self, error_message: str) -> bool:
         """Check if automatic recovery should be attempted."""
@@ -446,6 +466,9 @@ class ProjectAgentWorkflow:
         This update handler executes a chat and returns the result.
         Uses Temporal's update mechanism for synchronous request-response.
 
+        If the Agent triggers an HITL (Human-in-the-Loop) request, this method
+        will wait for the user response via Signal and then continue execution.
+
         Args:
             request: Chat request containing message and context
 
@@ -480,6 +503,7 @@ class ProjectAgentWorkflow:
         try:
             with workflow.unsafe.imports_passed_through():
                 from src.infrastructure.adapters.secondary.temporal.activities.project_agent import (
+                    continue_project_chat_activity,
                     execute_project_chat_activity,
                 )
 
@@ -500,6 +524,7 @@ class ProjectAgentWorkflow:
                 backoff_coefficient=2.0,
             )
 
+            # Initial chat execution
             result = await workflow.execute_activity(
                 execute_project_chat_activity,
                 {
@@ -513,6 +538,78 @@ class ProjectAgentWorkflow:
                 start_to_close_timeout=timedelta(minutes=10),
                 retry_policy=retry_policy,
             )
+
+            # HITL loop: wait for response and continue until completion
+            max_hitl_iterations = 10  # Prevent infinite loops
+            hitl_iterations = 0
+
+            while result.get("hitl_pending") and hitl_iterations < max_hitl_iterations:
+                hitl_iterations += 1
+                hitl_request_id = result.get("hitl_request_id", "")
+                hitl_type = result.get("hitl_type", "")
+                hitl_state_key = result.get("hitl_state_key", "")
+                timeout_seconds = result.get("timeout_seconds", 300.0)
+
+                workflow.logger.info(
+                    f"HITL pending: request_id={hitl_request_id}, type={hitl_type}, "
+                    f"iteration={hitl_iterations}"
+                )
+
+                # Register HITL request for tracking
+                self._register_pending_hitl(
+                    request_id=hitl_request_id,
+                    hitl_type=hitl_type,
+                    request_data=result.get("hitl_request_data", {}),
+                )
+
+                # Wait for user response via Signal
+                hitl_response = await self._wait_for_hitl_response(
+                    request_id=hitl_request_id,
+                    timeout_seconds=timeout_seconds,
+                )
+
+                if hitl_response is None:
+                    # Timeout - return timeout result
+                    workflow.logger.warning(
+                        f"HITL timeout: request_id={hitl_request_id}"
+                    )
+                    return ProjectChatResult(
+                        conversation_id=request.conversation_id,
+                        message_id=request.message_id,
+                        is_error=True,
+                        error_message=f"HITL request timed out after {timeout_seconds}s",
+                        execution_time_ms=result.get("execution_time_ms", 0),
+                        event_count=result.get("event_count", 0),
+                    )
+
+                # Continue execution with user response
+                workflow.logger.info(
+                    f"Continuing chat with HITL response: request_id={hitl_request_id}"
+                )
+
+                result = await workflow.execute_activity(
+                    continue_project_chat_activity,
+                    {
+                        "hitl_state_key": hitl_state_key,
+                        "hitl_request_id": hitl_request_id,
+                        "hitl_response": hitl_response.get("response_data", {}),
+                        "correlation_id": request.correlation_id,
+                        "config": config,
+                    },
+                    start_to_close_timeout=timedelta(minutes=10),
+                    retry_policy=retry_policy,
+                )
+
+            if hitl_iterations >= max_hitl_iterations:
+                workflow.logger.error(
+                    f"Max HITL iterations reached: {max_hitl_iterations}"
+                )
+                return ProjectChatResult(
+                    conversation_id=request.conversation_id,
+                    message_id=request.message_id,
+                    is_error=True,
+                    error_message="Maximum HITL iterations exceeded",
+                )
 
             # Update metrics
             self._total_chats += 1
@@ -689,6 +786,160 @@ class ProjectAgentWorkflow:
         self._stop_requested = True
         # Mark as restart (not error) for proper status reporting
         self._error = None
+
+    # =========================================================================
+    # HITL (Human-in-the-Loop) Signal Handlers
+    # =========================================================================
+
+    @workflow.signal(name=HITL_RESPONSE_SIGNAL)
+    def hitl_response(self, payload: Dict[str, Any]):
+        """
+        Signal handler for HITL responses from users.
+
+        This signal is sent when a user provides a response to an HITL request
+        (clarification, decision, env_var, permission).
+
+        Args:
+            payload: Dictionary containing:
+                - request_id: str - The HITL request ID
+                - hitl_type: str - Type of HITL request
+                - response_data: dict - The user's response
+                - user_id: Optional[str] - User who responded
+                - timestamp: Optional[str] - Response timestamp
+        """
+        request_id = payload.get("request_id", "")
+        hitl_type = payload.get("hitl_type", "unknown")
+        response_data = payload.get("response_data", {})
+        user_id = payload.get("user_id")
+        timestamp = payload.get("timestamp") or workflow.now().isoformat()
+
+        workflow.logger.info(
+            f"Received HITL response signal: request_id={request_id}, "
+            f"type={hitl_type}, user={user_id}"
+        )
+
+        # Store response for waiting code to pick up
+        self._hitl_responses[request_id] = {
+            "hitl_type": hitl_type,
+            "response_data": response_data,
+            "user_id": user_id,
+            "timestamp": timestamp,
+            "received_at": workflow.now().isoformat(),
+        }
+
+        # Remove from pending if it was tracked
+        if request_id in self._pending_hitl_requests:
+            del self._pending_hitl_requests[request_id]
+
+    @workflow.signal
+    def cancel_hitl_request(self, request_id: str, reason: Optional[str] = None):
+        """
+        Signal to cancel a pending HITL request.
+
+        Args:
+            request_id: The HITL request ID to cancel
+            reason: Optional reason for cancellation
+        """
+        workflow.logger.info(f"Cancelling HITL request: {request_id}, reason={reason}")
+
+        # Store cancellation as a special response
+        self._hitl_responses[request_id] = {
+            "hitl_type": "cancelled",
+            "response_data": {"cancelled": True, "reason": reason},
+            "received_at": workflow.now().isoformat(),
+        }
+
+        # Remove from pending
+        if request_id in self._pending_hitl_requests:
+            del self._pending_hitl_requests[request_id]
+
+    @workflow.query
+    def get_pending_hitl_requests(self) -> List[Dict[str, Any]]:
+        """
+        Query for all pending HITL requests in this workflow.
+
+        Returns:
+            List of pending HITL request information
+        """
+        return list(self._pending_hitl_requests.values())
+
+    @workflow.query
+    def has_pending_hitl(self) -> bool:
+        """
+        Query whether there are any pending HITL requests.
+
+        Returns:
+            True if there are pending HITL requests
+        """
+        return len(self._pending_hitl_requests) > 0
+
+    # =========================================================================
+    # HITL Helper Methods (for use within workflow)
+    # =========================================================================
+
+    async def _wait_for_hitl_response(
+        self,
+        request_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Wait for an HITL response with timeout.
+
+        This method is called from within the workflow when an HITL request
+        is initiated and needs to wait for user response.
+
+        Args:
+            request_id: The HITL request ID to wait for
+            timeout_seconds: Maximum time to wait
+
+        Returns:
+            Response payload if received, None if timeout
+        """
+        workflow.logger.info(
+            f"Waiting for HITL response: request_id={request_id}, "
+            f"timeout={timeout_seconds}s"
+        )
+
+        try:
+            # Wait for response signal to populate _hitl_responses
+            await workflow.wait_condition(
+                lambda: request_id in self._hitl_responses,
+                timeout=timedelta(seconds=timeout_seconds),
+            )
+
+            # Response received
+            response = self._hitl_responses.pop(request_id, None)
+            workflow.logger.info(f"HITL response received: {request_id}")
+            return response
+
+        except asyncio.TimeoutError:
+            workflow.logger.warning(f"HITL response timeout: {request_id}")
+            # Remove from pending
+            if request_id in self._pending_hitl_requests:
+                del self._pending_hitl_requests[request_id]
+            return None
+
+    def _register_pending_hitl(
+        self,
+        request_id: str,
+        hitl_type: str,
+        request_data: Dict[str, Any],
+    ) -> None:
+        """
+        Register a pending HITL request.
+
+        Args:
+            request_id: The HITL request ID
+            hitl_type: Type of HITL request
+            request_data: Request data (question, options, etc.)
+        """
+        self._pending_hitl_requests[request_id] = {
+            "request_id": request_id,
+            "hitl_type": hitl_type,
+            "request_data": request_data,
+            "conversation_id": self._current_conversation_id,
+            "created_at": workflow.now().isoformat(),
+        }
 
 
 def get_project_agent_workflow_id(

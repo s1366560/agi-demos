@@ -182,7 +182,6 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
   const [taskProgress, setTaskProgress] = useState<MemoryTaskProgress>({});
 
-  const sseCleanupRef = useRef<Map<string, () => void>>(new Map());
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Filter memories
@@ -408,8 +407,8 @@ ToolbarInternal.displayName = 'MemoryList.Toolbar';
 // ============================================================================
 
 interface VirtualListProps {
-  parentRef: React.RefObject<HTMLDivElement>;
-  virtualizer: ReturnType<typeof useVirtualizer>;
+  parentRef: React.RefObject<HTMLDivElement | null>;
+  virtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>;
   filteredMemories: Memory[];
   totalSize: number;
   className?: string;
@@ -417,7 +416,8 @@ interface VirtualListProps {
 
 const VirtualListInternal: React.FC<VirtualListProps> = memo(
   ({ parentRef, virtualizer, filteredMemories, totalSize, className = '' }) => {
-    const { state, actions, projectId } = useMemoryListContext();
+     
+    const { state: _state, actions: _actions, projectId: _projectId } = useMemoryListContext();
 
     return (
       <div className={`overflow-x-auto ${className}`}>
@@ -514,16 +514,14 @@ interface MemoryRowProps {
   index: number;
   onDelete?: (memory: Memory) => void;
   projectId?: string;
-  className?: string;
 }
 
-const MemoryRowInternal: React.FC<MemoryRowProps> = memo(({ memory, index, onDelete: propOnDelete, projectId: propProjectId, className = '' }) => {
+const MemoryRowInternal: React.FC<MemoryRowProps> = memo(({ memory, index, onDelete: propOnDelete, projectId: propProjectId }) => {
   const context = useMemoryListContextOptional();
   const state = context?.state;
   const actions = context?.actions;
   const projectId = propProjectId ?? context?.projectId ?? 'test-project-1';
   const onDelete = propOnDelete ?? actions?.confirmDelete;
-  const styles = getProcessingStatusStyles(memory.processing_status);
   const progress = state?.taskProgress[memory.id]?.progress;
 
   return (

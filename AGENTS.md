@@ -222,6 +222,32 @@ src/tests/               # All tests (unit, integration, contract, performance)
 - Service tests: `<serviceName>.test.ts`
 - E2E tests: `<feature>.spec.ts`
 
+**Zustand Store Usage:**
+- **CRITICAL**: When selecting multiple values from a Zustand store, use `useShallow` to avoid infinite re-render loops
+- ❌ **Wrong** (creates new object every render, causes infinite loop):
+  ```tsx
+  const { value1, value2 } = useStore((state) => ({
+    value1: state.value1,
+    value2: state.value2,
+  }));
+  ```
+- ✅ **Correct** (uses shallow comparison):
+  ```tsx
+  import { useShallow } from 'zustand/react/shallow';
+  
+  const { value1, value2 } = useStore(
+    useShallow((state) => ({
+      value1: state.value1,
+      value2: state.value2,
+    }))
+  );
+  ```
+- ✅ **Alternative** (select individually):
+  ```tsx
+  const value1 = useStore((state) => state.value1);
+  const value2 = useStore((state) => state.value2);
+  ```
+
 ## Error Handling
 
 **Backend:**
@@ -234,6 +260,26 @@ src/tests/               # All tests (unit, integration, contract, performance)
 - Use React error boundaries for component errors
 - API errors handled in service layer
 - User-facing error messages through i18n
+
+**SSE/WebSocket Error Recovery:**
+- LLM providers may throw rate limit errors (429), backend will retry via `RetryPolicy`
+- When retry occurs, backend emits `retry` event with `{attempt, delay_ms, message}`
+- Frontend `onRetry` handler sets `agentState: "retrying"` but keeps `isStreaming: true`
+- For rate limit errors in `onError`, do NOT immediately stop streaming:
+  ```tsx
+  onError: (event) => {
+    const isRateLimitError = event.data.code === "RATE_LIMIT" ||
+      event.data.message?.includes("rate limit");
+    if (isRateLimitError) {
+      // Don't stop streaming - backend may retry
+      set({ agentState: "retrying" });
+    } else {
+      // Fatal error - stop streaming
+      set({ isStreaming: false, agentState: "idle" });
+    }
+  }
+  ```
+- Backend `AgentRetryEvent` flow: `processor.py` catches LLM errors, checks `is_retryable()`, yields `AgentRetryEvent`, waits, then retries
 
 ## Testing Strategy
 

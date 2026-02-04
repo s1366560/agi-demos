@@ -2,9 +2,12 @@
  * Unit tests for Sandbox SSE Service.
  *
  * Tests the SSE subscription service for sandbox events.
+ * 
+ * NOTE: sandboxSSEService has been migrated to use WebSocket internally
+ * while maintaining the same API for backward compatibility.
  */
 
-import { vi, beforeEach, afterEach, describe, it, expect, vi } from "vitest";
+import { vi, beforeEach, afterEach, describe, it, expect } from "vitest";
 
 // Mock logger
 vi.mock("../../utils/logger", () => ({
@@ -21,99 +24,74 @@ vi.mock("../../utils/tokenResolver", () => ({
   getAuthToken: vi.fn(() => "mock-token"),
 }));
 
-// Mock URL utils
-vi.mock("../../services/client/urlUtils", () => ({
-  createApiUrl: vi.fn((path: string) => `http://localhost:8000${path}`),
+// Track the callback passed to subscribeSandbox and unsubscribe calls
+let sandboxCallback: ((event: unknown) => void) | null = null;
+let unsubscribeCalled = false;
+
+// Mock unifiedEventService since sandboxSSEService now uses it
+vi.mock("../../services/unifiedEventService", () => ({
+  unifiedEventService: {
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn(),
+    isConnected: vi.fn().mockReturnValue(true),
+    subscribeSandbox: vi.fn((_projectId: string, callback: (event: unknown) => void) => {
+      sandboxCallback = callback;
+      // Return an unsubscribe function that tracks if it's called
+      return () => {
+        unsubscribeCalled = true;
+      };
+    }),
+    getStatus: vi.fn().mockReturnValue('connected'),
+  },
 }));
 
-// Mock window.location
-Object.defineProperty(global, "window", {
-  value: {
-    location: {
-      origin: "http://localhost:3000",
-    },
-  },
-  writable: true,
-});
-
-// Mock URL constructor to avoid issues in test environment
-global.URL = URL as any;
-
 import { sandboxSSEService } from "../../services/sandboxSSEService";
-import type { SandboxSSEEvent } from "../../types/sandbox";
+import type { BaseSandboxSSEEvent } from "../../services/sandboxSSEService";
+import { unifiedEventService } from "../../services/unifiedEventService";
 
-describe("SandboxSSEService", () => {
-  let mockEventSource: EventSource;
-  let EventSourceMock: any;
-
+describe("SandboxSSEService (WebSocket-based)", () => {
   beforeEach(() => {
-    // Create a fresh mock instance for each test
-    mockEventSource = {
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      close: vi.fn(),
-      readyState: 0,
-      CONNECTING: 0,
-      OPEN: 1,
-      CLOSED: 2,
-      onopen: null,
-      onerror: null,
-    } as unknown as EventSource;
-
-    // Mock EventSource constructor function as a spy
-    EventSourceMock = vi.fn(function(_url: string) {
-      return mockEventSource;
-    }) as any;
-    EventSourceMock.CONNECTING = 0;
-    EventSourceMock.OPEN = 1;
-    EventSourceMock.CLOSED = 2;
-    global.EventSource = EventSourceMock;
-
-    // Reset singleton state after mocking EventSource
-    const service = sandboxSSEService as any;
-    service.handlers.clear();
-    service.disconnect();
-    service.lastEventId = "0";
-    service.projectId = null;
-    service.status = "disconnected";
-    service.reconnectAttempts = 0;
-    service.reconnectTimeout = null;
+    vi.clearAllMocks();
+    sandboxCallback = null;
+    unsubscribeCalled = false;
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
+    // Reset the service's internal state
+    (sandboxSSEService as any).status = "disconnected";
+    (sandboxSSEService as any).projectId = null;
+    (sandboxSSEService as any).handlers.clear();
+    (sandboxSSEService as any).unsubscribeFn = null;
   });
 
   describe("subscribe", () => {
-    it("should create EventSource with correct URL", () => {
+    it("should connect to unifiedEventService", async () => {
       const handler = {
         onDesktopStarted: vi.fn(),
       };
 
       sandboxSSEService.subscribe("proj-123", handler);
 
-      expect(global.EventSource).toHaveBeenCalledWith(
-        expect.stringContaining("sandbox/events/proj-123")
-      );
+      // Should call connect on unifiedEventService
+      expect(unifiedEventService.connect).toHaveBeenCalled();
     });
 
-    it("should include last_id parameter when reconnecting", () => {
+    it("should call subscribeSandbox after connection resolves", async () => {
       const handler = {
         onDesktopStarted: vi.fn(),
       };
 
-      // Simulate a previous connection by setting lastEventId
-      const service = sandboxSSEService as any;
-      service.lastEventId = "1234567890-0";
-
       sandboxSSEService.subscribe("proj-123", handler);
 
-      expect(global.EventSource).toHaveBeenCalledWith(
-        expect.stringContaining("last_id=1234567890-0")
+      // Wait for the async connect to resolve
+      await vi.waitFor(() => {
+        expect(unifiedEventService.subscribeSandbox).toHaveBeenCalled();
+      });
+
+      expect(unifiedEventService.subscribeSandbox).toHaveBeenCalledWith(
+        "proj-123",
+        expect.any(Function)
       );
     });
 
@@ -127,394 +105,240 @@ describe("SandboxSSEService", () => {
       expect(typeof unsubscribe).toBe("function");
     });
 
-    it("should remove handler when unsubscribe is called", () => {
-      const handler = {
-        onDesktopStarted: vi.fn(),
-      };
+    it("should support multiple handlers for the same project", async () => {
+      const handler1 = { onDesktopStarted: vi.fn() };
+      const handler2 = { onTerminalStarted: vi.fn() };
 
-      const unsubscribe = sandboxSSEService.subscribe("proj-123", handler);
-      unsubscribe();
+      sandboxSSEService.subscribe("proj-123", handler1);
+      
+      // Wait for first subscription to complete
+      await vi.waitFor(() => {
+        expect(sandboxSSEService.getStatus()).toBe("connected");
+      });
+      
+      // Clear the mock to check if connect is called again
+      vi.mocked(unifiedEventService.connect).mockClear();
+      
+      sandboxSSEService.subscribe("proj-123", handler2);
 
-      const service = sandboxSSEService as any;
-      expect(service.handlers.size).toBe(0);
-    });
-
-    it("should disconnect when last handler is removed", () => {
-      const handler = {
-        onDesktopStarted: vi.fn(),
-      };
-
-      const unsubscribe = sandboxSSEService.subscribe("proj-123", handler);
-
-      // Spy on the mockEventSource's close method
-      const closeSpy = vi.spyOn(mockEventSource, "close");
-
-      unsubscribe();
-
-      expect(closeSpy).toHaveBeenCalled();
+      // connect() should not be called again since we're already connected
+      expect(unifiedEventService.connect).not.toHaveBeenCalled();
     });
   });
 
-  describe("connect", () => {
-    it("should set up event listeners on EventSource", () => {
-      const handler = {
-        onDesktopStarted: vi.fn(),
-      };
-
-      const service = sandboxSSEService as any;
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      // Check that EventSource was created
-      expect(service.eventSource).toBe(mockEventSource);
-
-      // Check that addEventListener was called for "sandbox" event
-      expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
-        "sandbox",
-        expect.any(Function)
-      );
-
-      // Check that onopen and onerror properties were set
-      expect(mockEventSource.onopen).toEqual(expect.any(Function));
-      expect(mockEventSource.onerror).toEqual(expect.any(Function));
+  describe("disconnect", () => {
+    it("should be callable without errors when not connected", () => {
+      expect(() => sandboxSSEService.disconnect()).not.toThrow();
     });
 
-    it("should call onDesktopStarted handler when event received", () => {
+    it("should unsubscribe from unifiedEventService when all handlers removed", async () => {
+      const handler = { onDesktopStarted: vi.fn() };
+      const unsubscribe = sandboxSSEService.subscribe("proj-123", handler);
+      
+      // Wait for connection
+      await vi.waitFor(() => {
+        expect(sandboxSSEService.getStatus()).toBe("connected");
+      });
+      
+      // Verify subscription was created
+      expect(unifiedEventService.subscribeSandbox).toHaveBeenCalled();
+      
+      // Unsubscribe (removes last handler, triggers disconnect)
+      unsubscribe();
+      
+      // unsubscribeCalled should be true when last handler is removed
+      expect(unsubscribeCalled).toBe(true);
+    });
+
+    it("should call unsubscribe on disconnect", async () => {
+      const handler = { onDesktopStarted: vi.fn() };
+      sandboxSSEService.subscribe("proj-123", handler);
+      
+      // Wait for connection
+      await vi.waitFor(() => {
+        expect(sandboxSSEService.getStatus()).toBe("connected");
+      });
+      
+      sandboxSSEService.disconnect();
+      
+      expect(unsubscribeCalled).toBe(true);
+    });
+  });
+
+  describe("getStatus", () => {
+    it("should return disconnected initially", () => {
+      const status = sandboxSSEService.getStatus();
+      expect(status).toBe("disconnected");
+    });
+
+    it("should return connected after successful subscription", async () => {
+      const handler = { onDesktopStarted: vi.fn() };
+      sandboxSSEService.subscribe("proj-123", handler);
+      
+      // Wait for the async connection
+      await vi.waitFor(() => {
+        expect(sandboxSSEService.getStatus()).toBe("connected");
+      });
+    });
+  });
+
+  describe("event routing", () => {
+    it("should route desktop_started to onDesktopStarted handler", async () => {
       const handler = {
         onDesktopStarted: vi.fn(),
+        onDesktopStopped: vi.fn(),
       };
 
       sandboxSSEService.subscribe("proj-123", handler);
+      
+      // Wait for subscription to be established
+      await vi.waitFor(() => {
+        expect(sandboxCallback).not.toBeNull();
+      });
 
-      // Directly call routeEvent with a desktop_started event
-      const event = {
-        type: "desktop_started" as const,
+      // Simulate receiving an event through the callback
+      sandboxCallback!({
+        type: "sandbox_event",
         data: {
-          sandbox_id: "sb-123",
-          url: "http://localhost:6080",
-          display: ":1",
-          resolution: "1280x720",
-          port: 6080,
+          type: "desktop_started",
+          data: { sandbox_id: "sb-123" },
+          timestamp: "2026-02-04T00:00:00Z",
         },
-        timestamp: "2024-01-01T00:00:00Z",
-      };
-
-      const service = sandboxSSEService as any;
-      service.routeEvent(event);
+      });
 
       expect(handler.onDesktopStarted).toHaveBeenCalledWith(
         expect.objectContaining({
           type: "desktop_started",
-          data: expect.objectContaining({
-            sandbox_id: "sb-123",
-          }),
         })
       );
+      expect(handler.onDesktopStopped).not.toHaveBeenCalled();
     });
 
-    it("should route terminal_started events correctly", () => {
+    it("should route terminal_started to onTerminalStarted handler", async () => {
       const handler = {
         onTerminalStarted: vi.fn(),
       };
 
       sandboxSSEService.subscribe("proj-123", handler);
+      
+      await vi.waitFor(() => {
+        expect(sandboxCallback).not.toBeNull();
+      });
 
-      const event = {
-        type: "terminal_started" as const,
+      sandboxCallback!({
+        type: "sandbox_event",
         data: {
-          sandbox_id: "sb-123",
-          url: "ws://localhost:7681",
-          port: 7681,
-          session_id: "sess-abc",
+          type: "terminal_started",
+          data: { terminal_id: "term-123" },
+          timestamp: "2026-02-04T00:00:00Z",
         },
-        timestamp: "2024-01-01T00:00:00Z",
-      };
-
-      const service = sandboxSSEService as any;
-      service.routeEvent(event);
+      });
 
       expect(handler.onTerminalStarted).toHaveBeenCalled();
     });
 
-    it("should route sandbox_terminated events correctly", () => {
+    it("should route status events to onStatusUpdate handler", async () => {
       const handler = {
-        onSandboxTerminated: vi.fn(),
+        onStatusUpdate: vi.fn(),
       };
 
       sandboxSSEService.subscribe("proj-123", handler);
-
-      const event = {
-        type: "sandbox_terminated" as const,
-        data: { sandbox_id: "sb-123" },
-        timestamp: "2024-01-01T00:00:00Z",
-      };
-
-      const service = sandboxSSEService as any;
-      service.routeEvent(event);
-
-      expect(handler.onSandboxTerminated).toHaveBeenCalled();
-    });
-
-    it("should update lastEventId when event received", () => {
-      const handler = {
-        onDesktopStarted: vi.fn(),
-      };
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      const service = sandboxSSEService as any;
-      service.lastEventId = "99999-0";
-
-      expect(service.lastEventId).toBe("99999-0");
-    });
-
-    it("should call onError handler when connection fails", () => {
-      const handler = {
-        onError: vi.fn(),
-      };
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      const service = sandboxSSEService as any;
-      const onerror = service.eventSource?.onerror;
-
-      // Set reconnectAttempts to max so error is triggered immediately
-      service.reconnectAttempts = service.maxReconnectAttempts;
-
-      if (onerror) {
-        onerror(new Event("error"));
-      }
-
-      expect(handler.onError).toHaveBeenCalledWith(
-        expect.any(Error)
-      );
-    });
-
-    it("should handle JSON parse errors gracefully", () => {
-      const handler = {
-        onDesktopStarted: vi.fn(),
-      };
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      const addCalls = (mockEventSource.addEventListener as any).mock.calls;
-      const sandboxListener = addCalls.find(
-        (call: any[]) => call[0] === "sandbox"
-      )?.[1];
-
-      if (sandboxListener) {
-        const mockEvent = new MessageEvent("message", {
-          data: "invalid json{",
-        });
-
-        // Should not throw
-        expect(() => sandboxListener(mockEvent)).not.toThrow();
-      }
-
-      // handler should NOT be called for JSON parse errors (they're logged instead)
-      expect(handler.onDesktopStarted).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("reconnection", () => {
-    it("should schedule reconnection on error", async () => {
-      vi.useFakeTimers();
-
-      const handler = {
-        onError: vi.fn(),
-      };
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      const service = sandboxSSEService as any;
-
-      // Get the onerror handler from the actual EventSource instance
-      const onerror = service.eventSource?.onerror;
-
-      // Trigger error by calling onerror
-      if (onerror) {
-        onerror(new Event("error"));
-      }
-
-      // Verify reconnect timeout was scheduled
-      expect(service.reconnectTimeout).not.toBeNull();
-
-      // Fast forward timers to trigger reconnection
-      await vi.runAllTimersAsync();
-
-      // Verify reconnect was attempted (reconnectAttempts > 0)
-      expect(service.reconnectAttempts).toBeGreaterThan(0);
-
-      vi.useRealTimers();
-    });
-
-    it("should stop reconnecting after max attempts", async () => {
-      vi.useFakeTimers();
-
-      const handler = {
-        onError: vi.fn(),
-      };
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      const service = sandboxSSEService as any;
-      service.maxReconnectAttempts = 2;
-
-      // Get the onerror handler
-      const onerror = service.eventSource?.onerror;
-
-      // Trigger multiple errors
-      for (let i = 0; i < 5; i++) {
-        if (onerror) {
-          onerror(new Event("error"));
-        }
-        await vi.runAllTimersAsync();
-      }
-
-      // Should have stopped reconnecting
-      expect(handler.onError).toHaveBeenCalledWith(
-        expect.any(Error)
-      );
-
-      vi.useRealTimers();
-    });
-  });
-
-  describe("disconnect", () => {
-    it("should close EventSource when disconnected", () => {
-      sandboxSSEService.subscribe("proj-123", {
-        onDesktopStarted: vi.fn(),
+      
+      await vi.waitFor(() => {
+        expect(sandboxCallback).not.toBeNull();
       });
 
-      // Spy on the mockEventSource's close method
-      const closeSpy = vi.spyOn(mockEventSource, "close");
-
-      sandboxSSEService.disconnect();
-
-      expect(closeSpy).toHaveBeenCalled();
-    });
-
-    it("should clear reconnection timeout when disconnected", async () => {
-      vi.useFakeTimers();
-
-      const handler = {
-        onDesktopStarted: vi.fn(),
-      };
-
-      sandboxSSEService.subscribe("proj-123", handler);
-
-      const service = sandboxSSEService as any;
-
-      // Get the onerror handler
-      const onerror = service.eventSource?.onerror;
-
-      // Trigger error to start reconnection timeout
-      if (onerror) {
-        onerror(new Event("error"));
-      }
-
-      // Disconnect before reconnection
-      sandboxSSEService.disconnect();
-
-      expect(service.reconnectTimeout).toBeNull();
-
-      vi.useRealTimers();
-    });
-  });
-
-  describe("getStatus", () => {
-    it("should return disconnected status initially", () => {
-      expect(sandboxSSEService.getStatus()).toBe("disconnected");
-    });
-
-    it("should return connecting status while connecting", () => {
-      sandboxSSEService.subscribe("proj-123", {
-        onDesktopStarted: vi.fn(),
+      sandboxCallback!({
+        type: "sandbox_event",
+        data: {
+          type: "sandbox_status",
+          data: { status: "running" },
+          timestamp: "2026-02-04T00:00:00Z",
+        },
       });
 
-      const service = sandboxSSEService as any;
-      service.status = "connecting";
-
-      expect(sandboxSSEService.getStatus()).toBe("connecting");
+      expect(handler.onStatusUpdate).toHaveBeenCalled();
     });
-  });
 
-  describe("multiple handlers", () => {
-    it("should notify all handlers of events", () => {
-      const handler1 = {
-        onDesktopStarted: vi.fn(),
-      };
-      const handler2 = {
-        onDesktopStarted: vi.fn(),
-      };
+    it("should notify multiple handlers", async () => {
+      const handler1 = { onDesktopStarted: vi.fn() };
+      const handler2 = { onDesktopStarted: vi.fn() };
 
-      // Both handlers should be registered
       sandboxSSEService.subscribe("proj-123", handler1);
       sandboxSSEService.subscribe("proj-123", handler2);
+      
+      await vi.waitFor(() => {
+        expect(sandboxCallback).not.toBeNull();
+      });
 
-      const service = sandboxSSEService as any;
-      expect(service.handlers.size).toBe(2);
+      sandboxCallback!({
+        type: "sandbox_event",
+        data: {
+          type: "desktop_started",
+          data: {},
+          timestamp: "2026-02-04T00:00:00Z",
+        },
+      });
 
-      // Trigger event manually
-      const event = {
-        type: "desktop_started" as const,
-        data: { sandbox_id: "sb-123" },
-        timestamp: "2024-01-01T00:00:00Z",
-      };
-
-      service.routeEvent(event);
-
-      expect(handler1.onDesktopStarted).toHaveBeenCalledWith(event);
-      expect(handler2.onDesktopStarted).toHaveBeenCalledWith(event);
-    });
-
-    it("should allow handlers to be added and removed independently", () => {
-      const handler1 = {
-        onDesktopStarted: vi.fn(),
-      };
-      const handler2 = {
-        onDesktopStarted: vi.fn(),
-      };
-
-      const unsubscribe1 = sandboxSSEService.subscribe("proj-123", handler1);
-      const unsubscribe2 = sandboxSSEService.subscribe("proj-123", handler2);
-
-      const service = sandboxSSEService as any;
-      expect(service.handlers.size).toBe(2);
-
-      // Remove handler1
-      unsubscribe1();
-      expect(service.handlers.size).toBe(1);
-
-      // Simulate event through the routeEvent method
-      const event = {
-        type: "desktop_started" as const,
-        data: { sandbox_id: "sb-123" },
-        timestamp: "2024-01-01T00:00:00Z",
-      };
-
-      service.routeEvent(event);
-
-      // Since handler1 was removed, only handler2 should be called
-      expect(handler1.onDesktopStarted).not.toHaveBeenCalled();
-      expect(handler2.onDesktopStarted).toHaveBeenCalledWith(event);
+      expect(handler1.onDesktopStarted).toHaveBeenCalled();
+      expect(handler2.onDesktopStarted).toHaveBeenCalled();
     });
   });
 
-  describe("type guards", () => {
-    it("should correctly identify sandbox_created events", () => {
-      const event: SandboxSSEEvent = {
-        type: "sandbox_created",
-        data: {
-          sandbox_id: "sb-123",
-          project_id: "proj-456",
-          status: "running",
-        },
-        timestamp: "2024-01-01T00:00:00Z",
+  describe("routeEvent (direct testing)", () => {
+    it("should route events correctly via public routeEvent method", () => {
+      const handler = {
+        onSandboxCreated: vi.fn(),
+        onSandboxTerminated: vi.fn(),
+        onDesktopStarted: vi.fn(),
+        onDesktopStopped: vi.fn(),
+        onTerminalStarted: vi.fn(),
+        onTerminalStopped: vi.fn(),
+        onStatusUpdate: vi.fn(),
       };
 
-      expect(event.type).toBe("sandbox_created");
-      expect(event.data).toHaveProperty("sandbox_id", "sb-123");
+      sandboxSSEService.subscribe("proj-123", handler);
+
+      const events: BaseSandboxSSEEvent[] = [
+        { type: "sandbox_created", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+        { type: "sandbox_terminated", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+        { type: "desktop_started", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+        { type: "desktop_stopped", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+        { type: "terminal_started", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+        { type: "terminal_stopped", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+        { type: "sandbox_status", data: {}, timestamp: "2026-02-04T00:00:00Z" },
+      ];
+
+      events.forEach(event => {
+        sandboxSSEService.routeEvent(event);
+      });
+
+      expect(handler.onSandboxCreated).toHaveBeenCalledTimes(1);
+      expect(handler.onSandboxTerminated).toHaveBeenCalledTimes(1);
+      expect(handler.onDesktopStarted).toHaveBeenCalledTimes(1);
+      expect(handler.onDesktopStopped).toHaveBeenCalledTimes(1);
+      expect(handler.onTerminalStarted).toHaveBeenCalledTimes(1);
+      expect(handler.onTerminalStopped).toHaveBeenCalledTimes(1);
+      expect(handler.onStatusUpdate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("backward compatibility", () => {
+    it("should maintain same API as SSE-based version", () => {
+      // Check that all expected methods exist
+      expect(typeof sandboxSSEService.subscribe).toBe("function");
+      expect(typeof sandboxSSEService.disconnect).toBe("function");
+      expect(typeof sandboxSSEService.getStatus).toBe("function");
+    });
+
+    it("should accept partial handler objects", () => {
+      // Only providing some handlers should work
+      const handler = {
+        onDesktopStarted: vi.fn(),
+        // Other handlers omitted
+      };
+
+      expect(() => sandboxSSEService.subscribe("proj-123", handler)).not.toThrow();
     });
   });
 });

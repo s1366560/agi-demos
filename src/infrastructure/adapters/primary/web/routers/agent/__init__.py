@@ -51,7 +51,7 @@ router.include_router(messages.router)
 router.include_router(tools.router)
 router.include_router(patterns.router)
 router.include_router(config.router)
-router.include_router(hitl.router)
+router.include_router(hitl.router, prefix="/hitl")
 router.include_router(plans.router)
 router.include_router(events.router)
 

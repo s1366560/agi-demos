@@ -4,48 +4,25 @@ Clarification Tool for Human-in-the-Loop Interaction.
 This tool allows the agent to ask clarifying questions during planning phase
 when encountering ambiguous requirements or multiple valid approaches.
 
-Cross-Process Communication:
-- Uses Redis Streams for reliable cross-process HITL responses (primary)
-- Falls back to Redis Pub/Sub for backward compatibility
-- Worker process subscribes to Redis Stream for responses
-- API process publishes responses to Redis Stream
+Architecture (NEW - Temporal-based):
+- Uses TemporalHITLHandler for unified HITL handling
+- Temporal Signals for reliable cross-process communication
+- SSE events for real-time frontend updates
 
-Database Persistence:
-- Stores HITL requests in database for recovery after page refresh
-- Enables frontend to query pending requests on reconnection
-
-Architecture:
-- ClarificationManager inherits from BaseHITLManager for common HITL infrastructure
-- ClarificationRequest extends BaseHITLRequest for type-specific request handling
-
-NOTE: This file re-exports from the new HITL infrastructure for backward compatibility.
-New code should import directly from src.infrastructure.agent.hitl.
+Architecture (LEGACY - Redis-based, deprecated):
+- ClarificationManager inherits from BaseHITLManager
+- Redis Streams for cross-process communication
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-# Re-export from new HITL infrastructure for backward compatibility
-from src.infrastructure.agent.hitl.clarification_manager import (
-    ClarificationManager,
-    ClarificationOption,
-    ClarificationRequest,
-    ClarificationType,
-    get_clarification_manager,
-    set_clarification_manager,
-)
+from src.infrastructure.agent.hitl.temporal_hitl_handler import TemporalHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
 
-# Re-export for backward compatibility
 __all__ = [
-    "ClarificationType",
-    "ClarificationOption",
-    "ClarificationRequest",
-    "ClarificationManager",
-    "get_clarification_manager",
-    "set_clarification_manager",
     "ClarificationTool",
 ]
 
@@ -59,7 +36,7 @@ class ClarificationTool(AgentTool):
     multiple valid approaches.
 
     Usage:
-        clarification = ClarificationTool()
+        clarification = ClarificationTool(hitl_handler)
         answer = await clarification.execute(
             question="Should I use caching?",
             clarification_type="approach",
@@ -70,12 +47,17 @@ class ClarificationTool(AgentTool):
         )
     """
 
-    def __init__(self, manager: Optional[ClarificationManager] = None):
+    def __init__(
+        self,
+        hitl_handler: Optional[TemporalHITLHandler] = None,
+        emit_sse_callback: Optional[Callable] = None,
+    ):
         """
         Initialize the clarification tool.
 
         Args:
-            manager: Clarification manager to use (defaults to global instance)
+            hitl_handler: TemporalHITLHandler instance (required for execution)
+            emit_sse_callback: Optional callback for SSE events
         """
         super().__init__(
             name="ask_clarification",
@@ -85,7 +67,12 @@ class ClarificationTool(AgentTool):
                 "ensure alignment before execution."
             ),
         )
-        self.manager = manager or get_clarification_manager()
+        self._hitl_handler = hitl_handler
+        self._emit_sse_callback = emit_sse_callback
+
+    def set_hitl_handler(self, handler: TemporalHITLHandler) -> None:
+        """Set the HITL handler (for late binding)."""
+        self._hitl_handler = handler
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
@@ -161,9 +148,8 @@ class ClarificationTool(AgentTool):
             return False
 
         # Validate clarification type
-        try:
-            ClarificationType(kwargs["clarification_type"])
-        except ValueError:
+        valid_types = ["scope", "approach", "prerequisite", "priority", "custom"]
+        if kwargs["clarification_type"] not in valid_types:
             logger.error(f"Invalid clarification_type: {kwargs['clarification_type']}")
             return False
 
@@ -200,6 +186,7 @@ class ClarificationTool(AgentTool):
 
         Raises:
             ValueError: If arguments are invalid
+            RuntimeError: If HITL handler not set
             asyncio.TimeoutError: If user doesn't respond within timeout
         """
         # Validate
@@ -208,26 +195,17 @@ class ClarificationTool(AgentTool):
         ):
             raise ValueError("Invalid clarification arguments")
 
-        # Convert options to ClarificationOption objects
-        clarification_options = [
-            ClarificationOption(
-                id=opt["id"],
-                label=opt["label"],
-                description=opt.get("description"),
-                recommended=opt.get("recommended", False),
-            )
-            for opt in options
-        ]
+        if self._hitl_handler is None:
+            raise RuntimeError("HITL handler not set. Call set_hitl_handler() first.")
 
-        # Create request
-        clarif_type = ClarificationType(clarification_type)
-        answer = await self.manager.create_request(
+        # Use TemporalHITLHandler
+        answer = await self._hitl_handler.request_clarification(
             question=question,
-            clarification_type=clarif_type,
-            options=clarification_options,
+            options=options,
+            clarification_type=clarification_type,
             allow_custom=allow_custom,
-            context=context or {},
-            timeout=timeout,
+            timeout_seconds=timeout,
+            context=context,
         )
 
         logger.info(f"Clarification answered: {answer}")

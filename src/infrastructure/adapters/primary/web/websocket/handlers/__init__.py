@@ -7,6 +7,7 @@ Contains message handlers for different WebSocket message types:
 - StatusHandler: subscribe_status, unsubscribe_status
 - LifecycleHandler: subscribe_lifecycle_state, start/stop/restart_agent
 - HITLHandler: clarification_respond, decision_respond, env_var_respond
+- SandboxHandler: subscribe_sandbox, unsubscribe_sandbox
 """
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -27,6 +28,10 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.lifecycle_handle
     StopAgentHandler,
     SubscribeLifecycleStateHandler,
     UnsubscribeLifecycleStateHandler,
+)
+from src.infrastructure.adapters.primary.web.websocket.handlers.sandbox_handler import (
+    SubscribeSandboxHandler,
+    UnsubscribeSandboxHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.handlers.status_handler import (
     SubscribeStatusHandler,
@@ -54,6 +59,9 @@ __all__ = [
     "StartAgentHandler",
     "StopAgentHandler",
     "RestartAgentHandler",
+    # Sandbox
+    "SubscribeSandboxHandler",
+    "UnsubscribeSandboxHandler",
     # HITL
     "ClarificationRespondHandler",
     "DecisionRespondHandler",

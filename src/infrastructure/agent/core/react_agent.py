@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 from src.domain.events.agent_events import (
     AgentDomainEvent,
 )
+from src.domain.model.agent.hitl_types import HITLPendingException
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
@@ -524,6 +525,7 @@ class ReActAgent:
         message_id: Optional[str] = None,
         attachment_content: Optional[List[Dict[str, Any]]] = None,
         attachment_metadata: Optional[List[Dict[str, Any]]] = None,
+        hitl_response: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -544,6 +546,7 @@ class ReActAgent:
             tenant_id: Tenant ID
             conversation_context: Optional conversation history
             message_id: Optional message ID for HITL request persistence
+            hitl_response: Optional HITL response for resuming from HITL pause
 
         Yields:
             Event dictionaries compatible with existing SSE format:
@@ -872,6 +875,7 @@ class ReActAgent:
             "tenant_id": tenant_id,
             "project_id": project_id,
             "message_id": message_id,
+            "hitl_response": hitl_response,  # Pass HITL response for resume
         }
 
         try:
@@ -907,6 +911,11 @@ class ReActAgent:
                 },
                 "timestamp": datetime.utcnow().isoformat(),
             }
+
+        except HITLPendingException:
+            # Let HITLPendingException bubble up to Activity layer
+            # The Workflow will wait for user response and resume execution
+            raise
 
         except Exception as e:
             logger.error(f"[ReActAgent] Error in stream: {e}", exc_info=True)

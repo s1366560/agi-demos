@@ -24,6 +24,10 @@ import type {
   ActEvent,
   ObserveEvent,
   ArtifactCreatedEvent,
+  ClarificationAskedEventData,
+  DecisionAskedEventData,
+  EnvVarRequestedEventData,
+  PermissionAskedEventData,
 } from '../../../types/agent';
 // Import types without type qualifier
 import type {
@@ -36,21 +40,105 @@ import type {
   StepStartProps,
   TextEndProps,
   ArtifactCreatedProps,
+  MessageBubbleRootProps,
 } from './types';
+import { InlineHITLCard } from '../InlineHITLCard';
 
 // ========================================
-// Marker Symbols
+// HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard
 // ========================================
 
-const _UserMarker = Symbol('MessageBubble.User');
-const _AssistantMarker = Symbol('MessageBubble.Assistant');
-const _TextDeltaMarker = Symbol('MessageBubble.TextDelta');
-const _ThoughtMarker = Symbol('MessageBubble.Thought');
-const _ToolExecutionMarker = Symbol('MessageBubble.ToolExecution');
-const _WorkPlanMarker = Symbol('MessageBubble.WorkPlan');
-const _StepStartMarker = Symbol('MessageBubble.StepStart');
-const _TextEndMarker = Symbol('MessageBubble.TextEnd');
-const _ArtifactCreatedMarker = Symbol('MessageBubble.ArtifactCreated');
+/**
+ * Convert ClarificationAskedTimelineEvent to ClarificationAskedEventData (snake_case)
+ */
+const toClarificationData = (event: TimelineEvent): ClarificationAskedEventData | undefined => {
+  if (event.type !== 'clarification_asked') return undefined;
+  const e = event as TimelineEvent & {
+    requestId: string;
+    question: string;
+    clarificationType: string;
+    options: unknown[];
+    allowCustom: boolean;
+    context?: Record<string, unknown>;
+  };
+  return {
+    request_id: e.requestId,
+    question: e.question,
+    clarification_type: e.clarificationType as ClarificationAskedEventData['clarification_type'],
+    options: e.options as ClarificationAskedEventData['options'],
+    allow_custom: e.allowCustom,
+    context: e.context || {},
+  };
+};
+
+/**
+ * Convert DecisionAskedTimelineEvent to DecisionAskedEventData (snake_case)
+ */
+const toDecisionData = (event: TimelineEvent): DecisionAskedEventData | undefined => {
+  if (event.type !== 'decision_asked') return undefined;
+  const e = event as TimelineEvent & {
+    requestId: string;
+    question: string;
+    decisionType: string;
+    options: unknown[];
+    allowCustom?: boolean;
+    context?: Record<string, unknown>;
+    defaultOption?: string;
+  };
+  return {
+    request_id: e.requestId,
+    question: e.question,
+    decision_type: e.decisionType as DecisionAskedEventData['decision_type'],
+    options: e.options as DecisionAskedEventData['options'],
+    allow_custom: e.allowCustom || false,
+    context: e.context || {},
+    default_option: e.defaultOption,
+  };
+};
+
+/**
+ * Convert EnvVarRequestedTimelineEvent to EnvVarRequestedEventData (snake_case)
+ */
+const toEnvVarData = (event: TimelineEvent): EnvVarRequestedEventData | undefined => {
+  if (event.type !== 'env_var_requested') return undefined;
+  const e = event as TimelineEvent & {
+    requestId: string;
+    toolName: string;
+    fields: EnvVarRequestedEventData['fields'];
+    message?: string;
+    context?: Record<string, unknown>;
+  };
+  return {
+    request_id: e.requestId,
+    tool_name: e.toolName,
+    fields: e.fields,
+    message: e.message,
+    context: e.context,
+  };
+};
+
+/**
+ * Convert PermissionAskedTimelineEvent to PermissionAskedEventData (snake_case)
+ */
+const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | undefined => {
+  if (event.type !== 'permission_asked') return undefined;
+  const e = event as TimelineEvent & {
+    requestId: string;
+    toolName: string;
+    permissionType: "allow" | "deny" | "ask";
+    description: string;
+    riskLevel?: "low" | "medium" | "high";
+    context?: Record<string, unknown>;
+  };
+  return {
+    request_id: e.requestId,
+    tool_name: e.toolName,
+    permission_type: e.permissionType,
+    description: e.description,
+    risk_level: e.riskLevel,
+    context: e.context,
+  };
+};
 
 // ========================================
 // Utilities
@@ -455,8 +543,8 @@ WorkPlan.displayName = 'MessageBubble.WorkPlan';
 
 // Step Start Component
 const StepStart: React.FC<StepStartProps> = memo(({ event }) => {
-  const stepDesc = event?.stepDescription || event?.description;
-  const stepIndex = event?.stepIndex ?? event?.step_index;
+  const stepDesc = event?.stepDescription;
+  const stepIndex = event?.stepIndex;
 
   if (!stepDesc) return null;
 
@@ -679,6 +767,118 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(({
     case 'artifact_created':
       console.log('[MessageBubble] Rendering artifact_created event:', event);
       return <ArtifactCreated event={event as unknown as ArtifactCreatedEvent} />;
+
+    // HITL Events - Render inline cards
+    // Note: TimelineEvents use camelCase (requestId, allowCustom), but InlineHITLCard expects
+    // SSE format with snake_case (request_id, allow_custom). Use adapter functions to convert.
+    case 'clarification_asked': {
+      const clarificationData = toClarificationData(event);
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="clarification"
+          requestId={e.requestId || clarificationData?.request_id || ''}
+          clarificationData={clarificationData}
+          expiresAt={e.expiresAt}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'clarification_answered': {
+      // Show answered state
+      const e = event as TimelineEvent & { requestId?: string; answer?: string; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="clarification"
+          requestId={e.requestId || ''}
+          isAnswered={true}
+          answeredValue={e.answer}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'decision_asked': {
+      const decisionData = toDecisionData(event);
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="decision"
+          requestId={e.requestId || decisionData?.request_id || ''}
+          decisionData={decisionData}
+          expiresAt={e.expiresAt}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'decision_answered': {
+      const e = event as TimelineEvent & { requestId?: string; decision?: string; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="decision"
+          requestId={e.requestId || ''}
+          isAnswered={true}
+          answeredValue={e.decision}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'env_var_requested': {
+      const envVarData = toEnvVarData(event);
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="env_var"
+          requestId={e.requestId || envVarData?.request_id || ''}
+          envVarData={envVarData}
+          expiresAt={e.expiresAt}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'env_var_provided': {
+      const e = event as TimelineEvent & { requestId?: string; variableNames?: string[]; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="env_var"
+          requestId={e.requestId || ''}
+          isAnswered={true}
+          answeredValue={e.variableNames?.join(', ')}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'permission_asked': {
+      const permissionData = toPermissionData(event);
+      const e = event as TimelineEvent & { requestId?: string; expiresAt?: string; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="permission"
+          requestId={e.requestId || permissionData?.request_id || ''}
+          permissionData={permissionData}
+          expiresAt={e.expiresAt}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
+
+    case 'permission_replied': {
+      const e = event as TimelineEvent & { requestId?: string; granted?: boolean; createdAt?: string };
+      return (
+        <InlineHITLCard
+          hitlType="permission"
+          requestId={e.requestId || ''}
+          isAnswered={true}
+          answeredValue={e.granted ? '已允许' : '已拒绝'}
+          createdAt={e.createdAt || String(event.timestamp)}
+        />
+      );
+    }
 
     // These artifact events don't need visual rendering
     case 'artifact_ready':

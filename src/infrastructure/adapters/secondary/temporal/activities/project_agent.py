@@ -17,14 +17,17 @@ Metrics (via OpenTelemetry):
 - project_agent.active_count: Active agent instances gauge
 """
 
+import json
 import logging
 import time as time_module
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import redis.asyncio as aioredis
 from temporalio import activity
 
+from src.configuration.config import get_settings
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
@@ -37,6 +40,9 @@ logger = logging.getLogger(__name__)
 # This provides caching at the activity worker level
 _project_agent_instances: Dict[str, ProjectReActAgent] = {}
 _instances_lock = False  # Simple flag lock (activities are single-threaded per worker)
+
+# Global Redis connection pool for event publishing
+_redis_pool: Optional[aioredis.ConnectionPool] = None
 
 
 def _get_project_agent_key(
@@ -219,6 +225,12 @@ async def execute_project_chat_activity(
     This activity uses a cached ProjectReActAgent instance to process
     chat requests efficiently.
 
+    When an HITL request is encountered, this activity:
+    1. Saves the Agent state to Redis
+    2. Returns a result with hitl_pending=True
+    3. The Workflow then waits for user response via Signal
+    4. After receiving response, Workflow calls continue_project_chat_activity
+
     Args:
         input_data: Contains:
             - conversation_id: Conversation ID
@@ -227,10 +239,17 @@ async def execute_project_chat_activity(
             - user_id: User ID
             - conversation_context: Conversation history
             - config: Project configuration
+            - hitl_response: Optional HITL response (for resume scenario)
 
     Returns:
-        Chat result with content and metadata
+        Chat result with content and metadata, or hitl_pending indicator
     """
+    from src.domain.model.agent.hitl_types import HITLPendingException
+    from src.infrastructure.agent.hitl.state_store import (
+        HITLAgentState,
+        HITLStateStore,
+    )
+
     start_time = time_module.time()
 
     try:
@@ -242,6 +261,7 @@ async def execute_project_chat_activity(
         conversation_context = input_data.get("conversation_context", [])
         correlation_id = input_data.get("correlation_id")  # Request correlation ID
         config = input_data.get("config", {})
+        hitl_response = input_data.get("hitl_response")  # For resume scenario
 
         tenant_id = config.get("tenant_id", "")
         project_id = config.get("project_id", "")
@@ -249,7 +269,8 @@ async def execute_project_chat_activity(
 
         logger.info(
             f"[ProjectAgentActivity] Executing chat: conversation={conversation_id}, "
-            f"message={message_id}, project={project_id}, correlation={correlation_id}"
+            f"message={message_id}, project={project_id}, correlation={correlation_id}, "
+            f"has_hitl_response={hitl_response is not None}"
         )
 
         # Get cached agent
@@ -287,75 +308,148 @@ async def execute_project_chat_activity(
 
             _cache_project_agent(agent)
 
-        # Collect all events
+        # Collect all events and publish in real-time
         events: List[Dict[str, Any]] = []
         final_content = ""
         is_error = False
         error_message = None
+        sequence_number = 0
 
-        # Execute chat
-        async for event in agent.execute_chat(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            user_id=user_id,
-            conversation_context=conversation_context,
-            tenant_id=tenant_id,
-            message_id=message_id,
-        ):
-            events.append(event)
+        # Get Redis client for connection reuse during streaming
+        pool = await _get_redis_pool()
+        redis_client = aioredis.Redis(connection_pool=pool)
 
-            # Track important events
-            event_type = event.get("type")
-            if event_type == "complete":
-                final_content = event.get("data", {}).get("content", "")
-            elif event_type == "error":
-                is_error = True
-                error_message = event.get("data", {}).get("message", "Unknown error")
+        try:
+            # Execute chat and stream events to Redis
+            async for event in agent.execute_chat(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                user_id=user_id,
+                conversation_context=conversation_context,
+                tenant_id=tenant_id,
+                message_id=message_id,
+                hitl_response=hitl_response,  # Pass HITL response for resume
+            ):
+                events.append(event)
+                sequence_number += 1
 
-        # Persist events to database with correlation_id
-        sequence_number = await _persist_events(
-            conversation_id=conversation_id,
-            message_id=message_id,
-            events=events,
-            correlation_id=correlation_id,
-        )
+                # Publish event to Redis Stream in real-time
+                await _publish_event_to_stream(
+                    conversation_id=conversation_id,
+                    event=event,
+                    message_id=message_id,
+                    sequence_number=sequence_number,
+                    correlation_id=correlation_id,
+                    redis_client=redis_client,
+                )
 
-        execution_time_ms = (time_module.time() - start_time) * 1000
+                # Track important events
+                event_type = event.get("type")
+                if event_type == "complete":
+                    final_content = event.get("data", {}).get("content", "")
+                elif event_type == "error":
+                    is_error = True
+                    error_message = event.get("data", {}).get("message", "Unknown error")
 
-        # Record metrics
-        agent_metrics.increment(
-            "project_agent.chat_total",
-            labels={"project_id": project_id},
-        )
-        agent_metrics.observe(
-            "project_agent.chat_latency_ms",
-            execution_time_ms,
-            labels={"project_id": project_id},
-        )
+            # Normal completion - persist events and return result
+            await _persist_events(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                events=events,
+                correlation_id=correlation_id,
+            )
 
-        if is_error:
+            execution_time_ms = (time_module.time() - start_time) * 1000
+
+            # Record metrics
             agent_metrics.increment(
-                "project_agent.chat_errors",
+                "project_agent.chat_total",
                 labels={"project_id": project_id},
             )
-            logger.warning(
-                f"[ProjectAgentActivity] Chat failed: {error_message}, "
-                f"time={execution_time_ms:.1f}ms"
-            )
-        else:
-            logger.info(
-                f"[ProjectAgentActivity] Chat completed: events={len(events)}, "
-                f"time={execution_time_ms:.1f}ms"
+            agent_metrics.observe(
+                "project_agent.chat_latency_ms",
+                execution_time_ms,
+                labels={"project_id": project_id},
             )
 
-        return {
-            "content": final_content,
-            "sequence_number": sequence_number,
-            "is_error": is_error,
-            "error_message": error_message,
-            "execution_time_ms": execution_time_ms,
-            "event_count": len(events),
-        }
+            if is_error:
+                agent_metrics.increment(
+                    "project_agent.chat_errors",
+                    labels={"project_id": project_id},
+                )
+                logger.warning(
+                    f"[ProjectAgentActivity] Chat failed: {error_message}, "
+                    f"time={execution_time_ms:.1f}ms"
+                )
+            else:
+                logger.info(
+                    f"[ProjectAgentActivity] Chat completed: events={len(events)}, "
+                    f"time={execution_time_ms:.1f}ms"
+                )
+
+            return {
+                "content": final_content,
+                "sequence_number": sequence_number,
+                "is_error": is_error,
+                "error_message": error_message,
+                "execution_time_ms": execution_time_ms,
+                "event_count": len(events),
+            }
+
+        except HITLPendingException as hitl_ex:
+            # HITL request encountered - save state and return to Workflow
+            logger.info(
+                f"[ProjectAgentActivity] HITL pending: request_id={hitl_ex.request_id}, "
+                f"type={hitl_ex.hitl_type.value}"
+            )
+
+            # Save Agent state to Redis for later resumption
+            state = HITLAgentState(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                hitl_request_id=hitl_ex.request_id,
+                hitl_type=hitl_ex.hitl_type.value,
+                hitl_request_data=hitl_ex.request_data,
+                messages=conversation_context,
+                user_message=user_message,
+                user_id=user_id,
+                step_count=getattr(agent, "_step_count", 0),
+                timeout_seconds=hitl_ex.timeout_seconds,
+            )
+
+            state_store = HITLStateStore(redis_client)
+            state_key = await state_store.save_state(state)
+
+            # Persist events collected so far
+            if events:
+                await _persist_events(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    events=events,
+                    correlation_id=correlation_id,
+                )
+
+            execution_time_ms = (time_module.time() - start_time) * 1000
+
+            return {
+                "hitl_pending": True,
+                "hitl_request_id": hitl_ex.request_id,
+                "hitl_type": hitl_ex.hitl_type.value,
+                "hitl_request_data": hitl_ex.request_data,
+                "hitl_state_key": state_key,
+                "timeout_seconds": hitl_ex.timeout_seconds,
+                "content": "",
+                "sequence_number": sequence_number,
+                "is_error": False,
+                "error_message": None,
+                "execution_time_ms": execution_time_ms,
+                "event_count": len(events),
+            }
+
+        finally:
+            await redis_client.aclose()
 
     except Exception as e:
         execution_time_ms = (time_module.time() - start_time) * 1000
@@ -372,6 +466,274 @@ async def execute_project_chat_activity(
             )
         except Exception as pub_error:
             logger.warning(f"[ProjectAgentActivity] Failed to publish error event: {pub_error}")
+
+        return {
+            "content": "",
+            "sequence_number": 0,
+            "is_error": True,
+            "error_message": str(e),
+            "execution_time_ms": execution_time_ms,
+            "event_count": 0,
+        }
+
+
+@activity.defn
+async def continue_project_chat_activity(
+    input_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Continue a chat request after receiving HITL response.
+
+    This activity resumes Agent execution after the user has provided
+    a response to an HITL request. It:
+    1. Loads the saved Agent state from Redis
+    2. Injects the HITL response into the Agent context
+    3. Continues execution until completion or another HITL request
+
+    Args:
+        input_data: Contains:
+            - hitl_state_key: Key to load Agent state from Redis
+            - hitl_request_id: The HITL request that was answered
+            - hitl_response: User's response data
+            - correlation_id: Optional request correlation ID
+            - config: Project configuration
+
+    Returns:
+        Chat result, or another hitl_pending indicator if more input needed
+    """
+    from src.domain.model.agent.hitl_types import HITLPendingException
+    from src.infrastructure.agent.hitl.state_store import (
+        HITLAgentState,
+        HITLStateStore,
+    )
+
+    start_time = time_module.time()
+    conversation_id = ""
+    message_id = ""
+
+    try:
+        # Extract parameters
+        hitl_state_key = input_data.get("hitl_state_key", "")
+        hitl_request_id = input_data.get("hitl_request_id", "")
+        hitl_response = input_data.get("hitl_response", {})
+        correlation_id = input_data.get("correlation_id")
+        config = input_data.get("config", {})
+
+        logger.info(
+            f"[ProjectAgentActivity] Continuing chat: state_key={hitl_state_key}, "
+            f"request_id={hitl_request_id}"
+        )
+
+        # Get Redis client
+        pool = await _get_redis_pool()
+        redis_client = aioredis.Redis(connection_pool=pool)
+
+        try:
+            # Load saved state
+            state_store = HITLStateStore(redis_client)
+            state = await state_store.load_state(hitl_state_key)
+
+            if not state:
+                # Try loading by request ID
+                state = await state_store.load_state_by_request(hitl_request_id)
+
+            if not state:
+                logger.error(
+                    f"[ProjectAgentActivity] State not found: key={hitl_state_key}, "
+                    f"request_id={hitl_request_id}"
+                )
+                return {
+                    "content": "",
+                    "sequence_number": 0,
+                    "is_error": True,
+                    "error_message": "HITL state not found or expired",
+                    "execution_time_ms": (time_module.time() - start_time) * 1000,
+                    "event_count": 0,
+                }
+
+            conversation_id = state.conversation_id
+            message_id = state.message_id
+            tenant_id = state.tenant_id
+            project_id = state.project_id
+
+            # Get or create agent
+            agent_mode = config.get("agent_mode", "default")
+            agent = _get_cached_project_agent(tenant_id, project_id, agent_mode)
+
+            if not agent:
+                # Reinitialize agent
+                agent_config = ProjectAgentConfig(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    agent_mode=agent_mode,
+                    model=config.get("model"),
+                    temperature=config.get("temperature", 0.7),
+                    max_tokens=config.get("max_tokens", 4096),
+                    max_steps=config.get("max_steps", 20),
+                )
+
+                agent = ProjectReActAgent(agent_config)
+                success = await agent.initialize()
+
+                if not success:
+                    return {
+                        "content": "",
+                        "sequence_number": 0,
+                        "is_error": True,
+                        "error_message": "Failed to reinitialize project agent",
+                        "execution_time_ms": (time_module.time() - start_time) * 1000,
+                        "event_count": 0,
+                    }
+
+                _cache_project_agent(agent)
+
+            # Prepare HITL response for Agent
+            hitl_response_for_agent = {
+                "request_id": hitl_request_id,
+                "hitl_type": state.hitl_type,
+                "response_data": hitl_response,
+            }
+
+            # Collect events
+            events: List[Dict[str, Any]] = []
+            final_content = ""
+            is_error = False
+            error_message = None
+            sequence_number = 0
+
+            # Continue execution with HITL response
+            async for event in agent.execute_chat(
+                conversation_id=conversation_id,
+                user_message=state.user_message,
+                user_id=state.user_id,
+                conversation_context=state.messages,
+                tenant_id=tenant_id,
+                message_id=message_id,
+                hitl_response=hitl_response_for_agent,
+            ):
+                events.append(event)
+                sequence_number += 1
+
+                # Publish event to Redis Stream
+                await _publish_event_to_stream(
+                    conversation_id=conversation_id,
+                    event=event,
+                    message_id=message_id,
+                    sequence_number=sequence_number,
+                    correlation_id=correlation_id,
+                    redis_client=redis_client,
+                )
+
+                # Track important events
+                event_type = event.get("type")
+                if event_type == "complete":
+                    final_content = event.get("data", {}).get("content", "")
+                elif event_type == "error":
+                    is_error = True
+                    error_message = event.get("data", {}).get("message", "Unknown error")
+
+            # Execution completed - clean up state
+            await state_store.delete_state(hitl_state_key)
+
+            # Persist events
+            await _persist_events(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                events=events,
+                correlation_id=correlation_id,
+            )
+
+            execution_time_ms = (time_module.time() - start_time) * 1000
+
+            # Record metrics
+            agent_metrics.increment(
+                "project_agent.chat_total",
+                labels={"project_id": project_id},
+            )
+            agent_metrics.observe(
+                "project_agent.chat_latency_ms",
+                execution_time_ms,
+                labels={"project_id": project_id},
+            )
+
+            if is_error:
+                agent_metrics.increment(
+                    "project_agent.chat_errors",
+                    labels={"project_id": project_id},
+                )
+
+            return {
+                "content": final_content,
+                "sequence_number": sequence_number,
+                "is_error": is_error,
+                "error_message": error_message,
+                "execution_time_ms": execution_time_ms,
+                "event_count": len(events),
+            }
+
+        except HITLPendingException as hitl_ex:
+            # Another HITL request encountered
+            logger.info(
+                f"[ProjectAgentActivity] Another HITL pending: request_id={hitl_ex.request_id}"
+            )
+
+            # Save new state
+            new_state = HITLAgentState(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                tenant_id=state.tenant_id,
+                project_id=state.project_id,
+                hitl_request_id=hitl_ex.request_id,
+                hitl_type=hitl_ex.hitl_type.value,
+                hitl_request_data=hitl_ex.request_data,
+                messages=state.messages,
+                user_message=state.user_message,
+                user_id=state.user_id,
+                step_count=state.step_count + 1,
+                timeout_seconds=hitl_ex.timeout_seconds,
+            )
+
+            new_state_key = await state_store.save_state(new_state)
+
+            # Delete old state
+            await state_store.delete_state(hitl_state_key)
+
+            execution_time_ms = (time_module.time() - start_time) * 1000
+
+            return {
+                "hitl_pending": True,
+                "hitl_request_id": hitl_ex.request_id,
+                "hitl_type": hitl_ex.hitl_type.value,
+                "hitl_request_data": hitl_ex.request_data,
+                "hitl_state_key": new_state_key,
+                "timeout_seconds": hitl_ex.timeout_seconds,
+                "content": "",
+                "sequence_number": sequence_number,
+                "is_error": False,
+                "error_message": None,
+                "execution_time_ms": execution_time_ms,
+                "event_count": len(events),
+            }
+
+        finally:
+            await redis_client.aclose()
+
+    except Exception as e:
+        execution_time_ms = (time_module.time() - start_time) * 1000
+        agent_metrics.increment("project_agent.chat_errors")
+        logger.error(f"[ProjectAgentActivity] Continue chat error: {e}", exc_info=True)
+
+        # Publish error event
+        if conversation_id:
+            try:
+                await _publish_error_event(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    error_message=str(e),
+                    correlation_id=input_data.get("correlation_id"),
+                )
+            except Exception as pub_error:
+                logger.warning(f"[ProjectAgentActivity] Failed to publish error: {pub_error}")
 
         return {
             "content": "",
@@ -486,6 +848,23 @@ async def _persist_events(
                     if event_type in SKIP_EVENT_TYPES:
                         continue
 
+                    # Convert 'complete' to 'assistant_message' for unified event type
+                    # This ensures historical messages display correctly
+                    if event_type == "complete":
+                        content = event_data.get("content", "")
+                        if content:
+                            event_type = "assistant_message"
+                            event_data = {
+                                "content": content,
+                                "message_id": str(uuid.uuid4()),
+                                "role": "assistant",
+                            }
+                            if event.get("data", {}).get("artifacts"):
+                                event_data["artifacts"] = event["data"]["artifacts"]
+                        else:
+                            # Skip empty complete events
+                            continue
+
                     stmt = (
                         insert(AgentExecutionEvent)
                         .values(
@@ -579,3 +958,98 @@ async def _publish_error_event(
 
     except Exception as e:
         logger.error(f"[ProjectAgentActivity] Failed to publish error to Redis: {e}")
+
+
+async def _get_redis_pool() -> aioredis.ConnectionPool:
+    """
+    Get or create Redis connection pool for event publishing.
+
+    Uses a global connection pool to minimize connection overhead
+    when publishing multiple events during a chat session.
+    """
+    global _redis_pool
+    if _redis_pool is None:
+        settings = get_settings()
+        _redis_pool = aioredis.ConnectionPool.from_url(
+            settings.redis_url,
+            max_connections=20,
+            decode_responses=True,
+        )
+    return _redis_pool
+
+
+async def _publish_event_to_stream(
+    conversation_id: str,
+    event: Dict[str, Any],
+    message_id: str,
+    sequence_number: int,
+    correlation_id: Optional[str] = None,
+    redis_client: Optional[aioredis.Redis] = None,
+) -> None:
+    """
+    Publish a single event to Redis Stream in real-time.
+
+    This function is called for each event generated during agent execution,
+    enabling real-time streaming to the frontend via WebSocket.
+
+    Args:
+        conversation_id: Conversation ID (used in stream key)
+        event: Event data with 'type' and 'data' fields
+        message_id: Associated message ID
+        sequence_number: Event sequence number for ordering
+        correlation_id: Optional request correlation ID
+        redis_client: Optional existing Redis client (for connection reuse)
+    """
+    should_close = False
+
+    try:
+        # Use provided client or create new one
+        if redis_client is None:
+            pool = await _get_redis_pool()
+            redis_client = aioredis.Redis(connection_pool=pool)
+            should_close = True
+
+        stream_key = f"agent:events:{conversation_id}"
+
+        # Build event matching the format expected by stream_read()
+        # stream_read expects: {"data": JSON_string} where JSON contains:
+        # {type, seq, data (nested), timestamp, conversation_id, message_id}
+        event_type = event.get("type", "unknown")
+        event_data = event.get("data", {})
+
+        # Ensure event_data includes message_id for filtering
+        if isinstance(event_data, dict):
+            event_data_with_meta = {**event_data, "message_id": message_id}
+        else:
+            event_data_with_meta = {"content": event_data, "message_id": message_id}
+
+        stream_event_payload = {
+            "type": event_type,
+            "seq": sequence_number,
+            "data": event_data_with_meta,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+        }
+        if correlation_id:
+            stream_event_payload["correlation_id"] = correlation_id
+
+        # IMPORTANT: Redis stream_read expects a "data" field with JSON string
+        redis_message = {"data": json.dumps(stream_event_payload)}
+
+        # Publish to Redis Stream
+        await redis_client.xadd(stream_key, redis_message, maxlen=1000)
+
+        # Debug log for important events only
+        if event_type in ("complete", "error", "tool_start", "tool_end"):
+            logger.debug(
+                f"[ProjectAgentActivity] Published {event_type} event to {stream_key} (seq={sequence_number})"
+            )
+
+    except Exception as e:
+        # Don't fail the activity on publish error, just log
+        logger.warning(f"[ProjectAgentActivity] Failed to publish event to Redis: {e}")
+
+    finally:
+        if should_close and redis_client:
+            await redis_client.aclose()

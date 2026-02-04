@@ -117,7 +117,7 @@ export const LazyImage = createLazyComponent(() => import('antd').then(m => ({ d
 // ============================================================================
 
 // Typography - has Text, Title, Paragraph, Link subcomponents
-export { Typography, Button, Tag, Input, Radio, Select, Modal, Form, Divider, Spin, Progress, Tooltip, Empty, Alert, message, notification, Space, List, Skeleton, Descriptions } from 'antd'
+export { Typography, Button, Tag, Input, Radio, Select, Modal, Form, Divider, Spin, Progress, Tooltip, Empty, Alert, message, notification, Space, List, Skeleton, Descriptions, Badge } from 'antd'
 
 // Get Empty static properties (must be done after export)
 import { Empty as EmptyComponent } from 'antd'

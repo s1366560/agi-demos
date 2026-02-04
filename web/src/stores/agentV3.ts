@@ -22,10 +22,14 @@ import {
     ClarificationAskedEventData,
     DecisionAskedEventData,
     EnvVarRequestedEventData,
+    PermissionAskedEventData,
+    DoomLoopDetectedEventData,
+    CostUpdateEventData,
 } from "../types/agent";
 import {
     type ConversationState,
     type HITLSummary,
+    type CostTrackingState,
     createDefaultConversationState,
     getHITLSummaryFromState,
     MAX_CONCURRENT_STREAMING_CONVERSATIONS,
@@ -105,7 +109,7 @@ function clearDeltaBuffers(conversationId: string): void {
  * Used when switching conversations or on cleanup
  */
 function clearAllDeltaBuffers(): void {
-    deltaBuffers.forEach((buffer, conversationId) => {
+    deltaBuffers.forEach((_buffer, conversationId) => {
         clearDeltaBuffers(conversationId);
     });
     deltaBuffers.clear();
@@ -249,7 +253,7 @@ interface AgentV3State {
     streamingAssistantContent: string; // Streaming content (used for real-time display)
 
     // Agent Execution State (for active conversation - backward compatibility)
-    agentState: "idle" | "thinking" | "acting" | "observing" | "awaiting_input";
+    agentState: "idle" | "thinking" | "acting" | "observing" | "awaiting_input" | "retrying";
     currentThought: string;
     streamingThought: string; // For streaming thought_delta content
     isThinkingStreaming: boolean; // Whether thought is currently streaming
@@ -273,8 +277,10 @@ interface AgentV3State {
     // Interactivity (for active conversation - backward compatibility)
     pendingClarification: any; // Pending clarification request from agent
     pendingDecision: any; // Using any for brevity in this update
-    doomLoopDetected: any;
     pendingEnvVarRequest: any; // Pending environment variable request from agent
+    pendingPermission: PermissionAskedEventData | null; // Pending permission request
+    doomLoopDetected: DoomLoopDetectedEventData | null;
+    costTracking: CostTrackingState | null; // Cost tracking state
 
     // Multi-conversation state helpers
     getConversationState: (conversationId: string) => ConversationState;
@@ -311,6 +317,7 @@ interface AgentV3State {
     respondToClarification: (requestId: string, answer: string) => Promise<void>;
     respondToDecision: (requestId: string, decision: string) => Promise<void>;
     respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
+    respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
     loadPendingHITL: (conversationId: string) => Promise<void>;
     togglePlanMode: () => Promise<void>;
     clearError: () => void;
@@ -359,8 +366,10 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                 pendingClarification: null,
                 pendingDecision: null,
-                doomLoopDetected: null,
                 pendingEnvVarRequest: null,
+                pendingPermission: null,
+                doomLoopDetected: null,
+                costTracking: null,
 
                 // ===== Multi-conversation state helpers =====
 
@@ -398,7 +407,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                         // Update HITL summary if HITL state changed
                         if (updates.pendingClarification !== undefined ||
                             updates.pendingDecision !== undefined ||
-                            updates.pendingEnvVarRequest !== undefined) {
+                            updates.pendingEnvVarRequest !== undefined ||
+                            updates.pendingPermission !== undefined) {
                             updatedState.pendingHITLSummary = getHITLSummaryFromState(updatedState);
                         }
 
@@ -427,7 +437,9 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 ...(updates.pendingClarification !== undefined && { pendingClarification: updates.pendingClarification }),
                                 ...(updates.pendingDecision !== undefined && { pendingDecision: updates.pendingDecision }),
                                 ...(updates.pendingEnvVarRequest !== undefined && { pendingEnvVarRequest: updates.pendingEnvVarRequest }),
+                                ...(updates.pendingPermission !== undefined && { pendingPermission: updates.pendingPermission }),
                                 ...(updates.doomLoopDetected !== undefined && { doomLoopDetected: updates.doomLoopDetected }),
+                                ...(updates.costTracking !== undefined && { costTracking: updates.costTracking }),
                                 ...(updates.hasEarlier !== undefined && { hasEarlier: updates.hasEarlier }),
                                 ...(updates.earliestLoadedSequence !== undefined && { earliestLoadedSequence: updates.earliestLoadedSequence }),
                             };
@@ -809,13 +821,44 @@ export const useAgentV3Store = create<AgentV3State>()(
                             return;
                         }
 
+                        // DEBUG: Log full timeline analysis for diagnosing missing/disordered messages
+                        const eventTypeCounts: Record<string, number> = {};
+                        let isOrdered = true;
+                        let prevSeq = -1;
+                        for (const event of response.timeline) {
+                            eventTypeCounts[event.type] = (eventTypeCounts[event.type] || 0) + 1;
+                            if (event.sequenceNumber <= prevSeq) {
+                                isOrdered = false;
+                                console.error(`[AgentV3] Timeline out of order! seq=${event.sequenceNumber} <= prevSeq=${prevSeq}`, event);
+                            }
+                            prevSeq = event.sequenceNumber;
+                        }
+                        console.log(`[AgentV3] loadMessages API response:`, {
+                            conversationId,
+                            totalEvents: response.timeline.length,
+                            eventTypeCounts,
+                            isOrdered,
+                            has_more: response.has_more,
+                            first_sequence: response.first_sequence,
+                            last_sequence: response.last_sequence,
+                        });
+
+                        // Ensure timeline is sorted by sequence number (defensive fix)
+                        const sortedTimeline = [...response.timeline].sort(
+                            (a, b) => a.sequenceNumber - b.sequenceNumber
+                        );
+
                         // Store the raw timeline and derive messages (no merging)
-                        const messages = timelineToMessages(response.timeline);
-                        const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
-                        const lastSequence = response.timeline[response.timeline.length - 1]?.sequenceNumber ?? 0;
+                        const messages = timelineToMessages(sortedTimeline);
+                        const firstSequence = sortedTimeline[0]?.sequenceNumber ?? null;
+                        const lastSequence = sortedTimeline[sortedTimeline.length - 1]?.sequenceNumber ?? 0;
+
+                        // DEBUG: Log assistant_message events
+                        const assistantMsgs = sortedTimeline.filter((e: any) => e.type === 'assistant_message');
+                        console.log(`[AgentV3] loadMessages: Found ${assistantMsgs.length} assistant_message events`, assistantMsgs);
 
                         // DEBUG: Log artifact events in timeline
-                        const artifactEvents = response.timeline.filter((e: any) => e.type === 'artifact_created');
+                        const artifactEvents = sortedTimeline.filter((e: any) => e.type === 'artifact_created');
                         console.log(`[AgentV3] loadMessages: Found ${artifactEvents.length} artifact_created events in timeline`, artifactEvents);
 
                         // Update localStorage with latest sequence
@@ -825,7 +868,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                         // Update both global state and conversation-specific state
                         const newConvState: Partial<ConversationState> = {
-                            timeline: response.timeline,
+                            timeline: sortedTimeline,  // Use sorted timeline
                             hasEarlier: response.has_more ?? false,
                             earliestLoadedSequence: firstSequence,
                             isPlanMode: planStatus?.is_in_plan_mode ?? false,
@@ -841,7 +884,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                             return {
                                 conversationStates: newStates,
-                                timeline: response.timeline,
+                                timeline: sortedTimeline,  // Use sorted timeline
                                 messages: messages,
                                 isLoadingHistory: false,
                                 hasEarlier: response.has_more ?? false,
@@ -972,12 +1015,44 @@ export const useAgentV3Store = create<AgentV3State>()(
                                         isThinkingStreaming: false,
                                     });
                                 },
-                                onError: (event) => {
+                                onRetry: (event) => {
+                                    // LLM is retrying after a transient error (e.g., rate limit)
+                                    // Keep streaming state active, just show a warning
+                                    console.warn(
+                                        `[AgentV3] LLM retrying: attempt=${event.data.attempt}, ` +
+                                        `delay=${event.data.delay_ms}ms, reason=${event.data.message}`
+                                    );
+                                    // Update state to show retry indicator
                                     set({
-                                        error: event.data.message,
-                                        isStreaming: false,
-                                        agentState: "idle",
+                                        agentState: "retrying",
+                                        // Keep isStreaming: true so we continue receiving events
                                     });
+                                },
+                                onError: (event) => {
+                                    // Check if this is a recoverable error
+                                    const isRateLimitError = event.data.code === "RATE_LIMIT" ||
+                                        event.data.message?.includes("rate limit") ||
+                                        event.data.message?.includes("限流") ||
+                                        event.data.message?.includes("并发数过高");
+                                    
+                                    if (isRateLimitError) {
+                                        // Rate limit error - the backend might retry
+                                        // Don't immediately stop streaming
+                                        console.warn(`[AgentV3] Rate limit error, waiting for retry: ${event.data.message}`);
+                                        set({
+                                            error: `限流错误，正在重试: ${event.data.message}`,
+                                            agentState: "retrying",
+                                            // Keep isStreaming: true
+                                        });
+                                    } else {
+                                        // Fatal error - stop streaming
+                                        console.error(`[AgentV3] Fatal error: ${event.data.message}`);
+                                        set({
+                                            error: event.data.message,
+                                            isStreaming: false,
+                                            agentState: "idle",
+                                        });
+                                    }
                                 },
                             };
 
@@ -1022,20 +1097,23 @@ export const useAgentV3Store = create<AgentV3State>()(
                             return false;
                         }
 
-                        // Prepend new events to existing timeline (no merging)
-                        const newTimeline = [...response.timeline, ...timeline];
-                        const newMessages = timelineToMessages(newTimeline);
-                        const newFirstSequence = response.timeline[0]?.sequenceNumber ?? null;
+                        // Prepend new events to existing timeline and sort by sequence number
+                        const combinedTimeline = [...response.timeline, ...timeline];
+                        const sortedTimeline = combinedTimeline.sort(
+                            (a, b) => a.sequenceNumber - b.sequenceNumber
+                        );
+                        const newMessages = timelineToMessages(sortedTimeline);
+                        const newFirstSequence = sortedTimeline[0]?.sequenceNumber ?? null;
 
                         set({
-                            timeline: newTimeline,
+                            timeline: sortedTimeline,
                             messages: newMessages,
                             isLoadingEarlier: false,
                             hasEarlier: response.has_more ?? false,
                             earliestLoadedSequence: newFirstSequence,
                         });
 
-                        console.log('[AgentV3] Loaded earlier messages, total timeline length:', newTimeline.length);
+                        console.log('[AgentV3] Loaded earlier messages, total timeline length:', sortedTimeline.length);
                         return true;
                     } catch (error) {
                         console.error('[AgentV3] Failed to load earlier messages:', error);
@@ -1488,6 +1566,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                         onTextDelta: (event) => {
                             // Batch rapid token updates for performance (reduces re-renders from 100+/s to ~20/s)
                             const delta = event.data.delta;
+                            console.log(`[AgentV3] onTextDelta: delta="${delta?.substring(0, 30)}...", conv=${handlerConversationId}`);
                             if (!delta) return;
 
                             // Get per-conversation buffer
@@ -1505,6 +1584,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                                     if (bufferedContent) {
                                         const { activeConversationId, updateConversationState, getConversationState } = get();
+                                        console.log(`[AgentV3] Flushing buffer: len=${bufferedContent.length}, active=${activeConversationId}, handler=${handlerConversationId}`);
 
                                         // Always update per-conversation state
                                         const convState = getConversationState(handlerConversationId);
@@ -1515,10 +1595,13 @@ export const useAgentV3Store = create<AgentV3State>()(
 
                                         // Only update global state if this is the active conversation
                                         if (handlerConversationId === activeConversationId) {
+                                            console.log(`[AgentV3] Updating global streamingAssistantContent`);
                                             set((state) => ({
                                                 streamingAssistantContent: state.streamingAssistantContent + bufferedContent,
                                                 streamStatus: "streaming"
                                             }));
+                                        } else {
+                                            console.log(`[AgentV3] Skipping global update: handler=${handlerConversationId} != active=${activeConversationId}`);
                                         }
                                     }
                                 }, TOKEN_BATCH_INTERVAL_MS);
@@ -1655,6 +1738,101 @@ export const useAgentV3Store = create<AgentV3State>()(
                                 });
                             }
                         },
+                        onPermissionAsked: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            // Add to timeline for inline rendering
+                            const permissionEvent: AgentEvent<PermissionAskedEventData> = {
+                                type: "permission_asked",
+                                data: event.data,
+                            };
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, permissionEvent);
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                pendingPermission: event.data,
+                                agentState: "awaiting_input",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
+                                    timeline: updatedTimeline,
+                                    pendingPermission: event.data,
+                                    agentState: "awaiting_input",
+                                });
+                            }
+                        },
+                        onPermissionReplied: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            // Add to timeline for inline rendering
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+                            // Clear pending permission
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                pendingPermission: null,
+                                agentState: event.data.granted ? "thinking" : "idle",
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
+                                    timeline: updatedTimeline,
+                                    pendingPermission: null,
+                                    agentState: event.data.granted ? "thinking" : "idle",
+                                });
+                            }
+                        },
+                        onDoomLoopIntervened: (event) => {
+                            const { activeConversationId, updateConversationState, getConversationState } = get();
+
+                            // Add to timeline
+                            const convState = getConversationState(handlerConversationId);
+                            const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+                            // Clear doom loop state after intervention
+                            updateConversationState(handlerConversationId, {
+                                timeline: updatedTimeline,
+                                doomLoopDetected: null,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({
+                                    timeline: updatedTimeline,
+                                    doomLoopDetected: null,
+                                });
+                            }
+                        },
+                        onCostUpdate: (event) => {
+                            const { activeConversationId, updateConversationState } = get();
+
+                            // Update cost tracking state
+                            const costData = event.data as CostUpdateEventData;
+                            const costTracking: CostTrackingState = {
+                                inputTokens: costData.input_tokens,
+                                outputTokens: costData.output_tokens,
+                                totalTokens: costData.total_tokens,
+                                costUsd: costData.cost_usd,
+                                model: costData.model,
+                                lastUpdated: new Date().toISOString(),
+                            };
+
+                            // Always update per-conversation state
+                            updateConversationState(handlerConversationId, {
+                                costTracking,
+                            });
+
+                            // Only update global state if this is the active conversation
+                            if (handlerConversationId === activeConversationId) {
+                                set({ costTracking });
+                            }
+                        },
                         onArtifactCreated: (event) => {
                             const { activeConversationId, updateConversationState, getConversationState } = get();
 
@@ -1692,6 +1870,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                             });
                         },
                         onComplete: (event) => {
+                            console.log(`[AgentV3] onComplete: handler=${handlerConversationId}, content preview="${(event.data as any)?.content?.substring(0, 50)}..."`);
                             const { activeConversationId, updateConversationState, getConversationState } = get();
 
                             // Clear all delta buffers on completion using helper function
@@ -1996,6 +2175,32 @@ export const useAgentV3Store = create<AgentV3State>()(
                                         };
                                     });
                                 },
+                                onPermissionAsked: (event) => {
+                                    const permissionEvent: AgentEvent<PermissionAskedEventData> = {
+                                        type: "permission_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, permissionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingPermission: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onCostUpdate: (event) => {
+                                    const costData = event.data as CostUpdateEventData;
+                                    const costTracking: CostTrackingState = {
+                                        inputTokens: costData.input_tokens,
+                                        outputTokens: costData.output_tokens,
+                                        totalTokens: costData.total_tokens,
+                                        costUsd: costData.cost_usd,
+                                        model: costData.model,
+                                        lastUpdated: new Date().toISOString(),
+                                    };
+                                    set({ costTracking });
+                                },
                             };
                             agentService.subscribe(activeConversationId, simpleHandler);
                             console.log("[agentV3] Subscribed to conversation:", activeConversationId);
@@ -2138,6 +2343,32 @@ export const useAgentV3Store = create<AgentV3State>()(
                                             agentState: "awaiting_input",
                                         };
                                     });
+                                },
+                                onPermissionAsked: (event) => {
+                                    const permissionEvent: AgentEvent<PermissionAskedEventData> = {
+                                        type: "permission_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, permissionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingPermission: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onCostUpdate: (event) => {
+                                    const costData = event.data as CostUpdateEventData;
+                                    const costTracking: CostTrackingState = {
+                                        inputTokens: costData.input_tokens,
+                                        outputTokens: costData.output_tokens,
+                                        totalTokens: costData.total_tokens,
+                                        costUsd: costData.cost_usd,
+                                        model: costData.model,
+                                        lastUpdated: new Date().toISOString(),
+                                    };
+                                    set({ costTracking });
                                 },
                             };
                             agentService.subscribe(activeConversationId, simpleHandler);
@@ -2282,6 +2513,32 @@ export const useAgentV3Store = create<AgentV3State>()(
                                         };
                                     });
                                 },
+                                onPermissionAsked: (event) => {
+                                    const permissionEvent: AgentEvent<PermissionAskedEventData> = {
+                                        type: "permission_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, permissionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingPermission: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onCostUpdate: (event) => {
+                                    const costData = event.data as CostUpdateEventData;
+                                    const costTracking: CostTrackingState = {
+                                        inputTokens: costData.input_tokens,
+                                        outputTokens: costData.output_tokens,
+                                        totalTokens: costData.total_tokens,
+                                        costUsd: costData.cost_usd,
+                                        model: costData.model,
+                                        lastUpdated: new Date().toISOString(),
+                                    };
+                                    set({ costTracking });
+                                },
                             };
                             agentService.subscribe(activeConversationId, simpleHandler);
                             console.log("[agentV3] Subscribed to conversation:", activeConversationId);
@@ -2298,6 +2555,181 @@ export const useAgentV3Store = create<AgentV3State>()(
                         }
                     } catch (error) {
                         console.error("Failed to respond to env var request:", error);
+                        set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
+                    }
+                },
+
+                respondToPermission: async (requestId, granted) => {
+                    console.log("Responding to permission request", requestId, granted);
+                    const { activeConversationId } = get();
+
+                    try {
+                        // Ensure WebSocket is connected before responding
+                        if (!agentService.isConnected()) {
+                            console.log("[agentV3] Connecting WebSocket before permission response...");
+                            await agentService.connect();
+                        }
+
+                        // Subscribe to the conversation to receive responses
+                        if (activeConversationId) {
+                            const simpleHandler: AgentStreamHandler = {
+                                onTextDelta: (event) => {
+                                    const delta = event.data.delta;
+                                    if (delta) {
+                                        set((state) => ({
+                                            streamingAssistantContent: state.streamingAssistantContent + delta,
+                                            streamStatus: "streaming"
+                                        }));
+                                    }
+                                },
+                                onTextEnd: (event) => {
+                                    const fullText = event.data.full_text;
+                                    if (fullText) {
+                                        set({ streamingAssistantContent: fullText });
+                                    }
+                                },
+                                onComplete: (event) => {
+                                    set((state) => {
+                                        const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            messages: timelineToMessages(updatedTimeline),
+                                            isStreaming: false,
+                                            streamStatus: "idle",
+                                            agentState: "idle",
+                                        };
+                                    });
+                                },
+                                onError: (event) => {
+                                    console.error("[agentV3] Permission response error:", event.data);
+                                    set({
+                                        error: event.data.message || "Agent error",
+                                        isStreaming: false,
+                                        streamStatus: "error",
+                                        agentState: "idle",
+                                    });
+                                },
+                                onThought: (event) => {
+                                    set((state) => {
+                                        const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
+                                        return {
+                                            currentThought: event.data.thought || "",
+                                            timeline: updatedTimeline,
+                                            agentState: "thinking",
+                                        };
+                                    });
+                                },
+                                onAct: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "acting",
+                                        };
+                                    });
+                                },
+                                onObserve: (event) => {
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            agentState: "observing",
+                                        };
+                                    });
+                                },
+                                // HITL event handlers for nested requests
+                                onClarificationAsked: (event) => {
+                                    const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
+                                        type: "clarification_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingClarification: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onDecisionAsked: (event) => {
+                                    const decisionEvent: AgentEvent<DecisionAskedEventData> = {
+                                        type: "decision_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingDecision: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onEnvVarRequested: (event) => {
+                                    const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
+                                        type: "env_var_requested",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingEnvVarRequest: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onPermissionAsked: (event) => {
+                                    const permissionEvent: AgentEvent<PermissionAskedEventData> = {
+                                        type: "permission_asked",
+                                        data: event.data,
+                                    };
+                                    set((state) => {
+                                        const updatedTimeline = appendSSEEventToTimeline(state.timeline, permissionEvent);
+                                        return {
+                                            timeline: updatedTimeline,
+                                            pendingPermission: event.data,
+                                            agentState: "awaiting_input",
+                                        };
+                                    });
+                                },
+                                onCostUpdate: (event) => {
+                                    const costData = event.data as CostUpdateEventData;
+                                    const costTracking: CostTrackingState = {
+                                        inputTokens: costData.input_tokens,
+                                        outputTokens: costData.output_tokens,
+                                        totalTokens: costData.total_tokens,
+                                        costUsd: costData.cost_usd,
+                                        model: costData.model,
+                                        lastUpdated: new Date().toISOString(),
+                                    };
+                                    set({ costTracking });
+                                },
+                            };
+                            agentService.subscribe(activeConversationId, simpleHandler);
+                            console.log("[agentV3] Subscribed to conversation:", activeConversationId);
+                        }
+
+                        await agentService.respondToPermission(requestId, granted);
+                        // CRITICAL: Clear delta buffers before resuming streaming
+                        clearAllDeltaBuffers();
+                        set({
+                            pendingPermission: null,
+                            agentState: granted ? "thinking" : "idle",
+                            isStreaming: granted,
+                            streamStatus: granted ? "streaming" : "idle",
+                            streamingAssistantContent: ""
+                        });
+
+                        // Broadcast HITL state change to other tabs
+                        if (activeConversationId) {
+                            tabSync.broadcastHITLStateChanged(activeConversationId, false, 'permission');
+                        }
+                    } catch (error) {
+                        console.error("Failed to respond to permission request:", error);
                         set({ agentState: "idle", isStreaming: false, streamStatus: "idle" });
                     }
                 },

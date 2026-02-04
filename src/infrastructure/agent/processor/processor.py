@@ -65,10 +65,14 @@ from src.infrastructure.adapters.secondary.sandbox.artifact_integration import (
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
 
+# Import HITLPendingException from domain layer
+from src.domain.model.agent.hitl_types import HITLPendingException
+
 from ..core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from ..core.message import Message, MessageRole, ToolPart, ToolState
 from ..cost import CostTracker, TokenUsage
 from ..doom_loop import DoomLoopDetector
+from ..hitl.temporal_hitl_handler import TemporalHITLHandler
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
 from .message_utils import classify_tool_by_description, extract_user_query
@@ -223,10 +227,32 @@ class SessionProcessor:
         # Langfuse observability context
         self._langfuse_context: Optional[Dict[str, Any]] = None
 
+        # HITL handler (created lazily when context is available)
+        self._hitl_handler: Optional[TemporalHITLHandler] = None
+
     @property
     def state(self) -> ProcessorState:
         """Get current processor state."""
         return self._state
+
+    def _get_hitl_handler(self) -> TemporalHITLHandler:
+        """Get or create the HITL handler for current context."""
+        ctx = self._langfuse_context or {}
+        conversation_id = ctx.get("conversation_id", "unknown")
+        tenant_id = ctx.get("tenant_id", "unknown")
+        project_id = ctx.get("project_id", "unknown")
+        message_id = ctx.get("message_id")
+
+        # Create new handler if needed or context changed
+        if self._hitl_handler is None or self._hitl_handler.conversation_id != conversation_id:
+            self._hitl_handler = TemporalHITLHandler(
+                conversation_id=conversation_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                message_id=message_id,
+            )
+
+        return self._hitl_handler
 
     async def process(
         self,
@@ -359,6 +385,11 @@ class SessionProcessor:
                 self._state = ProcessorState.COMPLETED
             elif result == ProcessorResult.COMPACT:
                 yield AgentStatusEvent(status="compact_needed")
+
+        except HITLPendingException:
+            # Let HITLPendingException bubble up to Activity layer
+            # The Workflow will wait for user response and resume execution
+            raise
 
         except Exception as e:
             logger.error(f"Processor error: {e}", exc_info=True)
@@ -1473,10 +1504,9 @@ class SessionProcessor:
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
-        Handle clarification tool with SSE event emission.
+        Handle clarification tool with SSE event emission via TemporalHITLHandler.
 
-        Emits clarification_asked event before blocking on user response,
-        allowing frontend to display dialog immediately.
+        Uses the unified Temporal-based HITL system for cross-process communication.
 
         Args:
             session_id: Session identifier
@@ -1488,15 +1518,8 @@ class SessionProcessor:
         Yields:
             AgentDomainEvent objects for clarification flow
         """
-        from ..tools.clarification import (
-            ClarificationOption,
-            ClarificationRequest,
-            ClarificationType,
-            get_clarification_manager,
-        )
-
         self._state = ProcessorState.WAITING_CLARIFICATION
-        manager = get_clarification_manager()
+        handler = self._get_hitl_handler()
 
         try:
             # Parse arguments
@@ -1506,24 +1529,17 @@ class SessionProcessor:
             allow_custom = arguments.get("allow_custom", True)
             context_raw = arguments.get("context", {})
             timeout = arguments.get("timeout", 300.0)
+            default_value = arguments.get("default_value")
 
             # Ensure context is a dictionary (LLM might pass a string)
             if isinstance(context_raw, str):
                 context = {"description": context_raw} if context_raw else {}
             elif isinstance(context_raw, dict):
-                context = context_raw.copy()  # Copy to avoid modifying original
+                context = context_raw.copy()
             else:
                 context = {}
 
-            # Add conversation_id to context for cross-process resolution after page refresh
-            ctx = getattr(self, "_langfuse_context", {}) or {}
-            if ctx.get("conversation_id"):
-                context["conversation_id"] = ctx["conversation_id"]
-
-            # Create request ID
-            request_id = f"clarif_{uuid.uuid4().hex[:8]}"
-
-            # Convert options to proper format
+            # Convert options to standard format for SSE event
             clarification_options = []
             for opt in options_raw:
                 clarification_options.append(
@@ -1535,41 +1551,8 @@ class SessionProcessor:
                     }
                 )
 
-            # Create the request object for manager
-            try:
-                clarif_type = ClarificationType(clarification_type)
-            except ValueError:
-                clarif_type = ClarificationType.CUSTOM
-
-            option_objects = [
-                ClarificationOption(
-                    id=opt["id"],
-                    label=opt["label"],
-                    description=opt.get("description"),
-                    recommended=opt.get("recommended", False),
-                )
-                for opt in clarification_options
-            ]
-
-            request = ClarificationRequest(
-                request_id=request_id,
-                question=question,
-                clarification_type=clarif_type,
-                options=option_objects,
-                allow_custom=allow_custom,
-                context=context,
-            )
-
-            # Register request with manager (including persistence context)
-            ctx = getattr(self, "_langfuse_context", {}) or {}
-            await manager.register_request(
-                request,
-                tenant_id=ctx.get("tenant_id"),
-                project_id=ctx.get("project_id"),
-                conversation_id=ctx.get("conversation_id"),
-                message_id=ctx.get("message_id"),
-                timeout=timeout,
-            )
+            # Generate request ID for tracking
+            request_id = f"clar_{uuid.uuid4().hex[:8]}"
 
             # Emit clarification_asked event BEFORE blocking
             yield AgentClarificationAskedEvent(
@@ -1581,10 +1564,19 @@ class SessionProcessor:
                 context=context,
             )
 
-            # Wait for user response (with Redis cross-process support)
+            # Use TemporalHITLHandler for request/response
             start_time = time.time()
             try:
-                answer = await manager.wait_for_response(request_id, timeout=timeout)
+                answer = await handler.request_clarification(
+                    question=question,
+                    options=clarification_options,
+                    clarification_type=clarification_type,
+                    allow_custom=allow_custom,
+                    timeout_seconds=timeout,
+                    context=context,
+                    default_value=default_value,
+                    request_id=request_id,  # Pass the same request_id
+                )
                 end_time = time.time()
 
                 # Emit answered event
@@ -1617,9 +1609,11 @@ class SessionProcessor:
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
                 )
-            finally:
-                # Clean up request (stops Redis listener)
-                await manager.unregister_request(request_id)
+
+        except HITLPendingException:
+            # Let HITLPendingException bubble up to Activity layer
+            # The Workflow will wait for user response and resume execution
+            raise
 
         except Exception as e:
             logger.error(f"Clarification tool error: {e}", exc_info=True)
@@ -1645,10 +1639,9 @@ class SessionProcessor:
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
-        Handle decision tool with SSE event emission.
+        Handle decision tool with SSE event emission via TemporalHITLHandler.
 
-        Emits decision_asked event before blocking on user response,
-        allowing frontend to display dialog immediately.
+        Uses the unified Temporal-based HITL system for cross-process communication.
 
         Args:
             session_id: Session identifier
@@ -1660,15 +1653,8 @@ class SessionProcessor:
         Yields:
             AgentDomainEvent objects for decision flow
         """
-        from ..tools.decision import (
-            DecisionOption,
-            DecisionRequest,
-            DecisionType,
-            get_decision_manager,
-        )
-
         self._state = ProcessorState.WAITING_DECISION
-        manager = get_decision_manager()
+        handler = self._get_hitl_handler()
 
         try:
             # Parse arguments
@@ -1684,19 +1670,11 @@ class SessionProcessor:
             if isinstance(context_raw, str):
                 context = {"description": context_raw} if context_raw else {}
             elif isinstance(context_raw, dict):
-                context = context_raw.copy()  # Copy to avoid modifying original
+                context = context_raw.copy()
             else:
                 context = {}
 
-            # Add conversation_id to context for cross-process resolution after page refresh
-            ctx = getattr(self, "_langfuse_context", {}) or {}
-            if ctx.get("conversation_id"):
-                context["conversation_id"] = ctx["conversation_id"]
-
-            # Create request ID
-            request_id = f"decision_{uuid.uuid4().hex[:8]}"
-
-            # Convert options to proper format
+            # Convert options to standard format for SSE event
             decision_options = []
             for opt in options_raw:
                 decision_options.append(
@@ -1711,45 +1689,8 @@ class SessionProcessor:
                     }
                 )
 
-            # Create the request object for manager
-            try:
-                dec_type = DecisionType(decision_type)
-            except ValueError:
-                dec_type = DecisionType.CUSTOM
-
-            option_objects = [
-                DecisionOption(
-                    id=opt["id"],
-                    label=opt["label"],
-                    description=opt.get("description"),
-                    recommended=opt.get("recommended", False),
-                    estimated_time=opt.get("estimated_time"),
-                    estimated_cost=opt.get("estimated_cost"),
-                    risks=opt.get("risks", []),
-                )
-                for opt in decision_options
-            ]
-
-            request = DecisionRequest(
-                request_id=request_id,
-                question=question,
-                decision_type=dec_type,
-                options=option_objects,
-                allow_custom=allow_custom,
-                default_option=default_option,
-                context=context,
-            )
-
-            # Register request with manager (including persistence context)
-            ctx = getattr(self, "_langfuse_context", {}) or {}
-            await manager.register_request(
-                request,
-                tenant_id=ctx.get("tenant_id"),
-                project_id=ctx.get("project_id"),
-                conversation_id=ctx.get("conversation_id"),
-                message_id=ctx.get("message_id"),
-                timeout=timeout,
-            )
+            # Generate request ID for tracking
+            request_id = f"deci_{uuid.uuid4().hex[:8]}"
 
             # Emit decision_asked event BEFORE blocking
             yield AgentDecisionAskedEvent(
@@ -1762,12 +1703,18 @@ class SessionProcessor:
                 context=context,
             )
 
-            # Wait for user response using manager's wait_for_response
-            # This handles both local and Redis cross-process responses
+            # Use TemporalHITLHandler for request/response
             start_time = time.time()
             try:
-                decision = await manager.wait_for_response(
-                    request_id, timeout=timeout, default_response=default_option
+                decision = await handler.request_decision(
+                    question=question,
+                    options=decision_options,
+                    decision_type=decision_type,
+                    allow_custom=allow_custom,
+                    timeout_seconds=timeout,
+                    context=context,
+                    default_option=default_option,
+                    request_id=request_id,  # Pass the same request_id
                 )
                 end_time = time.time()
 
@@ -1791,7 +1738,6 @@ class SessionProcessor:
                 )
 
             except asyncio.TimeoutError:
-                # Timeout without default option (wait_for_response handles default internally)
                 tool_part.status = ToolState.ERROR
                 tool_part.error = "Decision request timed out"
                 tool_part.end_time = time.time()
@@ -1802,9 +1748,11 @@ class SessionProcessor:
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
                 )
-            finally:
-                # Clean up request
-                await manager.unregister_request(request_id)
+
+        except HITLPendingException:
+            # Let HITLPendingException bubble up to Activity layer
+            # The Workflow will wait for user response and resume execution
+            raise
 
         except Exception as e:
             logger.error(f"Decision tool error: {e}", exc_info=True)
@@ -1832,8 +1780,8 @@ class SessionProcessor:
         """
         Handle environment variable request tool with SSE event emission.
 
-        Emits env_var_requested event before blocking on user response,
-        allowing frontend to display input form immediately.
+        Uses the unified Temporal-based HITL system. After receiving values,
+        optionally saves them encrypted to the database.
 
         Args:
             session_id: Session identifier
@@ -1845,15 +1793,8 @@ class SessionProcessor:
         Yields:
             AgentDomainEvent objects for env var request flow
         """
-        from ..tools.env_var_tools import (
-            EnvVarField,
-            EnvVarInputType,
-            EnvVarRequest,
-            get_env_var_manager,
-        )
-
         self._state = ProcessorState.WAITING_ENV_VAR
-        manager = get_env_var_manager()
+        handler = self._get_hitl_handler()
 
         try:
             # Parse arguments
@@ -1862,77 +1803,41 @@ class SessionProcessor:
             message = arguments.get("message")
             context_raw = arguments.get("context", {})
             timeout = arguments.get("timeout", 300.0)
+            save_to_project = arguments.get("save_to_project", False)
 
-            # Ensure context is a dictionary and add conversation_id
+            # Ensure context is a dictionary
             if isinstance(context_raw, dict):
                 context = context_raw.copy()
             else:
                 context = {}
 
-            # Add conversation_id to context for cross-process resolution after page refresh
-            ctx = getattr(self, "_langfuse_context", {}) or {}
-            if ctx.get("conversation_id"):
-                context["conversation_id"] = ctx["conversation_id"]
-
-            # Create request ID
-            request_id = f"envvar_{uuid.uuid4().hex[:8]}"
-
-            # Convert fields to proper format for SSE and manager
+            # Convert fields to standard format for SSE event and handler
             fields_for_sse = []
-            env_var_fields = []
+            fields_for_handler = []
             for field in fields_raw:
                 # Map from agent tool schema to internal format
                 var_name = field.get("variable_name", field.get("name", ""))
                 display_name = field.get("display_name", field.get("label", var_name))
                 input_type_str = field.get("input_type", "text")
+                is_required = field.get("is_required", field.get("required", True))
+                is_secret = field.get("is_secret", True)
 
                 # Create field dict for SSE (frontend format)
                 field_dict = {
                     "name": var_name,
                     "label": display_name,
                     "description": field.get("description"),
-                    "required": field.get("is_required", field.get("required", True)),
+                    "required": is_required,
                     "input_type": input_type_str,
                     "default_value": field.get("default_value"),
                     "placeholder": field.get("placeholder"),
+                    "secret": is_secret,
                 }
                 fields_for_sse.append(field_dict)
+                fields_for_handler.append(field_dict)
 
-                # Create EnvVarField for manager
-                try:
-                    input_type = EnvVarInputType(input_type_str)
-                except ValueError:
-                    input_type = EnvVarInputType.TEXT
-
-                env_var_fields.append(
-                    EnvVarField(
-                        variable_name=var_name,
-                        display_name=display_name,
-                        description=field.get("description"),
-                        input_type=input_type,
-                        is_required=field.get("is_required", field.get("required", True)),
-                        default_value=field.get("default_value"),
-                    )
-                )
-
-            # Create the request object and register with manager
-            request = EnvVarRequest(
-                request_id=request_id,
-                tool_name=target_tool_name,
-                fields=env_var_fields,
-                context=context or {},
-            )
-
-            # Register request with manager (including persistence context)
-            ctx = getattr(self, "_langfuse_context", {}) or {}
-            await manager.register_request(
-                request,
-                tenant_id=ctx.get("tenant_id"),
-                project_id=ctx.get("project_id"),
-                conversation_id=ctx.get("conversation_id"),
-                message_id=ctx.get("message_id"),
-                timeout=timeout,
-            )
+            # Generate request ID for tracking
+            request_id = f"envvar_{uuid.uuid4().hex[:8]}"
 
             # Emit env_var_requested event BEFORE blocking
             yield AgentEnvVarRequestedEvent(
@@ -1942,21 +1847,24 @@ class SessionProcessor:
                 context=context if context else {},
             )
 
-            # Wait for user response using manager's wait_for_response
-            # This handles both local and Redis cross-process responses
+            # Use TemporalHITLHandler for request/response
             start_time = time.time()
             try:
-                values = await manager.wait_for_response(request_id, timeout=timeout)
+                values = await handler.request_env_vars(
+                    tool_name=target_tool_name,
+                    fields=fields_for_handler,
+                    message=message,
+                    timeout_seconds=timeout,
+                )
                 end_time = time.time()
 
                 # values is a Dict[str, str] of variable_name -> value
                 saved_variables = []
 
                 # Save environment variables to database
-                ctx = getattr(self, "_langfuse_context", {}) or {}
+                ctx = self._langfuse_context or {}
                 tenant_id = ctx.get("tenant_id")
                 project_id = ctx.get("project_id")
-                save_to_project = arguments.get("save_to_project", False)
 
                 if tenant_id and values:
                     try:
@@ -1984,8 +1892,8 @@ class SessionProcessor:
 
                         async with async_session_factory() as db_session:
                             repository = SqlToolEnvironmentVariableRepository(db_session)
-                            for field_spec in env_var_fields:
-                                var_name = field_spec.variable_name
+                            for field_spec in fields_for_sse:
+                                var_name = field_spec["name"]
                                 if var_name in values and values[var_name]:
                                     # Encrypt the value
                                     encrypted_value = encryption_service.encrypt(values[var_name])
@@ -1997,9 +1905,9 @@ class SessionProcessor:
                                         tool_name=target_tool_name,
                                         variable_name=var_name,
                                         encrypted_value=encrypted_value,
-                                        description=field_spec.description,
-                                        is_required=field_spec.is_required,
-                                        is_secret=getattr(field_spec, "is_secret", True),
+                                        description=field_spec.get("description"),
+                                        is_required=field_spec.get("required", True),
+                                        is_secret=field_spec.get("secret", True),
                                         scope=scope,
                                     )
 
@@ -2053,9 +1961,11 @@ class SessionProcessor:
                     call_id=call_id,
                     tool_execution_id=tool_part.tool_execution_id,
                 )
-            finally:
-                # Clean up request
-                await manager.unregister_request(request_id)
+
+        except HITLPendingException:
+            # Let HITLPendingException bubble up to Activity layer
+            # The Workflow will wait for user response and resume execution
+            raise
 
         except Exception as e:
             logger.error(f"Environment variable tool error: {e}", exc_info=True)

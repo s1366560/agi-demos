@@ -1,15 +1,17 @@
 /**
  * Sandbox SSE Service - Subscribe to sandbox events.
  *
- * Provides Server-Sent Events subscription for sandbox lifecycle
- * and service status events (desktop, terminal).
+ * **Migration Notice**: This service now uses WebSocket internally via
+ * unifiedEventService. The SSE endpoint is deprecated.
  *
- * Events are streamed from: GET /api/v1/sandbox/events/{project_id}
+ * Provides subscription for sandbox lifecycle and service status events
+ * (desktop, terminal).
+ *
+ * Events now come via WebSocket: subscribe_sandbox message type
  */
 
 import { logger } from "../utils/logger";
-import { getAuthToken } from "../utils/tokenResolver";
-import { createApiUrl } from "./client/urlUtils";
+import { unifiedEventService, UnifiedEvent } from "./unifiedEventService";
 
 /**
  * Sandbox event types from backend
@@ -56,19 +58,14 @@ export type SSEStatus = "connecting" | "connected" | "disconnected" | "error";
 /**
  * Sandbox SSE Service implementation
  *
- * Manages SSE connection to sandbox events endpoint.
- * Supports reconnection with exponential backoff.
+ * **Updated**: Now uses WebSocket via unifiedEventService instead of SSE.
+ * The API remains the same for backward compatibility.
  */
 class SandboxSSEService {
-  private eventSource: EventSource | null = null;
   private status: SSEStatus = "disconnected";
   private projectId: string | null = null;
   private handlers: Set<SandboxEventHandler> = new Set();
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  private lastEventId: string = "0";
+  private unsubscribeFn: (() => void) | null = null;
 
   /**
    * Subscribe to sandbox events for a project.
@@ -81,8 +78,8 @@ class SandboxSSEService {
     this.projectId = projectId;
     this.handlers.add(handler);
 
-    // Start connection if not already connected
-    if (!this.eventSource || this.status === "disconnected") {
+    // Start WebSocket connection if not already connected
+    if (!this.unsubscribeFn) {
       this.connect();
     }
 
@@ -96,90 +93,52 @@ class SandboxSSEService {
   }
 
   /**
-   * Establish SSE connection
+   * Establish WebSocket connection via unified service
    */
   private connect(): void {
     if (!this.projectId) {
-      logger.warn("[SandboxSSE] No project_id set");
+      logger.warn("[SandboxWS] No project_id set");
       return;
     }
 
     this.status = "connecting";
-    const token = getAuthToken();
 
-    // Build SSE URL
-    const url = createApiUrl(`/sandbox/events/${this.projectId}`);
-    let urlWithParams: string;
+    // Ensure unified service is connected
+    unifiedEventService.connect().then(() => {
+      if (!this.projectId) return;
 
-    try {
-      const urlObj = new URL(url, window.location.origin);
-      urlObj.searchParams.set("last_id", this.lastEventId);
-      if (token) {
-        urlObj.searchParams.set("token", token);
-      }
-      urlWithParams = urlObj.toString();
-    } catch {
-      // Fallback for environments without URL support (e.g., some test environments)
-      const params = new URLSearchParams();
-      params.set("last_id", this.lastEventId);
-      if (token) {
-        params.set("token", token);
-      }
-      const separator = url.includes("?") ? "&" : "?";
-      urlWithParams = `${url}${separator}${params.toString()}`;
-    }
-
-    try {
-      logger.debug(`[SandboxSSE] Connecting to ${urlWithParams}`);
-
-      this.eventSource = new EventSource(urlWithParams);
-
-      // Connection opened
-      this.eventSource.onopen = () => {
-        logger.debug(`[SandboxSSE] Connected to project ${this.projectId}`);
-        this.status = "connected";
-        this.reconnectAttempts = 0;
-        this.reconnectDelay = 1000;
-      };
-
-      // Message received - route to appropriate handler
-      this.eventSource.addEventListener("sandbox", (event) => {
-        const message = event as MessageEvent;
-        try {
-          const data: BaseSandboxSSEEvent = JSON.parse(message.data);
-          this.lastEventId = (event as any).lastEventId || this.lastEventId;
-          this.routeEvent(data);
-        } catch (err) {
-          logger.error("[SandboxSSE] Failed to parse event:", err);
+      // Subscribe to sandbox events via unified WebSocket
+      this.unsubscribeFn = unifiedEventService.subscribeSandbox(
+        this.projectId,
+        (event: UnifiedEvent) => {
+          this.handleEvent(event);
         }
-      });
+      );
 
-      // Error handling
-      this.eventSource.onerror = (error) => {
-        logger.error("[SandboxSSE] Connection error:", error);
-        this.status = "error";
-
-        // Close the EventSource before reconnecting
-        if (this.eventSource) {
-          this.eventSource.close();
-        }
-
-        // Schedule reconnection
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          this.scheduleReconnect();
-        } else {
-          this.notifyHandlers(
-            "onError",
-            new Error("Max reconnection attempts reached")
-          );
-        }
-      };
-
-    } catch (err) {
-      logger.error("[SandboxSSE] Failed to create EventSource:", err);
+      this.status = "connected";
+      logger.debug(`[SandboxWS] Connected to project ${this.projectId}`);
+    }).catch((err) => {
+      logger.error("[SandboxWS] Failed to connect:", err);
       this.status = "error";
       this.notifyHandlers("onError", err as Error);
-    }
+    });
+  }
+
+  /**
+   * Handle incoming WebSocket event
+   */
+  private handleEvent(event: UnifiedEvent): void {
+    // Extract the actual sandbox event from the data
+    const eventData = event.data as { type?: string; data?: unknown; timestamp?: string } | undefined;
+    if (!eventData) return;
+
+    const sandboxEvent: BaseSandboxSSEEvent = {
+      type: (eventData.type || event.type) as SandboxEventType,
+      data: eventData.data || eventData,
+      timestamp: eventData.timestamp || event.timestamp || new Date().toISOString(),
+    };
+
+    this.routeEvent(sandboxEvent);
   }
 
   /**
@@ -214,7 +173,7 @@ class SandboxSSEService {
         this.notifyHandlers("onStatusUpdate", event);
         break;
       default:
-        logger.debug(`[SandboxSSE] Unknown event type: ${type}`);
+        logger.debug(`[SandboxWS] Unknown event type: ${type}`);
     }
   }
 
@@ -229,50 +188,25 @@ class SandboxSSEService {
       try {
         const fn = handler[handlerKey];
         if (typeof fn === "function") {
-          (fn as any)(...args);
+          (fn as (...args: unknown[]) => void)(...args);
         }
       } catch (err) {
-        logger.error(`[SandboxSSE] Handler error for ${handlerKey}:`, err);
+        logger.error(`[SandboxWS] Handler error for ${handlerKey}:`, err);
       }
     });
   }
 
   /**
-   * Schedule reconnection with exponential backoff
-   */
-  private scheduleReconnect(): void {
-    if (this.reconnectTimeout) {
-      return; // Already scheduled
-    }
-
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-    logger.debug(
-      `[SandboxSSE] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-    );
-
-    this.reconnectTimeout = setTimeout(() => {
-      this.reconnectTimeout = null;
-      this.connect();
-    }, delay);
-  }
-
-  /**
-   * Disconnect from SSE stream
+   * Disconnect from WebSocket stream
    */
   disconnect(): void {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    if (this.unsubscribeFn) {
+      this.unsubscribeFn();
+      this.unsubscribeFn = null;
     }
 
     this.status = "disconnected";
+    this.projectId = null;
   }
 
   /**

@@ -4,8 +4,6 @@
  * Defines the type system for the compound CommunitiesList component.
  */
 
-import type { TimelineEvent } from '../../../types/agent';
-
 // ========================================
 // Domain Types
 // ========================================

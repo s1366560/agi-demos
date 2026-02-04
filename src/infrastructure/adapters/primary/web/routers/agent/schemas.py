@@ -206,8 +206,12 @@ class HITLRequestResponse(BaseModel):
     conversation_id: str
     message_id: str
     request_type: str
-    request_data: dict
+    question: str
+    options: Optional[list] = None
+    context: Optional[dict] = None
+    metadata: Optional[dict] = None
     created_at: str
+    expires_at: Optional[str] = None
     status: str
 
 
@@ -251,6 +255,33 @@ class HumanInteractionResponse(BaseModel):
 
     success: bool
     message: str
+
+
+# === Unified HITL Schemas (Temporal-based) ===
+
+
+class HITLResponseRequest(BaseModel):
+    """Unified request to respond to any HITL request via Temporal Signal.
+
+    This replaces the separate clarification/decision/env_var endpoints
+    with a single unified endpoint that sends a Temporal Signal.
+    """
+
+    request_id: str
+    hitl_type: str  # "clarification", "decision", "env_var", "permission"
+    response_data: dict  # Type-specific response data
+
+    # For clarification: {"answer": "user answer"}
+    # For decision: {"decision": "option_id"}
+    # For env_var: {"values": {"VAR_NAME": "value"}, "save": true}
+    # For permission: {"action": "allow", "remember": false}
+
+
+class HITLCancelRequest(BaseModel):
+    """Request to cancel a pending HITL request."""
+
+    request_id: str
+    reason: Optional[str] = None
 
 
 # === Plan Mode Schemas ===

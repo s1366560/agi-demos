@@ -238,7 +238,18 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
     if (!projectId) return;
     try {
       const data = await schemaAPI.listEntityTypes(projectId);
-      setEntities(data);
+      // Convert SchemaEntityType to EntityType
+      const entityTypes: EntityType[] = data.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description || '',
+        schema: (item.properties as Record<string, any>) || {},
+        status: 'ENABLED' as const,
+        source: 'user' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      setEntities(entityTypes);
     } catch (error) {
       console.error('Failed to load entity types:', error);
     } finally {

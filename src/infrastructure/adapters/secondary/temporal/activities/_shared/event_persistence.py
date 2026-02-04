@@ -143,6 +143,24 @@ async def save_event_to_db(
     if not settings.agent_persist_detail_events and event_type in NOISY_EVENT_TYPES:
         return
 
+    # Convert 'complete' to 'assistant_message' for unified event type
+    # This ensures historical messages display correctly in the frontend
+    if event_type == "complete":
+        content = event_data.get("content", "")
+        if content:
+            original_artifacts = event_data.get("artifacts")
+            event_type = "assistant_message"
+            event_data = {
+                "content": content,
+                "message_id": str(uuid.uuid4()),
+                "role": "assistant",
+            }
+            if original_artifacts:
+                event_data["artifacts"] = original_artifacts
+        else:
+            # Skip empty complete events
+            return
+
     from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy.exc import IntegrityError
 

@@ -40,8 +40,10 @@ interface SerializedConversationState {
     pendingClarification: unknown;
     pendingDecision: unknown;
     pendingEnvVarRequest: unknown;
+    pendingPermission: unknown;
     doomLoopDetected: unknown;
     pendingHITLSummary: unknown;
+    costTracking: unknown;
     // Metadata
     lastUpdated: number;
     conversationId: string;
@@ -111,8 +113,10 @@ function serializeState(
         pendingClarification: state.pendingClarification || null,
         pendingDecision: state.pendingDecision || null,
         pendingEnvVarRequest: state.pendingEnvVarRequest || null,
+        pendingPermission: state.pendingPermission || null,
         doomLoopDetected: state.doomLoopDetected || null,
         pendingHITLSummary: state.pendingHITLSummary || null,
+        costTracking: state.costTracking || null,
         lastUpdated: Date.now(),
     };
 }
@@ -141,8 +145,10 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
         pendingClarification: stored.pendingClarification as ConversationState['pendingClarification'],
         pendingDecision: stored.pendingDecision as ConversationState['pendingDecision'],
         pendingEnvVarRequest: stored.pendingEnvVarRequest as ConversationState['pendingEnvVarRequest'],
-        doomLoopDetected: stored.doomLoopDetected,
+        pendingPermission: stored.pendingPermission as ConversationState['pendingPermission'],
+        doomLoopDetected: stored.doomLoopDetected as ConversationState['doomLoopDetected'],
         pendingHITLSummary: stored.pendingHITLSummary as ConversationState['pendingHITLSummary'],
+        costTracking: stored.costTracking as ConversationState['costTracking'],
     };
 }
 

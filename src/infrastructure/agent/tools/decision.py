@@ -4,48 +4,25 @@ Decision Tool for Human-in-the-Loop Interaction.
 This tool allows the agent to request user decisions at critical execution points
 when multiple approaches exist or confirmation is needed for risky operations.
 
-Cross-Process Communication:
-- Uses Redis Streams for reliable cross-process HITL responses (primary)
-- Falls back to Redis Pub/Sub for backward compatibility
-- Worker process subscribes to Redis Stream for responses
-- API process publishes responses to Redis Stream
+Architecture (NEW - Temporal-based):
+- Uses TemporalHITLHandler for unified HITL handling
+- Temporal Signals for reliable cross-process communication
+- SSE events for real-time frontend updates
 
-Database Persistence:
-- Stores HITL requests in database for recovery after page refresh
-- Enables frontend to query pending requests on reconnection
-
-Architecture:
-- DecisionManager inherits from BaseHITLManager for common HITL infrastructure
-- DecisionRequest extends BaseHITLRequest for type-specific request handling
-
-NOTE: This file re-exports from the new HITL infrastructure for backward compatibility.
-New code should import directly from src.infrastructure.agent.hitl.
+Architecture (LEGACY - Redis-based, deprecated):
+- DecisionManager inherits from BaseHITLManager
+- Redis Streams for cross-process communication
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-# Re-export from new HITL infrastructure for backward compatibility
-from src.infrastructure.agent.hitl.decision_manager import (
-    DecisionManager,
-    DecisionOption,
-    DecisionRequest,
-    DecisionType,
-    get_decision_manager,
-    set_decision_manager,
-)
+from src.infrastructure.agent.hitl.temporal_hitl_handler import TemporalHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
 
-# Re-export for backward compatibility
 __all__ = [
-    "DecisionType",
-    "DecisionOption",
-    "DecisionRequest",
-    "DecisionManager",
-    "get_decision_manager",
-    "set_decision_manager",
     "DecisionTool",
 ]
 
@@ -59,7 +36,7 @@ class DecisionTool(AgentTool):
     an execution branch, confirming a risky operation, or selecting a method.
 
     Usage:
-        decision = DecisionTool()
+        decision = DecisionTool(hitl_handler)
         choice = await decision.execute(
             question="Delete all user data?",
             decision_type="confirmation",
@@ -78,12 +55,17 @@ class DecisionTool(AgentTool):
         )
     """
 
-    def __init__(self, manager: Optional[DecisionManager] = None):
+    def __init__(
+        self,
+        hitl_handler: Optional[TemporalHITLHandler] = None,
+        emit_sse_callback: Optional[Callable] = None,
+    ):
         """
         Initialize the decision tool.
 
         Args:
-            manager: Decision manager to use (defaults to global instance)
+            hitl_handler: TemporalHITLHandler instance (required for execution)
+            emit_sse_callback: Optional callback for SSE events
         """
         super().__init__(
             name="request_decision",
@@ -93,7 +75,12 @@ class DecisionTool(AgentTool):
                 "operations, or a choice must be made between execution branches."
             ),
         )
-        self.manager = manager or get_decision_manager()
+        self._hitl_handler = hitl_handler
+        self._emit_sse_callback = emit_sse_callback
+
+    def set_hitl_handler(self, handler: TemporalHITLHandler) -> None:
+        """Set the HITL handler (for late binding)."""
+        self._hitl_handler = handler
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
@@ -187,9 +174,8 @@ class DecisionTool(AgentTool):
             return False
 
         # Validate decision type
-        try:
-            DecisionType(kwargs["decision_type"])
-        except ValueError:
+        valid_types = ["branch", "method", "confirmation", "risk", "custom"]
+        if kwargs["decision_type"] not in valid_types:
             logger.error(f"Invalid decision_type: {kwargs['decision_type']}")
             return False
 
@@ -229,36 +215,25 @@ class DecisionTool(AgentTool):
 
         Raises:
             ValueError: If arguments are invalid
+            RuntimeError: If HITL handler not set
             asyncio.TimeoutError: If user doesn't respond within timeout and no default
         """
         # Validate
         if not self.validate_args(question=question, decision_type=decision_type, options=options):
             raise ValueError("Invalid decision arguments")
 
-        # Convert options to DecisionOption objects
-        decision_options = [
-            DecisionOption(
-                id=opt["id"],
-                label=opt["label"],
-                description=opt.get("description"),
-                recommended=opt.get("recommended", False),
-                estimated_time=opt.get("estimated_time"),
-                estimated_cost=opt.get("estimated_cost"),
-                risks=opt.get("risks", []),
-            )
-            for opt in options
-        ]
+        if self._hitl_handler is None:
+            raise RuntimeError("HITL handler not set. Call set_hitl_handler() first.")
 
-        # Create request
-        dec_type = DecisionType(decision_type)
-        decision = await self.manager.create_request(
+        # Use TemporalHITLHandler
+        decision = await self._hitl_handler.request_decision(
             question=question,
-            decision_type=dec_type,
-            options=decision_options,
+            options=options,
+            decision_type=decision_type,
             allow_custom=allow_custom,
-            context=context or {},
+            timeout_seconds=timeout,
             default_option=default_option,
-            timeout=timeout,
+            context=context,
         )
 
         logger.info(f"Decision made: {decision}")

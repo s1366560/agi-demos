@@ -68,11 +68,25 @@ import type {
     ClarificationAnsweredEventData,
     DecisionAskedEventData,
     DecisionAnsweredEventData,
+    DoomLoopDetectedEventData,
+    DoomLoopIntervenedEventData,
     EnvVarRequestedEventData,
     EnvVarProvidedEventData,
+    PermissionAskedEventData,
+    PermissionRepliedEventData,
+    CostUpdateEventData,
+    PlanStatusChangedEventData,
+    PlanStepReadyEventData,
+    PlanStepCompleteEventData,
+    PlanStepSkippedEventData,
+    PlanSnapshotCreatedEventData,
+    PlanRollbackEventData,
+    AdjustmentAppliedEventData,
+    SandboxEventData,
     CompleteEventData,
     TitleGeneratedEventData,
     ErrorEventData,
+    RetryEventData,
     SkillMatchedEventData,
     SkillExecutionStartEventData,
     SkillToolStartEventData,
@@ -526,7 +540,7 @@ class AgentServiceImpl implements AgentService {
             const handler = this.handlers.get(conversation_id);
             // DEBUG: Enhanced logging for recovery troubleshooting
             const isRecovery = (message as { is_recovery?: boolean }).is_recovery;
-            logger.debug("[AgentWS] Looking for handler:", {
+            console.log("[AgentWS] Looking for handler:", {
                 conversation_id,
                 hasHandler: !!handler,
                 handlersSize: this.handlers.size,
@@ -536,7 +550,7 @@ class AgentServiceImpl implements AgentService {
             if (handler) {
                 this.routeToHandler(type as AgentEventType, data, handler);
             } else {
-                logger.warn("[AgentWS] No handler found for conversation:", conversation_id);
+                console.warn("[AgentWS] No handler found for conversation:", conversation_id);
             }
         }
     }
@@ -672,6 +686,9 @@ class AgentServiceImpl implements AgentService {
             case "error":
                 handler.onError?.(event as AgentEvent<ErrorEventData>);
                 break;
+            case "retry":
+                handler.onRetry?.(event as AgentEvent<RetryEventData>);
+                break;
             // Skill execution events (L2 layer)
             case "skill_matched":
                 handler.onSkillMatched?.(event as AgentEvent<SkillMatchedEventData>);
@@ -721,6 +738,68 @@ class AgentServiceImpl implements AgentService {
                 break;
             case "reflection_complete":
                 handler.onReflectionComplete?.(event as AgentEvent<ReflectionCompleteEvent>);
+                break;
+            // Extended Plan Mode events
+            case "plan_status_changed":
+                handler.onPlanStatusChanged?.(event as AgentEvent<PlanStatusChangedEventData>);
+                break;
+            case "plan_step_ready":
+                handler.onPlanStepReady?.(event as AgentEvent<PlanStepReadyEventData>);
+                break;
+            case "plan_step_complete":
+                handler.onPlanStepComplete?.(event as AgentEvent<PlanStepCompleteEventData>);
+                break;
+            case "plan_step_skipped":
+                handler.onPlanStepSkipped?.(event as AgentEvent<PlanStepSkippedEventData>);
+                break;
+            case "plan_snapshot_created":
+                handler.onPlanSnapshotCreated?.(event as AgentEvent<PlanSnapshotCreatedEventData>);
+                break;
+            case "plan_rollback":
+                handler.onPlanRollback?.(event as AgentEvent<PlanRollbackEventData>);
+                break;
+            case "adjustment_applied":
+                handler.onAdjustmentApplied?.(event as AgentEvent<AdjustmentAppliedEventData>);
+                break;
+            // Doom loop events
+            case "doom_loop_detected":
+                handler.onDoomLoopDetected?.(event as AgentEvent<DoomLoopDetectedEventData>);
+                break;
+            case "doom_loop_intervened":
+                handler.onDoomLoopIntervened?.(event as AgentEvent<DoomLoopIntervenedEventData>);
+                break;
+            // Permission events
+            case "permission_asked":
+                handler.onPermissionAsked?.(event as AgentEvent<PermissionAskedEventData>);
+                break;
+            case "permission_replied":
+                handler.onPermissionReplied?.(event as AgentEvent<PermissionRepliedEventData>);
+                break;
+            // Cost tracking events
+            case "cost_update":
+                handler.onCostUpdate?.(event as AgentEvent<CostUpdateEventData>);
+                break;
+            // Sandbox events (unified WebSocket)
+            case "sandbox_created":
+                handler.onSandboxCreated?.(event as AgentEvent<SandboxEventData>);
+                break;
+            case "sandbox_terminated":
+                handler.onSandboxTerminated?.(event as AgentEvent<SandboxEventData>);
+                break;
+            case "sandbox_status":
+                handler.onSandboxStatus?.(event as AgentEvent<SandboxEventData>);
+                break;
+            case "desktop_started":
+                handler.onDesktopStarted?.(event as AgentEvent<SandboxEventData>);
+                break;
+            case "desktop_stopped":
+                handler.onDesktopStopped?.(event as AgentEvent<SandboxEventData>);
+                break;
+            case "terminal_started":
+                handler.onTerminalStarted?.(event as AgentEvent<SandboxEventData>);
+                break;
+            case "terminal_stopped":
+                handler.onTerminalStopped?.(event as AgentEvent<SandboxEventData>);
                 break;
         }
     }
@@ -1463,6 +1542,45 @@ class AgentServiceImpl implements AgentService {
     }
 
     /**
+     * Respond to a permission request from the Agent
+     *
+     * Submits user's permission grant/deny decision for a tool execution.
+     * Uses WebSocket when connected for lower latency, with HTTP fallback.
+     *
+     * @param requestId - The request ID from the permission_asked event
+     * @param granted - Whether the permission is granted (true) or denied (false)
+     * @returns Promise resolving when the response is submitted
+     * @throws {ApiError} If the request fails or request_id is invalid
+     *
+     * @example
+     * ```typescript
+     * await agentService.respondToPermission('req-123', true);
+     * ```
+     */
+    async respondToPermission(
+        requestId: string,
+        granted: boolean
+    ): Promise<void> {
+        // Try WebSocket first for lower latency
+        if (this.isConnected()) {
+            const sent = this.send({
+                type: "permission_respond",
+                request_id: requestId,
+                granted,
+            });
+            if (sent) {
+                logger.debug("[AgentWS] Sent permission_respond via WebSocket");
+                return;
+            }
+        }
+        // Fallback to HTTP
+        await api.post<{ status: string }>("/agent/permission/respond", {
+            request_id: requestId,
+            granted,
+        });
+    }
+
+    /**
      * Get pending HITL (Human-In-The-Loop) requests for a conversation
      *
      * Retrieves any pending clarification, decision, or environment variable
@@ -1495,7 +1613,7 @@ class AgentServiceImpl implements AgentService {
             params.append("request_type", requestType);
         }
         const queryString = params.toString();
-        const url = `/agent/conversations/${conversationId}/hitl/pending${queryString ? `?${queryString}` : ""}`;
+        const url = `/agent/hitl/conversations/${conversationId}/pending${queryString ? `?${queryString}` : ""}`;
         return await api.get<PendingHITLResponse>(url);
     }
 

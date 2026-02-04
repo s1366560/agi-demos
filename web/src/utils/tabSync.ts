@@ -67,7 +67,7 @@ export interface HITLStateChangedMessage extends TabSyncMessageBase {
     type: 'HITL_STATE_CHANGED';
     conversationId: string;
     hasPendingHITL: boolean;
-    hitlType?: 'clarification' | 'decision' | 'env_var';
+    hitlType?: 'clarification' | 'decision' | 'env_var' | 'permission';
 }
 
 /**
@@ -282,7 +282,7 @@ class TabSyncManager {
     broadcastHITLStateChanged(
         conversationId: string,
         hasPendingHITL: boolean,
-        hitlType?: 'clarification' | 'decision' | 'env_var'
+        hitlType?: 'clarification' | 'decision' | 'env_var' | 'permission'
     ): void {
         this.broadcastMessage({
             type: 'HITL_STATE_CHANGED',
@@ -345,7 +345,7 @@ export const tabSync = {
     broadcastHITLStateChanged: (
         conversationId: string,
         hasPendingHITL: boolean,
-        hitlType?: 'clarification' | 'decision' | 'env_var'
+        hitlType?: 'clarification' | 'decision' | 'env_var' | 'permission'
     ) => getTabSyncManager().broadcastHITLStateChanged(conversationId, hasPendingHITL, hitlType),
     broadcastConversationDeleted: (conversationId: string) =>
         getTabSyncManager().broadcastConversationDeleted(conversationId),
