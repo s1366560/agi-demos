@@ -156,7 +156,7 @@ class AgentService(AgentServicePort):
             self._event_bus = RedisEventBusAdapter(self._redis_client)
 
     async def _build_react_agent_async(self, project_id: str, user_id: str, tenant_id: str):
-        # Deprecated: Agent execution moved to Temporal
+        # Deprecated: Agent execution moved to Ray Actors
         pass
 
     async def stream_chat_v2(
@@ -169,7 +169,7 @@ class AgentService(AgentServicePort):
         attachment_ids: Optional[List[str]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Stream agent response using Temporal Workflow.
+        Stream agent response using Ray Actors.
 
         Args:
             conversation_id: Conversation ID
@@ -284,9 +284,9 @@ class AgentService(AgentServicePort):
                 if event.id != user_msg_event.id  # Exclude current user message
             ]
 
-            # Start Temporal Workflow
-            # Events will be published to Redis Stream by the Activity
-            workflow_id = await self._start_chat_workflow(
+            # Start Ray Actor
+            # Events will be published to Redis Stream by the Actor runtime
+            actor_id = await self._start_chat_actor(
                 conversation=conversation,
                 message_id=user_msg_id,
                 user_message=user_message,
@@ -295,7 +295,7 @@ class AgentService(AgentServicePort):
                 correlation_id=correlation_id,
             )
             logger.info(
-                f"[AgentService] Started workflow {workflow_id} for conversation {conversation_id}"
+                f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
             )
 
             # Connect to stream with message_id filtering
@@ -315,7 +315,7 @@ class AgentService(AgentServicePort):
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-    async def _start_chat_workflow(
+    async def _start_chat_actor(
         self,
         conversation: Conversation,
         message_id: str,
@@ -324,158 +324,44 @@ class AgentService(AgentServicePort):
         attachment_ids: Optional[List[str]] = None,
         correlation_id: Optional[str] = None,
     ) -> str:
-        """Start agent execution workflow in Temporal.
-
-        Uses ProjectAgentWorkflow - a long-running workflow that persists across requests:
-        - Uses wait_condition() for persistent agent instances
-        - Sends chat via Temporal update mechanism
-        - 95%+ latency reduction for subsequent requests
-
-        Args:
-            conversation: The conversation entity (already loaded)
-            message_id: The user message ID
-            user_message: The user message content
-            conversation_context: Pre-filtered conversation history (excludes current user message)
-            attachment_ids: Optional list of attachment IDs to include with the message
-            correlation_id: Optional correlation ID for event tracking
-
-        Returns:
-            The workflow ID
-        """
+        """Start agent execution via Ray Actor."""
         from src.configuration.config import get_settings
-        from src.configuration.temporal_config import get_temporal_settings
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import (
+            get_or_create_actor,
+            register_project,
+        )
+        from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
+        from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
 
         settings = get_settings()
-        temporal_settings = get_temporal_settings()
+        agent_mode = "default"
 
-        return await self._start_or_get_session_workflow(
-            conversation=conversation,
-            message_id=message_id,
-            user_message=user_message,
-            conversation_context=conversation_context,
-            settings=settings,
-            temporal_settings=temporal_settings,
-            attachment_ids=attachment_ids,
-            correlation_id=correlation_id,
-        )
-
-    async def _start_or_get_session_workflow(
-        self,
-        conversation: Conversation,
-        message_id: str,
-        user_message: str,
-        conversation_context: list[Dict[str, Any]],
-        settings,
-        temporal_settings,
-        attachment_ids: Optional[List[str]] = None,
-        correlation_id: Optional[str] = None,
-    ) -> str:
-        """Start or get existing Project Agent Workflow and send chat via update.
-
-        This implements the long-running workflow pattern similar to MCP Worker:
-        - Workflow ID: project_agent_{tenant_id}_{project_id}_{agent_mode}
-        - Workflow stays alive via wait_condition()
-        - Chat requests sent via Temporal update mechanism
-        - Agent instance persists across multiple requests
-
-        Args:
-            conversation: The conversation entity
-            message_id: The user message ID
-            user_message: The user message content
-            conversation_context: Conversation history
-            settings: Application settings
-            temporal_settings: Temporal settings
-
-        Returns:
-            The workflow ID
-        """
-        from temporalio.client import WorkflowExecutionStatus
-
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            ProjectAgentWorkflowInput,
-            ProjectChatRequest,
-            get_project_agent_workflow_id,
-        )
-
-        client = await TemporalClientFactory.get_client()
-
-        # Generate workflow ID (per project + mode)
-        agent_mode = "default"  # Could be extracted from conversation settings
-        workflow_id = get_project_agent_workflow_id(
+        config = ProjectAgentActorConfig(
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
             agent_mode=agent_mode,
+            model=self._get_model(settings),
+            api_key=self._get_api_key(settings),
+            base_url=self._get_base_url(settings),
+            temperature=0.7,
+            max_tokens=settings.agent_max_tokens,
+            max_steps=settings.agent_max_steps,
+            persistent=True,
+            mcp_tools_ttl_seconds=300,
+            max_concurrent_chats=10,
+            enable_skills=True,
+            enable_subagents=True,
         )
 
-        # Try to get existing workflow handle
-        handle = client.get_workflow_handle(workflow_id)
+        await register_project(conversation.tenant_id, conversation.project_id)
+        actor = await get_or_create_actor(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            agent_mode=agent_mode,
+            config=config,
+        )
 
-        try:
-            # Check if workflow exists and is running
-            describe = await handle.describe()
-            if describe.status != WorkflowExecutionStatus.RUNNING:
-                # Workflow exists but not running, start a new one
-                raise Exception("Workflow not running")
-
-            logger.info(f"Using existing Project Agent Workflow: {workflow_id}")
-
-        except Exception:
-            # Workflow doesn't exist or not running, start a new one
-            logger.info(f"Starting new Project Agent Workflow: {workflow_id}")
-
-            config = ProjectAgentWorkflowInput(
-                tenant_id=conversation.tenant_id,
-                project_id=conversation.project_id,
-                agent_mode=agent_mode,
-                model=self._get_model(settings),
-                api_key=self._get_api_key(settings),
-                base_url=self._get_base_url(settings),
-                temperature=0.7,
-                max_tokens=4096,
-                max_steps=settings.agent_max_steps,
-                persistent=True,  # Agent runs forever until explicitly stopped
-                mcp_tools_ttl_seconds=300,  # 5 minutes
-            )
-
-            await client.start_workflow(
-                "project_agent",  # Workflow name
-                config,
-                id=workflow_id,
-                task_queue=temporal_settings.agent_temporal_task_queue,
-            )
-
-            # Get handle to the new workflow
-            handle = client.get_workflow_handle(workflow_id)
-
-            # Wait for workflow to initialize (poll with timeout)
-            # Workflow initialization includes loading tools, skills, etc.
-            import asyncio
-
-            max_wait_seconds = 30
-            poll_interval = 0.5
-            waited = 0
-
-            while waited < max_wait_seconds:
-                try:
-                    status = await handle.query("get_status")
-                    if status and getattr(status, "is_initialized", False):
-                        logger.info(
-                            f"Project Agent Workflow initialized after {waited:.1f}s: {workflow_id}"
-                        )
-                        break
-                except Exception:
-                    # Workflow might not be ready yet, continue waiting
-                    pass
-
-                await asyncio.sleep(poll_interval)
-                waited += poll_interval
-            else:
-                logger.warning(
-                    f"Timeout waiting for Project Agent Workflow initialization: {workflow_id}"
-                )
-
-        # Send chat request via Temporal update
         chat_request = ProjectChatRequest(
             conversation_id=conversation.id,
             message_id=message_id,
@@ -486,48 +372,24 @@ class AgentService(AgentServicePort):
             correlation_id=correlation_id,
         )
 
-        # Execute update asynchronously to avoid blocking first token streaming
-        # Note: Actual streaming happens via Redis pub/sub in the activity
-        import asyncio
+        async def _fire_and_forget() -> None:
+            try:
+                await await_ray(actor.chat.remote(chat_request))
+            except Exception as e:
+                logger.error(
+                    "[AgentService] Actor chat failed: conversation=%s error=%s",
+                    conversation.id,
+                    e,
+                    exc_info=True,
+                )
 
-        asyncio.create_task(
-            self._execute_chat_update_async(
-                handle=handle,
-                chat_request=chat_request,
-                workflow_id=workflow_id,
-                conversation_id=conversation.id,
-            )
+        asyncio.create_task(_fire_and_forget())
+
+        return ProjectAgentActor.actor_id(
+            conversation.tenant_id,
+            conversation.project_id,
+            agent_mode,
         )
-
-        return workflow_id
-
-    async def _execute_chat_update_async(
-        self,
-        handle,
-        chat_request,
-        workflow_id: str,
-        conversation_id: str,
-    ) -> None:
-        """Execute Temporal chat update without blocking stream setup."""
-        try:
-            result = await handle.execute_update(
-                "chat",
-                chat_request,
-            )
-            is_error = (
-                result.get("is_error", False)
-                if isinstance(result, dict)
-                else getattr(result, "is_error", False)
-            )
-            logger.info(
-                f"Agent Session chat completed: workflow={workflow_id}, "
-                f"conversation={conversation_id}, is_error={is_error}"
-            )
-        except Exception as e:
-            logger.error(
-                f"Agent Session chat failed: workflow={workflow_id}, conversation={conversation_id}, error={e}",
-                exc_info=True,
-            )
 
     def _get_api_key(self, settings):
         provider = settings.llm_provider.strip().lower()

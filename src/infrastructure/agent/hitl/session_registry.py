@@ -4,6 +4,7 @@ Agent Session Registry for HITL Real-time Response Delivery.
 This module provides a registry for tracking active Agent sessions
 that are waiting for HITL responses. It enables direct in-memory
 delivery of HITL responses without going through Temporal.
+delivery of HITL responses within the same worker process.
 
 Architecture:
 - Each Agent Worker maintains its own registry instance

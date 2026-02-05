@@ -6,9 +6,9 @@ These tools allow the agent to:
 2. RequestEnvVarTool: Request missing environment variables from the user
 3. CheckEnvVarsTool: Check if required environment variables are configured
 
-Architecture (NEW - Temporal-based for HITL):
-- RequestEnvVarTool uses TemporalHITLHandler for unified HITL handling
-- Temporal Signals for reliable cross-process communication
+Architecture (Ray-based for HITL):
+- RequestEnvVarTool uses RayHITLHandler for unified HITL handling
+- Redis Streams for response delivery
 - SSE events for real-time frontend updates
 
 GetEnvVarTool and CheckEnvVarsTool do NOT use HITL, they just read from database.
@@ -25,7 +25,7 @@ from src.domain.model.agent.tool_environment_variable import (
 from src.domain.ports.repositories.tool_environment_variable_repository import (
     ToolEnvironmentVariableRepositoryPort,
 )
-from src.infrastructure.agent.hitl.temporal_hitl_handler import TemporalHITLHandler
+from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.security.encryption_service import (
     EncryptionService,
@@ -285,7 +285,7 @@ class RequestEnvVarTool(AgentTool):
 
     def __init__(
         self,
-        hitl_handler: Optional[TemporalHITLHandler] = None,
+        hitl_handler: Optional[RayHITLHandler] = None,
         repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
         encryption_service: Optional[EncryptionService] = None,
         event_publisher: Optional[Callable[[Dict[str, Any]], None]] = None,
@@ -297,7 +297,7 @@ class RequestEnvVarTool(AgentTool):
         Initialize the request env var tool.
 
         Args:
-            hitl_handler: TemporalHITLHandler instance (required for execution)
+            hitl_handler: RayHITLHandler instance (required for execution)
             repository: Repository for env var persistence (optional if session_factory provided)
             encryption_service: Service for encryption (defaults to singleton)
             event_publisher: Function to publish SSE events (optional, handler emits SSE)
@@ -393,7 +393,7 @@ class RequestEnvVarTool(AgentTool):
         if event_publisher:
             self._event_publisher = event_publisher
 
-    def set_hitl_handler(self, handler: TemporalHITLHandler) -> None:
+    def set_hitl_handler(self, handler: RayHITLHandler) -> None:
         """Set the HITL handler (for late binding)."""
         self._hitl_handler = handler
 
@@ -448,7 +448,7 @@ class RequestEnvVarTool(AgentTool):
         if self._hitl_handler is None:
             raise RuntimeError("HITL handler not set. Call set_hitl_handler() first.")
 
-        # Convert fields to format expected by TemporalHITLHandler
+        # Convert fields to format expected by RayHITLHandler
         hitl_fields = []
         field_specs = {}  # Track original specs for saving
         for f in fields:
@@ -480,7 +480,7 @@ class RequestEnvVarTool(AgentTool):
         logger.info(f"Requesting env vars for tool={tool_name}: {[f['name'] for f in hitl_fields]}")
 
         try:
-            # Use TemporalHITLHandler to request env vars
+            # Use RayHITLHandler to request env vars
             values = await self._hitl_handler.request_env_vars(
                 tool_name=tool_name,
                 fields=hitl_fields,

@@ -2,10 +2,11 @@
 HITL (Human-in-the-Loop) Handlers for WebSocket
 
 Handles clarification_respond, decision_respond, and env_var_respond message types.
-Uses Temporal Signals to communicate with the running workflow.
+Uses Redis Streams to communicate with the running Ray Actor.
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -23,56 +24,50 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-async def _send_hitl_signal_to_workflow(
+async def _publish_hitl_response_to_redis(
     tenant_id: str,
     project_id: str,
+    conversation_id: str,
     request_id: str,
     hitl_type: str,
     response_data: dict,
     user_id: str,
+    agent_mode: str,
 ) -> bool:
-    """Send HITL response signal to the Temporal workflow."""
+    """Publish HITL response to Redis Stream for Ray Actor delivery."""
     try:
-        from temporalio.client import Client
-
-        from src.configuration.temporal_config import get_temporal_settings
-        from src.domain.model.agent.hitl_types import HITL_RESPONSE_SIGNAL
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            get_project_agent_workflow_id,
+        from src.configuration.config import get_settings
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_redis_client,
         )
 
-        temporal_settings = get_temporal_settings()
+        settings = get_settings()
+        if not getattr(settings, "hitl_realtime_enabled", True):
+            logger.debug("[WS HITL] Realtime disabled, skipping Redis publish")
+            return False
 
-        # Get Temporal client
-        client = await Client.connect(
-            temporal_settings.temporal_host,
-            namespace=temporal_settings.temporal_namespace,
-        )
+        redis = await get_redis_client()
 
-        # Get workflow ID
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-
-        # Build signal payload
-        signal_payload = {
+        stream_key = f"hitl:response:{tenant_id}:{project_id}"
+        message_data = {
             "request_id": request_id,
             "hitl_type": hitl_type,
             "response_data": response_data,
             "user_id": user_id,
+            "conversation_id": conversation_id,
+            "tenant_id": tenant_id,
+            "project_id": project_id,
+            "agent_mode": agent_mode,
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-        # Get workflow handle and send signal
-        handle = client.get_workflow_handle(workflow_id)
-        await handle.signal(HITL_RESPONSE_SIGNAL, signal_payload)
+        await redis.xadd(stream_key, {"data": json.dumps(message_data)}, maxlen=1000)
 
-        logger.info(f"[WS HITL] Sent Temporal Signal to workflow {workflow_id}: {request_id}")
+        logger.info(f"[WS HITL] Published response to Redis: {request_id}")
         return True
 
     except Exception as e:
-        logger.warning(f"[WS HITL] Failed to send Temporal Signal: {e}")
+        logger.warning(f"[WS HITL] Failed to publish to Redis: {e}")
         return False
 
 
@@ -86,7 +81,7 @@ async def _handle_hitl_response(
     """
     Common handler for all HITL response types.
     
-    Uses Temporal Signals to communicate with the running workflow.
+    Uses Redis Streams to communicate with the running Ray Actor.
     """
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
@@ -114,17 +109,20 @@ async def _handle_hitl_response(
             )
             return
 
-        # Send Temporal Signal
-        signal_sent = await _send_hitl_signal_to_workflow(
+        # Publish to Redis Stream
+        agent_mode = (hitl_request.metadata or {}).get("agent_mode", "default")
+        redis_sent = await _publish_hitl_response_to_redis(
             tenant_id=hitl_request.tenant_id,
             project_id=hitl_request.project_id,
+            conversation_id=hitl_request.conversation_id,
             request_id=request_id,
             hitl_type=hitl_type,
             response_data=response_data,
             user_id=context.user_id,
+            agent_mode=agent_mode,
         )
 
-        if signal_sent:
+        if redis_sent:
             # Update database record
             response_str = (
                 response_data.get("answer")
@@ -137,7 +135,7 @@ async def _handle_hitl_response(
 
             logger.info(
                 f"[WS HITL] User {context.user_id} responded to {hitl_type} {request_id} "
-                "via Temporal Signal"
+                "via Redis Stream"
             )
 
             await context.send_json(
@@ -155,8 +153,7 @@ async def _handle_hitl_response(
             )
         else:
             await context.send_error(
-                f"Failed to send HITL response for {request_id}. "
-                "The agent workflow may have terminated."
+                f"Failed to send HITL response for {request_id}."
             )
 
 

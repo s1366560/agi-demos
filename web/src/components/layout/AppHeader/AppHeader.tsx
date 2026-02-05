@@ -23,10 +23,6 @@
 
 import * as React from 'react'
 
-import { Link } from 'react-router-dom'
-
-import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
-
 // Import subcomponents
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { MobileMenu } from './MobileMenu'
@@ -41,41 +37,9 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 // Import types
 import type {
-  Breadcrumb,
   AppHeaderRootProps,
   HeaderVariant,
 } from './types'
-
-/**
- * Default breadcrumbs when no custom breadcrumbs provided
- */
-function DefaultBreadcrumbs({ crumbs }: { crumbs: Breadcrumb[] }) {
-  if (crumbs.length === 0) return null
-
-  return (
-    <nav className="flex items-center text-sm">
-      {crumbs.map((crumb, index, array) => (
-        <React.Fragment key={crumb.path}>
-          {index > 0 && (
-            <span className="mx-2 text-slate-300 dark:text-slate-600">/</span>
-          )}
-          {index === array.length - 1 ? (
-            <span className="font-medium text-slate-900 dark:text-white">
-              {crumb.label}
-            </span>
-          ) : (
-            <Link
-              to={crumb.path}
-              className="text-slate-500 hover:text-primary transition-colors"
-            >
-              {crumb.label}
-            </Link>
-          )}
-        </React.Fragment>
-      ))}
-    </nav>
-  )
-}
 
 /**
  * Context for compound components
@@ -98,14 +62,8 @@ export const AppHeaderRoot = React.memo(function AppHeader({
   basePath,
   context = 'tenant',
   variant = 'full',
-  breadcrumbs: customBreadcrumbs,
-  breadcrumbOptions,
   children,
 }: AppHeaderProps) {
-  // Use custom breadcrumbs or generate from hook
-  const defaultBreadcrumbs = useBreadcrumbs(context, breadcrumbOptions)
-  const breadcrumbs = customBreadcrumbs ?? defaultBreadcrumbs
-
   const contextValue: AppHeaderContextValue = React.useMemo(
     () => ({ basePath, context }),
     [basePath, context]
@@ -117,17 +75,14 @@ export const AppHeaderRoot = React.memo(function AppHeader({
     const effectiveVariant = variant === 'custom' ? 'full' : variant
     return (
       <AppHeaderContext.Provider value={contextValue}>
-        <HeaderContent
-          breadcrumbs={breadcrumbs}
-          variant={effectiveVariant}
-        />
+        <HeaderContent variant={effectiveVariant} />
       </AppHeaderContext.Provider>
     )
   }
 
   return (
     <AppHeaderContext.Provider value={contextValue}>
-      <HeaderWrapper breadcrumbs={breadcrumbs}>
+      <HeaderWrapper>
         {children}
       </HeaderWrapper>
     </AppHeaderContext.Provider>
@@ -138,10 +93,8 @@ export const AppHeaderRoot = React.memo(function AppHeader({
  * Header wrapper for compound components
  */
 function HeaderWrapper({
-  breadcrumbs,
   children,
 }: {
-  breadcrumbs: Breadcrumb[]
   children: React.ReactNode
 }) {
   // Group children by section using slot prop
@@ -164,12 +117,9 @@ function HeaderWrapper({
 
   return (
     <header className="h-16 flex items-center justify-between px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex-none shrink-0">
-      {/* Left: Sidebar toggle + Mobile menu + Breadcrumbs */}
+      {/* Left: Sidebar toggle + Mobile menu */}
       <div className="flex items-center gap-3">
         {leftChildren}
-        <div className="ml-1">
-          <DefaultBreadcrumbs crumbs={breadcrumbs} />
-        </div>
       </div>
 
       {/* Right: Actions */}
@@ -184,10 +134,8 @@ function HeaderWrapper({
  * Header content for variant presets
  */
 function HeaderContent({
-  breadcrumbs,
   variant,
 }: {
-  breadcrumbs: Breadcrumb[]
   variant: HeaderVariant
 }) {
   const renderContent = () => {
@@ -195,22 +143,14 @@ function HeaderContent({
       case 'minimal':
         return (
           <header className="h-16 flex items-center justify-between px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex-none shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="ml-1">
-                <DefaultBreadcrumbs crumbs={breadcrumbs} />
-              </div>
-            </div>
+            <div className="flex items-center gap-3" />
           </header>
         )
 
       case 'compact':
         return (
           <header className="h-16 flex items-center justify-between px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex-none shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="ml-1">
-                <DefaultBreadcrumbs crumbs={breadcrumbs} />
-              </div>
-            </div>
+            <div className="flex items-center gap-3" />
             <div className="flex items-center gap-4">
               <ThemeToggle />
               <LanguageSwitcher />
@@ -222,11 +162,7 @@ function HeaderContent({
       case 'full':
         return (
           <header className="h-16 flex items-center justify-between px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex-none shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="ml-1">
-                <DefaultBreadcrumbs crumbs={breadcrumbs} />
-              </div>
-            </div>
+            <div className="flex items-center gap-3" />
             <div className="flex items-center gap-4">
               <Search />
               <ThemeToggle />

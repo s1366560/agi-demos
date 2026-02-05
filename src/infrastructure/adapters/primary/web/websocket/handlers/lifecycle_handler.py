@@ -28,13 +28,8 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
 
     async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
         """Subscribe to agent lifecycle state updates and send current state."""
-        from temporalio.client import WorkflowExecutionStatus
-
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            ProjectAgentWorkflow,
-            get_project_agent_workflow_id,
-        )
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
         project_id = message.get("project_id")
 
@@ -52,80 +47,12 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
 
             # Query current agent state and send immediately
             try:
-                client = await TemporalClientFactory.get_client()
-                workflow_id = get_project_agent_workflow_id(context.tenant_id, project_id)
-                handle = client.get_workflow_handle(workflow_id)
-
-                try:
-                    describe = await handle.describe()
-                    if describe.status == WorkflowExecutionStatus.RUNNING:
-                        # Query current status from workflow
-                        try:
-                            status = await handle.query(ProjectAgentWorkflow.get_status)
-                            # Derive lifecycle state from status
-                            lifecycle_state = "ready"
-                            if status.error:
-                                lifecycle_state = "error"
-                            elif not status.is_initialized:
-                                lifecycle_state = "initializing"
-                            elif status.active_chats > 0:
-                                lifecycle_state = "executing"
-
-                            # Send current state to this subscriber
-                            await context.send_json(
-                                {
-                                    "type": "lifecycle_state_change",
-                                    "project_id": project_id,
-                                    "data": {
-                                        "lifecycle_state": lifecycle_state,
-                                        "is_active": status.is_active,
-                                        "is_initialized": status.is_initialized,
-                                        "tool_count": status.tool_count or 0,
-                                        "skill_count": 0,
-                                        "subagent_count": 0,
-                                        "error_message": status.error,
-                                    },
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            )
-                            logger.debug(
-                                f"[WS] Sent current lifecycle state for {project_id}: "
-                                f"lifecycle={lifecycle_state}, is_active={status.is_active}"
-                            )
-                        except Exception as query_err:
-                            logger.debug(
-                                f"[WS] Could not query workflow state: {query_err}, "
-                                "sending default ready state"
-                            )
-                            # Workflow is running but query failed, assume ready
-                            await context.send_json(
-                                {
-                                    "type": "lifecycle_state_change",
-                                    "project_id": project_id,
-                                    "data": {
-                                        "lifecycle_state": "ready",
-                                        "is_active": True,
-                                        "is_initialized": True,
-                                    },
-                                    "timestamp": datetime.utcnow().isoformat(),
-                                }
-                            )
-                    else:
-                        # Workflow exists but not running (completed/failed/etc)
-                        await context.send_json(
-                            {
-                                "type": "lifecycle_state_change",
-                                "project_id": project_id,
-                                "data": {
-                                    "lifecycle_state": "uninitialized",
-                                    "is_active": False,
-                                    "is_initialized": False,
-                                },
-                                "timestamp": datetime.utcnow().isoformat(),
-                            }
-                        )
-                except Exception:
-                    # Workflow doesn't exist - agent is uninitialized
+                actor = await get_actor_if_exists(
+                    tenant_id=context.tenant_id,
+                    project_id=project_id,
+                    agent_mode="default",
+                )
+                if not actor:
                     await context.send_json(
                         {
                             "type": "lifecycle_state_change",
@@ -139,12 +66,40 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                         }
                     )
                     logger.debug(
-                        f"[WS] Agent workflow not found for {project_id}, sent uninitialized"
+                        f"[WS] Agent actor not found for {project_id}, sent uninitialized"
                     )
+                    return
+
+                status = await await_ray(actor.status.remote())
+                lifecycle_state = "ready"
+                if not status.is_initialized:
+                    lifecycle_state = "initializing"
+                elif status.is_executing:
+                    lifecycle_state = "executing"
+
+                await context.send_json(
+                    {
+                        "type": "lifecycle_state_change",
+                        "project_id": project_id,
+                        "data": {
+                            "lifecycle_state": lifecycle_state,
+                            "is_active": status.is_active,
+                            "is_initialized": status.is_initialized,
+                            "tool_count": status.tool_count or 0,
+                            "skill_count": status.skill_count or 0,
+                            "subagent_count": status.subagent_count or 0,
+                            "error_message": None,
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                logger.debug(
+                    f"[WS] Sent current lifecycle state for {project_id}: "
+                    f"lifecycle={lifecycle_state}, is_active={status.is_active}"
+                )
 
             except Exception as state_err:
                 logger.warning(f"[WS] Could not query current agent state: {state_err}")
-                # Don't fail the subscription, just log the warning
 
         except Exception as e:
             logger.error(f"[WS] Error subscribing to lifecycle state: {e}", exc_info=True)
@@ -173,22 +128,23 @@ class UnsubscribeLifecycleStateHandler(WebSocketMessageHandler):
 
 
 class StartAgentHandler(WebSocketMessageHandler):
-    """Handle start_agent: Start the Agent Session Workflow for a project."""
+    """Handle start_agent: Start the Agent Actor for a project."""
 
     @property
     def message_type(self) -> str:
         return "start_agent"
 
     async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
-        """Start the Agent Session Workflow for a project."""
-        from temporalio.client import WorkflowExecutionStatus
-
+        """Start the Agent Actor for a project."""
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            ProjectAgentWorkflowInput,
-            get_project_agent_workflow_id,
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import (
+            get_actor_if_exists,
+            get_or_create_actor,
+            register_project,
         )
+        from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
+        from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
 
         project_id = message.get("project_id")
         if not project_id:
@@ -200,56 +156,55 @@ class StartAgentHandler(WebSocketMessageHandler):
             await _ensure_sandbox_exists(context, project_id)
 
             settings = get_settings()
-            workflow_id = get_project_agent_workflow_id(
+            agent_mode = "default"
+
+            existing = await get_actor_if_exists(
                 tenant_id=context.tenant_id,
                 project_id=project_id,
-                agent_mode="default",
+                agent_mode=agent_mode,
             )
+            if existing:
+                await context.send_json(
+                    {
+                        "type": "agent_lifecycle_ack",
+                        "action": "start_agent",
+                        "project_id": project_id,
+                        "status": "already_running",
+                        "workflow_id": ProjectAgentActor.actor_id(
+                            context.tenant_id,
+                            project_id,
+                            agent_mode,
+                        ),
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
+                return
 
-            client = await TemporalClientFactory.get_client()
-            handle = client.get_workflow_handle(workflow_id)
-
-            # Check if already running
-            try:
-                describe = await handle.describe()
-                if describe.status == WorkflowExecutionStatus.RUNNING:
-                    await context.send_json(
-                        {
-                            "type": "agent_lifecycle_ack",
-                            "action": "start_agent",
-                            "project_id": project_id,
-                            "status": "already_running",
-                            "workflow_id": workflow_id,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    )
-                    return
-            except Exception:
-                # Workflow doesn't exist, we can start it
-                pass
-
-            # Start new workflow
-            config = ProjectAgentWorkflowInput(
+            config = ProjectAgentActorConfig(
                 tenant_id=context.tenant_id,
                 project_id=project_id,
-                agent_mode="default",
+                agent_mode=agent_mode,
+                model=_get_model_from_settings(settings),
+                api_key=_get_api_key_from_settings(settings),
+                base_url=_get_base_url_from_settings(settings),
+                temperature=0.7,
+                max_tokens=settings.agent_max_tokens,
                 max_steps=settings.agent_max_steps,
                 persistent=True,
                 mcp_tools_ttl_seconds=300,
             )
 
-            from src.configuration.temporal_settings import get_temporal_settings
-
-            temporal_settings = get_temporal_settings()
-
-            await client.start_workflow(
-                "project_agent",
-                config,
-                id=workflow_id,
-                task_queue=temporal_settings.agent_temporal_task_queue,
+            await register_project(context.tenant_id, project_id)
+            actor = await get_or_create_actor(
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+                agent_mode=agent_mode,
+                config=config,
             )
+            await await_ray(actor.status.remote())
 
-            logger.info(f"[WS] Started Project Agent: {workflow_id}")
+            actor_id = ProjectAgentActor.actor_id(context.tenant_id, project_id, agent_mode)
+            logger.info(f"[WS] Started Project Agent Actor: {actor_id}")
 
             await context.send_json(
                 {
@@ -257,7 +212,7 @@ class StartAgentHandler(WebSocketMessageHandler):
                     "action": "start_agent",
                     "project_id": project_id,
                     "status": "started",
-                    "workflow_id": workflow_id,
+                    "workflow_id": actor_id,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
@@ -279,21 +234,19 @@ class StartAgentHandler(WebSocketMessageHandler):
 
 
 class StopAgentHandler(WebSocketMessageHandler):
-    """Handle stop_agent: Stop the Agent Session Workflow for a project."""
+    """Handle stop_agent: Stop the Agent Actor for a project."""
 
     @property
     def message_type(self) -> str:
         return "stop_agent"
 
     async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
-        """Stop the Agent Session Workflow for a project."""
-        from temporalio.client import WorkflowExecutionStatus
+        """Stop the Agent Actor for a project."""
+        import ray
 
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            ProjectAgentWorkflow,
-            get_project_agent_workflow_id,
-        )
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
+        from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
 
         project_id = message.get("project_id")
         if not project_id:
@@ -301,47 +254,29 @@ class StopAgentHandler(WebSocketMessageHandler):
             return
 
         try:
-            workflow_id = get_project_agent_workflow_id(
+            actor_id = ProjectAgentActor.actor_id(context.tenant_id, project_id, "default")
+            actor = await get_actor_if_exists(
                 tenant_id=context.tenant_id,
                 project_id=project_id,
                 agent_mode="default",
             )
-
-            client = await TemporalClientFactory.get_client()
-            handle = client.get_workflow_handle(workflow_id)
-
-            # Check if running
-            try:
-                describe = await handle.describe()
-                if describe.status != WorkflowExecutionStatus.RUNNING:
-                    await context.send_json(
-                        {
-                            "type": "agent_lifecycle_ack",
-                            "action": "stop_agent",
-                            "project_id": project_id,
-                            "status": "not_running",
-                            "workflow_id": workflow_id,
-                            "timestamp": datetime.utcnow().isoformat(),
-                        }
-                    )
-                    return
-            except Exception:
+            if not actor:
                 await context.send_json(
                     {
                         "type": "agent_lifecycle_ack",
                         "action": "stop_agent",
                         "project_id": project_id,
                         "status": "not_found",
-                        "workflow_id": workflow_id,
+                        "workflow_id": actor_id,
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 )
                 return
 
-            # Send stop signal
-            await handle.signal(ProjectAgentWorkflow.stop)
+            await await_ray(actor.shutdown.remote())
+            ray.kill(actor, no_restart=True)
 
-            logger.info(f"[WS] Sent stop signal to Project Agent: {workflow_id}")
+            logger.info(f"[WS] Stopped Project Agent Actor: {actor_id}")
 
             await context.send_json(
                 {
@@ -349,7 +284,7 @@ class StopAgentHandler(WebSocketMessageHandler):
                     "action": "stop_agent",
                     "project_id": project_id,
                     "status": "stopping",
-                    "workflow_id": workflow_id,
+                    "workflow_id": actor_id,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
@@ -371,23 +306,25 @@ class StopAgentHandler(WebSocketMessageHandler):
 
 
 class RestartAgentHandler(WebSocketMessageHandler):
-    """Handle restart_agent: Restart the Agent Session Workflow for a project."""
+    """Handle restart_agent: Restart the Agent Actor for a project."""
 
     @property
     def message_type(self) -> str:
         return "restart_agent"
 
     async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
-        """Restart the Agent Session Workflow for a project."""
-        from temporalio.client import WorkflowExecutionStatus
+        """Restart the Agent Actor for a project."""
+        import ray
 
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            ProjectAgentWorkflow,
-            ProjectAgentWorkflowInput,
-            get_project_agent_workflow_id,
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import (
+            get_actor_if_exists,
+            get_or_create_actor,
+            register_project,
         )
+        from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
+        from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
 
         project_id = message.get("project_id")
         if not project_id:
@@ -399,14 +336,8 @@ class RestartAgentHandler(WebSocketMessageHandler):
             await _sync_and_repair_sandbox(context, project_id)
 
             settings = get_settings()
-            workflow_id = get_project_agent_workflow_id(
-                tenant_id=context.tenant_id,
-                project_id=project_id,
-                agent_mode="default",
-            )
-
-            client = await TemporalClientFactory.get_client()
-            handle = client.get_workflow_handle(workflow_id)
+            agent_mode = "default"
+            actor_id = ProjectAgentActor.actor_id(context.tenant_id, project_id, agent_mode)
 
             # First, notify restarting state
             await context.connection_manager.broadcast_lifecycle_state(
@@ -419,38 +350,40 @@ class RestartAgentHandler(WebSocketMessageHandler):
                 },
             )
 
-            # Stop existing workflow if running
-            try:
-                describe = await handle.describe()
-                if describe.status == WorkflowExecutionStatus.RUNNING:
-                    await handle.signal(ProjectAgentWorkflow.restart)
-                    # Wait for it to stop
-                    await asyncio.sleep(2)
-            except Exception:
-                pass  # Workflow doesn't exist, which is fine
-
-            # Start new workflow
-            config = ProjectAgentWorkflowInput(
+            existing = await get_actor_if_exists(
                 tenant_id=context.tenant_id,
                 project_id=project_id,
-                agent_mode="default",
+                agent_mode=agent_mode,
+            )
+            if existing:
+                await await_ray(existing.shutdown.remote())
+                ray.kill(existing, no_restart=True)
+                await asyncio.sleep(1)
+
+            config = ProjectAgentActorConfig(
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+                agent_mode=agent_mode,
+                model=_get_model_from_settings(settings),
+                api_key=_get_api_key_from_settings(settings),
+                base_url=_get_base_url_from_settings(settings),
+                temperature=0.7,
+                max_tokens=settings.agent_max_tokens,
                 max_steps=settings.agent_max_steps,
                 persistent=True,
                 mcp_tools_ttl_seconds=300,
             )
 
-            from src.configuration.temporal_settings import get_temporal_settings
-
-            temporal_settings = get_temporal_settings()
-
-            await client.start_workflow(
-                "project_agent",
-                config,
-                id=workflow_id,
-                task_queue=temporal_settings.agent_temporal_task_queue,
+            await register_project(context.tenant_id, project_id)
+            actor = await get_or_create_actor(
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+                agent_mode=agent_mode,
+                config=config,
             )
+            await await_ray(actor.initialize.remote(config, True))
 
-            logger.info(f"[WS] Restarted Project Agent: {workflow_id}")
+            logger.info(f"[WS] Restarted Project Agent Actor: {actor_id}")
 
             await context.send_json(
                 {
@@ -458,7 +391,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
                     "action": "restart_agent",
                     "project_id": project_id,
                     "status": "restarted",
-                    "workflow_id": workflow_id,
+                    "workflow_id": actor_id,
                     "timestamp": datetime.utcnow().isoformat(),
                 }
             )
@@ -482,6 +415,47 @@ class RestartAgentHandler(WebSocketMessageHandler):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+def _get_api_key_from_settings(settings) -> str | None:
+    provider = settings.llm_provider.strip().lower()
+    if provider == "openai":
+        return settings.openai_api_key
+    if provider == "qwen":
+        return settings.qwen_api_key
+    if provider == "deepseek":
+        return settings.deepseek_api_key
+    if provider == "gemini":
+        return settings.gemini_api_key
+    if provider == "zai" or provider == "zhipu":
+        return settings.zai_api_key
+    return None
+
+
+def _get_base_url_from_settings(settings) -> str | None:
+    provider = settings.llm_provider.strip().lower()
+    if provider == "openai":
+        return settings.openai_base_url
+    if provider == "qwen":
+        return settings.qwen_base_url
+    if provider == "deepseek":
+        return settings.deepseek_base_url
+    return None
+
+
+def _get_model_from_settings(settings) -> str:
+    provider = settings.llm_provider.strip().lower()
+    if provider == "openai":
+        return settings.openai_model
+    if provider == "qwen":
+        return settings.qwen_model
+    if provider == "deepseek":
+        return settings.deepseek_model
+    if provider == "gemini":
+        return settings.gemini_model
+    if provider == "zai" or provider == "zhipu":
+        return settings.zai_model
+    return "qwen-plus"
 
 
 async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Any:

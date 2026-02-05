@@ -4,10 +4,11 @@ Provides endpoints for event management and execution monitoring:
 - get_conversation_events: Get SSE events for replay
 - get_execution_status: Get current execution status
 - resume_execution: Resume from checkpoint
-- get_workflow_status: Get Temporal workflow status
+- get_workflow_status: Get Ray Actor status
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -259,55 +260,54 @@ async def get_workflow_status(
     request: Request = None,
 ) -> WorkflowStatusResponse:
     """
-    Get the Temporal workflow status for an agent execution.
-
-    This endpoint queries the Temporal server for the current status of the
-    agent execution workflow, including whether it's running, completed, or failed.
+    Get the Ray Actor status for an agent execution.
     """
     try:
-        container = get_container_with_db(request, db)
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
+        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+            SqlConversationRepository,
+        )
 
-        # Get Temporal client (if available)
-        temporal_client = await container.temporal_client()
-        if not temporal_client:
-            raise HTTPException(status_code=501, detail="Temporal workflow engine not configured")
+        conversation_repo = SqlConversationRepository(db)
+        conversation = await conversation_repo.find_by_id(conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
 
-        # Determine workflow ID from message_id or conversation
-        workflow_id = f"agent-exec-{conversation_id}"
-        if message_id:
-            workflow_id = f"agent-exec-{conversation_id}-{message_id}"
+        if conversation.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=403, detail="Access denied to this conversation")
 
-        # Query Temporal for workflow status
-        try:
-            handle = temporal_client.get_workflow_handle(workflow_id)
-            desc = await handle.describe()
-
-            # Map Temporal status to string
-            status_map = {
-                "RUNNING": "RUNNING",
-                "COMPLETED": "COMPLETED",
-                "FAILED": "FAILED",
-                "CANCELED": "CANCELED",
-                "TERMINATED": "TERMINATED",
-                "TIMED_OUT": "TIMED_OUT",
-            }
-            status = status_map.get(str(desc.status), "UNKNOWN")
-
-            return WorkflowStatusResponse(
-                workflow_id=workflow_id,
-                run_id=desc.run_id,
-                status=status,
-                started_at=desc.start_time,
-                completed_at=desc.close_time,
+        actor = await get_actor_if_exists(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            agent_mode="default",
+        )
+        if not actor:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No actor found for conversation {conversation_id}",
             )
 
-        except Exception as e:
-            # Workflow not found or other Temporal error
-            if "not found" in str(e).lower() or "workflow not found" in str(e).lower():
-                raise HTTPException(
-                    status_code=404, detail=f"No workflow found for conversation {conversation_id}"
-                )
-            raise
+        status = await await_ray(actor.status.remote())
+        status_text = "RUNNING" if status.is_executing else "IDLE" if status.is_initialized else "UNINITIALIZED"
+
+        started_at = None
+        if status.created_at:
+            try:
+                started_at = datetime.fromisoformat(status.created_at)
+            except Exception:
+                started_at = None
+
+        return WorkflowStatusResponse(
+            workflow_id=status.actor_id,
+            run_id=None,
+            status=status_text,
+            started_at=started_at,
+            completed_at=None,
+            current_step=None,
+            total_steps=None,
+            error=None,
+        )
 
     except HTTPException:
         raise

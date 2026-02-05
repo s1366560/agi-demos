@@ -187,8 +187,8 @@ class Settings(BaseSettings):
     run_background_workers: bool = Field(default=True, alias="RUN_BACKGROUND_WORKERS")
     queue_batch_size: int = Field(default=1, alias="QUEUE_BATCH_SIZE")
 
-    # Temporal Workflow Engine Settings (migrated from Redis queue)
-    # Note: All task processing now uses Temporal workflows
+    # Temporal Workflow Engine Settings (background workflows)
+    # Note: Agent execution uses Ray Actors; Temporal remains for background workflows.
 
     # Embedding Management
     auto_clear_mismatched_embeddings: bool = Field(
@@ -238,8 +238,7 @@ class Settings(BaseSettings):
     )
 
     # HITL (Human-in-the-Loop) Real-time Optimization
-    # When enabled, uses Redis Streams for low-latency (~30ms) HITL response delivery
-    # Temporal Signal is always used as a reliable backup channel
+    # Uses Redis Streams for low-latency (~30ms) HITL response delivery
     hitl_realtime_enabled: bool = Field(default=True, alias="HITL_REALTIME_ENABLED")
 
     # Agent Execution Limits

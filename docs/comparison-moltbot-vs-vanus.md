@@ -73,7 +73,7 @@
 | **语言/运行时** | TypeScript/Node.js 22+ | Python 3.12+ |
 | **Web 框架** | Hono | FastAPI |
 | **数据存储** | SQLite + 文件系统 | PostgreSQL + Neo4j + Redis |
-| **工作流** | 内置调度 | Temporal.io |
+| **工作流** | 内置调度 | Workflow engine |
 | **Agent 核心** | @mariozechner/pi-agent-core | 自研 ReAct Agent |
 | **LLM 集成** | 直接集成 | LiteLLM (多提供商) |
 
@@ -165,7 +165,7 @@
 | **权限管理** | 设备认证 | RBAC + API Key |
 | **审计日志** | 无 | 有 |
 | **可观测性** | 基础日志 | OpenTelemetry 分布式追踪 |
-| **工作流编排** | 内置简单调度 | Temporal.io 企业级 |
+| **工作流编排** | 内置简单调度 | Workflow engine 企业级 |
 | **数据持久化** | 文件系统 | PostgreSQL + Neo4j + Redis |
 
 ## 六、目录结构对比
@@ -261,7 +261,7 @@ Vanus/
 | 特性 | 说明 |
 |------|------|
 | **知识图谱** | Neo4j 驱动的实体关系图 |
-| **企业级工作流** | Temporal.io 编排 |
+| **企业级工作流** | Workflow engine 编排 |
 | **多租户架构** | 完整的租户和项目隔离 |
 | **自研 Agent** | 四层 ReAct Agent 架构 |
 | **代码执行沙箱** | Docker + VNC 桌面环境 |
@@ -359,7 +359,7 @@ Vanus/
 
 1. **知识图谱**: Neo4j 的图结构比文件系统更强大
 2. **企业级特性**: 多租户、权限、审计是 B 端必备
-3. **工作流编排**: Temporal.io 比内置调度更可靠
+3. **工作流编排**: Workflow engine 比内置调度更可靠
 4. **代码执行沙箱**: Docker 桌面环境更安全可控
 5. **DDD 架构**: 六边形架构更易于测试和扩展
 
@@ -386,7 +386,7 @@ sqlalchemy = ">=2.0.0"
 neo4j = ">=5.26.0"
 redis = ">=5.0.0"
 litellm = ">=1.0.0"
-temporalio = ">=1.0.0"
+workflow = ">=1.0.0"
 
 # 前端
 react = "19.2.0"

@@ -14,6 +14,7 @@ COPY . .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir uv && \
     pip install --no-cache-dir -e .
 
 # Expose port

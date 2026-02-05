@@ -127,9 +127,9 @@ class DesktopStartedEvent(AgentDomainEvent):
 ```
 sandbox-mcp-server (MCP WebSocket Server)
     ↓
-Temporal MCP Worker (MCPTemporalAdapter)
+Workflow MCP Worker (MCPWorkflowAdapter)
     ↓
-Agent Worker (MCPTemporalToolLoader)
+Agent Worker (MCPWorkflowToolLoader)
     ↓
 Agent Session Pool (缓存 MCP 工具, TTL: 5min)
     ↓

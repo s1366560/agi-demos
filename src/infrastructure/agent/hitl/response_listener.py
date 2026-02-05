@@ -2,7 +2,7 @@
 HITL Response Listener for Real-time Response Delivery.
 
 This module provides a listener that consumes HITL responses from Redis Streams
-and delivers them directly to Agent sessions in memory, bypassing Temporal.
+and delivers them directly to Agent sessions in memory.
 
 Architecture:
 - Runs as a background task in each Agent Worker
@@ -11,12 +11,10 @@ Architecture:
 - Delivers responses directly to AgentSessionRegistry
 
 Benefits:
-- ~30ms latency (vs 500ms+ with Temporal Signal)
-- No network round-trip to Temporal Server
+- ~30ms latency
 - Direct in-memory delivery when session is on same Worker
 
 Reliability:
-- Temporal Signal serves as backup channel
 - Consumer Groups ensure at-least-once delivery
 - Message acknowledgment after successful delivery
 """
@@ -284,11 +282,11 @@ class HITLResponseListener:
                 self._messages_skipped += 1
                 logger.debug(
                     f"[HITLListener] No local waiter for request: {request_id} "
-                    f"(will be handled by Temporal Signal backup)"
+                    f"(awaiting actor recovery or stream replay)"
                 )
 
             # Always acknowledge the message
-            # Even if not delivered locally, Temporal Signal backup will handle it
+            # Even if not delivered locally, stream replay or actor routing can handle it
             await self._ack_message(stream_key, msg_id)
 
         except json.JSONDecodeError as e:

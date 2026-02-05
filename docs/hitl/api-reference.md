@@ -312,7 +312,7 @@ GET /hitl/requests/{request_id}
 | `HITL_REQUEST_NOT_PENDING` | 400 | 请求不在待处理状态 |
 | `HITL_REQUEST_EXPIRED` | 409 | 请求已超时 |
 | `HITL_INVALID_RESPONSE` | 400 | 响应格式无效 |
-| `HITL_WORKFLOW_ERROR` | 500 | Temporal 工作流通信失败 |
+| `HITL_ACTOR_ERROR` | 500 | Ray actor resume failed |
 | `HITL_UNAUTHORIZED` | 401 | 未授权访问 |
 | `HITL_FORBIDDEN` | 403 | 无权限操作此请求 |
 

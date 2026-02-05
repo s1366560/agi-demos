@@ -83,7 +83,7 @@ if written_md5 != content_md5:
 
 ### 3. 调用方端到端验证
 
-**文件**: `src/infrastructure/adapters/secondary/temporal/activities/agent_session.py`
+**文件**: `src/infrastructure/agent/actor/execution.py`
 
 在 `_sync_files_to_sandbox` 中比对 MD5：
 
@@ -193,7 +193,7 @@ curl -X POST http://localhost:8000/api/v1/attachments/upload/simple \
 2. `sandbox-mcp-server/src/tools/import_tools.py`
    - `import_file()` 添加完整性验证
 
-3. `src/infrastructure/adapters/secondary/temporal/activities/agent_session.py`
+3. `src/infrastructure/agent/actor/execution.py`
    - `_prepare_attachments()` 添加 base64 验证日志
    - `_sync_files_to_sandbox()` 添加端到端 MD5 验证
    - 修复 `SqlAlchemyProjectSandboxRepository` 类名和方法名

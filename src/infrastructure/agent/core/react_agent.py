@@ -17,6 +17,7 @@ Features:
 Reference: OpenCode SessionProcessor architecture
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime
@@ -526,6 +527,7 @@ class ReActAgent:
         attachment_content: Optional[List[Dict[str, Any]]] = None,
         attachment_metadata: Optional[List[Dict[str, Any]]] = None,
         hitl_response: Optional[Dict[str, Any]] = None,
+        abort_signal: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -884,6 +886,7 @@ class ReActAgent:
                 session_id=conversation_id,
                 messages=messages,
                 langfuse_context=langfuse_context,
+                abort_signal=abort_signal,
             ):
                 # Convert AgentDomainEvent to legacy event format
                 event = self._convert_domain_event(domain_event)

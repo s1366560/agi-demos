@@ -30,7 +30,7 @@ services:
       - TEMPORAL_HOST=temporal
       - TEMPORAL_PORT=7233
       # LLM Providers (from .env)
-      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - LLM_PROVIDER=${LLM_PROVIDER:-zai}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

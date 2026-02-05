@@ -89,24 +89,16 @@ async def monitor_agent_status(
     """
     Monitor Agent Session status and push updates via WebSocket.
 
-    Runs as a background task and periodically queries the Temporal
-    workflow status, sending updates to the client when status changes.
+    Runs as a background task and periodically queries the Ray Actor
+    status, sending updates to the client when status changes.
     """
     from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
         get_connection_manager,
     )
-    from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-    from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-        ProjectAgentWorkflowStatus,
-        get_project_agent_workflow_id,
-    )
+    from src.infrastructure.adapters.secondary.ray.client import await_ray
+    from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
     manager = get_connection_manager()
-    workflow_id = get_project_agent_workflow_id(
-        tenant_id=tenant_id,
-        project_id=project_id,
-        agent_mode="default",
-    )
 
     last_status = None
 
@@ -126,32 +118,34 @@ async def monitor_agent_status(
                     )
                     break
 
-                # Query Temporal for status
-                temporal_client = await TemporalClientFactory.get_client()
                 status_data = {
                     "is_initialized": False,
                     "is_active": False,
                     "total_chats": 0,
                     "active_chats": 0,
                     "tool_count": 0,
-                    "workflow_id": workflow_id,
+                    "workflow_id": "",
                 }
 
-                if temporal_client:
+                actor = await get_actor_if_exists(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    agent_mode="default",
+                )
+                if actor:
                     try:
-                        handle = temporal_client.get_workflow_handle(workflow_id)
-                        status: ProjectAgentWorkflowStatus = await handle.query("get_status")
+                        status = await await_ray(actor.status.remote())
                         status_data = {
                             "is_initialized": status.is_initialized,
                             "is_active": status.is_active,
                             "total_chats": status.total_chats,
                             "active_chats": status.active_chats,
                             "tool_count": status.tool_count,
-                            "cached_since": getattr(status, "created_at", None),
-                            "workflow_id": workflow_id,
+                            "cached_since": status.created_at,
+                            "workflow_id": status.actor_id,
                         }
                     except Exception:
-                        # Workflow not found, return default (uninitialized) status
+                        # Actor not reachable, return default
                         pass
 
                 # Only send if status changed
