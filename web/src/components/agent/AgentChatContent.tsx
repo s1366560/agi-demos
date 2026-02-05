@@ -141,7 +141,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       setProjectId(projectId);
       subscribeSSE(projectId);
       // Try to ensure sandbox exists and get sandboxId
-      ensureSandbox().then((sandboxId) => {
+      // Pass projectId directly to avoid race condition with setProjectId
+      ensureSandbox(projectId).then((sandboxId) => {
         if (sandboxId) {
           setSandboxId(sandboxId);
         }

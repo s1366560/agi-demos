@@ -565,13 +565,39 @@ class MCPSandboxAdapter(SandboxPort):
     # === SandboxPort interface implementation ===
 
     async def get_sandbox(self, sandbox_id: str) -> Optional[MCPSandboxInstance]:
-        """Get sandbox instance by ID."""
-        if sandbox_id not in self._active_sandboxes:
-            return None
+        """Get sandbox instance by ID.
+        
+        If the sandbox is not in memory but exists in Docker, attempt to recover it.
+        This handles API restarts where the in-memory cache is lost.
+        """
+        # Fast path: sandbox is already in memory
+        if sandbox_id in self._active_sandboxes:
+            instance = self._active_sandboxes[sandbox_id]
 
-        instance = self._active_sandboxes[sandbox_id]
+            # Update status from Docker
+            try:
+                loop = asyncio.get_event_loop()
+                container = await loop.run_in_executor(
+                    None,
+                    lambda: self._docker.containers.get(sandbox_id),
+                )
 
-        # Update status from Docker
+                status_map = {
+                    "running": SandboxStatus.RUNNING,
+                    "exited": SandboxStatus.STOPPED,
+                    "created": SandboxStatus.CREATING,
+                }
+                instance.status = status_map.get(container.status, SandboxStatus.ERROR)
+
+            except NotFound:
+                del self._active_sandboxes[sandbox_id]
+                return None
+            except Exception as e:
+                logger.warning(f"Error getting sandbox status: {e}")
+
+            return instance
+
+        # Recovery path: sandbox not in memory, check Docker
         try:
             loop = asyncio.get_event_loop()
             container = await loop.run_in_executor(
@@ -579,20 +605,94 @@ class MCPSandboxAdapter(SandboxPort):
                 lambda: self._docker.containers.get(sandbox_id),
             )
 
-            status_map = {
-                "running": SandboxStatus.RUNNING,
-                "exited": SandboxStatus.STOPPED,
-                "created": SandboxStatus.CREATING,
-            }
-            instance.status = status_map.get(container.status, SandboxStatus.ERROR)
+            # Container exists but not in memory - recover it
+            if container.status == "running":
+                logger.info(f"Recovering sandbox {sandbox_id} from Docker (API restart)")
+                
+                labels = container.labels or {}
+                
+                # Extract port information from labels
+                mcp_port_str = labels.get("memstack.sandbox.mcp_port", "")
+                desktop_port_str = labels.get("memstack.sandbox.desktop_port", "")
+                terminal_port_str = labels.get("memstack.sandbox.terminal_port", "")
+
+                mcp_port = int(mcp_port_str) if mcp_port_str else None
+                desktop_port = int(desktop_port_str) if desktop_port_str else None
+                terminal_port = int(terminal_port_str) if terminal_port_str else None
+
+                # Get project path from volume mounts
+                project_path = ""
+                mounts = container.attrs.get("Mounts", [])
+                for mount in mounts:
+                    if mount.get("Destination") == "/workspace":
+                        project_path = mount.get("Source", "")
+                        break
+
+                # Build URLs if ports are available
+                websocket_url = None
+                desktop_url = None
+                terminal_url = None
+                if mcp_port:
+                    from src.application.services.sandbox_url_service import (
+                        SandboxInstanceInfo,
+                        SandboxUrlService,
+                    )
+                    url_service = SandboxUrlService()
+                    instance_info = SandboxInstanceInfo(
+                        mcp_port=mcp_port,
+                        desktop_port=desktop_port or 0,
+                        terminal_port=terminal_port or 0,
+                        sandbox_id=sandbox_id,
+                        host="localhost",
+                    )
+                    urls = url_service.build_all_urls(instance_info)
+                    websocket_url = urls.mcp_url
+                    desktop_url = urls.desktop_url if desktop_port else None
+                    terminal_url = urls.terminal_url if terminal_port else None
+
+                # Create instance record
+                from datetime import datetime
+                now = datetime.now()
+                instance = MCPSandboxInstance(
+                    id=sandbox_id,
+                    status=SandboxStatus.RUNNING,
+                    config=SandboxConfig(image=self._mcp_image),
+                    project_path=project_path,
+                    endpoint=websocket_url,
+                    created_at=now,
+                    last_activity_at=now,
+                    websocket_url=websocket_url,
+                    mcp_client=None,  # Will connect on first use
+                    mcp_port=mcp_port,
+                    desktop_port=desktop_port,
+                    terminal_port=terminal_port,
+                    desktop_url=desktop_url,
+                    terminal_url=terminal_url,
+                    labels=labels,
+                )
+
+                async with self._lock:
+                    self._active_sandboxes[sandbox_id] = instance
+                    # Track used ports
+                    if mcp_port:
+                        self._used_ports.add(mcp_port)
+                    if desktop_port:
+                        self._used_ports.add(desktop_port)
+                    if terminal_port:
+                        self._used_ports.add(terminal_port)
+
+                logger.info(f"Successfully recovered sandbox {sandbox_id} (MCP: {mcp_port}, Desktop: {desktop_port}, Terminal: {terminal_port})")
+                return instance
+            else:
+                # Container exists but not running
+                return None
 
         except NotFound:
-            del self._active_sandboxes[sandbox_id]
+            # Container doesn't exist in Docker either
             return None
         except Exception as e:
-            logger.warning(f"Error getting sandbox status: {e}")
-
-        return instance
+            logger.warning(f"Error recovering sandbox {sandbox_id} from Docker: {e}")
+            return None
 
     async def terminate_sandbox(self, sandbox_id: str) -> bool:
         """Terminate a sandbox container with proper cleanup and locking."""

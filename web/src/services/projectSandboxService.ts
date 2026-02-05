@@ -325,6 +325,9 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
 
     /**
      * Internal method to actually call the API
+     * 
+     * Uses extended timeout (60s) because sandbox creation can take a while
+     * when Docker containers need to be started.
      */
     private async _doEnsureSandbox(
         projectId: string,
@@ -335,6 +338,9 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
             {
                 profile: request.profile,
                 auto_create: request.auto_create ?? true,
+            },
+            {
+                timeout: 60000, // 60 seconds for sandbox creation
             }
         );
         return response;
@@ -404,7 +410,9 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     ): Promise<DesktopStatus> {
         logger.debug(`[ProjectSandboxService] Starting desktop for project: ${projectId}`);
         const response = await this.api.post<any>(
-            `/projects/${projectId}/sandbox/desktop?resolution=${encodeURIComponent(resolution)}`
+            `/projects/${projectId}/sandbox/desktop?resolution=${encodeURIComponent(resolution)}`,
+            undefined,
+            { timeout: 30000 } // 30 seconds for desktop service startup
         );
 
         // Build proxy URL instead of using direct container URL
@@ -430,7 +438,9 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     async startTerminal(projectId: string): Promise<TerminalStatus> {
         logger.debug(`[ProjectSandboxService] Starting terminal for project: ${projectId}`);
         const response = await this.api.post<any>(
-            `/projects/${projectId}/sandbox/terminal`
+            `/projects/${projectId}/sandbox/terminal`,
+            undefined,
+            { timeout: 30000 } // 30 seconds for terminal service startup
         );
 
         // Build WebSocket URL if session_id is provided

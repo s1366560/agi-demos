@@ -23,6 +23,8 @@ import "@xterm/xterm/css/xterm.css";
 export interface SandboxTerminalProps {
   /** Sandbox container ID */
   sandboxId: string;
+  /** Project ID for project-scoped WebSocket */
+  projectId?: string;
   /** Optional existing session ID to reconnect */
   sessionId?: string;
   /** Called when terminal connects */
@@ -44,6 +46,7 @@ const TerminalImpl = lazy(() => import('./TerminalImpl'));
 
 export function SandboxTerminal({
   sandboxId,
+  projectId,
   sessionId: initialSessionId,
   onConnect,
   onDisconnect,
@@ -167,6 +170,7 @@ export function SandboxTerminal({
         }>
           <TerminalImpl
             sandboxId={sandboxId}
+            projectId={projectId}
             sessionId={sessionId || undefined}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}

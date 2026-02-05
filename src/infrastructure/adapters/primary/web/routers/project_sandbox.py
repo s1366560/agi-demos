@@ -6,11 +6,14 @@ Provides REST API endpoints for managing persistent sandboxes per project:
 - Health monitoring and auto-recovery
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from src.application.services.project_sandbox_lifecycle_service import (
@@ -793,12 +796,14 @@ async def stop_project_terminal(
 async def proxy_project_desktop(
     project_id: str,
     path: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Proxy requests to the project's sandbox desktop (noVNC) service.
     
     This allows browser access to the desktop without exposing container ports directly.
+    Uses httpx to proxy all content (HTML, JS, CSS, WebSocket) through the API server.
     """
     info = await service.get_project_sandbox(project_id)
     
@@ -814,30 +819,75 @@ async def proxy_project_desktop(
             detail=f"Desktop service is not running for project {project_id}",
         )
     
-    # Import here to avoid circular imports
-    from fastapi.responses import RedirectResponse
+    # Build target URL from the desktop service URL
+    import httpx
+    from fastapi.responses import StreamingResponse
     
-    # Redirect to the actual desktop URL
-    # The desktop URL from sandbox info should already contain the full URL
-    target_url = info.desktop_url
-    if path and path != "vnc.html":
-        # If a specific path is requested, append it
-        target_url = target_url.replace("/vnc.html", f"/{path}")
+    target_base = info.desktop_url.rstrip("/").replace("/vnc.html", "")
+    target_path = path if path else "vnc.html"
+    target_url = f"{target_base}/{target_path}"
     
-    return RedirectResponse(url=target_url, status_code=307)
+    # Copy query parameters
+    if request.query_params:
+        target_url += f"?{request.query_params}"
+    
+    try:
+        # Proxy the request to the desktop service
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Forward the request with appropriate headers
+            headers = {}
+            for header in ["accept", "accept-encoding", "accept-language", "cache-control"]:
+                if header in request.headers:
+                    headers[header] = request.headers[header]
+            
+            response = await client.get(target_url, headers=headers)
+            
+            # Return the response with appropriate content type
+            content_type = response.headers.get("content-type", "application/octet-stream")
+            
+            # For HTML/JS/CSS, rewrite URLs to use proxy path
+            content = response.content
+            if content_type.startswith("text/html") or content_type.startswith("application/javascript"):
+                content_str = content.decode("utf-8", errors="replace")
+                # Rewrite relative URLs to use proxy path
+                proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
+                content_str = content_str.replace('href="/', f'href="{proxy_prefix}')
+                content_str = content_str.replace('src="/', f'src="{proxy_prefix}')
+                content_str = content_str.replace("href='/", f"href='{proxy_prefix}")
+                content_str = content_str.replace("src='/", f"src='{proxy_prefix}")
+                content = content_str.encode("utf-8")
+            
+            return StreamingResponse(
+                iter([content]),
+                status_code=response.status_code,
+                headers={"content-type": content_type},
+            )
+    except httpx.RequestError as e:
+        logger.error(f"Failed to proxy desktop request to {target_url}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to connect to desktop service: {str(e)}"
+        )
 
 
 @router.websocket("/{project_id}/sandbox/terminal/proxy/ws")
 async def proxy_project_terminal_websocket(
     websocket: WebSocket,
     project_id: str,
+    session_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """WebSocket proxy for the project's sandbox terminal service.
     
     This allows browser WebSocket connections to the terminal without exposing container ports.
+    Uses the terminal proxy to create/manage sessions with Docker containers.
     """
+    from src.infrastructure.adapters.secondary.sandbox.terminal_proxy import (
+        TerminalSession,
+        get_terminal_proxy,
+    )
+    
     info = await service.get_project_sandbox(project_id)
     
     if not info:
@@ -851,50 +901,91 @@ async def proxy_project_terminal_websocket(
     # Accept the WebSocket connection
     await websocket.accept()
     
-    # Import aiohttp for proxying WebSocket connections
-    try:
-        import aiohttp
-    except ImportError:
-        await websocket.send_json({"type": "error", "message": "WebSocket proxy not available"})
-        await websocket.close()
-        return
-    
-    # Connect to the backend terminal WebSocket
-    target_ws_url = info.terminal_url
+    proxy = get_terminal_proxy()
+    session: Optional[TerminalSession] = None
     
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(target_ws_url) as target_ws:
-                # Create bidirectional relay tasks
-                async def client_to_target():
-                    try:
-                        while True:
-                            msg = await websocket.receive_text()
-                            await target_ws.send_str(msg)
-                    except Exception:
-                        pass
+        # Create or get session using terminal proxy (docker exec)
+        if session_id:
+            session = proxy.get_session(session_id)
+            if not session or session.container_id != info.sandbox_id:
+                await websocket.send_json({"type": "error", "message": "Session not found"})
+                await websocket.close()
+                return
+        else:
+            # Create new session using docker exec
+            try:
+                session = await proxy.create_session(container_id=info.sandbox_id)
+            except ValueError as e:
+                await websocket.send_json({"type": "error", "message": str(e)})
+                await websocket.close()
+                return
+        
+        # Send connected message
+        await websocket.send_json(
+            {
+                "type": "connected",
+                "session_id": session.session_id,
+                "cols": session.cols,
+                "rows": session.rows,
+            }
+        )
+        
+        # Start output reader task
+        async def read_output():
+            """Background task to read and forward output."""
+            while session and session.is_active:
+                try:
+                    output = await proxy.read_output(session.session_id)
+                    if output is None:
+                        break
+                    if output:
+                        await websocket.send_json({"type": "output", "data": output})
+                except Exception as e:
+                    logger.error(f"Output reader error: {e}")
+                    break
+                await asyncio.sleep(0.01)  # Small delay to prevent CPU spin
+        
+        output_task = asyncio.create_task(read_output())
+        
+        # Process incoming messages
+        try:
+            while True:
+                msg = await websocket.receive_json()
+                msg_type = msg.get("type")
                 
-                async def target_to_client():
-                    try:
-                        async for msg in target_ws:
-                            if msg.type == aiohttp.WSMsgType.TEXT:
-                                await websocket.send_text(msg.data)
-                            elif msg.type == aiohttp.WSMsgType.BINARY:
-                                await websocket.send_bytes(msg.data)
-                            elif msg.type == aiohttp.WSMsgType.CLOSED:
-                                break
-                    except Exception:
-                        pass
+                if msg_type == "input":
+                    data = msg.get("data", "")
+                    await proxy.send_input(session.session_id, data)
                 
-                # Run both directions concurrently
-                await asyncio.gather(client_to_target(), target_to_client())
+                elif msg_type == "resize":
+                    cols = msg.get("cols", 80)
+                    rows = msg.get("rows", 24)
+                    await proxy.resize(session.session_id, cols, rows)
+                
+                elif msg_type == "ping":
+                    await websocket.send_json({"type": "pong"})
+        
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected for session {session.session_id}")
+    
     except Exception as e:
         logger.error(f"Terminal WebSocket proxy error: {e}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
+    
     finally:
+        # Cleanup
+        if "output_task" in locals():
+            output_task.cancel()
+            try:
+                await output_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Don't close session on disconnect - allow reconnection
         try:
             await websocket.close()
         except Exception:

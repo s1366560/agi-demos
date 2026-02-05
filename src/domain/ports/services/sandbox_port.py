@@ -242,10 +242,12 @@ class SandboxError(Exception):
         message: str,
         sandbox_id: Optional[str] = None,
         operation: Optional[str] = None,
+        project_id: Optional[str] = None,
     ):
         self.message = message
         self.sandbox_id = sandbox_id
         self.operation = operation
+        self.project_id = project_id
         super().__init__(self.message)
 
 

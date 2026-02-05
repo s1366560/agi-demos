@@ -24,6 +24,7 @@ interface TerminalMessage {
 
 interface TerminalImplProps {
   sandboxId: string;
+  projectId?: string;
   sessionId?: string;
   onConnect: (sessionId: string) => void;
   onDisconnect: () => void;
@@ -34,6 +35,7 @@ interface TerminalImplProps {
 
 export function TerminalImpl({
   sandboxId,
+  projectId,
   sessionId,
   onConnect,
   onDisconnect,
@@ -50,12 +52,21 @@ export function TerminalImpl({
   const connectRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Get WebSocket URL using centralized utility
+  // Use project-scoped WebSocket proxy endpoint if projectId is available
   const getWsUrl = useCallback(() => {
+    if (projectId) {
+      // New project-scoped terminal WebSocket proxy
+      return createWebSocketUrl(
+        `/projects/${projectId}/sandbox/terminal/proxy/ws`,
+        sessionId ? { session_id: sessionId } : undefined
+      );
+    }
+    // Fallback to legacy sandbox endpoint
     return createWebSocketUrl(
       `/terminal/${sandboxId}/ws`,
       sessionId ? { session_id: sessionId } : undefined
     );
-  }, [sandboxId, sessionId]);
+  }, [projectId, sandboxId, sessionId]);
 
   // Initialize terminal
   const initTerminal = useCallback(() => {

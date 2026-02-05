@@ -59,6 +59,9 @@ export interface SandboxState {
     isDesktopLoading: boolean;
     isTerminalLoading: boolean;
 
+    // Error state
+    error: string | null;
+
     // Tool execution tracking
     currentTool: CurrentTool | null;
     toolExecutions: ToolExecution[];
@@ -87,7 +90,7 @@ export interface SandboxState {
 
     // Project-scoped actions (v2 API)
     setProjectId: (projectId: string | null) => void;
-    ensureSandbox: () => Promise<string | null>;
+    ensureSandbox: (projectId?: string) => Promise<string | null>;
     executeTool: (
         toolName: string,
         args: Record<string, unknown>,
@@ -157,6 +160,7 @@ const initialState = {
     maxExecutions: 50,
     artifacts: new Map<string, Artifact>(),
     artifactsByToolExecution: new Map<string, string[]>(),
+    error: null as string | null,
 };
 
 export const useSandboxStore = create<SandboxState>()(
@@ -186,13 +190,14 @@ export const useSandboxStore = create<SandboxState>()(
 
             // Sandbox connection actions
             setSandboxId: (sandboxId) => {
-                set({
+                set((state) => ({
                     activeSandboxId: sandboxId,
-                    connectionStatus: sandboxId ? "idle" : "idle",
-                    terminalSessionId: null,
-                    desktopStatus: null,
-                    terminalStatus: null,
-                });
+                    connectionStatus: sandboxId ? "connected" : "idle",
+                    // Preserve terminal and desktop status if sandboxId is set
+                    terminalSessionId: sandboxId ? state.terminalSessionId : null,
+                    desktopStatus: sandboxId ? state.desktopStatus : null,
+                    terminalStatus: sandboxId ? state.terminalStatus : null,
+                }));
             },
 
             setConnectionStatus: (status) => {
@@ -226,7 +231,7 @@ export const useSandboxStore = create<SandboxState>()(
             },
 
             // Ensure sandbox exists (v2 API)
-            ensureSandbox: async () => {
+            ensureSandbox: async (projectId?: string) => {
                 const { activeProjectId, activeSandboxId } = get();
 
                 // Return existing sandboxId if available
@@ -234,7 +239,9 @@ export const useSandboxStore = create<SandboxState>()(
                     return activeSandboxId;
                 }
 
-                if (!activeProjectId) {
+                // Use provided projectId or fall back to activeProjectId
+                const targetProjectId = projectId || activeProjectId;
+                if (!targetProjectId) {
                     logger.warn("[SandboxStore] Cannot ensure sandbox: no active project");
                     return null;
                 }
@@ -242,16 +249,18 @@ export const useSandboxStore = create<SandboxState>()(
                 try {
                     set({ connectionStatus: "connecting" });
                     const sandbox = await projectSandboxService.ensureSandbox(
-                        activeProjectId
+                        targetProjectId
                     );
 
                     // Build proxy URLs instead of using direct container URLs
                     // This allows browser access through the API server
                     const proxyDesktopUrl = sandbox.desktop_url
-                        ? `/api/v1/projects/${activeProjectId}/sandbox/desktop/proxy/vnc.html`
+                        ? `/api/v1/projects/${targetProjectId}/sandbox/desktop/proxy/vnc.html`
                         : null;
-                    const proxyTerminalUrl = sandbox.terminal_url
-                        ? `/api/v1/projects/${activeProjectId}/sandbox/terminal/proxy/ws`
+                    // Terminal uses the existing WebSocket endpoint
+                    // The TerminalImpl component will build the correct WebSocket URL
+                    const terminalWsUrl = sandbox.terminal_url
+                        ? `/api/v1/terminal/${sandbox.sandbox_id}/ws`
                         : null;
 
                     set({
@@ -266,10 +275,10 @@ export const useSandboxStore = create<SandboxState>()(
                                 port: sandbox.desktop_port || 6080,
                             }
                             : null,
-                        terminalStatus: proxyTerminalUrl
+                        terminalStatus: terminalWsUrl
                             ? {
                                 running: true,
-                                url: proxyTerminalUrl,
+                                url: terminalWsUrl,
                                 port: sandbox.terminal_port || 7681,
                                 sessionId: null,
                                 pid: null,
@@ -281,9 +290,23 @@ export const useSandboxStore = create<SandboxState>()(
                         `[SandboxStore] Sandbox ensured: ${sandbox.sandbox_id} (${sandbox.status})`
                     );
                     return sandbox.sandbox_id;
-                } catch (error) {
+                } catch (error: any) {
                     logger.error("[SandboxStore] Failed to ensure sandbox:", error);
-                    set({ connectionStatus: "error" });
+                    
+                    // Provide more specific error messages for common issues
+                    let errorMessage = "Failed to connect to sandbox";
+                    if (error.message?.includes("timeout")) {
+                        errorMessage = "Sandbox creation timed out. The service may be starting up, please try again in a moment.";
+                    } else if (error.message?.includes("Network Error")) {
+                        errorMessage = "Network error. Please check your connection and try again.";
+                    } else if (error.code === "ECONNABORTED") {
+                        errorMessage = "Connection aborted. Sandbox creation may still be in progress.";
+                    }
+                    
+                    set({ 
+                        connectionStatus: "error",
+                        error: errorMessage,
+                    });
                     return null;
                 }
             },

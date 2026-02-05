@@ -39,10 +39,11 @@ interface SandboxSectionProps {
 // Terminal Tab Content
 const TerminalTab: React.FC<{ 
   sandboxId: string;
+  projectId?: string;
   terminalStatus: any;
   onStartTerminal: () => Promise<void>;
   isTerminalLoading: boolean;
-}> = ({ sandboxId, terminalStatus, onStartTerminal, isTerminalLoading }) => {
+}> = ({ sandboxId, projectId, terminalStatus, onStartTerminal, isTerminalLoading }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -113,6 +114,7 @@ const TerminalTab: React.FC<{
       <div className="flex-1 min-h-0">
         <SandboxTerminal
           sandboxId={sandboxId}
+          projectId={projectId}
           sessionId={sessionId || undefined}
           onConnect={(id) => {
             setSessionId(id);
@@ -273,6 +275,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
   const { 
+    activeProjectId,
     desktopStatus, 
     terminalStatus, 
     startDesktop, 
@@ -297,6 +300,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
       children: sandboxId ? (
         <TerminalTab 
           sandboxId={sandboxId} 
+          projectId={activeProjectId || undefined}
           terminalStatus={terminalStatus}
           onStartTerminal={startTerminal}
           isTerminalLoading={isTerminalLoading}
