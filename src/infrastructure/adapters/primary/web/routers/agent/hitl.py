@@ -103,9 +103,7 @@ async def get_pending_hitl_requests(
         raise
     except Exception as e:
         logger.error(f"Error getting pending HITL requests: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get pending HITL requests: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get pending HITL requests: {e!s}")
 
 
 @router.get("/projects/{project_id}/pending", response_model=PendingHITLResponse)
@@ -153,9 +151,7 @@ async def get_project_pending_hitl_requests(
 
     except Exception as e:
         logger.error(f"Error getting project pending HITL requests: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get pending HITL requests: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get pending HITL requests: {e!s}")
 
 
 # =============================================================================
@@ -284,7 +280,7 @@ async def respond_to_hitl(
         logger.error(f"Error responding to HITL request: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to respond to HITL request: {str(e)}",
+            detail=f"Failed to respond to HITL request: {e!s}",
         )
 
 
@@ -328,9 +324,7 @@ async def cancel_hitl_request(
         await repo.mark_cancelled(request.request_id, request.reason)
         await db.commit()
 
-        logger.info(
-            f"User {current_user.id} cancelled HITL {request.request_id}: {request.reason}"
-        )
+        logger.info(f"User {current_user.id} cancelled HITL {request.request_id}: {request.reason}")
 
         return HumanInteractionResponse(
             success=True,
@@ -343,7 +337,7 @@ async def cancel_hitl_request(
         logger.error(f"Error cancelling HITL request: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to cancel HITL request: {str(e)}",
+            detail=f"Failed to cancel HITL request: {e!s}",
         )
 
 
@@ -359,21 +353,16 @@ async def _send_hitl_signal_to_workflow(
     from datetime import datetime
 
     try:
-        from temporalio.client import Client
-
-        from src.configuration.temporal_config import get_temporal_settings
         from src.domain.model.agent.hitl_types import HITL_RESPONSE_SIGNAL
+        from src.infrastructure.adapters.secondary.temporal.client import (
+            TemporalClientFactory,
+        )
         from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
             get_project_agent_workflow_id,
         )
 
-        temporal_settings = get_temporal_settings()
-
-        # Get Temporal client
-        client = await Client.connect(
-            temporal_settings.temporal_host,
-            namespace=temporal_settings.temporal_namespace,
-        )
+        # Get Temporal client (reuse singleton for lower latency)
+        client = await TemporalClientFactory.get_client()
 
         # Get workflow ID
         workflow_id = get_project_agent_workflow_id(
@@ -415,19 +404,15 @@ async def _send_hitl_cancel_signal_to_workflow(
 ) -> bool:
     """Send HITL cancellation signal to the Temporal workflow."""
     try:
-        from temporalio.client import Client
-
-        from src.configuration.temporal_config import get_temporal_settings
+        from src.infrastructure.adapters.secondary.temporal.client import (
+            TemporalClientFactory,
+        )
         from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
             get_project_agent_workflow_id,
         )
 
-        temporal_settings = get_temporal_settings()
-
-        client = await Client.connect(
-            temporal_settings.temporal_host,
-            namespace=temporal_settings.temporal_namespace,
-        )
+        # Get Temporal client (reuse singleton for lower latency)
+        client = await TemporalClientFactory.get_client()
 
         workflow_id = get_project_agent_workflow_id(
             tenant_id=tenant_id,
