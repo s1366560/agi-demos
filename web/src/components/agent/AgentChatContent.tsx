@@ -127,8 +127,30 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     activeSandboxId,
     toolExecutions,
     currentTool,
+    setProjectId,
+    subscribeSSE,
+    unsubscribeSSE,
+    ensureSandbox,
+    setSandboxId,
   } = useSandboxStore();
   const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
+
+  // Set projectId to sandbox store and subscribe to SSE events
+  useEffect(() => {
+    if (projectId) {
+      setProjectId(projectId);
+      subscribeSSE(projectId);
+      // Try to ensure sandbox exists and get sandboxId
+      ensureSandbox().then((sandboxId) => {
+        if (sandboxId) {
+          setSandboxId(sandboxId);
+        }
+      });
+    }
+    return () => {
+      unsubscribeSSE();
+    };
+  }, [projectId, setProjectId, subscribeSSE, unsubscribeSSE, ensureSandbox, setSandboxId]);
 
   // Get tenant ID from current project
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -202,6 +224,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         }),
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doomLoopDetected, t]);
 
   const handleNewConversation = useCallback(async () => {

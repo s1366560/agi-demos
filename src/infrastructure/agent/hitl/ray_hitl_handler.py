@@ -191,7 +191,12 @@ class RayHITLHandler:
             preinjected_data = preinjected.get("response_data", {})
 
             if preinjected_type == hitl_type.value:
+                # Consume the preinjected response
                 self._preinjected_response = None
+                logger.info(
+                    f"[RayHITL] Using pre-injected response for {hitl_type.value}: "
+                    f"request_id={preinjected.get('request_id')}"
+                )
                 if preinjected_data.get("cancelled") or preinjected_data.get("timeout"):
                     request = strategy.create_request(
                         conversation_id=self.conversation_id,
@@ -203,6 +208,12 @@ class RayHITLHandler:
                     )
                     return strategy.get_default_response(request)
                 return strategy.extract_response_value(preinjected_data)
+            else:
+                # Type mismatch - log warning but don't consume
+                logger.warning(
+                    f"[RayHITL] Pre-injected response type mismatch: "
+                    f"expected={hitl_type.value}, got={preinjected_type}"
+                )
 
         request = strategy.create_request(
             conversation_id=self.conversation_id,

@@ -173,6 +173,13 @@ async def handle_hitl_pending(
 
     saved_messages = hitl_exception.current_messages or request.conversation_context
 
+    logger.info(
+        f"[ActorExecution] Handling HITL pending: request_id={hitl_exception.request_id}, "
+        f"type={hitl_exception.hitl_type.value}, "
+        f"messages_count={len(saved_messages)}, "
+        f"last_sequence_number={last_sequence_number}"
+    )
+
     state = HITLAgentState(
         conversation_id=request.conversation_id,
         message_id=request.message_id,
@@ -194,11 +201,16 @@ async def handle_hitl_pending(
     await state_store.save_state(state)
     await save_hitl_snapshot(state, agent.config.agent_mode)
 
+    logger.info(
+        f"[ActorExecution] HITL state saved: request_id={hitl_exception.request_id}, "
+        f"conversation_id={request.conversation_id}"
+    )
+
     return ProjectChatResult(
         conversation_id=request.conversation_id,
         message_id=request.message_id,
         content="",
-        sequence_number=0,
+        sequence_number=last_sequence_number,  # Preserve sequence number for continuity
         is_error=False,
         error_message=None,
         execution_time_ms=0.0,
@@ -224,6 +236,11 @@ async def continue_project_chat(
     redis_client = await _get_redis_client()
     state_store = HITLStateStore(redis_client)
 
+    logger.info(
+        f"[ActorExecution] Continuing chat: request_id={request_id}, "
+        f"response_keys={list(response_data.keys()) if response_data else 'None'}"
+    )
+
     state = None
     for attempt in range(10):
         state = await state_store.load_state_by_request(request_id)
@@ -235,6 +252,9 @@ async def continue_project_chat(
             await asyncio.sleep(0.2)
 
     if not state:
+        logger.error(
+            f"[ActorExecution] HITL state not found for request_id={request_id}"
+        )
         return ProjectChatResult(
             conversation_id="",
             message_id="",
@@ -245,6 +265,12 @@ async def continue_project_chat(
             execution_time_ms=(time_module.time() - start_time) * 1000,
             event_count=0,
         )
+
+    logger.info(
+        f"[ActorExecution] Loaded HITL state: conversation_id={state.conversation_id}, "
+        f"hitl_type={state.hitl_type}, messages_count={len(state.messages)}, "
+        f"last_sequence_number={state.last_sequence_number}"
+    )
 
     sequence_number = max(sequence_number, state.last_sequence_number)
     await set_agent_running(state.conversation_id, state.message_id)
@@ -310,6 +336,13 @@ async def continue_project_chat(
                     await refresh_agent_running_ttl(state.conversation_id)
                     last_refresh = now
         except HITLPendingException as hitl_ex:
+            logger.info(
+                f"[ActorExecution] Second HITL detected during continue: "
+                f"first_request_id={request_id}, "
+                f"second_request_id={hitl_ex.request_id}, "
+                f"events_emitted={len(events)}, "
+                f"sequence_number={sequence_number}"
+            )
             if events:
                 await _persist_events(
                     conversation_id=state.conversation_id,

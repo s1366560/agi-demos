@@ -244,10 +244,16 @@ class SessionProcessor:
         message_id = ctx.get("message_id")
         
         # Get pre-injected HITL response for resume case (used once only)
-        hitl_response = ctx.pop("hitl_response", None) if isinstance(ctx, dict) else None
+        # Use get() instead of pop() to avoid removing it from context
+        # This allows multiple HITL handlers to be created if needed
+        hitl_response = ctx.get("hitl_response") if isinstance(ctx, dict) else None
 
         # Create new handler if needed or context changed
         if self._hitl_handler is None or self._hitl_handler.conversation_id != conversation_id:
+            logger.debug(
+                f"[Processor] Creating new HITL handler for conversation={conversation_id}, "
+                f"has_preinjected={hitl_response is not None}"
+            )
             self._hitl_handler = RayHITLHandler(
                 conversation_id=conversation_id,
                 tenant_id=tenant_id,
@@ -255,10 +261,18 @@ class SessionProcessor:
                 message_id=message_id,
                 preinjected_response=hitl_response,
             )
-        elif hitl_response:
+            # Mark that we've consumed this hitl_response for this processor instance
+            if hitl_response and isinstance(ctx, dict):
+                ctx["_hitl_response_consumed"] = True
+        elif hitl_response and not ctx.get("_hitl_response_consumed"):
             # Update existing handler with new response if one was provided
             # This happens only once per resume cycle
+            logger.debug(
+                f"[Processor] Updating existing HITL handler with preinjected response, "
+                f"request_id={hitl_response.get('request_id')}"
+            )
             self._hitl_handler._preinjected_response = hitl_response
+            ctx["_hitl_response_consumed"] = True
 
         return self._hitl_handler
 
