@@ -369,6 +369,9 @@ async def main():
             from src.infrastructure.agent.hitl.response_listener import (
                 HITLResponseListener,
             )
+            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                set_hitl_response_listener,
+            )
 
             # Get Redis URL from settings
             redis_url = getattr(settings, "redis_url", None)
@@ -380,6 +383,10 @@ async def main():
             redis_client = aioredis.from_url(redis_url)
             hitl_response_listener = HITLResponseListener(redis_client)
             await hitl_response_listener.start()
+
+            # Register listener in global state for Activity access
+            set_hitl_response_listener(hitl_response_listener)
+
             logger.info("Agent Worker: HITL Response Listener started (real-time delivery enabled)")
         except Exception as e:
             logger.warning(

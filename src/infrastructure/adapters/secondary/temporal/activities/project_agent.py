@@ -1306,10 +1306,11 @@ async def _wait_for_hitl_response_fast_path(
     by using the in-process SessionRegistry rather than Temporal Signals.
 
     The flow:
-    1. Register a waiter in SessionRegistry
-    2. HITLResponseListener (running in agent_worker) receives response from Redis Stream
-    3. HITLResponseListener delivers response to SessionRegistry
-    4. This function receives response and returns
+    1. Ensure HITLResponseListener is listening to this project's stream
+    2. Register a waiter in SessionRegistry
+    3. HITLResponseListener (running in agent_worker) receives response from Redis Stream
+    4. HITLResponseListener delivers response to SessionRegistry
+    5. This function receives response and returns
 
     Args:
         tenant_id: Tenant ID
@@ -1323,7 +1324,21 @@ async def _wait_for_hitl_response_fast_path(
         Response data dict if received, None if timeout or error
     """
     try:
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_hitl_response_listener,
+        )
         from src.infrastructure.agent.hitl.session_registry import get_session_registry
+
+        # Ensure HITLResponseListener is listening to this project's stream
+        listener = get_hitl_response_listener()
+        if listener:
+            await listener.add_project(tenant_id, project_id)
+            logger.debug(
+                f"[HITL FastPath] Registered project stream: tenant={tenant_id}, project={project_id}"
+            )
+        else:
+            logger.warning("[HITL FastPath] HITLResponseListener not available, skipping fast path")
+            return None
 
         registry = get_session_registry()
 
@@ -1342,7 +1357,7 @@ async def _wait_for_hitl_response_fast_path(
         # Wait for response
         response = await registry.wait_for_response(
             request_id=request_id,
-            timeout_seconds=timeout_seconds,
+            timeout=timeout_seconds,
         )
 
         if response:

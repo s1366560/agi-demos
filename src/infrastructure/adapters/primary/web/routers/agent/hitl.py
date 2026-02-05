@@ -469,7 +469,9 @@ async def _publish_hitl_response_to_redis(
     """
     try:
         from src.configuration.config import get_settings
-        from src.infrastructure.cache.redis_client import get_redis_pool
+        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            get_redis_client,
+        )
 
         settings = get_settings()
 
@@ -478,7 +480,7 @@ async def _publish_hitl_response_to_redis(
             logger.debug("HITL real-time disabled, skipping Redis Stream publish")
             return False
 
-        redis = await get_redis_pool()
+        redis = await get_redis_client()
 
         stream_key = f"hitl:response:{tenant_id}:{project_id}"
         message_data = {
@@ -497,7 +499,7 @@ async def _publish_hitl_response_to_redis(
             maxlen=1000,  # Keep last 1000 messages
         )
 
-        logger.debug(f"[HITL Redis] Published response to {stream_key}: request_id={request_id}")
+        logger.info(f"[HITL Redis] Published response to {stream_key}: request_id={request_id}")
         return True
 
     except Exception as e:
