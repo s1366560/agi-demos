@@ -216,12 +216,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   messageCount = 0,
   enablePoolManagement = false,
 }) => {
-  // Use the unified status hook for consolidated state (WebSocket-based fallback)
+  // Use the unified status hook for consolidated state
+  // Always enable WebSocket for sandbox state sync, even when pool management is enabled
   const { status, isLoading, error: wsError, isStreaming } = useUnifiedAgentStatus({
     projectId,
     tenantId,
-    // Disable WebSocket lifecycle subscription when pool is enabled
-    enabled: !!projectId && !enablePoolManagement,
+    // Always enabled for WebSocket connection (needed for sandbox lifecycle events)
+    enabled: !!projectId,
   });
 
   // Pool instance state (primary when pool management is enabled)
