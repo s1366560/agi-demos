@@ -2,12 +2,12 @@
 HITL Service Port - Domain port for Human-in-the-Loop interactions.
 
 This port defines the contract for HITL operations, abstracting away the
-underlying implementation (Temporal Signals, Redis, etc.).
+underlying implementation (Redis Streams, Ray Actors, etc.).
 
 Architecture:
     - Domain layer defines this port
     - Application layer uses this port for HITL operations
-    - Infrastructure layer implements this port (Temporal adapter)
+    - Infrastructure layer implements this port (Ray/Redis adapter)
 """
 
 from abc import ABC, abstractmethod
@@ -75,7 +75,7 @@ class HITLServicePort(ABC):
 
         This method:
         1. Validates the response
-        2. Sends Signal to Temporal Workflow
+        2. Routes response to the active agent runtime
         3. Emits SSE event for frontend
 
         Args:

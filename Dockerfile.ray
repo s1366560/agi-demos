@@ -1,0 +1,11 @@
+FROM rayproject/ray:2.53.0-py312
+
+USER root
+WORKDIR /app
+
+# Ray actors import app modules; install the full app deps into the Ray image.
+COPY . .
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir uv \
+    && python -m pip install --no-cache-dir -e . \
+    && python -m pip install --no-cache-dir "neo4j>=5.14.0"

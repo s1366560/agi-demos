@@ -66,13 +66,13 @@ if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
 
 # Import HITLPendingException from domain layer
-from src.domain.model.agent.hitl_types import HITLPendingException
+from src.domain.model.agent.hitl_types import HITLPendingException, HITLType
 
 from ..core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from ..core.message import Message, MessageRole, ToolPart, ToolState
 from ..cost import CostTracker, TokenUsage
 from ..doom_loop import DoomLoopDetector
-from ..hitl.temporal_hitl_handler import TemporalHITLHandler
+from ..hitl.ray_hitl_handler import RayHITLHandler
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
 from .message_utils import classify_tool_by_description, extract_user_query
@@ -228,14 +228,14 @@ class SessionProcessor:
         self._langfuse_context: Optional[Dict[str, Any]] = None
 
         # HITL handler (created lazily when context is available)
-        self._hitl_handler: Optional[TemporalHITLHandler] = None
+        self._hitl_handler: Optional[RayHITLHandler] = None
 
     @property
     def state(self) -> ProcessorState:
         """Get current processor state."""
         return self._state
 
-    def _get_hitl_handler(self) -> TemporalHITLHandler:
+    def _get_hitl_handler(self) -> RayHITLHandler:
         """Get or create the HITL handler for current context."""
         ctx = self._langfuse_context or {}
         conversation_id = ctx.get("conversation_id", "unknown")
@@ -248,7 +248,7 @@ class SessionProcessor:
 
         # Create new handler if needed or context changed
         if self._hitl_handler is None or self._hitl_handler.conversation_id != conversation_id:
-            self._hitl_handler = TemporalHITLHandler(
+            self._hitl_handler = RayHITLHandler(
                 conversation_id=conversation_id,
                 tenant_id=tenant_id,
                 project_id=project_id,
@@ -1541,9 +1541,9 @@ class SessionProcessor:
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
-        Handle clarification tool with SSE event emission via TemporalHITLHandler.
+        Handle clarification tool with SSE event emission via RayHITLHandler.
 
-        Uses the unified Temporal-based HITL system for cross-process communication.
+        Uses the unified Ray-based HITL system for cross-process communication.
 
         Args:
             session_id: Session identifier
@@ -1588,20 +1588,25 @@ class SessionProcessor:
                     }
                 )
 
-            # Generate request ID for tracking
-            request_id = f"clar_{uuid.uuid4().hex[:8]}"
-
-            # Emit clarification_asked event BEFORE blocking
-            yield AgentClarificationAskedEvent(
-                request_id=request_id,
-                question=question,
-                clarification_type=clarification_type,
-                options=clarification_options,
-                allow_custom=allow_custom,
-                context=context,
+            preinjected = handler.peek_preinjected_response(HITLType.CLARIFICATION)
+            request_id = (
+                preinjected.get("request_id")
+                if preinjected and preinjected.get("request_id")
+                else f"clar_{uuid.uuid4().hex[:8]}"
             )
 
-            # Use TemporalHITLHandler for request/response
+            if not preinjected:
+                # Emit clarification_asked event BEFORE blocking
+                yield AgentClarificationAskedEvent(
+                    request_id=request_id,
+                    question=question,
+                    clarification_type=clarification_type,
+                    options=clarification_options,
+                    allow_custom=allow_custom,
+                    context=context,
+                )
+
+            # Use RayHITLHandler for request/response
             start_time = time.time()
             try:
                 answer = await handler.request_clarification(
@@ -1676,9 +1681,9 @@ class SessionProcessor:
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
-        Handle decision tool with SSE event emission via TemporalHITLHandler.
+        Handle decision tool with SSE event emission via RayHITLHandler.
 
-        Uses the unified Temporal-based HITL system for cross-process communication.
+        Uses the unified Ray-based HITL system for cross-process communication.
 
         Args:
             session_id: Session identifier
@@ -1726,21 +1731,26 @@ class SessionProcessor:
                     }
                 )
 
-            # Generate request ID for tracking
-            request_id = f"deci_{uuid.uuid4().hex[:8]}"
-
-            # Emit decision_asked event BEFORE blocking
-            yield AgentDecisionAskedEvent(
-                request_id=request_id,
-                question=question,
-                decision_type=decision_type,
-                options=decision_options,
-                allow_custom=allow_custom,
-                default_option=default_option,
-                context=context,
+            preinjected = handler.peek_preinjected_response(HITLType.DECISION)
+            request_id = (
+                preinjected.get("request_id")
+                if preinjected and preinjected.get("request_id")
+                else f"deci_{uuid.uuid4().hex[:8]}"
             )
 
-            # Use TemporalHITLHandler for request/response
+            if not preinjected:
+                # Emit decision_asked event BEFORE blocking
+                yield AgentDecisionAskedEvent(
+                    request_id=request_id,
+                    question=question,
+                    decision_type=decision_type,
+                    options=decision_options,
+                    allow_custom=allow_custom,
+                    default_option=default_option,
+                    context=context,
+                )
+
+            # Use RayHITLHandler for request/response
             start_time = time.time()
             try:
                 decision = await handler.request_decision(
@@ -1817,7 +1827,7 @@ class SessionProcessor:
         """
         Handle environment variable request tool with SSE event emission.
 
-        Uses the unified Temporal-based HITL system. After receiving values,
+        Uses the unified Ray-based HITL system. After receiving values,
         optionally saves them encrypted to the database.
 
         Args:
@@ -1873,18 +1883,23 @@ class SessionProcessor:
                 fields_for_sse.append(field_dict)
                 fields_for_handler.append(field_dict)
 
-            # Generate request ID for tracking
-            request_id = f"envvar_{uuid.uuid4().hex[:8]}"
-
-            # Emit env_var_requested event BEFORE blocking
-            yield AgentEnvVarRequestedEvent(
-                request_id=request_id,
-                tool_name=target_tool_name,
-                fields=fields_for_sse,
-                context=context if context else {},
+            preinjected = handler.peek_preinjected_response(HITLType.ENV_VAR)
+            request_id = (
+                preinjected.get("request_id")
+                if preinjected and preinjected.get("request_id")
+                else f"envvar_{uuid.uuid4().hex[:8]}"
             )
 
-            # Use TemporalHITLHandler for request/response
+            if not preinjected:
+                # Emit env_var_requested event BEFORE blocking
+                yield AgentEnvVarRequestedEvent(
+                    request_id=request_id,
+                    tool_name=target_tool_name,
+                    fields=fields_for_sse,
+                    context=context if context else {},
+                )
+
+            # Use RayHITLHandler for request/response
             start_time = time.time()
             try:
                 values = await handler.request_env_vars(
@@ -1892,6 +1907,7 @@ class SessionProcessor:
                     fields=fields_for_handler,
                     message=message,
                     timeout_seconds=timeout,
+                    request_id=request_id,
                 )
                 end_time = time.time()
 

@@ -59,12 +59,14 @@ class HITLAgentState:
     messages: List[Dict[str, Any]] = field(default_factory=list)
     user_message: str = ""
     user_id: str = ""
+    correlation_id: Optional[str] = None
 
     # Execution state
     step_count: int = 0
     current_plan_step: int = 0
     work_plan_id: Optional[str] = None
     work_plan_steps: List[Dict[str, Any]] = field(default_factory=list)
+    last_sequence_number: int = 0
 
     # Pending tool calls (serialized)
     pending_tool_calls: Dict[str, Dict[str, Any]] = field(default_factory=dict)

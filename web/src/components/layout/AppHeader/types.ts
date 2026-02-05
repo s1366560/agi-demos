@@ -6,16 +6,6 @@
 
 import * as React from 'react'
 
-import type { BreadcrumbOptions } from '@/hooks/useBreadcrumbs'
-
-/**
- * Breadcrumb item
- */
-export interface Breadcrumb {
-  label: string
-  path: string
-}
-
 /**
  * Header variant presets
  */
@@ -32,18 +22,11 @@ export type WorkspaceMode = 'tenant' | 'project'
 export interface AppHeaderRootProps {
   /** Base path for navigation */
   basePath: string
-  /** Layout context for breadcrumbs */
+  /** Layout context */
   context?: 'tenant' | 'project' | 'agent'
   /** Header variant (presets for common configurations) */
   variant?: HeaderVariant
-  /** Custom breadcrumbs (overrides useBreadcrumbs hook) */
-  breadcrumbs?: Breadcrumb[]
-  /** Options for breadcrumb generation */
-  breadcrumbOptions?: BreadcrumbOptions
 }
-
-// Re-export BreadcrumbOptions for convenience
-export type { BreadcrumbOptions }
 
 /**
  * Sidebar toggle props
@@ -177,7 +160,6 @@ export interface CompoundComponentProps {
 export interface AppHeaderContextValue {
   basePath: string
   context?: 'tenant' | 'project' | 'agent'
-  breadcrumbs: Breadcrumb[]
 }
 
 /**
@@ -230,10 +212,6 @@ export interface LegacyAppHeaderProps {
   }
   /** Additional actions to display on the right */
   extraActions?: React.ReactNode
-  /** Custom breadcrumbs (overrides useBreadcrumbs hook) */
-  breadcrumbs?: Breadcrumb[]
-  /** Options for breadcrumb generation */
-  breadcrumbOptions?: BreadcrumbOptions
   /** Show user status bar */
   showUserStatus?: boolean
   /** User profile path */

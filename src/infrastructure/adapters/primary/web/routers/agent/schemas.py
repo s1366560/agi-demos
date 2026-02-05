@@ -257,14 +257,14 @@ class HumanInteractionResponse(BaseModel):
     message: str
 
 
-# === Unified HITL Schemas (Temporal-based) ===
+# === Unified HITL Schemas (Ray-based) ===
 
 
 class HITLResponseRequest(BaseModel):
-    """Unified request to respond to any HITL request via Temporal Signal.
+    """Unified request to respond to any HITL request via Redis Stream.
 
-    This replaces the separate clarification/decision/env_var endpoints
-    with a single unified endpoint that sends a Temporal Signal.
+    This replaces separate clarification/decision/env_var endpoints
+    with a single unified endpoint consumed by Ray Actors.
     """
 
     request_id: str
@@ -367,7 +367,7 @@ class ExecutionStatusResponse(BaseModel):
 
 
 class WorkflowStatusResponse(BaseModel):
-    """Response with Temporal workflow status."""
+    """Response with Ray actor status."""
 
     workflow_id: str
     run_id: Optional[str] = None

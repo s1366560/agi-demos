@@ -1,0 +1,38 @@
+services:
+  agent-actor-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: memstack-agent-actor-worker
+    command: uv run python -m src.agent_actor_worker
+    environment:
+      - RAY_ADDRESS=ray://ray-head:10001
+      - RAY_NAMESPACE=memstack
+
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=your_password_here
+      - DATABASE_URL=postgresql://postgres:your_password_here@postgres:5432/memstack
+      - REDIS_URL=redis://redis:6379
+
+      - LLM_PROVIDER=${LLM_PROVIDER:-qwen}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ZAI_API_KEY=${ZAI_API_KEY}
+
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+    depends_on:
+      ray-head:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 2g
+    cpus: "1.0"
+    restart: unless-stopped

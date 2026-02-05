@@ -27,7 +27,7 @@
 
 ### Knowledge & Memory Management
 - **Dynamic Knowledge Integration**: Real-time integration of conversations, structured data, and external information
-- **Temporal Awareness**: Dual-timestamp model for precise historical queries
+- **Time Awareness**: Dual-timestamp model for precise historical queries
 - **High-Performance Retrieval**: Hybrid search (semantic + keyword + graph traversal) with sub-second response
 
 ### Multi-Tenant Architecture

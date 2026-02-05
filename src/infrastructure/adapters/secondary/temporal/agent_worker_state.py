@@ -419,6 +419,8 @@ async def get_or_create_tools(
         Dictionary of tool name -> tool instance (built-in + MCP + skill_loader)
     """
     from src.infrastructure.agent.tools import WebScrapeTool, WebSearchTool
+    from src.infrastructure.agent.tools.clarification import ClarificationTool
+    from src.infrastructure.agent.tools.decision import DecisionTool
 
     # 1. Get or create cached built-in tools
     async with _tools_cache_lock:
@@ -431,6 +433,8 @@ async def get_or_create_tools(
             _tools_cache[project_id] = {
                 "web_search": WebSearchTool(redis_client),
                 "web_scrape": WebScrapeTool(),
+                "ask_clarification": ClarificationTool(),
+                "request_decision": DecisionTool(),
             }
             logger.info(f"Agent Worker: Tool set cached for project {project_id}")
 

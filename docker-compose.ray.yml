@@ -1,0 +1,73 @@
+services:
+  ray-head:
+    build:
+      context: .
+      dockerfile: Dockerfile.ray
+    container_name: memstack-ray-head
+    environment:
+      - PYTHONPATH=/app
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=memstack
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_password_here
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=your_password_here
+      - LLM_PROVIDER=${LLM_PROVIDER:-qwen}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ZAI_API_KEY=${ZAI_API_KEY}
+    command: >
+      ray start --head
+      --port=6379
+      --dashboard-host=0.0.0.0
+      --dashboard-port=8265
+      --ray-client-server-port=10001
+      --object-store-memory=536870912
+      --memory=1073741824
+      --block
+    ports:
+      - "8265:8265"
+      - "10001:10001"
+    mem_limit: 2g
+    cpus: "1.0"
+    restart: unless-stopped
+
+  ray-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.ray
+    container_name: memstack-ray-worker
+    environment:
+      - PYTHONPATH=/app
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=memstack
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_password_here
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=your_password_here
+      - LLM_PROVIDER=${LLM_PROVIDER:-qwen}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ZAI_API_KEY=${ZAI_API_KEY}
+    command: >
+      ray start --address=ray-head:6379
+      --object-store-memory=536870912
+      --memory=1073741824
+      --block
+    depends_on:
+      - ray-head
+    mem_limit: 2g
+    cpus: "1.0"
+    restart: unless-stopped

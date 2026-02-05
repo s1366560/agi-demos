@@ -731,6 +731,22 @@ class ExecutionCheckpoint(Base):
     # message relationship removed - unified event timeline doesn't require FK to messages
 
 
+class AgentSessionSnapshot(Base):
+    """Persisted Agent session snapshot for HITL recovery."""
+
+    __tablename__ = "agent_session_snapshots"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    agent_mode: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    request_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    snapshot_data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class WorkflowPattern(Base):
     """
     Workflow pattern for learning from successful agent executions.

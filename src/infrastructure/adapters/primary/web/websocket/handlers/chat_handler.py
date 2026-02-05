@@ -150,24 +150,36 @@ class StopSessionHandler(WebSocketMessageHandler):
                 del manager.bridge_tasks[context.session_id][conversation_id]
                 logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
 
-            # Cancel Temporal workflow
+            # Cancel Ray Actor execution
             try:
-                from src.infrastructure.adapters.secondary.temporal.client import (
-                    TemporalClientFactory,
+                from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+                    SqlConversationRepository,
                 )
+                from src.infrastructure.adapters.secondary.ray.client import await_ray
+                from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
-                client = await TemporalClientFactory.get_client()
+                conv_repo = SqlConversationRepository(context.db)
+                conversation = await conv_repo.find_by_id(conversation_id)
+                if not conversation:
+                    await context.send_error("Conversation not found", conversation_id=conversation_id)
+                    return
+                if conversation.tenant_id != context.tenant_id:
+                    await context.send_error("Access denied", conversation_id=conversation_id)
+                    return
 
-                # Find and cancel the running workflow
-                async for workflow in client.list_workflows(
-                    query=f'WorkflowId STARTS_WITH "agent-execution-{conversation_id}-" '
-                    f'AND ExecutionStatus = "Running"'
-                ):
-                    await client.get_workflow_handle(workflow.id).cancel()
-                    logger.info(f"[WS] Cancelled Temporal workflow {workflow.id}")
-                    break
+                actor = await get_actor_if_exists(
+                    tenant_id=conversation.tenant_id,
+                    project_id=conversation.project_id,
+                    agent_mode="default",
+                )
+                if actor:
+                    await await_ray(actor.cancel.remote(conversation_id))
+                    logger.info(
+                        "[WS] Cancelled Ray actor execution for conversation %s",
+                        conversation_id,
+                    )
             except Exception as e:
-                logger.warning(f"[WS] Failed to cancel Temporal workflow: {e}")
+                logger.warning(f"[WS] Failed to cancel Ray actor: {e}")
 
             # Send acknowledgment
             await context.send_ack("stop_session", conversation_id=conversation_id)

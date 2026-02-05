@@ -4,20 +4,13 @@ Human-in-the-Loop (HITL) infrastructure.
 This module provides the framework for HITL tools that require
 human input during agent execution.
 
-Architecture (Temporal-based):
-- TemporalHITLHandler: Unified handler using Temporal Signals
+Architecture (Ray-based):
+- RayHITLHandler: Unified handler for HITL requests in Actor runtime
 - HITLType, HITLStatus: Unified type definitions from domain model
-- HITLServicePort: Domain port for HITL operations
 - HITLStateStore: Redis-based state persistence for pause/resume
 
-Real-time Architecture (Redis Streams):
-- HITLResponseListener: Consumes HITL responses from Redis Streams
-- AgentSessionRegistry: Tracks sessions waiting for HITL responses
-- Enables ~30ms response delivery (vs 500ms+ with Temporal Signal)
-
 Features:
-- Temporal Signals for reliable cross-process communication
-- Redis Streams for low-latency direct delivery (dual-channel)
+- Redis Streams for low-latency response delivery
 - Database persistence for recovery after page refresh
 - SSE events for real-time frontend updates
 - Automatic cleanup and timeout handling
@@ -40,15 +33,11 @@ from src.infrastructure.agent.hitl.state_store import (
     HITLStateStore,
     get_hitl_state_store,
 )
-from src.infrastructure.agent.hitl.temporal_hitl_handler import (
-    TemporalHITLHandler,
-    create_hitl_handler,
-)
+from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
 
 __all__ = [
-    # Temporal-based (reliable)
-    "TemporalHITLHandler",
-    "create_hitl_handler",
+    # Ray-based
+    "RayHITLHandler",
     "HITLAgentState",
     "HITLStateStore",
     "get_hitl_state_store",

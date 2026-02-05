@@ -5,13 +5,11 @@ Provides endpoints for human intervention during agent execution:
 - get_project_pending_hitl_requests: Get pending requests for a project
 - respond_to_hitl: Unified endpoint to respond to any HITL request
 
-Architecture (Dual-Channel for low-latency + reliability):
+Architecture (Ray-based, Redis Streams only):
     Frontend → POST /hitl/respond
-                    ├─ Redis Stream (primary, ~30ms) → Agent Worker → Session
-                    └─ Temporal Signal (backup, ~500ms) → Workflow → Activity
+                    └─ Redis Stream (primary, ~30ms) → Ray Actor → Session
 """
 
-import asyncio
 import json
 import logging
 from datetime import datetime
@@ -160,7 +158,7 @@ async def get_project_pending_hitl_requests(
 
 
 # =============================================================================
-# Unified HITL Response Endpoint (Temporal-based)
+# Unified HITL Response Endpoint (Ray-based)
 # =============================================================================
 
 
@@ -174,8 +172,7 @@ async def respond_to_hitl(
     """
     Unified endpoint to respond to any HITL request.
 
-    This endpoint sends a Temporal Signal to the running workflow,
-    replacing the legacy manager-based approach.
+    This endpoint publishes to Redis Streams so Ray Actors can continue execution.
 
     Request body:
     - request_id: The HITL request ID
@@ -236,13 +233,10 @@ async def respond_to_hitl(
         # Get project_id and conversation_id for channel routing
         project_id = hitl_request.project_id
         conversation_id = hitl_request.conversation_id
+        agent_mode = (hitl_request.metadata or {}).get("agent_mode", "default")
 
-        # Dual-Channel Architecture:
-        # 1. Redis Stream (primary, low-latency ~30ms) - direct delivery to Agent Worker
-        # 2. Temporal Signal (backup, reliable ~500ms) - fallback through Workflow
-
-        # Channel 1: Publish to Redis Stream (primary channel)
-        # This allows Agent Worker to receive response directly in-memory
+        # Redis Stream delivery (primary channel)
+        # This allows Ray Actors to receive response directly in-memory
         redis_sent = await _publish_hitl_response_to_redis(
             tenant_id=tenant_id,
             project_id=project_id,
@@ -251,24 +245,15 @@ async def respond_to_hitl(
             hitl_type=request.hitl_type,
             response_data=request.response_data,
             user_id=str(current_user.id),
+            agent_mode=agent_mode,
         )
-        if redis_sent:
-            logger.info(
-                f"HITL response published to Redis Stream (fast path): {request.request_id}"
+        if not redis_sent:
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to deliver HITL response. Please retry.",
             )
 
-        # Channel 2: Send Temporal Signal (backup channel) - fire-and-forget
-        # Use create_task so we don't block on slower Temporal signal
-        asyncio.create_task(
-            _send_hitl_signal_to_workflow_async(
-                tenant_id=tenant_id,
-                project_id=project_id,
-                request_id=request.request_id,
-                hitl_type=request.hitl_type,
-                response_data=request.response_data,
-                user_id=str(current_user.id),
-            )
-        )
+        logger.info(f"HITL response published to Redis Stream: {request.request_id}")
 
         # Update database record
         response_str = (
@@ -283,7 +268,7 @@ async def respond_to_hitl(
 
         logger.info(
             f"User {current_user.id} responded to HITL {request.request_id} "
-            f"(type={request.hitl_type}) via dual-channel (Redis={redis_sent})"
+            f"(type={request.hitl_type}) via Redis"
         )
 
         return HumanInteractionResponse(
@@ -310,8 +295,6 @@ async def cancel_hitl_request(
 ) -> HumanInteractionResponse:
     """
     Cancel a pending HITL request.
-
-    This sends a cancellation signal to the workflow.
     """
     try:
         repo = SqlHITLRequestRepository(db)
@@ -329,13 +312,13 @@ async def cancel_hitl_request(
                 detail="Access denied to this HITL request",
             )
 
-        # Send cancel signal to workflow
-        await _send_hitl_cancel_signal_to_workflow(
-            tenant_id=tenant_id,
-            project_id=hitl_request.project_id,
-            request_id=request.request_id,
-            reason=request.reason,
-        )
+        # Remove any stored HITL state (Redis + Postgres snapshot)
+        from src.infrastructure.agent.actor.state.snapshot_repo import delete_hitl_snapshot
+        from src.infrastructure.agent.hitl.state_store import get_hitl_state_store
+
+        state_store = await get_hitl_state_store()
+        await state_store.delete_state_by_request(request.request_id)
+        await delete_hitl_snapshot(request.request_id)
 
         # Update database
         await repo.mark_cancelled(request.request_id, request.reason)
@@ -358,95 +341,6 @@ async def cancel_hitl_request(
         )
 
 
-async def _send_hitl_signal_to_workflow(
-    tenant_id: str,
-    project_id: str,
-    request_id: str,
-    hitl_type: str,
-    response_data: dict,
-    user_id: str,
-) -> bool:
-    """Send HITL response signal to the Temporal workflow."""
-    from datetime import datetime
-
-    try:
-        from src.domain.model.agent.hitl_types import HITL_RESPONSE_SIGNAL
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            get_project_agent_workflow_id,
-        )
-
-        # Get Temporal client (reuse singleton for lower latency)
-        client = await TemporalClientFactory.get_client()
-
-        # Get workflow ID
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-
-        logger.info(f"Attempting to send HITL signal to workflow: {workflow_id}")
-
-        # Build signal payload
-        signal_payload = {
-            "request_id": request_id,
-            "hitl_type": hitl_type,
-            "response_data": response_data,
-            "user_id": user_id,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-        # Get workflow handle and send signal
-        handle = client.get_workflow_handle(workflow_id)
-        await handle.signal(HITL_RESPONSE_SIGNAL, signal_payload)
-
-        logger.info(f"Sent HITL signal to workflow {workflow_id}: {request_id}")
-        return True
-
-    except Exception as e:
-        logger.warning(
-            f"Failed to send HITL signal to workflow: {e}. "
-            f"tenant={tenant_id}, project={project_id}, request={request_id}"
-        )
-        return False
-
-
-async def _send_hitl_cancel_signal_to_workflow(
-    tenant_id: str,
-    project_id: str,
-    request_id: str,
-    reason: Optional[str],
-) -> bool:
-    """Send HITL cancellation signal to the Temporal workflow."""
-    try:
-        from src.infrastructure.adapters.secondary.temporal.client import (
-            TemporalClientFactory,
-        )
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            get_project_agent_workflow_id,
-        )
-
-        # Get Temporal client (reuse singleton for lower latency)
-        client = await TemporalClientFactory.get_client()
-
-        workflow_id = get_project_agent_workflow_id(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-
-        handle = client.get_workflow_handle(workflow_id)
-        await handle.signal("cancel_hitl_request", request_id, reason)
-
-        logger.info(f"Sent HITL cancel signal to workflow {workflow_id}: {request_id}")
-        return True
-
-    except Exception as e:
-        logger.warning(f"Failed to send HITL cancel signal: {e}")
-        return False
-
-
 async def _publish_hitl_response_to_redis(
     tenant_id: str,
     project_id: str,
@@ -455,12 +349,13 @@ async def _publish_hitl_response_to_redis(
     hitl_type: str,
     response_data: dict,
     user_id: str,
+    agent_mode: str,
 ) -> bool:
     """
     Publish HITL response to Redis Stream for fast delivery.
 
-    This is the primary (fast) channel that allows Agent Workers
-    to receive responses directly without going through Temporal.
+    This is the primary channel that allows Ray Actors
+    to receive responses and continue execution.
 
     Stream key: hitl:response:{tenant_id}:{project_id}
 
@@ -489,6 +384,9 @@ async def _publish_hitl_response_to_redis(
             "response_data": json.dumps(response_data),
             "user_id": user_id,
             "conversation_id": conversation_id,
+            "tenant_id": tenant_id,
+            "project_id": project_id,
+            "agent_mode": agent_mode,
             "timestamp": datetime.utcnow().isoformat(),
         }
 
@@ -503,37 +401,5 @@ async def _publish_hitl_response_to_redis(
         return True
 
     except Exception as e:
-        logger.warning(
-            f"Failed to publish HITL response to Redis Stream: {e}. "
-            f"Temporal Signal backup will be used."
-        )
+        logger.warning(f"Failed to publish HITL response to Redis Stream: {e}.")
         return False
-
-
-async def _send_hitl_signal_to_workflow_async(
-    tenant_id: str,
-    project_id: str,
-    request_id: str,
-    hitl_type: str,
-    response_data: dict,
-    user_id: str,
-) -> None:
-    """
-    Async wrapper for sending HITL signal to workflow (fire-and-forget).
-
-    This is used as the backup channel. Errors are logged but not propagated
-    since the Redis Stream is the primary delivery mechanism.
-    """
-    try:
-        success = await _send_hitl_signal_to_workflow(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            request_id=request_id,
-            hitl_type=hitl_type,
-            response_data=response_data,
-            user_id=user_id,
-        )
-        if success:
-            logger.debug(f"[HITL Temporal] Backup signal sent for {request_id}")
-    except Exception as e:
-        logger.warning(f"[HITL Temporal] Backup signal failed for {request_id}: {e}")

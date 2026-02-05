@@ -56,8 +56,8 @@
 | 目录                               | 行数   | 职责                  | 问题                  |
 | ---------------------------------- | ------ | --------------------- | --------------------- |
 | `infrastructure/agent/mcp/`        | 2354行 | Agent MCP 客户端      | client.py 831行过大   |
-| `infrastructure/mcp/`              | 744行  | Temporal MCP 工具适配 | 与 agent/mcp 职责重叠 |
-| `adapters/secondary/temporal/mcp/` | 2608行 | Temporal MCP 工作流   | 多种客户端实现分散    |
+| `infrastructure/mcp/`              | 744行  | Workflow MCP 工具适配 | 与 agent/mcp 职责重叠 |
+| `adapters/secondary/workflow/mcp/` | 2608行 | Workflow MCP 工作流   | 多种客户端实现分散    |
 
 **MCP 系统总计**: ~5706 行，分布在 **3 个不同目录**
 
@@ -67,7 +67,7 @@
 - `oauth.py` (595行) - OAuth 逻辑复杂
 - `http_client.py` (663行) - HTTP 客户端过大
 - 3 种客户端 (HTTP/WebSocket/Subprocess) 无统一接口
-- Temporal MCP 与 Agent MCP 职责边界不清
+- Workflow MCP 与 Agent MCP 职责边界不清
 
 ### 上下文管理系统问题
 
@@ -626,15 +626,15 @@ class MCPConnectionManager:
     async def shutdown(self) -> None: ...
 ```
 
-#### 5.4 迁移 Temporal MCP
+#### 5.4 迁移 Workflow MCP
 
-将 `adapters/secondary/temporal/mcp/` 重构为 Temporal 专用适配：
+将 `adapters/secondary/workflow/mcp/` 重构为 Workflow 专用适配：
 
 ```
-src/infrastructure/adapters/secondary/temporal/
-├── mcp_adapter.py           # Temporal → MCP 桥接 (~200行)
-├── mcp_activities.py        # Temporal Activities (~200行)
-└── mcp_workflows.py         # Temporal Workflows (~150行)
+src/infrastructure/adapters/secondary/workflow/
+├── mcp_adapter.py           # Workflow → MCP 桥接 (~200行)
+├── mcp_activities.py        # Workflow Activities (~200行)
+└── mcp_workflows.py         # Workflow Workflows (~150行)
 ```
 
 ### Phase 6: 事件系统重构
@@ -1388,7 +1388,7 @@ src/infrastructure/agent/
 - [ ] 5.8 重构 `mcp/auth/oauth.py` (从 595行 精简到 ~300行)
 - [ ] 5.9 创建 `mcp/tools/` 工具适配层
 - [ ] 5.10 迁移 `infrastructure/mcp/` 到 `agent/mcp/tools/`
-- [ ] 5.11 重构 `adapters/secondary/temporal/mcp/` 为精简适配
+- [ ] 5.11 重构 `adapters/secondary/workflow/mcp/` 为精简适配
 - [ ] 5.12 更新测试并验证功能
 
 ### Phase 6: 事件系统重构

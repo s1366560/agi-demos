@@ -4,9 +4,9 @@ Clarification Tool for Human-in-the-Loop Interaction.
 This tool allows the agent to ask clarifying questions during planning phase
 when encountering ambiguous requirements or multiple valid approaches.
 
-Architecture (NEW - Temporal-based):
-- Uses TemporalHITLHandler for unified HITL handling
-- Temporal Signals for reliable cross-process communication
+Architecture (Ray-based):
+- Uses RayHITLHandler for unified HITL handling
+- Redis Streams for response delivery
 - SSE events for real-time frontend updates
 
 Architecture (LEGACY - Redis-based, deprecated):
@@ -17,7 +17,7 @@ Architecture (LEGACY - Redis-based, deprecated):
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from src.infrastructure.agent.hitl.temporal_hitl_handler import TemporalHITLHandler
+from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
@@ -49,14 +49,14 @@ class ClarificationTool(AgentTool):
 
     def __init__(
         self,
-        hitl_handler: Optional[TemporalHITLHandler] = None,
+        hitl_handler: Optional[RayHITLHandler] = None,
         emit_sse_callback: Optional[Callable] = None,
     ):
         """
         Initialize the clarification tool.
 
         Args:
-            hitl_handler: TemporalHITLHandler instance (required for execution)
+            hitl_handler: RayHITLHandler instance (required for execution)
             emit_sse_callback: Optional callback for SSE events
         """
         super().__init__(
@@ -70,7 +70,7 @@ class ClarificationTool(AgentTool):
         self._hitl_handler = hitl_handler
         self._emit_sse_callback = emit_sse_callback
 
-    def set_hitl_handler(self, handler: TemporalHITLHandler) -> None:
+    def set_hitl_handler(self, handler: RayHITLHandler) -> None:
         """Set the HITL handler (for late binding)."""
         self._hitl_handler = handler
 
@@ -198,7 +198,7 @@ class ClarificationTool(AgentTool):
         if self._hitl_handler is None:
             raise RuntimeError("HITL handler not set. Call set_hitl_handler() first.")
 
-        # Use TemporalHITLHandler
+        # Use RayHITLHandler
         answer = await self._hitl_handler.request_clarification(
             question=question,
             options=options,

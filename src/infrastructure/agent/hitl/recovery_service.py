@@ -1,12 +1,9 @@
 """
 HITL Recovery Service - Recovers unprocessed HITL responses after Worker restart.
 
-NOTE: With Temporal-based HITL architecture, this service is largely obsolete.
-Temporal Workflows automatically persist and recover state, so HITL requests
-that are waiting for user response will resume automatically when the workflow
-is replayed.
-
-This service is kept for backward compatibility but performs minimal operations.
+With Ray/Redis-based HITL, state recovery is primarily handled by Redis Streams
+and Postgres snapshots. This service performs minimal maintenance, such as
+expiring stale pending requests.
 """
 
 import logging
@@ -20,9 +17,9 @@ class HITLRecoveryService:
     """
     Service to recover unprocessed HITL responses after Worker restart.
 
-    NOTE: With Temporal-based architecture, most recovery is handled automatically
-    by Temporal Workflow replay. This service now only handles edge cases where
-    responses were stored in the database but the Temporal Signal wasn't processed.
+    NOTE: With Ray/Redis-based architecture, most recovery is handled by
+    stream replay and snapshot restore. This service handles edge cases where
+    requests remain pending or were answered but not resumed.
     """
 
     def __init__(self):
@@ -36,8 +33,8 @@ class HITLRecoveryService:
         """
         Scan and recover all unprocessed HITL responses.
 
-        With Temporal architecture, this mainly marks any orphaned PENDING requests
-        as EXPIRED so they don't block future operations.
+        This mainly marks any orphaned PENDING requests as EXPIRED so they don't
+        block future operations.
 
         Args:
             max_concurrent: Maximum concurrent recovery operations
@@ -64,7 +61,6 @@ class HITLRecoveryService:
                 repo = SqlHITLRequestRepository(session)
 
                 # Mark any old PENDING requests as expired
-                # With Temporal, if a workflow is running, it will create new requests
                 now = datetime.now(timezone.utc)
                 expired_count = await repo.mark_expired_requests(before=now)
                 if expired_count > 0:
@@ -77,8 +73,7 @@ class HITLRecoveryService:
                 if requests:
                     logger.info(
                         f"HITL Recovery: Found {len(requests)} ANSWERED but unprocessed requests. "
-                        "These should be handled by Temporal Workflow replay. "
-                        "No action needed - Temporal will process them when workflows resume."
+                        "These should be resumed by the actor router or replayed from streams."
                     )
 
                 return self._recovered_count

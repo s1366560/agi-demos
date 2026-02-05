@@ -48,6 +48,8 @@ dependencies = [
     "aioboto3>=15.5.0",
     # MCP (Model Context Protocol) for tool integration
     "mcp>=1.0.0",
+    # Ray for Actor-based agent runtime
+    "ray>=2.9.0",
 ]
 
 [project.optional-dependencies]

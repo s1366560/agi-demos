@@ -510,16 +510,16 @@ CREATE TABLE agent_execution_events (
 );
 ```
 
-#### 4.3.2 Temporal 重试处理
+#### 4.3.2 Workflow 重试处理
 
-当 Temporal Activity 重试时，可能导致相同事件被多次写入。MemStack 通过以下机制处理：
+当 Workflow Activity 重试时，可能导致相同事件被多次写入。MemStack 通过以下机制处理：
 
 ```python
 async def sync_sequence_number_from_db(
     conversation_id: str,
     state_sequence_number: int,
 ) -> int:
-    """从 DB 同步序列号，处理 Temporal 重试场景"""
+    """从 DB 同步序列号，处理 Workflow 重试场景"""
     
     # 查询 DB 中的最大序列号
     result = await session.execute(
@@ -531,7 +531,7 @@ async def sync_sequence_number_from_db(
     # 如果 DB 序列号更大，说明发生了重试
     if db_last_seq > state_sequence_number:
         logger.warning(
-            f"Temporal retry detected. Syncing sequence_number "
+            f"Workflow retry detected. Syncing sequence_number "
             f"from {state_sequence_number} to {db_last_seq}"
         )
         return db_last_seq
@@ -1047,7 +1047,7 @@ function handleError(event: ErrorEvent) {
 | `src/infrastructure/adapters/secondary/messaging/redis_sequence_service.py` | Redis 序列号服务 |
 | `src/infrastructure/adapters/secondary/messaging/redis_unified_event_bus.py` | Redis 统一事件总线 |
 | `src/infrastructure/adapters/secondary/persistence/sql_agent_execution_event_repository.py` | 事件仓储实现 |
-| `src/infrastructure/adapters/secondary/temporal/activities/_shared/event_persistence.py` | WAL 持久化工具 |
+| `src/infrastructure/adapters/secondary/workflow/activities/_shared/event_persistence.py` | WAL 持久化工具 |
 | `src/infrastructure/adapters/primary/web/routers/agent/events.py` | 事件 API 端点 |
 
 ### 9.2 前端核心文件
@@ -1104,7 +1104,7 @@ EVENT_SEQUENCE_TTL=604800            # 7 天 (秒)
 
 ### B.2 序列号不连续
 
-1. 检查是否有 Temporal Activity 重试
+1. 检查是否有 Workflow Activity 重试
 2. 验证 Redis INCR 是否正常
 3. 检查数据库唯一约束是否生效
 
