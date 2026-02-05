@@ -790,15 +790,24 @@ class ReActAgent:
 
         # Build context using ContextFacade - replaces inline message building
         # and attachment injection (was ~115 lines, now ~10 lines)
+        # For HITL resume: conversation_context already contains tool result, skip adding user_message
+        is_hitl_resume = hitl_response is not None
         context_request = ContextBuildRequest(
             system_prompt=system_prompt,
             conversation_context=conversation_context,
             user_message=user_message,
             attachment_metadata=attachment_metadata,
             attachment_content=attachment_content,
+            is_hitl_resume=is_hitl_resume,
         )
         context_result = await self.context_facade.build_context(context_request)
         messages = context_result.messages
+
+        if is_hitl_resume:
+            logger.info(
+                f"[ReActAgent] HITL resume: built context with {len(messages)} messages "
+                f"(skipped user_message append)"
+            )
 
         # Log attachment info if present
         if attachment_metadata:

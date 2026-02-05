@@ -74,6 +74,8 @@ class ContextBuildRequest:
     attachment_content: Optional[List[Dict[str, Any]]] = None
     max_context_tokens: Optional[int] = None
     max_output_tokens: Optional[int] = None
+    # HITL resume flag: when True, skip adding user_message as it's already in conversation_context
+    is_hitl_resume: bool = False
 
 
 @dataclass

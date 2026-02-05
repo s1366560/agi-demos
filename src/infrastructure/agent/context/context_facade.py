@@ -192,8 +192,11 @@ class ContextFacade(ContextManagerPort):
                 text=enhanced_message
             )
 
-        # Add user message to context
-        context_messages.append(user_message)
+        # Add user message to context (skip for HITL resume as it's already in context)
+        if not request.is_hitl_resume:
+            context_messages.append(user_message)
+        elif self._debug:
+            logger.debug("[ContextFacade] Skipping user message append for HITL resume")
 
         # Step 5: Apply context window management
         window_result = await self._window_manager.build_context_window(
