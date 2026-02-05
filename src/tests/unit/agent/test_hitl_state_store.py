@@ -140,6 +140,67 @@ class TestHITLAgentState:
         assert restored.step_count == original.step_count
         assert restored.messages == original.messages
 
+    def test_state_with_pending_tool_call_id(self):
+        """Test state with pending_tool_call_id field."""
+        state = HITLAgentState(
+            conversation_id="conv-tool-call",
+            message_id="msg-tool-call",
+            tenant_id="tenant-tool-call",
+            project_id="project-tool-call",
+            hitl_request_id="tool_call_test",
+            hitl_type="decision",
+            hitl_request_data={"question": "Which option?"},
+            pending_tool_call_id="call_abc123",
+        )
+
+        assert state.pending_tool_call_id == "call_abc123"
+
+    def test_state_roundtrip_with_pending_tool_call_id(self):
+        """Test roundtrip preserves pending_tool_call_id."""
+        original = HITLAgentState(
+            conversation_id="conv-roundtrip-call",
+            message_id="msg-roundtrip-call",
+            tenant_id="tenant-roundtrip",
+            project_id="project-roundtrip",
+            hitl_request_id="roundtrip_call_test",
+            hitl_type="clarification",
+            hitl_request_data={},
+            messages=[{"role": "user", "content": "test"}],
+            pending_tool_call_id="call_xyz789",
+        )
+
+        data = original.to_dict()
+        restored = HITLAgentState.from_dict(data)
+
+        assert restored.pending_tool_call_id == "call_xyz789"
+        assert restored.pending_tool_call_id == original.pending_tool_call_id
+
+    def test_state_from_dict_backward_compatibility(self):
+        """Test from_dict handles old data without pending_tool_call_id."""
+        # Simulate old state data that doesn't have pending_tool_call_id
+        old_data = {
+            "conversation_id": "conv-old",
+            "message_id": "msg-old",
+            "tenant_id": "tenant-old",
+            "project_id": "project-old",
+            "hitl_request_id": "old_test",
+            "hitl_type": "env_var",
+            "hitl_request_data": {},
+            "messages": [],
+            "user_message": "",
+            "user_id": "",
+            "step_count": 0,
+            "timeout_seconds": 300.0,
+            "created_at": "2024-01-01T00:00:00",
+            # Note: no pending_tool_call_id field
+        }
+
+        state = HITLAgentState.from_dict(old_data)
+
+        # Should work without errors, pending_tool_call_id defaults to None
+        assert state.conversation_id == "conv-old"
+        assert state.pending_tool_call_id is None
+
 
 @pytest.mark.unit
 class TestHITLStateStore:

@@ -1,5 +1,9 @@
+import { v4 as uuidv4 } from "uuid";
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
+
+import { agentService } from "../services/agentService";
+import { planService } from "../services/planService";
 import {
     Message,
     WorkPlan,
@@ -34,17 +38,14 @@ import {
     getHITLSummaryFromState,
     MAX_CONCURRENT_STREAMING_CONVERSATIONS,
 } from "../types/conversationState";
-import { agentService } from "../services/agentService";
-import { planService } from "../services/planService";
-import { v4 as uuidv4 } from "uuid";
-import { appendSSEEventToTimeline } from "../utils/sseEventAdapter";
 import {
     saveConversationState,
     loadConversationState,
     deleteConversationState,
 } from "../utils/conversationDB";
-import { tabSync, type TabSyncMessage } from "../utils/tabSync";
 import { logger } from "../utils/logger";
+import { appendSSEEventToTimeline } from "../utils/sseEventAdapter";
+import { tabSync, type TabSyncMessage } from "../utils/tabSync";
 
 /**
  * Token delta batching configuration
@@ -186,6 +187,30 @@ export interface AdditionalAgentHandlers {
     onObserve?: (event: AgentEvent<ObserveEventData>) => void;
     /** Attachment IDs to include with the message */
     attachmentIds?: string[];
+}
+
+/**
+ * Update HITL event in timeline when user responds
+ * Finds the matching event by requestId and updates its answered state
+ *
+ * @param timeline - Current timeline array
+ * @param requestId - The HITL request ID to find
+ * @param eventType - Type of HITL event to match
+ * @param updates - Fields to update (answered, answer/decision/values)
+ * @returns Updated timeline with the HITL event marked as answered
+ */
+function updateHITLEventInTimeline(
+    timeline: TimelineEvent[],
+    requestId: string,
+    eventType: 'clarification_asked' | 'decision_asked' | 'env_var_requested' | 'permission_asked',
+    updates: { answered: boolean; answer?: string; decision?: string; values?: Record<string, string>; granted?: boolean }
+): TimelineEvent[] {
+    return timeline.map((event) => {
+        if (event.type === eventType && (event as any).requestId === requestId) {
+            return { ...event, ...updates };
+        }
+        return event;
+    });
 }
 
 /**
@@ -2209,7 +2234,20 @@ export const useAgentV3Store = create<AgentV3State>()(
                         await agentService.respondToClarification(requestId, answer);
                         // CRITICAL: Clear delta buffers before resuming streaming
                         clearAllDeltaBuffers();
-                        set({ pendingClarification: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
+                        // Update timeline HITL event status and clear pending state
+                        set((state) => ({
+                            timeline: updateHITLEventInTimeline(
+                                state.timeline,
+                                requestId,
+                                'clarification_asked',
+                                { answered: true, answer }
+                            ),
+                            pendingClarification: null,
+                            agentState: "thinking",
+                            isStreaming: true,
+                            streamStatus: "streaming",
+                            streamingAssistantContent: ""
+                        }));
 
                         // Broadcast HITL state change to other tabs
                         if (activeConversationId) {
@@ -2378,7 +2416,20 @@ export const useAgentV3Store = create<AgentV3State>()(
                         await agentService.respondToDecision(requestId, decision);
                         // CRITICAL: Clear delta buffers before resuming streaming
                         clearAllDeltaBuffers();
-                        set({ pendingDecision: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
+                        // Update timeline HITL event status and clear pending state
+                        set((state) => ({
+                            timeline: updateHITLEventInTimeline(
+                                state.timeline,
+                                requestId,
+                                'decision_asked',
+                                { answered: true, decision }
+                            ),
+                            pendingDecision: null,
+                            agentState: "thinking",
+                            isStreaming: true,
+                            streamStatus: "streaming",
+                            streamingAssistantContent: ""
+                        }));
 
                         // Broadcast HITL state change to other tabs
                         if (activeConversationId) {
@@ -2547,7 +2598,20 @@ export const useAgentV3Store = create<AgentV3State>()(
                         await agentService.respondToEnvVar(requestId, values);
                         // CRITICAL: Clear delta buffers before resuming streaming
                         clearAllDeltaBuffers();
-                        set({ pendingEnvVarRequest: null, agentState: "thinking", isStreaming: true, streamStatus: "streaming", streamingAssistantContent: "" });
+                        // Update timeline HITL event status and clear pending state
+                        set((state) => ({
+                            timeline: updateHITLEventInTimeline(
+                                state.timeline,
+                                requestId,
+                                'env_var_requested',
+                                { answered: true, values }
+                            ),
+                            pendingEnvVarRequest: null,
+                            agentState: "thinking",
+                            isStreaming: true,
+                            streamStatus: "streaming",
+                            streamingAssistantContent: ""
+                        }));
 
                         // Broadcast HITL state change to other tabs
                         if (activeConversationId) {
@@ -2716,13 +2780,20 @@ export const useAgentV3Store = create<AgentV3State>()(
                         await agentService.respondToPermission(requestId, granted);
                         // CRITICAL: Clear delta buffers before resuming streaming
                         clearAllDeltaBuffers();
-                        set({
+                        // Update timeline HITL event status and clear pending state
+                        set((state) => ({
+                            timeline: updateHITLEventInTimeline(
+                                state.timeline,
+                                requestId,
+                                'permission_asked',
+                                { answered: true, granted }
+                            ),
                             pendingPermission: null,
                             agentState: granted ? "thinking" : "idle",
                             isStreaming: granted,
                             streamStatus: granted ? "streaming" : "idle",
                             streamingAssistantContent: ""
-                        });
+                        }));
 
                         // Broadcast HITL state change to other tabs
                         if (activeConversationId) {

@@ -82,6 +82,9 @@ class HITLAgentState:
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     timeout_seconds: float = 300.0
 
+    # Pending HITL tool call ID (for injecting tool result on resume)
+    pending_tool_call_id: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return asdict(self)
@@ -89,7 +92,10 @@ class HITLAgentState:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HITLAgentState":
         """Create from dictionary."""
-        return cls(**data)
+        # Handle backward compatibility for old states without pending_tool_call_id
+        known_fields = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered_data = {k: v for k, v in data.items() if k in known_fields}
+        return cls(**filtered_data)
 
 
 # =============================================================================

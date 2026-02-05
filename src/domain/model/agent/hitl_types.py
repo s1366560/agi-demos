@@ -693,6 +693,8 @@ class HITLPendingException(Exception):
         conversation_id: str,
         message_id: Optional[str] = None,
         timeout_seconds: float = 300.0,
+        current_messages: Optional[List[Dict[str, Any]]] = None,
+        tool_call_id: Optional[str] = None,
     ):
         self.request_id = request_id
         self.hitl_type = hitl_type
@@ -700,6 +702,12 @@ class HITLPendingException(Exception):
         self.conversation_id = conversation_id
         self.message_id = message_id
         self.timeout_seconds = timeout_seconds
+        # Current conversation messages including assistant's tool calls
+        # Used to properly resume agent execution with full context
+        self.current_messages = current_messages
+        # The tool call ID that triggered this HITL request
+        # Used to inject tool result on resume
+        self.tool_call_id = tool_call_id
 
         super().__init__(
             f"HITL request pending: {hitl_type.value} ({request_id})"
@@ -707,7 +715,7 @@ class HITLPendingException(Exception):
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        result = {
             "request_id": self.request_id,
             "hitl_type": self.hitl_type.value,
             "request_data": self.request_data,
@@ -715,6 +723,13 @@ class HITLPendingException(Exception):
             "message_id": self.message_id,
             "timeout_seconds": self.timeout_seconds,
         }
+        # Only include current_messages if present (can be large)
+        if self.current_messages is not None:
+            result["current_messages"] = self.current_messages
+        # Include tool_call_id for resume injection
+        if self.tool_call_id is not None:
+            result["tool_call_id"] = self.tool_call_id
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HITLPendingException":
@@ -726,4 +741,6 @@ class HITLPendingException(Exception):
             conversation_id=data["conversation_id"],
             message_id=data.get("message_id"),
             timeout_seconds=data.get("timeout_seconds", 300.0),
+            current_messages=data.get("current_messages"),
+            tool_call_id=data.get("tool_call_id"),
         )

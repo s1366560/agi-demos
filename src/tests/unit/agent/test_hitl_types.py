@@ -623,3 +623,239 @@ class TestHITLPendingException:
 
         assert ex.message_id is None
         assert ex.timeout_seconds is None
+
+    def test_exception_with_current_messages(self):
+        """Test exception with current_messages field."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Help me configure the environment"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "type": "function",
+                        "function": {
+                            "name": "ask_clarification",
+                            "arguments": '{"question": "Which environment?"}',
+                        },
+                    }
+                ],
+            },
+        ]
+
+        ex = HITLPendingException(
+            request_id="clarif_with_msg",
+            hitl_type=HITLType.CLARIFICATION,
+            request_data={"question": "Which environment?"},
+            conversation_id="conv-msg-test",
+            message_id="msg-001",
+            timeout_seconds=300.0,
+            current_messages=messages,
+        )
+
+        assert ex.current_messages is not None
+        assert len(ex.current_messages) == 3
+        assert ex.current_messages[2]["role"] == "assistant"
+        assert "tool_calls" in ex.current_messages[2]
+
+    def test_exception_to_dict_with_current_messages(self):
+        """Test to_dict includes current_messages when present."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "call_1"}]},
+        ]
+
+        ex = HITLPendingException(
+            request_id="test_123",
+            hitl_type=HITLType.CLARIFICATION,
+            request_data={"question": "Which?"},
+            conversation_id="conv-dict-test",
+            current_messages=messages,
+        )
+
+        data = ex.to_dict()
+        assert "current_messages" in data
+        assert len(data["current_messages"]) == 2
+        assert data["current_messages"][0]["role"] == "user"
+
+    def test_exception_to_dict_without_current_messages(self):
+        """Test to_dict excludes current_messages when None."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        ex = HITLPendingException(
+            request_id="test_456",
+            hitl_type=HITLType.DECISION,
+            request_data={"question": "Proceed?"},
+            conversation_id="conv-no-msg",
+        )
+
+        data = ex.to_dict()
+        assert "current_messages" not in data
+
+    def test_exception_from_dict_with_current_messages(self):
+        """Test from_dict restores current_messages."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        data = {
+            "request_id": "from_dict_test",
+            "hitl_type": "clarification",
+            "request_data": {"question": "Which option?"},
+            "conversation_id": "conv-from-dict",
+            "message_id": "msg-from-dict",
+            "timeout_seconds": 120.0,
+            "current_messages": [
+                {"role": "user", "content": "Test message"},
+                {"role": "assistant", "tool_calls": [{"id": "call_x"}]},
+            ],
+        }
+
+        ex = HITLPendingException.from_dict(data)
+
+        assert ex.request_id == "from_dict_test"
+        assert ex.current_messages is not None
+        assert len(ex.current_messages) == 2
+        assert ex.current_messages[1]["role"] == "assistant"
+
+    def test_exception_from_dict_without_current_messages(self):
+        """Test from_dict handles missing current_messages (backward compatibility)."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        data = {
+            "request_id": "backward_compat",
+            "hitl_type": "decision",
+            "request_data": {},
+            "conversation_id": "conv-old",
+        }
+
+        ex = HITLPendingException.from_dict(data)
+
+        assert ex.request_id == "backward_compat"
+        assert ex.current_messages is None
+
+    def test_exception_roundtrip_with_current_messages(self):
+        """Test to_dict -> from_dict roundtrip preserves current_messages."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        messages = [
+            {"role": "system", "content": "System prompt"},
+            {"role": "user", "content": "User message"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_roundtrip",
+                        "type": "function",
+                        "function": {"name": "ask_clarification", "arguments": "{}"},
+                    }
+                ],
+            },
+        ]
+
+        original = HITLPendingException(
+            request_id="roundtrip_test",
+            hitl_type=HITLType.CLARIFICATION,
+            request_data={"question": "Roundtrip?"},
+            conversation_id="conv-roundtrip",
+            message_id="msg-roundtrip",
+            timeout_seconds=180.0,
+            current_messages=messages,
+        )
+
+        data = original.to_dict()
+        restored = HITLPendingException.from_dict(data)
+
+        assert restored.request_id == original.request_id
+        assert restored.hitl_type == original.hitl_type
+        assert restored.conversation_id == original.conversation_id
+        assert restored.message_id == original.message_id
+        assert restored.timeout_seconds == original.timeout_seconds
+        assert restored.current_messages == original.current_messages
+        assert len(restored.current_messages) == 3
+        assert "tool_calls" in restored.current_messages[2]
+
+    def test_exception_with_tool_call_id(self):
+        """Test exception with tool_call_id field."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        ex = HITLPendingException(
+            request_id="test_with_call_id",
+            hitl_type=HITLType.DECISION,
+            request_data={"question": "Which option?"},
+            conversation_id="conv-tool-call",
+            tool_call_id="call_abc123xyz",
+        )
+
+        assert ex.tool_call_id == "call_abc123xyz"
+
+    def test_exception_to_dict_with_tool_call_id(self):
+        """Test to_dict includes tool_call_id when present."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        ex = HITLPendingException(
+            request_id="dict_call_id_test",
+            hitl_type=HITLType.CLARIFICATION,
+            request_data={},
+            conversation_id="conv-dict-call",
+            tool_call_id="call_dict_123",
+        )
+
+        data = ex.to_dict()
+        assert "tool_call_id" in data
+        assert data["tool_call_id"] == "call_dict_123"
+
+    def test_exception_to_dict_without_tool_call_id(self):
+        """Test to_dict excludes tool_call_id when None."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        ex = HITLPendingException(
+            request_id="no_call_id_test",
+            hitl_type=HITLType.ENV_VAR,
+            request_data={},
+            conversation_id="conv-no-call",
+        )
+
+        data = ex.to_dict()
+        assert "tool_call_id" not in data
+
+    def test_exception_from_dict_with_tool_call_id(self):
+        """Test from_dict restores tool_call_id."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        data = {
+            "request_id": "from_dict_call_id",
+            "hitl_type": "decision",
+            "request_data": {},
+            "conversation_id": "conv-from-call",
+            "tool_call_id": "call_restored_456",
+        }
+
+        ex = HITLPendingException.from_dict(data)
+        assert ex.tool_call_id == "call_restored_456"
+
+    def test_exception_roundtrip_with_tool_call_id(self):
+        """Test to_dict -> from_dict roundtrip preserves tool_call_id."""
+        from src.domain.model.agent.hitl_types import HITLPendingException
+
+        original = HITLPendingException(
+            request_id="roundtrip_call_id",
+            hitl_type=HITLType.PERMISSION,
+            request_data={"tool_name": "dangerous_tool"},
+            conversation_id="conv-roundtrip-call",
+            message_id="msg-roundtrip-call",
+            timeout_seconds=120.0,
+            current_messages=[{"role": "user", "content": "test"}],
+            tool_call_id="call_roundtrip_789",
+        )
+
+        data = original.to_dict()
+        restored = HITLPendingException.from_dict(data)
+
+        assert restored.tool_call_id == original.tool_call_id
+        assert restored.current_messages == original.current_messages

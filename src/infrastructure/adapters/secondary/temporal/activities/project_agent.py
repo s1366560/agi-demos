@@ -89,6 +89,64 @@ def _remove_cached_project_agent(
     return _project_agent_instances.pop(key, None) is not None
 
 
+def _format_hitl_response_as_tool_result(
+    hitl_type: str,
+    response_data: Dict[str, Any],
+) -> str:
+    """
+    Format HITL response data as a tool result content string.
+    
+    This is used to inject the user's HITL response into the conversation
+    as a tool result, so the LLM can see what the user chose.
+    
+    Args:
+        hitl_type: Type of HITL request (clarification, decision, env_var, permission)
+        response_data: User's response data
+        
+    Returns:
+        Formatted tool result content string
+    """
+    if hitl_type == "clarification":
+        selected = response_data.get("selected_option_id") or response_data.get("selected_options")
+        custom = response_data.get("custom_input")
+        if custom:
+            return f"User clarification: {custom}"
+        elif selected:
+            if isinstance(selected, list):
+                return f"User selected options: {', '.join(selected)}"
+            return f"User selected: {selected}"
+        return "User provided clarification (no specific selection)"
+        
+    elif hitl_type == "decision":
+        selected = response_data.get("selected_option_id")
+        custom = response_data.get("custom_input")
+        if custom:
+            return f"User decision (custom): {custom}"
+        elif selected:
+            return f"User chose: {selected}"
+        return "User made a decision (no specific selection)"
+        
+    elif hitl_type == "env_var":
+        # For env vars, we don't expose the actual values in the tool result
+        # Just indicate that values were provided
+        values = response_data.get("values", {})
+        provided_vars = list(values.keys()) if values else []
+        if provided_vars:
+            return f"User provided environment variables: {', '.join(provided_vars)}"
+        return "User provided environment variable values"
+        
+    elif hitl_type == "permission":
+        granted = response_data.get("granted", False)
+        scope = response_data.get("scope", "once")
+        if granted:
+            return f"User granted permission (scope: {scope})"
+        else:
+            return "User denied permission"
+    
+    # Fallback for unknown types
+    return f"User responded to {hitl_type} request"
+
+
 @activity.defn
 async def initialize_project_agent_activity(
     input_data: Dict[str, Any],
@@ -403,6 +461,21 @@ async def execute_project_chat_activity(
                 f"type={hitl_ex.hitl_type.value}"
             )
 
+            # Use current_messages from exception if available (includes assistant's tool call)
+            # Fall back to conversation_context if not set (backward compatibility)
+            saved_messages = hitl_ex.current_messages or conversation_context
+            
+            if hitl_ex.current_messages:
+                logger.info(
+                    f"[ProjectAgentActivity] Saving {len(hitl_ex.current_messages)} messages "
+                    f"(with assistant tool call)"
+                )
+            else:
+                logger.warning(
+                    f"[ProjectAgentActivity] current_messages not available, "
+                    f"falling back to conversation_context ({len(conversation_context)} messages)"
+                )
+
             # Save Agent state to Redis for later resumption
             state = HITLAgentState(
                 conversation_id=conversation_id,
@@ -412,11 +485,12 @@ async def execute_project_chat_activity(
                 hitl_request_id=hitl_ex.request_id,
                 hitl_type=hitl_ex.hitl_type.value,
                 hitl_request_data=hitl_ex.request_data,
-                messages=conversation_context,
+                messages=saved_messages,
                 user_message=user_message,
                 user_id=user_id,
                 step_count=getattr(agent, "_step_count", 0),
                 timeout_seconds=hitl_ex.timeout_seconds,
+                pending_tool_call_id=hitl_ex.tool_call_id,
             )
 
             state_store = HITLStateStore(redis_client)
@@ -594,6 +668,30 @@ async def continue_project_chat_activity(
                 "response_data": hitl_response,
             }
 
+            # Build conversation context with injected tool result
+            # This is critical: LLM needs to see the tool result to understand
+            # what the user chose, so it can continue from that context
+            conversation_context = list(state.messages)
+            
+            if state.pending_tool_call_id:
+                # Format the HITL response as a tool result
+                tool_result_content = _format_hitl_response_as_tool_result(
+                    hitl_type=state.hitl_type,
+                    response_data=hitl_response,
+                )
+                
+                # Inject tool result into messages
+                conversation_context.append({
+                    "role": "tool",
+                    "tool_call_id": state.pending_tool_call_id,
+                    "content": tool_result_content,
+                })
+                
+                logger.info(
+                    f"[ProjectAgentActivity] Injected tool result for call_id="
+                    f"{state.pending_tool_call_id}: {tool_result_content[:100]}..."
+                )
+
             # Collect events
             events: List[Dict[str, Any]] = []
             final_content = ""
@@ -606,7 +704,7 @@ async def continue_project_chat_activity(
                 conversation_id=conversation_id,
                 user_message=state.user_message,
                 user_id=state.user_id,
-                conversation_context=state.messages,
+                conversation_context=conversation_context,
                 tenant_id=tenant_id,
                 message_id=message_id,
                 hitl_response=hitl_response_for_agent,
@@ -686,6 +784,21 @@ async def continue_project_chat_activity(
                     correlation_id=correlation_id,
                 )
 
+            # Use current_messages from exception if available (includes assistant's tool call)
+            # Fall back to old state.messages if not set (backward compatibility)
+            saved_messages = hitl_ex.current_messages or state.messages
+            
+            if hitl_ex.current_messages:
+                logger.info(
+                    f"[ProjectAgentActivity] Saving {len(hitl_ex.current_messages)} messages "
+                    f"(with assistant tool call)"
+                )
+            else:
+                logger.warning(
+                    f"[ProjectAgentActivity] current_messages not available, "
+                    f"falling back to state.messages ({len(state.messages)} messages)"
+                )
+
             # Save new state
             new_state = HITLAgentState(
                 conversation_id=conversation_id,
@@ -695,11 +808,12 @@ async def continue_project_chat_activity(
                 hitl_request_id=hitl_ex.request_id,
                 hitl_type=hitl_ex.hitl_type.value,
                 hitl_request_data=hitl_ex.request_data,
-                messages=state.messages,
+                messages=saved_messages,
                 user_message=state.user_message,
                 user_id=state.user_id,
                 step_count=state.step_count + 1,
                 timeout_seconds=hitl_ex.timeout_seconds,
+                pending_tool_call_id=hitl_ex.tool_call_id,
             )
 
             new_state_key = await state_store.save_state(new_state)

@@ -394,9 +394,38 @@ class SessionProcessor:
             elif result == ProcessorResult.COMPACT:
                 yield AgentStatusEvent(status="compact_needed")
 
-        except HITLPendingException:
-            # Let HITLPendingException bubble up to Activity layer
-            # The Workflow will wait for user response and resume execution
+        except HITLPendingException as hitl_ex:
+            # Add current messages to the exception for proper state saving
+            # This includes the assistant's tool call message that triggered HITL
+            current_messages = list(messages)  # Copy current messages
+            
+            # Also add current message if it has tool calls (assistant's pending response)
+            # and extract the tool_call_id that triggered the HITL
+            tool_call_id = None
+            if self._current_message:
+                current_messages.append(self._current_message.to_llm_format())
+                # Find the HITL tool call that triggered this exception
+                for part in self._current_message.get_tool_parts():
+                    # Note: ToolPart uses 'tool' attribute, not 'name'
+                    if part.tool in (
+                        "ask_clarification",
+                        "request_decision",
+                        "request_env_var",
+                        "request_permission",
+                    ):
+                        tool_call_id = part.call_id
+                        break
+            
+            # Set current_messages and tool_call_id on the exception for Activity to use
+            hitl_ex.current_messages = current_messages
+            hitl_ex.tool_call_id = tool_call_id
+            
+            logger.info(
+                f"[Processor] HITL pending with {len(current_messages)} messages, "
+                f"request_id={hitl_ex.request_id}, tool_call_id={tool_call_id}"
+            )
+            
+            # Re-raise with updated messages
             raise
 
         except Exception as e:
