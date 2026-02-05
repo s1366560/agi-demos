@@ -90,31 +90,47 @@ async def _handle_hitl_response(
         SqlHITLRequestRepository,
     )
     from src.domain.model.agent.hitl_request import HITLRequestStatus
+    from sqlalchemy import text
 
     hitl_request = None
     session = None
     
-    # Try using context's existing session first (more likely to work in WebSocket context)
+    # ALWAYS use a fresh session for HITL queries to avoid transaction isolation issues
+    # WebSocket connections hold long-lived sessions that may not see other transactions
     try:
-        repo = SqlHITLRequestRepository(context.db)
-        hitl_request = await repo.get_by_id(request_id)
-        if hitl_request:
-            session = context.db
-            logger.debug(f"[WS HITL] Found HITL request {request_id} using context session")
+        async with async_session_factory() as fresh_session:
+            # First, execute a raw SQL to ensure we get fresh data
+            result = await fresh_session.execute(
+                text("SELECT id, request_type, status, tenant_id, project_id, conversation_id, request_metadata FROM hitl_requests WHERE id = :id"),
+                {"id": request_id}
+            )
+            row = result.fetchone()
+            
+            if row:
+                # Convert row to domain object manually
+                from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestType, HITLRequestStatus
+                from datetime import datetime
+                
+                hitl_request = HITLRequest(
+                    id=row.id,
+                    request_type=HITLRequestType(row.request_type.lower()),
+                    conversation_id=row.conversation_id,
+                    message_id=None,
+                    tenant_id=row.tenant_id,
+                    project_id=row.project_id,
+                    question="",
+                    options=[],
+                    context={},
+                    metadata=row.request_metadata or {},
+                    created_at=datetime.utcnow(),
+                    status=HITLRequestStatus(row.status.lower()) if row.status else HITLRequestStatus.PENDING,
+                )
+                session = fresh_session
+                logger.debug(f"[WS HITL] Found HITL request {request_id} using raw SQL query")
+            else:
+                logger.warning(f"[WS HITL] HITL request {request_id} not found via raw SQL")
     except Exception as e:
-        logger.warning(f"[WS HITL] Failed to query with context session: {e}")
-
-    # If not found, try with a fresh session
-    if not hitl_request:
-        try:
-            async with async_session_factory() as fresh_session:
-                repo = SqlHITLRequestRepository(fresh_session)
-                hitl_request = await repo.get_by_id(request_id)
-                if hitl_request:
-                    session = fresh_session
-                    logger.debug(f"[WS HITL] Found HITL request {request_id} using fresh session")
-        except Exception as e:
-            logger.error(f"[WS HITL] Failed to query with fresh session: {e}")
+        logger.error(f"[WS HITL] Failed to query with raw SQL: {e}", exc_info=True)
 
     if not hitl_request:
         logger.error(f"[WS HITL] HITL request {request_id} not found in database")
@@ -142,18 +158,18 @@ async def _handle_hitl_response(
     )
 
     if redis_sent:
-        # Update database record using the same session that found the request
+        # Update database record using raw SQL to avoid ORM session issues
         try:
-            repo = SqlHITLRequestRepository(session)
             response_str = (
                 response_data.get("answer")
                 or response_data.get("decision")
                 or str(response_data.get("values", {}))
             )
-            await repo.update_response(request_id, response_str)
-            await repo.mark_completed(request_id)
             
-            # Commit the session
+            await session.execute(
+                text("UPDATE hitl_requests SET status = 'completed', response = :response WHERE id = :id"),
+                {"id": request_id, "response": response_str}
+            )
             await session.commit()
                 
             logger.info(

@@ -272,8 +272,8 @@ describe("RemoteDesktopViewer", () => {
         />
       );
 
-      // Loading indicator should be present
-      expect(screen.getByText(/Connecting/i)).toBeInTheDocument();
+      // Loading indicator should be present (more specific selector for the spinner text)
+      expect(screen.getByText("Connecting to desktop...")).toBeInTheDocument();
     });
 
     it("should render toolbar when showToolbar is true", () => {
@@ -612,12 +612,15 @@ describe("SandboxControlPanel", () => {
         />
       );
 
-      // Find buttons by text content since icon interferes with name matching
-      const startButtons = Array.from(container.querySelectorAll("button"))
-        .filter(btn => btn.textContent?.includes("Start"));
+      // Find the Web Terminal card and its Start button
+      // Look for the card containing "Web Terminal" and then find its Start button
+      const cards = Array.from(container.querySelectorAll(".ant-card"));
+      const terminalCard = cards.find(card => card.textContent?.includes("Web Terminal"));
+      expect(terminalCard).toBeDefined();
 
-      expect(startButtons.length).toBeGreaterThan(0);
-      fireEvent.click(startButtons[0]);
+      const startButton = terminalCard?.querySelector("button");
+      expect(startButton).toBeInTheDocument();
+      fireEvent.click(startButton!);
 
       expect(mockOnTerminalStart).toHaveBeenCalledTimes(1);
     });

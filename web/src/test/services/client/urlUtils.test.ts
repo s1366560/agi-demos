@@ -63,7 +63,8 @@ describe('createWebSocketUrl', () => {
 
   it('should create ws:// URL for http protocol', () => {
     const result = createWebSocketUrl('/agent/ws');
-    expect(result).toBe('ws://localhost:3000/api/v1/agent/ws');
+    // Port 3000 is automatically redirected to 8000 (backend port) in development
+    expect(result).toBe('ws://localhost:8000/api/v1/agent/ws');
   });
 
   it('should create wss:// URL for https protocol', () => {
@@ -87,7 +88,8 @@ describe('createWebSocketUrl', () => {
 
   it('should append query parameters', () => {
     const result = createWebSocketUrl('/agent/ws', { token: 'abc123', session_id: 'xyz' });
-    expect(result).toBe('ws://localhost:3000/api/v1/agent/ws?token=abc123&session_id=xyz');
+    // Port 3000 is automatically redirected to 8000 (backend port) in development
+    expect(result).toBe('ws://localhost:8000/api/v1/agent/ws?token=abc123&session_id=xyz');
   });
 });
 

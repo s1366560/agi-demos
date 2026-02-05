@@ -162,7 +162,7 @@ export interface TerminalStatus {
     running: boolean;
     url: string | null;
     port: number;
-    session_id: string | null;
+    sessionId: string | null;
     pid: number | null;
 }
 
@@ -437,7 +437,7 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
             running: response.success ?? response.running,
             url: wsUrl || null,
             port: response.port || 7681,
-            session_id: response.session_id || null,
+            sessionId: response.session_id || null,
             pid: response.pid || null,
         };
     }

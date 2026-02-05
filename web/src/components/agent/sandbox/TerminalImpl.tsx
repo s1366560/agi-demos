@@ -131,6 +131,8 @@ export function TerminalImpl({
 
   // Connect WebSocket
   const connect = useCallback(async () => {
+    // Check if WebSocket is available (not in test environment) and already open
+    if (typeof WebSocket === 'undefined') return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const ws = new WebSocket(getWsUrl());

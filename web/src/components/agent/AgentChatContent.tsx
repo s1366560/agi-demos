@@ -245,7 +245,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         description: t('agent.notifications.planModeExitFailed.description')
       });
     }
-  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t]);
+  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t, notification]);
 
   // Memoized components
   const messageArea = useMemo(() => (

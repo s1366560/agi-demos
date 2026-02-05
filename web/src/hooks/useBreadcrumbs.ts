@@ -24,8 +24,8 @@
 
 import { useParams, useLocation } from 'react-router-dom'
 
-import { useProjectStore } from '@/stores/project'
 import { useConversationsStore } from '@/stores/agent/conversationsStore'
+import { useProjectStore } from '@/stores/project'
 
 import type { Breadcrumb } from '@/config/navigation'
 
