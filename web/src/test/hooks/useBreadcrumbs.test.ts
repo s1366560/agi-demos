@@ -42,6 +42,16 @@ vi.mock('@/stores/project', () => ({
   },
 }))
 
+// Mock conversations store
+const mockCurrentConversation = { id: 'conv-123', title: 'Test Conversation' }
+
+vi.mock('@/stores/agent/conversationsStore', () => ({
+  useConversationsStore: (selector?: (state: { currentConversation: typeof mockCurrentConversation }) => unknown) => {
+    const state = { currentConversation: mockCurrentConversation }
+    return selector ? selector(state) : state
+  },
+}))
+
 describe('useBreadcrumbs', () => {
   describe('tenant breadcrumbs', () => {
     beforeEach(() => {
@@ -77,25 +87,34 @@ describe('useBreadcrumbs', () => {
       expect(result.current.length).toBe(0)
     })
 
-    it('should generate breadcrumbs for agent-workspace with conversation ID', () => {
-      mockLocation.pathname = '/tenant/tenant-123/agent-workspace/f7bde02e-9637-4229-ba4c-e8feb33889ad'
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
-
-      // Should show "Agent Workspace" instead of the conversation ID
-      expect(result.current).toEqual([
-        { label: 'Home', path: '/tenant' },
-        { label: 'Agent Workspace', path: '/tenant/tenant-123/agent-workspace' },
-      ])
-    })
-
-    it('should generate breadcrumbs for agent-workspace without conversation ID', () => {
+    it('should generate breadcrumbs for agent-workspace with conversation name', () => {
       mockLocation.pathname = '/tenant/tenant-123/agent-workspace'
       const { result } = renderHook(() => useBreadcrumbs('tenant'))
 
+      // Should show conversation name when available
+      expect(result.current).toEqual([
+        { label: 'Home', path: '/tenant' },
+        { label: 'Test Conversation', path: '/tenant/tenant-123/agent-workspace' },
+      ])
+    })
+
+    it('should generate breadcrumbs for agent-workspace with fallback when no conversation', () => {
+      // Temporarily set no conversation
+      const originalConversation = { ...mockCurrentConversation }
+      mockCurrentConversation.id = 'conv-123'
+      mockCurrentConversation.title = ''
+
+      mockLocation.pathname = '/tenant/tenant-123/agent-workspace'
+      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+
+      // Should show "Agent Workspace" as fallback when no conversation title
       expect(result.current).toEqual([
         { label: 'Home', path: '/tenant' },
         { label: 'Agent Workspace', path: '/tenant/tenant-123/agent-workspace' },
       ])
+
+      // Restore
+      Object.assign(mockCurrentConversation, originalConversation)
     })
   })
 

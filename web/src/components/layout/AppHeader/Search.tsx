@@ -39,7 +39,7 @@ export const Search = React.memo(function Search({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         aria-label={ariaLabel || placeholder}
-        className="input-search w-64"
+        className="input-search w-48 lg:w-64 transition-all duration-200"
       />
     </div>
   )

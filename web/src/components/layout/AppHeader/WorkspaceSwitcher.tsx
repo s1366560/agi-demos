@@ -17,7 +17,11 @@ export const WorkspaceSwitcher = React.memo(function WorkspaceSwitcher({
   mode,
   as: Component = BaseWorkspaceSwitcher,
 }: WorkspaceSwitcherProps) {
-  const widthClass = mode === 'project' ? 'w-48' : 'w-56'
+  // Responsive width classes
+  const widthClass = mode === 'project'
+    ? 'w-full min-w-0'
+    : 'w-full min-w-0'
+
   return (
     <div className={widthClass}>
       <Component mode={mode} />

@@ -17,6 +17,14 @@ export type HeaderVariant = 'minimal' | 'compact' | 'full' | 'custom'
 export type WorkspaceMode = 'tenant' | 'project'
 
 /**
+ * Breadcrumb item
+ */
+export interface Breadcrumb {
+  label: string
+  path: string
+}
+
+/**
  * Root AppHeader props
  */
 export interface AppHeaderRootProps {
@@ -26,6 +34,12 @@ export interface AppHeaderRootProps {
   context?: 'tenant' | 'project' | 'agent'
   /** Header variant (presets for common configurations) */
   variant?: HeaderVariant
+  /** Custom breadcrumbs to display */
+  breadcrumbs?: Breadcrumb[]
+  /** Options for breadcrumb generation */
+  breadcrumbOptions?: {
+    skipFirst?: boolean
+  }
 }
 
 /**

@@ -64,6 +64,18 @@ vi.mock('@/stores/auth', () => ({
   useAuthActions: () => ({ logout: mockLogout }),
 }))
 
+// Mock theme store
+vi.mock('@/stores/theme', () => ({
+  useThemeStore: vi.fn((selector) => {
+    const state = {
+      theme: 'system' as const,
+      computedTheme: 'light' as const,
+      setTheme: vi.fn(),
+    }
+    return selector ? selector(state) : state
+  }),
+}))
+
 function renderWithHeader(node: React.ReactNode) {
   return render(
     <MemoryRouter initialEntries={['/tenant']}>

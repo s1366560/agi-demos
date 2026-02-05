@@ -64,11 +64,11 @@ export const UserMenu = React.memo(function UserMenu({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        className="flex items-center gap-1.5 sm:gap-2 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label="User menu"
         type="button"
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-sm font-medium overflow-hidden">
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-xs sm:text-sm font-medium overflow-hidden flex-shrink-0">
           {avatarUrl ? (
             <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
           ) : (
@@ -76,16 +76,16 @@ export const UserMenu = React.memo(function UserMenu({
           )}
         </div>
 
-        <div className="hidden sm:flex flex-col items-start">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
+        <div className="hidden md:flex flex-col items-start min-w-0 max-w-24 lg:max-w-32">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight truncate w-full">
             {displayName}
           </span>
-          <span className="text-xs text-slate-500 dark:text-slate-400 leading-tight">
+          <span className="text-xs text-slate-500 dark:text-slate-400 leading-tight truncate w-full">
             {user.roles?.[0] || 'User'}
           </span>
         </div>
 
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`hidden sm:block w-4 h-4 text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (

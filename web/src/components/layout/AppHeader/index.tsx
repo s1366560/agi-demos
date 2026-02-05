@@ -40,7 +40,6 @@ export type {
   PrimaryActionProps,
   AppHeaderContextValue,
   CompoundComponentProps,
-  BreadcrumbOptions,
 } from './types'
 
 // Re-export types with aliases for convenience

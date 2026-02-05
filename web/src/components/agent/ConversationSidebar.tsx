@@ -18,7 +18,9 @@ import {
   Edit3,
   Bot,
   AlertCircle,
-  Loader2
+  Loader2,
+  PanelLeft,
+  PanelLeftClose
 } from 'lucide-react';
 
 import { LazyButton, LazyBadge, LazyTooltip, LazyDropdown, LazyModal, LazyInput } from '@/components/ui/lazyAntd';
@@ -255,6 +257,7 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   onDelete,
   onRename,
   collapsed,
+  onToggleCollapse,
   headerExtra,
   conversationStatuses,
 }) => {
@@ -310,8 +313,22 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
         ${collapsed ? 'flex items-center justify-center' : ''}
       `}>
         {collapsed ? (
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Bot className="text-primary" size={24} />
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Bot className="text-primary" size={24} />
+            </div>
+            {/* Collapse Toggle Button - Compact mode */}
+            {onToggleCollapse && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                aria-label="展开侧边栏"
+                title="展开侧边栏"
+              >
+                <PanelLeft size={18} />
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -324,6 +341,18 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
                 <h2 className="font-semibold text-slate-900 dark:text-slate-100 truncate">Agent Chat</h2>
                 <p className="text-xs text-slate-500">{conversations.length} conversations</p>
               </div>
+              {/* Collapse Toggle Button */}
+              {onToggleCollapse && (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  aria-label="收起侧边栏"
+                  title="收起侧边栏"
+                >
+                  <PanelLeftClose size={18} />
+                </button>
+              )}
             </div>
             
             {/* Extra Header Content (e.g., Project Selector) */}

@@ -28,15 +28,17 @@ services:
       --dashboard-host=0.0.0.0
       --dashboard-port=8265
       --ray-client-server-port=10001
-      --object-store-memory=536870912
-      --memory=1073741824
+      --object-store-memory=1073741824
+      --memory=4294967296
+      --disable-usage-stats
       --block
     ports:
       - "8265:8265"
       - "10001:10001"
-    mem_limit: 2g
-    cpus: "1.0"
+    mem_limit: 6g
+    cpus: "1.5"
     restart: unless-stopped
+    shm_size: 2g
 
   ray-worker:
     build:
@@ -63,11 +65,12 @@ services:
       - ZAI_API_KEY=${ZAI_API_KEY}
     command: >
       ray start --address=ray-head:6379
-      --object-store-memory=536870912
-      --memory=1073741824
+      --object-store-memory=1073741824
+      --memory=4294967296
       --block
     depends_on:
       - ray-head
-    mem_limit: 2g
-    cpus: "1.0"
+    mem_limit: 6g
+    cpus: "1.5"
     restart: unless-stopped
+    shm_size: 2g

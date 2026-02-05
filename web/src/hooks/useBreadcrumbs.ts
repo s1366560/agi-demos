@@ -25,6 +25,7 @@
 import { useParams, useLocation } from 'react-router-dom'
 
 import { useProjectStore } from '@/stores/project'
+import { useConversationsStore } from '@/stores/agent/conversationsStore'
 
 import type { Breadcrumb } from '@/config/navigation'
 
@@ -58,6 +59,7 @@ export function useBreadcrumbs(
   const location = useLocation()
   // Use selective selectors to prevent unnecessary re-renders
   const currentProject = useProjectStore((state) => state.currentProject)
+  const currentConversation = useConversationsStore((state) => state.currentConversation)
 
   const {
     labels: customLabels = {},
@@ -87,10 +89,12 @@ export function useBreadcrumbs(
     // Tenant-level breadcrumbs
     if (paths.length > 2) {
       const section = paths[2]
-      // Handle special case for agent-workspace - don't show conversation ID
+      // Handle special case for agent-workspace - show conversation name if available
       if (section === 'agent-workspace') {
+        // Show conversation name if available, otherwise show 'Agent Workspace'
+        const conversationName = currentConversation?.title || 'Agent Workspace'
         breadcrumbs.push({
-          label: 'Agent Workspace',
+          label: conversationName,
           path: `/tenant/${tenantId}/agent-workspace`,
         })
       } else {
