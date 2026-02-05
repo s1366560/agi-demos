@@ -565,65 +565,124 @@ async def execute_project_chat_activity(
                         }
                     )
 
-                # Continue execution
-                async for event in agent.execute_chat(
-                    conversation_id=conversation_id,
-                    user_message=user_message,
-                    user_id=user_id,
-                    conversation_context=conversation_context_with_response,
-                    tenant_id=tenant_id,
-                    message_id=message_id,
-                    hitl_response=hitl_response_for_agent,
-                ):
-                    events.append(event)
-                    sequence_number += 1
-
-                    await _publish_event_to_stream(
+                # Continue execution - may trigger another HITL
+                try:
+                    async for event in agent.execute_chat(
                         conversation_id=conversation_id,
-                        event=event,
+                        user_message=user_message,
+                        user_id=user_id,
+                        conversation_context=conversation_context_with_response,
+                        tenant_id=tenant_id,
                         message_id=message_id,
-                        sequence_number=sequence_number,
+                        hitl_response=hitl_response_for_agent,
+                    ):
+                        events.append(event)
+                        sequence_number += 1
+
+                        await _publish_event_to_stream(
+                            conversation_id=conversation_id,
+                            event=event,
+                            message_id=message_id,
+                            sequence_number=sequence_number,
+                            correlation_id=correlation_id,
+                            redis_client=redis_client,
+                        )
+
+                        event_type = event.get("type")
+                        if event_type == "complete":
+                            final_content = event.get("data", {}).get("content", "")
+                        elif event_type == "error":
+                            is_error = True
+                            error_message = event.get("data", {}).get("message", "Unknown error")
+
+                    # Clean up state
+                    await state_store.delete_state(state_key)
+
+                    # Persist all events
+                    await _persist_events(
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        events=events,
                         correlation_id=correlation_id,
-                        redis_client=redis_client,
                     )
 
-                    event_type = event.get("type")
-                    if event_type == "complete":
-                        final_content = event.get("data", {}).get("content", "")
-                    elif event_type == "error":
-                        is_error = True
-                        error_message = event.get("data", {}).get("message", "Unknown error")
+                    execution_time_ms = (time_module.time() - start_time) * 1000
 
-                # Clean up state
-                await state_store.delete_state(state_key)
+                    agent_metrics.increment(
+                        "project_agent.chat_total",
+                        labels={"project_id": project_id},
+                    )
+                    agent_metrics.increment(
+                        "project_agent.hitl_fast_path_success",
+                        labels={"project_id": project_id},
+                    )
 
-                # Persist all events
-                await _persist_events(
-                    conversation_id=conversation_id,
-                    message_id=message_id,
-                    events=events,
-                    correlation_id=correlation_id,
-                )
+                    return {
+                        "content": final_content,
+                        "sequence_number": sequence_number,
+                        "is_error": is_error,
+                        "error_message": error_message,
+                        "execution_time_ms": execution_time_ms,
+                        "event_count": len(events),
+                    }
 
-                execution_time_ms = (time_module.time() - start_time) * 1000
+                except HITLPendingException as nested_hitl_ex:
+                    # Another HITL triggered during fast path execution
+                    logger.info(
+                        f"[ProjectAgentActivity] Nested HITL during fast path: "
+                        f"request_id={nested_hitl_ex.request_id}, type={nested_hitl_ex.hitl_type.value}"
+                    )
 
-                agent_metrics.increment(
-                    "project_agent.chat_total",
-                    labels={"project_id": project_id},
-                )
-                agent_metrics.increment(
-                    "project_agent.hitl_fast_path_success",
-                    labels={"project_id": project_id},
-                )
+                    # Save state for the new HITL
+                    nested_saved_messages = nested_hitl_ex.current_messages or conversation_context_with_response
 
-                return {
-                    "content": final_content,
-                    "sequence_number": sequence_number,
-                    "is_error": is_error,
-                    "error_message": error_message,
-                    "execution_time_ms": execution_time_ms,
-                    "event_count": len(events),
-                }
+                    nested_state = HITLAgentState(
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                        hitl_request_id=nested_hitl_ex.request_id,
+                        hitl_type=nested_hitl_ex.hitl_type.value,
+                        hitl_request_data=nested_hitl_ex.request_data,
+                        messages=nested_saved_messages,
+                        user_message=user_message,
+                        user_id=user_id,
+                        step_count=getattr(agent, "_step_count", 0),
+                        timeout_seconds=nested_hitl_ex.timeout_seconds,
+                        pending_tool_call_id=nested_hitl_ex.tool_call_id,
+                    )
+
+                    nested_state_key = await state_store.save_state(nested_state)
+
+                    # Delete the old state
+                    await state_store.delete_state(state_key)
+
+                    # Persist events collected so far
+                    if events:
+                        await _persist_events(
+                            conversation_id=conversation_id,
+                            message_id=message_id,
+                            events=events,
+                            correlation_id=correlation_id,
+                        )
+
+                    execution_time_ms = (time_module.time() - start_time) * 1000
+
+                    # Return new HITL pending status
+                    return {
+                        "hitl_pending": True,
+                        "hitl_request_id": nested_hitl_ex.request_id,
+                        "hitl_type": nested_hitl_ex.hitl_type.value,
+                        "hitl_request_data": nested_hitl_ex.request_data,
+                        "hitl_state_key": nested_state_key,
+                        "timeout_seconds": nested_hitl_ex.timeout_seconds,
+                        "content": "",
+                        "sequence_number": sequence_number,
+                        "is_error": False,
+                        "error_message": None,
+                        "execution_time_ms": execution_time_ms,
+                        "event_count": len(events),
+                    }
 
             # Fast path timed out - fall back to Workflow Signal
             execution_time_ms = (time_module.time() - start_time) * 1000
