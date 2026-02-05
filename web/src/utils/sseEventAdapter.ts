@@ -592,9 +592,12 @@ export function sseEventToTimeline(
 /**
  * Convert a batch of SSE events to TimelineEvents
  *
- * Automatically assigns sequence numbers starting from 1.
+ * Automatically assigns sequence numbers.
  * Filters out null events (unsupported event types).
- * Resets sequence counter for each batch.
+ * 
+ * Note: Does NOT reset sequence counter to ensure continuity
+ * across multiple HITL scenarios. Call resetSequenceCounter() 
+ * explicitly if you need to start from 1.
  *
  * @param events - Array of SSE events to convert
  * @returns Array of TimelineEvents (filtered to exclude nulls)
@@ -602,8 +605,9 @@ export function sseEventToTimeline(
 export function batchConvertSSEEvents(
     events: AgentEvent<unknown>[]
 ): TimelineEvent[] {
-    // Reset sequence for each batch
-    resetSequenceCounter();
+    // 注意：不在批量转换时重置计数器，以确保多次 HITL 场景下的事件序列连续性
+    // 如果需要重置，请显式调用 resetSequenceCounter()
+    // resetSequenceCounter();
 
     const timelineEvents: TimelineEvent[] = [];
 
@@ -617,6 +621,22 @@ export function batchConvertSSEEvents(
     }
 
     return timelineEvents;
+}
+
+/**
+ * Convert a batch of SSE events to TimelineEvents with sequence reset
+ *
+ * Use this when you explicitly need to start sequence numbers from 1,
+ * such as when loading a new conversation history.
+ *
+ * @param events - Array of SSE events to convert
+ * @returns Array of TimelineEvents (filtered to exclude nulls)
+ */
+export function batchConvertSSEEventsWithReset(
+    events: AgentEvent<unknown>[]
+): TimelineEvent[] {
+    resetSequenceCounter();
+    return batchConvertSSEEvents(events);
 }
 
 /**

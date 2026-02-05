@@ -4,7 +4,7 @@
  * Provides Terminal and Remote Desktop functionality in a modern tabbed interface.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { 
   Terminal, 
@@ -37,9 +37,45 @@ interface SandboxSectionProps {
 }
 
 // Terminal Tab Content
-const TerminalTab: React.FC<{ sandboxId: string }> = ({ sandboxId }) => {
+const TerminalTab: React.FC<{ 
+  sandboxId: string;
+  terminalStatus: any;
+  onStartTerminal: () => Promise<void>;
+  isTerminalLoading: boolean;
+}> = ({ sandboxId, terminalStatus, onStartTerminal, isTerminalLoading }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  // Auto-start terminal if not running
+  useEffect(() => {
+    if (!terminalStatus?.running && !isTerminalLoading && !isConnected) {
+      onStartTerminal();
+    }
+  }, [terminalStatus?.running, isTerminalLoading, isConnected, onStartTerminal]);
+
+  // If terminal is not running, show start button
+  if (!terminalStatus?.running && !isConnected) {
+    return (
+      <div className="h-full flex items-center justify-center bg-slate-900">
+        <LazyEmpty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            <div className="text-center">
+              <p className="text-slate-400 mb-4">Terminal is not running</p>
+              <LazyButton
+                type="primary"
+                icon={<Play size={16} />}
+                onClick={onStartTerminal}
+                loading={isTerminalLoading}
+              >
+                Start Terminal
+              </LazyButton>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -63,6 +99,11 @@ const TerminalTab: React.FC<{ sandboxId: string }> = ({ sandboxId }) => {
               size="small"
               icon={<RefreshCw size={14} />}
               className="text-slate-400 hover:text-white"
+              onClick={() => {
+                setSessionId(null);
+                setIsConnected(false);
+                onStartTerminal();
+              }}
             />
           </LazyTooltip>
         </div>
@@ -90,9 +131,18 @@ const TerminalTab: React.FC<{ sandboxId: string }> = ({ sandboxId }) => {
 const DesktopTab: React.FC<{ 
   sandboxId: string; 
   desktopStatus: any;
-}> = ({ sandboxId, desktopStatus }) => {
-  const { startDesktop, stopDesktop, isDesktopLoading } = useSandboxStore();
+  onStartDesktop: () => Promise<void>;
+  onStopDesktop: () => Promise<void>;
+  isDesktopLoading: boolean;
+}> = ({ sandboxId, desktopStatus, onStartDesktop, onStopDesktop, isDesktopLoading }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Auto-start desktop if not running
+  useEffect(() => {
+    if (!desktopStatus?.running && !isDesktopLoading) {
+      onStartDesktop();
+    }
+  }, [desktopStatus?.running, isDesktopLoading, onStartDesktop]);
 
   if (!desktopStatus?.running) {
     return (
@@ -105,7 +155,7 @@ const DesktopTab: React.FC<{
               <LazyButton
                 type="primary"
                 icon={<Play size={16} />}
-                onClick={() => startDesktop()}
+                onClick={onStartDesktop}
                 loading={isDesktopLoading}
               >
                 Start Desktop
@@ -141,7 +191,7 @@ const DesktopTab: React.FC<{
               type="text"
               size="small"
               icon={<Square size={14} />}
-              onClick={stopDesktop}
+              onClick={onStopDesktop}
               loading={isDesktopLoading}
               className="text-slate-400 hover:text-red-400"
             />
@@ -222,7 +272,15 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
   className,
 }) => {
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
-  const { desktopStatus, terminalStatus } = useSandboxStore();
+  const { 
+    desktopStatus, 
+    terminalStatus, 
+    startDesktop, 
+    stopDesktop, 
+    startTerminal,
+    isDesktopLoading, 
+    isTerminalLoading 
+  } = useSandboxStore();
 
   const tabItems = [
     {
@@ -237,7 +295,12 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         </div>
       ),
       children: sandboxId ? (
-        <TerminalTab sandboxId={sandboxId} />
+        <TerminalTab 
+          sandboxId={sandboxId} 
+          terminalStatus={terminalStatus}
+          onStartTerminal={startTerminal}
+          isTerminalLoading={isTerminalLoading}
+        />
       ) : (
         <div className="h-full flex items-center justify-center">
           <LazyEmpty description="No sandbox connected" />
@@ -256,7 +319,13 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         </div>
       ),
       children: sandboxId ? (
-        <DesktopTab sandboxId={sandboxId} desktopStatus={desktopStatus} />
+        <DesktopTab 
+          sandboxId={sandboxId} 
+          desktopStatus={desktopStatus} 
+          onStartDesktop={startDesktop}
+          onStopDesktop={stopDesktop}
+          isDesktopLoading={isDesktopLoading}
+        />
       ) : (
         <div className="h-full flex items-center justify-center">
           <LazyEmpty description="No sandbox connected" />

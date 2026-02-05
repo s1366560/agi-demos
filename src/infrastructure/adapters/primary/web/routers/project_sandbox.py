@@ -782,3 +782,120 @@ async def stop_project_terminal(
     except Exception as e:
         logger.error(f"Failed to stop terminal for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {str(e)}")
+
+
+# ============================================================================
+# Desktop/Terminal Proxy endpoints
+# ============================================================================
+
+
+@router.get("/{project_id}/sandbox/desktop/proxy/{path:path}")
+async def proxy_project_desktop(
+    project_id: str,
+    path: str,
+    current_user: User = Depends(get_current_user),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+):
+    """Proxy requests to the project's sandbox desktop (noVNC) service.
+    
+    This allows browser access to the desktop without exposing container ports directly.
+    """
+    info = await service.get_project_sandbox(project_id)
+    
+    if not info:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No sandbox found for project {project_id}",
+        )
+    
+    if not info.desktop_url:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Desktop service is not running for project {project_id}",
+        )
+    
+    # Import here to avoid circular imports
+    from fastapi.responses import RedirectResponse
+    
+    # Redirect to the actual desktop URL
+    # The desktop URL from sandbox info should already contain the full URL
+    target_url = info.desktop_url
+    if path and path != "vnc.html":
+        # If a specific path is requested, append it
+        target_url = target_url.replace("/vnc.html", f"/{path}")
+    
+    return RedirectResponse(url=target_url, status_code=307)
+
+
+@router.websocket("/{project_id}/sandbox/terminal/proxy/ws")
+async def proxy_project_terminal_websocket(
+    websocket: WebSocket,
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+):
+    """WebSocket proxy for the project's sandbox terminal service.
+    
+    This allows browser WebSocket connections to the terminal without exposing container ports.
+    """
+    info = await service.get_project_sandbox(project_id)
+    
+    if not info:
+        await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
+        return
+    
+    if not info.terminal_url:
+        await websocket.close(code=1008, reason=f"Terminal service is not running for project {project_id}")
+        return
+    
+    # Accept the WebSocket connection
+    await websocket.accept()
+    
+    # Import aiohttp for proxying WebSocket connections
+    try:
+        import aiohttp
+    except ImportError:
+        await websocket.send_json({"type": "error", "message": "WebSocket proxy not available"})
+        await websocket.close()
+        return
+    
+    # Connect to the backend terminal WebSocket
+    target_ws_url = info.terminal_url
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(target_ws_url) as target_ws:
+                # Create bidirectional relay tasks
+                async def client_to_target():
+                    try:
+                        while True:
+                            msg = await websocket.receive_text()
+                            await target_ws.send_str(msg)
+                    except Exception:
+                        pass
+                
+                async def target_to_client():
+                    try:
+                        async for msg in target_ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                await websocket.send_text(msg.data)
+                            elif msg.type == aiohttp.WSMsgType.BINARY:
+                                await websocket.send_bytes(msg.data)
+                            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                                break
+                    except Exception:
+                        pass
+                
+                # Run both directions concurrently
+                await asyncio.gather(client_to_target(), target_to_client())
+    except Exception as e:
+        logger.error(f"Terminal WebSocket proxy error: {e}")
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass

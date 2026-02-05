@@ -128,7 +128,16 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
         set((state) => {
           // Skip if already exists
           if (state.pendingRequests.has(request.requestId)) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[HITL Debug] Request already exists:', request.requestId);
+            }
             return state;
+          }
+
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[HITL Debug] Adding request:', request.requestId, 
+              'Type:', request.hitlType,
+              'Total pending:', state.pendingRequests.size + 1);
           }
 
           const newPending = new Map(state.pendingRequests);
@@ -172,6 +181,10 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
 
       updateRequestStatus: (requestId: string, status: HITLStatus) => {
         set((state) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[HITL Debug] Updating request status:', requestId, '->', status);
+          }
+
           // Always update the status map (even if request not in pendingRequests)
           const newStatuses = new Map(state.requestStatuses);
           newStatuses.set(requestId, status);
@@ -224,11 +237,24 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
         data: Record<string, unknown>,
         conversationId: string
       ) => {
+        // 调试日志：记录接收到的 SSE 事件
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[HITL Debug] Received SSE event:', { 
+            eventType, 
+            conversationId, 
+            requestId: data.request_id,
+            hitlType: SSE_EVENT_TO_HITL_TYPE[eventType] 
+          });
+        }
+
         // Handle "asked" events
         const hitlType = SSE_EVENT_TO_HITL_TYPE[eventType];
         if (hitlType) {
           const request = createRequestFromSSE(eventType, data, conversationId);
           if (request) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[HITL Debug] Created request:', request.requestId, request.hitlType);
+            }
             get().addRequest(request);
           }
           return;
@@ -265,7 +291,11 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
         }, false, 'hitl/submitStart');
 
         try {
+          // 先调用 API - 确保后端成功接收响应后再更新本地状态
+          // 这避免了 API 失败但状态已更新的竞态条件
           await unifiedHitlService.respond(requestId, hitlType, responseData);
+          
+          // API 成功后再更新本地状态
           get().updateRequestStatus(requestId, 'answered');
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : 'Failed to submit response';
@@ -417,55 +447,97 @@ function createRequestFromSSE(
     case 'clarification':
       return {
         ...base,
+        question: (data.question as string) || '',
         clarificationData: {
-          question: data.question as string,
-          clarificationType: (data.clarification_type as any) || 'custom',
+          question: (data.question as string) || '',
+          clarificationType: (data.clarification_type as any) || 
+                            (data.clarificationType as any) || 
+                            'custom',
           options: (data.options as ClarificationOption[]) || [],
-          allowCustom: (data.allow_custom as boolean) ?? true,
+          allowCustom: (data.allow_custom as boolean) ?? 
+                      (data.allowCustom as boolean) ?? 
+                      true,
           context: (data.context as Record<string, unknown>) || {},
-          defaultValue: data.default_value as string | undefined,
+          defaultValue: (data.default_value as string) || 
+                       (data.defaultValue as string) || 
+                       undefined,
         },
       };
 
     case 'decision':
       return {
         ...base,
+        question: (data.question as string) || '',
         decisionData: {
-          question: data.question as string,
-          decisionType: (data.decision_type as any) || 'single_choice',
+          question: (data.question as string) || '',
+          decisionType: (data.decision_type as any) || 
+                       (data.decisionType as any) || 
+                       'single_choice',
           options: (data.options as DecisionOption[]) || [],
-          allowCustom: (data.allow_custom as boolean) ?? false,
-          defaultOption: data.default_option as string | undefined,
-          maxSelections: data.max_selections as number | undefined,
+          allowCustom: (data.allow_custom as boolean) ?? 
+                      (data.allowCustom as boolean) ?? 
+                      false,
+          defaultOption: (data.default_option as string) || 
+                        (data.defaultOption as string) || 
+                        undefined,
+          maxSelections: (data.max_selections as number) || 
+                        (data.maxSelections as number) || 
+                        undefined,
           context: (data.context as Record<string, unknown>) || {},
         },
       };
 
     case 'env_var':
+      // 尝试多个可能的字段名，以兼容不同的后端版本
+      // 后端可能使用 'message' 或 'question' 字段
+      const envMessage = (data.message as string) || 
+                         (data.question as string) || 
+                         'Please provide environment variables';
+      
       return {
         ...base,
-        question: (data.message as string) || 'Please provide environment variables',
+        question: envMessage,
         envVarData: {
-          toolName: data.tool_name as string,
+          toolName: (data.tool_name as string) || 
+                    (data.toolName as string) || 
+                    'unknown',
           fields: (data.fields as EnvVarField[]) || [],
-          message: data.message as string | undefined,
-          allowSave: (data.allow_save as boolean) ?? true,
+          message: envMessage,
+          allowSave: (data.allow_save as boolean) ?? 
+                     (data.allowSave as boolean) ?? 
+                     true,
           context: (data.context as Record<string, unknown>) || {},
         },
       };
 
     case 'permission':
+      const toolName = (data.tool_name as string) || 
+                      (data.toolName as string) || 
+                      'unknown';
+      const action = (data.action as string) || 
+                    (data.permission_type as string) || 
+                    'perform action';
+      const description = (data.description as string) || 
+                         (data.desc as string);
+      
       return {
         ...base,
-        question: (data.description as string) || `Allow ${data.tool_name} to ${data.action}?`,
+        question: description || `Allow ${toolName} to ${action}?`,
         permissionData: {
-          toolName: data.tool_name as string,
-          action: data.action as string,
-          riskLevel: (data.risk_level as any) || 'medium',
-          details: (data.details as Record<string, unknown>) || {},
-          description: data.description as string | undefined,
-          allowRemember: (data.allow_remember as boolean) ?? true,
-          defaultAction: data.default_action as any,
+          toolName: toolName,
+          action: action,
+          riskLevel: (data.risk_level as any) || 
+                    (data.riskLevel as any) || 
+                    'medium',
+          details: (data.details as Record<string, unknown>) || 
+                   (data.context as Record<string, unknown>) || 
+                   {},
+          description: description,
+          allowRemember: (data.allow_remember as boolean) ?? 
+                        (data.allowRemember as boolean) ?? 
+                        true,
+          defaultAction: (data.default_action as any) || 
+                        (data.defaultAction as any),
           context: (data.context as Record<string, unknown>) || {},
         },
       };

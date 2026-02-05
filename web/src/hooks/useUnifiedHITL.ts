@@ -32,7 +32,7 @@ interface UseUnifiedHITLReturn {
   /** All pending HITL requests for this conversation */
   pendingRequests: UnifiedHITLRequest[];
 
-  /** The highest priority pending request (first one) */
+  /** The highest priority pending request (first pending one) */
   currentRequest: UnifiedHITLRequest | null;
 
   /** Number of pending requests */
@@ -43,6 +43,9 @@ interface UseUnifiedHITLReturn {
 
   /** Get requests by type */
   getByType: (type: HITLType) => UnifiedHITLRequest[];
+
+  /** Get the next pending request after the given one (for multiple HITL) */
+  getNextPendingRequest: (currentRequestId: string) => UnifiedHITLRequest | null;
 }
 
 /**
@@ -138,11 +141,29 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
   // Computed values
   const currentRequest = useMemo(() => {
     if (pendingRequests.length === 0) return null;
-    // Return the first (oldest) request as the current one
-    // Sort by createdAt ascending - oldest first
-    return [...pendingRequests].sort(
+    
+    // 按 createdAt 排序（最早的在前）
+    const sorted = [...pendingRequests].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    )[0];
+    );
+    
+    // 返回第一个 pending 状态的请求
+    // 在多次 HITL 场景下，这确保用户按顺序处理每个请求
+    return sorted.find(r => r.status === 'pending') || sorted[0];
+  }, [pendingRequests]);
+
+  // 获取下一个待处理请求的函数（用于处理多个 HITL）
+  const getNextPendingRequest = useMemo(() => {
+    return (currentRequestId: string) => {
+      if (pendingRequests.length <= 1) return null;
+      
+      const sorted = [...pendingRequests].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      
+      const currentIndex = sorted.findIndex(r => r.requestId === currentRequestId);
+      return sorted[currentIndex + 1] || null;
+    };
   }, [pendingRequests]);
 
   const getByType = useMemo(() => {
@@ -155,6 +176,7 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
     pendingCount: pendingRequests.length,
     hasPending: pendingRequests.length > 0,
     getByType,
+    getNextPendingRequest,
   };
 }
 

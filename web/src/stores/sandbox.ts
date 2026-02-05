@@ -245,22 +245,31 @@ export const useSandboxStore = create<SandboxState>()(
                         activeProjectId
                     );
 
+                    // Build proxy URLs instead of using direct container URLs
+                    // This allows browser access through the API server
+                    const proxyDesktopUrl = sandbox.desktop_url
+                        ? `/api/v1/projects/${activeProjectId}/sandbox/desktop/proxy/vnc.html`
+                        : null;
+                    const proxyTerminalUrl = sandbox.terminal_url
+                        ? `/api/v1/projects/${activeProjectId}/sandbox/terminal/proxy/ws`
+                        : null;
+
                     set({
                         activeSandboxId: sandbox.sandbox_id,
                         connectionStatus: sandbox.is_healthy ? "connected" : "error",
-                        desktopStatus: sandbox.desktop_url
+                        desktopStatus: proxyDesktopUrl
                             ? {
                                 running: true,
-                                url: sandbox.desktop_url,
+                                url: proxyDesktopUrl,
                                 display: ":1",
                                 resolution: "1280x720",
                                 port: sandbox.desktop_port || 6080,
                             }
                             : null,
-                        terminalStatus: sandbox.terminal_url
+                        terminalStatus: proxyTerminalUrl
                             ? {
                                 running: true,
-                                url: sandbox.terminal_url,
+                                url: proxyTerminalUrl,
                                 port: sandbox.terminal_port || 7681,
                                 sessionId: null,
                                 pid: null,

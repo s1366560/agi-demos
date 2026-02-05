@@ -407,9 +407,15 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
             `/projects/${projectId}/sandbox/desktop?resolution=${encodeURIComponent(resolution)}`
         );
 
+        // Build proxy URL instead of using direct container URL
+        // This allows browser access through the API server
+        const proxyUrl = response.success || response.running
+            ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/vnc.html`
+            : null;
+
         return {
             running: response.success ?? response.running,
-            url: response.url || null,
+            url: proxyUrl,
             display: response.display || ":1",
             resolution: response.resolution || resolution,
             port: response.port || 0,
