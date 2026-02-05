@@ -89,41 +89,62 @@ async def _handle_hitl_response(
     from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
         SqlHITLRequestRepository,
     )
+    from src.domain.model.agent.hitl_request import HITLRequestStatus
 
-    # Use a fresh session to ensure we see the latest data from other processes
-    # (the HITL request was created by the agent worker in a different process)
-    async with async_session_factory() as session:
-        repo = SqlHITLRequestRepository(session)
+    hitl_request = None
+    session = None
+    
+    # Try using context's existing session first (more likely to work in WebSocket context)
+    try:
+        repo = SqlHITLRequestRepository(context.db)
         hitl_request = await repo.get_by_id(request_id)
+        if hitl_request:
+            session = context.db
+            logger.debug(f"[WS HITL] Found HITL request {request_id} using context session")
+    except Exception as e:
+        logger.warning(f"[WS HITL] Failed to query with context session: {e}")
 
-        if not hitl_request:
-            await context.send_error(f"HITL request {request_id} not found")
-            return
+    # If not found, try with a fresh session
+    if not hitl_request:
+        try:
+            async with async_session_factory() as fresh_session:
+                repo = SqlHITLRequestRepository(fresh_session)
+                hitl_request = await repo.get_by_id(request_id)
+                if hitl_request:
+                    session = fresh_session
+                    logger.debug(f"[WS HITL] Found HITL request {request_id} using fresh session")
+        except Exception as e:
+            logger.error(f"[WS HITL] Failed to query with fresh session: {e}")
 
-        # Check if already answered
-        from src.domain.model.agent.hitl_request import HITLRequestStatus
+    if not hitl_request:
+        logger.error(f"[WS HITL] HITL request {request_id} not found in database")
+        await context.send_error(f"HITL request {request_id} not found")
+        return
 
-        if hitl_request.status != HITLRequestStatus.PENDING:
-            await context.send_error(
-                f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})"
-            )
-            return
-
-        # Publish to Redis Stream
-        agent_mode = (hitl_request.metadata or {}).get("agent_mode", "default")
-        redis_sent = await _publish_hitl_response_to_redis(
-            tenant_id=hitl_request.tenant_id,
-            project_id=hitl_request.project_id,
-            conversation_id=hitl_request.conversation_id,
-            request_id=request_id,
-            hitl_type=hitl_type,
-            response_data=response_data,
-            user_id=context.user_id,
-            agent_mode=agent_mode,
+    # Check if already answered
+    if hitl_request.status != HITLRequestStatus.PENDING:
+        await context.send_error(
+            f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})"
         )
+        return
 
-        if redis_sent:
-            # Update database record
+    # Publish to Redis Stream
+    agent_mode = (hitl_request.metadata or {}).get("agent_mode", "default")
+    redis_sent = await _publish_hitl_response_to_redis(
+        tenant_id=hitl_request.tenant_id,
+        project_id=hitl_request.project_id,
+        conversation_id=hitl_request.conversation_id,
+        request_id=request_id,
+        hitl_type=hitl_type,
+        response_data=response_data,
+        user_id=context.user_id,
+        agent_mode=agent_mode,
+    )
+
+    if redis_sent:
+        # Update database record using the same session that found the request
+        try:
+            repo = SqlHITLRequestRepository(session)
             response_str = (
                 response_data.get("answer")
                 or response_data.get("decision")
@@ -131,8 +152,10 @@ async def _handle_hitl_response(
             )
             await repo.update_response(request_id, response_str)
             await repo.mark_completed(request_id)
+            
+            # Commit the session
             await session.commit()
-
+                
             logger.info(
                 f"[WS HITL] User {context.user_id} responded to {hitl_type} {request_id} "
                 "via Redis Stream"
@@ -151,10 +174,13 @@ async def _handle_hitl_response(
                 context=context,
                 request_id=request_id,
             )
-        else:
-            await context.send_error(
-                f"Failed to send HITL response for {request_id}."
-            )
+        except Exception as e:
+            logger.error(f"[WS HITL] Failed to update HITL request: {e}", exc_info=True)
+            await context.send_error(f"Failed to update HITL request: {str(e)}")
+    else:
+        await context.send_error(
+            f"Failed to send HITL response for {request_id}."
+        )
 
 
 class ClarificationRespondHandler(WebSocketMessageHandler):
