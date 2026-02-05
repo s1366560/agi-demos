@@ -261,7 +261,17 @@ class HITLResponseListener:
             data = json.loads(raw_data)
 
             request_id = data.get("request_id")
-            response_data = data.get("response_data", {})
+            response_data_raw = data.get("response_data", {})
+
+            # response_data may be a JSON string (from API serialization)
+            if isinstance(response_data_raw, str):
+                try:
+                    response_data = json.loads(response_data_raw)
+                except json.JSONDecodeError:
+                    # If not valid JSON, treat as plain string
+                    response_data = {"answer": response_data_raw}
+            else:
+                response_data = response_data_raw
 
             if not request_id:
                 logger.warning(f"[HITLListener] Message missing request_id: {msg_id}")

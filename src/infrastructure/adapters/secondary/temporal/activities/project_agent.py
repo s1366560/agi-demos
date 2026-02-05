@@ -101,11 +101,23 @@ def _format_hitl_response_as_tool_result(
 
     Args:
         hitl_type: Type of HITL request (clarification, decision, env_var, permission)
-        response_data: User's response data
+        response_data: User's response data (dict or str)
 
     Returns:
         Formatted tool result content string
     """
+    # Handle string response_data (defensive coding)
+    if isinstance(response_data, str):
+        try:
+            response_data = json.loads(response_data)
+        except (json.JSONDecodeError, TypeError):
+            # If can't parse, treat as plain answer
+            return f"User responded: {response_data}"
+
+    # Ensure response_data is a dict
+    if not isinstance(response_data, dict):
+        return f"User responded to {hitl_type} request"
+
     if hitl_type == "clarification":
         selected = response_data.get("selected_option_id") or response_data.get("selected_options")
         custom = response_data.get("custom_input")
