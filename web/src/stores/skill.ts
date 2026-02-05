@@ -7,7 +7,9 @@
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+
 import { skillAPI, tenantSkillConfigAPI } from "../services/skillService";
+
 import type {
   SkillResponse,
   SkillCreate,

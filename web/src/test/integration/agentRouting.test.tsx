@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import { render, waitFor } from '@testing-library/react'
+
 import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 
 // Mock stores BEFORE importing App
@@ -90,8 +91,8 @@ vi.mock('../../stores/agent', () => ({
   useAgentStore: vi.fn(() => createMockAgentStore()),
 }))
 
-import { useAuthStore } from '../../stores/auth'
 import App from '../../App'
+import { useAuthStore } from '../../stores/auth'
 
 // Create a wrapper with required providers
 const createWrapper = () => {

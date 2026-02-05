@@ -7,7 +7,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { agentService } from '@/services/agentService';
+
 import { getAuthToken } from '@/utils/tokenResolver';
 
 // Mock WebSocket

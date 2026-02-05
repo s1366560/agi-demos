@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+
 import type { NavUser } from '@/config/navigation'
 
 export interface SidebarContextValue {

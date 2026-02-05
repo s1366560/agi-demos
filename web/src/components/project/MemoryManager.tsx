@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
+
 import { Brain, Search, Plus, Clock, User, Tag, AlertCircle, Eye, Trash2 } from 'lucide-react';
+
 import { useMemoryStore } from '../../stores/memory';
 import { useProjectStore } from '../../stores/project';
 import { Memory } from '../../types/memory';
 import { MemoryCreateModal } from '../MemoryCreateModal';
+
 import { MemoryDetailModal } from './MemoryDetailModal';
 
 interface MemoryManagerProps {

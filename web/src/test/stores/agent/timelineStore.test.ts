@@ -25,6 +25,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { useTimelineStore, initialState } from '../../../stores/agent/timelineStore';
 
 // Helper to create mock timeline response matching the full type

@@ -5,14 +5,21 @@
  */
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+
 import { useTranslation } from 'react-i18next'
-import { graphService } from '../../services/graphService'
-import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph'
-import { useProjectStore } from '../../stores/project'
-import { SearchForm, SearchResults, SearchConfig } from './search'
-import type { SearchMode, SearchResult } from './search'
+import { useParams } from 'react-router-dom'
+
 import { AlertCircle, Maximize, Network } from 'lucide-react'
+
+import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph'
+
+import { graphService } from '../../services/graphService'
+import { useProjectStore } from '../../stores/project'
+
+import { SearchForm, SearchResults, SearchConfig } from './search'
+
+import type { SearchMode, SearchResult } from './search'
+
 
 // Type declarations for Web Speech API
 declare global {

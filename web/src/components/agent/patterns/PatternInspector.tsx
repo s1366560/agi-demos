@@ -5,7 +5,9 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
+
 import { MaterialIcon } from '../shared';
+
 import type { PatternDefinition } from './PatternList';
 
 export interface PatternInspectorProps {

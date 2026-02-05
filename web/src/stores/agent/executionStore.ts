@@ -24,6 +24,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+
 import type { WorkPlan, TimelineStep, ToolExecution } from '../../types/agent';
 
 /**

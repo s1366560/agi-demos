@@ -8,12 +8,15 @@
  */
 
 import React, { useState, createContext, useContext, useCallback } from 'react'
+
 import { useThemeStore } from '@/stores/theme'
-import type { GraphConfig, NodeData, GraphActions } from './types'
+
 import { createGraphConfig, legacyPropsToConfig, THEME_COLORS } from './Config'
-import { CytoscapeGraphViewport } from './Viewport'
 import { CytoscapeGraphControls as ControlsComponent } from './Controls'
 import { CytoscapeGraphNodeInfoPanel as NodeInfoPanelComponent } from './NodeInfoPanel'
+import { CytoscapeGraphViewport } from './Viewport'
+
+import type { GraphConfig, NodeData, GraphActions } from './types'
 
 // ========================================
 // Context for Composite Pattern

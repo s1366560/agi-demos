@@ -12,7 +12,9 @@
  */
 
 import React, { useCallback, useEffect, useState, useMemo, useContext } from 'react';
+
 import { useParams } from 'react-router-dom';
+
 import {
     Plus,
     Search,
@@ -28,6 +30,7 @@ import {
     Gavel,
     GripVertical
 } from 'lucide-react';
+
 import { schemaAPI } from '../../../services/api';
 
 // ============================================================================

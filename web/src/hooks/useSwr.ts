@@ -24,9 +24,11 @@
  */
 
 import useSWR, { SWRConfiguration, mutate as globalMutate } from 'swr'
-import { httpClient } from '@/services/client/httpClient'
-import type { MemoryListResponse, Project, SchemaEntityType, SchemaEdgeType, EdgeMapping } from '@/types/memory'
+
 import { schemaAPI } from '@/services/api'
+import { httpClient } from '@/services/client/httpClient'
+
+import type { MemoryListResponse, Project, SchemaEntityType, SchemaEdgeType, EdgeMapping } from '@/types/memory'
 
 /**
  * SWR Configuration Options

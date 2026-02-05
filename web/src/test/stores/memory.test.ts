@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useMemoryStore } from '../../stores/memory'
+
 import { memoryAPI } from '../../services/api'
+import { useMemoryStore } from '../../stores/memory'
 
 vi.mock('../../services/api', () => ({
     memoryAPI: {

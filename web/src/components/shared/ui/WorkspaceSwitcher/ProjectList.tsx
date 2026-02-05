@@ -5,7 +5,9 @@
  */
 
 import { useEffect, type KeyboardEvent } from 'react'
+
 import { useWorkspaceContext } from './WorkspaceContext'
+
 import type { ProjectListProps } from './types'
 
 export const ProjectList: React.FC<ProjectListProps> = ({

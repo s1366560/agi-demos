@@ -14,13 +14,16 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { LazyTabs, LazyButton, LazyBadge } from '@/components/ui/lazyAntd';
+
 import { X, ListTodo, Terminal } from 'lucide-react';
-import { SandboxSection } from './SandboxSection';
+
+import { LazyTabs, LazyButton, LazyBadge } from '@/components/ui/lazyAntd';
+
 import { ResizeHandle, PlanContent } from './RightPanelComponents';
-import type { WorkPlan } from '../../types/agent';
-import type { ExecutionPlan } from '../../types/agent';
+import { SandboxSection } from './SandboxSection';
+
 import type { ToolExecution } from './sandbox/SandboxOutputViewer';
+import type { WorkPlan , ExecutionPlan } from '../../types/agent';
 
 export type RightPanelTab = 'plan' | 'sandbox';
 

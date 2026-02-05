@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useCallback, useRef } from "react";
+
 import { useSandboxStore, isSandboxTool } from "../stores/sandbox";
 
 export interface UseSandboxDetectionOptions {

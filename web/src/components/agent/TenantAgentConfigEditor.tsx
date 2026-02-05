@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+
 import {
   Alert,
   Checkbox,
@@ -32,14 +33,16 @@ import {
   Typography,
   message,
 } from "antd";
-import type {
-  TenantAgentConfig,
-  UpdateTenantAgentConfigRequest,
-} from "@/types/agent";
+
 import {
   agentConfigService,
   TenantAgentConfigError,
 } from "@/services/agentConfigService";
+
+import type {
+  TenantAgentConfig,
+  UpdateTenantAgentConfigRequest,
+} from "@/types/agent";
 
 const { Option } = Select;
 const { TextArea } = Input;

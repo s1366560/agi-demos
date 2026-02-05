@@ -10,8 +10,8 @@
  * 3. contain-intrinsic-size: Reserve space for unrendered content
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // Test component wrapper for CSS containment utilities

@@ -1,13 +1,17 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+
 import { useTranslation } from 'react-i18next'
-import { useLazyMessage } from '@/components/ui/lazyAntd'
-import { memoryAPI } from '../../services/api'
-import { Memory } from '../../types/memory'
-import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+
 import { EditMemoryModal } from '@/components/project/EditMemoryModal'
+import { DeleteConfirmationModal } from '@/components/shared/modals/DeleteConfirmationModal'
+import { useLazyMessage } from '@/components/ui/lazyAntd'
+
 import { TaskList } from '../../components/tasks/TaskList'
 import { subscribeToTask, TaskStatus } from '../../hooks/useTaskSSE'
+import { memoryAPI } from '../../services/api'
+import { Memory } from '../../types/memory'
+
 
 interface ProcessingProgress {
     progress: number;

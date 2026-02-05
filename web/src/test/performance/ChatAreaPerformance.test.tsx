@@ -5,11 +5,13 @@
  * minimizes unnecessary re-renders during streaming.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
 import React from 'react';
-import { fileURLToPath } from 'node:url';
+
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 
 // Get the correct path to the source file
 const chatAreaPath = path.resolve(__dirname, '../../components/agent/chat/ChatArea.tsx');

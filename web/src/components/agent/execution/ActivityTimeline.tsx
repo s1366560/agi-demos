@@ -9,7 +9,7 @@
  */
 
 import React, { useMemo, useRef, useEffect, memo } from "react";
-import { Collapse, Tooltip } from "antd";
+
 import {
   BulbOutlined,
   ToolOutlined,
@@ -18,6 +18,8 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
 } from "@ant-design/icons";
+import { Collapse, Tooltip } from "antd";
+
 import type { ToolCall, ToolResult } from "../../../types/agent";
 
 /**

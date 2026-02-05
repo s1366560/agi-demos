@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { UserManager } from '@/components/tenant/UserManager';
 
 export const Team: React.FC = () => {

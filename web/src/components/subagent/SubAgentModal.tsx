@@ -5,7 +5,9 @@
  */
 
 import React, { useCallback, useEffect, useState, useRef } from "react";
+
 import { useTranslation } from "react-i18next";
+
 import {
   Modal,
   Form,
@@ -18,13 +20,15 @@ import {
   message,
   Slider,
 } from "antd";
-import type { Color } from "antd/es/color-picker";
+
 import { useSubAgentStore, useSubAgentSubmitting } from "../../stores/subagent";
+
 import type {
   SubAgentResponse,
   SubAgentCreate,
   SubAgentUpdate,
 } from "../../types/agent";
+import type { Color } from "antd/es/color-picker";
 
 const { TextArea } = Input;
 const { Option } = Select;

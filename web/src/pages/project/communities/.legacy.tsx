@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react'
-import { useParams } from 'react-router-dom'
+
 import { useTranslation } from 'react-i18next'
-import { logger } from '../../utils/logger'
-import { graphService } from '../../services/graphService'
+import { useParams } from 'react-router-dom'
+
+import { VirtualGrid } from '../../components/common'
 import { TaskList } from '../../components/tasks/TaskList'
 import { createApiUrl } from '../../services/client/urlUtils'
-import { VirtualGrid } from '../../components/common'
+import { graphService } from '../../services/graphService'
+import { logger } from '../../utils/logger'
 
 interface Community {
     uuid: string

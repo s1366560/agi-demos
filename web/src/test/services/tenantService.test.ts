@@ -6,8 +6,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { tenantService } from '../../services/tenantService';
+
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
+import { tenantService } from '../../services/tenantService';
 
 // Mock apiFetch
 vi.mock('../../services/client/urlUtils', () => ({

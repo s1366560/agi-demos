@@ -9,9 +9,11 @@
  * @see web/src/components/agent/VirtualTimelineEventList.tsx
  */
 
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+
 import { VirtualTimelineEventList } from '../../components/agent/VirtualTimelineEventList';
+
 import type { TimelineEvent } from '../../types/agent';
 
 // Helper to query by data-index attribute

@@ -4,9 +4,11 @@
  * Tests for the reusable header component.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+
+import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { AppHeader } from '@/components/layout/AppHeader'
 import type { Breadcrumb } from '@/components/layout/AppHeader'
 

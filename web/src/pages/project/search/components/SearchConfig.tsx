@@ -5,7 +5,9 @@
  */
 
 import { memo, useCallback } from 'react'
+
 import { useTranslation } from 'react-i18next'
+
 import { Sliders, Filter, X, Plus, Minus, ChevronDown, HelpCircle, Network } from 'lucide-react'
 
 export type SearchMode = 'semantic' | 'graphTraversal' | 'temporal' | 'faceted' | 'community'

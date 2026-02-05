@@ -4,8 +4,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '../../utils'
+
 import { ProjectSettings } from '../../../pages/project/Settings'
+import { render, screen } from '../../utils'
 
 // Mock useProjectStore
 vi.mock('../../../stores/project', () => ({

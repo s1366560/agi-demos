@@ -9,8 +9,7 @@
  * Backward compatibility maintained through individual prop support.
  */
 
-import { KeyboardEvent, useState } from "react";
-import { useId } from "react";
+import { KeyboardEvent, useState , useId } from "react";
 
 /**
  * Plan mode configuration

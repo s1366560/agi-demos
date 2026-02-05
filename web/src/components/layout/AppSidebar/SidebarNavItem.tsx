@@ -7,8 +7,11 @@
  */
 
 import { Link } from 'react-router-dom'
-import { LazyTooltip } from '@/components/ui/lazyAntd'
+
 import { useNavigation } from '@/hooks/useNavigation'
+
+import { LazyTooltip } from '@/components/ui/lazyAntd'
+
 import type { NavItem } from '@/config/navigation'
 
 export interface SidebarNavItemProps {

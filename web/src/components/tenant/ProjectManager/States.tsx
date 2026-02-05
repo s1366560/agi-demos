@@ -5,8 +5,11 @@
  */
 
 import { FC } from 'react';
+
 import { Folder, AlertCircle, Plus } from 'lucide-react';
+
 import { useProjectManagerContext } from './context';
+
 import type { ProjectManagerLoadingProps, ProjectManagerEmptyProps, ProjectManagerErrorProps } from './types';
 
 // ============================================================================

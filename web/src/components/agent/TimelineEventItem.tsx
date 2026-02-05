@@ -13,14 +13,18 @@
  */
 
 import { memo, lazy, Suspense, useState } from "react";
+
+import { useAgentV3Store } from "../../stores/agentV3";
+import { formatDistanceToNowCN, formatReadableTime } from "../../utils/date";
+
+import { AssistantMessage } from "./chat/AssistantMessage";
 import {
   UserMessage,
   AgentSection,
   ToolExecutionCardDisplay,
-} from "./chat/MessageStream";
-import { AssistantMessage } from "./chat/AssistantMessage";
-import { ReasoningLogCard } from "./chat/MessageStream";
-import { formatDistanceToNowCN, formatReadableTime } from "../../utils/date";
+ ReasoningLogCard } from "./chat/MessageStream";
+
+
 import type { 
   TimelineEvent, 
   ActEvent, 
@@ -33,7 +37,7 @@ import type {
   EnvVarField,
   ArtifactCreatedEvent,
 } from "../../types/agent";
-import { useAgentV3Store } from "../../stores/agentV3";
+
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
 // Using dynamic import with a wrapper to handle type issues

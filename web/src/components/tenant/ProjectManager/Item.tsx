@@ -5,8 +5,11 @@
  */
 
 import React, { FC } from 'react';
+
 import { Folder, Settings, Trash2 } from 'lucide-react';
+
 import { useProjectManagerContext } from './context';
+
 import type { ProjectManagerItemProps } from './types';
 
 export const Item: FC<ProjectManagerItemProps> = ({

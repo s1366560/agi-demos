@@ -5,9 +5,12 @@
  */
 
 import { FC } from 'react';
-import { useProjectManagerContext } from './context';
+
 import { ProjectCreateModal } from '../ProjectCreateModal';
 import { ProjectSettingsModal } from '../ProjectSettingsModal';
+
+import { useProjectManagerContext } from './context';
+
 import type { ProjectManagerCreateModalProps, ProjectManagerSettingsModalProps } from './types';
 
 // ============================================================================

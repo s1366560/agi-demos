@@ -18,13 +18,19 @@
  */
 
 import React, { useState, useEffect } from 'react'
+
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom'
-import { LazyTooltip } from '@/components/ui/lazyAntd'
-import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary'
-import { AgentSidebar } from '@/components/layout/AppSidebar'
+
+import { Search, History, GitBranch } from 'lucide-react'
+
 import { useProjectStore } from '@/stores/project'
 import { useTenantStore } from '@/stores/tenant'
-import { Search, History, GitBranch } from 'lucide-react'
+
+import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary'
+import { AgentSidebar } from '@/components/layout/AppSidebar'
+import { LazyTooltip } from '@/components/ui/lazyAntd'
+
+
 
 // Top navigation tabs for agent views
 const TOP_TABS = [

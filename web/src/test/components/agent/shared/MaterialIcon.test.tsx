@@ -5,8 +5,9 @@
  * In React 19, forwardRef is no longer needed - components can accept ref directly.
  */
 
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
+
 import { MaterialIcon } from '@/components/agent/shared/MaterialIcon'
 
 describe('MaterialIcon', () => {

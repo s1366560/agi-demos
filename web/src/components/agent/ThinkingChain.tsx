@@ -8,10 +8,14 @@
  */
 
 import React, { memo, useMemo } from "react";
-import { Collapse } from "antd";
+
 import { BulbOutlined, ToolOutlined } from "@ant-design/icons";
-import { ToolCard } from "./ToolCard";
+import { Collapse } from "antd";
+
 import { ToolCall, ToolResult } from "../../types/agent";
+
+import { ToolCard } from "./ToolCard";
+
 
 interface TimelineItem {
     type: 'thought' | 'tool_call';

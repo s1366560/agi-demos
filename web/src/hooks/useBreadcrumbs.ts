@@ -23,7 +23,9 @@
  */
 
 import { useParams, useLocation } from 'react-router-dom'
+
 import { useProjectStore } from '@/stores/project'
+
 import type { Breadcrumb } from '@/config/navigation'
 
 export type BreadcrumbContext = 'tenant' | 'project' | 'agent' | 'schema'

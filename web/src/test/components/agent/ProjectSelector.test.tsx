@@ -5,14 +5,15 @@
  * agent conversations from within the Agent UI.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import '@testing-library/jest-dom/vitest'
 import { ProjectSelector } from '../../../components/agent/ProjectSelector'
+import { useAgentV3Store as useAgentStore } from '../../../stores/agentV3'
 import { useProjectStore } from '../../../stores/project'
 // FIXME: This test was written for the old agent store (agent.ts).
 // The new agentV3 store has a different API. This test needs to be migrated.
-import { useAgentV3Store as useAgentStore } from '../../../stores/agentV3'
 import { useTenantStore } from '../../../stores/tenant'
 
 // Mock stores

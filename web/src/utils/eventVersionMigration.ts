@@ -5,8 +5,9 @@
  * Uses BFS to find the shortest migration path between versions.
  */
 
-import type { AgentEventType } from '../types/generated/eventTypes';
 import { CURRENT_SCHEMA_VERSION } from '../types/generated/eventEnvelope';
+
+import type { AgentEventType } from '../types/generated/eventTypes';
 
 // =============================================================================
 // Types

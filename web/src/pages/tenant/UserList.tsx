@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react'
+
 import { useTranslation } from 'react-i18next'
+
 import { useTenantStore } from '../../stores/tenant'
+
 import type { UserTenant } from '../../types/memory'
 
 interface TenantMember {

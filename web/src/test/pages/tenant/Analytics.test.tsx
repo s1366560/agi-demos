@@ -5,8 +5,9 @@
  * Tests verify React.memo optimization and component behavior.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { Analytics } from '../../../pages/tenant/Analytics';
 import { useTenantStore } from '../../../stores/tenant';
 

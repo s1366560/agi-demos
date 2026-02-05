@@ -8,14 +8,18 @@
  */
 
 import React, { memo, useMemo } from "react";
+
 import { Spin } from "antd";
+
+import { ExecutionTimeline } from "../execution/ExecutionTimeline";
+import { FollowUpPills } from "../execution/FollowUpPills";
+import { VirtualTimelineEventList } from "../VirtualTimelineEventList";
+
 import {
   IdleState,
   type StarterTile,
 } from "./IdleState";
-import { VirtualTimelineEventList } from "../VirtualTimelineEventList";
-import { ExecutionTimeline } from "../execution/ExecutionTimeline";
-import { FollowUpPills } from "../execution/FollowUpPills";
+
 import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus, TimelineEvent } from "../../../types/agent";
 
 // Default starter tiles

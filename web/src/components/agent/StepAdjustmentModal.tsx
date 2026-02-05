@@ -11,13 +11,15 @@
  */
 
 import React, { useMemo } from "react";
-import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from "antd";
+
 import {
   CheckOutlined,
   CloseOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
 } from "@ant-design/icons";
+import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from "antd";
+
 import type { StepAdjustment, AdjustmentType } from "../../types/agent";
 
 const { Text, Paragraph } = Typography;

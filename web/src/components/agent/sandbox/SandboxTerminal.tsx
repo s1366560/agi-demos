@@ -9,12 +9,13 @@
  */
 
 import { lazy, Suspense, useState, useCallback } from "react";
-import { Spin, Alert, Button } from "antd";
+
 import {
   ReloadOutlined,
   ExpandOutlined,
   CompressOutlined,
 } from "@ant-design/icons";
+import { Spin, Alert, Button } from "antd";
 
 // Lazy load terminal dependencies
 import "@xterm/xterm/css/xterm.css";

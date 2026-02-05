@@ -3,8 +3,11 @@
  */
 
 import React from 'react';
-import { LazyButton, LazyTag } from '@/components/ui/lazyAntd';
+
 import { FileText, Eye, X, Beaker, Hammer } from 'lucide-react';
+
+import { LazyButton, LazyTag } from '@/components/ui/lazyAntd';
+
 import type { PlanModeStatus, AgentMode } from '../../types/agent';
 
 interface PlanModeBannerProps {

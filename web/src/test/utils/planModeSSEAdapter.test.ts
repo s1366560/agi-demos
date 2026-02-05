@@ -15,7 +15,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+
 import { planModeSSEAdapter } from "../../utils/planModeSSEAdapter";
+
 import type { AgentEvent } from "../../types/agent";
 
 // Helper to create test event with timestamp (not part of AgentEvent type)

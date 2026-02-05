@@ -7,19 +7,20 @@
  * 3. Backward compatibility with legacy API
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '../../utils'
+
 import React from 'react'
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Import mocks FIRST before component imports
 import '../../mocks/cytoscape'
-import '../../mocks/graphService'
-import '../../mocks/themeStore'
-import { graphService } from '../../mocks/graphService'
-import { useThemeStore } from '../../mocks/themeStore'
 
 import { CytoscapeGraph } from '@/components/graph/CytoscapeGraph'
 import type { GraphConfig, NodeData } from '@/components/graph/CytoscapeGraph/types'
+
+import { graphService } from '../../mocks/graphService'
+import { useThemeStore } from '../../mocks/themeStore'
 
 describe('CytoscapeGraph - TDD Refactoring', () => {
     beforeEach(() => {

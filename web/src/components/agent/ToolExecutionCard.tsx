@@ -8,7 +8,7 @@
  */
 
 import { useState, memo } from "react";
-import { Card, Typography, Space, Tag, Image as AntImage } from "antd";
+
 import {
   ToolOutlined,
   LoadingOutlined,
@@ -18,18 +18,22 @@ import {
   CaretRightOutlined,
   PictureOutlined,
 } from "@ant-design/icons";
-import { WebSearchResultCard, type SearchResult } from "./WebSearchResultCard";
-import { WebScrapeResultCard } from "./WebScrapeResultCard";
-import {
-  CodeExecutorResultCard,
-  parseCodeExecutorResult,
-} from "./CodeExecutorResultCard";
+import { Card, Typography, Space, Tag, Image as AntImage } from "antd";
+
 import {
   isImageUrl as _isImageUrl,
   parseBase64Image,
   extractImageUrl,
   foldText,
 } from "../../utils/toolResultUtils";
+
+import {
+  CodeExecutorResultCard,
+  parseCodeExecutorResult,
+} from "./CodeExecutorResultCard";
+import { WebScrapeResultCard } from "./WebScrapeResultCard";
+import { WebSearchResultCard, type SearchResult } from "./WebSearchResultCard";
+
 
 const { Text, Link } = Typography;
 

@@ -10,9 +10,11 @@
  * 4. Date formatting is memoized
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, render, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+
+import { screen, render, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { ProjectOverview } from '../../../pages/project/ProjectOverview'
 import { projectAPI, memoryAPI } from '../../../services/api'
 

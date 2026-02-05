@@ -5,11 +5,13 @@
  * Tests the VirtualTimelineEventList integration with timeline-only mode.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ChatArea } from '../../../../components/agent/chat/ChatArea';
-import type { TimelineEvent, WorkPlan, ToolExecution, TimelineStep } from '../../../../types/agent';
+
 import type { StarterTile } from '../../../../components/agent/chat/IdleState';
+import type { TimelineEvent, WorkPlan, ToolExecution, TimelineStep } from '../../../../types/agent';
 
 // Mock the IdleState component
 vi.mock('../../../../components/agent/chat/IdleState', () => ({

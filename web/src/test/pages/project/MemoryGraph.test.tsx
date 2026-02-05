@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '../../utils'
-import { MemoryGraph } from '../../../pages/project/MemoryGraph'
 import { useParams } from 'react-router-dom'
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import { MemoryGraph } from '../../../pages/project/MemoryGraph'
+import { render, screen, fireEvent } from '../../utils'
 
 // Mock CytoscapeGraph component
 vi.mock('../../../components/graph/CytoscapeGraph', () => ({

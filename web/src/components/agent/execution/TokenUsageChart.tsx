@@ -9,13 +9,14 @@
  */
 
 import React, { useState, useMemo } from "react";
-import { Tooltip } from "antd";
+
 import {
   InfoCircleOutlined,
   DownOutlined,
   RightOutlined,
   DollarOutlined,
 } from "@ant-design/icons";
+import { Tooltip } from "antd";
 
 /**
  * Token usage data structure

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import { createApiUrl, createWebSocketUrl } from '../../services/client/urlUtils'
 
 // Mock window.location for WebSocket URL tests

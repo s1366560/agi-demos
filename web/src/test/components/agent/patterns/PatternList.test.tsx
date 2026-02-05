@@ -5,8 +5,9 @@
  * Boolean props replaced with configuration objects for better extensibility.
  */
 
-import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+
 import { PatternList, type PatternStatus, type WorkflowPattern, type PatternDefinition } from '@/components/agent/patterns/PatternList'
 
 describe('PatternList', () => {

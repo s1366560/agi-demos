@@ -12,12 +12,16 @@
  * - Error handling
  */
 
-import { LazyEmpty, Empty, LazyAlert, LazySpin } from '@/components/ui/lazyAntd';
 import { CheckCircle2, Play, Clock } from 'lucide-react';
-import { PlanEditor } from '../PlanEditor';
+
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
-import type { WorkPlan } from '@/types/agent';
-import type { ExecutionPlan } from '@/types/agent';
+
+import { LazyEmpty, Empty, LazyAlert, LazySpin } from '@/components/ui/lazyAntd';
+
+import { PlanEditor } from '../PlanEditor';
+
+
+import type { WorkPlan , ExecutionPlan } from '@/types/agent';
 
 export interface PlanContentProps {
   /** Current work plan */

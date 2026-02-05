@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useTenantStore } from '../../stores/tenant'
+
 import { tenantAPI } from '../../services/api'
+import { useTenantStore } from '../../stores/tenant'
 
 vi.mock('../../services/api', () => ({
     tenantAPI: {

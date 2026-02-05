@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useProjectStore } from '../../stores/project'
+
 import { projectAPI } from '../../services/api'
+import { useProjectStore } from '../../stores/project'
 
 vi.mock('../../services/api', () => ({
     projectAPI: {

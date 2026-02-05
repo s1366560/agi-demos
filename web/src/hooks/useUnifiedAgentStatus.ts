@@ -14,13 +14,15 @@
  */
 
 import { useMemo } from 'react';
-import { useAgentV3Store } from '../stores/agentV3';
+
 import { usePlanModeStore } from '../stores/agent/planModeStore';
 import { useStreamingStore } from '../stores/agent/streamingStore';
+import { useAgentV3Store } from '../stores/agentV3';
 import { useSandboxStore } from '../stores/sandbox';
+
 import { useAgentLifecycleState } from './useAgentLifecycleState';
-import type { LifecycleStateData } from '../types/agent';
-import type { PlanModeStatus } from '../types/agent';
+
+import type { LifecycleStateData , PlanModeStatus } from '../types/agent';
 
 /**
  * Project Agent Lifecycle State (matches LifecycleState with 'uninitialized' added)

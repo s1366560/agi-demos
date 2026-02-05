@@ -5,9 +5,14 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
+
 import { useTranslation } from 'react-i18next';
-import { useLazyMessage, LazyPopconfirm, LazySelect, LazyEmpty, LazySpin } from '@/components/ui/lazyAntd';
+
 import { Input } from 'antd';
+
+import { useLazyMessage, LazyPopconfirm, LazySelect, LazyEmpty, LazySpin } from '@/components/ui/lazyAntd';
+
+import { SkillModal } from '../../components/skill/SkillModal';
 import {
   useSkillStore,
   useSkillLoading,
@@ -17,7 +22,7 @@ import {
   useTotalUsageCount,
   useSkillTotal,
 } from '../../stores/skill';
-import { SkillModal } from '../../components/skill/SkillModal';
+
 import type { SkillResponse } from '../../types/agent';
 
 const { Search } = Input;

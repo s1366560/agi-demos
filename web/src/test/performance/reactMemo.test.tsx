@@ -11,15 +11,16 @@
  * - Other pure components
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import '@testing-library/jest-dom/vitest'
 import { createElement } from 'react'
 
 // Import components to test
 import { WorkPlanProgress } from '../../components/agent/execution/WorkPlanProgress'
-import { TopNavigation } from '../../components/agent/layout/TopNavigation'
 import { ExecutionStatsCard } from '../../components/agent/ExecutionStatsCard'
+import { TopNavigation } from '../../components/agent/layout/TopNavigation'
 import { WorkPlanCard } from '../../components/agent/WorkPlanCard'
 import * as containment from '../../styles/containment'
 

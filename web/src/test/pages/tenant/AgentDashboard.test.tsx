@@ -5,8 +5,9 @@
  * Tests verify React.memo optimization and component behavior.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { AgentDashboard } from '../../../pages/tenant/AgentDashboard';
 
 // Mock react-i18next

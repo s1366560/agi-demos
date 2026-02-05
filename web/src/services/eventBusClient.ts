@@ -5,8 +5,9 @@
  * Supports pattern-based subscriptions, automatic reconnection, and heartbeats.
  */
 
-import type { EventEnvelope } from '../types/generated/eventEnvelope';
 import { isEventEnvelope } from '../types/generated/eventEnvelope';
+
+import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
 // =============================================================================
 // Types

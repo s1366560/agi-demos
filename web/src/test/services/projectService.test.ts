@@ -6,8 +6,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { projectService } from '../../services/projectService';
+
 import { ApiError, ApiErrorType } from '../../services/client/ApiError';
+import { projectService } from '../../services/projectService';
 
 // Mock apiFetch
 vi.mock('../../services/client/urlUtils', () => ({

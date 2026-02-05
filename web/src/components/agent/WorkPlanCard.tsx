@@ -8,6 +8,16 @@
  */
 
 import React, { useState, memo } from "react";
+
+import {
+  CheckCircleOutlined,
+  LoadingOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
+  CaretDownOutlined,
+  CaretRightOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
 import {
   Card,
   Collapse,
@@ -18,15 +28,7 @@ import {
   Tooltip,
   Button,
 } from "antd";
-import {
-  CheckCircleOutlined,
-  LoadingOutlined,
-  CloseCircleOutlined,
-  ClockCircleOutlined,
-  CaretDownOutlined,
-  CaretRightOutlined,
-  ThunderboltOutlined,
-} from "@ant-design/icons";
+
 import type { WorkPlan, PlanStatus } from "../../types/agent";
 
 const { Text } = Typography;

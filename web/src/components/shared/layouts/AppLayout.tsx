@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+
+import { useNavigate } from 'react-router-dom';
+
 import {
     Menu,
     X,
@@ -7,8 +10,8 @@ import {
     Brain,
     Search
 } from 'lucide-react';
+
 import { useAuthStore } from '@/stores/auth';
-import { useNavigate } from 'react-router-dom';
 
 export interface NavigationItem {
     id: string;

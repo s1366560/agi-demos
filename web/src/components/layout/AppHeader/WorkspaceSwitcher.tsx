@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+
 import { WorkspaceSwitcher as BaseWorkspaceSwitcher } from '@/components/shared/ui/WorkspaceSwitcher'
 
 export interface WorkspaceSwitcherProps {

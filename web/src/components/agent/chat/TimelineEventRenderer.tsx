@@ -8,8 +8,11 @@
  */
 
 import React, { memo } from 'react';
-import { MessageStream } from './MessageStream';
+
 import { TimelineEventItem } from '../TimelineEventItem';
+
+import { MessageStream } from './MessageStream';
+
 import type { TimelineEvent } from '../../../types/agent';
 
 interface TimelineEventRendererProps {

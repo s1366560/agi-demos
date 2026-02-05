@@ -5,8 +5,10 @@
  */
 
 import { ChevronDown } from 'lucide-react'
-import { SidebarNavItem } from './SidebarNavItem'
+
 import { useSidebarContext } from './SidebarContext'
+import { SidebarNavItem } from './SidebarNavItem'
+
 import type { SidebarConfig } from '@/config/navigation'
 
 export interface SidebarNavigationProps {

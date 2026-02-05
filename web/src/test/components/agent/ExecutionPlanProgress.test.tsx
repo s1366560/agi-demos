@@ -2,8 +2,9 @@
  * Tests for ExecutionPlanProgress component
  */
 
-import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+
 import { ExecutionPlanProgress } from "../../../components/agent/ExecutionPlanProgress";
 import { ExecutionPlan, ExecutionPlanStatus } from "../../../types/agent";
 

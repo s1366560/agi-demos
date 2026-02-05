@@ -4,9 +4,11 @@
  * TDD: Tests for scroll-to-load functionality.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { VirtualTimelineEventList } from '../../../components/agent/VirtualTimelineEventList';
+
 import type { TimelineEvent } from '../../../types/agent';
 
 // Mock @tanstack/react-virtual

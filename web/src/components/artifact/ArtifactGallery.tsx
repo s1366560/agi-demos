@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from "react";
-import { Modal, Empty, Typography, Space, Tag, Segmented } from "antd";
+
 import {
   AppstoreOutlined,
   BarsOutlined,
@@ -15,9 +15,11 @@ import {
   FileTextOutlined,
   FileOutlined,
 } from "@ant-design/icons";
+import { Modal, Empty, Typography, Space, Tag, Segmented } from "antd";
+
+import { ArtifactRenderer } from "./ArtifactRenderer";
 
 import type { Artifact, ArtifactCategory } from "../../types/agent";
-import { ArtifactRenderer } from "./ArtifactRenderer";
 
 const { Text } = Typography;
 

@@ -6,8 +6,9 @@
  */
 
 import React from "react";
-import { Button, Tooltip } from "antd";
+
 import { DownloadOutlined, FileOutlined, FilePdfOutlined } from "@ant-design/icons";
+import { Button, Tooltip } from "antd";
 
 interface FileDownloadButtonProps {
   /** The filename to display */

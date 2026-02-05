@@ -9,11 +9,13 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
+
 import {
   PanelLeft,
   PanelRight
 } from 'lucide-react';
+
+import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 interface ChatLayoutProps {
   sidebar: React.ReactNode;

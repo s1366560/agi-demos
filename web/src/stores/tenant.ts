@@ -13,7 +13,9 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
+
 import { tenantAPI } from '../services/api';
+
 import type { Tenant, TenantCreate, TenantUpdate, TenantListResponse, UserTenant } from '../types/memory';
 
 interface ApiError {

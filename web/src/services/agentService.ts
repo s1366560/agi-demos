@@ -34,11 +34,13 @@
  * ```
  */
 
-import { ApiError } from "./client/ApiError";
-import { httpClient } from "./client/httpClient";
 import { logger } from "../utils/logger";
 import { getAuthToken } from "../utils/tokenResolver";
+
+import { ApiError } from "./client/ApiError";
+import { httpClient } from "./client/httpClient";
 import { createWebSocketUrl } from "./client/urlUtils";
+
 import type {
     AgentEvent,
     AgentEventType,

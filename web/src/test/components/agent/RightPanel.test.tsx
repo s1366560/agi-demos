@@ -7,8 +7,8 @@
  * - RightPanel (refactored to use extracted components)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock antd components completely to avoid complex dependencies
 vi.mock('antd', () => ({
@@ -86,8 +86,8 @@ vi.mock('@/components/agent/PlanEditor', () => ({
 
 // Import components after mocking
 import { RightPanel } from '@/components/agent/RightPanel'
-import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle'
 import { PlanContent } from '@/components/agent/rightPanel/PlanContent'
+import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle'
 
 // Types for test data
 import type { WorkPlan, ExecutionPlan } from '@/types/agent'

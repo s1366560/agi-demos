@@ -16,38 +16,28 @@ import { describe, it, expect } from 'vitest'
 
 // Test 1: Common components barrel exports
 import {
-    ErrorBoundary,
-    SkeletonLoader,
-    EmptyState,
-} from '../../components/common'
-
-// Test 2: Agent layout barrel exports (direct import)
+    ErrorBoundary as RootErrorBoundary,
+    SkeletonLoader as RootSkeletonLoader,
+    EmptyState as RootEmptyState,
+    ChatLayout as RootChatLayout,
+    ConversationSidebar as RootConversationSidebar,
+    MessageArea as RootMessageArea,
+    MessageBubble as RootMessageBubble,
+    InputBar as RootInputBar,
+} from '../../components'
 import {
-    WorkspaceSidebar,
-    TopNavigation,
-    ChatHistorySidebar,
-} from '../../components/agent/layout'
-
-// Test 3: Agent chat barrel exports (direct import)
+    ChatLayout,
+    ConversationSidebar as AgentConversationSidebar,
+    MessageArea,
+    MessageBubble as AgentMessageBubble,
+    InputBar as AgentInputBar,
+    ExecutionPlanViewer,
+} from '../../components/agent'
 import {
     IdleState,
     FloatingInputBar,
     MarkdownContent,
 } from '../../components/agent/chat'
-
-// Test 4: Agent patterns barrel exports (direct import)
-import {
-    PatternStats,
-    PatternList,
-    PatternInspector,
-} from '../../components/agent/patterns'
-
-// Test 5: Agent shared barrel exports (direct import)
-import {
-    MaterialIcon,
-} from '../../components/agent/shared'
-
-// Test 6: Agent execution barrel exports (direct import)
 import {
     WorkPlanProgress,
     ToolExecutionLive,
@@ -63,13 +53,37 @@ import {
     TokenUsageChart,
     ToolCallVisualization,
 } from '../../components/agent/execution'
+import {
+    WorkspaceSidebar,
+    TopNavigation,
+    ChatHistorySidebar,
+} from '../../components/agent/layout'
 
-// Test 7: Sandbox components barrel exports (direct import)
+// Test 2: Agent layout barrel exports (direct import)
+
+// Test 3: Agent chat barrel exports (direct import)
+
+// Test 4: Agent patterns barrel exports (direct import)
+import {
+    PatternStats,
+    PatternList,
+    PatternInspector,
+} from '../../components/agent/patterns'
+
+// Test 5: Agent shared barrel exports (direct import)
+import { ProjectSelector } from '../../components/agent/ProjectSelector'
 import {
     SandboxTerminal,
     SandboxOutputViewer,
     SandboxPanel,
 } from '../../components/agent/sandbox'
+import {
+    MaterialIcon,
+} from '../../components/agent/shared'
+
+// Test 6: Agent execution barrel exports (direct import)
+
+// Test 7: Sandbox components barrel exports (direct import)
 
 // Test 8: Agent components barrel exports (direct import)
 // NOTE: Some components have been renamed or are not exported from the barrel:
@@ -79,31 +93,17 @@ import {
 // - ToolCard exists but is not exported from barrel
 // - PlanViewer -> ExecutionPlanViewer
 // - ExecutionDetailsPanel exists but is not exported from barrel
-import {
-    ChatLayout,
-    ConversationSidebar as AgentConversationSidebar,
-    MessageArea,
-    MessageBubble as AgentMessageBubble,
-    InputBar as AgentInputBar,
-    ExecutionPlanViewer,
-} from '../../components/agent'
 
 // Test 9: Individual component imports (not through barrel) to verify components exist
-import { WorkPlanCard } from '../../components/agent/WorkPlanCard'
 import { ToolExecutionCard } from '../../components/agent/ToolExecutionCard'
-import { ProjectSelector } from '../../components/agent/ProjectSelector'
+import { WorkPlanCard } from '../../components/agent/WorkPlanCard'
+import {
+    ErrorBoundary,
+    SkeletonLoader,
+    EmptyState,
+} from '../../components/common'
 
 // Test 10: Root components barrel export
-import {
-    ErrorBoundary as RootErrorBoundary,
-    SkeletonLoader as RootSkeletonLoader,
-    EmptyState as RootEmptyState,
-    ChatLayout as RootChatLayout,
-    ConversationSidebar as RootConversationSidebar,
-    MessageArea as RootMessageArea,
-    MessageBubble as RootMessageBubble,
-    InputBar as RootInputBar,
-} from '../../components'
 
 describe('Barrel Exports', () => {
     describe('Common Components Barrel', () => {

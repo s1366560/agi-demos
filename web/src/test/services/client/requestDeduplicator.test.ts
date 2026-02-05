@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { requestDeduplicator } from '../../../services/client/requestDeduplicator';
 
 describe('requestDeduplicator', () => {

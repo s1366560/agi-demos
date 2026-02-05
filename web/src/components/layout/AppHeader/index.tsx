@@ -45,4 +45,5 @@ export type {
 
 // Re-export types with aliases for convenience
 import type { AppHeaderRootProps } from './types'
+
 export type AppHeaderProps = AppHeaderRootProps

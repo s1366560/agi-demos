@@ -23,7 +23,9 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+
 import { agentService } from '../../services/agentService';
+
 import type { TimelineEvent } from '../../types/agent';
 
 /**

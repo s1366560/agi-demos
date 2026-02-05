@@ -29,7 +29,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { useExecutionStore, initialState } from '../../../stores/agent/executionStore';
+
 import type { WorkPlan } from '../../../types/agent';
 
 describe('ExecutionStore', () => {

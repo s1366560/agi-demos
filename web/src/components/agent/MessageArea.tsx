@@ -33,12 +33,16 @@
  */
 
 import { useRef, useEffect, useCallback, useState, memo, Children, createContext } from 'react';
+
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+
 import { LoadingOutlined } from '@ant-design/icons';
+import remarkGfm from 'remark-gfm';
+
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
 import { StreamingThoughtBubble } from './StreamingThoughtBubble';
+
 import type { TimelineEvent, PlanModeStatus } from '../../types/agent';
 
 // Import and re-export types from separate file

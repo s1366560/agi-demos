@@ -12,8 +12,9 @@
  * 6. Performance: formatter instance is stable
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { useDateFormatter } from '../../hooks/useDateFormatter'
 
 describe('useDateFormatter', () => {

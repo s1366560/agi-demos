@@ -11,9 +11,10 @@
  */
 
 import React from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { SWRConfig } from 'swr'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock the httpClient before importing hooks
 vi.mock('@/services/client/httpClient', () => ({
@@ -27,6 +28,7 @@ vi.mock('@/services/client/httpClient', () => ({
 }))
 
 import { httpClient } from '@/services/client/httpClient'
+
 import { useProjectStats, useMemories, useProject } from '@/hooks/useSwr'
 
 // Test data factories

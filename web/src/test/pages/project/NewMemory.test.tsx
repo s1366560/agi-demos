@@ -1,7 +1,8 @@
 
 import { describe, it, expect, vi } from 'vitest'
-import { screen, render } from '../../utils'
+
 import { NewMemory } from '../../../pages/project/NewMemory'
+import { screen, render } from '../../utils'
 
 vi.mock('../../../services/api', () => ({
     memoryAPI: {

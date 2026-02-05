@@ -4,8 +4,9 @@
  * TDD: Tests written first for the new compound component API.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { EnhancedSearch } from '../../../pages/project/EnhancedSearch'
 
 // Mock the dependencies

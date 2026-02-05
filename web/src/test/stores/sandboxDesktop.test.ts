@@ -4,8 +4,9 @@
  * Tests the extended sandbox store with desktop and terminal status management.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import { useSandboxStore } from "../../stores/sandbox";
 
 import type { DesktopStatus, TerminalStatus } from "../../types/agent";

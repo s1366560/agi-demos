@@ -5,9 +5,11 @@
  * Shows a simple vertical list of tool executions.
  */
 
-import type { ToolExecution } from '../../../types/agent';
 import { MaterialIcon } from '../shared';
+
 import { ToolExecutionDetail } from './ToolExecutionDetail';
+
+import type { ToolExecution } from '../../../types/agent';
 
 export interface SimpleExecutionViewProps {
   /** Tool executions to display */

@@ -1,8 +1,10 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, render, waitFor } from '../utils'
-import { ProjectLayout } from '../../layouts/ProjectLayout'
 import { useParams } from 'react-router-dom'
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import { ProjectLayout } from '../../layouts/ProjectLayout'
+import { screen, render, waitFor } from '../utils'
 
 // Mock stores with complete state to prevent useEffect from running async operations
 vi.mock('@/stores/project', () => ({

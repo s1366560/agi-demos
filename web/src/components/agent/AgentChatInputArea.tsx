@@ -11,8 +11,10 @@
  */
 
 import { GripHorizontal } from 'lucide-react'
-import { Resizer } from './Resizer'
+
 import { InputBar } from './InputBar'
+import { Resizer } from './Resizer'
+
 import type { INPUT_MIN_HEIGHT, INPUT_MAX_HEIGHT } from './AgentChatHooks'
 
 export interface AgentChatInputAreaProps {

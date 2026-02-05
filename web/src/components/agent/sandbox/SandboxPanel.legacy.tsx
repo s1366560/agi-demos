@@ -6,18 +6,19 @@
  */
 
 import { useState, useCallback } from "react";
-import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
+
 import {
   CodeOutlined,
   FileTextOutlined,
   DesktopOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
+import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
 
-import { SandboxTerminal } from "./SandboxTerminal";
-import { SandboxOutputViewer, ToolExecution } from "./SandboxOutputViewer";
 import { RemoteDesktopViewer } from "./RemoteDesktopViewer";
 import { SandboxControlPanel } from "./SandboxControlPanel";
+import { SandboxOutputViewer, ToolExecution } from "./SandboxOutputViewer";
+import { SandboxTerminal } from "./SandboxTerminal";
 
 import type { DesktopStatus, TerminalStatus } from "../../../types/agent";
 

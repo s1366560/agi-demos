@@ -1,12 +1,17 @@
 import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+
 import { Plus, Building2, ArrowRight } from 'lucide-react';
-import { AppLayout, NavigationItem } from '@/components/shared/layouts/AppLayout';
-import { useTenantStore } from '../stores/tenant';
-import { TenantCreateModal } from '@/components/tenant/TenantCreateModal';
-import { Tenant } from '../types/memory';
+
 import { useModal } from '@/hooks/useModal';
+
+import { AppLayout, NavigationItem } from '@/components/shared/layouts/AppLayout';
+import { TenantCreateModal } from '@/components/tenant/TenantCreateModal';
+
+import { useTenantStore } from '../stores/tenant';
+import { Tenant } from '../types/memory';
 
 export const SpaceListPage: React.FC = () => {
     const { t } = useTranslation();

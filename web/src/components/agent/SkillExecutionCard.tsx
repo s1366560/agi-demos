@@ -8,7 +8,7 @@
  */
 
 import React, { memo } from "react";
-import { Card, Typography, Space, Tag, Progress, Steps, Tooltip } from "antd";
+
 import {
   ThunderboltOutlined,
   LoadingOutlined,
@@ -18,6 +18,8 @@ import {
   RocketOutlined,
   EditOutlined,
 } from "@ant-design/icons";
+import { Card, Typography, Space, Tag, Progress, Steps, Tooltip } from "antd";
+
 import type {
   SkillExecutionState,
   SkillToolExecution,

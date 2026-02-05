@@ -1,5 +1,5 @@
-import { afterEach, vi, beforeEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { afterEach, vi, beforeEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // Inline common translations to avoid mock hoisting issues

@@ -6,9 +6,11 @@
 
 import { act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 // FIXME: This test was written for the old agent store (agent.ts).
 // The new agentV3 store has a different API. This test needs to be migrated.
 import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
+
 import type { Conversation, TimelineEvent } from '../../types/agent';
 
 describe('Agent Store - Title Generated Event Handling', () => {

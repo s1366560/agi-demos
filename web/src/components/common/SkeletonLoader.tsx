@@ -1,6 +1,6 @@
 import React from 'react'
-import { Skeleton } from 'antd'
-import { Card, Row, Col } from 'antd'
+
+import { Skeleton , Card, Row, Col } from 'antd'
 
 export interface SkeletonLoaderProps {
     type?: 'list' | 'card' | 'table' | 'form' | 'chat'

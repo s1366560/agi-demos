@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+
 import { X, Loader2, Save } from 'lucide-react';
-import { Memory } from '../../types/memory';
+
 import { memoryAPI } from '../../services/api';
+import { Memory } from '../../types/memory';
 
 interface EditMemoryModalProps {
     isOpen: boolean;

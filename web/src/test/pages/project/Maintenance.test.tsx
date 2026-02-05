@@ -1,8 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { useParams } from 'react-router-dom'
+
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { Maintenance } from '../../../pages/project/Maintenance'
 import { graphService } from '../../../services/graphService'
-import { useParams } from 'react-router-dom'
+
 
 vi.mock('../../../services/graphService', () => ({
     graphService: {

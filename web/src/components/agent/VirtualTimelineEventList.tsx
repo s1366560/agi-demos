@@ -10,12 +10,15 @@
  */
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
+
+import { DownOutlined, MessageOutlined } from "@ant-design/icons";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Button, Spin } from "antd";
-import { DownOutlined, MessageOutlined } from "@ant-design/icons";
-import { TimelineEventItem } from "./TimelineEventItem";
+
 import { MessageStream } from "./chat/MessageStream";
 import { StreamingThoughtBubble } from "./StreamingThoughtBubble";
+import { TimelineEventItem } from "./TimelineEventItem";
+
 import type { TimelineEvent } from "../../types/agent";
 
 interface VirtualTimelineEventListProps {

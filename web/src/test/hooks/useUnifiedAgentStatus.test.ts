@@ -9,9 +9,10 @@
 
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
 import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
-import type { LifecycleStateData } from '../../types/agent';
-import type { PlanModeStatus } from '../../types/agent';
+
 
 // Mock stores
 vi.mock('../../stores/agentV3', () => ({
@@ -35,11 +36,12 @@ vi.mock('../../hooks/useAgentLifecycleState', () => ({
     useAgentLifecycleState: vi.fn(),
 }));
 
-import { useAgentV3Store } from '../../stores/agentV3';
 import { usePlanModeStore } from '../../stores/agent/planModeStore';
 import { useStreamingStore } from '../../stores/agent/streamingStore';
+import { useAgentV3Store } from '../../stores/agentV3';
 import { useSandboxStore } from '../../stores/sandbox';
-import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
+
+import type { PlanModeStatus , LifecycleStateData } from '../../types/agent';
 
 describe('useUnifiedAgentStatus - TDD RED Phase', () => {
     const mockProjectId = 'test-project-123';

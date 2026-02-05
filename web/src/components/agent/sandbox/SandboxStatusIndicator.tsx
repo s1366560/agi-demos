@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type FC } from "react";
+
 import { Popover, Spin, Progress, message, Button } from "antd";
 import {
   Terminal,
@@ -24,13 +25,14 @@ import {
   Clock,
   RefreshCw,
 } from "lucide-react";
+
+import { agentService } from "../../../services/agentService";
 import {
   projectSandboxService,
   type ProjectSandbox,
   type SandboxStats,
   type ProjectSandboxStatus,
 } from "../../../services/projectSandboxService";
-import { agentService } from "../../../services/agentService";
 import { type SandboxStateData } from "../../../types/agent";
 import { logger } from "../../../utils/logger";
 

@@ -4,10 +4,13 @@
  * Tests for the SearchHeader composite component.
  */
 
-import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { SearchHeader } from '@/components/project/search/SearchHeader'
+import { describe, it, expect, vi } from 'vitest'
+
 import type { SearchMode } from '@/hooks/useSearchState'
+
+import { SearchHeader } from '@/components/project/search/SearchHeader'
+
 
 // Mock i18n
 vi.mock('react-i18next', () => ({

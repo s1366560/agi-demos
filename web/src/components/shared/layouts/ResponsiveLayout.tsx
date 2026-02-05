@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import { 
   LayoutDashboard, 
   Building2, 
@@ -13,9 +14,10 @@ import {
   User,
   Bell
 } from 'lucide-react';
+
 import { useAuthStore } from '@/stores/auth';
-import { useTenantStore } from '@/stores/tenant';
 import { useProjectStore } from '@/stores/project';
+import { useTenantStore } from '@/stores/tenant';
 
 interface ResponsiveLayoutProps {
   children: React.ReactNode;

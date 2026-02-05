@@ -9,8 +9,8 @@
  * @packageDocumentation
  */
 
-import type { ConversationState } from '../types/conversationState';
 import type { TimelineEvent } from '../types/agent';
+import type { ConversationState } from '../types/conversationState';
 
 const DB_NAME = 'memstack-agent';
 const DB_VERSION = 1;

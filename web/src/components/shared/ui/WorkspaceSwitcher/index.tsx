@@ -31,12 +31,14 @@
  */
 
 // First, import all components
-import { WorkspaceSwitcherRoot } from './WorkspaceSwitcherRoot'
-import { WorkspaceSwitcherTrigger } from './Trigger'
-import { WorkspaceSwitcherMenu } from './Menu'
-import { TenantList } from './TenantList'
-import { ProjectList } from './ProjectList'
 import { WorkspaceSwitcher as LegacyWorkspaceSwitcher } from '../WorkspaceSwitcher.legacy'
+
+import { WorkspaceSwitcherMenu } from './Menu'
+import { ProjectList } from './ProjectList'
+import { TenantList } from './TenantList'
+import { WorkspaceSwitcherTrigger } from './Trigger'
+import { WorkspaceSwitcherRoot } from './WorkspaceSwitcherRoot'
+
 
 // Then export them
 export { WorkspaceSwitcherRoot } from './WorkspaceSwitcherRoot'

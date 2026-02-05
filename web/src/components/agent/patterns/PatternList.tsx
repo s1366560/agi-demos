@@ -10,6 +10,7 @@
  */
 
 import React, { memo, useMemo } from "react";
+
 import { MaterialIcon } from '../shared';
 
 export type PatternStatus = 'preferred' | 'active' | 'deprecated';

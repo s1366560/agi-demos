@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { useTimelineStore, initialState } from '../../../stores/agent/timelineStore';
 
 // Mock agent service

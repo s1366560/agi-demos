@@ -1,9 +1,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, render, waitFor } from '../../utils'
+
 import { TenantOverview } from '../../../pages/tenant/TenantOverview'
-import { useTenantStore } from '../../../stores/tenant'
 import { tenantAPI } from '../../../services/api'
+import { useTenantStore } from '../../../stores/tenant'
+import { screen, render, waitFor } from '../../utils'
 
 vi.mock('../../../stores/tenant')
 vi.mock('../../../services/api')

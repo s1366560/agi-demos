@@ -1,6 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { SpaceListPage } from '../../pages/SpaceListPage';
 import { useTenantStore } from '../../stores/tenant';
 

@@ -1,9 +1,13 @@
 import { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { LazyResult, LazyButton } from '@/components/ui/lazyAntd'
-import { useTranslation } from 'react-i18next'
-import { ErrorBoundary } from './ErrorBoundary'
 import type { ErrorInfo } from 'react'
+
+import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+
+import { LazyResult, LazyButton } from '@/components/ui/lazyAntd'
+
+import { ErrorBoundary } from './ErrorBoundary'
+
 
 /**
  * Props for RouteErrorBoundary component

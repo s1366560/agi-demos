@@ -1,6 +1,9 @@
 import React from 'react'
+
 import { NavLink, Outlet, useParams } from 'react-router-dom'
+
 import { LayoutDashboard, Box, Network, GitMerge } from 'lucide-react'
+
 import { RouteErrorBoundary } from '../components/common/RouteErrorBoundary'
 
 export const SchemaLayout: React.FC = () => {

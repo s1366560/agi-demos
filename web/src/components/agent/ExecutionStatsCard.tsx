@@ -6,8 +6,10 @@
  */
 
 import { LazyCard, LazyStatistic, LazyRow, LazyCol, LazyProgress, LazyTable, Tag } from '@/components/ui/lazyAntd';
-import type { ExecutionStatsResponse } from '../../types/agent';
+
 import { MaterialIcon } from './shared';
+
+import type { ExecutionStatsResponse } from '../../types/agent';
 
 interface ExecutionStatsCardProps {
   stats: ExecutionStatsResponse;

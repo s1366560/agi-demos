@@ -1,5 +1,7 @@
 import { useState } from 'react';
+
 import { Link, useLocation } from 'react-router-dom';
+
 import {
   AppstoreOutlined,
   DatabaseOutlined,
@@ -8,8 +10,10 @@ import {
   SettingOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
-import { LazyMenu } from '@/components/ui/lazyAntd';
 import { Layout as AntLayout } from 'antd';
+
+import { LazyMenu } from '@/components/ui/lazyAntd';
+
 import type { MenuProps } from 'antd';
 
 const { Header, Content, Sider } = AntLayout;

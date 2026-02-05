@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
+
 import { getNavigationConfig, getTenantSidebarConfig, getProjectSidebarConfig, getAgentConfig } from '@/config/navigation'
 
 describe('Navigation Configuration', () => {

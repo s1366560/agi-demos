@@ -5,19 +5,24 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
+
 import { projectService } from '@/services/projectService';
-import type { Project } from '@/types/memory';
-import type { ProjectManagerProps } from './types';
+
 import { ProjectManagerContext } from './context';
 
 // Import sub-components for full variant rendering
-import { Search } from './Search';
-import { List } from './List';
 import { Item } from './Item';
+import { List } from './List';
 import { CreateModal, SettingsModal } from './Modals';
+import { Search } from './Search';
 import { Loading, Empty, Error } from './States';
+
+import type { Project } from '@/types/memory';
+
+import type { ProjectManagerProps } from './types';
 
 export const Root: React.FC<ProjectManagerProps> = ({
   children,

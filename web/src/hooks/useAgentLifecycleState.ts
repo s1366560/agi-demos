@@ -24,8 +24,10 @@
  */
 
 import { useState, useEffect, useMemo } from "react";
-import { logger } from "../utils/logger";
+
 import { agentService } from "../services/agentService";
+import { logger } from "../utils/logger";
+
 import type { LifecycleStateData, LifecycleStatus } from "../types/agent";
 
 // Global lock to prevent duplicate subscriptions in React StrictMode

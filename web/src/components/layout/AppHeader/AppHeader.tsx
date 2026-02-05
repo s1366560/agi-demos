@@ -22,20 +22,22 @@
  */
 
 import * as React from 'react'
+
 import { Link } from 'react-router-dom'
+
 import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
 
 // Import subcomponents
-import { SidebarToggle } from './SidebarToggle'
-import { MobileMenu } from './MobileMenu'
-import { Search } from './Search'
-import { Notifications } from './Notifications'
-import { Tools } from './Tools'
-import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitcher } from './LanguageSwitcher'
-import { WorkspaceSwitcher } from './WorkspaceSwitcher'
-import { UserMenu } from './UserMenu'
+import { MobileMenu } from './MobileMenu'
+import { Notifications } from './Notifications'
 import { PrimaryAction } from './PrimaryAction'
+import { Search } from './Search'
+import { SidebarToggle } from './SidebarToggle'
+import { ThemeToggle } from './ThemeToggle'
+import { Tools } from './Tools'
+import { UserMenu } from './UserMenu'
+import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 
 // Import types
 import type {

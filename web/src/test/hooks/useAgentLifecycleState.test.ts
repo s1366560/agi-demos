@@ -4,8 +4,8 @@
  * Tests React hook for subscribing to agent lifecycle state changes via WebSocket.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, waitFor, act, cleanup } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // Mock agentService module with inline mocks (vitest hoisting requirement)
 vi.mock("../../services/agentService", () => ({
@@ -18,8 +18,8 @@ vi.mock("../../services/agentService", () => ({
 }));
 
 // Import after mock declaration
-import { agentService } from "../../services/agentService";
 import { useAgentLifecycleState } from "../../hooks/useAgentLifecycleState";
+import { agentService } from "../../services/agentService";
 
 describe("useAgentLifecycleState", () => {
   const mockProjectId = "proj-123";

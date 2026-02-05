@@ -7,12 +7,14 @@
  * TDD: Tests written first, implementation will follow.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 // FIXME: This test was written for the old agent store (agent.ts).
 // The new agentV3 store has a different API. This test needs to be migrated.
 // For now, we import from agentV3 but some functionality may not work.
 import { useAgentV3Store as useAgentStore } from '../../stores/agentV3'
+
 import type {
   WorkPlan,
   PlanStatus,

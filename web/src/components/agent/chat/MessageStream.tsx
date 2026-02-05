@@ -6,8 +6,10 @@
  */
 
 import { ReactNode, memo, useState, useMemo } from "react";
-import { MarkdownContent } from "./MarkdownContent";
+
 import { foldTextWithMetadata } from "../../../utils/toolResultUtils";
+
+import { MarkdownContent } from "./MarkdownContent";
 
 export interface MessageStreamProps {
     /** Messages to display */

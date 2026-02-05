@@ -69,9 +69,7 @@ class HITLRecoveryService:
                 expired_count = await repo.mark_expired_requests(before=now)
                 if expired_count > 0:
                     await session.commit()
-                    logger.info(
-                        f"HITL Recovery: Marked {expired_count} expired PENDING requests"
-                    )
+                    logger.info(f"HITL Recovery: Marked {expired_count} expired PENDING requests")
                     self._recovered_count = expired_count
 
                 # Check for ANSWERED but unprocessed requests (edge case)

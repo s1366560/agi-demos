@@ -5,6 +5,7 @@
  */
 
 import { useSidebarContext } from './SidebarContext'
+
 import type { NavUser } from '@/config/navigation'
 
 export interface SidebarUserProps {

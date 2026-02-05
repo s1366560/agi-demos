@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+
 import { X, Building2, AlertCircle } from 'lucide-react';
+
 import { useTenantStore } from '../../stores/tenant';
 
 interface TenantCreateModalProps {

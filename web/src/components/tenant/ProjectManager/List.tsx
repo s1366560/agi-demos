@@ -5,7 +5,9 @@
  */
 
 import { FC } from 'react';
+
 import { useProjectManagerContext } from './context';
+
 import type { ProjectManagerListProps } from './types';
 
 export const List: FC<ProjectManagerListProps> = ({

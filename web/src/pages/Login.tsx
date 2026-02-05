@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { Brain, Eye, EyeOff, AlertCircle, Share2, Database, ShieldCheck } from 'lucide-react';
+
 import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '../stores/auth';
+
+import { Brain, Eye, EyeOff, AlertCircle, Share2, Database, ShieldCheck } from 'lucide-react';
+
 import { LanguageSwitcher } from '@/components/shared/ui/LanguageSwitcher';
+
+import { useAuthStore } from '../stores/auth';
+
 
 export const Login: React.FC = () => {
     const { t } = useTranslation();

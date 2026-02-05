@@ -14,9 +14,11 @@
  * - Null status handling
  */
 
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+
 import { PlanModeIndicator } from "../../../components/agent/PlanModeIndicator";
+
 import type { PlanModeStatus, PlanDocument } from "../../../types/agent";
 
 describe("PlanModeIndicator", () => {

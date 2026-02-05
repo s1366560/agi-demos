@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { LazyTabs, LazyButton, LazyBadge, LazyEmpty, Empty, LazyTooltip } from '@/components/ui/lazyAntd';
+
 import { 
   Terminal, 
   Monitor, 
@@ -16,9 +16,15 @@ import {
   Minimize2,
   Settings
 } from 'lucide-react';
-import { SandboxTerminal } from './sandbox/SandboxTerminal';
-import { RemoteDesktopViewer } from './sandbox/RemoteDesktopViewer';
+
+import { LazyTabs, LazyButton, LazyBadge, LazyEmpty, Empty, LazyTooltip } from '@/components/ui/lazyAntd';
+
 import { useSandboxStore } from '../../stores/sandbox';
+
+import { RemoteDesktopViewer } from './sandbox/RemoteDesktopViewer';
+import { SandboxTerminal } from './sandbox/SandboxTerminal';
+
+
 import type { ToolExecution } from './sandbox/SandboxOutputViewer';
 
 type SandboxTab = 'terminal' | 'desktop' | 'output';

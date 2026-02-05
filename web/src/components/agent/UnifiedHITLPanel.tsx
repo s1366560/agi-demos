@@ -15,6 +15,21 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+import {
+  QuestionCircleOutlined,
+  ExclamationCircleOutlined,
+  KeyOutlined,
+  SafetyOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
+  WarningOutlined,
+  LockOutlined,
+  FileTextOutlined,
+  CodeOutlined,
+} from '@ant-design/icons';
+
 import { 
   Modal, 
   Form, 
@@ -31,19 +46,10 @@ import {
   Badge,
   Descriptions,
 } from '@/components/ui/lazyAntd';
-import {
-  QuestionCircleOutlined,
-  ExclamationCircleOutlined,
-  KeyOutlined,
-  SafetyOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ClockCircleOutlined,
-  WarningOutlined,
-  LockOutlined,
-  FileTextOutlined,
-  CodeOutlined,
-} from '@ant-design/icons';
+
+import { useUnifiedHITLStore, useIsSubmitting } from '../../stores/hitlStore.unified';
+import { getRemainingTimeSeconds } from '../../types/hitl.unified';
+
 import type { 
   UnifiedHITLRequest, 
   HITLType,
@@ -51,8 +57,7 @@ import type {
   DecisionOption,
   EnvVarField,
 } from '../../types/hitl.unified';
-import { getRemainingTimeSeconds } from '../../types/hitl.unified';
-import { useUnifiedHITLStore, useIsSubmitting } from '../../stores/hitlStore.unified';
+
 
 const { Text, Paragraph, Title } = Typography;
 const { TextArea } = Input;

@@ -4,9 +4,11 @@
  * Tests for the Agent layout component.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
 import { BrowserRouter, Route, Routes, MemoryRouter } from 'react-router-dom'
+
+import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import { AgentLayout } from '@/layouts/AgentLayout'
 
 // Mock stores

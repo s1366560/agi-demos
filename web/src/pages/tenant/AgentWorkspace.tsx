@@ -6,16 +6,21 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
-import { Empty as AntEmpty } from 'antd';
+
 import { useTranslation } from 'react-i18next';
-import { useProjectStore } from '../../stores/project';
-import { useAgentV3Store } from '../../stores/agentV3';
-import { useAuthStore } from '../../stores/auth';
-import { useTenantStore } from '../../stores/tenant';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { Empty as AntEmpty } from 'antd';
+
+import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
+
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { useAgentV3Store } from '../../stores/agentV3';
+import { useAuthStore } from '../../stores/auth';
+import { useProjectStore } from '../../stores/project';
+import { useTenantStore } from '../../stores/tenant';
+
 import type { Project } from '../../types/memory';
 
 /**

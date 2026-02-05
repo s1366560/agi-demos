@@ -5,9 +5,12 @@
  */
 
 import * as React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { User, Settings, LogOut, ChevronDown } from 'lucide-react'
+
 import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
+
+import { User, Settings, LogOut, ChevronDown } from 'lucide-react'
+
 import { useUser, useAuthActions } from '@/stores/auth'
 
 export interface UserMenuProps {

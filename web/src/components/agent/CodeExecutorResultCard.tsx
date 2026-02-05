@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from "react";
-import { Card, Typography, Space, Tag, Alert, Collapse } from "antd";
+
 import {
   CodeOutlined,
   FileOutlined,
@@ -16,6 +16,8 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
 } from "@ant-design/icons";
+import { Card, Typography, Space, Tag, Alert, Collapse } from "antd";
+
 import { FileDownloadButton } from "./FileDownloadButton";
 
 const { Text } = Typography;

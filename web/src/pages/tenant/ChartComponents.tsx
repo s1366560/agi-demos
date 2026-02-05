@@ -6,6 +6,9 @@
  */
 
 import React from 'react'
+
+import { Line, Pie } from 'react-chartjs-2'
+
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -17,7 +20,6 @@ import {
     Legend,
     ArcElement,
 } from 'chart.js'
-import { Line, Pie } from 'react-chartjs-2'
 
 // Register Chart.js components once when this module is loaded
 ChartJS.register(

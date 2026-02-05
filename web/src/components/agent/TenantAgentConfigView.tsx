@@ -17,11 +17,16 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { LazyAlert, LazyButton, LazyCard, LazyDescriptions, Descriptions, LazySpin, LazyTag } from '@/components/ui/lazyAntd';
-import { Typography } from 'antd';
+
 import { EditOutlined, ReloadOutlined } from '@ant-design/icons';
-import type { TenantAgentConfig } from '@/types/agent';
+import { Typography } from 'antd';
+
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
+
+import { LazyAlert, LazyButton, LazyCard, LazyDescriptions, Descriptions, LazySpin, LazyTag } from '@/components/ui/lazyAntd';
+
+import type { TenantAgentConfig } from '@/types/agent';
+
 
 const { Title, Text } = Typography;
 

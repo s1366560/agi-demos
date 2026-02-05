@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
+
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '../stores/auth'
+
 import { authAPI } from '../services/api'
-import type { UserUpdate } from '../types/memory'
-import type { UserProfile as UserProfileType } from '../types/memory'
+import { useAuthStore } from '../stores/auth'
+
+import type { UserUpdate , UserProfile as UserProfileType } from '../types/memory'
 
 export const UserProfile: React.FC = () => {
     const { t } = useTranslation()

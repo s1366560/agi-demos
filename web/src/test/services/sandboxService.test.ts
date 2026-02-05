@@ -5,9 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { sandboxService } from "../../services/sandboxService";
-import { httpClient } from "../../services/client/httpClient";
+
 import { ApiError, ApiErrorType } from "../../services/client/ApiError";
+import { httpClient } from "../../services/client/httpClient";
+import { sandboxService } from "../../services/sandboxService";
 
 // Mock httpClient
 vi.mock("../../services/client/httpClient", () => ({

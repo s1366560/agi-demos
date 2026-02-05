@@ -3,6 +3,7 @@
  */
 
 import { httpClient } from "./client/httpClient";
+
 import type { Artifact, ArtifactCategory } from "../types/agent";
 
 export interface ArtifactListResponse {

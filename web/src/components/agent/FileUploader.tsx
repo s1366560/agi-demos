@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
-import { Button, Progress, Select, Tag, Tooltip, message } from '@/components/ui/lazyAntd';
+
 import { 
   Paperclip, 
   X, 
@@ -23,11 +23,13 @@ import {
   AlertCircle,
   CheckCircle,
 } from 'lucide-react';
+
 import { 
   attachmentService, 
   type AttachmentResponse,
-} from '@/services/attachmentService';
-import type { AttachmentPurpose, UploadProgress } from '@/services/attachmentService';
+ AttachmentPurpose, UploadProgress } from '@/services/attachmentService';
+
+import { Button, Progress, Select, Tag, Tooltip, message } from '@/components/ui/lazyAntd';
 
 // ==================== Types ====================
 

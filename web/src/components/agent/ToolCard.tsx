@@ -8,9 +8,11 @@
  */
 
 import React, { memo, useMemo } from "react";
-import { Card, Tag, Collapse, Typography } from "antd";
-import { foldText } from "../../utils/toolResultUtils";
+
 import { CheckCircleOutlined, SyncOutlined, CloseCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import { Card, Tag, Collapse, Typography } from "antd";
+
+import { foldText } from "../../utils/toolResultUtils";
 
 const { Panel } = Collapse;
 const { Text } = Typography;

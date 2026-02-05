@@ -1,5 +1,7 @@
 import React from 'react'
+
 import { useTranslation } from 'react-i18next'
+
 import { useTenantStore } from '../../stores/tenant'
 
 export const Billing: React.FC = () => {

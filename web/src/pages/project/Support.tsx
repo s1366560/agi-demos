@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { MessageSquare, Send, ExternalLink, FileText, BookOpen, HelpCircle, Plus } from 'lucide-react';
+
 import { useTranslation } from 'react-i18next';
-import { useTenantStore } from '../../stores/tenant';
+
+import { MessageSquare, Send, ExternalLink, FileText, BookOpen, HelpCircle, Plus } from 'lucide-react';
+
 import api from '../../services/api';
+import { useTenantStore } from '../../stores/tenant';
 
 interface SupportTicket {
     id: string;

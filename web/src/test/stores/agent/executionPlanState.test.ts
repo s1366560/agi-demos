@@ -26,11 +26,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 // FIXME: This test was written for the old agent store (agent.ts).
 // The new agentV3 store has a different API. This test needs to be migrated.
 // SKIPPED: Methods tested (updateExecutionPlanStatus, updateDetectionInfo, etc.)
 // do not exist in the current agentV3 store implementation.
 import { useAgentV3Store as useAgentStore } from '../../../stores/agentV3';
+
 import type {
   ExecutionPlan,
   ExecutionStep,

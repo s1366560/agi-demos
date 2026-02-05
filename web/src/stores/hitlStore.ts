@@ -6,6 +6,18 @@
 
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
+
+import { hitlService } from '../services/hitlService';
+import {
+  getRemainingTime,
+  createHITLRequest,
+  isClarificationRequest,
+  isPermissionRequest,
+  isDecisionRequest,
+  isEnvVarRequest,
+} from '../types/hitl';
+
+import type { AgentEventType } from '../types/generated/eventTypes';
 import type {
   HITLRequest,
   HITLResponse,
@@ -15,16 +27,6 @@ import type {
   DecisionRequest,
   EnvVarRequest,
 } from '../types/hitl';
-import {
-  getRemainingTime,
-  createHITLRequest,
-  isClarificationRequest,
-  isPermissionRequest,
-  isDecisionRequest,
-  isEnvVarRequest,
-} from '../types/hitl';
-import { hitlService } from '../services/hitlService';
-import type { AgentEventType } from '../types/generated/eventTypes';
 
 // =============================================================================
 // State Interface

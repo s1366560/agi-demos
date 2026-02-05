@@ -16,16 +16,7 @@
  */
 
 import React, { useMemo } from "react";
-import {
-  Progress,
-  Typography,
-  Card,
-  List,
-  Tag,
-  Space,
-  Spin,
-  Empty,
-} from "antd";
+
 import {
   CheckCircleOutlined,
   LoadingOutlined,
@@ -36,8 +27,19 @@ import {
   EditOutlined,
   SwapOutlined,
 } from "@ant-design/icons";
-import { ExecutionPlan, ExecutionStep } from "../../types/agent";
+import {
+  Progress,
+  Typography,
+  Card,
+  List,
+  Tag,
+  Space,
+  Spin,
+  Empty,
+} from "antd";
+
 import { usePlanModeEvents, ReflectionResult, PlanAdjustment } from "../../hooks/usePlanModeEvents";
+import { ExecutionPlan, ExecutionStep } from "../../types/agent";
 
 const { Text } = Typography;
 

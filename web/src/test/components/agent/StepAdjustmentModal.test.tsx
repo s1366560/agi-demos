@@ -13,9 +13,11 @@
  * - Empty state handling
  */
 
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+
 import { StepAdjustmentModal } from "../../../components/agent/StepAdjustmentModal";
+
 import type { StepAdjustment } from "../../../types/agent";
 
 describe("StepAdjustmentModal", () => {

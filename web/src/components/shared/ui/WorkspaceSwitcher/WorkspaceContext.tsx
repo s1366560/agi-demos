@@ -3,6 +3,7 @@
  */
 
 import { createContext, useContext, useRef, useState, useCallback } from 'react'
+
 import type { WorkspaceContextValue, WorkspaceMode } from './types'
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)

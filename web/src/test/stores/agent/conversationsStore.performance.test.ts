@@ -12,8 +12,9 @@
  * They should initially FAIL and then drive the implementation.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import {
   useConversationsStore,
   useConversations,

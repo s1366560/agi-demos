@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+
 import { MaterialIcon } from "./shared";
 
 export interface SearchResult {

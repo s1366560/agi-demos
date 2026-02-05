@@ -108,9 +108,7 @@ class ClarificationStrategy(HITLTypeStrategy):
     ) -> HITLRequest:
         question = request_data.get("question", "")
         options_data = request_data.get("options", [])
-        clarification_type = ClarificationType(
-            request_data.get("clarification_type", "custom")
-        )
+        clarification_type = ClarificationType(request_data.get("clarification_type", "custom"))
 
         options = []
         for opt in options_data:
@@ -154,10 +152,7 @@ class ClarificationStrategy(HITLTypeStrategy):
     def get_default_response(self, request: HITLRequest) -> Any:
         if request.clarification_data and request.clarification_data.default_value:
             return request.clarification_data.default_value
-        if (
-            request.clarification_data
-            and request.clarification_data.options
-        ):
+        if request.clarification_data and request.clarification_data.options:
             # Return first recommended or first option
             for opt in request.clarification_data.options:
                 if opt.recommended:
@@ -438,7 +433,7 @@ class TemporalHITLHandler:
         self.message_id = message_id
         self.default_timeout = default_timeout
         self._emit_sse_callback = emit_sse_callback
-        
+
         # Pre-injected response for HITL resume (used once then cleared)
         self._preinjected_response = preinjected_response
 
@@ -491,7 +486,7 @@ class TemporalHITLHandler:
             "context": context or {},
             "default_value": default_value,
         }
-        
+
         # Use provided request_id if given
         if request_id:
             request_data["_request_id"] = request_id
@@ -538,7 +533,7 @@ class TemporalHITLHandler:
             "context": context or {},
             "default_option": default_option,
         }
-        
+
         # Use provided request_id if given
         if request_id:
             request_data["_request_id"] = request_id
@@ -655,7 +650,7 @@ class TemporalHITLHandler:
             Response value (type depends on hitl_type)
         """
         strategy = self._get_strategy(hitl_type)
-        
+
         # Check for pre-injected response (HITL resume case)
         # This happens when continue_project_chat_activity restores agent state
         # and the tool is called again - we should return the cached response
@@ -663,7 +658,7 @@ class TemporalHITLHandler:
             preinjected = self._preinjected_response
             preinjected_type = preinjected.get("hitl_type", "")
             preinjected_data = preinjected.get("response_data", {})
-            
+
             # Type must match (clarification, decision, env_var, permission)
             if preinjected_type == hitl_type.value:
                 logger.info(
@@ -690,9 +685,7 @@ class TemporalHITLHandler:
             message_id=self.message_id,
         )
 
-        logger.info(
-            f"[TemporalHITL] Creating {hitl_type.value} request: {request.request_id}"
-        )
+        logger.info(f"[TemporalHITL] Creating {hitl_type.value} request: {request.request_id}")
 
         # Track pending request
         self._pending_requests[request.request_id] = request

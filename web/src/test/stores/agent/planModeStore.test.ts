@@ -25,7 +25,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { usePlanModeStore, initialState } from '../../../stores/agent/planModeStore';
+
 import type { PlanDocument, PlanModeStatus } from '../../../types/agent';
 
 // Mock planService

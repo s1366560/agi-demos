@@ -12,8 +12,7 @@
  */
 
 import React, { memo, useState, useCallback, useEffect } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { LazyButton, LazyProgress, LazyTag } from '@/components/ui/lazyAntd';
+
 import { Radio, Input, Form } from 'antd';
 import {
   HelpCircle,
@@ -26,6 +25,12 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
+
+import { LazyButton, LazyProgress, LazyTag } from '@/components/ui/lazyAntd';
+
+import { useUnifiedHITLStore } from '../../stores/hitlStore.unified';
+
 import type {
   ClarificationAskedEventData,
   DecisionAskedEventData,
@@ -33,7 +38,6 @@ import type {
   PermissionAskedEventData,
 } from '../../types/agent';
 import type { HITLType, HITLResponseData } from '../../types/hitl.unified';
-import { useUnifiedHITLStore } from '../../stores/hitlStore.unified';
 
 // =============================================================================
 // Types

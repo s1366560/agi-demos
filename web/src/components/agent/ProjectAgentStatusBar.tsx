@@ -18,7 +18,7 @@
 
 import type { FC } from 'react';
 import { useState, useCallback, useEffect } from 'react';
-import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
+
 import {
   Zap,
   MessageSquare,
@@ -43,10 +43,14 @@ import {
   Layers,
   Heart,
 } from 'lucide-react';
+
+import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
+
 import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
-import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
 import { agentService } from '../../services/agentService';
 import { poolService, type PoolInstance, type ProjectTier, type InstanceStatus } from '../../services/poolService';
+
+import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
 
 interface ProjectAgentStatusBarProps {
   /** Project ID */

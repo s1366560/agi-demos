@@ -1,8 +1,10 @@
+import { useParams } from "react-router-dom";
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "../../utils";
+
 import { CommunitiesList } from "../../../pages/project/CommunitiesList";
 import { graphService } from "../../../services/graphService";
-import { useParams } from "react-router-dom";
+import { render, screen, fireEvent, waitFor } from "../../utils";
 
 vi.mock("../../../services/graphService", () => ({
   graphService: {

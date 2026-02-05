@@ -7,8 +7,10 @@
 
 import { renderHook } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import { useEntityTypes, useEdgeTypes, useEdgeMaps, useSchemaData } from '@/hooks/useSwr'
+
 import { schemaAPI } from '@/services/api'
+
+import { useEntityTypes, useEdgeTypes, useEdgeMaps, useSchemaData } from '@/hooks/useSwr'
 
 // Mock the API service
 vi.mock('@/services/api', () => ({

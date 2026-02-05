@@ -5,7 +5,9 @@
  */
 
 import { useEffect, useRef, type KeyboardEvent } from 'react'
+
 import { useWorkspaceContext } from './WorkspaceContext'
+
 import type { WorkspaceMenuProps } from './types'
 
 export const WorkspaceSwitcherMenu: React.FC<WorkspaceMenuProps> = ({

@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { httpClient } from './client/httpClient';
+
 import type {
     ProjectCreate,
     ProjectUpdate,

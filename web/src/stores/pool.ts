@@ -8,7 +8,7 @@
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import { logger } from "../utils/logger";
+
 import {
   poolService,
   type PoolStatus,
@@ -18,6 +18,7 @@ import {
   type InstanceStatus,
   type ListInstancesParams,
 } from "../services/poolService";
+import { logger } from "../utils/logger";
 
 // ============================================================================
 // Types

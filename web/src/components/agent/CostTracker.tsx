@@ -6,8 +6,11 @@
  */
 
 import React from 'react';
-import { Typography, Space, Tooltip, Progress } from '@/components/ui/lazyAntd';
+
 import { DollarOutlined, ThunderboltOutlined } from '@ant-design/icons';
+
+import { Typography, Space, Tooltip, Progress } from '@/components/ui/lazyAntd';
+
 import type { CostTrackingState } from '../../types/conversationState';
 
 const { Text } = Typography;

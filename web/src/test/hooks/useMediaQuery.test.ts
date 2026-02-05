@@ -12,8 +12,9 @@
  * 6. Edge cases (invalid queries, SSR)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 // Mock matchMedia

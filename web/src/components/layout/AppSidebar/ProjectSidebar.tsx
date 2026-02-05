@@ -6,13 +6,20 @@
  */
 
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+
 import { useTranslation } from 'react-i18next'
-import { AppSidebar } from './AppSidebar'
-import { getProjectSidebarConfig } from '@/config/navigation'
+import { useNavigate } from 'react-router-dom'
+
 import { useAuthStore } from '@/stores/auth'
-import type { NavUser } from '@/config/navigation'
+
+import { getProjectSidebarConfig } from '@/config/navigation'
+
+import { AppSidebar } from './AppSidebar'
+
+
+
 import type { ProjectSidebarProps } from './types'
+import type { NavUser } from '@/config/navigation'
 
 /**
  * Project sidebar component with configuration and state management

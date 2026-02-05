@@ -6,7 +6,9 @@
  */
 
 import axios, { AxiosRequestConfig } from 'axios';
+
 import { getAuthToken } from '@/utils/tokenResolver';
+
 import { ApiError, ApiErrorType } from './ApiError';
 
 /**

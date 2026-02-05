@@ -46,8 +46,9 @@ vi.mock("../../services/unifiedEventService", () => ({
 }));
 
 import { sandboxSSEService } from "../../services/sandboxSSEService";
-import type { BaseSandboxSSEEvent } from "../../services/sandboxSSEService";
 import { unifiedEventService } from "../../services/unifiedEventService";
+
+import type { BaseSandboxSSEEvent } from "../../services/sandboxSSEService";
 
 describe("SandboxSSEService (WebSocket-based)", () => {
   beforeEach(() => {

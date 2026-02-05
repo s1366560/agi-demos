@@ -4,8 +4,9 @@
  * TDD: Tests written first for the new compound component API.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { MessageArea } from '../../../components/agent/MessageArea'
 
 // Mock the dependencies

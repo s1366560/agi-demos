@@ -8,12 +8,14 @@
  */
 
 import React, { useState, memo } from "react";
-import { Card, Typography, Space, Tag } from "antd";
+
 import {
   BulbOutlined,
   CaretDownOutlined,
   CaretRightOutlined,
 } from "@ant-design/icons";
+import { Card, Typography, Space, Tag } from "antd";
+
 import type { ThoughtLevel } from "../../types/agent";
 
 const { Text } = Typography;

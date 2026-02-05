@@ -5,7 +5,9 @@
  */
 
 import React, { memo, useState, useEffect } from 'react';
-import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
+
+import ReactMarkdown from 'react-markdown';
+
 import {
   User,
   Sparkles,
@@ -17,21 +19,13 @@ import {
   ChevronUp,
   Clock
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type {
-  TimelineEvent,
-  ActEvent,
-  ObserveEvent,
-  ArtifactCreatedEvent,
-  ClarificationAskedEventData,
-  DecisionAskedEventData,
-  EnvVarRequestedEventData,
-  PermissionAskedEventData,
-  PermissionAskedTimelineEvent,
-  PermissionRequestedTimelineEvent,
-} from '../../../types/agent';
+
+import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
+
 // Import types without type qualifier
+import { InlineHITLCard } from '../InlineHITLCard';
+
 import type {
   UserMessageProps,
   AssistantMessageProps,
@@ -44,7 +38,18 @@ import type {
   ArtifactCreatedProps,
   MessageBubbleRootProps,
 } from './types';
-import { InlineHITLCard } from '../InlineHITLCard';
+import type {
+  TimelineEvent,
+  ActEvent,
+  ObserveEvent,
+  ArtifactCreatedEvent,
+  ClarificationAskedEventData,
+  DecisionAskedEventData,
+  EnvVarRequestedEventData,
+  PermissionAskedEventData,
+  PermissionAskedTimelineEvent,
+  PermissionRequestedTimelineEvent,
+} from '../../../types/agent';
 
 // ========================================
 // HITL Adapters - Convert TimelineEvent to SSE format for InlineHITLCard

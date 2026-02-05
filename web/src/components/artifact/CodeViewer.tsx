@@ -3,8 +3,9 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { Typography, Spin, Alert, Button, Tooltip, message } from "antd";
+
 import { CopyOutlined, CheckOutlined } from "@ant-design/icons";
+import { Typography, Spin, Alert, Button, Tooltip, message } from "antd";
 
 const { Text } = Typography;
 

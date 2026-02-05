@@ -9,9 +9,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+
 import { useParams } from 'react-router-dom';
-import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
+
 import { Modal } from 'antd';
+
+import { useLazyMessage, LazySkeleton, Skeleton as AntSkeleton } from '@/components/ui/lazyAntd';
+
 import {
   PatternStats,
   PatternList,
@@ -19,9 +23,10 @@ import {
   type WorkflowPattern as UIWorkflowPattern,
   type PatternStatus,
 } from '../../components/agent';
-import { patternService, PatternServiceError } from '../../services/patternService';
-import type { WorkflowPattern as APIWorkflowPattern } from '../../types/agent';
 import { MaterialIcon } from '../../components/agent/shared';
+import { patternService, PatternServiceError } from '../../services/patternService';
+
+import type { WorkflowPattern as APIWorkflowPattern } from '../../types/agent';
 
 /**
  * Convert API pattern to UI pattern format

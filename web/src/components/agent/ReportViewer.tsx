@@ -6,7 +6,9 @@
  */
 
 import React, { useState } from 'react';
-import { LazyCard, LazyButton, Typography } from '@/components/ui/lazyAntd';
+
+import ReactMarkdown from 'react-markdown';
+
 import {
   DownloadOutlined,
   CopyOutlined,
@@ -14,7 +16,8 @@ import {
   TableOutlined,
   CodeOutlined,
 } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
+
+import { LazyCard, LazyButton, Typography } from '@/components/ui/lazyAntd';
 
 const { Text, Paragraph } = Typography;
 

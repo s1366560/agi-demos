@@ -1,7 +1,10 @@
 import React from 'react';
+
 import { useTranslation } from 'react-i18next';
-import { LazySelect } from '@/components/ui/lazyAntd';
+
 import { GlobalOutlined } from '@ant-design/icons';
+
+import { LazySelect } from '@/components/ui/lazyAntd';
 
 export const LanguageSwitcher: React.FC = () => {
   const { i18n } = useTranslation();

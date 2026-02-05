@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { subscribeToTask } from '../../hooks/useTaskSSE';
 
 // Mock EventSource

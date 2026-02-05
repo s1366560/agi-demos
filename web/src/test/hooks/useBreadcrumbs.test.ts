@@ -4,8 +4,9 @@
  * Tests for breadcrumb generation hook.
  */
 
-import { describe, it, expect, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+
 import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
 
 // Mock react-router-dom

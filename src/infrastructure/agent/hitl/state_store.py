@@ -137,7 +137,7 @@ class HITLStateStore:
 
     def _make_key(self, conversation_id: str, request_id: str) -> str:
         """Generate Redis key for state storage.
-        
+
         Note: Uses request_id (not message_id) to ensure each HITL request
         has a unique state key. This prevents issues when multiple HITL
         requests occur for the same message.

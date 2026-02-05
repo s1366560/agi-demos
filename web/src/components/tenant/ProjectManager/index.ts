@@ -17,12 +17,12 @@
  * </ProjectManager>
  */
 
+import { Filters } from './Filters';
+import { Item } from './Item';
+import { List } from './List';
+import { CreateModal, SettingsModal } from './Modals';
 import { Root } from './ProjectManager';
 import { Search } from './Search';
-import { Filters } from './Filters';
-import { List } from './List';
-import { Item } from './Item';
-import { CreateModal, SettingsModal } from './Modals';
 import { Loading, Empty, Error } from './States';
 
 // Attach sub-components to Root for compound pattern

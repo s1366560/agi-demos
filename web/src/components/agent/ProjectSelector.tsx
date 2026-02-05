@@ -13,10 +13,13 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Select, Modal, Spin, Alert } from '@/components/ui/lazyAntd';
+
 import { ExclamationCircleOutlined, LoadingOutlined } from '@ant-design/icons';
-import { useProjectStore } from '../../stores/project';
+
+import { Select, Modal, Spin, Alert } from '@/components/ui/lazyAntd';
+
 import { useAgentV3Store } from '../../stores/agentV3';
+import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 const { Option } = Select;

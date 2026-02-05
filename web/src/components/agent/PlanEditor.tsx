@@ -6,6 +6,15 @@
  */
 
 import { useState, useCallback, useEffect, memo } from "react";
+
+import {
+  EditOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  SaveOutlined,
+  FileTextOutlined,
+  ExclamationCircleOutlined,
+} from "@ant-design/icons";
 import {
   Card,
   Button,
@@ -19,14 +28,7 @@ import {
   Spin,
   Divider,
 } from "antd";
-import {
-  EditOutlined,
-  CheckOutlined,
-  CloseOutlined,
-  SaveOutlined,
-  FileTextOutlined,
-  ExclamationCircleOutlined,
-} from "@ant-design/icons";
+
 import type { PlanDocument, PlanDocumentStatus } from "../../types/agent";
 
 const { Text, Paragraph } = Typography;

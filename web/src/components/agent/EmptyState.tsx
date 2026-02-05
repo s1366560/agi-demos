@@ -3,8 +3,10 @@
  */
 
 import React from 'react';
-import { LazyButton } from '@/components/ui/lazyAntd';
+
 import { Plus, Sparkles, BarChart3, FileText, Search } from 'lucide-react';
+
+import { LazyButton } from '@/components/ui/lazyAntd';
 
 interface EmptyStateProps {
   onNewConversation: () => void;

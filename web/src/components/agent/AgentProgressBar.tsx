@@ -6,7 +6,7 @@
  */
 
 import React from 'react'
-import { LazyProgress, LazySpace, Typography } from '@/components/ui/lazyAntd'
+
 import {
   CheckCircleOutlined,
   LoadingOutlined,
@@ -14,6 +14,8 @@ import {
   ClockCircleOutlined,
   ThunderboltFilled,
 } from '@ant-design/icons'
+
+import { LazyProgress, LazySpace, Typography } from '@/components/ui/lazyAntd'
 
 const { Text } = Typography
 

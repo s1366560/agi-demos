@@ -5,6 +5,7 @@
  */
 
 import { httpClient } from './client/httpClient';
+
 import type {
   ClarificationResponse,
   PermissionResponse,

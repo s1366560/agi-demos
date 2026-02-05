@@ -14,8 +14,9 @@
  * They should initially FAIL and then drive the implementation.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useTaskSSE } from '../../hooks/useTaskSSE';
 
 // Mock EventSource

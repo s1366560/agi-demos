@@ -1,7 +1,8 @@
 import { useMemo, memo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+
 import { useTranslation } from 'react-i18next';
-import { useSchemaData } from '../../../hooks/useSwr';
+import { useParams, Link } from 'react-router-dom';
+
 import {
     Code,
     Download,
@@ -13,6 +14,9 @@ import {
     ArrowRight,
     Share2
 } from 'lucide-react';
+
+import { useSchemaData } from '../../../hooks/useSwr';
+
 
 // Memoized entity card component to prevent unnecessary re-renders
 interface EntityCardProps {

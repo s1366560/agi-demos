@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+
 import { 
     Network, 
     MousePointer2, Move, 
     Focus, Plus, Minus, X
 } from 'lucide-react';
+
 import { useMemoryStore } from '../../stores/memory';
 import { useProjectStore } from '../../stores/project';
 import { useThemeStore } from '../../stores/theme';

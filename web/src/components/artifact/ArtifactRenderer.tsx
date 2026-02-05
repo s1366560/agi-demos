@@ -26,7 +26,7 @@
  */
 
 import { useState, useCallback, Children } from "react";
-import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from "antd";
+
 import {
   FileImageOutlined,
   VideoCameraOutlined,
@@ -40,13 +40,13 @@ import {
   ExpandOutlined,
   LoadingOutlined,
 } from "@ant-design/icons";
+import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from "antd";
 
-import type { Artifact, ArtifactCategory } from "../../types/agent";
-import { ImageViewer } from "./ImageViewer";
-import { VideoPlayer } from "./VideoPlayer";
 import { AudioPlayer } from "./AudioPlayer";
 import { CodeViewer } from "./CodeViewer";
 import { FileDownloader } from "./FileDownloader";
+import { ImageViewer } from "./ImageViewer";
+import { VideoPlayer } from "./VideoPlayer";
 
 import type {
   ArtifactRendererRootProps,
@@ -62,6 +62,7 @@ import type {
   ArtifactHeaderProps,
   ArtifactActionsProps,
 } from "./types";
+import type { Artifact, ArtifactCategory } from "../../types/agent";
 
 const { Text } = Typography;
 

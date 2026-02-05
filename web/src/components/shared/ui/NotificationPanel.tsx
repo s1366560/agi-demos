@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
-import { useNotificationStore } from '@/stores/notification';
+
 import { useNavigate } from 'react-router-dom';
+
+import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
+
+import { useNotificationStore } from '@/stores/notification';
 
 export const NotificationPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);

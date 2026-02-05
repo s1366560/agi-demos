@@ -4,15 +4,17 @@
  * TDD Tests for compound component pattern refactoring
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
 import * as React from 'react';
+
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Import the component and types
 import {
   ProjectManager,
   type ProjectManagerProps,
 } from '@/components/tenant/ProjectManager';
+
 import type { Project } from '@/types/memory';
 
 // ============================================================================

@@ -11,12 +11,13 @@
  * TDD Phase: RED - Tests are written first, will fail initially
  */
 
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
+
 import '@testing-library/jest-dom/vitest'
 import { AssistantMessage } from '../../../../components/agent/chat/AssistantMessage'
-import { ToolExecutionCardDisplay } from '../../../../components/agent/chat/MessageStream'
 import { FinalResponseDisplay } from '../../../../components/agent/chat/FinalResponseDisplay'
+import { ToolExecutionCardDisplay } from '../../../../components/agent/chat/MessageStream'
 
 describe('AssistantMessage - Markdown Rendering', () => {
   describe('GitHub Flavored Markdown (GFM) Support', () => {

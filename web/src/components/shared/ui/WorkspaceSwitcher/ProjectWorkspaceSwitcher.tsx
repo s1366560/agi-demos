@@ -5,16 +5,22 @@
  */
 
 import { useEffect } from 'react'
+
 import { useNavigate, useParams } from 'react-router-dom'
-import { useTenantStore } from '@/stores/tenant'
+
 import { useProjectStore } from '@/stores/project'
-import type { Project } from '@/types/memory'
+import { useTenantStore } from '@/stores/tenant'
+
+
 import {
   WorkspaceSwitcherRoot,
   WorkspaceSwitcherTrigger,
   WorkspaceSwitcherMenu,
 } from './compound'
 import { ProjectList } from './ProjectList'
+
+import type { Project } from '@/types/memory'
+
 import type { ProjectWorkspaceSwitcherProps } from './types'
 
 export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> = ({

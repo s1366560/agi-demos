@@ -19,8 +19,10 @@
  */
 
 import React, { useCallback, useEffect, useState, useMemo, useContext } from 'react';
+
 import { message, Popconfirm, Dropdown, Switch, Empty, Spin, Tooltip } from 'antd';
-import type { MenuProps } from 'antd';
+
+import { SubAgentModal } from '../../components/subagent/SubAgentModal';
 import {
   useSubAgentData,
   useSubAgentFiltersData,
@@ -40,8 +42,9 @@ import {
   useSetSubAgentFilters,
   useClearSubAgentError,
 } from '../../stores/subagent';
-import { SubAgentModal } from '../../components/subagent/SubAgentModal';
+
 import type { SubAgentResponse, SubAgentTemplate } from '../../types/agent';
+import type { MenuProps } from 'antd';
 
 // ============================================================================
 // Constants

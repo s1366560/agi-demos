@@ -10,8 +10,9 @@
  * 4. Integrates with error reporting services
  */
 
-import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+
 import { ErrorBoundary } from '../../../components/common'
 
 // Helper to query by selector

@@ -5,9 +5,11 @@
  * These tests define the desired API before implementation.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+
+import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import * as AppHeaderModule from '@/components/layout/AppHeader'
 
 // Import components after module is created

@@ -4,8 +4,9 @@
  * TDD Approach: Tests written first, implementation to follow
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { ExecutionPlanViewer } from "../../../components/agent/ExecutionPlanViewer";
 import { ExecutionPlan, ExecutionPlanStatus, ExecutionStep } from "../../../types/agent";
 

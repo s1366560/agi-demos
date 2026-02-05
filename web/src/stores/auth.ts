@@ -13,7 +13,9 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
+
 import { authAPI } from '../services/api';
+
 import type { User } from '../types/memory';
 
 interface AuthState {

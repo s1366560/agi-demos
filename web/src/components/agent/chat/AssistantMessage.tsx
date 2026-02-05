@@ -11,7 +11,9 @@
  */
 
 import ReactMarkdown from 'react-markdown';
+
 import remarkGfm from 'remark-gfm';
+
 import { FinalResponseDisplay } from './FinalResponseDisplay';
 
 export interface AssistantMessageProps {

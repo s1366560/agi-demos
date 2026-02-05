@@ -26,31 +26,34 @@
  */
 
 import React, { useMemo, useState, memo, useCallback, Children } from "react";
-import { Segmented } from "antd";
+
 import {
   BulbOutlined,
   FieldTimeOutlined,
   ToolOutlined,
   BarChartOutlined,
 } from "@ant-design/icons";
+import { Segmented } from "antd";
 
-import { ThinkingChain } from "./ThinkingChain";
-import { ActivityTimeline } from "./execution/ActivityTimeline";
-import {
-  ToolCallVisualization,
-  type ToolExecutionItem,
-} from "./execution/ToolCallVisualization";
-import {
-  TokenUsageChart,
-  type TokenData,
-  type CostData,
-} from "./execution/TokenUsageChart";
 import {
   adaptTimelineData,
   adaptToolVisualizationData,
   extractTokenData,
   hasExecutionData,
 } from "../../utils/agentDataAdapters";
+
+import { ActivityTimeline } from "./execution/ActivityTimeline";
+import {
+  TokenUsageChart,
+  type TokenData,
+  type CostData,
+} from "./execution/TokenUsageChart";
+import {
+  ToolCallVisualization,
+  type ToolExecutionItem,
+} from "./execution/ToolCallVisualization";
+import { ThinkingChain } from "./ThinkingChain";
+
 
 import type {
   ViewType,

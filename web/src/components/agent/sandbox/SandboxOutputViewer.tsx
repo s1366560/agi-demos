@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo } from "react";
-import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from "antd";
+
 import {
   CopyOutlined,
   CheckOutlined,
@@ -19,10 +19,13 @@ import {
   FolderOutlined,
   PictureOutlined,
 } from "@ant-design/icons";
-import type { CollapseProps } from "antd";
+import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from "antd";
+
+import { ArtifactRenderer } from "../../artifact";
 
 import type { Artifact } from "../../../types/agent";
-import { ArtifactRenderer } from "../../artifact";
+import type { CollapseProps } from "antd";
+
 
 const { Text } = Typography;
 

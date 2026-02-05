@@ -13,8 +13,9 @@
  * - Only tenant admins can modify config
  */
 
-import { httpClient } from './client/httpClient';
 import { ApiError } from './client/ApiError';
+import { httpClient } from './client/httpClient';
+
 import type {
   TenantAgentConfig,
   TenantAgentConfigService as ITenantAgentConfigService,

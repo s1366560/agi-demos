@@ -11,8 +11,9 @@
  * - POST /agent/workflows/patterns/reset - Reset all patterns
  */
 
-import { httpClient } from './client/httpClient';
 import { ApiError } from './client/ApiError';
+import { httpClient } from './client/httpClient';
+
 import type {
   WorkflowPattern,
   PatternsListResponse,

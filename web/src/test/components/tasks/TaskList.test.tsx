@@ -4,8 +4,8 @@
  * TDD: GREEN - Tests passing after implementation
  */
 
-import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // Mock date-fns

@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+
 import { ThemeToggle as BaseThemeToggle } from '@/components/shared/ui/ThemeToggle'
 
 export interface ThemeToggleProps {

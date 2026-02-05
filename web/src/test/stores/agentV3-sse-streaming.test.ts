@@ -8,9 +8,11 @@
  * TDD Phase: SSE Adapter Integration into agentV3 Store
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { useAgentV3Store } from '../../stores/agentV3';
+
 import type {
     AgentEvent,
     MessageEventData,

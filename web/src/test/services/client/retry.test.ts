@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 import {
   calculateDelay,
   isRetryableError,
@@ -12,7 +14,6 @@ import {
   DEFAULT_RETRY_CONFIG,
   type RetryConfig,
 } from '@/services/client/retry';
-import { ApiError, ApiErrorType } from '@/services/client/ApiError';
 
 describe('calculateDelay', () => {
   it('should return initial delay for first retry (attempt 0)', () => {

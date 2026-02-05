@@ -8,6 +8,13 @@
 import { create } from 'zustand';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
+
+import { unifiedHitlService } from '../services/hitlService.unified';
+import {
+  getRemainingTimeSeconds,
+  SSE_EVENT_TO_HITL_TYPE,
+} from '../types/hitl.unified';
+
 import type {
   HITLType,
   HITLStatus,
@@ -17,11 +24,6 @@ import type {
   DecisionOption,
   EnvVarField,
 } from '../types/hitl.unified';
-import {
-  getRemainingTimeSeconds,
-  SSE_EVENT_TO_HITL_TYPE,
-} from '../types/hitl.unified';
-import { unifiedHitlService } from '../services/hitlService.unified';
 
 // =============================================================================
 // State Interface

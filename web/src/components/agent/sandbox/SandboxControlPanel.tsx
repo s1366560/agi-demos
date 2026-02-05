@@ -5,7 +5,7 @@
  */
 
 import { useCallback } from "react";
-import { Card, Space, Button, Badge, Typography, Divider, Tooltip } from "antd";
+
 import {
   DesktopOutlined,
   CodeOutlined,
@@ -13,6 +13,7 @@ import {
   StopOutlined,
   LinkOutlined,
 } from "@ant-design/icons";
+import { Card, Space, Button, Badge, Typography, Divider, Tooltip } from "antd";
 
 import type { DesktopStatus, TerminalStatus } from "../../../types/agent";
 

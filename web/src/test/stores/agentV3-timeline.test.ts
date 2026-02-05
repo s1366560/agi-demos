@@ -8,9 +8,11 @@
  * TDD Phase 1: Add timeline field to AgentV3State
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { useAgentV3Store } from '../../stores/agentV3';
+
 import type { TimelineEvent } from '../../types/agent';
 
 // Mock the services

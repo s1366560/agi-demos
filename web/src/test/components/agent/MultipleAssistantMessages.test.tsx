@@ -6,7 +6,9 @@
  */
 
 import { render, screen } from '@testing-library/react';
+
 import { MessageArea } from '../../../components/agent/MessageArea';
+
 import type { TimelineEvent } from '../../../types/agent';
 
 // Mock data: After backend fix, each event has unique id = "{event_type}-{sequence_number}"

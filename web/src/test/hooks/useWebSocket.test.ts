@@ -14,8 +14,9 @@
  * 8. Edge cases are handled
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { useWebSocket } from '../../hooks/useWebSocket';
 
 // Global tracking for the most recently created WebSocket instance

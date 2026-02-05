@@ -1,9 +1,13 @@
 import React, { useEffect, useState, memo } from 'react'
+
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
-import { useTenantStore } from '../../stores/tenant'
-import { useProjectStore } from '../../stores/project'
 import { Link } from 'react-router-dom'
+
+import { useProjectStore } from '../../stores/project'
+import { useTenantStore } from '../../stores/tenant'
+
+import type { TFunction } from 'i18next'
+
 
 // Hoist formatStorage outside component to avoid recreation on every render (rendering-hoist-jsx)
 const formatStorage = (bytes: number): string => {

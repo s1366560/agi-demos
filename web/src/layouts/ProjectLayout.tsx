@@ -15,13 +15,17 @@
  */
 
 import React, { useEffect } from "react"
+
 import { Outlet, useParams } from "react-router-dom"
+
 import { Plus } from "lucide-react"
-import { ProjectSidebar } from "@/components/layout/AppSidebar"
-import { AppHeader } from "@/components/layout/AppHeader"
-import { RouteErrorBoundary } from "@/components/common/RouteErrorBoundary"
+
 import { useProjectStore } from "@/stores/project"
 import { useTenantStore } from "@/stores/tenant"
+
+import { RouteErrorBoundary } from "@/components/common/RouteErrorBoundary"
+import { AppHeader } from "@/components/layout/AppHeader"
+import { ProjectSidebar } from "@/components/layout/AppSidebar"
 
 /**
  * ProjectLayout component

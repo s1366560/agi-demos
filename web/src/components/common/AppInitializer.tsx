@@ -6,7 +6,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
+
 import { useTranslation } from 'react-i18next';
+
 import { useAuthStore } from '../../stores/auth';
 
 interface AppInitializerProps {

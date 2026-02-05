@@ -5,7 +5,9 @@
  */
 
 import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
+
 import { MaterialIcon } from './shared';
+
 import type { ExecutionStatsResponse } from '../../types/agent';
 
 interface ExecutionTimelineChartProps {

@@ -8,9 +8,11 @@
  * - Animation effects
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
 import { TimelineEventItem } from '../../components/agent/TimelineEventItem';
+
 import type { TimelineEvent } from '../../types/agent';
 
 describe('Timeline Styles', () => {

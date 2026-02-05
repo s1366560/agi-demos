@@ -8,7 +8,10 @@
  *   Frontend → POST /hitl/respond → API → Temporal Signal → Workflow
  */
 
+import { apiToUnifiedRequest, buildResponseData } from '../types/hitl.unified';
+
 import { httpClient } from './client/httpClient';
+
 import type {
   HITLType,
   HITLResponseData,
@@ -22,7 +25,6 @@ import type {
   EnvVarResponseData,
   PermissionResponseData,
 } from '../types/hitl.unified';
-import { apiToUnifiedRequest, buildResponseData } from '../types/hitl.unified';
 
 /**
  * Base URL for HITL endpoints

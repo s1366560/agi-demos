@@ -5,7 +5,9 @@
  */
 
 import { useEffect, type KeyboardEvent } from 'react'
+
 import { useWorkspaceContext } from './WorkspaceContext'
+
 import type { TenantListProps } from './types'
 
 export const TenantList: React.FC<TenantListProps> = ({

@@ -5,7 +5,9 @@
  */
 
 import { useTranslation } from 'react-i18next'
+
 import { useGraphContext } from './CytoscapeGraph'
+
 import type { NodeData } from './types'
 
 // ========================================

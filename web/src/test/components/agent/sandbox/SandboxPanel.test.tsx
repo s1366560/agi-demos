@@ -4,8 +4,9 @@
  * TDD: Tests written first for the new compound component API.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { SandboxPanel } from "../../../../components/agent/sandbox/SandboxPanel";
 
 import type { DesktopStatus, TerminalStatus } from "../../../../types/agent";

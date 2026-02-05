@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
+
 import { memoryAPI } from '../services/api';
+
+import type { UnknownError } from '../types/common';
 import type {
   Memory,
   MemoryCreate,
@@ -12,7 +15,6 @@ import type {
   Relationship,
   GraphData
 } from '../types/memory';
-import type { UnknownError } from '../types/common';
 
 /**
  * Helper function to extract error message from unknown error

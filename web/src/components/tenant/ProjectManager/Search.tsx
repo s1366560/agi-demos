@@ -5,8 +5,11 @@
  */
 
 import React, { FC, useState, useCallback } from 'react';
+
 import { Search as SearchIcon } from 'lucide-react';
+
 import { useProjectManagerContext } from './context';
+
 import type { ProjectManagerSearchProps } from './types';
 
 export const Search: FC<ProjectManagerSearchProps> = ({

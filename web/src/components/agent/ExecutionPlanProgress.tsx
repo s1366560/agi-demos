@@ -7,7 +7,9 @@
  */
 
 import React, { useMemo } from "react";
+
 import { Progress, Typography, Badge } from "antd";
+
 import { ExecutionPlan, ExecutionPlanStatus } from "../../types/agent";
 
 const { Text } = Typography;

@@ -18,17 +18,22 @@
  */
 
 import React, { useEffect, useState, useCallback } from "react"
-import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom"
-import { useTranslation } from "react-i18next"
 
-import { TenantChatSidebar } from "@/components/layout/TenantChatSidebar"
-import { TenantNavMenu } from "@/components/layout/TenantNavMenu"
-import { AppHeader } from "@/components/layout/AppHeader"
-import { TenantCreateModal } from "@/pages/tenant/TenantCreate"
-import { RouteErrorBoundary } from "@/components/common/RouteErrorBoundary"
-import { useTenantStore } from "@/stores/tenant"
+import { useTranslation } from "react-i18next"
+import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom"
+
 import { useAuthStore } from "@/stores/auth"
 import { useProjectStore } from "@/stores/project"
+import { useTenantStore } from "@/stores/tenant"
+
+import { TenantCreateModal } from "@/pages/tenant/TenantCreate"
+
+import { RouteErrorBoundary } from "@/components/common/RouteErrorBoundary"
+import { AppHeader } from "@/components/layout/AppHeader"
+import { TenantChatSidebar } from "@/components/layout/TenantChatSidebar"
+import { TenantNavMenu } from "@/components/layout/TenantNavMenu"
+
+
 
 // HTTP status codes for error handling
 const HTTP_STATUS = {

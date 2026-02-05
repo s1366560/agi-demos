@@ -5,13 +5,19 @@
  * Explicit variant with embedded configuration and state management.
  */
 
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AppSidebar } from './AppSidebar'
-import { getAgentConfig } from '@/config/navigation'
+import { useNavigate } from 'react-router-dom'
+
 import { useAuthStore } from '@/stores/auth'
-import type { NavUser } from '@/config/navigation'
+
+import { getAgentConfig } from '@/config/navigation'
+
+import { AppSidebar } from './AppSidebar'
+
+
+
 import type { AgentSidebarProps } from './types'
+import type { NavUser } from '@/config/navigation'
 
 /**
  * Agent sidebar component with configuration and state management

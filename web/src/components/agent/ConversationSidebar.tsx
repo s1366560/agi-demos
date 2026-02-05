@@ -9,8 +9,7 @@
 
 import type { FC } from 'react';
 import { useMemo, useState, memo, useTransition } from 'react';
-import { LazyButton, LazyBadge, LazyTooltip, LazyDropdown, LazyModal, LazyInput } from '@/components/ui/lazyAntd';
-import type { MenuProps } from 'antd';
+
 import { 
   Plus, 
   MessageSquare, 
@@ -21,9 +20,15 @@ import {
   AlertCircle,
   Loader2
 } from 'lucide-react';
+
+import { LazyButton, LazyBadge, LazyTooltip, LazyDropdown, LazyModal, LazyInput } from '@/components/ui/lazyAntd';
+
+import { formatDistanceToNow } from '../../utils/date';
+
 import type { Conversation } from '../../types/agent';
 import type { HITLSummary } from '../../types/conversationState';
-import { formatDistanceToNow } from '../../utils/date';
+import type { MenuProps } from 'antd';
+
 
 /**
  * Conversation status for UI display

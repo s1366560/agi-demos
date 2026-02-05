@@ -5,7 +5,9 @@
  */
 
 import React, { memo, useCallback } from 'react'
+
 import { useTranslation } from 'react-i18next'
+
 import { Search, Mic, Network, Grid, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react'
 
 export type SearchMode = 'semantic' | 'graphTraversal' | 'temporal' | 'faceted' | 'community'

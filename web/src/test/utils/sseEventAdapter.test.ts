@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import {
   sseEventToTimeline,
   batchConvertSSEEvents,
@@ -18,6 +19,7 @@ import {
   appendSSEEventToTimeline,
   isSupportedEventType,
 } from '../../utils/sseEventAdapter';
+
 import type {
   AgentEvent,
   MessageEventData,

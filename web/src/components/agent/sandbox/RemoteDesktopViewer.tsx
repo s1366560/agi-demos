@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Button, Spin, Alert, Space, Tooltip, Badge } from "antd";
+
 import {
   DesktopOutlined,
   ReloadOutlined,
@@ -14,6 +14,7 @@ import {
   CompressOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
+import { Button, Spin, Alert, Space, Tooltip, Badge } from "antd";
 
 import type { DesktopStatus } from "../../../types/agent";
 

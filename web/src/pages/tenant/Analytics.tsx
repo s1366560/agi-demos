@@ -1,7 +1,9 @@
 import React, { useEffect, useState, lazy, Suspense, memo, useCallback, useMemo } from 'react'
+
 import { useTranslation } from 'react-i18next'
-import { useTenantStore } from '../../stores/tenant'
+
 import { projectAPI } from '../../services/api'
+import { useTenantStore } from '../../stores/tenant'
 import { Project } from '../../types/memory'
 
 // Dynamic imports for chart libraries to reduce initial bundle size

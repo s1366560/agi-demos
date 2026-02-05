@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useMemo, memo } from "react";
-import { Tooltip, Drawer, Tag, Empty, Segmented } from "antd";
+
 import {
   CheckCircleOutlined,
   SyncOutlined,
@@ -24,6 +24,7 @@ import {
   UnorderedListOutlined,
   NodeIndexOutlined,
 } from "@ant-design/icons";
+import { Tooltip, Drawer, Tag, Empty, Segmented } from "antd";
 
 /**
  * Tool execution item for visualization

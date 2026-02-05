@@ -19,14 +19,17 @@
  */
 
 import { useEffect, useRef, useCallback, useReducer, createContext, useContext } from "react";
+
+import { MaterialIcon } from "../shared";
+
+import { SimpleExecutionView } from "./SimpleExecutionView";
+import { TimelineNode } from "./TimelineNode";
+
 import type {
   TimelineStep,
   WorkPlan,
   ToolExecution,
 } from "../../../types/agent";
-import { MaterialIcon } from "../shared";
-import { TimelineNode } from "./TimelineNode";
-import { SimpleExecutionView } from "./SimpleExecutionView";
 
 export type DisplayMode = "timeline" | "simple-timeline" | "direct";
 

@@ -26,6 +26,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { useStreamingStore, initialState } from '../../../stores/agent/streamingStore';
 
 describe('StreamingStore', () => {

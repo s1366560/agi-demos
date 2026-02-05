@@ -12,10 +12,10 @@
 
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+
 import { useNavigate } from 'react-router-dom';
-import { LazyButton, LazyBadge, LazyDropdown, LazySelect, LazyInput } from '@/components/ui/lazyAntd';
+
 import { Modal } from 'antd';
-import type { MenuProps } from 'antd';
 import { 
   Plus, 
   MessageSquare, 
@@ -26,10 +26,17 @@ import {
   FolderOpen,
   ChevronDown
 } from 'lucide-react';
+
 import { useAgentV3Store } from '@/stores/agentV3';
 import { useProjectStore } from '@/stores/project';
+
 import { formatDistanceToNow } from '@/utils/date';
+
+import { LazyButton, LazyBadge, LazyDropdown, LazySelect, LazyInput } from '@/components/ui/lazyAntd';
+
 import type { Conversation } from '@/types/agent';
+
+import type { MenuProps } from 'antd';
 
 interface ConversationWithProject extends Conversation {
   projectId: string;

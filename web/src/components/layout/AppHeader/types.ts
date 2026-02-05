@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+
 import type { BreadcrumbOptions } from '@/hooks/useBreadcrumbs'
 
 /**

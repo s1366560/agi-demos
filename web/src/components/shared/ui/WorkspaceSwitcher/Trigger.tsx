@@ -5,7 +5,9 @@
  */
 
 import { forwardRef, useEffect, type KeyboardEvent } from 'react'
+
 import { useWorkspaceContext } from './WorkspaceContext'
+
 import type { WorkspaceTriggerProps } from './types'
 
 export const WorkspaceSwitcherTrigger = forwardRef<HTMLButtonElement, WorkspaceTriggerProps>(

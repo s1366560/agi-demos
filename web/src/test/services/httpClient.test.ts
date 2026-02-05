@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { requestCache } from '../../services/client/requestCache';
 import { requestDeduplicator } from '../../services/client/requestDeduplicator';
 

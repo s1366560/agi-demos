@@ -6,16 +6,16 @@
  * and the visualization components.
  */
 
-import type { Message, ToolCall, ToolResult } from "../types/agent";
 import type {
   TimelineItem,
   ToolExecutionInfo,
 } from "../components/agent/execution/ActivityTimeline";
-import type { ToolExecutionItem } from "../components/agent/execution/ToolCallVisualization";
 import type {
   TokenData,
   CostData,
 } from "../components/agent/execution/TokenUsageChart";
+import type { ToolExecutionItem } from "../components/agent/execution/ToolCallVisualization";
+import type { Message, ToolCall, ToolResult } from "../types/agent";
 
 /**
  * Adapt message data for ActivityTimeline component

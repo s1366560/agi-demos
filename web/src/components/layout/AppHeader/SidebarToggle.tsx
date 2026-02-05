@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+
 import { PanelLeft, PanelRight } from 'lucide-react'
 
 export interface SidebarToggleProps {

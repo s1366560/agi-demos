@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback, memo } from 'react'
-import { useParams } from 'react-router-dom'
+
 import { useTranslation } from 'react-i18next'
+import { useParams } from 'react-router-dom'
+
 import { useDebounce } from 'use-debounce'
-import { graphService } from '../../services/graphService'
-import { EntityCard, getEntityTypeColor } from '../../components/graph'
+
 import { VirtualGrid } from '../../components/common'
+import { EntityCard, getEntityTypeColor } from '../../components/graph'
+import { graphService } from '../../services/graphService'
 
 interface Entity {
     uuid: string

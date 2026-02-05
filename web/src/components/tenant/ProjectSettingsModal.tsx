@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+
 import { X, Settings, Trash2 } from 'lucide-react';
 
 interface Project {

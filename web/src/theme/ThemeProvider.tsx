@@ -6,12 +6,16 @@
  */
 
 import React from 'react';
-import { ConfigProvider, theme as antdTheme } from 'antd';
-import { lightTheme, darkTheme } from './antdTheme';
-import zhCN from 'antd/locale/zh_CN';
-import enUS from 'antd/locale/en_US';
+
 import { useTranslation } from 'react-i18next';
+
+import { ConfigProvider, theme as antdTheme } from 'antd';
+import enUS from 'antd/locale/en_US';
+import zhCN from 'antd/locale/zh_CN';
+
 import { useThemeStore } from '../stores/theme';
+
+import { lightTheme, darkTheme } from './antdTheme';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { i18n } = useTranslation();

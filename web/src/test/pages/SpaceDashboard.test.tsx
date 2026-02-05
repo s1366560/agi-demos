@@ -1,10 +1,12 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { SpaceDashboard } from '../../pages/SpaceDashboard';
-import { useTenantStore } from '../../stores/tenant';
-import { useProjectStore } from '../../stores/project';
 import { tenantAPI } from '../../services/api';
+import { useProjectStore } from '../../stores/project';
+import { useTenantStore } from '../../stores/tenant';
 
 // Mock tenantAPI
 vi.mock('../../services/api', () => ({

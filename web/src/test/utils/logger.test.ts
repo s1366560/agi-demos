@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import { logger } from "../../utils/logger";
 
 describe("logger", () => {

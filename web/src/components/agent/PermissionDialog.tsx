@@ -6,8 +6,11 @@
  */
 
 import React from 'react';
-import { Modal, Space, Button, Tag, Typography, Alert, Descriptions } from '@/components/ui/lazyAntd';
+
 import { SafetyOutlined, WarningOutlined, CodeOutlined } from '@ant-design/icons';
+
+import { Modal, Space, Button, Tag, Typography, Alert, Descriptions } from '@/components/ui/lazyAntd';
+
 import type { PermissionAskedEventData } from '../../types/agent';
 
 const { Text, Paragraph } = Typography;

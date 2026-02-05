@@ -28,19 +28,20 @@
  */
 
 import { useState, useCallback, Children } from "react";
-import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
+
 import {
   CodeOutlined,
   FileTextOutlined,
   DesktopOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
+import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
 
-import { SandboxPanelProvider } from "./SandboxPanelContext";
-import { SandboxTerminal } from "./SandboxTerminal";
-import { SandboxOutputViewer } from "./SandboxOutputViewer";
 import { RemoteDesktopViewer } from "./RemoteDesktopViewer";
 import { SandboxControlPanel } from "./SandboxControlPanel";
+import { SandboxOutputViewer } from "./SandboxOutputViewer";
+import { SandboxPanelProvider } from "./SandboxPanelContext";
+import { SandboxTerminal } from "./SandboxTerminal";
 
 import type {
   SandboxTabKey,

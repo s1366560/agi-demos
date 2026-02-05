@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+
 import { LanguageSwitcher as BaseLanguageSwitcher } from '@/components/shared/ui/LanguageSwitcher'
 
 export interface LanguageSwitcherProps {

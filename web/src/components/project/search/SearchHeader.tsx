@@ -6,8 +6,11 @@
  */
 
 import React from 'react'
+
 import { useTranslation } from 'react-i18next'
+
 import { Search, Network, ArrowUpDown, Filter, Grid, Mic, ArrowRight, Sliders, PanelRightClose, PanelRightOpen, MessageSquare, Download } from 'lucide-react'
+
 import type { SearchMode } from '@/hooks/useSearchState'
 
 export interface SearchHeaderProps {

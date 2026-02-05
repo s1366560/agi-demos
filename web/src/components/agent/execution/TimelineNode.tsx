@@ -9,9 +9,12 @@
  */
 
 import { useState } from 'react';
-import type { TimelineStep } from '../../../types/agent';
+
 import { MaterialIcon } from '../shared';
+
 import { ToolExecutionDetail } from './ToolExecutionDetail';
+
+import type { TimelineStep } from '../../../types/agent';
 
 export interface TimelineNodeProps {
   /** Step data */

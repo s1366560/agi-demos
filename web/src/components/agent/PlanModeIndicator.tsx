@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import { Button, Tag, Tooltip, Badge } from "antd";
+
 import {
   FileTextOutlined,
   ExperimentOutlined,
@@ -14,6 +14,8 @@ import {
   EyeOutlined,
   CloseOutlined,
 } from "@ant-design/icons";
+import { Button, Tag, Tooltip, Badge } from "antd";
+
 import type { AgentMode, PlanModeStatus } from "../../types/agent";
 
 interface PlanModeIndicatorProps {

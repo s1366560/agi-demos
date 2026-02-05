@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+
 import { X, Brain, AlertCircle, Type, Hash, Settings } from 'lucide-react';
+
 import { useMemoryStore } from '../stores/memory';
 import { useProjectStore } from '../stores/project';
 

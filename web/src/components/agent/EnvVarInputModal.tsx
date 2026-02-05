@@ -7,8 +7,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { FC, ReactNode } from 'react';
-import { Modal, Form, Input, Space, Button, Tag, Typography, Alert } from '@/components/ui/lazyAntd';
+
 import { KeyOutlined, CheckCircleOutlined, LockOutlined, FileTextOutlined } from '@ant-design/icons';
+
+import { Modal, Form, Input, Space, Button, Tag, Typography, Alert } from '@/components/ui/lazyAntd';
+
 import type { EnvVarRequestedEventData, EnvVarField, EnvVarInputType } from '../../types/agent';
 
 const { Text, Paragraph } = Typography;

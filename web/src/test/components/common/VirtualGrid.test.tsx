@@ -13,8 +13,9 @@
  * 7. Handles window resize for column adjustment
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import { VirtualGrid } from '../../../components/common/VirtualGrid'
 
 // Mock @tanstack/react-virtual

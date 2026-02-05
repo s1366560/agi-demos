@@ -8,9 +8,9 @@
  */
 
 import React, { useState } from 'react';
+
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LazyDropdown } from '@/components/ui/lazyAntd';
-import type { MenuProps } from 'antd';
+
 import { 
   LayoutDashboard,
   Folder,
@@ -28,6 +28,10 @@ import {
   ChevronDown,
   LayoutGrid
 } from 'lucide-react';
+
+import { LazyDropdown } from '@/components/ui/lazyAntd';
+
+import type { MenuProps } from 'antd';
 
 interface TenantNavMenuProps {
   tenantId?: string;

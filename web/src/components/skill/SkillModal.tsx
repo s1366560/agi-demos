@@ -5,7 +5,9 @@
  */
 
 import React, { useCallback, useEffect, useState, useRef } from "react";
+
 import { useTranslation } from "react-i18next";
+
 import {
   Modal,
   Form,
@@ -16,7 +18,9 @@ import {
   message,
   InputNumber,
 } from "antd";
+
 import { useSkillStore, useSkillSubmitting } from "../../stores/skill";
+
 import type {
   SkillResponse,
   SkillCreate,

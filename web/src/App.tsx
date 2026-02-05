@@ -1,14 +1,16 @@
 import { lazy, Suspense } from "react";
+
 import { Routes, Route, Navigate } from "react-router-dom";
+
 import { LazySpin } from "./components/ui/lazyAntd";
 import "./i18n/config";
-import { ThemeProvider } from "./theme";
-import { Login } from "./pages/Login";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
-import { TenantLayout } from "./layouts/TenantLayout";
 import { ProjectLayout } from "./layouts/ProjectLayout";
 import { SchemaLayout } from "./layouts/SchemaLayout";
+import { TenantLayout } from "./layouts/TenantLayout";
+import { Login } from "./pages/Login";
 import { useAuthStore } from "./stores/auth";
+import { ThemeProvider } from "./theme";
 import "./App.css";
 
 // ============================================================================

@@ -4,13 +4,14 @@
  * Tests the sandbox panel components with desktop and terminal support.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { SandboxPanel } from "../../../../components/agent/sandbox/SandboxPanel";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { RemoteDesktopViewer } from "../../../../components/agent/sandbox/RemoteDesktopViewer";
 import { SandboxControlPanel } from "../../../../components/agent/sandbox/SandboxControlPanel";
-import type { ToolExecution } from "../../../../components/agent/sandbox/SandboxOutputViewer";
+import { SandboxPanel } from "../../../../components/agent/sandbox/SandboxPanel";
 
+import type { ToolExecution } from "../../../../components/agent/sandbox/SandboxOutputViewer";
 import type { DesktopStatus, TerminalStatus } from "../../../../types/agent";
 
 // Mock the dependencies - must define mocks inline for vitest hoisting

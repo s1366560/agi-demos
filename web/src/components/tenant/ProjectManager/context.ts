@@ -5,6 +5,7 @@
  */
 
 import { createContext, useContext } from 'react';
+
 import type { ProjectManagerContextValue } from './types';
 
 export const ProjectManagerContext = createContext<ProjectManagerContextValue | null>(

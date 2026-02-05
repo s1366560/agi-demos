@@ -4,8 +4,9 @@
  * TDD: RED - Tests are written first before implementation
  */
 
-import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+
 import '@testing-library/jest-dom/vitest'
 import type { DecisionAskedEventData } from '../../../types/agent'
 

@@ -14,7 +14,7 @@
  */
 
 import React, { useState, createContext, useContext } from 'react';
-import { Modal, Radio, Input, Button, Tag, Divider, Typography, Alert } from '@/components/ui/lazyAntd';
+
 import {
   ExclamationCircleOutlined,
   CheckCircleOutlined,
@@ -22,6 +22,9 @@ import {
   DollarOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
+
+import { Modal, Radio, Input, Button, Tag, Divider, Typography, Alert } from '@/components/ui/lazyAntd';
+
 import type { DecisionAskedEventData, DecisionOption } from '../../types/agent';
 
 const { Text, Paragraph, Title } = Typography;

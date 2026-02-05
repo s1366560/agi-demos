@@ -4,8 +4,8 @@
  * TDD: RED - Tests are written first before implementation
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 
 // Mock child components to simplify testing
@@ -49,13 +49,14 @@ vi.mock('../../../../components/agent/shared', () => ({
   ),
 }))
 
+import { getDisplayMode } from '../../../../components/agent/execution/ExecutionTimeline'
+
 import type {
   TimelineStep,
   WorkPlan,
   ToolExecution,
   DisplayMode,
 } from '../../../../types/agent'
-import { getDisplayMode } from '../../../../components/agent/execution/ExecutionTimeline'
 
 // Mock data for testing
 const mockWorkPlan: WorkPlan = {

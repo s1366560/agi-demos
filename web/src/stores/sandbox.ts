@@ -10,11 +10,12 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
-import type { ToolExecution } from "../components/agent/sandbox/SandboxOutputViewer";
-import type { Artifact, DesktopStatus, TerminalStatus } from "../types/agent";
 import { projectSandboxService } from "../services/projectSandboxService";
 import { sandboxSSEService } from "../services/sandboxSSEService";
 import { logger } from "../utils/logger";
+
+import type { ToolExecution } from "../components/agent/sandbox/SandboxOutputViewer";
+import type { Artifact, DesktopStatus, TerminalStatus } from "../types/agent";
 
 // Sandbox tools that should trigger panel opening
 export const SANDBOX_TOOLS = [

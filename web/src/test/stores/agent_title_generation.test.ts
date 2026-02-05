@@ -6,11 +6,13 @@
 
 import { act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 // FIXME: This test was written for the old agent store (agent.ts).
 // The new agentV3 store has a different API. This test needs to be migrated.
 // SKIPPED: Tests reference non-existent reset() method and title generation flow
 // that may be implemented differently in agentV3.
 import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
+
 import type { TimelineEvent, Conversation } from '../../types/agent';
 
 // Mock agent service

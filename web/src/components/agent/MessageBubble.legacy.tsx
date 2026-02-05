@@ -3,7 +3,9 @@
  */
 
 import React, { memo, useState, useEffect } from 'react';
-import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
+
+import ReactMarkdown from 'react-markdown';
+
 import {
   User,
   Sparkles,
@@ -15,8 +17,10 @@ import {
   ChevronUp,
   Clock
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
+
 // Lazy load syntax highlighter to reduce initial bundle size (bundle-dynamic-imports)
 // ~400KB savings - only loaded when code blocks are actually rendered
 import type { TimelineEvent, ActEvent, ObserveEvent, ArtifactCreatedEvent } from '../../types/agent';

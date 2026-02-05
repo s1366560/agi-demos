@@ -20,9 +20,12 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+
 import { Settings as SettingsIcon, Save, Trash2, Download, RefreshCw, AlertCircle } from 'lucide-react';
-import { useProjectStore } from '../../stores/project';
+
 import api, { projectAPI } from '../../services/api';
+import { useProjectStore } from '../../stores/project';
+
 import type {
   ProjectSettingsHeaderProps,
   ProjectSettingsMessageProps,

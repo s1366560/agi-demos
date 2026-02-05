@@ -7,10 +7,12 @@
 
 import * as React from 'react'
 import { useState, useCallback } from 'react'
-import { SidebarProvider, useSidebarContext } from './SidebarContext'
+
 import { SidebarBrand } from './SidebarBrand'
+import { SidebarProvider, useSidebarContext } from './SidebarContext'
 import { SidebarNavigation } from './SidebarNavigation'
 import { SidebarUser } from './SidebarUser'
+
 import type { AppSidebarProps, SidebarVariant } from './types'
 import type { SidebarConfig } from '@/config/navigation'
 

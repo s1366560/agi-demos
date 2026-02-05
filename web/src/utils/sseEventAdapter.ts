@@ -16,6 +16,8 @@
  * @module utils/sseEventAdapter
  */
 
+import { isEventEnvelope } from '../types/generated/eventEnvelope';
+
 import type {
     AgentEvent,
     AgentEventType,
@@ -51,7 +53,6 @@ import type {
     ArtifactCategory,
 } from '../types/agent';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
-import { isEventEnvelope } from '../types/generated/eventEnvelope';
 
 /**
  * Sequence number counter for timeline events

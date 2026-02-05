@@ -8,6 +8,15 @@
  */
 
 import React, { useMemo } from "react";
+
+import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined,
+  ClockCircleOutlined,
+  MinusCircleOutlined,
+  StopOutlined,
+} from "@ant-design/icons";
 import {
   Typography,
   Card,
@@ -18,14 +27,7 @@ import {
   Descriptions,
   Badge,
 } from "antd";
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  LoadingOutlined,
-  ClockCircleOutlined,
-  MinusCircleOutlined,
-  StopOutlined,
-} from "@ant-design/icons";
+
 import { ExecutionPlan, ExecutionStep, ExecutionStepStatus, ReflectionResult } from "../../types/agent";
 
 const { Title, Text, Paragraph } = Typography;

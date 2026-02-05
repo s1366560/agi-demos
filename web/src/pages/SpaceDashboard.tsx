@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+
 import { useTranslation } from 'react-i18next';
+import { useParams, useNavigate } from 'react-router-dom';
+
 import {
     LayoutDashboard,
     Folder,
@@ -19,12 +21,14 @@ import {
     Badge,
     Globe
 } from 'lucide-react';
+
 import { AppLayout, NavigationGroup } from '@/components/shared/layouts/AppLayout';
-import { useTenantStore } from '../stores/tenant';
-import { useProjectStore } from '../stores/project';
 import { ProjectCreateModal } from '@/components/tenant/ProjectCreateModal';
-import { Project } from '../types/memory';
+
 import { tenantAPI } from '../services/api';
+import { useProjectStore } from '../stores/project';
+import { useTenantStore } from '../stores/tenant';
+import { Project } from '../types/memory';
 
 export const SpaceDashboard: React.FC = () => {
     const { t } = useTranslation();

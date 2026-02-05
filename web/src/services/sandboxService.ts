@@ -18,8 +18,9 @@
  * @packageDocumentation
  */
 
-import { httpClient } from "./client/httpClient";
 import { logger } from "../utils/logger";
+
+import { httpClient } from "./client/httpClient";
 import {
   buildTerminalWebSocketUrl,
   buildDirectDesktopUrl,

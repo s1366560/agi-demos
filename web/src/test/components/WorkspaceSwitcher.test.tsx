@@ -1,10 +1,13 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, render } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+
+import { screen, fireEvent, render } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { WorkspaceSwitcher } from '@/components/shared/ui/WorkspaceSwitcher'
-import { useTenantStore } from '../../stores/tenant'
+
 import { useProjectStore } from '../../stores/project'
+import { useTenantStore } from '../../stores/tenant'
 
 // Mock stores
 vi.mock('../../stores/tenant', () => ({

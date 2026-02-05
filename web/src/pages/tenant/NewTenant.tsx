@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+
 import { useTranslation } from 'react-i18next'
+import { useNavigate, Link } from 'react-router-dom'
+
 import { useTenantStore } from '../../stores/tenant'
 
 export const NewTenant: React.FC = () => {

@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
-import { LazyButton, LazyTooltip, LazyBadge, LazyPopover } from '@/components/ui/lazyAntd';
+
 import {
   Send,
   Square,
@@ -15,6 +15,9 @@ import {
   Image as ImageIcon,
   File,
 } from 'lucide-react';
+
+import { LazyButton, LazyTooltip, LazyBadge, LazyPopover } from '@/components/ui/lazyAntd';
+
 import { FileUploader, type PendingAttachment } from './FileUploader';
 
 interface InputBarProps {

@@ -4,8 +4,9 @@
  * TDD: Refactor boolean props to use configuration object pattern
  */
 
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+
 import { FloatingInputBar, type FloatingInputBarConfig } from "../../components/agent/chat/FloatingInputBar";
 
 describe("FloatingInputBar", () => {

@@ -12,8 +12,10 @@
  */
 
 import { useEffect, useRef } from "react";
-import type { AgentEvent } from "../types/agent";
+
 import { sseEmitter, type PlanModeEventHandlers } from "../services/sse";
+
+import type { AgentEvent } from "../types/agent";
 
 /**
  * Reflection result from plan execution

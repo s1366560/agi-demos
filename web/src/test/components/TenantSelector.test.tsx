@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { TenantSelector } from '@/components/tenant/TenantSelector'
+
 import { useTenantStore } from '../../stores/tenant'
 
 vi.mock('../../stores/tenant', () => ({

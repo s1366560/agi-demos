@@ -19,6 +19,7 @@
 
 import { logger } from "../utils/logger";
 import { getAuthToken } from "../utils/tokenResolver";
+
 import { createWebSocketUrl } from "./client/urlUtils";
 
 // =============================================================================

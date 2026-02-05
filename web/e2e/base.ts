@@ -1,7 +1,8 @@
 /* eslint-disable react-hooks/rules-of-hooks */
-import { test as base } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+
+import { test as base } from '@playwright/test';
 
 const API_BASE = process.env.API_BASE || 'http://localhost:8000';
 const HEALTH_URL = `${API_BASE}/health`;

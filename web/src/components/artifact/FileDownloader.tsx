@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import { Button, Space, Typography, Card } from "antd";
+
 import {
   DownloadOutlined,
   FileOutlined,
@@ -12,6 +12,7 @@ import {
   FileWordOutlined,
   FileExcelOutlined,
 } from "@ant-design/icons";
+import { Button, Space, Typography, Card } from "antd";
 
 const { Text } = Typography;
 

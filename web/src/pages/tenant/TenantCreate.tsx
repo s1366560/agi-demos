@@ -3,8 +3,11 @@
  */
 
 import React, { useState } from 'react';
-import { X, Building2 } from 'lucide-react';
+
 import { useTranslation } from 'react-i18next';
+
+import { X, Building2 } from 'lucide-react';
+
 import { tenantService } from '../../services/tenantService';
 
 interface TenantCreateModalProps {

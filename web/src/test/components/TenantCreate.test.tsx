@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '../utils';
+
 import { TenantCreateModal } from '@/components/tenant/TenantCreateModal';
+
+import { render, screen, fireEvent, waitFor } from '../utils';
 
 // Mock the store module
 vi.mock('../../stores/tenant', () => ({

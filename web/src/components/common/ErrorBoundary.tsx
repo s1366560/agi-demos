@@ -1,6 +1,8 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
-import { Result, Button } from 'antd'
+
 import { useTranslation } from 'react-i18next'
+
+import { Result, Button } from 'antd'
 
 /**
  * Props for ErrorBoundary component

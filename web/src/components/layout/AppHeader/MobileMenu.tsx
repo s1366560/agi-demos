@@ -5,6 +5,7 @@
  */
 
 import * as React from 'react'
+
 import { Menu } from 'lucide-react'
 
 export interface MobileMenuProps {

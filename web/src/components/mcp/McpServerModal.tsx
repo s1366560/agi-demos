@@ -12,9 +12,13 @@ import React, {
   useRef,
   useState,
 } from "react";
+
 import { useTranslation } from "react-i18next";
+
 import { Modal, Form, Input, Select, Switch, message, Alert } from "antd";
+
 import { useMCPStore } from "../../stores/mcp";
+
 import type {
   MCPServerResponse,
   MCPServerCreate,

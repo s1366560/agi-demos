@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
+
 import { useNavigate, useParams } from 'react-router-dom'
-import { useTenantStore } from '@/stores/tenant'
+
 import { useProjectStore } from '@/stores/project'
+import { useTenantStore } from '@/stores/tenant'
+
 import { Tenant, Project } from '@/types/memory'
 
 interface WorkspaceSwitcherProps {

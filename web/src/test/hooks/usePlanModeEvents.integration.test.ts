@@ -11,9 +11,11 @@
  * - plan_mode_completed
  */
 
+import { EventEmitter } from 'events';
+
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
-import { EventEmitter } from 'events';
+
 import type { AgentEvent } from '../../types/agent';
 
 // Mock the SSE module using factory function
@@ -35,8 +37,9 @@ vi.mock('../../services/sse', () => {
 
 // Import after mock
 import { usePlanModeEvents } from '../../hooks/usePlanModeEvents';
-import type { PlanModeEventHandlers } from '../../services/sse';
 import { sseEmitter as mockSSEEmitter } from '../../services/sse';
+
+import type { PlanModeEventHandlers } from '../../services/sse';
 
 // Helper to emit events
 function emitPlanEvent(event: AgentEvent<unknown>) {

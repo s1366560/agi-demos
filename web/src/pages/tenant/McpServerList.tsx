@@ -24,6 +24,7 @@ import React, {
   useState,
   useRef,
 } from 'react';
+
 import {
   message,
   Popconfirm,
@@ -34,13 +35,10 @@ import {
   Switch,
   Tooltip,
 } from 'antd';
-import { useMCPStore } from '../../stores/mcp';
+
 import { McpServerModal } from '../../components/mcp/McpServerModal';
-import type {
-  MCPServerResponse,
-  MCPServerType,
-  MCPToolInfo,
-} from '../../types/agent';
+import { useMCPStore } from '../../stores/mcp';
+
 import type {
   McpServerListHeaderProps,
   McpServerListStatsProps,
@@ -55,6 +53,11 @@ import type {
   McpServerListModalProps,
   McpServerListProps,
 } from './McpServerList/types';
+import type {
+  MCPServerResponse,
+  MCPServerType,
+  MCPToolInfo,
+} from '../../types/agent';
 
 const { Search } = Input;
 

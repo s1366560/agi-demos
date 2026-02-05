@@ -11,25 +11,32 @@
 
 import * as React from 'react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useLazyNotification } from '@/components/ui/lazyAntd';
+
 import { useTranslation } from 'react-i18next';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+
 import { PanelRight, GripHorizontal } from 'lucide-react';
-import { useAgentV3Store } from '@/stores/agentV3';
+
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
-import { useSandboxStore } from '@/stores/sandbox';
+import { useAgentV3Store } from '@/stores/agentV3';
 import { useProjectStore } from '@/stores/project';
+import { useSandboxStore } from '@/stores/sandbox';
+
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
-import { Resizer } from './Resizer';
+
+import { useLazyNotification } from '@/components/ui/lazyAntd';
+
 
 // Import design components
+import { EmptyState } from './EmptyState';
+import { Resizer } from './Resizer';
+
 import {
   MessageArea,
   InputBar,
   RightPanel,
   ProjectAgentStatusBar,
 } from './index';
-import { EmptyState } from './EmptyState';
 
 interface AgentChatContentProps {
   /** Optional className for styling */

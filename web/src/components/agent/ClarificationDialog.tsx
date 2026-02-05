@@ -6,8 +6,11 @@
  */
 
 import React, { useState } from 'react';
-import { Modal, Radio, Input, Space, Button, Tag, Typography } from '@/components/ui/lazyAntd';
+
 import { QuestionCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
+
+import { Modal, Radio, Input, Space, Button, Tag, Typography } from '@/components/ui/lazyAntd';
+
 import type { ClarificationAskedEventData } from '../../types/agent';
 
 const { Text, Paragraph } = Typography;

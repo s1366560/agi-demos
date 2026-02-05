@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { UserManager } from '@/components/tenant/UserManager'
-import { useTenantStore } from '../../stores/tenant'
+
+import { projectService } from '../../services/projectService'
+import { tenantService } from '../../services/tenantService'
 import { useProjectStore } from '../../stores/project'
+import { useTenantStore } from '../../stores/tenant'
 
 // Mock the stores
 vi.mock('../../stores/tenant', () => ({
@@ -32,8 +36,6 @@ vi.mock('../../services/projectService', () => ({
     }
 }))
 
-import { tenantService } from '../../services/tenantService'
-import { projectService } from '../../services/projectService'
 
 describe('UserManager - Component Tests', () => {
     const mockTenantUsers = [

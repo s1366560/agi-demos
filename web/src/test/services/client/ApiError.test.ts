@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
 import { ApiError, ApiErrorType, parseResponseError, parseAxiosError, parseError } from '@/services/client/ApiError';
 
 describe('ApiError', () => {

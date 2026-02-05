@@ -4,8 +4,9 @@
  * Tests for navigation utility hook.
  */
 
-import { describe, it, expect, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+
 import { useNavigation } from '@/hooks/useNavigation'
 
 // Mock react-router-dom
