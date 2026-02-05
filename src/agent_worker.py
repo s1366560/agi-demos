@@ -43,6 +43,7 @@ worker = None
 cleanup_task = None  # Background cleanup task for Agent Session Pool
 pool_adapter = None  # Agent Pool Adapter (when enabled)
 pool_orchestrator = None  # Pool Orchestrator (with HA services)
+hitl_response_listener = None  # HITL Response Listener for real-time delivery
 
 # Agent worker-specific settings
 AGENT_TASK_QUEUE = os.getenv("AGENT_TEMPORAL_TASK_QUEUE", "memstack-agent-tasks")
@@ -50,6 +51,7 @@ AGENT_WORKER_CONCURRENCY = int(os.getenv("AGENT_WORKER_CONCURRENCY", "50"))
 AGENT_SESSION_CLEANUP_INTERVAL = int(
     os.getenv("AGENT_SESSION_CLEANUP_INTERVAL", "600")
 )  # 10 minutes
+HITL_REALTIME_ENABLED = os.getenv("HITL_REALTIME_ENABLED", "true").lower() == "true"
 
 
 async def periodic_session_cleanup():
@@ -158,11 +160,20 @@ async def shutdown(signal_enum=None):
     2. Close resources in dependency order: Pool -> Redis -> Graph Service -> State
     """
     global worker, temporal_client, cleanup_task, pool_adapter, pool_orchestrator
+    global hitl_response_listener
 
     if signal_enum:
         logger.info(f"Agent Worker: Received exit signal {signal_enum.name}...")
 
     logger.info("Agent Worker: Shutting down...")
+
+    # Stop HITL Response Listener first
+    if hitl_response_listener:
+        try:
+            await hitl_response_listener.stop()
+            logger.info("Agent Worker: HITL Response Listener stopped")
+        except Exception as e:
+            logger.warning(f"Agent Worker: HITL Listener shutdown error: {e}")
 
     # Cancel cleanup task first
     if cleanup_task and not cleanup_task.done():
@@ -348,6 +359,34 @@ async def main():
     if settings.agent_session_prewarm_enabled:
         asyncio.create_task(prewarm_agent_sessions())
         logger.info("Agent Worker: Prewarm task scheduled")
+
+    # Initialize HITL Response Listener for real-time delivery
+    global hitl_response_listener
+    if HITL_REALTIME_ENABLED:
+        try:
+            import redis.asyncio as aioredis
+
+            from src.infrastructure.agent.hitl.response_listener import (
+                HITLResponseListener,
+            )
+
+            # Get Redis URL from settings
+            redis_url = getattr(settings, "redis_url", None)
+            if not redis_url:
+                redis_host = getattr(settings, "redis_host", "localhost")
+                redis_port = getattr(settings, "redis_port", 6379)
+                redis_url = f"redis://{redis_host}:{redis_port}"
+
+            redis_client = aioredis.from_url(redis_url)
+            hitl_response_listener = HITLResponseListener(redis_client)
+            await hitl_response_listener.start()
+            logger.info("Agent Worker: HITL Response Listener started (real-time delivery enabled)")
+        except Exception as e:
+            logger.warning(
+                f"Agent Worker: Failed to initialize HITL Response Listener: {e}. "
+                f"Falling back to Temporal Signal only."
+            )
+            hitl_response_listener = None
 
     # Optional: Initialize Agent Pool with Orchestrator (new 3-tier architecture with HA)
     global pool_adapter, pool_orchestrator

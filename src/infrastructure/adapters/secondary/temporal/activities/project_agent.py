@@ -95,14 +95,14 @@ def _format_hitl_response_as_tool_result(
 ) -> str:
     """
     Format HITL response data as a tool result content string.
-    
+
     This is used to inject the user's HITL response into the conversation
     as a tool result, so the LLM can see what the user chose.
-    
+
     Args:
         hitl_type: Type of HITL request (clarification, decision, env_var, permission)
         response_data: User's response data
-        
+
     Returns:
         Formatted tool result content string
     """
@@ -116,7 +116,7 @@ def _format_hitl_response_as_tool_result(
                 return f"User selected options: {', '.join(selected)}"
             return f"User selected: {selected}"
         return "User provided clarification (no specific selection)"
-        
+
     elif hitl_type == "decision":
         selected = response_data.get("selected_option_id")
         custom = response_data.get("custom_input")
@@ -125,7 +125,7 @@ def _format_hitl_response_as_tool_result(
         elif selected:
             return f"User chose: {selected}"
         return "User made a decision (no specific selection)"
-        
+
     elif hitl_type == "env_var":
         # For env vars, we don't expose the actual values in the tool result
         # Just indicate that values were provided
@@ -134,7 +134,7 @@ def _format_hitl_response_as_tool_result(
         if provided_vars:
             return f"User provided environment variables: {', '.join(provided_vars)}"
         return "User provided environment variable values"
-        
+
     elif hitl_type == "permission":
         granted = response_data.get("granted", False)
         scope = response_data.get("scope", "once")
@@ -142,7 +142,7 @@ def _format_hitl_response_as_tool_result(
             return f"User granted permission (scope: {scope})"
         else:
             return "User denied permission"
-    
+
     # Fallback for unknown types
     return f"User responded to {hitl_type} request"
 
@@ -455,7 +455,7 @@ async def execute_project_chat_activity(
             }
 
         except HITLPendingException as hitl_ex:
-            # HITL request encountered - save state and return to Workflow
+            # HITL request encountered - try fast path first, then fall back to Workflow Signal
             logger.info(
                 f"[ProjectAgentActivity] HITL pending: request_id={hitl_ex.request_id}, "
                 f"type={hitl_ex.hitl_type.value}"
@@ -464,7 +464,7 @@ async def execute_project_chat_activity(
             # Use current_messages from exception if available (includes assistant's tool call)
             # Fall back to conversation_context if not set (backward compatibility)
             saved_messages = hitl_ex.current_messages or conversation_context
-            
+
             if hitl_ex.current_messages:
                 logger.info(
                     f"[ProjectAgentActivity] Saving {len(hitl_ex.current_messages)} messages "
@@ -476,7 +476,7 @@ async def execute_project_chat_activity(
                     f"falling back to conversation_context ({len(conversation_context)} messages)"
                 )
 
-            # Save Agent state to Redis for later resumption
+            # Save Agent state to Redis for later resumption (needed for backup path)
             state = HITLAgentState(
                 conversation_id=conversation_id,
                 message_id=message_id,
@@ -505,6 +505,115 @@ async def execute_project_chat_activity(
                     correlation_id=correlation_id,
                 )
 
+            # === FAST PATH: Try to wait for response via Redis Streams (in-process) ===
+            # This provides ~30ms latency vs ~500ms for Temporal Signal
+            settings = get_settings()
+            fast_path_response = None
+
+            if getattr(settings, "hitl_realtime_enabled", True):
+                fast_path_response = await _wait_for_hitl_response_fast_path(
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    conversation_id=conversation_id,
+                    request_id=hitl_ex.request_id,
+                    hitl_type=hitl_ex.hitl_type.value,
+                    timeout_seconds=min(
+                        10.0, hitl_ex.timeout_seconds
+                    ),  # Wait max 10s for fast path
+                )
+
+            if fast_path_response:
+                # Fast path succeeded! Continue execution directly in this Activity
+                logger.info(
+                    f"[ProjectAgentActivity] Fast path response received for {hitl_ex.request_id}, "
+                    f"continuing execution"
+                )
+
+                # Build context with HITL response
+                hitl_response_for_agent = {
+                    "request_id": hitl_ex.request_id,
+                    "hitl_type": hitl_ex.hitl_type.value,
+                    "response_data": fast_path_response,
+                }
+
+                # Build conversation context with injected tool result
+                conversation_context_with_response = list(saved_messages)
+
+                if hitl_ex.tool_call_id:
+                    tool_result_content = _format_hitl_response_as_tool_result(
+                        hitl_type=hitl_ex.hitl_type.value,
+                        response_data=fast_path_response,
+                    )
+
+                    conversation_context_with_response.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": hitl_ex.tool_call_id,
+                            "content": tool_result_content,
+                        }
+                    )
+
+                # Continue execution
+                async for event in agent.execute_chat(
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    user_id=user_id,
+                    conversation_context=conversation_context_with_response,
+                    tenant_id=tenant_id,
+                    message_id=message_id,
+                    hitl_response=hitl_response_for_agent,
+                ):
+                    events.append(event)
+                    sequence_number += 1
+
+                    await _publish_event_to_stream(
+                        conversation_id=conversation_id,
+                        event=event,
+                        message_id=message_id,
+                        sequence_number=sequence_number,
+                        correlation_id=correlation_id,
+                        redis_client=redis_client,
+                    )
+
+                    event_type = event.get("type")
+                    if event_type == "complete":
+                        final_content = event.get("data", {}).get("content", "")
+                    elif event_type == "error":
+                        is_error = True
+                        error_message = event.get("data", {}).get("message", "Unknown error")
+
+                # Clean up state
+                await state_store.delete_state(state_key)
+
+                # Persist all events
+                await _persist_events(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    events=events,
+                    correlation_id=correlation_id,
+                )
+
+                execution_time_ms = (time_module.time() - start_time) * 1000
+
+                agent_metrics.increment(
+                    "project_agent.chat_total",
+                    labels={"project_id": project_id},
+                )
+                agent_metrics.increment(
+                    "project_agent.hitl_fast_path_success",
+                    labels={"project_id": project_id},
+                )
+
+                return {
+                    "content": final_content,
+                    "sequence_number": sequence_number,
+                    "is_error": is_error,
+                    "error_message": error_message,
+                    "execution_time_ms": execution_time_ms,
+                    "event_count": len(events),
+                }
+
+            # Fast path timed out - fall back to Workflow Signal
             execution_time_ms = (time_module.time() - start_time) * 1000
 
             return {
@@ -672,21 +781,23 @@ async def continue_project_chat_activity(
             # This is critical: LLM needs to see the tool result to understand
             # what the user chose, so it can continue from that context
             conversation_context = list(state.messages)
-            
+
             if state.pending_tool_call_id:
                 # Format the HITL response as a tool result
                 tool_result_content = _format_hitl_response_as_tool_result(
                     hitl_type=state.hitl_type,
                     response_data=hitl_response,
                 )
-                
+
                 # Inject tool result into messages
-                conversation_context.append({
-                    "role": "tool",
-                    "tool_call_id": state.pending_tool_call_id,
-                    "content": tool_result_content,
-                })
-                
+                conversation_context.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": state.pending_tool_call_id,
+                        "content": tool_result_content,
+                    }
+                )
+
                 logger.info(
                     f"[ProjectAgentActivity] Injected tool result for call_id="
                     f"{state.pending_tool_call_id}: {tool_result_content[:100]}..."
@@ -787,7 +898,7 @@ async def continue_project_chat_activity(
             # Use current_messages from exception if available (includes assistant's tool call)
             # Fall back to old state.messages if not set (backward compatibility)
             saved_messages = hitl_ex.current_messages or state.messages
-            
+
             if hitl_ex.current_messages:
                 logger.info(
                     f"[ProjectAgentActivity] Saving {len(hitl_ex.current_messages)} messages "
@@ -1059,10 +1170,12 @@ async def _publish_error_event(
             error_event = {
                 "type": "error",
                 "seq": "999999",  # High sequence to ensure it's processed
-                "data": json.dumps({
-                    "message": error_message,
-                    "code": "ACTIVITY_ERROR",
-                }),
+                "data": json.dumps(
+                    {
+                        "message": error_message,
+                        "code": "ACTIVITY_ERROR",
+                    }
+                ),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "conversation_id": conversation_id,
                 "message_id": message_id,
@@ -1176,3 +1289,80 @@ async def _publish_event_to_stream(
     finally:
         if should_close and redis_client:
             await redis_client.aclose()
+
+
+async def _wait_for_hitl_response_fast_path(
+    tenant_id: str,
+    project_id: str,
+    conversation_id: str,
+    request_id: str,
+    hitl_type: str,
+    timeout_seconds: float = 10.0,
+) -> Optional[Dict[str, Any]]:
+    """
+    Wait for HITL response via fast path (Redis Streams + SessionRegistry).
+
+    This function attempts to receive HITL responses with minimal latency
+    by using the in-process SessionRegistry rather than Temporal Signals.
+
+    The flow:
+    1. Register a waiter in SessionRegistry
+    2. HITLResponseListener (running in agent_worker) receives response from Redis Stream
+    3. HITLResponseListener delivers response to SessionRegistry
+    4. This function receives response and returns
+
+    Args:
+        tenant_id: Tenant ID
+        project_id: Project ID
+        conversation_id: Conversation ID for the request
+        request_id: HITL request ID to wait for
+        hitl_type: Type of HITL request
+        timeout_seconds: Maximum time to wait (default 10s)
+
+    Returns:
+        Response data dict if received, None if timeout or error
+    """
+    try:
+        from src.infrastructure.agent.hitl.session_registry import get_session_registry
+
+        registry = get_session_registry()
+
+        # Register waiter
+        await registry.register_waiter(
+            request_id=request_id,
+            conversation_id=conversation_id,
+            hitl_type=hitl_type,
+        )
+
+        logger.info(
+            f"[HITL FastPath] Registered waiter: request_id={request_id}, "
+            f"timeout={timeout_seconds}s"
+        )
+
+        # Wait for response
+        response = await registry.wait_for_response(
+            request_id=request_id,
+            timeout_seconds=timeout_seconds,
+        )
+
+        if response:
+            logger.info(
+                f"[HITL FastPath] Response received for {request_id} (latency < {timeout_seconds}s)"
+            )
+            return response
+        else:
+            logger.debug(
+                f"[HITL FastPath] Timeout waiting for {request_id}, falling back to Temporal Signal"
+            )
+            return None
+
+    except Exception as e:
+        logger.warning(f"[HITL FastPath] Error waiting for response: {e}")
+        return None
+    finally:
+        # Always unregister waiter to prevent memory leaks
+        try:
+            registry = get_session_registry()
+            await registry.unregister_waiter(request_id)
+        except Exception:
+            pass

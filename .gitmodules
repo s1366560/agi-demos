@@ -1,9 +1,6 @@
 [submodule "vendor/claude-code"]
 	path = vendor/claude-code
 	url = https://github.com/anthropics/claude-code.git
-[submodule "vendor/opencode"]
-	path = vendor/opencode
-	url = https://github.com/anomalyco/opencode.git
 [submodule "vendor/skills"]
 	path = vendor/skills
 	url = https://github.com/anthropics/skills.git
@@ -13,6 +10,3 @@
 [submodule "vendor/browser-use"]
 	path = vendor/browser-use
 	url = https://github.com/browser-use/browser-use.git
-[submodule "vendor/moltbot"]
-	path = vendor/moltbot
-	url = https://github.com/moltbot/moltbot.git

@@ -53,15 +53,11 @@ class Settings(BaseSettings):
     # When True, resolves LLM providers from database configuration (llm_provider_configs table)
     # When False, uses environment variables directly
     # Note: LiteLLM is still used internally as the unified adapter layer
-    use_db_provider_resolution: bool = Field(
-        default=True, alias="USE_DB_PROVIDER_RESOLUTION"
-    )
+    use_db_provider_resolution: bool = Field(default=True, alias="USE_DB_PROVIDER_RESOLUTION")
 
     # Legacy alias for backward compatibility (deprecated, use USE_DB_PROVIDER_RESOLUTION)
     # TODO: Remove in next major version
-    use_litellm: bool = Field(
-        default=True, alias="USE_LITELLM"
-    )
+    use_litellm: bool = Field(default=True, alias="USE_LITELLM")
 
     # LLM Provider API Key Encryption
     # 32-byte (256-bit) encryption key as hex string (64 hex characters)
@@ -240,6 +236,11 @@ class Settings(BaseSettings):
         default=86400,
         alias="AGENT_SESSION_TTL_SECONDS",  # 24 hours default
     )
+
+    # HITL (Human-in-the-Loop) Real-time Optimization
+    # When enabled, uses Redis Streams for low-latency (~30ms) HITL response delivery
+    # Temporal Signal is always used as a reliable backup channel
+    hitl_realtime_enabled: bool = Field(default=True, alias="HITL_REALTIME_ENABLED")
 
     # Agent Execution Limits
     agent_max_steps: int = Field(
