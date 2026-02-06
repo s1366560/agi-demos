@@ -16,6 +16,7 @@ import pytest
 
 from src.domain.model.agent.skill import Skill, SkillStatus, TriggerType
 from src.domain.model.agent.skill_source import SkillSource
+from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
 # =============================================================================
 # MarkdownParser Tests
@@ -171,8 +172,8 @@ class TestFileSystemSkillScanner:
             skill_file = skill_dir / "SKILL.md"
             skill_file.write_text("---\nname: test\ndescription: test\n---\nContent")
 
-            scanner = FileSystemSkillScanner(include_system=False)
-            result = scanner.scan(base_path, include_system=False)
+            scanner = FileSystemSkillScanner(include_system=False, include_global=False)
+            result = scanner.scan(base_path, include_system=False, include_global=False)
 
             assert result.count == 1
             assert len(result.skills) == 1
@@ -191,8 +192,8 @@ class TestFileSystemSkillScanner:
             skill_file = skill_dir / "SKILL.md"
             skill_file.write_text("---\nname: claude\ndescription: claude skill\n---\nContent")
 
-            scanner = FileSystemSkillScanner(include_system=False)
-            result = scanner.scan(base_path, include_system=False)
+            scanner = FileSystemSkillScanner(include_system=False, include_global=False)
+            result = scanner.scan(base_path, include_system=False, include_global=False)
 
             assert result.count == 1
             assert result.skills[0].skill_id == "claude-skill"
@@ -204,8 +205,8 @@ class TestFileSystemSkillScanner:
         with tempfile.TemporaryDirectory() as tmpdir:
             base_path = Path(tmpdir)
 
-            scanner = FileSystemSkillScanner(include_system=False)
-            result = scanner.scan(base_path, include_system=False)
+            scanner = FileSystemSkillScanner(include_system=False, include_global=False)
+            result = scanner.scan(base_path, include_system=False, include_global=False)
 
             assert result.count == 0
             assert len(result.skills) == 0
@@ -223,8 +224,8 @@ class TestFileSystemSkillScanner:
             (skill_dir / "README.md").write_text("Not a skill file")
             (skill_dir / "config.json").write_text("{}")
 
-            scanner = FileSystemSkillScanner(include_system=False)
-            result = scanner.scan(base_path, include_system=False)
+            scanner = FileSystemSkillScanner(include_system=False, include_global=False)
+            result = scanner.scan(base_path, include_system=False, include_global=False)
 
             assert result.count == 0
 
@@ -284,6 +285,7 @@ Do the thing.
                 base_path=base_path,
                 tenant_id="test-tenant",
                 include_system=False,
+                scanner=FileSystemSkillScanner(include_system=False, include_global=False),
             )
 
             result = await loader.load_all(include_system=False)
@@ -318,6 +320,7 @@ This is the complete instruction set.
             loader = FileSystemSkillLoader(
                 base_path=base_path,
                 tenant_id="test-tenant",
+                scanner=FileSystemSkillScanner(include_system=False, include_global=False),
             )
 
             content = await loader.load_skill_content("content-test")
@@ -349,6 +352,7 @@ Content.
                 base_path=base_path,
                 tenant_id="test-tenant",
                 include_system=False,
+                scanner=FileSystemSkillScanner(include_system=False, include_global=False),
             )
 
             # First load
@@ -408,6 +412,7 @@ Content.
                 base_path=base_path,
                 tenant_id="test-tenant",
                 include_system=False,
+                scanner=FileSystemSkillScanner(include_system=False, include_global=False),
             )
 
             service = SkillService(
@@ -454,6 +459,7 @@ Complete content here.
                 base_path=base_path,
                 tenant_id="test-tenant",
                 include_system=False,
+                scanner=FileSystemSkillScanner(include_system=False, include_global=False),
             )
 
             service = SkillService(
@@ -524,6 +530,7 @@ FS Content.
                 base_path=base_path,
                 tenant_id="test-tenant",
                 include_system=False,
+                scanner=FileSystemSkillScanner(include_system=False, include_global=False),
             )
 
             service = SkillService(

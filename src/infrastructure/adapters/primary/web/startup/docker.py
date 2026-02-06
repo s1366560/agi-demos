@@ -45,9 +45,21 @@ async def initialize_docker_services(container: DIContainer) -> Optional[Any]:
         # Get event publisher from container (already configured with Redis event bus)
         event_publisher = container.sandbox_event_publisher()
 
+        # Create a repository factory that yields ProjectSandboxRepository instances
+        from contextlib import asynccontextmanager
+
+        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+            SqlProjectSandboxRepository,
+        )
+
+        @asynccontextmanager
+        async def sandbox_repository_factory():
+            async with async_session_factory() as session:
+                yield SqlProjectSandboxRepository(session)
+
         # Create status sync service
         sync_service = SandboxStatusSyncService(
-            session_factory=async_session_factory,
+            repository_factory=sandbox_repository_factory,
             event_publisher=event_publisher,
         )
 

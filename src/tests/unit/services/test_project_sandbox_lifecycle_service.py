@@ -229,7 +229,7 @@ class TestProjectSandboxLifecycleService:
         result = await service.health_check("proj-456")
 
         assert result is False
-        assert sample_association.status == ProjectSandboxStatus.UNHEALTHY
+        assert sample_association.status == ProjectSandboxStatus.ERROR
 
     @pytest.mark.asyncio
     async def test_health_check_no_sandbox(self, service, mock_repository) -> None:

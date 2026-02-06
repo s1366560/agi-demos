@@ -75,6 +75,11 @@ from ..doom_loop import DoomLoopDetector
 from ..hitl.ray_hitl_handler import RayHITLHandler
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
+from .hitl_tool_handler import (
+    handle_clarification_tool,
+    handle_decision_tool,
+    handle_env_var_tool,
+)
 from .message_utils import classify_tool_by_description, extract_user_query
 
 logger = logging.getLogger(__name__)
@@ -1554,136 +1559,17 @@ class SessionProcessor:
         arguments: Dict[str, Any],
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
-        """
-        Handle clarification tool with SSE event emission via RayHITLHandler.
-
-        Uses the unified Ray-based HITL system for cross-process communication.
-
-        Args:
-            session_id: Session identifier
-            call_id: Tool call ID
-            tool_name: Tool name (ask_clarification)
-            arguments: Tool arguments
-            tool_part: Tool part for tracking state
-
-        Yields:
-            AgentDomainEvent objects for clarification flow
-        """
+        """Handle clarification tool — delegates to hitl_tool_handler."""
         self._state = ProcessorState.WAITING_CLARIFICATION
         handler = self._get_hitl_handler()
-
-        try:
-            # Parse arguments
-            question = arguments.get("question", "")
-            clarification_type = arguments.get("clarification_type", "custom")
-            options_raw = arguments.get("options", [])
-            allow_custom = arguments.get("allow_custom", True)
-            context_raw = arguments.get("context", {})
-            timeout = arguments.get("timeout", 300.0)
-            default_value = arguments.get("default_value")
-
-            # Ensure context is a dictionary (LLM might pass a string)
-            if isinstance(context_raw, str):
-                context = {"description": context_raw} if context_raw else {}
-            elif isinstance(context_raw, dict):
-                context = context_raw.copy()
-            else:
-                context = {}
-
-            # Convert options to standard format for SSE event
-            clarification_options = []
-            for opt in options_raw:
-                clarification_options.append(
-                    {
-                        "id": opt.get("id", ""),
-                        "label": opt.get("label", ""),
-                        "description": opt.get("description"),
-                        "recommended": opt.get("recommended", False),
-                    }
-                )
-
-            preinjected = handler.peek_preinjected_response(HITLType.CLARIFICATION)
-            request_id = (
-                preinjected.get("request_id")
-                if preinjected and preinjected.get("request_id")
-                else f"clar_{uuid.uuid4().hex[:8]}"
-            )
-
-            if not preinjected:
-                # Emit clarification_asked event BEFORE blocking
-                yield AgentClarificationAskedEvent(
-                    request_id=request_id,
-                    question=question,
-                    clarification_type=clarification_type,
-                    options=clarification_options,
-                    allow_custom=allow_custom,
-                    context=context,
-                )
-
-            # Use RayHITLHandler for request/response
-            start_time = time.time()
-            try:
-                answer = await handler.request_clarification(
-                    question=question,
-                    options=clarification_options,
-                    clarification_type=clarification_type,
-                    allow_custom=allow_custom,
-                    timeout_seconds=timeout,
-                    context=context,
-                    default_value=default_value,
-                    request_id=request_id,  # Pass the same request_id
-                )
-                end_time = time.time()
-
-                # Emit answered event
-                yield AgentClarificationAnsweredEvent(
-                    request_id=request_id,
-                    answer=answer,
-                )
-
-                # Update tool part
-                tool_part.status = ToolState.COMPLETED
-                tool_part.output = answer
-                tool_part.end_time = end_time
-
-                yield AgentObserveEvent(
-                    tool_name=tool_name,
-                    result=answer,
-                    duration_ms=int((end_time - start_time) * 1000),
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-
-            except asyncio.TimeoutError:
-                tool_part.status = ToolState.ERROR
-                tool_part.error = "Clarification request timed out"
-                tool_part.end_time = time.time()
-
-                yield AgentObserveEvent(
-                    tool_name=tool_name,
-                    error="Clarification request timed out",
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-
-        except HITLPendingException:
-            # Let HITLPendingException bubble up to Activity layer
-            # The Workflow will wait for user response and resume execution
-            raise
-
-        except Exception as e:
-            logger.error(f"Clarification tool error: {e}", exc_info=True)
-            tool_part.status = ToolState.ERROR
-            tool_part.error = str(e)
-            tool_part.end_time = time.time()
-
-            yield AgentObserveEvent(
-                tool_name=tool_name,
-                error=str(e),
-                call_id=call_id,
-                tool_execution_id=tool_part.tool_execution_id,
-            )
-
+        async for event in handle_clarification_tool(
+            handler=handler,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+        ):
+            yield event
         self._state = ProcessorState.OBSERVING
 
     async def _handle_decision_tool(
@@ -1694,140 +1580,17 @@ class SessionProcessor:
         arguments: Dict[str, Any],
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
-        """
-        Handle decision tool with SSE event emission via RayHITLHandler.
-
-        Uses the unified Ray-based HITL system for cross-process communication.
-
-        Args:
-            session_id: Session identifier
-            call_id: Tool call ID
-            tool_name: Tool name (request_decision)
-            arguments: Tool arguments
-            tool_part: Tool part for tracking state
-
-        Yields:
-            AgentDomainEvent objects for decision flow
-        """
+        """Handle decision tool — delegates to hitl_tool_handler."""
         self._state = ProcessorState.WAITING_DECISION
         handler = self._get_hitl_handler()
-
-        try:
-            # Parse arguments
-            question = arguments.get("question", "")
-            decision_type = arguments.get("decision_type", "custom")
-            options_raw = arguments.get("options", [])
-            allow_custom = arguments.get("allow_custom", False)
-            default_option = arguments.get("default_option")
-            context_raw = arguments.get("context", {})
-            timeout = arguments.get("timeout", 300.0)
-
-            # Ensure context is a dictionary (LLM might pass a string)
-            if isinstance(context_raw, str):
-                context = {"description": context_raw} if context_raw else {}
-            elif isinstance(context_raw, dict):
-                context = context_raw.copy()
-            else:
-                context = {}
-
-            # Convert options to standard format for SSE event
-            decision_options = []
-            for opt in options_raw:
-                decision_options.append(
-                    {
-                        "id": opt.get("id", ""),
-                        "label": opt.get("label", ""),
-                        "description": opt.get("description"),
-                        "recommended": opt.get("recommended", False),
-                        "estimated_time": opt.get("estimated_time"),
-                        "estimated_cost": opt.get("estimated_cost"),
-                        "risks": opt.get("risks", []),
-                    }
-                )
-
-            preinjected = handler.peek_preinjected_response(HITLType.DECISION)
-            request_id = (
-                preinjected.get("request_id")
-                if preinjected and preinjected.get("request_id")
-                else f"deci_{uuid.uuid4().hex[:8]}"
-            )
-
-            if not preinjected:
-                # Emit decision_asked event BEFORE blocking
-                yield AgentDecisionAskedEvent(
-                    request_id=request_id,
-                    question=question,
-                    decision_type=decision_type,
-                    options=decision_options,
-                    allow_custom=allow_custom,
-                    default_option=default_option,
-                    context=context,
-                )
-
-            # Use RayHITLHandler for request/response
-            start_time = time.time()
-            try:
-                decision = await handler.request_decision(
-                    question=question,
-                    options=decision_options,
-                    decision_type=decision_type,
-                    allow_custom=allow_custom,
-                    timeout_seconds=timeout,
-                    context=context,
-                    default_option=default_option,
-                    request_id=request_id,  # Pass the same request_id
-                )
-                end_time = time.time()
-
-                # Emit answered event
-                yield AgentDecisionAnsweredEvent(
-                    request_id=request_id,
-                    decision=decision,
-                )
-
-                # Update tool part
-                tool_part.status = ToolState.COMPLETED
-                tool_part.output = decision
-                tool_part.end_time = end_time
-
-                yield AgentObserveEvent(
-                    tool_name=tool_name,
-                    result=decision,
-                    duration_ms=int((end_time - start_time) * 1000),
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-
-            except asyncio.TimeoutError:
-                tool_part.status = ToolState.ERROR
-                tool_part.error = "Decision request timed out"
-                tool_part.end_time = time.time()
-
-                yield AgentObserveEvent(
-                    tool_name=tool_name,
-                    error="Decision request timed out",
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-
-        except HITLPendingException:
-            # Let HITLPendingException bubble up to Activity layer
-            # The Workflow will wait for user response and resume execution
-            raise
-
-        except Exception as e:
-            logger.error(f"Decision tool error: {e}", exc_info=True)
-            tool_part.status = ToolState.ERROR
-            tool_part.error = str(e)
-            tool_part.end_time = time.time()
-
-            yield AgentObserveEvent(
-                tool_name=tool_name,
-                error=str(e),
-                call_id=call_id,
-                tool_execution_id=tool_part.tool_execution_id,
-            )
-
+        async for event in handle_decision_tool(
+            handler=handler,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+        ):
+            yield event
         self._state = ProcessorState.OBSERVING
 
     async def _handle_env_var_tool(
@@ -1838,215 +1601,18 @@ class SessionProcessor:
         arguments: Dict[str, Any],
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
-        """
-        Handle environment variable request tool with SSE event emission.
-
-        Uses the unified Ray-based HITL system. After receiving values,
-        optionally saves them encrypted to the database.
-
-        Args:
-            session_id: Session identifier
-            call_id: Tool call ID
-            tool_name: Tool name (request_env_var)
-            arguments: Tool arguments
-            tool_part: Tool part for tracking state
-
-        Yields:
-            AgentDomainEvent objects for env var request flow
-        """
+        """Handle env var request tool — delegates to hitl_tool_handler."""
         self._state = ProcessorState.WAITING_ENV_VAR
         handler = self._get_hitl_handler()
-
-        try:
-            # Parse arguments
-            target_tool_name = arguments.get("tool_name", "")
-            fields_raw = arguments.get("fields", [])
-            message = arguments.get("message")
-            context_raw = arguments.get("context", {})
-            timeout = arguments.get("timeout", 300.0)
-            save_to_project = arguments.get("save_to_project", False)
-
-            # Ensure context is a dictionary
-            if isinstance(context_raw, dict):
-                context = context_raw.copy()
-            else:
-                context = {}
-
-            # Convert fields to standard format for SSE event and handler
-            fields_for_sse = []
-            fields_for_handler = []
-            for field in fields_raw:
-                # Map from agent tool schema to internal format
-                var_name = field.get("variable_name", field.get("name", ""))
-                display_name = field.get("display_name", field.get("label", var_name))
-                input_type_str = field.get("input_type", "text")
-                is_required = field.get("is_required", field.get("required", True))
-                is_secret = field.get("is_secret", True)
-
-                # Create field dict for SSE (frontend format)
-                field_dict = {
-                    "name": var_name,
-                    "label": display_name,
-                    "description": field.get("description"),
-                    "required": is_required,
-                    "input_type": input_type_str,
-                    "default_value": field.get("default_value"),
-                    "placeholder": field.get("placeholder"),
-                    "secret": is_secret,
-                }
-                fields_for_sse.append(field_dict)
-                fields_for_handler.append(field_dict)
-
-            preinjected = handler.peek_preinjected_response(HITLType.ENV_VAR)
-            request_id = (
-                preinjected.get("request_id")
-                if preinjected and preinjected.get("request_id")
-                else f"envvar_{uuid.uuid4().hex[:8]}"
-            )
-
-            if not preinjected:
-                # Emit env_var_requested event BEFORE blocking
-                yield AgentEnvVarRequestedEvent(
-                    request_id=request_id,
-                    tool_name=target_tool_name,
-                    fields=fields_for_sse,
-                    context=context if context else {},
-                )
-
-            # Use RayHITLHandler for request/response
-            start_time = time.time()
-            try:
-                values = await handler.request_env_vars(
-                    tool_name=target_tool_name,
-                    fields=fields_for_handler,
-                    message=message,
-                    timeout_seconds=timeout,
-                    request_id=request_id,
-                )
-                end_time = time.time()
-
-                # values is a Dict[str, str] of variable_name -> value
-                saved_variables = []
-
-                # Save environment variables to database
-                ctx = self._langfuse_context or {}
-                tenant_id = ctx.get("tenant_id")
-                project_id = ctx.get("project_id")
-
-                if tenant_id and values:
-                    try:
-                        from src.domain.model.agent.tool_environment_variable import (
-                            EnvVarScope,
-                            ToolEnvironmentVariable,
-                        )
-                        from src.infrastructure.adapters.secondary.persistence.database import (
-                            async_session_factory,
-                        )
-                        from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                            SqlToolEnvironmentVariableRepository,
-                        )
-                        from src.infrastructure.security.encryption_service import (
-                            get_encryption_service,
-                        )
-
-                        encryption_service = get_encryption_service()
-                        scope = (
-                            EnvVarScope.PROJECT
-                            if save_to_project and project_id
-                            else EnvVarScope.TENANT
-                        )
-                        effective_project_id = project_id if save_to_project else None
-
-                        async with async_session_factory() as db_session:
-                            repository = SqlToolEnvironmentVariableRepository(db_session)
-                            for field_spec in fields_for_sse:
-                                var_name = field_spec["name"]
-                                if var_name in values and values[var_name]:
-                                    # Encrypt the value
-                                    encrypted_value = encryption_service.encrypt(values[var_name])
-
-                                    # Create domain entity
-                                    env_var = ToolEnvironmentVariable(
-                                        tenant_id=tenant_id,
-                                        project_id=effective_project_id,
-                                        tool_name=target_tool_name,
-                                        variable_name=var_name,
-                                        encrypted_value=encrypted_value,
-                                        description=field_spec.get("description"),
-                                        is_required=field_spec.get("required", True),
-                                        is_secret=field_spec.get("secret", True),
-                                        scope=scope,
-                                    )
-
-                                    # Upsert to database
-                                    await repository.upsert(env_var)
-                                    saved_variables.append(var_name)
-
-                                    logger.info(f"Saved env var: {target_tool_name}/{var_name}")
-                            await db_session.commit()
-                    except Exception as e:
-                        logger.error(f"Error saving env vars to database: {e}")
-                        # Even if save fails, include the variable names
-                        saved_variables = list(values.keys()) if values else []
-                else:
-                    saved_variables = list(values.keys()) if values else []
-
-                # Emit provided event
-                yield AgentEnvVarProvidedEvent(
-                    request_id=request_id,
-                    tool_name=target_tool_name,
-                    saved_variables=saved_variables,
-                )
-
-                # Update tool part
-                tool_part.status = ToolState.COMPLETED
-                result = {
-                    "success": True,
-                    "tool_name": target_tool_name,
-                    "saved_variables": saved_variables,
-                    "message": f"Successfully saved {len(saved_variables)} environment variable(s)",
-                }
-                tool_part.output = json.dumps(result)
-                tool_part.end_time = end_time
-
-                yield AgentObserveEvent(
-                    tool_name=tool_name,
-                    result=result,
-                    duration_ms=int((end_time - start_time) * 1000),
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-
-            except asyncio.TimeoutError:
-                tool_part.status = ToolState.ERROR
-                tool_part.error = "Environment variable request timed out"
-                tool_part.end_time = time.time()
-
-                yield AgentObserveEvent(
-                    tool_name=tool_name,
-                    error="Environment variable request timed out",
-                    call_id=call_id,
-                    tool_execution_id=tool_part.tool_execution_id,
-                )
-
-        except HITLPendingException:
-            # Let HITLPendingException bubble up to Activity layer
-            # The Workflow will wait for user response and resume execution
-            raise
-
-        except Exception as e:
-            logger.error(f"Environment variable tool error: {e}", exc_info=True)
-            tool_part.status = ToolState.ERROR
-            tool_part.error = str(e)
-            tool_part.end_time = time.time()
-
-            yield AgentObserveEvent(
-                tool_name=tool_name,
-                error=str(e),
-                call_id=call_id,
-                tool_execution_id=tool_part.tool_execution_id,
-            )
-
+        async for event in handle_env_var_tool(
+            handler=handler,
+            call_id=call_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            tool_part=tool_part,
+            langfuse_context=self._langfuse_context,
+        ):
+            yield event
         self._state = ProcessorState.OBSERVING
 
     def abort(self) -> None:

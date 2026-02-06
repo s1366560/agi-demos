@@ -336,11 +336,11 @@ class TestWorkPlan:
             current_step_index=0,
         )
 
-        # Not complete when at first step of two
+        # Not complete when no steps are in completed_step_indices
         assert not work_plan.is_complete
 
-        # Complete when at last step
-        work_plan.current_step_index = 1
+        # Complete when all steps are in completed_step_indices
+        work_plan.completed_step_indices = {0, 1}
         assert work_plan.is_complete
 
     def test_is_complete_with_single_step(self):
@@ -362,9 +362,10 @@ class TestWorkPlan:
             status=PlanStatus.IN_PROGRESS,
             steps=steps,
             current_step_index=0,
+            completed_step_indices={0},
         )
 
-        # Single step plan is complete when at index 0
+        # Single step plan is complete when step 0 is in completed indices
         assert work_plan.is_complete
 
     def test_is_complete_with_empty_steps(self):
@@ -417,15 +418,15 @@ class TestWorkPlan:
             current_step_index=0,
         )
 
-        # At first step of three: (0 + 1) / 3 * 100 = 33.33%
+        # No steps completed: 0/3 = 0%
+        assert work_plan.progress_percentage == pytest.approx(0.0, abs=0.1)
+
+        work_plan.completed_step_indices = {0}
+        # 1 of 3 completed: 1/3 * 100 = 33.33%
         assert work_plan.progress_percentage == pytest.approx(33.33, rel=0.1)
 
-        work_plan.current_step_index = 1
-        # At second step of three: (1 + 1) / 3 * 100 = 66.67%
-        assert work_plan.progress_percentage == pytest.approx(66.67, rel=0.1)
-
-        work_plan.current_step_index = 2
-        # At last step of three: (2 + 1) / 3 * 100 = 100%
+        work_plan.completed_step_indices = {0, 1, 2}
+        # All completed: 3/3 * 100 = 100%
         assert work_plan.progress_percentage == 100.0
 
     def test_progress_percentage_with_empty_steps(self):
@@ -438,7 +439,7 @@ class TestWorkPlan:
             current_step_index=0,
         )
 
-        assert work_plan.progress_percentage == 0.0
+        assert work_plan.progress_percentage == 100.0
 
     def test_to_dict(self):
         """Test converting work plan to dictionary."""

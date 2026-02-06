@@ -57,7 +57,7 @@ class TestProviderService:
 
     @pytest.mark.asyncio
     async def test_create_provider_duplicate_name(self, service):
-        """Test that duplicate provider names are rejected."""
+        """Test that duplicate provider names return existing provider."""
         config = ProviderConfigCreate(
             name="existing-provider",
             provider_type=ProviderType.OPENAI,
@@ -66,10 +66,14 @@ class TestProviderService:
         )
 
         # Mock that provider already exists
-        service.repository.get_by_name.return_value = MagicMock()
+        existing = MagicMock()
+        existing.name = "existing-provider"
+        service.repository.get_by_name.return_value = existing
 
-        with pytest.raises(ValueError, match="already exists"):
-            await service.create_provider(config)
+        result = await service.create_provider(config)
+        assert result is existing
+        # Should not attempt to create
+        service.repository.create.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_create_provider_clears_default_flag(self, service):

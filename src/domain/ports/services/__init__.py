@@ -1,5 +1,6 @@
 # flake8: noqa
 
+from src.domain.ports.services.authorization_port import AuthorizationPort
 from src.domain.ports.services.queue_port import QueuePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.domain.ports.services.agent_service_port import AgentServicePort
@@ -24,6 +25,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxConnectionError,
     SandboxNotFoundError,
 )
+from src.domain.ports.services.event_store_port import EventStorePort
 from src.domain.ports.services.skill_resource_port import (
     SkillResourcePort,
     SkillResource,
@@ -33,6 +35,7 @@ from src.domain.ports.services.skill_resource_port import (
 )
 
 __all__ = [
+    "AuthorizationPort",
     "QueuePort",
     "GraphServicePort",
     "AgentServicePort",
@@ -60,4 +63,6 @@ __all__ = [
     "SkillResourceContext",
     "ResourceEnvironment",
     "ResourceSyncResult",
+    # Event Store Port
+    "EventStorePort",
 ]

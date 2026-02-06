@@ -1,5 +1,10 @@
 # flake8: noqa
 
+from src.domain.ports.repositories.base import (
+    ListableReadRepositoryPort,
+    ReadRepositoryPort,
+    WriteRepositoryPort,
+)
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionRepository,
     ConversationRepository,
@@ -40,4 +45,7 @@ __all__ = [
     "PlanRepository",
     "ToolEnvironmentVariableRepositoryPort",
     "HITLRequestRepositoryPort",
+    "ReadRepositoryPort",
+    "WriteRepositoryPort",
+    "ListableReadRepositoryPort",
 ]

@@ -40,7 +40,7 @@ class TestSandboxMCPToolWrapper:
         }
 
     def test_initialization_with_namespacing(self, tool_schema, mock_adapter):
-        """Test tool is initialized with namespaced name."""
+        """Test tool is initialized with original name (no namespace prefix)."""
         wrapper = SandboxMCPToolWrapper(
             sandbox_id="abc123def",
             tool_name="bash",
@@ -48,11 +48,9 @@ class TestSandboxMCPToolWrapper:
             sandbox_adapter=mock_adapter,
         )
 
-        assert wrapper.name == "sandbox_abc123def_bash"
+        assert wrapper.name == "bash"
         assert wrapper.sandbox_id == "abc123def"
         assert wrapper.tool_name == "bash"
-        # Description shows first 8 chars of sandbox_id
-        assert "[Sandbox:abc123de...]" in wrapper.description
 
     def test_initialization_short_sandbox_id(self, tool_schema, mock_adapter):
         """Test with short sandbox ID."""
@@ -63,9 +61,7 @@ class TestSandboxMCPToolWrapper:
             sandbox_adapter=mock_adapter,
         )
 
-        assert wrapper.name == "sandbox_short_bash"
-        # Short IDs get [...] suffix
-        assert "[Sandbox:short...]" in wrapper.description
+        assert wrapper.name == "bash"
 
     def test_get_parameters_schema(self, tool_schema, mock_adapter):
         """Test parameters schema conversion from MCP schema."""
@@ -191,9 +187,8 @@ class TestSandboxMCPToolWrapper:
             sandbox_adapter=mock_adapter,
         )
 
-        result = await wrapper.execute(command="xyz")
-
-        assert "Error: Command not found" in result
+        with pytest.raises(RuntimeError, match="Tool execution failed"):
+            await wrapper.execute(command="xyz")
 
     @pytest.mark.asyncio
     async def test_execute_empty_content(self, tool_schema, mock_adapter):
@@ -226,9 +221,8 @@ class TestSandboxMCPToolWrapper:
             sandbox_adapter=mock_adapter,
         )
 
-        result = await wrapper.execute(command="ls")
-
-        assert "Error: Connection lost" in result
+        with pytest.raises(RuntimeError, match="Tool execution failed"):
+            await wrapper.execute(command="ls")
 
     def test_tool_schema_none(self, mock_adapter):
         """Test handling of None tool schema."""

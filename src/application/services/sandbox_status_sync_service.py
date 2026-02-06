@@ -9,9 +9,6 @@ from typing import Optional
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
-from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-    SqlProjectSandboxRepository,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +33,16 @@ class SandboxStatusSyncService:
     
     def __init__(
         self,
-        session_factory,
+        repository_factory,
         event_publisher: Optional[SandboxEventPublisher] = None,
     ):
         """Initialize the service.
         
         Args:
-            session_factory: SQLAlchemy async session factory
+            repository_factory: Async context manager that yields a ProjectSandboxRepository
             event_publisher: Optional event publisher for SSE
         """
-        self._session_factory = session_factory
+        self._repository_factory = repository_factory
         self._event_publisher = event_publisher
         
     async def handle_status_change(
@@ -80,9 +77,7 @@ class SandboxStatusSyncService:
             
         # Update database
         try:
-            async with self._session_factory() as session:
-                repository = SqlProjectSandboxRepository(session)
-                
+            async with self._repository_factory() as repository:
                 # Find by project ID
                 association = await repository.find_by_project(project_id)
                 if not association:

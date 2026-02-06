@@ -13,7 +13,6 @@ MCP (Model Context Protocol) Support:
 - Automatic tool namespace management
 """
 
-import asyncio
 import logging
 import time as time_module
 import uuid
@@ -22,7 +21,6 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.llm_providers.llm_types import Message as LLMMessage
 from src.domain.model.agent import (
     AgentExecution,
     AgentExecutionEvent,
@@ -38,12 +36,6 @@ from src.domain.ports.repositories.agent_repository import (
 )
 from src.domain.ports.services.agent_service_port import AgentServicePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
-from src.infrastructure.agent.tools import (
-    SkillInstallerTool,
-    SkillLoaderTool,
-    WebScrapeTool,
-    WebSearchTool,
-)
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
@@ -143,9 +135,6 @@ class AgentService(AgentServicePort):
         self._db_session = db_session
         self._sequence_service = sequence_service
 
-        # Tool definitions cache (static tool descriptions don't change)
-        self._tool_definitions_cache: Dict[str, list[Dict[str, Any]]] | None = None
-
         # Initialize Redis Event Bus if client available
         self._event_bus = None
         if self._redis_client:
@@ -154,6 +143,27 @@ class AgentService(AgentServicePort):
             )
 
             self._event_bus = RedisEventBusAdapter(self._redis_client)
+
+        # Compose sub-services
+        from src.application.services.agent.conversation_manager import ConversationManager
+        from src.application.services.agent.runtime_bootstrapper import (
+            AgentRuntimeBootstrapper,
+        )
+        from src.application.services.agent.tool_discovery import ToolDiscoveryService
+
+        self._conversation_mgr = ConversationManager(
+            conversation_repo=self._conversation_repo,
+            execution_repo=self._execution_repo,
+            agent_execution_event_repo=self._agent_execution_event_repo,
+            tool_execution_record_repo=self._tool_execution_record_repo,
+            execution_checkpoint_repo=self._execution_checkpoint_repo,
+            work_plan_repo=self._work_plan_repo,
+        )
+        self._runtime = AgentRuntimeBootstrapper()
+        self._tool_discovery = ToolDiscoveryService(
+            redis_client=self._redis_client,
+            skill_service=self._skill_service,
+        )
 
     async def _build_react_agent_async(self, project_id: str, user_id: str, tenant_id: str):
         # Deprecated: Agent execution moved to Ray Actors
@@ -325,225 +335,14 @@ class AgentService(AgentServicePort):
         correlation_id: Optional[str] = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
-        from src.configuration.config import get_settings
-        from src.infrastructure.agent.actor.actor_manager import (
-            get_or_create_actor,
-            register_project,
-        )
-        from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
-
-        settings = get_settings()
-        agent_mode = "default"
-
-        config = ProjectAgentActorConfig(
-            tenant_id=conversation.tenant_id,
-            project_id=conversation.project_id,
-            agent_mode=agent_mode,
-            model=self._get_model(settings),
-            api_key=self._get_api_key(settings),
-            base_url=self._get_base_url(settings),
-            temperature=0.7,
-            max_tokens=settings.agent_max_tokens,
-            max_steps=settings.agent_max_steps,
-            persistent=True,
-            mcp_tools_ttl_seconds=300,
-            max_concurrent_chats=10,
-            enable_skills=True,
-            enable_subagents=True,
-        )
-
-        chat_request = ProjectChatRequest(
-            conversation_id=conversation.id,
+        return await self._runtime.start_chat_actor(
+            conversation=conversation,
             message_id=message_id,
             user_message=user_message,
-            user_id=conversation.user_id,
             conversation_context=conversation_context,
             attachment_ids=attachment_ids,
             correlation_id=correlation_id,
         )
-
-        # Try Ray Actor path
-        await register_project(conversation.tenant_id, conversation.project_id)
-        actor = await get_or_create_actor(
-            tenant_id=conversation.tenant_id,
-            project_id=conversation.project_id,
-            agent_mode=agent_mode,
-            config=config,
-        )
-
-        if actor is not None:
-            from src.infrastructure.adapters.secondary.ray.client import await_ray
-
-            async def _fire_and_forget_ray() -> None:
-                try:
-                    await await_ray(actor.chat.remote(chat_request))
-                except Exception as e:
-                    logger.error(
-                        "[AgentService] Actor chat failed: conversation=%s error=%s",
-                        conversation.id,
-                        e,
-                        exc_info=True,
-                    )
-
-            asyncio.create_task(_fire_and_forget_ray())
-            logger.info("[AgentService] Using Ray Actor for conversation %s", conversation.id)
-        else:
-            # Fallback: local in-process execution
-            asyncio.create_task(
-                self._run_chat_local(config, chat_request)
-            )
-            logger.info(
-                "[AgentService] Using local execution (Ray unavailable) for conversation %s",
-                conversation.id,
-            )
-
-        return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
-
-    async def _run_chat_local(
-        self,
-        config: Any,
-        request: Any,
-    ) -> None:
-        """Run agent chat locally in-process when Ray is unavailable."""
-        from src.infrastructure.agent.actor.execution import execute_project_chat
-        from src.infrastructure.agent.core.project_react_agent import (
-            ProjectAgentConfig,
-            ProjectReActAgent,
-        )
-
-        try:
-            # Bootstrap shared services (graph, LLM providers) if not yet done
-            await self._ensure_local_runtime_bootstrapped()
-
-            agent_config = ProjectAgentConfig(
-                tenant_id=config.tenant_id,
-                project_id=config.project_id,
-                agent_mode=config.agent_mode,
-                model=config.model,
-                api_key=config.api_key,
-                base_url=config.base_url,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                max_steps=config.max_steps,
-                persistent=False,
-                idle_timeout_seconds=config.idle_timeout_seconds,
-                max_concurrent_chats=config.max_concurrent_chats,
-                mcp_tools_ttl_seconds=config.mcp_tools_ttl_seconds,
-                enable_skills=config.enable_skills,
-                enable_subagents=config.enable_subagents,
-            )
-
-            agent = ProjectReActAgent(agent_config)
-            await agent.initialize()
-
-            result = await execute_project_chat(agent, request)
-
-            if result.is_error:
-                logger.warning(
-                    "[AgentService] Local chat failed: message_id=%s error=%s",
-                    request.message_id,
-                    result.error_message,
-                )
-            else:
-                logger.info(
-                    "[AgentService] Local chat completed: message_id=%s events=%d",
-                    request.message_id,
-                    result.event_count,
-                )
-        except Exception as e:
-            logger.error(
-                "[AgentService] Local chat error: conversation=%s error=%s",
-                request.conversation_id,
-                e,
-                exc_info=True,
-            )
-            # Publish error event to Redis so frontend receives it
-            try:
-                from src.infrastructure.agent.actor.execution import _publish_error_event
-
-                await _publish_error_event(
-                    conversation_id=request.conversation_id,
-                    message_id=request.message_id,
-                    error_message=f"Agent execution failed: {e}",
-                    correlation_id=request.correlation_id,
-                )
-            except Exception as pub_err:
-                logger.warning("[AgentService] Failed to publish error event: %s", pub_err)
-
-    _local_bootstrapped = False
-    _local_bootstrap_lock = asyncio.Lock()
-
-    async def _ensure_local_runtime_bootstrapped(self) -> None:
-        """Bootstrap shared services for local (non-Ray) agent execution.
-
-        Mirrors ProjectAgentActor._bootstrap_runtime() but runs in API process.
-        """
-        if AgentService._local_bootstrapped:
-            return
-
-        async with AgentService._local_bootstrap_lock:
-            if AgentService._local_bootstrapped:
-                return
-
-            from src.configuration.factories import create_native_graph_adapter
-            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-                get_agent_graph_service,
-                set_agent_graph_service,
-            )
-            from src.infrastructure.llm.initializer import initialize_default_llm_providers
-
-            try:
-                await initialize_default_llm_providers()
-            except Exception as e:
-                logger.warning("[AgentService] LLM provider init failed: %s", e)
-
-            if not get_agent_graph_service():
-                try:
-                    graph_service = await create_native_graph_adapter()
-                    set_agent_graph_service(graph_service)
-                    logger.info("[AgentService] Graph service bootstrapped for local execution")
-                except Exception as e:
-                    logger.error("[AgentService] Graph service init failed: %s", e)
-                    raise
-
-            AgentService._local_bootstrapped = True
-
-    def _get_api_key(self, settings):
-        provider = settings.llm_provider.strip().lower()
-        if provider == "openai":
-            return settings.openai_api_key
-        if provider == "qwen":
-            return settings.qwen_api_key
-        if provider == "deepseek":
-            return settings.deepseek_api_key
-        if provider == "gemini":
-            return settings.gemini_api_key
-        return None
-
-    def _get_base_url(self, settings):
-        provider = settings.llm_provider.strip().lower()
-        if provider == "openai":
-            return settings.openai_base_url
-        if provider == "qwen":
-            return settings.qwen_base_url
-        if provider == "deepseek":
-            return settings.deepseek_base_url
-        return None
-
-    def _get_model(self, settings):
-        """Get the LLM model name based on the configured provider."""
-        provider = settings.llm_provider.strip().lower()
-        if provider == "openai":
-            return settings.openai_model
-        if provider == "qwen":
-            return settings.qwen_model
-        if provider == "deepseek":
-            return settings.deepseek_model
-        if provider == "gemini":
-            return settings.gemini_model
-        if provider == "zai" or provider == "zhipu":
-            return settings.zai_model
-        return "qwen-plus"  # Default fallback
 
     async def _get_stream_events(
         self, conversation_id: str, message_id: str, last_seq: int
@@ -797,61 +596,24 @@ class AgentService(AgentServicePort):
         title: str | None = None,
         agent_config: Dict[str, Any] | None = None,
     ) -> Conversation:
-        """
-        Create a new conversation.
-
-        Args:
-            project_id: Project ID for the conversation
-            user_id: User ID who owns the conversation
-            tenant_id: Tenant ID for multi-tenancy
-            title: Optional title for the conversation
-            agent_config: Optional agent configuration
-
-        Returns:
-            Created conversation entity
-        """
-        conversation = Conversation(
-            id=str(uuid.uuid4()),
+        """Create a new conversation."""
+        return await self._conversation_mgr.create_conversation(
             project_id=project_id,
-            tenant_id=tenant_id,
             user_id=user_id,
-            title=title or "New Conversation",
-            status=ConversationStatus.ACTIVE,
-            agent_config=agent_config or {},
-            metadata={"created_at": datetime.utcnow().isoformat()},
-            message_count=0,
-            created_at=datetime.utcnow(),
+            tenant_id=tenant_id,
+            title=title,
+            agent_config=agent_config,
         )
-
-        await self._conversation_repo.save(conversation)
-        logger.info(f"Created conversation {conversation.id} for project {project_id}")
-        return conversation
 
     async def get_conversation(
         self, conversation_id: str, project_id: str, user_id: str
     ) -> Conversation | None:
-        """
-        Get a conversation by ID.
-
-        Args:
-            conversation_id: Conversation ID
-            project_id: Project ID for authorization
-            user_id: User ID for authorization
-
-        Returns:
-            Conversation entity or None if not found or unauthorized
-        """
-        conversation = await self._conversation_repo.find_by_id(conversation_id)
-        if not conversation:
-            return None
-        # Authorization check: verify conversation belongs to the project and user
-        if conversation.project_id != project_id or conversation.user_id != user_id:
-            logger.warning(
-                f"Unauthorized access attempt to conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
-            )
-            return None
-        return conversation
+        """Get a conversation by ID."""
+        return await self._conversation_mgr.get_conversation(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=user_id,
+        )
 
     async def list_conversations(
         self,
@@ -860,220 +622,45 @@ class AgentService(AgentServicePort):
         limit: int = 50,
         status: ConversationStatus | None = None,
     ) -> list[Conversation]:
-        """
-        List conversations for a project.
-
-        Args:
-            project_id: Project ID to filter by
-            user_id: User ID to filter by
-            limit: Maximum number of conversations to return
-            status: Optional status filter
-
-        Returns:
-            List of conversation entities
-        """
-        return await self._conversation_repo.list_by_project(
-            project_id=project_id, limit=limit, status=status
+        """List conversations for a project."""
+        return await self._conversation_mgr.list_conversations(
+            project_id=project_id,
+            user_id=user_id,
+            limit=limit,
+            status=status,
         )
 
     async def delete_conversation(
         self, conversation_id: str, project_id: str, user_id: str
     ) -> bool:
-        """
-        Delete a conversation and all its messages.
-
-        Args:
-            conversation_id: Conversation ID to delete
-            project_id: Project ID for authorization
-            user_id: User ID for authorization
-
-        Returns:
-            True if deleted successfully, False if not found or unauthorized
-        """
-        # Verify conversation exists and belongs to user
-        conversation = await self._conversation_repo.find_by_id(conversation_id)
-        if not conversation:
-            logger.warning(f"Attempted to delete non-existent conversation {conversation_id}")
-            return False
-
-        # Authorization check
-        if conversation.project_id != project_id or conversation.user_id != user_id:
-            logger.warning(
-                f"Unauthorized delete attempt on conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
-            )
-            return False
-
-        # Delete related records in order to avoid FK violations
-        # 1. Delete tool execution records
-        if self._tool_execution_record_repo:
-            await self._tool_execution_record_repo.delete_by_conversation(conversation_id)
-
-        # 2. Delete agent execution events
-        if self._agent_execution_event_repo:
-            await self._agent_execution_event_repo.delete_by_conversation(conversation_id)
-
-        # 3. Delete execution checkpoints
-        if self._execution_checkpoint_repo:
-            await self._execution_checkpoint_repo.delete_by_conversation(conversation_id)
-
-        # 4. Delete work plans
-        if self._work_plan_repo:
-            await self._work_plan_repo.delete_by_conversation(conversation_id)
-
-        # 5. Delete executions (they reference conversations)
-        await self._execution_repo.delete_by_conversation(conversation_id)
-
-        # 6. Delete conversation
-        await self._conversation_repo.delete(conversation_id)
-
-        logger.info(f"Deleted conversation {conversation_id}")
-        return True
+        """Delete a conversation and all its messages."""
+        return await self._conversation_mgr.delete_conversation(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=user_id,
+        )
 
     async def update_conversation_title(
         self, conversation_id: str, project_id: str, user_id: str, title: str
     ) -> Conversation | None:
-        """
-        Update conversation title.
-
-        Args:
-            conversation_id: Conversation ID to update
-            project_id: Project ID for authorization
-            user_id: User ID for authorization
-            title: New title for the conversation
-
-        Returns:
-            Updated conversation if successful, None if not found or unauthorized
-        """
-        logger.info(f"[update_conversation_title] START: id={conversation_id}, title='{title}'")
-        # Verify conversation exists and belongs to user
-        conversation = await self._conversation_repo.find_by_id(conversation_id)
-        if not conversation:
-            logger.warning(f"Attempted to update non-existent conversation {conversation_id}")
-            return None
-
-        logger.info(
-            f"[update_conversation_title] Found conversation: project_id={conversation.project_id}, user_id={conversation.user_id}, current_title='{conversation.title}'"
+        """Update conversation title."""
+        return await self._conversation_mgr.update_conversation_title(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=user_id,
+            title=title,
         )
-        logger.info(
-            f"[update_conversation_title] Authorization check: expected project_id={project_id}, user_id={user_id}"
-        )
-
-        # Authorization check
-        if conversation.project_id != project_id or conversation.user_id != user_id:
-            logger.warning(
-                f"Unauthorized title update attempt on conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
-            )
-            return None
-
-        # Update title
-        logger.info(f"[update_conversation_title] Calling conversation.update_title('{title}')")
-        conversation.update_title(title)
-        logger.info("[update_conversation_title] Title updated in domain model, now saving...")
-        await self._conversation_repo.save_and_commit(conversation)
-
-        logger.info(f"Updated title for conversation {conversation_id} to: {title}")
-        return conversation
 
     async def generate_conversation_title(self, first_message: str, llm: LLMClient) -> str:
-        """
-        Generate a friendly, concise title for a conversation based on the first user message.
-
-        This method implements:
-        - Retry mechanism (up to 3 attempts with exponential backoff)
-        - Fallback to truncated first message on failure
-        - Graceful degradation
-
-        Args:
-            first_message: The first user message content
-            llm: The LLM to use for generation
-
-        Returns:
-            Generated title (max 50 characters)
-        """
-        prompt = f"""Generate a short, friendly title (max 50 characters) for a conversation that starts with this message:
-
-"{first_message[:200]}"
-
-Guidelines:
-- Be concise and descriptive
-- Use the user's language (English, Chinese, etc.)
-- Focus on the main topic or question
-- Maximum 50 characters
-- Return ONLY the title, no explanation
-
-Title:"""
-
-        max_retries = 3
-        base_delay = 1.0  # seconds
-
-        for attempt in range(max_retries):
-            try:
-                response = await llm.ainvoke(
-                    [
-                        LLMMessage.system(
-                            "You are a helpful assistant that generates concise conversation titles."
-                        ),
-                        LLMMessage.user(prompt),
-                    ]
-                )
-
-                title = response.content.strip().strip('"').strip("'")
-
-                # Limit length and add default if empty
-                if len(title) > 50:
-                    title = title[:47] + "..."
-                if not title:
-                    title = "New Conversation"
-
-                logger.info(f"Generated conversation title: {title}")
-                return title
-
-            except Exception as e:
-                logger.warning(
-                    f"[generate_conversation_title] Attempt {attempt + 1}/{max_retries} failed: {e}"
-                )
-
-                # If not the last attempt, wait with exponential backoff
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2**attempt)
-                    logger.info(f"Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
-                else:
-                    # All retries exhausted - use fallback
-                    logger.error(f"All {max_retries} retries exhausted for title generation")
-                    return self._generate_fallback_title(first_message)
-
-        # Should not reach here, but return default as safety net
-        return "New Conversation"
+        """Generate a friendly, concise title for a conversation."""
+        return await self._conversation_mgr.generate_conversation_title(
+            first_message=first_message,
+            llm=llm,
+        )
 
     def _generate_fallback_title(self, first_message: str) -> str:
-        """
-        Generate a fallback title from the first message when LLM fails.
-
-        This ensures users always get a meaningful title even when LLM is unavailable.
-
-        Args:
-            first_message: The first user message content
-
-        Returns:
-            Fallback title (max 50 characters)
-        """
-        # Strip whitespace and get first line/segment
-        content = first_message.strip()
-
-        # Take first 40 characters + "..." to stay under 50
-        if len(content) > 40:
-            # Try to break at word boundary
-            truncated = content[:40]
-            last_space = truncated.rfind(" ")
-            if last_space > 20:  # Only if we get a reasonable segment
-                truncated = truncated[:last_space]
-            content = truncated + "..."
-
-        logger.info(f"Using fallback title: '{content}'")
-        return content or "New Conversation"
+        """Generate a fallback title from the first message when LLM fails."""
+        return self._conversation_mgr._generate_fallback_title(first_message)
 
     async def get_conversation_messages(
         self,
@@ -1082,38 +669,12 @@ Title:"""
         user_id: str,
         limit: int = 100,
     ) -> list[AgentExecutionEvent]:
-        """
-        Get all message events in a conversation.
-
-        Returns user_message and assistant_message events from the unified event timeline.
-
-        Args:
-            conversation_id: Conversation ID
-            project_id: Project ID for authorization
-            user_id: User ID for authorization
-            limit: Maximum number of messages to return
-
-        Returns:
-            List of message events, or empty list if not found or unauthorized
-        """
-        # Verify conversation exists and belongs to user
-        conversation = await self._conversation_repo.find_by_id(conversation_id)
-        if not conversation:
-            logger.warning(
-                f"Attempted to get messages for non-existent conversation {conversation_id}"
-            )
-            return []
-
-        # Authorization check
-        if conversation.project_id != project_id or conversation.user_id != user_id:
-            logger.warning(
-                f"Unauthorized message access attempt on conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
-            )
-            return []
-
-        return await self._agent_execution_event_repo.get_message_events(
-            conversation_id=conversation_id, limit=limit
+        """Get all message events in a conversation."""
+        return await self._conversation_mgr.get_conversation_messages(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=user_id,
+            limit=limit,
         )
 
     async def get_execution_history(
@@ -1123,59 +684,13 @@ Title:"""
         user_id: str,
         limit: int = 50,
     ) -> list[Dict[str, Any]]:
-        """
-        Get the execution history for a conversation.
-
-        Args:
-            conversation_id: Conversation ID
-            project_id: Project ID for authorization
-            user_id: User ID for authorization
-            limit: Maximum number of executions to return
-
-        Returns:
-            List of execution dictionaries with metadata
-
-        Raises:
-            ValueError: If conversation not found or unauthorized
-        """
-        # Verify conversation exists and belongs to user
-        conversation = await self._conversation_repo.find_by_id(conversation_id)
-        if not conversation:
-            logger.warning(
-                f"Attempted to get executions for non-existent conversation {conversation_id}"
-            )
-            raise ValueError(f"Conversation {conversation_id} not found")
-
-        # Authorization check
-        if conversation.project_id != project_id or conversation.user_id != user_id:
-            logger.warning(
-                f"Unauthorized execution history access attempt on conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
-            )
-            raise ValueError("You do not have permission to access this conversation")
-
-        executions = await self._execution_repo.list_by_conversation(
-            conversation_id=conversation_id, limit=limit
+        """Get the execution history for a conversation."""
+        return await self._conversation_mgr.get_execution_history(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=user_id,
+            limit=limit,
         )
-
-        # Convert to dict for JSON response
-        return [
-            {
-                "id": exec.id,
-                "message_id": exec.message_id,
-                "status": exec.status.value if exec.status else None,
-                "started_at": exec.started_at.isoformat() if exec.started_at else None,
-                "completed_at": exec.completed_at.isoformat() if exec.completed_at else None,
-                "thought": exec.thought,
-                "action": exec.action,
-                "tool_name": exec.tool_name,
-                "tool_input": exec.tool_input,
-                "tool_output": exec.tool_output,
-                "observation": exec.observation,
-                "metadata": exec.metadata,
-            }
-            for exec in executions
-        ]
 
     # -------------------------------------------------------------------------
     # Abstract Method Implementations for AgentServicePort
@@ -1184,93 +699,21 @@ Title:"""
     async def get_available_tools(
         self, project_id: str, tenant_id: str, agent_mode: str = "default"
     ) -> list[Dict[str, Any]]:
-        """
-        Get list of available tools for the agent.
-
-        Args:
-            project_id: The project ID
-            tenant_id: The tenant ID
-            agent_mode: Agent mode for filtering skills (default: "default")
-
-        Returns:
-            List of tool definitions with name and description
-        """
-        # Use cached base tool definitions if available
-        if self._tool_definitions_cache is None:
-            self._tool_definitions_cache = self._build_base_tool_definitions()
-
-        # Start with cached base tools (copy to avoid mutation)
-        tools_list = list(self._tool_definitions_cache)
-
-        # Add skill_loader if SkillService is available (tenant-specific, not cached)
-        if self._skill_service:
-            skill_loader = SkillLoaderTool(
-                skill_service=self._skill_service,
-                tenant_id=tenant_id,
-                project_id=project_id,
-                agent_mode=agent_mode,
-            )
-            await skill_loader.initialize()
-            tools_list.append(
-                {
-                    "name": "skill_loader",
-                    "description": skill_loader.description,
-                }
-            )
-
-        return tools_list
-
-    def _build_base_tool_definitions(self) -> list[Dict[str, Any]]:
-        """Build and cache base tool definitions (static tools only)."""
-        from src.infrastructure.agent.tools import ClarificationTool, DecisionTool
-
-        return [
-            {
-                "name": "ask_clarification",
-                "description": ClarificationTool().description,
-            },
-            {
-                "name": "request_decision",
-                "description": DecisionTool().description,
-            },
-            {
-                "name": "web_search",
-                "description": WebSearchTool(self._redis_client).description,
-            },
-            {
-                "name": "web_scrape",
-                "description": WebScrapeTool().description,
-            },
-            {
-                "name": "skill_installer",
-                "description": SkillInstallerTool().description,
-            },
-        ]
+        """Get list of available tools for the agent."""
+        return await self._tool_discovery.get_available_tools(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            agent_mode=agent_mode,
+        )
 
     async def get_conversation_context(
         self, conversation_id: str, max_messages: int = 50
     ) -> list[Dict[str, Any]]:
-        """
-        Get conversation context for agent processing.
-
-        Args:
-            conversation_id: The conversation ID
-            max_messages: Maximum number of messages to include
-
-        Returns:
-            List of message dictionaries for LLM context
-        """
-        message_events = await self._agent_execution_event_repo.get_message_events(
-            conversation_id=conversation_id, limit=max_messages
+        """Get conversation context for agent processing."""
+        return await self._conversation_mgr.get_conversation_context(
+            conversation_id=conversation_id,
+            max_messages=max_messages,
         )
-
-        return [
-            {
-                "role": event.event_data.get("role", "user"),
-                "content": event.event_data.get("content", ""),
-            }
-            for event in message_events
-        ]
 
     async def _trigger_pattern_learning(
         self,

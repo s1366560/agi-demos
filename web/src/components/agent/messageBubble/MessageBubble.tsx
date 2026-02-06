@@ -443,7 +443,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30 flex items-center justify-center flex-shrink-0">
         <Lightbulb size={16} className="text-amber-600 dark:text-amber-400" />
       </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/50 dark:from-amber-900/20 dark:to-orange-900/10 border border-amber-200/50 dark:border-amber-800/30 rounded-xl overflow-hidden">
           <button
             onClick={() => setExpanded(!expanded)}
@@ -520,7 +520,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
         `}
         />
       </div>
-      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
+      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
           {/* Header */}
           <button
@@ -638,7 +638,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-100 to-violet-100 dark:from-purple-900/40 dark:to-violet-900/30 flex items-center justify-center flex-shrink-0">
         <Sparkles size={16} className="text-purple-600 dark:text-purple-400" />
       </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-gradient-to-r from-purple-50/80 to-violet-50/50 dark:from-purple-900/20 dark:to-violet-900/10 border border-purple-200/50 dark:border-purple-800/30 rounded-xl overflow-hidden">
           <button
             onClick={() => setExpanded(!expanded)}
@@ -692,14 +692,16 @@ const StepStart: React.FC<StepStartProps> = memo(({ event }) => {
   if (!stepDesc) return null;
 
   return (
-    <div className="flex items-center gap-3 my-3 animate-fade-in-up">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shrink-0 shadow-sm">
-        <span className="text-white text-xs font-semibold">
+    <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/30 flex items-center justify-center flex-shrink-0">
+        <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold">
           {stepIndex !== undefined ? stepIndex + 1 : '•'}
         </span>
       </div>
-      <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-2 rounded-lg border border-amber-200/30 dark:border-amber-800/20">
-        {stepDesc}
+      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+        <div className="text-sm text-slate-600 dark:text-slate-400 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-2 rounded-lg border border-amber-200/30 dark:border-amber-800/20">
+          {stepDesc}
+        </div>
       </div>
     </div>
   );
@@ -768,7 +770,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/30 flex items-center justify-center shrink-0">
         <FileOutput size={16} className="text-emerald-600 dark:text-emerald-400" />
       </div>
-      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
+      <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-gradient-to-r from-emerald-50/90 to-teal-50/70 dark:from-emerald-900/25 dark:to-teal-900/15 rounded-xl p-4 border border-emerald-200/50 dark:border-emerald-800/30 shadow-sm">
           {/* Header */}
           <div className="flex items-center gap-2 mb-3">

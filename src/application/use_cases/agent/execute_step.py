@@ -13,8 +13,8 @@ from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.model.agent import PlanStatus, PlanStep, ThoughtLevel, WorkPlan
 
 if TYPE_CHECKING:
+    from src.domain.ports.agent.agent_tool_port import AgentToolBase
     from src.domain.ports.repositories.work_plan_repository import WorkPlanRepositoryPort
-    from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class ExecuteStepUseCase:
         self,
         work_plan_repository: WorkPlanRepositoryPort,
         llm: LLMClient,
-        tools: dict[str, AgentTool],
+        tools: dict[str, AgentToolBase],
     ):
         """
         Initialize the use case.

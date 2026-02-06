@@ -132,14 +132,16 @@ class TestSandboxMCPRulesetIntegration:
 
     @pytest.mark.asyncio
     async def test_sandbox_tools_denied_in_explore_mode(self):
-        """Test that all sandbox tools are denied in explore mode."""
+        """Test that write/bash sandbox tools are denied in explore mode,
+        but read tools are allowed."""
         manager = PermissionManager(ruleset=sandbox_mcp_ruleset())
         manager.set_mode("explore")
 
-        # In explore mode, all sandbox tools should be denied
+        # In explore mode, read sandbox tools should still be allowed
         rule = manager.evaluate("read", "read")
-        assert rule.action == PermissionAction.DENY
+        assert rule.action == PermissionAction.ALLOW
 
+        # Write and bash tools should be denied
         rule = manager.evaluate("write", "write")
         assert rule.action == PermissionAction.DENY
 

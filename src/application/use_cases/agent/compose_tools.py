@@ -16,10 +16,10 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from src.domain.model.agent import ToolComposition
+from src.domain.ports.agent.agent_tool_port import AgentToolBase
 from src.domain.ports.repositories.tool_composition_repository import (
     ToolCompositionRepositoryPort,
 )
-from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class ComposeToolsUseCase:
     def __init__(
         self,
         composition_repository: ToolCompositionRepositoryPort,
-        available_tools: Dict[str, AgentTool],
+        available_tools: Dict[str, AgentToolBase],
     ):
         """
         Initialize the use case.
@@ -122,7 +122,7 @@ class ComposeToolsUseCase:
     async def _create_composition(
         self,
         tool_names: List[str],
-        tools: List[AgentTool],
+        tools: List[AgentToolBase],
     ) -> ToolComposition:
         """Create a new tool composition."""
         # Validate tool compatibility
@@ -155,7 +155,7 @@ class ComposeToolsUseCase:
     async def _execute_composition(
         self,
         composition: ToolComposition,
-        tools: List[AgentTool],
+        tools: List[AgentToolBase],
         execution_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
@@ -178,7 +178,7 @@ class ComposeToolsUseCase:
     async def _execute_sequential(
         self,
         composition: ToolComposition,
-        tools: List[AgentTool],
+        tools: List[AgentToolBase],
         execution_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Execute tools sequentially, passing output from one to the next."""
@@ -222,7 +222,7 @@ class ComposeToolsUseCase:
     async def _execute_parallel(
         self,
         composition: ToolComposition,
-        tools: List[AgentTool],
+        tools: List[AgentToolBase],
         execution_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
@@ -288,7 +288,7 @@ class ComposeToolsUseCase:
     async def _execute_conditional(
         self,
         composition: ToolComposition,
-        tools: List[AgentTool],
+        tools: List[AgentToolBase],
         execution_context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
@@ -423,7 +423,7 @@ class ComposeToolsUseCase:
 
     async def _execute_tool_step(
         self,
-        tool: AgentTool,
+        tool: AgentToolBase,
         previous_output: Optional[Any],
         execution_context: Dict[str, Any],
         is_chained: bool,

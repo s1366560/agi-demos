@@ -15,7 +15,6 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Set
 import docker
 from docker.errors import ImageNotFound, NotFound
 
-from src.application.services.sandbox_url_service import SandboxInstanceInfo, SandboxUrlService
 from src.domain.ports.services.sandbox_port import (
     CodeExecutionRequest,
     CodeExecutionResult,
@@ -31,6 +30,10 @@ from src.infrastructure.adapters.secondary.sandbox.constants import (
     DESKTOP_PORT,
     MCP_WEBSOCKET_PORT,
     TERMINAL_PORT,
+)
+from src.infrastructure.adapters.secondary.sandbox.url_service import (
+    SandboxInstanceInfo,
+    SandboxUrlService,
 )
 from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
 
@@ -633,7 +636,7 @@ class MCPSandboxAdapter(SandboxPort):
                 desktop_url = None
                 terminal_url = None
                 if mcp_port:
-                    from src.application.services.sandbox_url_service import (
+                    from src.infrastructure.adapters.secondary.sandbox.url_service import (
                         SandboxInstanceInfo,
                         SandboxUrlService,
                     )
@@ -1937,7 +1940,7 @@ class MCPSandboxAdapter(SandboxPort):
             config = original_config or SandboxConfig(image=self._mcp_image)
 
             # Build service URLs
-            from src.application.services.sandbox_url_service import (
+            from src.infrastructure.adapters.secondary.sandbox.url_service import (
                 SandboxInstanceInfo,
                 SandboxUrlService,
             )

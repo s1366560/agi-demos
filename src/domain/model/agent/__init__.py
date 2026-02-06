@@ -1,84 +1,99 @@
 """Agent domain models for React-mode agent functionality.
 
-This module contains domain entities for:
-- Conversations: Multi-turn chat sessions
-- Messages: Individual messages in conversations
-- AgentExecution: Agent execution cycles (Think-Act-Observe)
-- WorkPlan: Work-level plans for multi-step queries
-- PlanStep: Individual steps in a work plan
-- PlanStatus: Status of a work plan
-- ThoughtLevel: Level of thinking (work or task)
-- WorkflowPattern: Learned workflow patterns (T074)
-- ToolComposition: Composed tool chains (T108)
-- TenantAgentConfig: Tenant-level configuration (T093)
-- Skill: Declarative skills for task patterns (L2 layer)
+This module contains domain entities organized into bounded context subpackages:
+- conversation/: Conversations, messages, and attachments
+- planning/: Plans, steps, snapshots, and execution
+- execution/: Agent execution cycles, checkpoints, and results
+- skill/: Skills, permissions, tools, and compositions
+- hitl/: Human-in-the-Loop requests and types
+- config/: Tenant agent and skill configurations
+
+Core concepts kept at this level:
 - SubAgent: Specialized sub-agents (L3 layer)
-- Plan: Plan Mode planning documents
 - AgentMode: Agent operation modes (BUILD/PLAN/EXPLORE)
+- WorkflowPattern: Learned workflow patterns
+
+All symbols are re-exported here for backward compatibility.
 """
 
 from src.domain.events.agent_events import AgentEventType
-from src.domain.model.agent.agent_execution import AgentExecution, ExecutionStatus
-
-# AgentEventType is imported from domain.events.agent_events (unified event types)
-from src.domain.model.agent.agent_execution_event import AgentExecutionEvent
 from src.domain.model.agent.agent_mode import AgentMode
-from src.domain.model.agent.conversation import Conversation, ConversationStatus
-from src.domain.model.agent.execution_checkpoint import CheckpointType, ExecutionCheckpoint
 
-# Plan Mode Execution Models (Enhanced execution tracking)
-from src.domain.model.agent.execution_plan import (
+# Config bounded context
+from src.domain.model.agent.config import TenantAgentConfig
+
+# Conversation bounded context
+from src.domain.model.agent.conversation import (
+    Conversation,
+    ConversationStatus,
+    Message,
+    MessageRole,
+    MessageType,
+    ToolCall,
+    ToolResult,
+)
+
+# Execution bounded context
+from src.domain.model.agent.execution import (
+    AdjustmentType,
+    AgentExecution,
+    AgentExecutionEvent,
+    CheckpointType,
+    ExecutionCheckpoint,
     ExecutionPlan,
     ExecutionPlanStatus,
+    ExecutionStatus,
     ExecutionStep,
     ExecutionStepStatus,
+    ReflectionAssessment,
+    ReflectionResult,
+    StepAdjustment,
+    StepOutcome,
+    StepResult,
+    ThoughtLevel,
 )
-from src.domain.model.agent.hitl_request import (
+
+# HITL bounded context
+from src.domain.model.agent.hitl import (
     HITLRequest,
     HITLRequestStatus,
     HITLRequestType,
 )
-from src.domain.model.agent.message import Message, MessageRole, MessageType, ToolCall, ToolResult
-from src.domain.model.agent.plan import (
+
+# Planning bounded context
+from src.domain.model.agent.planning import (
     AlreadyInPlanModeError,
+    ExecutionMode,
     InvalidPlanStateError,
     NotInPlanModeError,
     Plan,
     PlanDocumentStatus,
-    PlanNotFoundError,
-)
-from src.domain.model.agent.plan_execution import (
-    ExecutionMode,
     PlanExecution,
+    PlanExecutionStatus,  # type alias
+    PlanExecutionStep,  # type alias
+    PlanNotFoundError,
+    PlanSnapshot,
+    PlanStatus,
+    PlanStep,
+    StepState,
     StepStatus,
+    WorkPlan,
 )
-from src.domain.model.agent.plan_execution import (
-    ExecutionStatus as PlanExecutionStatus,
-)
-from src.domain.model.agent.plan_execution import (
-    ExecutionStep as PlanExecutionStep,
-)
-from src.domain.model.agent.plan_snapshot import PlanSnapshot, StepState
-from src.domain.model.agent.plan_status import PlanStatus
-from src.domain.model.agent.plan_step import PlanStep
-from src.domain.model.agent.reflection_result import (
-    AdjustmentType,
-    ReflectionAssessment,
-    ReflectionResult,
-    StepAdjustment,
-)
-from src.domain.model.agent.skill import Skill, SkillStatus, TriggerPattern, TriggerType
-from src.domain.model.agent.step_result import StepOutcome, StepResult
-from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
-from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-from src.domain.model.agent.thought_level import ThoughtLevel
-from src.domain.model.agent.tool_composition import ToolComposition
-from src.domain.model.agent.tool_environment_variable import (
+
+# Skill bounded context
+from src.domain.model.agent.skill import (
     EnvVarScope,
+    Skill,
+    SkillStatus,
+    ToolComposition,
     ToolEnvironmentVariable,
+    ToolExecutionRecord,
+    TriggerPattern,
+    TriggerType,
 )
-from src.domain.model.agent.tool_execution_record import ToolExecutionRecord
-from src.domain.model.agent.work_plan import WorkPlan
+
+# Core concepts (kept at agent/ level)
+from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
 
 __all__ = [
@@ -133,4 +148,20 @@ __all__ = [
     "HITLRequest",
     "HITLRequestStatus",
     "HITLRequestType",
+    # Execution Plan (Enhanced)
+    "ExecutionPlan",
+    "ExecutionPlanStatus",
+    "ExecutionStep",
+    "ExecutionStepStatus",
+    # Plan Snapshot
+    "PlanSnapshot",
+    "StepState",
+    # Reflection Result
+    "AdjustmentType",
+    "ReflectionAssessment",
+    "ReflectionResult",
+    "StepAdjustment",
+    # Step Result
+    "StepOutcome",
+    "StepResult",
 ]

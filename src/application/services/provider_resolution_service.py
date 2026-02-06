@@ -14,9 +14,6 @@ from src.domain.llm_providers.models import (
     ResolvedProvider,
 )
 from src.domain.llm_providers.repositories import ProviderRepository
-from src.infrastructure.persistence.llm_providers_repository import (
-    SQLAlchemyProviderRepository,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +34,17 @@ class ProviderResolutionService:
 
     def __init__(
         self,
-        repository: Optional[ProviderRepository] = None,
+        repository: ProviderRepository,
         cache: Optional[dict] = None,
     ):
         """
         Initialize provider resolution service.
 
         Args:
-            repository: Provider repository instance
+            repository: Provider repository instance (required)
             cache: Simple in-memory cache (use Redis in production)
         """
-        self.repository = repository or SQLAlchemyProviderRepository()
+        self.repository = repository
         self.cache = cache if cache is not None else {}
 
     async def resolve_provider(self, tenant_id: Optional[str] = None) -> ProviderConfig:
@@ -157,5 +154,11 @@ def get_provider_resolution_service() -> ProviderResolutionService:
     """Get or create singleton provider resolution service."""
     global _provider_resolution_service
     if _provider_resolution_service is None:
-        _provider_resolution_service = ProviderResolutionService()
+        from src.infrastructure.persistence.llm_providers_repository import (
+            SQLAlchemyProviderRepository,
+        )
+
+        _provider_resolution_service = ProviderResolutionService(
+            repository=SQLAlchemyProviderRepository(),
+        )
     return _provider_resolution_service

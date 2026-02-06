@@ -22,7 +22,7 @@ class TestProjectSandbox:
             sandbox_id="sb-789",
         )
 
-        assert sandbox.status == ProjectSandboxStatus.PENDING
+        assert sandbox.status == ProjectSandboxStatus.STARTING
         assert sandbox.created_at is not None
         assert sandbox.last_accessed_at is not None
         assert sandbox.metadata == {}
@@ -72,8 +72,7 @@ class TestProjectSandbox:
 
         sandbox.mark_unhealthy(reason="Connection timeout")
 
-        assert sandbox.status == ProjectSandboxStatus.UNHEALTHY
-        assert sandbox.health_checked_at is not None
+        assert sandbox.status == ProjectSandboxStatus.ERROR
         assert sandbox.error_message == "Connection timeout"
 
     def test_mark_error(self) -> None:
@@ -103,7 +102,7 @@ class TestProjectSandbox:
 
         sandbox.mark_stopped()
 
-        assert sandbox.status == ProjectSandboxStatus.STOPPED
+        assert sandbox.status == ProjectSandboxStatus.TERMINATED
 
     def test_mark_terminated(self) -> None:
         """Should mark as terminated."""

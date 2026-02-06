@@ -1,12 +1,11 @@
 """Unit tests for HITLStreamRouterActor."""
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.infrastructure.agent.actor import hitl_router_actor
-from src.infrastructure.agent.actor.hitl_router_actor import HITLStreamRouterActor
 
 
 class _FakeContinue:
@@ -28,7 +27,10 @@ class TestHITLStreamRouterActor:
     """Tests for HITLStreamRouterActor."""
 
     async def test_handle_message_routes_to_actor_and_acks(self, monkeypatch):
-        actor = HITLStreamRouterActor()
+        # Get the underlying class from the Ray ActorClass wrapper
+        ActorClass = hitl_router_actor.HITLStreamRouterActor
+        inner_cls = ActorClass.__ray_metadata__.modified_class
+        actor = inner_cls.__new__(inner_cls)
         actor._redis = AsyncMock()
 
         fake_actor = _FakeActor()

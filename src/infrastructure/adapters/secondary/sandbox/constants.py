@@ -1,15 +1,11 @@
 """Sandbox infrastructure constants.
 
-This module provides centralized sandbox configuration values,
-importing from application settings to maintain a single source of truth.
+This module provides centralized sandbox configuration values.
+Domain constants are re-exported from the domain layer for backwards compatibility.
+Infrastructure-specific constants (ports) are defined here.
 """
 
-from src.configuration.config import get_settings
-
-_settings = get_settings()
-
-# Default sandbox MCP server image - single source of truth from config
-DEFAULT_SANDBOX_IMAGE = _settings.sandbox_default_image
+from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE  # noqa: F401
 
 # WebSocket ports inside container
 MCP_WEBSOCKET_PORT = 8765

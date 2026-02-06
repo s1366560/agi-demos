@@ -1,26 +1,4 @@
-"""
-Skill source enumeration.
+"""Backward compatibility - re-exports from skill subpackage."""
 
-Defines the source of a skill - whether it comes from the file system
-or the database.
-"""
-
-from enum import Enum
-
-
-class SkillSource(str, Enum):
-    """
-    Source of a skill definition.
-
-    Attributes:
-        FILESYSTEM: Skill loaded from .memstack/skills/ or .claude/skills/
-        DATABASE: Skill stored in PostgreSQL database
-        HYBRID: Merged from both sources (file system takes priority)
-    """
-
-    FILESYSTEM = "filesystem"
-    DATABASE = "database"
-    HYBRID = "hybrid"
-
-    def __str__(self) -> str:
-        return self.value
+# ruff: noqa: F403
+from src.domain.model.agent.skill.skill_source import *

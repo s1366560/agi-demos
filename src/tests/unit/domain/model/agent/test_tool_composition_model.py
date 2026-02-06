@@ -21,6 +21,7 @@ class TestToolComposition:
         """Test creating a valid tool composition."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Search and Summarize",
             description="Search memories and summarize results",
             tools=["memory_search", "summary"],
@@ -37,6 +38,7 @@ class TestToolComposition:
         """Test creating composition with default values."""
         composition = ToolComposition(
             id="comp-456",
+            tenant_id="test-tenant",
             name="Simple Composition",
             description="A simple composition",
             tools=["search"],
@@ -54,7 +56,8 @@ class TestToolComposition:
         with pytest.raises(ValueError, match="name cannot be empty"):
             ToolComposition(
                 id="comp-123",
-                name="",
+                tenant_id="test-tenant",
+            name="",
                 description="Description",
                 tools=["tool1"],
             )
@@ -64,7 +67,8 @@ class TestToolComposition:
         with pytest.raises(ValueError, match="tools cannot be empty"):
             ToolComposition(
                 id="comp-123",
-                name="Composition",
+                tenant_id="test-tenant",
+            name="Composition",
                 description="Description",
                 tools=[],
             )
@@ -75,7 +79,8 @@ class TestToolComposition:
         with pytest.raises(ValueError, match="success_count must be non-negative"):
             ToolComposition(
                 id="comp-123",
-                name="Composition",
+                tenant_id="test-tenant",
+            name="Composition",
                 description="Description",
                 tools=["tool1"],
                 success_count=-1,
@@ -85,7 +90,8 @@ class TestToolComposition:
         with pytest.raises(ValueError, match="failure_count must be non-negative"):
             ToolComposition(
                 id="comp-123",
-                name="Composition",
+                tenant_id="test-tenant",
+            name="Composition",
                 description="Description",
                 tools=["tool1"],
                 failure_count=-1,
@@ -95,7 +101,8 @@ class TestToolComposition:
         with pytest.raises(ValueError, match="usage_count must be non-negative"):
             ToolComposition(
                 id="comp-123",
-                name="Composition",
+                tenant_id="test-tenant",
+            name="Composition",
                 description="Description",
                 tools=["tool1"],
                 usage_count=-1,
@@ -105,6 +112,7 @@ class TestToolComposition:
         """Test success rate property calculation."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test Composition",
             description="Test",
             tools=["tool1", "tool2"],
@@ -118,6 +126,7 @@ class TestToolComposition:
         """Test success rate when never executed defaults to 1.0."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test Composition",
             description="Test",
             tools=["tool1"],
@@ -131,6 +140,7 @@ class TestToolComposition:
         """Test getting the primary tool from composition."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Multi Tool",
             description="Test",
             tools=["search", "summarize", "format"],
@@ -143,7 +153,8 @@ class TestToolComposition:
         with pytest.raises(ValueError, match="tools cannot be empty"):
             ToolComposition(
                 id="comp-123",
-                name="Empty",
+                tenant_id="test-tenant",
+            name="Empty",
                 description="Test",
                 tools=[],
             )
@@ -152,6 +163,7 @@ class TestToolComposition:
         """Test checking if composition can execute with all tools available."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["search", "summarize"],
@@ -164,6 +176,7 @@ class TestToolComposition:
         """Test checking if composition can execute with missing tools."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["search", "summarize"],
@@ -176,6 +189,7 @@ class TestToolComposition:
         """Test circular dependency check with unique tools."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Linear",
             description="Test",
             tools=["tool1", "tool2", "tool3"],
@@ -187,6 +201,7 @@ class TestToolComposition:
         """Test circular dependency check with duplicate tools."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Circular",
             description="Test",
             tools=["tool1", "tool2", "tool1"],
@@ -198,6 +213,7 @@ class TestToolComposition:
         """Test recording successful usage."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["tool1"],
@@ -218,6 +234,7 @@ class TestToolComposition:
         """Test recording failed usage."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["tool1"],
@@ -236,6 +253,7 @@ class TestToolComposition:
         """Test getting fallback tools from template."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["tool1"],
@@ -252,6 +270,7 @@ class TestToolComposition:
         """Test getting fallback tools when none defined."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["tool1"],
@@ -265,6 +284,7 @@ class TestToolComposition:
         """Test getting composition type from template."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["tool1"],
@@ -277,6 +297,7 @@ class TestToolComposition:
         """Test getting composition type defaults to sequential."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test",
             tools=["tool1"],
@@ -289,6 +310,7 @@ class TestToolComposition:
         """Test converting composition to dictionary."""
         composition = ToolComposition(
             id="comp-123",
+            tenant_id="test-tenant",
             name="Test",
             description="Test description",
             tools=["tool1", "tool2"],
@@ -314,6 +336,7 @@ class TestToolComposition:
     def test_create_factory_method(self):
         """Test creating composition using factory method."""
         composition = ToolComposition.create(
+            tenant_id="test-tenant",
             name="Search and Summarize",
             description="Search memories and summarize",
             tools=["memory_search", "summary"],
@@ -333,6 +356,7 @@ class TestToolComposition:
         """Test creating composition from dictionary."""
         data = {
             "id": "comp-123",
+            "tenant_id": "test-tenant",
             "name": "Test",
             "description": "Test description",
             "tools": ["tool1", "tool2"],
@@ -358,6 +382,7 @@ class TestToolComposition:
         """Test creating composition from dictionary with missing fields."""
         data = {
             "id": "comp-123",
+            "tenant_id": "test-tenant",
             "name": "Test",
             "description": "Test",
             "tools": ["tool1"],

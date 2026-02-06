@@ -96,8 +96,8 @@ class TestAgentSessionPoolRecovery:
         # Session should not be expired (last used 10 seconds ago, TTL is 1800)
         assert not sample_session.is_expired()
 
-        # Set last_used_at to make session expired
-        sample_session.last_used_at = time.time() - 2000
+        # Set last_used_at to make session expired (beyond 86400s TTL)
+        sample_session.last_used_at = time.time() - 90000
         assert sample_session.is_expired()
 
     def test_session_context_touch_increments_use_count(self, sample_session):

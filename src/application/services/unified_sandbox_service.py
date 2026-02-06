@@ -22,8 +22,11 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
 
-from src.application.services.sandbox_profile import SandboxProfileType
-from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
+from src.application.services.sandbox_profile import (
+    SandboxProfileType,
+    get_profile as get_sandbox_profile,
+)
+from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 from src.domain.model.sandbox.project_sandbox import (
     ProjectSandbox,
     ProjectSandboxStatus,
@@ -41,7 +44,6 @@ from src.domain.ports.services.sandbox_resource_port import (
     SandboxInfo,
     SandboxResourcePort,
 )
-from src.infrastructure.adapters.secondary.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 
 logger = logging.getLogger(__name__)
 

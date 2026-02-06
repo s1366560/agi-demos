@@ -123,17 +123,21 @@ def llm_providers_app(mock_provider_service, admin_user):
     """Create a test FastAPI app with only LLM providers router."""
     from fastapi import FastAPI
 
-    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
     from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+        get_current_user_with_roles,
         get_provider_service_with_session,
         router,
     )
+    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 
     app = FastAPI()
     app.include_router(router)
 
-    # Override dependencies
+    # Override dependencies — must override both get_current_user (used by
+    # list_provider_types, list_models) and get_current_user_with_roles
+    # (used by CRUD endpoints that need role checks)
     app.dependency_overrides[get_current_user] = lambda: admin_user
+    app.dependency_overrides[get_current_user_with_roles] = lambda: admin_user
     app.dependency_overrides[get_provider_service_with_session] = lambda: mock_provider_service
 
     return app
@@ -182,10 +186,12 @@ class TestLLMProvidersRouterCreate:
         self, llm_providers_app, sample_provider_data, regular_user
     ):
         """Test that non-admin users cannot create providers."""
-        from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
 
         # Override to use regular user
-        llm_providers_app.dependency_overrides[get_current_user] = lambda: regular_user
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
 
         response = client.post(
@@ -258,9 +264,9 @@ class TestLLMProvidersRouterList:
         self, llm_providers_app, mock_provider_service, regular_user
     ):
         """Test that non-admin users cannot see inactive providers."""
-        from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
 
-        llm_providers_app.dependency_overrides[get_current_user] = lambda: regular_user
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
 
         mock_provider_service.list_providers.return_value = []
@@ -312,9 +318,9 @@ class TestLLMProvidersRouterGet:
         self, llm_providers_app, mock_provider_service, regular_user
     ):
         """Test that non-admin users cannot see inactive providers."""
-        from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
 
-        llm_providers_app.dependency_overrides[get_current_user] = lambda: regular_user
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
 
         provider_id = str(uuid4())
@@ -378,9 +384,9 @@ class TestLLMProvidersRouterUpdate:
     @pytest.mark.asyncio
     async def test_update_provider_forbidden_for_non_admin(self, llm_providers_app, regular_user):
         """Test that non-admin users cannot update providers."""
-        from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
 
-        llm_providers_app.dependency_overrides[get_current_user] = lambda: regular_user
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
 
         provider_id = str(uuid4())
@@ -423,9 +429,9 @@ class TestLLMProvidersRouterDelete:
     @pytest.mark.asyncio
     async def test_delete_provider_forbidden_for_non_admin(self, llm_providers_app, regular_user):
         """Test that non-admin users cannot delete providers."""
-        from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
 
-        llm_providers_app.dependency_overrides[get_current_user] = lambda: regular_user
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
 
         provider_id = str(uuid4())
@@ -662,9 +668,9 @@ class TestLLMProvidersRouterUsage:
         self, llm_providers_app, mock_provider_service, regular_user
     ):
         """Test that non-admin users only see their tenant's usage."""
-        from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
 
-        llm_providers_app.dependency_overrides[get_current_user] = lambda: regular_user
+        llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
 
         provider_id = str(uuid4())
