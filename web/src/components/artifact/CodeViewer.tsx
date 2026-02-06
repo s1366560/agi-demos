@@ -2,10 +2,10 @@
  * CodeViewer - Display code/data files with syntax highlighting
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 
-import { CopyOutlined, CheckOutlined } from "@ant-design/icons";
-import { Typography, Spin, Alert, Button, Tooltip, message } from "antd";
+import { CopyOutlined, CheckOutlined } from '@ant-design/icons';
+import { Typography, Spin, Alert, Button, Tooltip, message } from 'antd';
 
 const { Text } = Typography;
 
@@ -28,50 +28,50 @@ export interface CodeViewerProps {
 
 // Detect language from filename
 function detectLanguage(filename: string, _mimeType?: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase();
+  const ext = filename.split('.').pop()?.toLowerCase();
 
   const extMap: Record<string, string> = {
-    js: "javascript",
-    mjs: "javascript",
-    ts: "typescript",
-    tsx: "typescript",
-    jsx: "javascript",
-    py: "python",
-    rb: "ruby",
-    java: "java",
-    go: "go",
-    rs: "rust",
-    c: "c",
-    cpp: "cpp",
-    h: "c",
-    hpp: "cpp",
-    cs: "csharp",
-    php: "php",
-    sh: "bash",
-    bash: "bash",
-    zsh: "bash",
-    json: "json",
-    yaml: "yaml",
-    yml: "yaml",
-    xml: "xml",
-    html: "html",
-    htm: "html",
-    css: "css",
-    scss: "scss",
-    less: "less",
-    md: "markdown",
-    sql: "sql",
-    csv: "plaintext",
-    txt: "plaintext",
+    js: 'javascript',
+    mjs: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    jsx: 'javascript',
+    py: 'python',
+    rb: 'ruby',
+    java: 'java',
+    go: 'go',
+    rs: 'rust',
+    c: 'c',
+    cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
+    cs: 'csharp',
+    php: 'php',
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    xml: 'xml',
+    html: 'html',
+    htm: 'html',
+    css: 'css',
+    scss: 'scss',
+    less: 'less',
+    md: 'markdown',
+    sql: 'sql',
+    csv: 'plaintext',
+    txt: 'plaintext',
   };
 
-  return ext ? extMap[ext] || "plaintext" : "plaintext";
+  return ext ? extMap[ext] || 'plaintext' : 'plaintext';
 }
 
 // Format JSON with pretty printing
 function formatContent(content: string, mimeType?: string, filename?: string): string {
   // Try to format JSON
-  if (mimeType?.includes("json") || filename?.endsWith(".json")) {
+  if (mimeType?.includes('json') || filename?.endsWith('.json')) {
     try {
       const parsed = JSON.parse(content);
       return JSON.stringify(parsed, null, 2);
@@ -92,7 +92,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
   onLoad,
   onError,
 }) => {
-  const [content, setContent] = useState<string>("");
+  const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -120,7 +120,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
         }
       } catch (err) {
         if (!cancelled) {
-          const errMsg = err instanceof Error ? err.message : "Failed to load content";
+          const errMsg = err instanceof Error ? err.message : 'Failed to load content';
           setError(errMsg);
           setLoading(false);
           onError?.(errMsg);
@@ -138,7 +138,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
   const handleCopy = async () => {
     await navigator.clipboard.writeText(content);
     setCopied(true);
-    message.success("Copied to clipboard");
+    message.success('Copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -151,18 +151,11 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
   }
 
   if (error) {
-    return (
-      <Alert
-        type="error"
-        message="Failed to load content"
-        description={error}
-        showIcon
-      />
-    );
+    return <Alert type="error" message="Failed to load content" description={error} showIcon />;
   }
 
   // Line count for display
-  const lineCount = content.split("\n").length;
+  const lineCount = content.split('\n').length;
 
   return (
     <div className="code-viewer relative">
@@ -171,7 +164,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
           <Text type="secondary">
             {filename} • {language} • {lineCount} lines
           </Text>
-          <Tooltip title={copied ? "Copied!" : "Copy code"}>
+          <Tooltip title={copied ? 'Copied!' : 'Copy code'}>
             <Button
               type="text"
               size="small"
@@ -184,7 +177,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
       <pre
         className="m-0 p-3 overflow-auto bg-gray-900 text-gray-100 text-sm font-mono"
         style={{
-          maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
+          maxHeight: typeof maxHeight === 'number' ? maxHeight : undefined,
         }}
       >
         <code className={`language-${language}`}>{content}</code>

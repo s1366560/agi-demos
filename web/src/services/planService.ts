@@ -5,7 +5,7 @@
  * managing plan documents during the planning phase.
  */
 
-import { httpClient } from "./client/httpClient";
+import { httpClient } from './client/httpClient';
 
 import type {
   EnterPlanModeRequest,
@@ -13,7 +13,7 @@ import type {
   PlanDocument,
   PlanModeStatus,
   UpdatePlanRequest,
-} from "../types/agent";
+} from '../types/agent';
 
 // Use centralized HTTP client
 const api = httpClient;
@@ -39,14 +39,14 @@ class PlanServiceImpl implements PlanService {
    * Enter Plan Mode for a conversation
    */
   async enterPlanMode(request: EnterPlanModeRequest): Promise<PlanDocument> {
-    return await api.post<PlanDocument>("/agent/plan/enter", request);
+    return await api.post<PlanDocument>('/agent/plan/enter', request);
   }
 
   /**
    * Exit Plan Mode for a conversation
    */
   async exitPlanMode(request: ExitPlanModeRequest): Promise<PlanDocument> {
-    return await api.post<PlanDocument>("/agent/plan/exit", request);
+    return await api.post<PlanDocument>('/agent/plan/exit', request);
   }
 
   /**
@@ -60,18 +60,13 @@ class PlanServiceImpl implements PlanService {
    * Get all plans for a conversation
    */
   async getConversationPlans(conversationId: string): Promise<PlanDocument[]> {
-    return await api.get<PlanDocument[]>(
-      `/agent/conversations/${conversationId}/plans`
-    );
+    return await api.get<PlanDocument[]>(`/agent/conversations/${conversationId}/plans`);
   }
 
   /**
    * Update a plan document
    */
-  async updatePlan(
-    planId: string,
-    request: UpdatePlanRequest
-  ): Promise<PlanDocument> {
+  async updatePlan(planId: string, request: UpdatePlanRequest): Promise<PlanDocument> {
     return await api.put<PlanDocument>(`/agent/plan/${planId}`, request);
   }
 
@@ -79,9 +74,7 @@ class PlanServiceImpl implements PlanService {
    * Get Plan Mode status for a conversation
    */
   async getPlanModeStatus(conversationId: string): Promise<PlanModeStatus> {
-    return await api.get<PlanModeStatus>(
-      `/agent/conversations/${conversationId}/plan-mode`
-    );
+    return await api.get<PlanModeStatus>(`/agent/conversations/${conversationId}/plan-mode`);
   }
 
   /**

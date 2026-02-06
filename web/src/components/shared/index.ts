@@ -11,21 +11,10 @@
  */
 
 // Layout components
-export {
-    AppLayout,
-    ResponsiveLayout,
-    Layout,
-} from './layouts'
+export { AppLayout, ResponsiveLayout, Layout } from './layouts';
 
 // Modal components
-export {
-    DeleteConfirmationModal,
-} from './modals'
+export { DeleteConfirmationModal } from './modals';
 
 // UI components
-export {
-    LanguageSwitcher,
-    NotificationPanel,
-    ThemeToggle,
-    WorkspaceSwitcher,
-} from './ui'
+export { LanguageSwitcher, NotificationPanel, ThemeToggle, WorkspaceSwitcher } from './ui';

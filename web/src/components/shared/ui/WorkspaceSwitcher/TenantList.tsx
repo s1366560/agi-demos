@@ -4,11 +4,11 @@
  * Renders a list of tenant options with create tenant button.
  */
 
-import { useEffect, type KeyboardEvent } from 'react'
+import { useEffect, type KeyboardEvent } from 'react';
 
-import { useWorkspaceContext } from './WorkspaceContext'
+import { useWorkspaceContext } from './WorkspaceContext';
 
-import type { TenantListProps } from './types'
+import type { TenantListProps } from './types';
 
 export const TenantList: React.FC<TenantListProps> = ({
   tenants,
@@ -17,71 +17,66 @@ export const TenantList: React.FC<TenantListProps> = ({
   onCreateTenant,
   createLabel = 'Create Tenant',
 }) => {
-  const {
-    focusedIndex,
-    setFocusedIndex,
-    registerMenuItemRef,
-    getMenuItemRef,
-    setMenuItemsCount,
-  } = useWorkspaceContext()
+  const { focusedIndex, setFocusedIndex, registerMenuItemRef, getMenuItemRef, setMenuItemsCount } =
+    useWorkspaceContext();
 
   // Update menu items count
-  const totalItems = tenants.length + 1 // tenants + create button
+  const totalItems = tenants.length + 1; // tenants + create button
   useEffect(() => {
-    setMenuItemsCount(totalItems)
-  }, [totalItems, setMenuItemsCount])
+    setMenuItemsCount(totalItems);
+  }, [totalItems, setMenuItemsCount]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
     switch (e.key) {
       case 'ArrowDown': {
-        e.preventDefault()
-        const nextIndex = (index + 1) % totalItems
-        setFocusedIndex(nextIndex)
-        getMenuItemRef(nextIndex)?.focus()
-        break
+        e.preventDefault();
+        const nextIndex = (index + 1) % totalItems;
+        setFocusedIndex(nextIndex);
+        getMenuItemRef(nextIndex)?.focus();
+        break;
       }
       case 'ArrowUp': {
-        e.preventDefault()
-        const prevIndex = (index - 1 + totalItems) % totalItems
-        setFocusedIndex(prevIndex)
-        getMenuItemRef(prevIndex)?.focus()
-        break
+        e.preventDefault();
+        const prevIndex = (index - 1 + totalItems) % totalItems;
+        setFocusedIndex(prevIndex);
+        getMenuItemRef(prevIndex)?.focus();
+        break;
       }
       case 'Home': {
-        e.preventDefault()
-        setFocusedIndex(0)
-        getMenuItemRef(0)?.focus()
-        break
+        e.preventDefault();
+        setFocusedIndex(0);
+        getMenuItemRef(0)?.focus();
+        break;
       }
       case 'End': {
-        e.preventDefault()
-        const lastIndex = totalItems - 1
-        setFocusedIndex(lastIndex)
-        getMenuItemRef(lastIndex)?.focus()
-        break
+        e.preventDefault();
+        const lastIndex = totalItems - 1;
+        setFocusedIndex(lastIndex);
+        getMenuItemRef(lastIndex)?.focus();
+        break;
       }
       case 'Escape': {
-        e.preventDefault()
+        e.preventDefault();
         // Close handled by parent
-        break
+        break;
       }
       case 'Enter':
       case ' ': {
-        e.preventDefault()
+        e.preventDefault();
         // Trigger click on the button element to select the tenant
-        const currentButton = getMenuItemRef(index)
+        const currentButton = getMenuItemRef(index);
         if (currentButton) {
-          currentButton.click()
+          currentButton.click();
         }
-        break
+        break;
       }
     }
-  }
+  };
 
   return (
     <>
       {tenants.map((tenant, index) => {
-        const isSelected = currentTenant?.id === tenant.id
+        const isSelected = currentTenant?.id === tenant.id;
 
         return (
           <button
@@ -104,9 +99,11 @@ export const TenantList: React.FC<TenantListProps> = ({
               }`}
             />
             <span className="truncate text-sm font-medium">{tenant.name}</span>
-            {isSelected && <span className="material-symbols-outlined text-[16px] ml-auto">check</span>}
+            {isSelected && (
+              <span className="material-symbols-outlined text-[16px] ml-auto">check</span>
+            )}
           </button>
-        )
+        );
       })}
       <div className="h-px bg-slate-100 dark:bg-slate-700 my-2" />
       <button
@@ -121,5 +118,5 @@ export const TenantList: React.FC<TenantListProps> = ({
         <span className="text-sm font-medium">{createLabel}</span>
       </button>
     </>
-  )
-}
+  );
+};

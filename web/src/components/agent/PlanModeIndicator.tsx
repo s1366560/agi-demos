@@ -5,7 +5,7 @@
  * with quick actions to view the plan or exit Plan Mode.
  */
 
-import React from "react";
+import React from 'react';
 
 import {
   FileTextOutlined,
@@ -13,10 +13,10 @@ import {
   BuildOutlined,
   EyeOutlined,
   CloseOutlined,
-} from "@ant-design/icons";
-import { Button, Tag, Tooltip, Badge } from "antd";
+} from '@ant-design/icons';
+import { Button, Tag, Tooltip, Badge } from 'antd';
 
-import type { AgentMode, PlanModeStatus } from "../../types/agent";
+import type { AgentMode, PlanModeStatus } from '../../types/agent';
 
 interface PlanModeIndicatorProps {
   status: PlanModeStatus | null;
@@ -32,39 +32,39 @@ const modeIcons: Record<AgentMode, React.ReactNode> = {
 };
 
 const modeColors: Record<AgentMode, string> = {
-  build: "success",
-  plan: "processing",
-  explore: "warning",
+  build: 'success',
+  plan: 'processing',
+  explore: 'warning',
 };
 
 const modeBgColors: Record<AgentMode, string> = {
-  build: "bg-emerald-50 border-emerald-200",
-  plan: "bg-blue-50 border-blue-200",
-  explore: "bg-amber-50 border-amber-200",
+  build: 'bg-emerald-50 border-emerald-200',
+  plan: 'bg-blue-50 border-blue-200',
+  explore: 'bg-amber-50 border-amber-200',
 };
 
 const modeTextColors: Record<AgentMode, string> = {
-  build: "text-emerald-700",
-  plan: "text-blue-700",
-  explore: "text-amber-700",
+  build: 'text-emerald-700',
+  plan: 'text-blue-700',
+  explore: 'text-amber-700',
 };
 
 const modeIconColors: Record<AgentMode, string> = {
-  build: "text-emerald-600",
-  plan: "text-blue-600",
-  explore: "text-amber-600",
+  build: 'text-emerald-600',
+  plan: 'text-blue-600',
+  explore: 'text-amber-600',
 };
 
 const modeLabels: Record<AgentMode, string> = {
-  build: "Build",
-  plan: "Plan",
-  explore: "Explore",
+  build: 'Build',
+  plan: 'Plan',
+  explore: 'Explore',
 };
 
 const modeDescriptions: Record<AgentMode, string> = {
-  build: "Full access - read, write, and execute",
-  plan: "Read-only + plan editing - design your approach",
-  explore: "Pure read-only - exploring as SubAgent",
+  build: 'Full access - read, write, and execute',
+  plan: 'Read-only + plan editing - design your approach',
+  explore: 'Pure read-only - exploring as SubAgent',
 };
 
 export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
@@ -94,7 +94,7 @@ export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
     );
   }
 
-  if (!isInPlanMode && currentMode === "build") {
+  if (!isInPlanMode && currentMode === 'build') {
     // Default state, no need to show indicator
     return null;
   }
@@ -115,9 +115,7 @@ export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
             bg-white/80 shadow-sm
           `}
         >
-          <span className={modeIconColors[currentMode]}>
-            {modeIcons[currentMode]}
-          </span>
+          <span className={modeIconColors[currentMode]}>{modeIcons[currentMode]}</span>
         </div>
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -126,9 +124,7 @@ export const PlanModeIndicator: React.FC<PlanModeIndicatorProps> = ({
             </span>
             <Badge status={modeColors[currentMode] as any} size="small" />
           </div>
-          <span className="text-xs text-slate-500">
-            {modeDescriptions[currentMode]}
-          </span>
+          <span className="text-xs text-slate-500">{modeDescriptions[currentMode]}</span>
         </div>
       </div>
 

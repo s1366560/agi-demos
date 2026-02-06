@@ -1,10 +1,9 @@
+import { useParams } from 'react-router-dom';
 
-import { useParams } from 'react-router-dom'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-import { ProjectLayout } from '../../layouts/ProjectLayout'
-import { screen, render, waitFor } from '../utils'
+import { ProjectLayout } from '../../layouts/ProjectLayout';
+import { screen, render, waitFor } from '../utils';
 
 // Mock stores with complete state to prevent useEffect from running async operations
 vi.mock('@/stores/project', () => ({
@@ -14,7 +13,7 @@ vi.mock('@/stores/project', () => ({
     setCurrentProject: vi.fn(),
     getProject: vi.fn().mockResolvedValue({ id: 'p1', name: 'Test Project' }),
   })),
-}))
+}));
 
 vi.mock('@/stores/tenant', () => ({
   useTenantStore: vi.fn(() => ({
@@ -23,14 +22,14 @@ vi.mock('@/stores/tenant', () => ({
     setCurrentTenant: vi.fn(),
     listTenants: vi.fn().mockResolvedValue([]),
   })),
-}))
+}));
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: vi.fn(() => ({
     user: { name: 'Test User', email: 'test@example.com' },
     logout: vi.fn(),
   })),
-}))
+}));
 
 // Mock i18n - must be before component imports
 vi.mock('react-i18next', () => ({
@@ -52,61 +51,61 @@ vi.mock('react-i18next', () => ({
         'nav.settings': 'Settings',
         'nav.support': 'Support',
         'nav.newMemory': 'New Memory',
-      }
-      return translations[key] || key
+      };
+      return translations[key] || key;
     },
   }),
-}))
+}));
 
 vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom')
-    return {
-        ...actual,
-        useParams: vi.fn(() => ({ projectId: 'p1' })),
-    }
-})
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useParams: vi.fn(() => ({ projectId: 'p1' })),
+  };
+});
 
 vi.mock('../../components/shared/ui/WorkspaceSwitcher', () => ({
-    WorkspaceSwitcher: () => <div data-testid="workspace-switcher">MockSwitcher</div>
-}))
+  WorkspaceSwitcher: () => <div data-testid="workspace-switcher">MockSwitcher</div>,
+}));
 vi.mock('../../components/shared/ui/ThemeToggle', () => ({
-    ThemeToggle: () => <div data-testid="theme-toggle">Theme</div>
-}))
+  ThemeToggle: () => <div data-testid="theme-toggle">Theme</div>,
+}));
 vi.mock('../../components/shared/ui/LanguageSwitcher', () => ({
-    LanguageSwitcher: () => <div data-testid="lang-toggle">Lang</div>
-}))
+  LanguageSwitcher: () => <div data-testid="lang-toggle">Lang</div>,
+}));
 
 describe('ProjectLayout', () => {
-    beforeEach(() => {
-        vi.clearAllMocks()
-    })
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    it('renders project navigation items', async () => {
-        render(<ProjectLayout />)
+  it('renders project navigation items', async () => {
+    render(<ProjectLayout />);
 
-        // Wait for any async state updates to complete
-        await waitFor(() => {
-            expect(screen.getByText('Overview')).toBeInTheDocument()
-        })
-        expect(screen.getByText('Memories')).toBeInTheDocument()
-        expect(screen.getByText('Knowledge Graph')).toBeInTheDocument()
-    })
+    // Wait for any async state updates to complete
+    await waitFor(() => {
+      expect(screen.getByText('Overview')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Memories')).toBeInTheDocument();
+    expect(screen.getByText('Knowledge Graph')).toBeInTheDocument();
+  });
 
-    it('renders header components', async () => {
-        render(<ProjectLayout />)
+  it('renders header components', async () => {
+    render(<ProjectLayout />);
 
-        await waitFor(() => {
-            expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
-        })
-        expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
-        expect(screen.getByTestId('workspace-switcher')).toBeInTheDocument()
-    })
+    await waitFor(() => {
+      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('lang-toggle')).toBeInTheDocument();
+    expect(screen.getByTestId('workspace-switcher')).toBeInTheDocument();
+  });
 
-    it('renders New Memory button', async () => {
-        render(<ProjectLayout />)
+  it('renders New Memory button', async () => {
+    render(<ProjectLayout />);
 
-        await waitFor(() => {
-            expect(screen.getByText('New Memory')).toBeInTheDocument()
-        })
-    })
-})
+    await waitFor(() => {
+      expect(screen.getByText('New Memory')).toBeInTheDocument();
+    });
+  });
+});

@@ -5,15 +5,15 @@
  * These tests define the desired API before implementation.
  */
 
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom';
 
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import * as AppHeaderModule from '@/components/layout/AppHeader'
+import * as AppHeaderModule from '@/components/layout/AppHeader';
 
 // Import components after module is created
-const { AppHeader } = AppHeaderModule
+const { AppHeader } = AppHeaderModule;
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
@@ -21,32 +21,32 @@ vi.mock('react-i18next', () => ({
     t: (key: string, defaultValue?: string) => defaultValue || key,
     i18n: { language: 'zh-CN', changeLanguage: vi.fn() },
   }),
-}))
+}));
 
 // Mock dependencies
 vi.mock('@/components/shared/ui/ThemeToggle', () => ({
   ThemeToggle: () => <button data-testid="theme-toggle">Theme</button>,
-}))
+}));
 
 vi.mock('@/components/shared/ui/LanguageSwitcher', () => ({
   LanguageSwitcher: () => <button data-testid="lang-toggle">Lang</button>,
-}))
+}));
 
 vi.mock('@/components/shared/ui/WorkspaceSwitcher', () => ({
   WorkspaceSwitcher: ({ mode }: { mode: string }) => (
     <div data-testid={`workspace-${mode}`}>Workspace {mode}</div>
   ),
-}))
+}));
 
 vi.mock('@/hooks/useBreadcrumbs', () => ({
   useBreadcrumbs: () => [
     { label: 'Home', path: '/tenant' },
     { label: 'Projects', path: '/tenant/projects' },
   ],
-}))
+}));
 
 // Mock auth store
-const mockLogout = vi.fn()
+const mockLogout = vi.fn();
 const mockUser = {
   id: '1',
   email: 'test@example.com',
@@ -57,12 +57,12 @@ const mockUser = {
   profile: {
     avatar_url: null,
   },
-}
+};
 
 vi.mock('@/stores/auth', () => ({
   useUser: vi.fn(() => mockUser),
   useAuthActions: () => ({ logout: mockLogout }),
-}))
+}));
 
 // Mock theme store
 vi.mock('@/stores/theme', () => ({
@@ -71,129 +71,122 @@ vi.mock('@/stores/theme', () => ({
       theme: 'system' as const,
       computedTheme: 'light' as const,
       setTheme: vi.fn(),
-    }
-    return selector ? selector(state) : state
+    };
+    return selector ? selector(state) : state;
   }),
-}))
+}));
 
 function renderWithHeader(node: React.ReactNode) {
-  return render(
-    <MemoryRouter initialEntries={['/tenant']}>
-      {node}
-    </MemoryRouter>
-  )
+  return render(<MemoryRouter initialEntries={['/tenant']}>{node}</MemoryRouter>);
 }
 
 describe('AppHeader (Compound Components)', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+  });
 
   describe('Basic Rendering', () => {
     it('should render header with basePath only', () => {
-      renderWithHeader(<AppHeader basePath="/tenant" />)
+      renderWithHeader(<AppHeader basePath="/tenant" />);
 
-      expect(screen.getByText('Home')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Home')).toBeInTheDocument();
+    });
 
     it('should render header with empty children', () => {
-      renderWithHeader(
-        <AppHeader basePath="/tenant">
-        </AppHeader>
-      )
+      renderWithHeader(<AppHeader basePath="/tenant"></AppHeader>);
 
-      expect(screen.getByText('Home')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Home')).toBeInTheDocument();
+    });
+  });
 
   describe('AppHeader.SidebarToggle', () => {
     it('should render sidebar toggle when child is provided', () => {
-      const onToggle = vi.fn()
+      const onToggle = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={false} onToggle={onToggle} />
         </AppHeader>
-      )
+      );
 
-      const toggleButton = screen.getByLabelText(/Collapse sidebar|Expand sidebar/)
-      expect(toggleButton).toBeInTheDocument()
-    })
+      const toggleButton = screen.getByLabelText(/Collapse sidebar|Expand sidebar/);
+      expect(toggleButton).toBeInTheDocument();
+    });
 
     it('should call onToggle when clicked', () => {
-      const onToggle = vi.fn()
+      const onToggle = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={false} onToggle={onToggle} />
         </AppHeader>
-      )
+      );
 
-      const toggleButton = screen.getByLabelText('Collapse sidebar')
-      fireEvent.click(toggleButton)
-      expect(onToggle).toHaveBeenCalledTimes(1)
-    })
+      const toggleButton = screen.getByLabelText('Collapse sidebar');
+      fireEvent.click(toggleButton);
+      expect(onToggle).toHaveBeenCalledTimes(1);
+    });
 
     it('should show correct icon based on collapsed state', () => {
-      const onToggle = vi.fn()
+      const onToggle = vi.fn();
       const { container: containerExpanded } = renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={false} onToggle={onToggle} />
         </AppHeader>
-      )
+      );
 
       const { container: containerCollapsed } = renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={true} onToggle={onToggle} />
         </AppHeader>
-      )
-    })
+      );
+    });
 
     it('should not render without onToggle callback', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={false} />
         </AppHeader>
-      )
+      );
 
-      expect(screen.queryByLabelText(/Collapse sidebar|Expand sidebar/)).not.toBeInTheDocument()
-    })
-  })
+      expect(screen.queryByLabelText(/Collapse sidebar|Expand sidebar/)).not.toBeInTheDocument();
+    });
+  });
 
   describe('AppHeader.MobileMenu', () => {
     it('should render mobile menu button', () => {
-      const onToggle = vi.fn()
+      const onToggle = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.MobileMenu onToggle={onToggle} />
         </AppHeader>
-      )
+      );
 
-      const menuButton = screen.getByLabelText('Toggle menu')
-      expect(menuButton).toBeInTheDocument()
-    })
+      const menuButton = screen.getByLabelText('Toggle menu');
+      expect(menuButton).toBeInTheDocument();
+    });
 
     it('should call onToggle when clicked', () => {
-      const onToggle = vi.fn()
+      const onToggle = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.MobileMenu onToggle={onToggle} />
         </AppHeader>
-      )
+      );
 
-      const menuButton = screen.getByLabelText('Toggle menu')
-      fireEvent.click(menuButton)
-      expect(onToggle).toHaveBeenCalledTimes(1)
-    })
+      const menuButton = screen.getByLabelText('Toggle menu');
+      fireEvent.click(menuButton);
+      expect(onToggle).toHaveBeenCalledTimes(1);
+    });
 
     it('should not render without onToggle callback', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.MobileMenu />
         </AppHeader>
-      )
+      );
 
-      expect(screen.queryByLabelText('Toggle menu')).not.toBeInTheDocument()
-    })
-  })
+      expect(screen.queryByLabelText('Toggle menu')).not.toBeInTheDocument();
+    });
+  });
 
   describe('AppHeader.Search', () => {
     it('should render search input', () => {
@@ -201,62 +194,62 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.Search />
         </AppHeader>
-      )
+      );
 
-      const searchInput = screen.queryByPlaceholderText('Search...')
-      expect(searchInput).toBeInTheDocument()
-    })
+      const searchInput = screen.queryByPlaceholderText('Search...');
+      expect(searchInput).toBeInTheDocument();
+    });
 
     it('should display search value', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Search value="test search" />
         </AppHeader>
-      )
+      );
 
-      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement
-      expect(searchInput.value).toBe('test search')
-    })
+      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement;
+      expect(searchInput.value).toBe('test search');
+    });
 
     it('should call onChange when typing', () => {
-      const onChange = vi.fn()
+      const onChange = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Search value="" onChange={onChange} />
         </AppHeader>
-      )
+      );
 
-      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement
-      fireEvent.change(searchInput, { target: { value: 'test' } })
-      expect(onChange).toHaveBeenCalledWith('test')
-    })
+      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement;
+      fireEvent.change(searchInput, { target: { value: 'test' } });
+      expect(onChange).toHaveBeenCalledWith('test');
+    });
 
     it('should call onSubmit when Enter key is pressed', () => {
-      const onSubmit = vi.fn()
+      const onSubmit = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Search value="test" onSubmit={onSubmit} />
         </AppHeader>
-      )
+      );
 
-      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement
-      fireEvent.keyDown(searchInput, { key: 'Enter' })
-      expect(onSubmit).toHaveBeenCalledWith('test')
-    })
+      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement;
+      fireEvent.keyDown(searchInput, { key: 'Enter' });
+      expect(onSubmit).toHaveBeenCalledWith('test');
+    });
 
     it('should not call onSubmit for non-Enter keys', () => {
-      const onSubmit = vi.fn()
+      const onSubmit = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Search value="test" onSubmit={onSubmit} />
         </AppHeader>
-      )
+      );
 
-      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement
-      fireEvent.keyDown(searchInput, { key: 'Escape' })
-      expect(onSubmit).not.toHaveBeenCalled()
-    })
-  })
+      const searchInput = screen.queryByPlaceholderText('Search...') as HTMLInputElement;
+      fireEvent.keyDown(searchInput, { key: 'Escape' });
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
 
   describe('AppHeader.Notifications', () => {
     it('should render notifications bell', () => {
@@ -264,47 +257,47 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.Notifications />
         </AppHeader>
-      )
+      );
 
-      const bellButton = screen.queryByLabelText('Notifications')
-      expect(bellButton).toBeInTheDocument()
-    })
+      const bellButton = screen.queryByLabelText('Notifications');
+      expect(bellButton).toBeInTheDocument();
+    });
 
     it('should show badge when count > 0', () => {
       const { container } = renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Notifications count={5} />
         </AppHeader>
-      )
+      );
 
-      const badge = container.querySelector('.bg-red-500')
-      expect(badge).toBeInTheDocument()
-    })
+      const badge = container.querySelector('.bg-red-500');
+      expect(badge).toBeInTheDocument();
+    });
 
     it('should not show badge when count is 0', () => {
       const { container } = renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Notifications count={0} />
         </AppHeader>
-      )
+      );
 
-      const badge = container.querySelector('.bg-red-500')
-      expect(badge).not.toBeInTheDocument()
-    })
+      const badge = container.querySelector('.bg-red-500');
+      expect(badge).not.toBeInTheDocument();
+    });
 
     it('should call onClick when clicked', () => {
-      const onClick = vi.fn()
+      const onClick = vi.fn();
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Notifications onClick={onClick} />
         </AppHeader>
-      )
+      );
 
-      const bellButton = screen.queryByLabelText('Notifications') as HTMLElement
-      fireEvent.click(bellButton)
-      expect(onClick).toHaveBeenCalledTimes(1)
-    })
-  })
+      const bellButton = screen.queryByLabelText('Notifications') as HTMLElement;
+      fireEvent.click(bellButton);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+  });
 
   describe('AppHeader.Tools', () => {
     it('should render children tools', () => {
@@ -314,10 +307,10 @@ describe('AppHeader (Compound Components)', () => {
             <button data-testid="custom-tool">Tool</button>
           </AppHeader.Tools>
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('custom-tool')).toBeInTheDocument()
-    })
+      expect(screen.getByTestId('custom-tool')).toBeInTheDocument();
+    });
 
     it('should render multiple tools', () => {
       renderWithHeader(
@@ -327,20 +320,20 @@ describe('AppHeader (Compound Components)', () => {
             <button data-testid="tool-2">Tool 2</button>
           </AppHeader.Tools>
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('tool-1')).toBeInTheDocument()
-      expect(screen.getByTestId('tool-2')).toBeInTheDocument()
-    })
+      expect(screen.getByTestId('tool-1')).toBeInTheDocument();
+      expect(screen.getByTestId('tool-2')).toBeInTheDocument();
+    });
 
     it('should render empty when no children', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.Tools />
         </AppHeader>
-      )
-    })
-  })
+      );
+    });
+  });
 
   describe('AppHeader.ThemeToggle', () => {
     it('should render theme toggle', () => {
@@ -348,11 +341,11 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.ThemeToggle />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
+    });
+  });
 
   describe('AppHeader.LanguageSwitcher', () => {
     it('should render language switcher', () => {
@@ -360,11 +353,11 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.LanguageSwitcher />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByTestId('lang-toggle')).toBeInTheDocument();
+    });
+  });
 
   describe('AppHeader.WorkspaceSwitcher', () => {
     it('should render workspace switcher with tenant mode', () => {
@@ -372,21 +365,21 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.WorkspaceSwitcher mode="tenant" />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('workspace-tenant')).toBeInTheDocument()
-    })
+      expect(screen.getByTestId('workspace-tenant')).toBeInTheDocument();
+    });
 
     it('should render workspace switcher with project mode', () => {
       renderWithHeader(
         <AppHeader basePath="/project/1">
           <AppHeader.WorkspaceSwitcher mode="project" />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('workspace-project')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByTestId('workspace-project')).toBeInTheDocument();
+    });
+  });
 
   describe('AppHeader.UserMenu', () => {
     it('should render user menu', () => {
@@ -394,60 +387,60 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.UserMenu />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByLabelText('User menu')).toBeInTheDocument()
-      expect(screen.getByText((content) => content.includes('Test User'))).toBeInTheDocument()
-    })
+      expect(screen.getByLabelText('User menu')).toBeInTheDocument();
+      expect(screen.getByText((content) => content.includes('Test User'))).toBeInTheDocument();
+    });
 
     it('should show dropdown when clicked', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.UserMenu />
         </AppHeader>
-      )
+      );
 
-      const userButton = screen.getByLabelText('User menu')
-      fireEvent.click(userButton)
+      const userButton = screen.getByLabelText('User menu');
+      fireEvent.click(userButton);
 
-      expect(screen.getByText('个人资料')).toBeInTheDocument()
-      expect(screen.getByText('设置')).toBeInTheDocument()
-      expect(screen.getByText('登出')).toBeInTheDocument()
-    })
+      expect(screen.getByText('个人资料')).toBeInTheDocument();
+      expect(screen.getByText('设置')).toBeInTheDocument();
+      expect(screen.getByText('登出')).toBeInTheDocument();
+    });
 
     it('should call logout when logout clicked', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.UserMenu />
         </AppHeader>
-      )
+      );
 
-      const userButton = screen.getByLabelText('User menu')
-      fireEvent.click(userButton)
+      const userButton = screen.getByLabelText('User menu');
+      fireEvent.click(userButton);
 
-      const logoutButton = screen.getByText('登出')
-      fireEvent.click(logoutButton)
+      const logoutButton = screen.getByText('登出');
+      fireEvent.click(logoutButton);
 
-      expect(mockLogout).toHaveBeenCalledTimes(1)
-    })
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+    });
 
     it('should use custom profile and settings paths', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.UserMenu profilePath="/custom-profile" settingsPath="/custom-settings" />
         </AppHeader>
-      )
+      );
 
-      const userButton = screen.getByLabelText('User menu')
-      fireEvent.click(userButton)
+      const userButton = screen.getByLabelText('User menu');
+      fireEvent.click(userButton);
 
-      const profileLink = screen.getByText('个人资料').closest('a')
-      const settingsLink = screen.getByText('设置').closest('a')
+      const profileLink = screen.getByText('个人资料').closest('a');
+      const settingsLink = screen.getByText('设置').closest('a');
 
-      expect(profileLink?.getAttribute('href')).toBe('/custom-profile')
-      expect(settingsLink?.getAttribute('href')).toBe('/custom-settings')
-    })
-  })
+      expect(profileLink?.getAttribute('href')).toBe('/custom-profile');
+      expect(settingsLink?.getAttribute('href')).toBe('/custom-settings');
+    });
+  });
 
   describe('AppHeader.PrimaryAction', () => {
     it('should render primary action button', () => {
@@ -455,37 +448,41 @@ describe('AppHeader (Compound Components)', () => {
         <AppHeader basePath="/tenant">
           <AppHeader.PrimaryAction label="Create" to="/create" />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByText('Create')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Create')).toBeInTheDocument();
+    });
 
     it('should render primary action with icon', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
-          <AppHeader.PrimaryAction label="Create" to="/create" icon={<span data-testid="icon">+</span>} />
+          <AppHeader.PrimaryAction
+            label="Create"
+            to="/create"
+            icon={<span data-testid="icon">+</span>}
+          />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('icon')).toBeInTheDocument()
-      expect(screen.getByText('Create')).toBeInTheDocument()
-    })
+      expect(screen.getByTestId('icon')).toBeInTheDocument();
+      expect(screen.getByText('Create')).toBeInTheDocument();
+    });
 
     it('should translate label if it contains dot', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.PrimaryAction label="nav.newMemory" to="/new" />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByText('nav.newMemory')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('nav.newMemory')).toBeInTheDocument();
+    });
+  });
 
   describe('Compound Integration', () => {
     it('should render full header with all components', () => {
-      const onToggle = vi.fn()
-      const onSearch = vi.fn()
+      const onToggle = vi.fn();
+      const onSearch = vi.fn();
 
       renderWithHeader(
         <AppHeader basePath="/tenant">
@@ -499,16 +496,16 @@ describe('AppHeader (Compound Components)', () => {
           <AppHeader.WorkspaceSwitcher mode="tenant" />
           <AppHeader.UserMenu />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByLabelText('Collapse sidebar')).toBeInTheDocument()
-      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
-      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
-      expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
-      expect(screen.getByTestId('workspace-tenant')).toBeInTheDocument()
-      expect(screen.getByLabelText('User menu')).toBeInTheDocument()
-      expect(screen.getByLabelText('Notifications')).toBeInTheDocument()
-    })
+      expect(screen.getByLabelText('Collapse sidebar')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
+      expect(screen.getByTestId('lang-toggle')).toBeInTheDocument();
+      expect(screen.getByTestId('workspace-tenant')).toBeInTheDocument();
+      expect(screen.getByLabelText('User menu')).toBeInTheDocument();
+      expect(screen.getByLabelText('Notifications')).toBeInTheDocument();
+    });
 
     it('should render custom components', () => {
       renderWithHeader(
@@ -519,102 +516,97 @@ describe('AppHeader (Compound Components)', () => {
           </AppHeader.Tools>
           <AppHeader.UserMenu />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByTestId('custom-tool')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByTestId('custom-tool')).toBeInTheDocument();
+    });
+  });
 
   describe('variant prop', () => {
     it('should render "full" variant with all default components', () => {
-      renderWithHeader(<AppHeader basePath="/tenant" variant="full" />)
+      renderWithHeader(<AppHeader basePath="/tenant" variant="full" />);
 
       // Full variant should include search, theme toggle, language switcher, notifications, workspace, user menu
-      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
-      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument()
-      expect(screen.getByTestId('lang-toggle')).toBeInTheDocument()
-      expect(screen.getByLabelText('Notifications')).toBeInTheDocument()
-      expect(screen.getByTestId('workspace-tenant')).toBeInTheDocument()
-      expect(screen.getByLabelText('User menu')).toBeInTheDocument()
-    })
+      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
+      expect(screen.getByTestId('lang-toggle')).toBeInTheDocument();
+      expect(screen.getByLabelText('Notifications')).toBeInTheDocument();
+      expect(screen.getByTestId('workspace-tenant')).toBeInTheDocument();
+      expect(screen.getByLabelText('User menu')).toBeInTheDocument();
+    });
 
     it('should render "minimal" variant with only breadcrumbs', () => {
-      renderWithHeader(<AppHeader basePath="/tenant" variant="minimal" />)
+      renderWithHeader(<AppHeader basePath="/tenant" variant="minimal" />);
 
-      expect(screen.getByText('Home')).toBeInTheDocument()
-      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument()
-    })
+      expect(screen.getByText('Home')).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+    });
 
     it('should allow overriding variant defaults with children', () => {
       renderWithHeader(
         <AppHeader basePath="/tenant" variant="minimal">
           <AppHeader.Search />
         </AppHeader>
-      )
+      );
 
-      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    });
+  });
 
   describe('Breadcrumbs', () => {
     it('should use custom breadcrumbs when provided', () => {
       renderWithHeader(
-        <AppHeader
-          basePath="/tenant"
-          breadcrumbs={[{ label: 'Custom', path: '/custom' }]}
-        />
-      )
+        <AppHeader basePath="/tenant" breadcrumbs={[{ label: 'Custom', path: '/custom' }]} />
+      );
 
-      expect(screen.getByText('Custom')).toBeInTheDocument()
-      expect(screen.queryByText('Home')).not.toBeInTheDocument()
-    })
+      expect(screen.getByText('Custom')).toBeInTheDocument();
+      expect(screen.queryByText('Home')).not.toBeInTheDocument();
+    });
 
     it('should use breadcrumb options', () => {
-      renderWithHeader(
-        <AppHeader basePath="/tenant" breadcrumbOptions={{ skipFirst: true }} />
-      )
-    })
-  })
+      renderWithHeader(<AppHeader basePath="/tenant" breadcrumbOptions={{ skipFirst: true }} />);
+    });
+  });
 
   describe('Context', () => {
     it('should pass context to useBreadcrumbs hook', () => {
-      renderWithHeader(<AppHeader basePath="/project/1" context="project" />)
+      renderWithHeader(<AppHeader basePath="/project/1" context="project" />);
 
-      expect(screen.getByText('Home')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Home')).toBeInTheDocument();
+    });
+  });
 
   describe('Styling', () => {
     it('should have correct header classes', () => {
-      const { container } = renderWithHeader(<AppHeader basePath="/tenant" />)
-      const header = container.querySelector('header')
+      const { container } = renderWithHeader(<AppHeader basePath="/tenant" />);
+      const header = container.querySelector('header');
 
-      expect(header).toHaveClass('h-16')
-      expect(header).toHaveClass('flex')
-      expect(header).toHaveClass('items-center')
-    })
+      expect(header).toHaveClass('h-16');
+      expect(header).toHaveClass('flex');
+      expect(header).toHaveClass('items-center');
+    });
 
     it('should render with border bottom', () => {
-      const { container } = renderWithHeader(<AppHeader basePath="/tenant" />)
-      const header = container.querySelector('header')
+      const { container } = renderWithHeader(<AppHeader basePath="/tenant" />);
+      const header = container.querySelector('header');
 
-      expect(header?.className).toContain('border-b')
-    })
-  })
+      expect(header?.className).toContain('border-b');
+    });
+  });
 
   describe('TypeScript Types', () => {
     // Note: Type exports are verified by TypeScript compiler, not runtime tests
     // These tests are skipped as types are erased during compilation
     it.skip('should export Breadcrumb type', () => {
-      expect(AppHeaderModule.Breadcrumb).toBeDefined()
-    })
+      expect(AppHeaderModule.Breadcrumb).toBeDefined();
+    });
 
     it.skip('should export AppHeaderProps type', () => {
-      expect(AppHeaderModule.AppHeaderProps).toBeDefined()
-    })
+      expect(AppHeaderModule.AppHeaderProps).toBeDefined();
+    });
 
     it.skip('should export CompoundComponentProps type', () => {
-      expect(AppHeaderModule.CompoundComponentProps).toBeDefined()
-    })
-  })
-})
+      expect(AppHeaderModule.CompoundComponentProps).toBeDefined();
+    });
+  });
+});

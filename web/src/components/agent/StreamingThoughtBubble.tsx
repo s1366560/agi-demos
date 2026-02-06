@@ -22,13 +22,24 @@ export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
           <div className="bg-slate-50 dark:bg-surface-dark/50 border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="material-symbols-outlined text-sm text-primary">chevron_right</span>
-              <span className="font-semibold uppercase text-[10px] text-primary">Reasoning Log</span>
+              <span className="font-semibold uppercase text-[10px] text-primary">
+                Reasoning Log
+              </span>
               <span className="text-xs text-slate-600 dark:text-slate-300">Thinking...</span>
               {isStreaming && (
                 <span className="flex gap-0.5 ml-2">
-                  <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1 h-1 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span
+                    className="w-1 h-1 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  />
+                  <span
+                    className="w-1 h-1 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  />
+                  <span
+                    className="w-1 h-1 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  />
                 </span>
               )}
             </div>
@@ -41,7 +52,9 @@ export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
     );
   },
   (prevProps, nextProps) => {
-    return prevProps.content === nextProps.content && prevProps.isStreaming === nextProps.isStreaming;
+    return (
+      prevProps.content === nextProps.content && prevProps.isStreaming === nextProps.isStreaming
+    );
   }
 );
 

@@ -25,7 +25,7 @@
  * ```
  */
 
-import { useState, useCallback, Children } from "react";
+import { useState, useCallback, Children } from 'react';
 
 import {
   FileImageOutlined,
@@ -39,14 +39,14 @@ import {
   DownloadOutlined,
   ExpandOutlined,
   LoadingOutlined,
-} from "@ant-design/icons";
-import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from "antd";
+} from '@ant-design/icons';
+import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from 'antd';
 
-import { AudioPlayer } from "./AudioPlayer";
-import { CodeViewer } from "./CodeViewer";
-import { FileDownloader } from "./FileDownloader";
-import { ImageViewer } from "./ImageViewer";
-import { VideoPlayer } from "./VideoPlayer";
+import { AudioPlayer } from './AudioPlayer';
+import { CodeViewer } from './CodeViewer';
+import { FileDownloader } from './FileDownloader';
+import { ImageViewer } from './ImageViewer';
+import { VideoPlayer } from './VideoPlayer';
 
 import type {
   ArtifactRendererRootProps,
@@ -61,8 +61,8 @@ import type {
   ArtifactMetaProps,
   ArtifactHeaderProps,
   ArtifactActionsProps,
-} from "./types";
-import type { Artifact, ArtifactCategory } from "../../types/agent";
+} from './types';
+import type { Artifact, ArtifactCategory } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -70,17 +70,17 @@ const { Text } = Typography;
 // Marker Symbols for Sub-Components
 // ========================================
 
-const IMAGE_SYMBOL = Symbol("ArtifactRendererImage");
-const VIDEO_SYMBOL = Symbol("ArtifactRendererVideo");
-const AUDIO_SYMBOL = Symbol("ArtifactRendererAudio");
-const CODE_SYMBOL = Symbol("ArtifactRendererCode");
-const DOCUMENT_SYMBOL = Symbol("ArtifactRendererDocument");
-const DOWNLOAD_SYMBOL = Symbol("ArtifactRendererDownload");
-const LOADING_SYMBOL = Symbol("ArtifactRendererLoading");
-const ERROR_SYMBOL = Symbol("ArtifactRendererError");
-const META_SYMBOL = Symbol("ArtifactRendererMeta");
-const HEADER_SYMBOL = Symbol("ArtifactRendererHeader");
-const ACTIONS_SYMBOL = Symbol("ArtifactRendererActions");
+const IMAGE_SYMBOL = Symbol('ArtifactRendererImage');
+const VIDEO_SYMBOL = Symbol('ArtifactRendererVideo');
+const AUDIO_SYMBOL = Symbol('ArtifactRendererAudio');
+const CODE_SYMBOL = Symbol('ArtifactRendererCode');
+const DOCUMENT_SYMBOL = Symbol('ArtifactRendererDocument');
+const DOWNLOAD_SYMBOL = Symbol('ArtifactRendererDownload');
+const LOADING_SYMBOL = Symbol('ArtifactRendererLoading');
+const ERROR_SYMBOL = Symbol('ArtifactRendererError');
+const META_SYMBOL = Symbol('ArtifactRendererMeta');
+const HEADER_SYMBOL = Symbol('ArtifactRendererHeader');
+const ACTIONS_SYMBOL = Symbol('ArtifactRendererActions');
 
 // ========================================
 // Category Icons and Colors
@@ -98,14 +98,14 @@ const CATEGORY_ICONS: Record<ArtifactCategory, React.ReactNode> = {
 };
 
 const CATEGORY_COLORS: Record<ArtifactCategory, string> = {
-  image: "blue",
-  video: "purple",
-  audio: "cyan",
-  document: "orange",
-  code: "green",
-  data: "gold",
-  archive: "magenta",
-  other: "default",
+  image: 'blue',
+  video: 'purple',
+  audio: 'cyan',
+  document: 'orange',
+  code: 'green',
+  data: 'gold',
+  archive: 'magenta',
+  other: 'default',
 };
 
 // ========================================
@@ -179,17 +179,17 @@ ArtifactRenderer.Actions = function ArtifactRendererActionsMarker(_props: Artifa
 (ArtifactRenderer.Actions as any)[ACTIONS_SYMBOL] = true;
 
 // Set display names for testing
-(ArtifactRenderer.Image as any).displayName = "ArtifactRendererImage";
-(ArtifactRenderer.Video as any).displayName = "ArtifactRendererVideo";
-(ArtifactRenderer.Audio as any).displayName = "ArtifactRendererAudio";
-(ArtifactRenderer.Code as any).displayName = "ArtifactRendererCode";
-(ArtifactRenderer.Document as any).displayName = "ArtifactRendererDocument";
-(ArtifactRenderer.Download as any).displayName = "ArtifactRendererDownload";
-(ArtifactRenderer.Loading as any).displayName = "ArtifactRendererLoading";
-(ArtifactRenderer.Error as any).displayName = "ArtifactRendererError";
-(ArtifactRenderer.Meta as any).displayName = "ArtifactRendererMeta";
-(ArtifactRenderer.Header as any).displayName = "ArtifactRendererHeader";
-(ArtifactRenderer.Actions as any).displayName = "ArtifactRendererActions";
+(ArtifactRenderer.Image as any).displayName = 'ArtifactRendererImage';
+(ArtifactRenderer.Video as any).displayName = 'ArtifactRendererVideo';
+(ArtifactRenderer.Audio as any).displayName = 'ArtifactRendererAudio';
+(ArtifactRenderer.Code as any).displayName = 'ArtifactRendererCode';
+(ArtifactRenderer.Document as any).displayName = 'ArtifactRendererDocument';
+(ArtifactRenderer.Download as any).displayName = 'ArtifactRendererDownload';
+(ArtifactRenderer.Loading as any).displayName = 'ArtifactRendererLoading';
+(ArtifactRenderer.Error as any).displayName = 'ArtifactRendererError';
+(ArtifactRenderer.Meta as any).displayName = 'ArtifactRendererMeta';
+(ArtifactRenderer.Header as any).displayName = 'ArtifactRendererHeader';
+(ArtifactRenderer.Actions as any).displayName = 'ArtifactRendererActions';
 
 // ========================================
 // Content Renderers
@@ -206,13 +206,13 @@ interface ContentRendererProps {
 function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
   return (
     <ImageViewer
-      src={artifact.url || ""}
+      src={artifact.url || ''}
       alt={artifact.filename}
       previewSrc={artifact.previewUrl}
       maxHeight={maxHeight}
       compact={compact}
       onLoad={onLoad}
-      onError={() => onError("Failed to load image")}
+      onError={() => onError('Failed to load image')}
     />
   );
 }
@@ -220,12 +220,12 @@ function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: Content
 function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
   return (
     <VideoPlayer
-      src={artifact.url || ""}
+      src={artifact.url || ''}
       mimeType={artifact.mimeType}
       maxHeight={maxHeight}
       compact={compact}
       onLoad={onLoad}
-      onError={() => onError("Failed to load video")}
+      onError={() => onError('Failed to load video')}
     />
   );
 }
@@ -233,11 +233,11 @@ function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: Content
 function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererProps) {
   return (
     <AudioPlayer
-      src={artifact.url || ""}
+      src={artifact.url || ''}
       filename={artifact.filename}
       compact={compact}
       onLoad={onLoad}
-      onError={() => onError("Failed to load audio")}
+      onError={() => onError('Failed to load audio')}
     />
   );
 }
@@ -245,7 +245,7 @@ function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererPro
 function CodeContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
   return (
     <CodeViewer
-      url={artifact.url || ""}
+      url={artifact.url || ''}
       filename={artifact.filename}
       mimeType={artifact.mimeType}
       maxHeight={maxHeight}
@@ -258,18 +258,18 @@ function CodeContent({ artifact, maxHeight, compact, onLoad, onError }: ContentR
 
 function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
   // For PDFs, try to embed
-  if (artifact.mimeType === "application/pdf") {
+  if (artifact.mimeType === 'application/pdf') {
     return (
       <iframe
-        src={artifact.url || ""}
+        src={artifact.url || ''}
         style={{
-          width: "100%",
-          height: typeof onError === "number" ? onError : 400,
-          border: "none",
+          width: '100%',
+          height: typeof onError === 'number' ? onError : 400,
+          border: 'none',
         }}
         title={artifact.filename}
         onLoad={onLoad}
-        onError={() => onError("Failed to load PDF")}
+        onError={() => onError('Failed to load PDF')}
       />
     );
   }
@@ -277,7 +277,7 @@ function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
   onLoad();
   return (
     <FileDownloader
-      url={artifact.url || ""}
+      url={artifact.url || ''}
       filename={artifact.filename}
       mimeType={artifact.mimeType}
       sizeBytes={artifact.sizeBytes}
@@ -289,7 +289,7 @@ function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
 function DownloadContent({ artifact }: ContentRendererProps) {
   return (
     <FileDownloader
-      url={artifact.url || ""}
+      url={artifact.url || ''}
       filename={artifact.filename}
       mimeType={artifact.mimeType}
       sizeBytes={artifact.sizeBytes}
@@ -304,7 +304,7 @@ function LoadingContent({ artifact }: { artifact: Artifact }) {
       <Space orientation="vertical">
         <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
         <Text type="secondary">
-          {artifact.status === "pending" ? "Preparing..." : "Uploading..."}
+          {artifact.status === 'pending' ? 'Preparing...' : 'Uploading...'}
         </Text>
       </Space>
     </div>
@@ -352,7 +352,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
   const {
     artifact,
     compact = false,
-    maxWidth = "100%",
+    maxWidth = '100%',
     maxHeight = 400,
     onExpand,
     showMeta = true,
@@ -376,45 +376,31 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
 
   // Parse children to detect sub-components
   const childrenArray = Children.toArray(children);
-  const imageChild = childrenArray.find(
-    (child: any) => child?.type?.[IMAGE_SYMBOL]
-  ) as any;
-  const videoChild = childrenArray.find(
-    (child: any) => child?.type?.[VIDEO_SYMBOL]
-  ) as any;
-  const audioChild = childrenArray.find(
-    (child: any) => child?.type?.[AUDIO_SYMBOL]
-  ) as any;
-  const codeChild = childrenArray.find(
-    (child: any) => child?.type?.[CODE_SYMBOL]
-  ) as any;
-  const documentChild = childrenArray.find(
-    (child: any) => child?.type?.[DOCUMENT_SYMBOL]
-  ) as any;
-  const downloadChild = childrenArray.find(
-    (child: any) => child?.type?.[DOWNLOAD_SYMBOL]
-  ) as any;
-  const loadingChild = childrenArray.find(
-    (child: any) => child?.type?.[LOADING_SYMBOL]
-  ) as any;
-  const errorChild = childrenArray.find(
-    (child: any) => child?.type?.[ERROR_SYMBOL]
-  ) as any;
-  const metaChild = childrenArray.find(
-    (child: any) => child?.type?.[META_SYMBOL]
-  ) as any;
-  const headerChild = childrenArray.find(
-    (child: any) => child?.type?.[HEADER_SYMBOL]
-  ) as any;
-  const actionsChild = childrenArray.find(
-    (child: any) => child?.type?.[ACTIONS_SYMBOL]
-  ) as any;
+  const imageChild = childrenArray.find((child: any) => child?.type?.[IMAGE_SYMBOL]) as any;
+  const videoChild = childrenArray.find((child: any) => child?.type?.[VIDEO_SYMBOL]) as any;
+  const audioChild = childrenArray.find((child: any) => child?.type?.[AUDIO_SYMBOL]) as any;
+  const codeChild = childrenArray.find((child: any) => child?.type?.[CODE_SYMBOL]) as any;
+  const documentChild = childrenArray.find((child: any) => child?.type?.[DOCUMENT_SYMBOL]) as any;
+  const downloadChild = childrenArray.find((child: any) => child?.type?.[DOWNLOAD_SYMBOL]) as any;
+  const loadingChild = childrenArray.find((child: any) => child?.type?.[LOADING_SYMBOL]) as any;
+  const errorChild = childrenArray.find((child: any) => child?.type?.[ERROR_SYMBOL]) as any;
+  const metaChild = childrenArray.find((child: any) => child?.type?.[META_SYMBOL]) as any;
+  const headerChild = childrenArray.find((child: any) => child?.type?.[HEADER_SYMBOL]) as any;
+  const actionsChild = childrenArray.find((child: any) => child?.type?.[ACTIONS_SYMBOL]) as any;
 
   // Determine if using compound mode
   const hasSubComponents =
-    imageChild || videoChild || audioChild || codeChild ||
-    documentChild || downloadChild || loadingChild || errorChild ||
-    metaChild || headerChild || actionsChild;
+    imageChild ||
+    videoChild ||
+    audioChild ||
+    codeChild ||
+    documentChild ||
+    downloadChild ||
+    loadingChild ||
+    errorChild ||
+    metaChild ||
+    headerChild ||
+    actionsChild;
 
   // In legacy mode, include default renderers
   const includeDefaultRenderer = !hasSubComponents;
@@ -422,17 +408,17 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
   // Render content based on artifact category
   const renderArtifactContent = () => {
     // Pending/uploading state
-    if (artifact.status === "pending" || artifact.status === "uploading") {
+    if (artifact.status === 'pending' || artifact.status === 'uploading') {
       return <LoadingContent artifact={artifact} />;
     }
 
     // Error state
-    if (artifact.status === "error" || error) {
+    if (artifact.status === 'error' || error) {
       return <ErrorContent artifact={artifact} error={error} />;
     }
 
     // Deleted state
-    if (artifact.status === "deleted") {
+    if (artifact.status === 'deleted') {
       return <DeletedContent />;
     }
 
@@ -443,7 +429,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
 
     // Route to appropriate viewer based on category
     switch (artifact.category) {
-      case "image":
+      case 'image':
         return imageChild || includeDefaultRenderer ? (
           <ImageContent
             artifact={artifact}
@@ -454,7 +440,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
           />
         ) : null;
 
-      case "video":
+      case 'video':
         return videoChild || includeDefaultRenderer ? (
           <VideoContent
             artifact={artifact}
@@ -465,7 +451,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
           />
         ) : null;
 
-      case "audio":
+      case 'audio':
         return audioChild || includeDefaultRenderer ? (
           <AudioContent
             artifact={artifact}
@@ -476,8 +462,8 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
           />
         ) : null;
 
-      case "code":
-      case "data":
+      case 'code':
+      case 'data':
         return codeChild || includeDefaultRenderer ? (
           <CodeContent
             artifact={artifact}
@@ -488,7 +474,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
           />
         ) : null;
 
-      case "document":
+      case 'document':
         return documentChild || includeDefaultRenderer ? (
           <DocumentContent
             artifact={artifact}
@@ -499,8 +485,8 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
           />
         ) : null;
 
-      case "archive":
-      case "other":
+      case 'archive':
+      case 'other':
       default:
         return downloadChild || includeDefaultRenderer ? (
           <DownloadContent
@@ -518,7 +504,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
   if (compact) {
     return (
       <div
-        className={`artifact-renderer artifact-renderer--compact ${className || ""}`}
+        className={`artifact-renderer artifact-renderer--compact ${className || ''}`}
         style={{ maxWidth }}
       >
         {renderArtifactContent()}
@@ -535,7 +521,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
 
   return (
     <Card
-      className={`artifact-renderer ${className || ""}`}
+      className={`artifact-renderer ${className || ''}`}
       style={{ maxWidth }}
       size="small"
       title={
@@ -545,9 +531,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
             <Text ellipsis style={{ maxWidth: 200 }}>
               {artifact.filename}
             </Text>
-            <Tag color={CATEGORY_COLORS[artifact.category]}>
-              {artifact.category}
-            </Tag>
+            <Tag color={CATEGORY_COLORS[artifact.category]}>{artifact.category}</Tag>
           </Space>
         )
       }
@@ -585,8 +569,8 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
         )
       }
     >
-      <div style={{ maxHeight, overflow: "auto" }}>
-        {loading && artifact.status === "ready" && !error && (
+      <div style={{ maxHeight, overflow: 'auto' }}>
+        {loading && artifact.status === 'ready' && !error && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
             <Spin />
           </div>
@@ -598,7 +582,8 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
           Generated by <code>{artifact.sourceTool}</code>
           {artifact.sourcePath && (
             <>
-              {" "}from <code>{artifact.sourcePath}</code>
+              {' '}
+              from <code>{artifact.sourcePath}</code>
             </>
           )}
         </div>
@@ -611,6 +596,6 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
 ArtifactRenderer.Root = ArtifactRenderer;
 
 // Set display name
-ArtifactRenderer.displayName = "ArtifactRenderer";
+ArtifactRenderer.displayName = 'ArtifactRenderer';
 
 export default ArtifactRenderer;

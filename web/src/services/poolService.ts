@@ -13,9 +13,9 @@
  * @packageDocumentation
  */
 
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 
-import { httpClient } from "./client/httpClient";
+import { httpClient } from './client/httpClient';
 
 // ============================================================================
 // Types
@@ -24,27 +24,27 @@ import { httpClient } from "./client/httpClient";
 /**
  * 项目分级
  */
-export type ProjectTier = "hot" | "warm" | "cold";
+export type ProjectTier = 'hot' | 'warm' | 'cold';
 
 /**
  * 实例状态
  */
 export type InstanceStatus =
-  | "created"
-  | "initializing"
-  | "initialization_failed"
-  | "ready"
-  | "executing"
-  | "paused"
-  | "unhealthy"
-  | "degraded"
-  | "terminating"
-  | "terminated";
+  | 'created'
+  | 'initializing'
+  | 'initialization_failed'
+  | 'ready'
+  | 'executing'
+  | 'paused'
+  | 'unhealthy'
+  | 'degraded'
+  | 'terminating'
+  | 'terminated';
 
 /**
  * 健康状态
  */
-export type HealthStatus = "healthy" | "degraded" | "unhealthy" | "unknown";
+export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
 /**
  * 池状态响应
@@ -167,7 +167,7 @@ export interface ListInstancesParams {
 // ============================================================================
 
 // Note: httpClient already has baseURL '/api/v1', so we only need the relative path
-const BASE_PATH = "/admin/pool";
+const BASE_PATH = '/admin/pool';
 
 /**
  * Agent Pool管理服务
@@ -181,7 +181,7 @@ export const poolService = {
       const response = await httpClient.get<PoolStatus>(`${BASE_PATH}/status`);
       return response;
     } catch (error) {
-      logger.error("[PoolService] Failed to get pool status:", error);
+      logger.error('[PoolService] Failed to get pool status:', error);
       throw error;
     }
   },
@@ -189,17 +189,14 @@ export const poolService = {
   /**
    * 列出所有实例
    */
-  listInstances: async (
-    params?: ListInstancesParams
-  ): Promise<InstanceListResponse> => {
+  listInstances: async (params?: ListInstancesParams): Promise<InstanceListResponse> => {
     try {
-      const response = await httpClient.get<InstanceListResponse>(
-        `${BASE_PATH}/instances`,
-        { params }
-      );
+      const response = await httpClient.get<InstanceListResponse>(`${BASE_PATH}/instances`, {
+        params,
+      });
       return response;
     } catch (error) {
-      logger.error("[PoolService] Failed to list instances:", error);
+      logger.error('[PoolService] Failed to list instances:', error);
       throw error;
     }
   },
@@ -214,10 +211,7 @@ export const poolService = {
       );
       return response;
     } catch (error) {
-      logger.error(
-        `[PoolService] Failed to get instance ${instanceKey}:`,
-        error
-      );
+      logger.error(`[PoolService] Failed to get instance ${instanceKey}:`, error);
       throw error;
     }
   },
@@ -232,10 +226,7 @@ export const poolService = {
       );
       return response;
     } catch (error) {
-      logger.error(
-        `[PoolService] Failed to pause instance ${instanceKey}:`,
-        error
-      );
+      logger.error(`[PoolService] Failed to pause instance ${instanceKey}:`, error);
       throw error;
     }
   },
@@ -250,10 +241,7 @@ export const poolService = {
       );
       return response;
     } catch (error) {
-      logger.error(
-        `[PoolService] Failed to resume instance ${instanceKey}:`,
-        error
-      );
+      logger.error(`[PoolService] Failed to resume instance ${instanceKey}:`, error);
       throw error;
     }
   },
@@ -272,10 +260,7 @@ export const poolService = {
       );
       return response;
     } catch (error) {
-      logger.error(
-        `[PoolService] Failed to terminate instance ${instanceKey}:`,
-        error
-      );
+      logger.error(`[PoolService] Failed to terminate instance ${instanceKey}:`, error);
       throw error;
     }
   },
@@ -288,16 +273,14 @@ export const poolService = {
     tenantId: string
   ): Promise<{ project_id: string; tenant_id: string; tier: ProjectTier }> => {
     try {
-      const response = await httpClient.get<{ project_id: string; tenant_id: string; tier: ProjectTier }>(
-        `${BASE_PATH}/projects/${projectId}/tier`,
-        { params: { tenant_id: tenantId } }
-      );
+      const response = await httpClient.get<{
+        project_id: string;
+        tenant_id: string;
+        tier: ProjectTier;
+      }>(`${BASE_PATH}/projects/${projectId}/tier`, { params: { tenant_id: tenantId } });
       return response;
     } catch (error) {
-      logger.error(
-        `[PoolService] Failed to get tier for project ${projectId}:`,
-        error
-      );
+      logger.error(`[PoolService] Failed to get tier for project ${projectId}:`, error);
       throw error;
     }
   },
@@ -318,10 +301,7 @@ export const poolService = {
       );
       return response;
     } catch (error) {
-      logger.error(
-        `[PoolService] Failed to set tier for project ${projectId}:`,
-        error
-      );
+      logger.error(`[PoolService] Failed to set tier for project ${projectId}:`, error);
       throw error;
     }
   },
@@ -331,12 +311,10 @@ export const poolService = {
    */
   getMetrics: async (): Promise<MetricsResponse> => {
     try {
-      const response = await httpClient.get<MetricsResponse>(
-        `${BASE_PATH}/metrics`
-      );
+      const response = await httpClient.get<MetricsResponse>(`${BASE_PATH}/metrics`);
       return response;
     } catch (error) {
-      logger.error("[PoolService] Failed to get metrics:", error);
+      logger.error('[PoolService] Failed to get metrics:', error);
       throw error;
     }
   },
@@ -346,15 +324,12 @@ export const poolService = {
    */
   getMetricsPrometheus: async (): Promise<string> => {
     try {
-      const response = await httpClient.get<string>(
-        `${BASE_PATH}/metrics/prometheus`,
-        {
-          headers: { Accept: "text/plain" },
-        }
-      );
+      const response = await httpClient.get<string>(`${BASE_PATH}/metrics/prometheus`, {
+        headers: { Accept: 'text/plain' },
+      });
       return response;
     } catch (error) {
-      logger.error("[PoolService] Failed to get prometheus metrics:", error);
+      logger.error('[PoolService] Failed to get prometheus metrics:', error);
       throw error;
     }
   },

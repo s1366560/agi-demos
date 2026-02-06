@@ -14,11 +14,7 @@
 import { ApiError } from './client/ApiError';
 import { httpClient } from './client/httpClient';
 
-import type {
-  WorkflowPattern,
-  PatternsListResponse,
-  ResetPatternsResponse,
-} from '../types/agent';
+import type { WorkflowPattern, PatternsListResponse, ResetPatternsResponse } from '../types/agent';
 
 // Use centralized HTTP client
 const api = httpClient;
@@ -80,10 +76,7 @@ class PatternServiceImpl implements PatternService {
     }
 
     try {
-      return await api.get<PatternsListResponse>(
-        '/agent/workflows/patterns',
-        { params }
-      );
+      return await api.get<PatternsListResponse>('/agent/workflows/patterns', { params });
     } catch (error) {
       if (error instanceof ApiError) {
         const status = error.statusCode;
@@ -107,10 +100,9 @@ class PatternServiceImpl implements PatternService {
    */
   async getPattern(patternId: string, tenantId: string): Promise<WorkflowPattern> {
     try {
-      return await api.get<WorkflowPattern>(
-        `/agent/workflows/patterns/${patternId}`,
-        { params: { tenant_id: tenantId } }
-      );
+      return await api.get<WorkflowPattern>(`/agent/workflows/patterns/${patternId}`, {
+        params: { tenant_id: tenantId },
+      });
     } catch (error) {
       if (error instanceof ApiError) {
         const status = error.statusCode;
@@ -143,7 +135,11 @@ class PatternServiceImpl implements PatternService {
         const message = error.getUserMessage();
 
         if (status === 403) {
-          throw new PatternServiceError('Admin access required to delete patterns', status, 'FORBIDDEN');
+          throw new PatternServiceError(
+            'Admin access required to delete patterns',
+            status,
+            'FORBIDDEN'
+          );
         }
         if (status === 404) {
           throw new PatternServiceError('Pattern not found', status, 'NOT_FOUND');
@@ -162,18 +158,20 @@ class PatternServiceImpl implements PatternService {
    */
   async resetPatterns(tenantId: string): Promise<ResetPatternsResponse> {
     try {
-      return await api.post<ResetPatternsResponse>(
-        '/agent/workflows/patterns/reset',
-        null,
-        { params: { tenant_id: tenantId } }
-      );
+      return await api.post<ResetPatternsResponse>('/agent/workflows/patterns/reset', null, {
+        params: { tenant_id: tenantId },
+      });
     } catch (error) {
       if (error instanceof ApiError) {
         const status = error.statusCode;
         const message = error.getUserMessage();
 
         if (status === 403) {
-          throw new PatternServiceError('Admin access required to reset patterns', status, 'FORBIDDEN');
+          throw new PatternServiceError(
+            'Admin access required to reset patterns',
+            status,
+            'FORBIDDEN'
+          );
         }
 
         throw new PatternServiceError(message, status);

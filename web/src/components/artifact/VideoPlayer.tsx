@@ -2,9 +2,9 @@
  * VideoPlayer - Video playback with controls
  */
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState } from 'react';
 
-import { Spin, Alert } from "antd";
+import { Spin, Alert } from 'antd';
 
 export interface VideoPlayerProps {
   /** Video source URL */
@@ -62,7 +62,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     <div
       className="video-player relative"
       style={{
-        maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
+        maxHeight: typeof maxHeight === 'number' ? maxHeight : undefined,
       }}
     >
       {loading && (
@@ -79,10 +79,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         playsInline
         preload="metadata"
         style={{
-          maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
-          maxWidth: "100%",
-          width: "100%",
-          backgroundColor: "#000",
+          maxHeight: typeof maxHeight === 'number' ? maxHeight : undefined,
+          maxWidth: '100%',
+          width: '100%',
+          backgroundColor: '#000',
         }}
         onLoadedData={handleLoadedData}
         onError={handleError}

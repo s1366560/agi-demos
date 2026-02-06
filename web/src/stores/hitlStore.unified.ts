@@ -1,6 +1,6 @@
 /**
  * Unified HITL Store - Simplified state management for Human-in-the-Loop
- * 
+ *
  * This store uses the new unified HITL types and service.
  * Manages pending HITL requests, timeouts, and responses.
  */
@@ -10,10 +10,7 @@ import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 import { unifiedHitlService } from '../services/hitlService.unified';
-import {
-  getRemainingTimeSeconds,
-  SSE_EVENT_TO_HITL_TYPE,
-} from '../types/hitl.unified';
+import { getRemainingTimeSeconds, SSE_EVENT_TO_HITL_TYPE } from '../types/hitl.unified';
 
 import type {
   HITLType,
@@ -32,25 +29,25 @@ import type {
 interface UnifiedHITLState {
   /** Map of request ID → pending HITL request */
   pendingRequests: Map<string, UnifiedHITLRequest>;
-  
+
   /** Map of conversation ID → Set of request IDs */
   requestsByConversation: Map<string, Set<string>>;
-  
+
   /** Map of request ID → status (for tracking answered state) */
   requestStatuses: Map<string, HITLStatus>;
-  
+
   /** History of completed requests (limited) */
   completedHistory: UnifiedHITLRequest[];
-  
+
   /** Maximum history size */
   maxHistorySize: number;
-  
+
   /** Whether a response is being submitted */
   isSubmitting: boolean;
-  
+
   /** Current submitting request ID */
   submittingRequestId: string | null;
-  
+
   /** Last error message */
   error: string | null;
 }
@@ -60,34 +57,34 @@ interface UnifiedHITLActions {
   addRequest: (request: UnifiedHITLRequest) => void;
   removeRequest: (requestId: string) => void;
   updateRequestStatus: (requestId: string, status: HITLStatus) => void;
-  
+
   // SSE event handling
   handleSSEEvent: (
     eventType: string,
     data: Record<string, unknown>,
     conversationId: string
   ) => void;
-  
+
   // Response submission (uses unified endpoint)
   submitResponse: (
     requestId: string,
     hitlType: HITLType,
     responseData: HITLResponseData
   ) => Promise<void>;
-  
+
   // Cancel request
   cancelRequest: (requestId: string, reason?: string) => Promise<void>;
-  
+
   // Queries
   getRequest: (requestId: string) => UnifiedHITLRequest | undefined;
   getRequestsForConversation: (conversationId: string) => UnifiedHITLRequest[];
   getRequestsByType: (conversationId: string, type: HITLType) => UnifiedHITLRequest[];
   getPendingCount: (conversationId?: string) => number;
-  
+
   // Timeout handling
   checkTimeouts: () => void;
   startTimeoutChecker: () => () => void;
-  
+
   // Cleanup
   clearConversation: (conversationId: string) => void;
   clearError: () => void;
@@ -125,107 +122,126 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
       // =========================================================================
 
       addRequest: (request: UnifiedHITLRequest) => {
-        set((state) => {
-          // Skip if already exists
-          if (state.pendingRequests.has(request.requestId)) {
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[HITL Debug] Request already exists:', request.requestId);
+        set(
+          (state) => {
+            // Skip if already exists
+            if (state.pendingRequests.has(request.requestId)) {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[HITL Debug] Request already exists:', request.requestId);
+              }
+              return state;
             }
-            return state;
-          }
 
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[HITL Debug] Adding request:', request.requestId, 
-              'Type:', request.hitlType,
-              'Total pending:', state.pendingRequests.size + 1);
-          }
+            if (process.env.NODE_ENV === 'development') {
+              console.log(
+                '[HITL Debug] Adding request:',
+                request.requestId,
+                'Type:',
+                request.hitlType,
+                'Total pending:',
+                state.pendingRequests.size + 1
+              );
+            }
 
-          const newPending = new Map(state.pendingRequests);
-          newPending.set(request.requestId, request);
+            const newPending = new Map(state.pendingRequests);
+            newPending.set(request.requestId, request);
 
-          const newByConv = new Map(state.requestsByConversation);
-          const convRequests = newByConv.get(request.conversationId) || new Set();
-          convRequests.add(request.requestId);
-          newByConv.set(request.conversationId, convRequests);
+            const newByConv = new Map(state.requestsByConversation);
+            const convRequests = newByConv.get(request.conversationId) || new Set();
+            convRequests.add(request.requestId);
+            newByConv.set(request.conversationId, convRequests);
 
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-          };
-        }, false, 'hitl/addRequest');
+            return {
+              pendingRequests: newPending,
+              requestsByConversation: newByConv,
+            };
+          },
+          false,
+          'hitl/addRequest'
+        );
       },
 
       removeRequest: (requestId: string) => {
-        set((state) => {
-          const request = state.pendingRequests.get(requestId);
-          if (!request) return state;
+        set(
+          (state) => {
+            const request = state.pendingRequests.get(requestId);
+            if (!request) return state;
 
-          const newPending = new Map(state.pendingRequests);
-          newPending.delete(requestId);
+            const newPending = new Map(state.pendingRequests);
+            newPending.delete(requestId);
 
-          const newByConv = new Map(state.requestsByConversation);
-          const convRequests = newByConv.get(request.conversationId);
-          if (convRequests) {
-            convRequests.delete(requestId);
-            if (convRequests.size === 0) {
-              newByConv.delete(request.conversationId);
+            const newByConv = new Map(state.requestsByConversation);
+            const convRequests = newByConv.get(request.conversationId);
+            if (convRequests) {
+              convRequests.delete(requestId);
+              if (convRequests.size === 0) {
+                newByConv.delete(request.conversationId);
+              }
             }
-          }
 
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-          };
-        }, false, 'hitl/removeRequest');
+            return {
+              pendingRequests: newPending,
+              requestsByConversation: newByConv,
+            };
+          },
+          false,
+          'hitl/removeRequest'
+        );
       },
 
       updateRequestStatus: (requestId: string, status: HITLStatus) => {
-        set((state) => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[HITL Debug] Updating request status:', requestId, '->', status);
-          }
-
-          // Always update the status map (even if request not in pendingRequests)
-          const newStatuses = new Map(state.requestStatuses);
-          newStatuses.set(requestId, status);
-
-          const request = state.pendingRequests.get(requestId);
-          if (!request) {
-            // Request not in pending (maybe from history), just update status
-            return { requestStatuses: newStatuses };
-          }
-
-          const updatedRequest = { ...request, status };
-          const newPending = new Map(state.pendingRequests);
-
-          if (status === 'pending') {
-            newPending.set(requestId, updatedRequest);
-            return { pendingRequests: newPending, requestStatuses: newStatuses };
-          }
-
-          // Move to history for non-pending states
-          newPending.delete(requestId);
-          
-          const newHistory = [updatedRequest, ...state.completedHistory]
-            .slice(0, state.maxHistorySize);
-
-          // Remove from conversation map
-          const newByConv = new Map(state.requestsByConversation);
-          const convRequests = newByConv.get(request.conversationId);
-          if (convRequests) {
-            convRequests.delete(requestId);
-            if (convRequests.size === 0) {
-              newByConv.delete(request.conversationId);
+        set(
+          (state) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[HITL Debug] Updating request status:', requestId, '->', status);
             }
-          }
 
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-            completedHistory: newHistory,
-            requestStatuses: newStatuses,
-          };
-        }, false, 'hitl/updateRequestStatus');
+            // Always update the status map (even if request not in pendingRequests)
+            const newStatuses = new Map(state.requestStatuses);
+            newStatuses.set(requestId, status);
+
+            const request = state.pendingRequests.get(requestId);
+            if (!request) {
+              // Request not in pending (maybe from history), just update status
+              return { requestStatuses: newStatuses };
+            }
+
+            const updatedRequest = { ...request, status };
+            const newPending = new Map(state.pendingRequests);
+
+            if (status === 'pending') {
+              newPending.set(requestId, updatedRequest);
+              return { pendingRequests: newPending, requestStatuses: newStatuses };
+            }
+
+            // Move to history for non-pending states
+            newPending.delete(requestId);
+
+            const newHistory = [updatedRequest, ...state.completedHistory].slice(
+              0,
+              state.maxHistorySize
+            );
+
+            // Remove from conversation map
+            const newByConv = new Map(state.requestsByConversation);
+            const convRequests = newByConv.get(request.conversationId);
+            if (convRequests) {
+              convRequests.delete(requestId);
+              if (convRequests.size === 0) {
+                newByConv.delete(request.conversationId);
+              }
+            }
+
+            return {
+              pendingRequests: newPending,
+              requestsByConversation: newByConv,
+              completedHistory: newHistory,
+              requestStatuses: newStatuses,
+            };
+          },
+          false,
+          'hitl/updateRequestStatus'
+        );
       },
 
       // =========================================================================
@@ -239,11 +255,11 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
       ) => {
         // 调试日志：记录接收到的 SSE 事件
         if (process.env.NODE_ENV === 'development') {
-          console.log('[HITL Debug] Received SSE event:', { 
-            eventType, 
-            conversationId, 
+          console.log('[HITL Debug] Received SSE event:', {
+            eventType,
+            conversationId,
             requestId: data.request_id,
-            hitlType: SSE_EVENT_TO_HITL_TYPE[eventType] 
+            hitlType: SSE_EVENT_TO_HITL_TYPE[eventType],
           });
         }
 
@@ -284,17 +300,21 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
         hitlType: HITLType,
         responseData: HITLResponseData
       ) => {
-        set({ 
-          isSubmitting: true, 
-          submittingRequestId: requestId,
-          error: null 
-        }, false, 'hitl/submitStart');
+        set(
+          {
+            isSubmitting: true,
+            submittingRequestId: requestId,
+            error: null,
+          },
+          false,
+          'hitl/submitStart'
+        );
 
         try {
           // 先调用 API - 确保后端成功接收响应后再更新本地状态
           // 这避免了 API 失败但状态已更新的竞态条件
           await unifiedHitlService.respond(requestId, hitlType, responseData);
-          
+
           // API 成功后再更新本地状态
           get().updateRequestStatus(requestId, 'answered');
         } catch (err) {
@@ -302,10 +322,14 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
           set({ error: errorMessage }, false, 'hitl/submitError');
           throw err;
         } finally {
-          set({ 
-            isSubmitting: false,
-            submittingRequestId: null 
-          }, false, 'hitl/submitEnd');
+          set(
+            {
+              isSubmitting: false,
+              submittingRequestId: null,
+            },
+            false,
+            'hitl/submitEnd'
+          );
         }
       },
 
@@ -334,14 +358,14 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
         if (!requestIds) return [];
 
         return Array.from(requestIds)
-          .map(id => state.pendingRequests.get(id))
+          .map((id) => state.pendingRequests.get(id))
           .filter((r): r is UnifiedHITLRequest => r !== undefined);
       },
 
       getRequestsByType: (conversationId: string, type: HITLType) => {
         return get()
           .getRequestsForConversation(conversationId)
-          .filter(r => r.hitlType === type);
+          .filter((r) => r.hitlType === type);
       },
 
       getPendingCount: (conversationId?: string) => {
@@ -381,23 +405,27 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
       // =========================================================================
 
       clearConversation: (conversationId: string) => {
-        set((state) => {
-          const requestIds = state.requestsByConversation.get(conversationId);
-          if (!requestIds) return state;
+        set(
+          (state) => {
+            const requestIds = state.requestsByConversation.get(conversationId);
+            if (!requestIds) return state;
 
-          const newPending = new Map(state.pendingRequests);
-          for (const id of requestIds) {
-            newPending.delete(id);
-          }
+            const newPending = new Map(state.pendingRequests);
+            for (const id of requestIds) {
+              newPending.delete(id);
+            }
 
-          const newByConv = new Map(state.requestsByConversation);
-          newByConv.delete(conversationId);
+            const newByConv = new Map(state.requestsByConversation);
+            newByConv.delete(conversationId);
 
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-          };
-        }, false, 'hitl/clearConversation');
+            return {
+              pendingRequests: newPending,
+              requestsByConversation: newByConv,
+            };
+          },
+          false,
+          'hitl/clearConversation'
+        );
       },
 
       clearError: () => {
@@ -450,17 +478,13 @@ function createRequestFromSSE(
         question: (data.question as string) || '',
         clarificationData: {
           question: (data.question as string) || '',
-          clarificationType: (data.clarification_type as any) || 
-                            (data.clarificationType as any) || 
-                            'custom',
+          clarificationType:
+            (data.clarification_type as any) || (data.clarificationType as any) || 'custom',
           options: (data.options as ClarificationOption[]) || [],
-          allowCustom: (data.allow_custom as boolean) ?? 
-                      (data.allowCustom as boolean) ?? 
-                      true,
+          allowCustom: (data.allow_custom as boolean) ?? (data.allowCustom as boolean) ?? true,
           context: (data.context as Record<string, unknown>) || {},
-          defaultValue: (data.default_value as string) || 
-                       (data.defaultValue as string) || 
-                       undefined,
+          defaultValue:
+            (data.default_value as string) || (data.defaultValue as string) || undefined,
         },
       };
 
@@ -470,19 +494,14 @@ function createRequestFromSSE(
         question: (data.question as string) || '',
         decisionData: {
           question: (data.question as string) || '',
-          decisionType: (data.decision_type as any) || 
-                       (data.decisionType as any) || 
-                       'single_choice',
+          decisionType:
+            (data.decision_type as any) || (data.decisionType as any) || 'single_choice',
           options: (data.options as DecisionOption[]) || [],
-          allowCustom: (data.allow_custom as boolean) ?? 
-                      (data.allowCustom as boolean) ?? 
-                      false,
-          defaultOption: (data.default_option as string) || 
-                        (data.defaultOption as string) || 
-                        undefined,
-          maxSelections: (data.max_selections as number) || 
-                        (data.maxSelections as number) || 
-                        undefined,
+          allowCustom: (data.allow_custom as boolean) ?? (data.allowCustom as boolean) ?? false,
+          defaultOption:
+            (data.default_option as string) || (data.defaultOption as string) || undefined,
+          maxSelections:
+            (data.max_selections as number) || (data.maxSelections as number) || undefined,
           context: (data.context as Record<string, unknown>) || {},
         },
       };
@@ -490,54 +509,44 @@ function createRequestFromSSE(
     case 'env_var':
       // 尝试多个可能的字段名，以兼容不同的后端版本
       // 后端可能使用 'message' 或 'question' 字段
-      const envMessage = (data.message as string) || 
-                         (data.question as string) || 
-                         'Please provide environment variables';
-      
+      const envMessage =
+        (data.message as string) ||
+        (data.question as string) ||
+        'Please provide environment variables';
+
       return {
         ...base,
         question: envMessage,
         envVarData: {
-          toolName: (data.tool_name as string) || 
-                    (data.toolName as string) || 
-                    'unknown',
+          toolName: (data.tool_name as string) || (data.toolName as string) || 'unknown',
           fields: (data.fields as EnvVarField[]) || [],
           message: envMessage,
-          allowSave: (data.allow_save as boolean) ?? 
-                     (data.allowSave as boolean) ?? 
-                     true,
+          allowSave: (data.allow_save as boolean) ?? (data.allowSave as boolean) ?? true,
           context: (data.context as Record<string, unknown>) || {},
         },
       };
 
     case 'permission':
-      const toolName = (data.tool_name as string) || 
-                      (data.toolName as string) || 
-                      'unknown';
-      const action = (data.action as string) || 
-                    (data.permission_type as string) || 
-                    'perform action';
-      const description = (data.description as string) || 
-                         (data.desc as string);
-      
+      const toolName = (data.tool_name as string) || (data.toolName as string) || 'unknown';
+      const action =
+        (data.action as string) || (data.permission_type as string) || 'perform action';
+      const description = (data.description as string) || (data.desc as string);
+
       return {
         ...base,
         question: description || `Allow ${toolName} to ${action}?`,
         permissionData: {
           toolName: toolName,
           action: action,
-          riskLevel: (data.risk_level as any) || 
-                    (data.riskLevel as any) || 
-                    'medium',
-          details: (data.details as Record<string, unknown>) || 
-                   (data.context as Record<string, unknown>) || 
-                   {},
+          riskLevel: (data.risk_level as any) || (data.riskLevel as any) || 'medium',
+          details:
+            (data.details as Record<string, unknown>) ||
+            (data.context as Record<string, unknown>) ||
+            {},
           description: description,
-          allowRemember: (data.allow_remember as boolean) ?? 
-                        (data.allowRemember as boolean) ?? 
-                        true,
-          defaultAction: (data.default_action as any) || 
-                        (data.defaultAction as any),
+          allowRemember:
+            (data.allow_remember as boolean) ?? (data.allowRemember as boolean) ?? true,
+          defaultAction: (data.default_action as any) || (data.defaultAction as any),
           context: (data.context as Record<string, unknown>) || {},
         },
       };
@@ -559,9 +568,9 @@ export function usePendingRequests(conversationId: string): UnifiedHITLRequest[]
     useShallow((state) => {
       const requestIds = state.requestsByConversation.get(conversationId);
       if (!requestIds || requestIds.size === 0) return [];
-      
+
       return Array.from(requestIds)
-        .map(id => state.pendingRequests.get(id))
+        .map((id) => state.pendingRequests.get(id))
         .filter((r): r is UnifiedHITLRequest => r !== undefined);
     })
   );
@@ -575,12 +584,10 @@ export function useClarificationRequests(conversationId: string): UnifiedHITLReq
     useShallow((state) => {
       const requestIds = state.requestsByConversation.get(conversationId);
       if (!requestIds || requestIds.size === 0) return [];
-      
+
       return Array.from(requestIds)
-        .map(id => state.pendingRequests.get(id))
-        .filter((r): r is UnifiedHITLRequest => 
-          r !== undefined && r.hitlType === 'clarification'
-        );
+        .map((id) => state.pendingRequests.get(id))
+        .filter((r): r is UnifiedHITLRequest => r !== undefined && r.hitlType === 'clarification');
     })
   );
 }
@@ -593,12 +600,10 @@ export function useDecisionRequests(conversationId: string): UnifiedHITLRequest[
     useShallow((state) => {
       const requestIds = state.requestsByConversation.get(conversationId);
       if (!requestIds || requestIds.size === 0) return [];
-      
+
       return Array.from(requestIds)
-        .map(id => state.pendingRequests.get(id))
-        .filter((r): r is UnifiedHITLRequest => 
-          r !== undefined && r.hitlType === 'decision'
-        );
+        .map((id) => state.pendingRequests.get(id))
+        .filter((r): r is UnifiedHITLRequest => r !== undefined && r.hitlType === 'decision');
     })
   );
 }
@@ -611,12 +616,10 @@ export function useEnvVarRequests(conversationId: string): UnifiedHITLRequest[] 
     useShallow((state) => {
       const requestIds = state.requestsByConversation.get(conversationId);
       if (!requestIds || requestIds.size === 0) return [];
-      
+
       return Array.from(requestIds)
-        .map(id => state.pendingRequests.get(id))
-        .filter((r): r is UnifiedHITLRequest => 
-          r !== undefined && r.hitlType === 'env_var'
-        );
+        .map((id) => state.pendingRequests.get(id))
+        .filter((r): r is UnifiedHITLRequest => r !== undefined && r.hitlType === 'env_var');
     })
   );
 }
@@ -629,12 +632,10 @@ export function usePermissionRequests(conversationId: string): UnifiedHITLReques
     useShallow((state) => {
       const requestIds = state.requestsByConversation.get(conversationId);
       if (!requestIds || requestIds.size === 0) return [];
-      
+
       return Array.from(requestIds)
-        .map(id => state.pendingRequests.get(id))
-        .filter((r): r is UnifiedHITLRequest => 
-          r !== undefined && r.hitlType === 'permission'
-        );
+        .map((id) => state.pendingRequests.get(id))
+        .filter((r): r is UnifiedHITLRequest => r !== undefined && r.hitlType === 'permission');
     })
   );
 }

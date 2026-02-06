@@ -8,9 +8,7 @@ import { createContext, useContext } from 'react';
 
 import type { ProjectManagerContextValue } from './types';
 
-export const ProjectManagerContext = createContext<ProjectManagerContextValue | null>(
-  null
-);
+export const ProjectManagerContext = createContext<ProjectManagerContextValue | null>(null);
 
 /**
  * Hook to access ProjectManager context

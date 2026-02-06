@@ -10,16 +10,17 @@ import { Folder, AlertCircle, Plus } from 'lucide-react';
 
 import { useProjectManagerContext } from './context';
 
-import type { ProjectManagerLoadingProps, ProjectManagerEmptyProps, ProjectManagerErrorProps } from './types';
+import type {
+  ProjectManagerLoadingProps,
+  ProjectManagerEmptyProps,
+  ProjectManagerErrorProps,
+} from './types';
 
 // ============================================================================
 // LOADING STATE
 // ============================================================================
 
-export const Loading: FC<ProjectManagerLoadingProps> = ({
-  message,
-  className = '',
-}) => {
+export const Loading: FC<ProjectManagerLoadingProps> = ({ message, className = '' }) => {
   return (
     <div
       className={`bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-8 ${className}`}
@@ -94,9 +95,7 @@ export const Empty: FC<ProjectManagerEmptyProps> = ({
     >
       <div className="text-center">
         <Folder className="h-12 w-12 text-gray-400 dark:text-slate-600 mx-auto mb-3" />
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          {getMessage()}
-        </h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{getMessage()}</h3>
         <p className="text-gray-600 dark:text-slate-400 mb-4">{getSubtitle()}</p>
         {shouldShowCreateButton && (
           <button

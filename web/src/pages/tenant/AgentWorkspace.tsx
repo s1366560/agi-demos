@@ -56,9 +56,7 @@ export const AgentWorkspace: React.FC = () => {
 
   // Calculate base path for conversation navigation - memoized
   const basePath = useMemo(
-    () => tenantId
-      ? `/tenant/${tenantId}/agent-workspace`
-      : '/tenant/agent-workspace',
+    () => (tenantId ? `/tenant/${tenantId}/agent-workspace` : '/tenant/agent-workspace'),
     [tenantId]
   );
 
@@ -75,7 +73,7 @@ export const AgentWorkspace: React.FC = () => {
       }
     };
     loadProjects();
-  // Only depend on tenantId - listProjects is stable from store
+    // Only depend on tenantId - listProjects is stable from store
   }, [tenantId]);
 
   // Initialize selected project after projects are loaded
@@ -147,10 +145,7 @@ export const AgentWorkspace: React.FC = () => {
   return (
     <div className="w-full h-full">
       {effectiveProjectId ? (
-        <AgentChatContent
-          externalProjectId={effectiveProjectId}
-          basePath={basePath}
-        />
+        <AgentChatContent externalProjectId={effectiveProjectId} basePath={basePath} />
       ) : (
         <div className="h-full flex items-center justify-center">
           <LazyEmpty

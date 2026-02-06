@@ -5,19 +5,17 @@
  * Explicit variant with embedded configuration and state management.
  */
 
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/stores/auth';
 
-import { getAgentConfig } from '@/config/navigation'
+import { getAgentConfig } from '@/config/navigation';
 
-import { AppSidebar } from './AppSidebar'
+import { AppSidebar } from './AppSidebar';
 
-
-
-import type { AgentSidebarProps } from './types'
-import type { NavUser } from '@/config/navigation'
+import type { AgentSidebarProps } from './types';
+import type { NavUser } from '@/config/navigation';
 
 /**
  * Agent sidebar component with configuration and state management
@@ -32,36 +30,38 @@ export function AgentSidebar({
   onLogout: externalLogout,
   t: externalT,
 }: AgentSidebarProps & {
-  collapsed?: boolean
-  onCollapseToggle?: () => void
-  user?: NavUser
-  onLogout?: () => void
-  t?: (key: string) => string
+  collapsed?: boolean;
+  onCollapseToggle?: () => void;
+  user?: NavUser;
+  onLogout?: () => void;
+  t?: (key: string) => string;
 }) {
-  const { t: useT } = useTranslation()
-  const { user: authUser, logout: authLogout } = useAuthStore()
-  const navigate = useNavigate()
+  const { t: useT } = useTranslation();
+  const { user: authUser, logout: authLogout } = useAuthStore();
+  const navigate = useNavigate();
 
   // Agent sidebar basePath is the project level
-  const basePath = projectId ? `/project/${projectId}` : '/project'
+  const basePath = projectId ? `/project/${projectId}` : '/project';
 
-  const handleLogout = externalLogout ?? (() => {
-    authLogout()
-    navigate('/login')
-  })
+  const handleLogout =
+    externalLogout ??
+    (() => {
+      authLogout();
+      navigate('/login');
+    });
 
   const navUser: NavUser = externalUser ?? {
     name: authUser?.name || 'User',
     email: authUser?.email || 'user@example.com',
-  }
+  };
 
-  const t = externalT ?? useT
+  const t = externalT ?? useT;
 
   // Agent sidebar has a flat structure without collapsible groups
-  const config = getAgentConfig().sidebar
+  const config = getAgentConfig().sidebar;
 
   // Determine collapsed state: controlled > defaultCollapsed > false
-  const isCollapsed = controlledCollapsed ?? defaultCollapsed ?? false
+  const isCollapsed = controlledCollapsed ?? defaultCollapsed ?? false;
 
   return (
     <AppSidebar
@@ -74,7 +74,7 @@ export function AgentSidebar({
       onLogout={handleLogout}
       t={t}
     />
-  )
+  );
 }
 
-export default AgentSidebar
+export default AgentSidebar;

@@ -7,9 +7,9 @@
  * - Synthesizing Report
  */
 
-import { MaterialIcon } from "../shared";
+import { MaterialIcon } from '../shared';
 
-export type StepStatus = "pending" | "running" | "completed" | "failed";
+export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface WorkPlanStep {
   number: number;
@@ -32,11 +32,7 @@ export interface WorkPlanProgressProps {
   compact?: boolean;
 }
 
-const DEFAULT_STEP_LABELS = [
-  "Analyzing Request",
-  "Searching Memory",
-  "Synthesizing Report",
-];
+const DEFAULT_STEP_LABELS = ['Analyzing Request', 'Searching Memory', 'Synthesizing Report'];
 
 /**
  * WorkPlanProgress component
@@ -57,31 +53,30 @@ export function WorkPlanProgress({
   compact = false,
 }: WorkPlanProgressProps) {
   // Calculate progress if not provided
-  const calculatedProgress =
-    progress ?? Math.round((currentStep / totalSteps) * 100);
+  const calculatedProgress = progress ?? Math.round((currentStep / totalSteps) * 100);
 
   const getStepStatus = (stepNumber: number): StepStatus => {
-    if (stepNumber < currentStep) return "completed";
-    if (stepNumber === currentStep) return "running";
-    return "pending";
+    if (stepNumber < currentStep) return 'completed';
+    if (stepNumber === currentStep) return 'running';
+    return 'pending';
   };
 
   const getStatusStyles = (status: StepStatus) => {
     switch (status) {
-      case "completed":
-        return "bg-primary text-white";
-      case "running":
-        return "bg-primary text-white animate-[pulse-ring_2s_ease-in-out_infinite]";
-      case "failed":
-        return "bg-red-500 text-white";
+      case 'completed':
+        return 'bg-primary text-white';
+      case 'running':
+        return 'bg-primary text-white animate-[pulse-ring_2s_ease-in-out_infinite]';
+      case 'failed':
+        return 'bg-red-500 text-white';
       default:
-        return "bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-600";
+        return 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-600';
     }
   };
 
   const getLineColor = (stepNumber: number) => {
-    if (stepNumber < currentStep) return "bg-primary";
-    return "bg-slate-200 dark:bg-slate-700";
+    if (stepNumber < currentStep) return 'bg-primary';
+    return 'bg-slate-200 dark:bg-slate-700';
   };
 
   if (compact) {
@@ -104,9 +99,7 @@ export function WorkPlanProgress({
               <span
                 key={index}
                 className={`text-xs font-medium ${
-                  status === "completed" || status === "running"
-                    ? "text-primary"
-                    : "text-slate-400"
+                  status === 'completed' || status === 'running' ? 'text-primary' : 'text-slate-400'
                 }`}
               >
                 {label}
@@ -124,18 +117,10 @@ export function WorkPlanProgress({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <MaterialIcon
-              name="psychology"
-              size={20}
-              className="text-primary"
-            />
-            <h3 className="font-semibold text-slate-900 dark:text-white">
-              Work Plan
-            </h3>
+            <MaterialIcon name="psychology" size={20} className="text-primary" />
+            <h3 className="font-semibold text-slate-900 dark:text-white">Work Plan</h3>
           </div>
-          {statusMessage && (
-            <span className="text-sm text-slate-500">{statusMessage}</span>
-          )}
+          {statusMessage && <span className="text-sm text-slate-500">{statusMessage}</span>}
         </div>
 
         {/* Overall Status Badge */}
@@ -146,11 +131,11 @@ export function WorkPlanProgress({
           <span
             className={`px-2 py-1 rounded-full text-xs font-semibold ${
               currentStep === totalSteps
-                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
             }`}
           >
-            {currentStep === totalSteps ? "Completed" : "In Progress"}
+            {currentStep === totalSteps ? 'Completed' : 'In Progress'}
           </span>
         </div>
       </div>
@@ -170,9 +155,9 @@ export function WorkPlanProgress({
                   status
                 )}`}
               >
-                {status === "completed" ? (
+                {status === 'completed' ? (
                   <MaterialIcon name="check" size={18} />
-                ) : status === "running" ? (
+                ) : status === 'running' ? (
                   <MaterialIcon name="hourglass_empty" size={18} />
                 ) : (
                   stepNum
@@ -183,9 +168,9 @@ export function WorkPlanProgress({
               <div className="ml-3">
                 <p
                   className={`text-sm font-medium ${
-                    status === "completed" || status === "running"
-                      ? "text-slate-900 dark:text-white"
-                      : "text-slate-400"
+                    status === 'completed' || status === 'running'
+                      ? 'text-slate-900 dark:text-white'
+                      : 'text-slate-400'
                   }`}
                 >
                   {label}

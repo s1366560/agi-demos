@@ -6,40 +6,33 @@
  */
 
 // Main component
-export { AppSidebar } from './AppSidebar'
-export type { AppSidebarProps } from './types'
+export { AppSidebar } from './AppSidebar';
+export type { AppSidebarProps } from './types';
 
 // Explicit variant components
-export { TenantSidebar } from './TenantSidebar'
-export type { TenantSidebarProps } from './types'
+export { TenantSidebar } from './TenantSidebar';
+export type { TenantSidebarProps } from './types';
 
-export { ProjectSidebar } from './ProjectSidebar'
-export type { ProjectSidebarProps } from './types'
+export { ProjectSidebar } from './ProjectSidebar';
+export type { ProjectSidebarProps } from './types';
 
-export { AgentSidebar } from './AgentSidebar'
-export type { AgentSidebarProps } from './types'
+export { AgentSidebar } from './AgentSidebar';
+export type { AgentSidebarProps } from './types';
 
 // Compound components
-export { SidebarBrand } from './SidebarBrand'
-export type { SidebarBrandProps } from './SidebarBrand'
+export { SidebarBrand } from './SidebarBrand';
+export type { SidebarBrandProps } from './SidebarBrand';
 
-export { SidebarNavigation } from './SidebarNavigation'
+export { SidebarNavigation } from './SidebarNavigation';
 
-export { SidebarUser } from './SidebarUser'
-export type { SidebarUserProps } from './SidebarUser'
+export { SidebarUser } from './SidebarUser';
+export type { SidebarUserProps } from './SidebarUser';
 
-export { SidebarNavItem } from './SidebarNavItem'
-export type { SidebarNavItemProps } from './SidebarNavItem'
+export { SidebarNavItem } from './SidebarNavItem';
+export type { SidebarNavItemProps } from './SidebarNavItem';
 
 // Context and hooks
-export {
-  SidebarContext,
-  SidebarProvider,
-  useSidebarContext,
-} from './SidebarContext'
+export { SidebarContext, SidebarProvider, useSidebarContext } from './SidebarContext';
 
 // Types
-export type {
-  SidebarVariant,
-  BaseSidebarProps,
-} from './types'
+export type { SidebarVariant, BaseSidebarProps } from './types';

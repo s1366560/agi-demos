@@ -474,8 +474,7 @@ describe('usePagination', () => {
 
     it('should handle itemsPerPage change', () => {
       const { result, rerender } = renderHook(
-        ({ totalItems, itemsPerPage }) =>
-          usePagination({ totalItems, itemsPerPage }),
+        ({ totalItems, itemsPerPage }) => usePagination({ totalItems, itemsPerPage }),
         {
           initialProps: { totalItems: 100, itemsPerPage: 10 },
         }

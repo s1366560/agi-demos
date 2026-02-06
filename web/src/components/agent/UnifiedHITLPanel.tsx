@@ -1,12 +1,12 @@
 /**
  * UnifiedHITLPanel Component
- * 
+ *
  * A unified Human-in-the-Loop panel that handles all HITL request types:
  * - Clarification: Questions requiring user input
  * - Decision: Choices with detailed options
  * - EnvVar: Environment variable configuration
  * - Permission: Tool authorization requests
- * 
+ *
  * Features:
  * - Progress countdown timer for timeouts
  * - Unified styling with type-specific content
@@ -30,16 +30,16 @@ import {
   CodeOutlined,
 } from '@ant-design/icons';
 
-import { 
-  Modal, 
-  Form, 
-  Input, 
-  Radio, 
-  Button, 
-  Tag, 
-  Typography, 
-  Alert, 
-  Space, 
+import {
+  Modal,
+  Form,
+  Input,
+  Radio,
+  Button,
+  Tag,
+  Typography,
+  Alert,
+  Space,
   Divider,
   Progress,
   Tooltip,
@@ -50,14 +50,13 @@ import {
 import { useUnifiedHITLStore, useIsSubmitting } from '../../stores/hitlStore.unified';
 import { getRemainingTimeSeconds } from '../../types/hitl.unified';
 
-import type { 
-  UnifiedHITLRequest, 
+import type {
+  UnifiedHITLRequest,
   HITLType,
   HITLResponseData,
   DecisionOption,
   EnvVarField,
 } from '../../types/hitl.unified';
-
 
 const { Text, Paragraph, Title } = Typography;
 const { TextArea } = Input;
@@ -66,12 +65,15 @@ const { TextArea } = Input;
 // Type-specific configurations
 // =============================================================================
 
-const TYPE_CONFIG: Record<HITLType, {
-  icon: React.ReactNode;
-  title: string;
-  color: string;
-  submitText: string;
-}> = {
+const TYPE_CONFIG: Record<
+  HITLType,
+  {
+    icon: React.ReactNode;
+    title: string;
+    color: string;
+    submitText: string;
+  }
+> = {
   clarification: {
     icon: <QuestionCircleOutlined style={{ color: '#1890ff' }} />,
     title: '需要澄清',
@@ -116,7 +118,11 @@ const DECISION_TYPE_LABELS: Record<string, string> = {
 
 const RISK_LEVEL_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   low: { label: '低风险', color: 'green', icon: <SafetyOutlined style={{ color: '#52c41a' }} /> },
-  medium: { label: '中等风险', color: 'gold', icon: <WarningOutlined style={{ color: '#faad14' }} /> },
+  medium: {
+    label: '中等风险',
+    color: 'gold',
+    icon: <WarningOutlined style={{ color: '#faad14' }} />,
+  },
   high: { label: '高风险', color: 'red', icon: <WarningOutlined style={{ color: '#f5222d' }} /> },
 };
 
@@ -129,14 +135,11 @@ interface UnifiedHITLPanelProps {
   onClose?: () => void;
 }
 
-export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
-  request,
-  onClose,
-}) => {
+export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onClose }) => {
   const submitResponse = useUnifiedHITLStore((state) => state.submitResponse);
   const cancelRequest = useUnifiedHITLStore((state) => state.cancelRequest);
   const isSubmitting = useIsSubmitting(request.requestId);
-  
+
   const [remainingTime, setRemainingTime] = useState<number | null>(
     getRemainingTimeSeconds(request)
   );
@@ -155,7 +158,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
   }, [request]);
 
   const config = TYPE_CONFIG[request.hitlType];
-  
+
   const handleCancel = useCallback(async () => {
     try {
       await cancelRequest(request.requestId, 'User cancelled');
@@ -165,14 +168,17 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
     }
   }, [cancelRequest, request.requestId, onClose]);
 
-  const handleSubmit = useCallback(async (responseData: HITLResponseData) => {
-    try {
-      await submitResponse(request.requestId, request.hitlType, responseData);
-      onClose?.();
-    } catch (error) {
-      console.error('Failed to submit HITL response:', error);
-    }
-  }, [submitResponse, request, onClose]);
+  const handleSubmit = useCallback(
+    async (responseData: HITLResponseData) => {
+      try {
+        await submitResponse(request.requestId, request.hitlType, responseData);
+        onClose?.();
+      } catch (error) {
+        console.error('Failed to submit HITL response:', error);
+      }
+    },
+    [submitResponse, request, onClose]
+  );
 
   // Calculate progress percentage
   const progressPercent = useMemo(() => {
@@ -180,7 +186,8 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
     return Math.max(0, (remainingTime / request.timeoutSeconds) * 100);
   }, [remainingTime, request.timeoutSeconds]);
 
-  const progressStatus = progressPercent <= 20 ? 'exception' : progressPercent <= 50 ? 'normal' : 'success';
+  const progressStatus =
+    progressPercent <= 20 ? 'exception' : progressPercent <= 50 ? 'normal' : 'success';
 
   return (
     <Modal
@@ -194,11 +201,11 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
           </Space>
           {remainingTime !== null && (
             <Tooltip title="剩余时间">
-              <Badge 
+              <Badge
                 count={`${Math.floor(remainingTime)}s`}
-                style={{ 
+                style={{
                   backgroundColor: progressPercent <= 20 ? '#f5222d' : '#52c41a',
-                  marginRight: 8
+                  marginRight: 8,
                 }}
               >
                 <ClockCircleOutlined style={{ fontSize: 16, marginRight: 4 }} />
@@ -216,8 +223,8 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
       <div className="space-y-4">
         {/* Timeout Progress */}
         {remainingTime !== null && (
-          <Progress 
-            percent={progressPercent} 
+          <Progress
+            percent={progressPercent}
             status={progressStatus}
             showInfo={false}
             size="small"
@@ -228,7 +235,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
         <ContextAlert request={request} />
 
         {/* Type-specific Content */}
-        <HITLContent 
+        <HITLContent
           request={request}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
@@ -280,7 +287,7 @@ const SubtypeTag: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) => {
 };
 
 const ContextAlert: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) => {
-  const context = 
+  const context =
     request.clarificationData?.context ||
     request.decisionData?.context ||
     request.envVarData?.context ||
@@ -290,9 +297,7 @@ const ContextAlert: React.FC<{ request: UnifiedHITLRequest }> = ({ request }) =>
 
   return (
     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-      <Text className="text-sm text-blue-700 dark:text-blue-300 font-semibold">
-        上下文信息：
-      </Text>
+      <Text className="text-sm text-blue-700 dark:text-blue-300 font-semibold">上下文信息：</Text>
       <div className="mt-2 space-y-1">
         {Object.entries(context).map(([key, value]) => (
           <div key={key} className="text-sm">
@@ -347,7 +352,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
 }) => {
   const data = request.clarificationData;
   const [selectedOption, setSelectedOption] = useState<string | null>(
-    data?.options.find(opt => opt.recommended)?.id || null
+    data?.options.find((opt) => opt.recommended)?.id || null
   );
   const [customInput, setCustomInput] = useState('');
 
@@ -361,9 +366,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
     }
   };
 
-  const isSubmitDisabled = 
-    !selectedOption || 
-    (selectedOption === 'custom' && !customInput.trim());
+  const isSubmitDisabled = !selectedOption || (selectedOption === 'custom' && !customInput.trim());
 
   return (
     <div className="space-y-4">
@@ -385,7 +388,9 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
                 <div className="flex items-center gap-2">
                   <Text strong>{option.label}</Text>
                   {option.recommended && (
-                    <Tag color="green" className="text-xs">推荐</Tag>
+                    <Tag color="green" className="text-xs">
+                      推荐
+                    </Tag>
                   )}
                 </div>
                 {option.description && (
@@ -449,7 +454,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
 }) => {
   const data = request.decisionData;
   const [selectedOption, setSelectedOption] = useState<string | null>(
-    data?.options.find(opt => opt.recommended)?.id || data?.defaultOption || null
+    data?.options.find((opt) => opt.recommended)?.id || data?.defaultOption || null
   );
   const [customInput, setCustomInput] = useState('');
 
@@ -463,11 +468,9 @@ const DecisionContent: React.FC<HITLContentProps> = ({
     }
   };
 
-  const isSubmitDisabled =
-    !selectedOption ||
-    (selectedOption === 'custom' && !customInput.trim());
+  const isSubmitDisabled = !selectedOption || (selectedOption === 'custom' && !customInput.trim());
 
-  const selectedOptionData = data?.options.find(opt => opt.id === selectedOption);
+  const selectedOptionData = data?.options.find((opt) => opt.id === selectedOption);
   const hasHighRisk = selectedOptionData?.risks && selectedOptionData.risks.length > 0;
 
   return (
@@ -482,7 +485,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
         <Alert
           message="超时默认选项"
           description={`如果您未在限定时间内做出决策，系统将自动选择：${
-            data.options.find(opt => opt.id === data.defaultOption)?.label
+            data.options.find((opt) => opt.id === data.defaultOption)?.label
           }`}
           type="info"
           showIcon
@@ -507,9 +510,10 @@ const DecisionContent: React.FC<HITLContentProps> = ({
             onClick={() => setSelectedOption('custom')}
             className={`
               p-4 rounded-lg border-2 cursor-pointer transition-all
-              ${selectedOption === 'custom'
-                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+              ${
+                selectedOption === 'custom'
+                  ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                  : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
               }
             `}
           >
@@ -564,18 +568,23 @@ const DecisionOptionCard: React.FC<{
       onClick={onSelect}
       className={`
         p-4 rounded-lg border-2 cursor-pointer transition-all
-        ${selected
-          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-          : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+        ${
+          selected
+            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+            : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
         }
       `}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-1">
           <Radio checked={selected} />
-          <Text strong className="text-base">{option.label}</Text>
+          <Text strong className="text-base">
+            {option.label}
+          </Text>
           {option.recommended && (
-            <Tag color="green" className="text-xs">推荐</Tag>
+            <Tag color="green" className="text-xs">
+              推荐
+            </Tag>
           )}
         </div>
       </div>
@@ -650,7 +659,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      
+
       // Filter out empty optional fields
       const filteredValues: Record<string, string> = {};
       Object.entries(values).forEach(([key, value]) => {
@@ -658,7 +667,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
           filteredValues[key] = String(value);
         }
       });
-      
+
       onSubmit({ values: filteredValues, save: false });
     } catch (error) {
       console.error('Form validation failed:', error);
@@ -690,9 +699,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
   return (
     <div className="space-y-4">
       {/* Message */}
-      {data?.message && (
-        <Alert title={data.message} type="info" showIcon />
-      )}
+      {data?.message && <Alert title={data.message} type="info" showIcon />}
 
       {/* Form Fields */}
       <Form form={form} layout="vertical">
@@ -705,7 +712,9 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
                 {inputTypeIcons[field.inputType]}
                 <span>{field.label}</span>
                 {field.required && (
-                  <Tag color="red" className="text-xs">必填</Tag>
+                  <Tag color="red" className="text-xs">
+                    必填
+                  </Tag>
                 )}
               </Space>
             }
@@ -715,11 +724,13 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
                 message: `请输入${field.label}`,
               },
             ]}
-            extra={field.description && (
-              <Paragraph type="secondary" className="text-xs mt-1 mb-0">
-                {field.description}
-              </Paragraph>
-            )}
+            extra={
+              field.description && (
+                <Paragraph type="secondary" className="text-xs mt-1 mb-0">
+                  {field.description}
+                </Paragraph>
+              )
+            }
           >
             {renderInput(field)}
           </Form.Item>
@@ -727,7 +738,7 @@ const EnvVarContent: React.FC<HITLContentProps> = ({
       </Form>
 
       {/* Security Notice */}
-      {data?.fields.some(f => f.inputType === 'password') && (
+      {data?.fields.some((f) => f.inputType === 'password') && (
         <Alert
           message="安全提示"
           description="密码类型的环境变量将被加密存储，保护您的敏感信息。"
@@ -794,8 +805,12 @@ const PermissionContent: React.FC<HITLContentProps> = ({
 
       {/* Tool Information */}
       <Descriptions column={1} bordered size="small">
-        <Descriptions.Item 
-          label={<Space><CodeOutlined /> 工具名称</Space>}
+        <Descriptions.Item
+          label={
+            <Space>
+              <CodeOutlined /> 工具名称
+            </Space>
+          }
         >
           <Text code>{data?.toolName}</Text>
         </Descriptions.Item>
@@ -803,10 +818,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
           <Text>{data?.action}</Text>
         </Descriptions.Item>
         <Descriptions.Item label="风险等级">
-          <Tag 
-            color={riskConfig.color}
-            icon={riskConfig.icon}
-          >
+          <Tag color={riskConfig.color} icon={riskConfig.icon}>
             {riskConfig.label}
           </Tag>
         </Descriptions.Item>
@@ -816,9 +828,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
       {data?.description && (
         <div>
           <Text strong>请求描述：</Text>
-          <Paragraph className="mt-2">
-            {data.description}
-          </Paragraph>
+          <Paragraph className="mt-2">{data.description}</Paragraph>
         </div>
       )}
 
@@ -836,20 +846,12 @@ const PermissionContent: React.FC<HITLContentProps> = ({
 
       {/* Actions */}
       <div className="flex justify-between">
-        <Button 
-          danger 
-          icon={<CloseCircleOutlined />}
-          onClick={handleDeny}
-          loading={isSubmitting}
-        >
+        <Button danger icon={<CloseCircleOutlined />} onClick={handleDeny} loading={isSubmitting}>
           拒绝
         </Button>
         <Space>
           {data?.allowRemember && (
-            <Button
-              onClick={handleGrantAlways}
-              loading={isSubmitting}
-            >
+            <Button onClick={handleGrantAlways} loading={isSubmitting}>
               总是允许
             </Button>
           )}

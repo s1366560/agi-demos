@@ -108,8 +108,13 @@ describe('TimelineStore', () => {
       useTimelineStore.getState().reset();
 
       // Verify initial state restored
-      const { timeline, timelineLoading, timelineError, earliestLoadedSequence, latestLoadedSequence } =
-        useTimelineStore.getState();
+      const {
+        timeline,
+        timelineLoading,
+        timelineError,
+        earliestLoadedSequence,
+        latestLoadedSequence,
+      } = useTimelineStore.getState();
       expect(timeline).toEqual([]);
       expect(timelineLoading).toBe(false);
       expect(timelineError).toBe(null);
@@ -126,12 +131,19 @@ describe('TimelineStore', () => {
         { id: '3', type: 'tool_execution', sequenceNumber: 3 },
       ];
 
-      vi.mocked(getConversationMessages).mockResolvedValue(createMockResponse(mockTimeline as any, 3));
+      vi.mocked(getConversationMessages).mockResolvedValue(
+        createMockResponse(mockTimeline as any, 3)
+      );
 
       await useTimelineStore.getState().getTimeline('conv-1', 'proj-1');
 
-      const { timeline, timelineLoading, timelineError, earliestLoadedSequence, latestLoadedSequence } =
-        useTimelineStore.getState();
+      const {
+        timeline,
+        timelineLoading,
+        timelineError,
+        earliestLoadedSequence,
+        latestLoadedSequence,
+      } = useTimelineStore.getState();
 
       expect(timeline).toEqual(mockTimeline);
       expect(timelineLoading).toBe(false);
@@ -176,9 +188,9 @@ describe('TimelineStore', () => {
       const error = { response: { data: { detail: 'Network error' } } };
       vi.mocked(getConversationMessages).mockRejectedValue(error);
 
-      await expect(
-        useTimelineStore.getState().getTimeline('conv-1', 'proj-1')
-      ).rejects.toEqual(error);
+      await expect(useTimelineStore.getState().getTimeline('conv-1', 'proj-1')).rejects.toEqual(
+        error
+      );
 
       const { timeline, timelineLoading, timelineError } = useTimelineStore.getState();
 
@@ -191,9 +203,9 @@ describe('TimelineStore', () => {
       const error = { message: 'Unknown error' };
       vi.mocked(getConversationMessages).mockRejectedValue(error);
 
-      await expect(
-        useTimelineStore.getState().getTimeline('conv-1', 'proj-1')
-      ).rejects.toEqual(error);
+      await expect(useTimelineStore.getState().getTimeline('conv-1', 'proj-1')).rejects.toEqual(
+        error
+      );
 
       expect(useTimelineStore.getState().timelineError).toBe('Failed to get timeline');
     });
@@ -206,11 +218,11 @@ describe('TimelineStore', () => {
         latestLoadedSequence: 1,
       });
 
-      const newTimeline = [
-        { id: 'new', type: 'assistant_message', sequenceNumber: 2 },
-      ];
+      const newTimeline = [{ id: 'new', type: 'assistant_message', sequenceNumber: 2 }];
 
-      vi.mocked(getConversationMessages).mockResolvedValue(createMockResponse(newTimeline as any, 1));
+      vi.mocked(getConversationMessages).mockResolvedValue(
+        createMockResponse(newTimeline as any, 1)
+      );
 
       await useTimelineStore.getState().getTimeline('conv-2', 'proj-1');
 
@@ -323,9 +335,7 @@ describe('TimelineStore', () => {
     });
 
     it('should prepend to empty timeline', () => {
-      const events = [
-        { id: '1', type: 'user_message', sequenceNumber: 1 },
-      ] as any;
+      const events = [{ id: '1', type: 'user_message', sequenceNumber: 1 }] as any;
 
       useTimelineStore.getState().prependTimelineEvents(events);
 
@@ -361,7 +371,9 @@ describe('TimelineStore', () => {
         { id: '2', type: 'assistant_message', sequenceNumber: 2 },
       ];
 
-      vi.mocked(getConversationMessages).mockResolvedValue(createMockResponse(earlierEvents as any, 4));
+      vi.mocked(getConversationMessages).mockResolvedValue(
+        createMockResponse(earlierEvents as any, 4)
+      );
 
       await useTimelineStore.getState().loadEarlierMessages('conv-1', 'proj-1');
 
@@ -451,9 +463,7 @@ describe('TimelineStore', () => {
     });
 
     it('should handle single event timeline', async () => {
-      const timeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 5 },
-      ];
+      const timeline = [{ id: '1', type: 'user_message', sequenceNumber: 5 }];
 
       vi.mocked(getConversationMessages).mockResolvedValue(createMockResponse(timeline as any, 1));
 
@@ -467,9 +477,7 @@ describe('TimelineStore', () => {
 
     it('should update pagination after loading earlier messages', async () => {
       useTimelineStore.setState({
-        timeline: [
-          { id: '5', type: 'assistant_message', sequenceNumber: 5 },
-        ] as any,
+        timeline: [{ id: '5', type: 'assistant_message', sequenceNumber: 5 }] as any,
         earliestLoadedSequence: 5,
       });
 
@@ -478,7 +486,9 @@ describe('TimelineStore', () => {
         { id: '4', type: 'assistant_message', sequenceNumber: 4 },
       ];
 
-      vi.mocked(getConversationMessages).mockResolvedValue(createMockResponse(earlierEvents as any, 3));
+      vi.mocked(getConversationMessages).mockResolvedValue(
+        createMockResponse(earlierEvents as any, 3)
+      );
 
       await useTimelineStore.getState().loadEarlierMessages('conv-1', 'proj-1');
 
@@ -548,7 +558,9 @@ describe('TimelineStore', () => {
         { id: '5', type: 'tool_execution', sequenceNumber: 5 }, // Gap: 4 is missing
       ];
 
-      vi.mocked(getConversationMessages).mockResolvedValue(createMockResponse(timelineWithGaps as any, 3));
+      vi.mocked(getConversationMessages).mockResolvedValue(
+        createMockResponse(timelineWithGaps as any, 3)
+      );
 
       await useTimelineStore.getState().getTimeline('conv-1', 'proj-1');
 
@@ -576,8 +588,13 @@ describe('TimelineStore', () => {
       useTimelineStore.getState().reset();
 
       // Verify all state reset
-      const { timeline, timelineLoading, timelineError, earliestLoadedSequence, latestLoadedSequence } =
-        useTimelineStore.getState();
+      const {
+        timeline,
+        timelineLoading,
+        timelineError,
+        earliestLoadedSequence,
+        latestLoadedSequence,
+      } = useTimelineStore.getState();
 
       expect(timeline).toEqual([]);
       expect(timelineLoading).toBe(false);

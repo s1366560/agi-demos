@@ -5,13 +5,13 @@
  * Matches design from docs/statics/project workbench/agent/start/
  */
 
-import { MaterialIcon } from "../shared";
+import { MaterialIcon } from '../shared';
 
 export interface StarterTile {
   id: string;
   title: string;
   description: string;
-  color: "blue" | "purple" | "emerald" | "amber";
+  color: 'blue' | 'purple' | 'emerald' | 'amber';
   icon: string;
 }
 
@@ -28,55 +28,55 @@ export interface IdleStateProps {
 
 const DEFAULT_STARTER_TILES: StarterTile[] = [
   {
-    id: "trends",
-    title: "Analyze project trends",
-    description: "Identify key patterns across multiple data streams",
-    color: "blue",
-    icon: "analytics",
+    id: 'trends',
+    title: 'Analyze project trends',
+    description: 'Identify key patterns across multiple data streams',
+    color: 'blue',
+    icon: 'analytics',
   },
   {
-    id: "reports",
-    title: "Synthesize Q4 reports",
-    description: "Aggregate complex findings into an executive summary",
-    color: "purple",
-    icon: "summarize",
+    id: 'reports',
+    title: 'Synthesize Q4 reports',
+    description: 'Aggregate complex findings into an executive summary',
+    color: 'purple',
+    icon: 'summarize',
   },
   {
-    id: "audit",
-    title: "Audit memory logs",
-    description: "Review system activity and trace data genealogy",
-    color: "emerald",
-    icon: "verified_user",
+    id: 'audit',
+    title: 'Audit memory logs',
+    description: 'Review system activity and trace data genealogy',
+    color: 'emerald',
+    icon: 'verified_user',
   },
   {
-    id: "compare",
-    title: "Cross-project comparison",
-    description: "Compare performance metrics between active projects",
-    color: "amber",
-    icon: "compare_arrows",
+    id: 'compare',
+    title: 'Cross-project comparison',
+    description: 'Compare performance metrics between active projects',
+    color: 'amber',
+    icon: 'compare_arrows',
   },
 ];
 
 const TILE_COLORS = {
   blue: {
-    bg: "bg-blue-50 dark:bg-primary/10",
-    text: "text-primary",
-    hoverText: "group-hover:text-primary",
+    bg: 'bg-blue-50 dark:bg-primary/10',
+    text: 'text-primary',
+    hoverText: 'group-hover:text-primary',
   },
   purple: {
-    bg: "bg-purple-50 dark:bg-purple-500/10",
-    text: "text-purple-600",
-    hoverText: "group-hover:text-primary",
+    bg: 'bg-purple-50 dark:bg-purple-500/10',
+    text: 'text-purple-600',
+    hoverText: 'group-hover:text-primary',
   },
   emerald: {
-    bg: "bg-emerald-50 dark:bg-emerald-500/10",
-    text: "text-emerald-600",
-    hoverText: "group-hover:text-primary",
+    bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+    text: 'text-emerald-600',
+    hoverText: 'group-hover:text-primary',
   },
   amber: {
-    bg: "bg-amber-50 dark:bg-amber-500/10",
-    text: "text-amber-600",
-    hoverText: "group-hover:text-primary",
+    bg: 'bg-amber-50 dark:bg-amber-500/10',
+    text: 'text-amber-600',
+    hoverText: 'group-hover:text-primary',
   },
 };
 
@@ -90,7 +90,7 @@ const TILE_COLORS = {
  * />
  */
 export function IdleState({
-  greeting = "How can I help you today?",
+  greeting = 'How can I help you today?',
   starterTiles = DEFAULT_STARTER_TILES,
   onTileClick,
   subtitle,
@@ -107,9 +107,7 @@ export function IdleState({
           {greeting}
         </h1>
         {subtitle && (
-          <p className="text-lg text-slate-500 dark:text-text-muted max-w-xl mx-auto">
-            {subtitle}
-          </p>
+          <p className="text-lg text-slate-500 dark:text-text-muted max-w-xl mx-auto">{subtitle}</p>
         )}
       </div>
 
@@ -124,14 +122,10 @@ export function IdleState({
               onClick={() => handleTileClick(tile)}
               className={`group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer text-left`}
             >
-              <div
-                className={`mb-4 p-2 rounded-lg ${colors.bg} ${colors.text}`}
-              >
+              <div className={`mb-4 p-2 rounded-lg ${colors.bg} ${colors.text}`}>
                 <MaterialIcon name={tile.icon as any} size={24} />
               </div>
-              <h3
-                className={`text-sm font-semibold mb-1 ${colors.hoverText} transition-colors`}
-              >
+              <h3 className={`text-sm font-semibold mb-1 ${colors.hoverText} transition-colors`}>
                 {tile.title}
               </h3>
               <p className="text-xs text-text-muted">{tile.description}</p>

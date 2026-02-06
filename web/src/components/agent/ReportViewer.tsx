@@ -145,11 +145,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
       extra={
         showDownload && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <LazyButton
-              icon={<CopyOutlined />}
-              size="small"
-              onClick={handleCopy}
-            >
+            <LazyButton icon={<CopyOutlined />} size="small" onClick={handleCopy}>
               {copied ? 'Copied!' : 'Copy'}
             </LazyButton>
             <LazyButton

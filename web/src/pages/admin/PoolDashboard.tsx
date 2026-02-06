@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import React, { useEffect, useCallback, useRef } from "react";
+import React, { useEffect, useCallback, useRef } from 'react';
 
 import {
   ReloadOutlined,
@@ -19,7 +19,7 @@ import {
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   CloseCircleOutlined,
-} from "@ant-design/icons";
+} from '@ant-design/icons';
 import {
   Card,
   Row,
@@ -37,13 +37,12 @@ import {
   Alert,
   Popconfirm,
   message,
-} from "antd";
+} from 'antd';
 
+import { usePoolStore } from '../../stores/pool';
 
-import { usePoolStore } from "../../stores/pool";
-
-import type { PoolInstance, ProjectTier } from "../../services/poolService";
-import type { ColumnsType } from "antd/es/table";
+import type { PoolInstance, ProjectTier } from '../../services/poolService';
+import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
 
@@ -53,9 +52,9 @@ const { Title, Text } = Typography;
 
 const TierTag: React.FC<{ tier: ProjectTier }> = ({ tier }) => {
   const config = {
-    hot: { color: "red", icon: <ThunderboltOutlined />, label: "HOT" },
-    warm: { color: "orange", icon: <CloudOutlined />, label: "WARM" },
-    cold: { color: "blue", icon: <HistoryOutlined />, label: "COLD" },
+    hot: { color: 'red', icon: <ThunderboltOutlined />, label: 'HOT' },
+    warm: { color: 'orange', icon: <CloudOutlined />, label: 'WARM' },
+    cold: { color: 'blue', icon: <HistoryOutlined />, label: 'COLD' },
   };
 
   const { color, icon, label } = config[tier] || config.cold;
@@ -69,17 +68,17 @@ const TierTag: React.FC<{ tier: ProjectTier }> = ({ tier }) => {
 
 const StatusTag: React.FC<{ status: string }> = ({ status }) => {
   const config: Record<string, { color: string; icon: React.ReactNode }> = {
-    ready: { color: "green", icon: <CheckCircleOutlined /> },
-    executing: { color: "blue", icon: <ThunderboltOutlined /> },
-    paused: { color: "orange", icon: <PauseCircleOutlined /> },
-    unhealthy: { color: "red", icon: <ExclamationCircleOutlined /> },
-    degraded: { color: "gold", icon: <ExclamationCircleOutlined /> },
-    initializing: { color: "cyan", icon: <ReloadOutlined spin /> },
-    terminated: { color: "default", icon: <StopOutlined /> },
-    initialization_failed: { color: "red", icon: <CloseCircleOutlined /> },
+    ready: { color: 'green', icon: <CheckCircleOutlined /> },
+    executing: { color: 'blue', icon: <ThunderboltOutlined /> },
+    paused: { color: 'orange', icon: <PauseCircleOutlined /> },
+    unhealthy: { color: 'red', icon: <ExclamationCircleOutlined /> },
+    degraded: { color: 'gold', icon: <ExclamationCircleOutlined /> },
+    initializing: { color: 'cyan', icon: <ReloadOutlined spin /> },
+    terminated: { color: 'default', icon: <StopOutlined /> },
+    initialization_failed: { color: 'red', icon: <CloseCircleOutlined /> },
   };
 
-  const { color, icon } = config[status] || { color: "default", icon: null };
+  const { color, icon } = config[status] || { color: 'default', icon: null };
 
   return (
     <Tag color={color} icon={icon}>
@@ -90,13 +89,13 @@ const StatusTag: React.FC<{ status: string }> = ({ status }) => {
 
 const HealthTag: React.FC<{ health: string }> = ({ health }) => {
   const config: Record<string, { color: string }> = {
-    healthy: { color: "green" },
-    degraded: { color: "gold" },
-    unhealthy: { color: "red" },
-    unknown: { color: "default" },
+    healthy: { color: 'green' },
+    degraded: { color: 'gold' },
+    unhealthy: { color: 'red' },
+    unknown: { color: 'default' },
   };
 
-  const { color } = config[health] || { color: "default" };
+  const { color } = config[health] || { color: 'default' };
 
   return <Tag color={color}>{health.toUpperCase()}</Tag>;
 };
@@ -170,36 +169,36 @@ const PoolDashboard: React.FC = () => {
   const handlePause = async (instanceKey: string) => {
     const success = await pauseInstance(instanceKey);
     if (success) {
-      message.success("Instance paused");
+      message.success('Instance paused');
     } else {
-      message.error("Failed to pause instance");
+      message.error('Failed to pause instance');
     }
   };
 
   const handleResume = async (instanceKey: string) => {
     const success = await resumeInstance(instanceKey);
     if (success) {
-      message.success("Instance resumed");
+      message.success('Instance resumed');
     } else {
-      message.error("Failed to resume instance");
+      message.error('Failed to resume instance');
     }
   };
 
   const handleTerminate = async (instanceKey: string) => {
     const success = await terminateInstance(instanceKey);
     if (success) {
-      message.success("Instance terminated");
+      message.success('Instance terminated');
     } else {
-      message.error("Failed to terminate instance");
+      message.error('Failed to terminate instance');
     }
   };
 
   // Table columns
   const columns: ColumnsType<PoolInstance> = [
     {
-      title: "Instance Key",
-      dataIndex: "instance_key",
-      key: "instance_key",
+      title: 'Instance Key',
+      dataIndex: 'instance_key',
+      key: 'instance_key',
       width: 250,
       ellipsis: true,
       render: (key: string) => (
@@ -211,29 +210,29 @@ const PoolDashboard: React.FC = () => {
       ),
     },
     {
-      title: "Tier",
-      dataIndex: "tier",
-      key: "tier",
+      title: 'Tier',
+      dataIndex: 'tier',
+      key: 'tier',
       width: 100,
       render: (tier: ProjectTier) => <TierTag tier={tier} />,
     },
     {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
       width: 140,
       render: (status: string) => <StatusTag status={status} />,
     },
     {
-      title: "Health",
-      dataIndex: "health_status",
-      key: "health_status",
+      title: 'Health',
+      dataIndex: 'health_status',
+      key: 'health_status',
       width: 100,
       render: (health: string) => <HealthTag health={health} />,
     },
     {
-      title: "Requests",
-      key: "requests",
+      title: 'Requests',
+      key: 'requests',
       width: 120,
       render: (_: unknown, record: PoolInstance) => (
         <Space direction="vertical" size={0}>
@@ -247,28 +246,27 @@ const PoolDashboard: React.FC = () => {
       ),
     },
     {
-      title: "Memory",
-      dataIndex: "memory_used_mb",
-      key: "memory_used_mb",
+      title: 'Memory',
+      dataIndex: 'memory_used_mb',
+      key: 'memory_used_mb',
       width: 100,
       render: (mb: number) => `${mb.toFixed(1)} MB`,
     },
     {
-      title: "Last Request",
-      dataIndex: "last_request_at",
-      key: "last_request_at",
+      title: 'Last Request',
+      dataIndex: 'last_request_at',
+      key: 'last_request_at',
       width: 160,
-      render: (time: string | null) =>
-        time ? new Date(time).toLocaleString() : "-",
+      render: (time: string | null) => (time ? new Date(time).toLocaleString() : '-'),
     },
     {
-      title: "Actions",
-      key: "actions",
+      title: 'Actions',
+      key: 'actions',
       width: 150,
-      fixed: "right",
+      fixed: 'right',
       render: (_: unknown, record: PoolInstance) => (
         <Space size="small">
-          {record.status === "ready" || record.status === "executing" ? (
+          {record.status === 'ready' || record.status === 'executing' ? (
             <Tooltip title="Pause">
               <Button
                 type="text"
@@ -277,7 +275,7 @@ const PoolDashboard: React.FC = () => {
                 onClick={() => handlePause(record.instance_key)}
               />
             </Tooltip>
-          ) : record.status === "paused" ? (
+          ) : record.status === 'paused' ? (
             <Tooltip title="Resume">
               <Button
                 type="text"
@@ -294,12 +292,7 @@ const PoolDashboard: React.FC = () => {
             cancelText="No"
           >
             <Tooltip title="Terminate">
-              <Button
-                type="text"
-                size="small"
-                danger
-                icon={<StopOutlined />}
-              />
+              <Button type="text" size="small" danger icon={<StopOutlined />} />
             </Tooltip>
           </Popconfirm>
         </Space>
@@ -309,14 +302,10 @@ const PoolDashboard: React.FC = () => {
 
   // Calculate resource usage percentages
   const memoryUsagePct = status?.resource_usage
-    ? (status.resource_usage.used_memory_mb /
-        status.resource_usage.total_memory_mb) *
-      100
+    ? (status.resource_usage.used_memory_mb / status.resource_usage.total_memory_mb) * 100
     : 0;
   const cpuUsagePct = status?.resource_usage
-    ? (status.resource_usage.used_cpu_cores /
-        status.resource_usage.total_cpu_cores) *
-      100
+    ? (status.resource_usage.used_cpu_cores / status.resource_usage.total_cpu_cores) * 100
     : 0;
 
   return (
@@ -325,9 +314,9 @@ const PoolDashboard: React.FC = () => {
       <div
         style={{
           marginBottom: 24,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
         <Title level={2} style={{ margin: 0 }}>
@@ -335,11 +324,7 @@ const PoolDashboard: React.FC = () => {
         </Title>
         <Space>
           <Text type="secondary">Auto-refresh</Text>
-          <Switch
-            checked={autoRefresh}
-            onChange={setAutoRefresh}
-            size="small"
-          />
+          <Switch checked={autoRefresh} onChange={setAutoRefresh} size="small" />
           <Button
             icon={<ReloadOutlined />}
             onClick={handleRefresh}
@@ -378,7 +363,7 @@ const PoolDashboard: React.FC = () => {
             <Statistic
               title="Ready"
               value={status?.ready_instances ?? 0}
-              valueStyle={{ color: "#52c41a" }}
+              valueStyle={{ color: '#52c41a' }}
               prefix={<CheckCircleOutlined />}
             />
           </Card>
@@ -388,7 +373,7 @@ const PoolDashboard: React.FC = () => {
             <Statistic
               title="Executing"
               value={status?.executing_instances ?? 0}
-              valueStyle={{ color: "#1890ff" }}
+              valueStyle={{ color: '#1890ff' }}
               prefix={<ThunderboltOutlined />}
             />
           </Card>
@@ -399,7 +384,7 @@ const PoolDashboard: React.FC = () => {
               title="Unhealthy"
               value={status?.unhealthy_instances ?? 0}
               valueStyle={{
-                color: (status?.unhealthy_instances ?? 0) > 0 ? "#f5222d" : undefined,
+                color: (status?.unhealthy_instances ?? 0) > 0 ? '#f5222d' : undefined,
               }}
               prefix={<ExclamationCircleOutlined />}
             />
@@ -416,7 +401,7 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <ThunderboltOutlined style={{ color: "#f5222d" }} />
+                      <ThunderboltOutlined style={{ color: '#f5222d' }} />
                       HOT
                     </Space>
                   }
@@ -427,7 +412,7 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <CloudOutlined style={{ color: "#fa8c16" }} />
+                      <CloudOutlined style={{ color: '#fa8c16' }} />
                       WARM
                     </Space>
                   }
@@ -438,7 +423,7 @@ const PoolDashboard: React.FC = () => {
                 <Statistic
                   title={
                     <Space>
-                      <HistoryOutlined style={{ color: "#1890ff" }} />
+                      <HistoryOutlined style={{ color: '#1890ff' }} />
                       COLD
                     </Space>
                   }
@@ -450,12 +435,12 @@ const PoolDashboard: React.FC = () => {
         </Col>
         <Col xs={24} lg={12}>
           <Card title="Resource Usage" loading={isStatusLoading}>
-            <Space direction="vertical" style={{ width: "100%" }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">Memory</Text>
                 <Progress
                   percent={Math.round(memoryUsagePct)}
-                  status={memoryUsagePct > 80 ? "exception" : "normal"}
+                  status={memoryUsagePct > 80 ? 'exception' : 'normal'}
                   format={() =>
                     `${status?.resource_usage?.used_memory_mb?.toFixed(0) ?? 0} / ${status?.resource_usage?.total_memory_mb?.toFixed(0) ?? 0} MB`
                   }
@@ -465,7 +450,7 @@ const PoolDashboard: React.FC = () => {
                 <Text type="secondary">CPU</Text>
                 <Progress
                   percent={Math.round(cpuUsagePct)}
-                  status={cpuUsagePct > 80 ? "exception" : "normal"}
+                  status={cpuUsagePct > 80 ? 'exception' : 'normal'}
                   format={() =>
                     `${status?.resource_usage?.used_cpu_cores?.toFixed(1) ?? 0} / ${status?.resource_usage?.total_cpu_cores?.toFixed(1) ?? 0} cores`
                   }
@@ -519,21 +504,16 @@ const PoolDashboard: React.FC = () => {
               value={tierFilter}
               onChange={setTierFilter}
               options={[
-                { value: "hot", label: "HOT" },
-                { value: "warm", label: "WARM" },
-                { value: "cold", label: "COLD" },
+                { value: 'hot', label: 'HOT' },
+                { value: 'warm', label: 'WARM' },
+                { value: 'cold', label: 'COLD' },
               ]}
             />
           </Space>
         }
       >
         {instancesError && (
-          <Alert
-            message={instancesError}
-            type="error"
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
+          <Alert message={instancesError} type="error" showIcon style={{ marginBottom: 16 }} />
         )}
         <Table
           columns={columns}

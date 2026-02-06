@@ -33,11 +33,13 @@ class BrowserEventEmitter {
       this.listeners.set(event, new Set());
     }
     const eventListeners = this.listeners.get(event)!;
-    
+
     if (eventListeners.size >= this.maxListeners) {
-      console.warn(`MaxListenersExceededWarning: Possible memory leak. ${eventListeners.size + 1} listeners added for event "${event}". Use setMaxListeners() to increase limit.`);
+      console.warn(
+        `MaxListenersExceededWarning: Possible memory leak. ${eventListeners.size + 1} listeners added for event "${event}". Use setMaxListeners() to increase limit.`
+      );
     }
-    
+
     eventListeners.add(listener);
     return this;
   }
@@ -55,8 +57,8 @@ class BrowserEventEmitter {
     if (!eventListeners || eventListeners.size === 0) {
       return false;
     }
-    
-    eventListeners.forEach(listener => {
+
+    eventListeners.forEach((listener) => {
       try {
         listener(...args);
       } catch (error) {
@@ -88,7 +90,9 @@ class SSEEmitter extends BrowserEventEmitter {
     super();
     // Increase max listeners to support multiple components
     this.setMaxListeners(100);
-    console.warn('[SSEEmitter] DEPRECATED: sseEmitter is deprecated. Use agentService WebSocket handlers.');
+    console.warn(
+      '[SSEEmitter] DEPRECATED: sseEmitter is deprecated. Use agentService WebSocket handlers.'
+    );
   }
 
   /**
@@ -137,23 +141,11 @@ export interface PlanModeEventHandlers {
     plan_id: string;
     plan_title: string;
   }) => void;
-  onPlanGenerated?: (data: {
-    plan: unknown;
-  }) => void;
-  onStepUpdated?: (data: {
-    step_id: string;
-    step: unknown;
-  }) => void;
-  onReflectionComplete?: (data: {
-    reflection: unknown;
-  }) => void;
-  onPlanAdjusted?: (data: {
-    adjustments: unknown[];
-  }) => void;
-  onPlanCompleted?: (data: {
-    plan_id: string;
-    status: string;
-  }) => void;
+  onPlanGenerated?: (data: { plan: unknown }) => void;
+  onStepUpdated?: (data: { step_id: string; step: unknown }) => void;
+  onReflectionComplete?: (data: { reflection: unknown }) => void;
+  onPlanAdjusted?: (data: { adjustments: unknown[] }) => void;
+  onPlanCompleted?: (data: { plan_id: string; status: string }) => void;
 }
 
 // Export AgentEvent for use in tests

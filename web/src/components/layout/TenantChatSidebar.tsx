@@ -1,9 +1,9 @@
 /**
  * TenantChatSidebar - Tenant-level conversation history sidebar
- * 
+ *
  * Shows conversations across all projects in the tenant.
  * This replaces the traditional tenant navigation as the primary sidebar.
- * 
+ *
  * Features:
  * - Draggable resize for width adjustment (optimized with RAF)
  * - Collapsible to icon-only mode (controlled by parent)
@@ -16,15 +16,15 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Modal } from 'antd';
-import { 
-  Plus, 
-  MessageSquare, 
-  MoreVertical, 
-  Trash2, 
+import {
+  Plus,
+  MessageSquare,
+  MoreVertical,
+  Trash2,
   Edit3,
   Bot,
   FolderOpen,
-  ChevronDown
+  ChevronDown,
 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -32,7 +32,13 @@ import { useProjectStore } from '@/stores/project';
 
 import { formatDistanceToNow } from '@/utils/date';
 
-import { LazyButton, LazyBadge, LazyDropdown, LazySelect, LazyInput } from '@/components/ui/lazyAntd';
+import {
+  LazyButton,
+  LazyBadge,
+  LazyDropdown,
+  LazySelect,
+  LazyInput,
+} from '@/components/ui/lazyAntd';
 
 import type { Conversation } from '@/types/agent';
 
@@ -60,133 +66,133 @@ const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
 
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
-const ConversationItem: React.FC<ConversationItemProps> = memo(({
-  conversation,
-  isActive,
-  onSelect,
-  onDelete,
-  onRename,
-  compact = false,
-}) => {
-  const timeAgo = React.useMemo(() => {
-    try {
-      return formatDistanceToNow(new Date(conversation.created_at));
-    } catch {
-      return '';
-    }
-  }, [conversation.created_at]);
+const ConversationItem: React.FC<ConversationItemProps> = memo(
+  ({ conversation, isActive, onSelect, onDelete, onRename, compact = false }) => {
+    const timeAgo = React.useMemo(() => {
+      try {
+        return formatDistanceToNow(new Date(conversation.created_at));
+      } catch {
+        return '';
+      }
+    }, [conversation.created_at]);
 
-  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
-    if (key === 'delete') {
-      onDelete({} as React.MouseEvent);
-    } else if (key === 'rename') {
-      onRename?.({} as React.MouseEvent);
-    }
-  };
+    const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+      if (key === 'delete') {
+        onDelete({} as React.MouseEvent);
+      } else if (key === 'rename') {
+        onRename?.({} as React.MouseEvent);
+      }
+    };
 
-  const items: MenuProps['items'] = React.useMemo(() => [
-    {
-      key: 'rename',
-      icon: <Edit3 size={14} />,
-      label: 'Rename',
-      onClick: () => onRename?.({} as React.MouseEvent),
-    },
-    {
-      key: 'delete',
-      icon: <Trash2 size={14} />,
-      label: 'Delete',
-      danger: true,
-      onClick: (e) => onDelete(e.domEvent as React.MouseEvent),
-    },
-  ], [onDelete, onRename]);
+    const items: MenuProps['items'] = React.useMemo(
+      () => [
+        {
+          key: 'rename',
+          icon: <Edit3 size={14} />,
+          label: 'Rename',
+          onClick: () => onRename?.({} as React.MouseEvent),
+        },
+        {
+          key: 'delete',
+          icon: <Trash2 size={14} />,
+          label: 'Delete',
+          danger: true,
+          onClick: (e) => onDelete(e.domEvent as React.MouseEvent),
+        },
+      ],
+      [onDelete, onRename]
+    );
 
-  if (compact) {
-    return (
-      <Tooltip title={conversation.title || 'Untitled'}>
-        <button
-          onClick={onSelect}
-          className={`
+    if (compact) {
+      return (
+        <Tooltip title={conversation.title || 'Untitled'}>
+          <button
+            onClick={onSelect}
+            className={`
             w-10 h-10 rounded-xl mb-1 transition-all duration-200
             flex items-center justify-center relative mx-auto
-            ${isActive 
-              ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200' 
-              : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+            ${
+              isActive
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }
           `}
-        >
-          <MessageSquare size={20} />
-          {isActive && (
-            <span className="absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full" />
-          )}
-        </button>
-      </Tooltip>
-    );
-  }
+          >
+            <MessageSquare size={20} />
+            {isActive && (
+              <span className="absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full" />
+            )}
+          </button>
+        </Tooltip>
+      );
+    }
 
-  return (
-    <div
-      onClick={onSelect}
-      className={`
+    return (
+      <div
+        onClick={onSelect}
+        className={`
         group relative p-3 rounded-xl mb-1 cursor-pointer
         transition-all duration-200 border
-        ${isActive 
-          ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100' 
-          : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+        ${
+          isActive
+            ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
+            : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
         }
       `}
-    >
-      <div className="flex items-start gap-3">
-        {/* Icon */}
-        <div className={`
+      >
+        <div className="flex items-start gap-3">
+          {/* Icon */}
+          <div
+            className={`
           w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
-          ${isActive 
-            ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' 
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+          ${
+            isActive
+              ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
           }
-        `}>
-          <MessageSquare size={18} />
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-medium text-sm truncate">
-              {conversation.title || 'Untitled Conversation'}
-            </p>
-            {conversation.status === 'active' && (
-              <LazyBadge status="processing" className="flex-shrink-0" />
-            )}
+        `}
+          >
+            <MessageSquare size={18} />
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {conversation.projectName} · {timeAgo}
-          </p>
-        </div>
 
-        {/* Actions */}
-        <LazyDropdown
-          menu={{ items, onClick: handleMenuClick }}
-          trigger={['click']}
-          placement="bottomRight"
-        >
-          <LazyButton
-            type="text"
-            size="small"
-            icon={<MoreVertical size={14} />}
-            className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          />
-        </LazyDropdown>
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium text-sm truncate">
+                {conversation.title || 'Untitled Conversation'}
+              </p>
+              {conversation.status === 'active' && (
+                <LazyBadge status="processing" className="flex-shrink-0" />
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {conversation.projectName} · {timeAgo}
+            </p>
+          </div>
+
+          {/* Actions */}
+          <LazyDropdown
+            menu={{ items, onClick: handleMenuClick }}
+            trigger={['click']}
+            placement="bottomRight"
+          >
+            <LazyButton
+              type="text"
+              size="small"
+              icon={<MoreVertical size={14} />}
+              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            />
+          </LazyDropdown>
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 ConversationItem.displayName = 'ConversationItem';
 
 // Simple Tooltip component for collapsed state
-const Tooltip: React.FC<{ children: React.ReactNode; title: string }> = ({ 
-  children, 
-  title,
-}) => (
+const Tooltip: React.FC<{ children: React.ReactNode; title: string }> = ({ children, title }) => (
   <div className="group relative">
     {children}
     <div className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none">
@@ -209,18 +215,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   onCollapsedChange,
 }) => {
   const navigate = useNavigate();
-  
+
   // Use ref for width during drag to avoid re-renders
   const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const sidebarRef = useRef<HTMLElement>(null);
-  
+
   // Internal state for uncontrolled mode
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
-  
+
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  
+
   // Use controlled or internal state
   const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const setCollapsed = (value: boolean) => {
@@ -229,7 +235,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
     onCollapsedChange?.(value);
   };
-  
+
   const {
     conversations,
     activeConversationId,
@@ -238,7 +244,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     createNewConversation,
     deleteConversation,
   } = useAgentV3Store();
-  
+
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
 
   // Sync ref with state when not dragging
@@ -271,7 +277,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const loadedProjectIdRef = useRef<string | null>(null);
   const loadConversationsRef = useRef(loadConversations);
   loadConversationsRef.current = loadConversations;
-  
+
   useEffect(() => {
     if (selectedProjectId && loadedProjectIdRef.current !== selectedProjectId) {
       loadedProjectIdRef.current = selectedProjectId;
@@ -283,20 +289,23 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Enrich conversations with project info
   const enrichedConversations: ConversationWithProject[] = useMemo(() => {
-    return conversations.map(conv => ({
+    return conversations.map((conv) => ({
       ...conv,
       projectId: selectedProjectId || '',
-      projectName: projects.find(p => p.id === selectedProjectId)?.name || 'Unknown Project'
+      projectName: projects.find((p) => p.id === selectedProjectId)?.name || 'Unknown Project',
     }));
   }, [conversations, selectedProjectId, projects]);
 
-  const handleSelectConversation = useCallback((id: string, projectId: string) => {
-    if (tenantId) {
-      navigate(`/tenant/${tenantId}/agent-workspace/${id}?projectId=${projectId}`);
-    } else {
-      navigate(`/tenant/agent-workspace/${id}?projectId=${projectId}`);
-    }
-  }, [navigate, tenantId]);
+  const handleSelectConversation = useCallback(
+    (id: string, projectId: string) => {
+      if (tenantId) {
+        navigate(`/tenant/${tenantId}/agent-workspace/${id}?projectId=${projectId}`);
+      } else {
+        navigate(`/tenant/agent-workspace/${id}?projectId=${projectId}`);
+      }
+    },
+    [navigate, tenantId]
+  );
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -310,29 +319,34 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
   }, [selectedProjectId, createNewConversation, navigate, tenantId]);
 
-  const handleDeleteConversation = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!selectedProjectId) return;
-    Modal.confirm({
-      title: 'Delete Conversation',
-      content: 'Are you sure? This action cannot be undone.',
-      okText: 'Delete',
-      okType: 'danger',
-      onOk: async () => {
-        await deleteConversation(id, selectedProjectId);
-        if (activeConversationId === id) {
-          if (tenantId) {
-            navigate(`/tenant/${tenantId}/agent-workspace`);
-          } else {
-            navigate(`/tenant/agent-workspace`);
+  const handleDeleteConversation = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!selectedProjectId) return;
+      Modal.confirm({
+        title: 'Delete Conversation',
+        content: 'Are you sure? This action cannot be undone.',
+        okText: 'Delete',
+        okType: 'danger',
+        onOk: async () => {
+          await deleteConversation(id, selectedProjectId);
+          if (activeConversationId === id) {
+            if (tenantId) {
+              navigate(`/tenant/${tenantId}/agent-workspace`);
+            } else {
+              navigate(`/tenant/agent-workspace`);
+            }
           }
-        }
-      },
-    });
-  }, [selectedProjectId, activeConversationId, deleteConversation, navigate, tenantId]);
+        },
+      });
+    },
+    [selectedProjectId, activeConversationId, deleteConversation, navigate, tenantId]
+  );
 
   // Rename conversation state and handlers
-  const [renamingConversation, setRenamingConversation] = useState<ConversationWithProject | null>(null);
+  const [renamingConversation, setRenamingConversation] = useState<ConversationWithProject | null>(
+    null
+  );
   const [newTitle, setNewTitle] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
   const { renameConversation } = useAgentV3Store();
@@ -345,7 +359,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const handleRenameSubmit = useCallback(async () => {
     if (!renamingConversation || !newTitle.trim() || !selectedProjectId) return;
-    
+
     setIsRenaming(true);
     try {
       await renameConversation(renamingConversation.id, selectedProjectId, newTitle.trim());
@@ -363,74 +377,83 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     setNewTitle('');
   }, []);
 
-  const handleProjectChange = useCallback((projectId: string) => {
-    setSelectedProjectId(projectId);
-    localStorage.setItem('agent:lastProjectId', projectId);
-    const project = projects.find(p => p.id === projectId);
-    if (project) {
-      setCurrentProject(project);
-    }
-    // NOTE: loadConversations is called by useEffect when selectedProjectId changes
-    // Do NOT call it here to avoid duplicate requests
-  }, [projects, setCurrentProject]);
+  const handleProjectChange = useCallback(
+    (projectId: string) => {
+      setSelectedProjectId(projectId);
+      localStorage.setItem('agent:lastProjectId', projectId);
+      const project = projects.find((p) => p.id === projectId);
+      if (project) {
+        setCurrentProject(project);
+      }
+      // NOTE: loadConversations is called by useEffect when selectedProjectId changes
+      // Do NOT call it here to avoid duplicate requests
+    },
+    [projects, setCurrentProject]
+  );
 
   // Optimized drag handlers using RAF
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    if (collapsed) return; // Don't resize when collapsed
-    
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-    
-    const startX = e.clientX;
-    const startWidth = widthRef.current;
-    let rafId: number | null = null;
-    let currentWidth = startWidth;
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (collapsed) return; // Don't resize when collapsed
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (rafId) return;
-      
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        const delta = e.clientX - startX;
-        currentWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidth + delta));
-        
-        if (sidebarRef.current) {
-          sidebarRef.current.style.width = `${currentWidth}px`;
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(true);
+
+      const startX = e.clientX;
+      const startWidth = widthRef.current;
+      let rafId: number | null = null;
+      let currentWidth = startWidth;
+
+      const handleMouseMove = (e: MouseEvent) => {
+        if (rafId) return;
+
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          const delta = e.clientX - startX;
+          currentWidth = Math.max(
+            SIDEBAR_MIN_WIDTH,
+            Math.min(SIDEBAR_MAX_WIDTH, startWidth + delta)
+          );
+
+          if (sidebarRef.current) {
+            sidebarRef.current.style.width = `${currentWidth}px`;
+          }
+        });
+      };
+
+      const handleMouseUp = () => {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
         }
-      });
-    };
 
-    const handleMouseUp = () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-      
-      if (currentWidth < COLLAPSE_THRESHOLD) {
-        setCollapsed(true);
-        setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
-        widthRef.current = SIDEBAR_DEFAULT_WIDTH;
-        if (sidebarRef.current) {
-          sidebarRef.current.style.width = `${SIDEBAR_COLLAPSED_WIDTH}px`;
+        if (currentWidth < COLLAPSE_THRESHOLD) {
+          setCollapsed(true);
+          setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+          widthRef.current = SIDEBAR_DEFAULT_WIDTH;
+          if (sidebarRef.current) {
+            sidebarRef.current.style.width = `${SIDEBAR_COLLAPSED_WIDTH}px`;
+          }
+        } else {
+          setCollapsed(false);
+          setSidebarWidth(currentWidth);
+          widthRef.current = currentWidth;
         }
-      } else {
-        setCollapsed(false);
-        setSidebarWidth(currentWidth);
-        widthRef.current = currentWidth;
-      }
-      
-      setIsDragging(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'ew-resize';
-  }, [collapsed, setCollapsed]);
+        setIsDragging(false);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ew-resize';
+    },
+    [collapsed, setCollapsed]
+  );
 
   // Get current width for render
   const currentWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
@@ -459,21 +482,25 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             group/handle
           `}
         >
-          <div className={`
+          <div
+            className={`
             w-0.5 h-6 rounded-full
             bg-slate-400/50 dark:bg-slate-500/50
             opacity-0 group-hover/handle:opacity-100
             ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
             transition-all duration-150
-          `} />
+          `}
+          />
         </div>
       )}
 
       {/* Header */}
-      <div className={`
+      <div
+        className={`
         h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0
         ${collapsed ? 'justify-center' : ''}
-      `}>
+      `}
+      >
         {collapsed ? (
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Bot className="text-primary" size={24} />
@@ -503,14 +530,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             placeholder="Select a project"
             disabled={projects.length === 0}
             suffixIcon={<ChevronDown size={16} />}
-            options={projects.map(p => ({
+            options={projects.map((p) => ({
               value: p.id,
               label: (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-primary" />
                   <span className="truncate">{p.name}</span>
                 </div>
-              )
+              ),
             }))}
           />
         </div>
@@ -519,7 +546,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       {/* Collapsed Project Indicator */}
       {collapsed && selectedProjectId && (
         <div className="px-2 pb-2 flex justify-center">
-          <Tooltip title={projects.find(p => p.id === selectedProjectId)?.name || 'Select Project'}>
+          <Tooltip
+            title={projects.find((p) => p.id === selectedProjectId)?.name || 'Select Project'}
+          >
             <button
               onClick={() => setCollapsed(false)}
               className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -557,10 +586,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           ) : (
             <>
               {enrichedConversations.length === 0 ? (
-                <div className={`
+                <div
+                  className={`
                   text-center py-8 text-slate-400
                   ${collapsed ? 'hidden' : 'block'}
-                `}>
+                `}
+                >
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                   <p className="text-xs">No conversations yet</p>
                 </div>

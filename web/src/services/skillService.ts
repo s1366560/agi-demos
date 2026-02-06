@@ -5,7 +5,7 @@
  * status management, skill matching, and tenant skill configurations.
  */
 
-import { httpClient } from "./client/httpClient";
+import { httpClient } from './client/httpClient';
 
 import type {
   SkillResponse,
@@ -17,15 +17,15 @@ import type {
   TenantSkillConfigResponse,
   TenantSkillConfigListResponse,
   SystemSkillStatus,
-} from "../types/agent";
+} from '../types/agent';
 
 // Use centralized HTTP client
 const api = httpClient;
 
 export interface SkillListParams {
-  status?: "active" | "disabled" | "deprecated" | null;
-  scope?: "system" | "tenant" | "project" | null;
-  trigger_type?: "keyword" | "semantic" | "hybrid" | null;
+  status?: 'active' | 'disabled' | 'deprecated' | null;
+  scope?: 'system' | 'tenant' | 'project' | null;
+  trigger_type?: 'keyword' | 'semantic' | 'hybrid' | null;
   skip?: number;
   limit?: number;
 }
@@ -41,23 +41,21 @@ export const skillAPI = {
    * List all Skills
    */
   list: async (params: SkillListParams = {}): Promise<SkillsListResponse> => {
-    return await api.get<SkillsListResponse>("/skills/", { params });
+    return await api.get<SkillsListResponse>('/skills/', { params });
   },
 
   /**
    * List system skills
    */
-  listSystemSkills: async (
-    params: { status?: string } = {}
-  ): Promise<SkillsListResponse> => {
-    return await api.get<SkillsListResponse>("/skills/system/list", { params });
+  listSystemSkills: async (params: { status?: string } = {}): Promise<SkillsListResponse> => {
+    return await api.get<SkillsListResponse>('/skills/system/list', { params });
   },
 
   /**
    * Create a new Skill
    */
   create: async (data: SkillCreate): Promise<SkillResponse> => {
-    return await api.post<SkillResponse>("/skills/", data);
+    return await api.post<SkillResponse>('/skills/', data);
   },
 
   /**
@@ -70,10 +68,7 @@ export const skillAPI = {
   /**
    * Update a Skill
    */
-  update: async (
-    skillId: string,
-    data: SkillUpdate
-  ): Promise<SkillResponse> => {
+  update: async (skillId: string, data: SkillUpdate): Promise<SkillResponse> => {
     return await api.put<SkillResponse>(`/skills/${skillId}`, data);
   },
 
@@ -89,7 +84,7 @@ export const skillAPI = {
    */
   updateStatus: async (
     skillId: string,
-    status: "active" | "disabled" | "deprecated"
+    status: 'active' | 'disabled' | 'deprecated'
   ): Promise<SkillResponse> => {
     return await api.patch<SkillResponse>(`/skills/${skillId}/status`, null, {
       params: { status },
@@ -100,7 +95,7 @@ export const skillAPI = {
    * Match skills based on query
    */
   match: async (params: SkillMatchParams): Promise<SkillMatchResponse> => {
-    return await api.post<SkillMatchResponse>("/skills/match", params);
+    return await api.post<SkillMatchResponse>('/skills/match', params);
   },
 
   /**
@@ -113,10 +108,7 @@ export const skillAPI = {
   /**
    * Update skill content
    */
-  updateContent: async (
-    skillId: string,
-    fullContent: string
-  ): Promise<SkillResponse> => {
+  updateContent: async (skillId: string, fullContent: string): Promise<SkillResponse> => {
     return await api.put<SkillResponse>(`/skills/${skillId}/content`, {
       full_content: fullContent,
     });
@@ -131,30 +123,23 @@ export const tenantSkillConfigAPI = {
    * List all tenant skill configs
    */
   list: async (): Promise<TenantSkillConfigListResponse> => {
-    return await api.get<TenantSkillConfigListResponse>("/tenant/skills/config/");
+    return await api.get<TenantSkillConfigListResponse>('/tenant/skills/config/');
   },
 
   /**
    * Get a specific tenant skill config
    */
   get: async (systemSkillName: string): Promise<TenantSkillConfigResponse> => {
-    return await api.get<TenantSkillConfigResponse>(
-      `/tenant/skills/config/${systemSkillName}`
-    );
+    return await api.get<TenantSkillConfigResponse>(`/tenant/skills/config/${systemSkillName}`);
   },
 
   /**
    * Disable a system skill
    */
-  disable: async (
-    systemSkillName: string
-  ): Promise<TenantSkillConfigResponse> => {
-    return await api.post<TenantSkillConfigResponse>(
-      "/tenant/skills/config/disable",
-      {
-        system_skill_name: systemSkillName,
-      }
-    );
+  disable: async (systemSkillName: string): Promise<TenantSkillConfigResponse> => {
+    return await api.post<TenantSkillConfigResponse>('/tenant/skills/config/disable', {
+      system_skill_name: systemSkillName,
+    });
   },
 
   /**
@@ -164,20 +149,17 @@ export const tenantSkillConfigAPI = {
     systemSkillName: string,
     overrideSkillId: string
   ): Promise<TenantSkillConfigResponse> => {
-    return await api.post<TenantSkillConfigResponse>(
-      "/tenant/skills/config/override",
-      {
-        system_skill_name: systemSkillName,
-        override_skill_id: overrideSkillId,
-      }
-    );
+    return await api.post<TenantSkillConfigResponse>('/tenant/skills/config/override', {
+      system_skill_name: systemSkillName,
+      override_skill_id: overrideSkillId,
+    });
   },
 
   /**
    * Enable a previously disabled/overridden system skill
    */
   enable: async (systemSkillName: string): Promise<void> => {
-    await api.post("/tenant/skills/config/enable", {
+    await api.post('/tenant/skills/config/enable', {
       system_skill_name: systemSkillName,
     });
   },
@@ -193,9 +175,7 @@ export const tenantSkillConfigAPI = {
    * Get status of a system skill
    */
   getStatus: async (systemSkillName: string): Promise<SystemSkillStatus> => {
-    return await api.get<SystemSkillStatus>(
-      `/tenant/skills/config/status/${systemSkillName}`
-    );
+    return await api.get<SystemSkillStatus>(`/tenant/skills/config/status/${systemSkillName}`);
   },
 };
 

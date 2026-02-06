@@ -72,14 +72,20 @@ export function FinalReport({
       }
       if (line.startsWith('## ')) {
         return (
-          <h2 key={index} className="text-lg font-semibold text-slate-900 dark:text-white mt-3 mb-2">
+          <h2
+            key={index}
+            className="text-lg font-semibold text-slate-900 dark:text-white mt-3 mb-2"
+          >
             {line.replace('## ', '')}
           </h2>
         );
       }
       if (line.startsWith('### ')) {
         return (
-          <h3 key={index} className="text-base font-semibold text-slate-900 dark:text-white mt-2 mb-1">
+          <h3
+            key={index}
+            className="text-base font-semibold text-slate-900 dark:text-white mt-2 mb-1"
+          >
             {line.replace('### ', '')}
           </h3>
         );
@@ -127,7 +133,9 @@ export function FinalReport({
   };
 
   // Dynamic import ExportActions to avoid circular dependency
-  const [ExportActions, setExportActions] = useState<typeof import('./ExportActions').ExportActions | null>(null);
+  const [ExportActions, setExportActions] = useState<
+    typeof import('./ExportActions').ExportActions | null
+  >(null);
 
   useEffect(() => {
     import('./ExportActions').then((mod) => {
@@ -147,13 +155,9 @@ export function FinalReport({
             <MaterialIcon name="check_circle" size={18} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Final Response
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Final Response</h3>
             {timestamp && (
-              <p className="text-xs text-slate-500">
-                Generated {formatTimestamp(timestamp)}
-              </p>
+              <p className="text-xs text-slate-500">Generated {formatTimestamp(timestamp)}</p>
             )}
           </div>
         </div>
@@ -168,7 +172,11 @@ export function FinalReport({
       <div className="flex">
         {/* Main Content */}
         <div className="flex-1 p-4 prose prose-sm max-w-none dark:prose-invert">
-          {format === 'markdown' ? renderContent(content || '') : <p className="text-sm whitespace-pre-wrap">{content}</p>}
+          {format === 'markdown' ? (
+            renderContent(content || '')
+          ) : (
+            <p className="text-sm whitespace-pre-wrap">{content}</p>
+          )}
         </div>
 
         {/* Export Sidebar */}

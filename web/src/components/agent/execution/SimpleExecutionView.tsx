@@ -27,10 +27,7 @@ export interface SimpleExecutionViewProps {
  *   isStreaming={isStreaming}
  * />
  */
-export function SimpleExecutionView({
-  toolExecutions,
-  isStreaming,
-}: SimpleExecutionViewProps) {
+export function SimpleExecutionView({ toolExecutions, isStreaming }: SimpleExecutionViewProps) {
   if (toolExecutions.length === 0) {
     return null;
   }
@@ -49,9 +46,7 @@ export function SimpleExecutionView({
               <MaterialIcon name="build" size={20} className="text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white">
-                Tool Executions
-              </h3>
+              <h3 className="font-semibold text-slate-900 dark:text-white">Tool Executions</h3>
               <p className="text-sm text-slate-500">
                 {toolExecutions.length} tool{toolExecutions.length > 1 ? 's' : ''} used
               </p>
@@ -82,10 +77,7 @@ export function SimpleExecutionView({
       {/* Tool Execution List */}
       <div className="space-y-3">
         {toolExecutions.map((execution) => (
-          <ToolExecutionDetail
-            key={execution.id}
-            execution={execution}
-          />
+          <ToolExecutionDetail key={execution.id} execution={execution} />
         ))}
       </div>
 

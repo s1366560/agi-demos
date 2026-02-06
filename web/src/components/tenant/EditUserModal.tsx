@@ -29,7 +29,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   onClose,
   onSave,
   context,
-  contextId: _contextId
+  contextId: _contextId,
 }) => {
   const { t } = useTranslation();
   const [role, setRole] = useState(user.role);
@@ -53,17 +53,18 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   if (!isOpen) return null;
 
-  const availableRoles = context === 'tenant'
-    ? [
-        { value: 'owner', label: t('tenant.users.roles.owner') },
-        { value: 'admin', label: t('tenant.users.roles.admin') },
-        { value: 'member', label: t('tenant.users.roles.member') },
-      ]
-    : [
-        { value: 'admin', label: t('tenant.users.roles.admin') },
-        { value: 'editor', label: t('tenant.users.roles.editor') },
-        { value: 'viewer', label: t('tenant.users.roles.viewer') },
-      ];
+  const availableRoles =
+    context === 'tenant'
+      ? [
+          { value: 'owner', label: t('tenant.users.roles.owner') },
+          { value: 'admin', label: t('tenant.users.roles.admin') },
+          { value: 'member', label: t('tenant.users.roles.member') },
+        ]
+      : [
+          { value: 'admin', label: t('tenant.users.roles.admin') },
+          { value: 'editor', label: t('tenant.users.roles.editor') },
+          { value: 'viewer', label: t('tenant.users.roles.viewer') },
+        ];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -122,15 +123,21 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           <div className="pt-4 border-t border-gray-200 dark:border-slate-800">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-gray-500 dark:text-slate-500">{t('tenant.users.joined_at_label')}</p>
+                <p className="text-gray-500 dark:text-slate-500">
+                  {t('tenant.users.joined_at_label')}
+                </p>
                 <p className="text-gray-900 dark:text-white font-medium">
                   {new Date(user.created_at).toLocaleDateString()}
                 </p>
               </div>
               <div>
-                <p className="text-gray-500 dark:text-slate-500">{t('tenant.users.last_login_label')}</p>
+                <p className="text-gray-500 dark:text-slate-500">
+                  {t('tenant.users.last_login_label')}
+                </p>
                 <p className="text-gray-900 dark:text-white font-medium">
-                  {user.last_login ? new Date(user.last_login).toLocaleDateString() : t('common.time.never')}
+                  {user.last_login
+                    ? new Date(user.last_login).toLocaleDateString()
+                    : t('common.time.never')}
                 </p>
               </div>
             </div>

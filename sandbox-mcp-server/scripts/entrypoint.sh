@@ -402,8 +402,9 @@ start_novnc() {
 
     # Start noVNC with websockify
     # Connects to VNC server on port 5901
+    # Use /usr/bin/websockify directly (installed via apt python3-websockify)
     cd /opt/noVNC
-    python3 -m websockify --web=/opt/noVNC --heartbeat 30 "$DESKTOP_PORT" localhost:5901 &
+    /usr/bin/websockify --web=/opt/noVNC --heartbeat 30 "$DESKTOP_PORT" localhost:5901 &
     PIDS+=($!)
 
     sleep 2

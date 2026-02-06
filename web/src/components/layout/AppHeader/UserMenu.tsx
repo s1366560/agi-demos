@@ -4,61 +4,61 @@
  * User dropdown menu with profile, settings, and logout.
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 
-import { User, Settings, LogOut, ChevronDown } from 'lucide-react'
+import { User, Settings, LogOut, ChevronDown } from 'lucide-react';
 
-import { useUser, useAuthActions } from '@/stores/auth'
+import { useUser, useAuthActions } from '@/stores/auth';
 
 export interface UserMenuProps {
-  profilePath?: string
-  settingsPath?: string
-  as?: React.ElementType
+  profilePath?: string;
+  settingsPath?: string;
+  as?: React.ElementType;
 }
 
 export const UserMenu = React.memo(function UserMenu({
   profilePath = '/profile',
   settingsPath = '/settings',
 }: UserMenuProps) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const user = useUser()
-  const { logout } = useAuthActions()
-  const [isOpen, setIsOpen] = React.useState(false)
-  const dropdownRef = React.useRef<HTMLDivElement>(null)
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const user = useUser();
+  const { logout } = useAuthActions();
+  const [isOpen, setIsOpen] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
+    logout();
+    navigate('/login');
+  };
 
-  if (!user) return null
+  if (!user) return null;
 
   const getInitials = (name: string) => {
     return name
       .split(' ')
-      .map(n => n[0])
+      .map((n) => n[0])
       .join('')
       .toUpperCase()
-      .slice(0, 2)
-  }
+      .slice(0, 2);
+  };
 
-  const displayName = user.name || user.email.split('@')[0]
-  const initials = getInitials(displayName)
-  const avatarUrl = user.profile?.avatar_url
+  const displayName = user.name || user.email.split('@')[0];
+  const initials = getInitials(displayName);
+  const avatarUrl = user.profile?.avatar_url;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -85,7 +85,9 @@ export const UserMenu = React.memo(function UserMenu({
           </span>
         </div>
 
-        <ChevronDown className={`hidden sm:block w-4 h-4 text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`hidden sm:block w-4 h-4 text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {isOpen && (
@@ -94,9 +96,7 @@ export const UserMenu = React.memo(function UserMenu({
             <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
               {displayName}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-              {user.email}
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
           </div>
 
           <div className="py-1">
@@ -131,7 +131,7 @@ export const UserMenu = React.memo(function UserMenu({
         </div>
       )}
     </div>
-  )
-})
+  );
+});
 
-UserMenu.displayName = 'AppHeader.UserMenu'
+UserMenu.displayName = 'AppHeader.UserMenu';

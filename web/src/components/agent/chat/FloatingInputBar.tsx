@@ -9,7 +9,7 @@
  * Backward compatibility maintained through individual prop support.
  */
 
-import { KeyboardEvent, useState , useId } from "react";
+import { KeyboardEvent, useState, useId } from 'react';
 
 /**
  * Plan mode configuration
@@ -140,13 +140,13 @@ function useFloatingInputBarConfig(props: FloatingInputBarProps) {
  * />
  */
 export function FloatingInputBar({
-  value = "",
+  value = '',
   onChange,
   onSend,
   onStop,
   disabled = false,
   placeholder = "Message the Agent or type '/' for commands...",
-  stopLabel = "Stop",
+  stopLabel = 'Stop',
   maxLength = 5000,
   ...restProps
 }: FloatingInputBarProps) {
@@ -159,8 +159,7 @@ export function FloatingInputBar({
   const markdownExportId = useId();
 
   // Merge config with individual props
-  const { showAttachment, showVoice, showFooter, planMode } =
-    useFloatingInputBarConfig(restProps);
+  const { showAttachment, showVoice, showFooter, planMode } = useFloatingInputBarConfig(restProps);
 
   // Use controlled or uncontrolled based on whether onChange is provided
   const inputValue = onChange !== undefined ? value : internalValue;
@@ -176,12 +175,12 @@ export function FloatingInputBar({
     const trimmed = inputValue.trim();
     if (trimmed && !disabled) {
       onSend?.(trimmed);
-      handleChange("");
+      handleChange('');
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -212,11 +211,11 @@ export function FloatingInputBar({
             value={inputValue}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Agent is thinking..." : placeholder}
+            placeholder={disabled ? 'Agent is thinking...' : placeholder}
             disabled={disabled}
             maxLength={maxLength}
             className={`flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white py-2 px-0 placeholder:text-text-muted text-sm ${
-              disabled ? "cursor-not-allowed opacity-50" : ""
+              disabled ? 'cursor-not-allowed opacity-50' : ''
             }`}
             type="text"
             aria-label="Message input"
@@ -245,9 +244,7 @@ export function FloatingInputBar({
                 title={stopLabel}
                 aria-label={stopLabel}
               >
-                <span className="material-symbols-outlined text-[18px]">
-                  stop_circle
-                </span>
+                <span className="material-symbols-outlined text-[18px]">stop_circle</span>
               </button>
             ) : (
               <button
@@ -310,9 +307,7 @@ export function FloatingInputBar({
                     className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 transition-colors uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Enter Plan Mode to create and refine implementation plans"
                   >
-                    <span className="material-symbols-outlined text-sm">
-                      architecture
-                    </span>
+                    <span className="material-symbols-outlined text-sm">architecture</span>
                     Plan Mode
                   </button>
                 </>
@@ -321,19 +316,17 @@ export function FloatingInputBar({
                 <>
                   <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
                   <span className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
-                    <span className="material-symbols-outlined text-sm">
-                      architecture
-                    </span>
+                    <span className="material-symbols-outlined text-sm">architecture</span>
                     In Plan Mode
                   </span>
                 </>
               )}
             </div>
             <div className="text-[10px] text-slate-400">
-              Press{" "}
+              Press{' '}
               <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 font-sans">
                 Enter
-              </kbd>{" "}
+              </kbd>{' '}
               to send
             </div>
           </div>

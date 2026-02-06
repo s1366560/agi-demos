@@ -36,9 +36,7 @@ describe('useModal', () => {
         value: 42,
       };
 
-      const { result } = renderHook(() =>
-        useModal<TestDataType>(initialData)
-      );
+      const { result } = renderHook(() => useModal<TestDataType>(initialData));
 
       expect(result.current.isOpen).toBe(false);
       expect(result.current.data).toEqual(initialData);
@@ -254,9 +252,7 @@ describe('useModal', () => {
   describe('real-world scenarios', () => {
     it('should support edit modal workflow', () => {
       // Simulate editing an entity
-      const { result } = renderHook(() =>
-        useModal<{ id: string; name: string }>()
-      );
+      const { result } = renderHook(() => useModal<{ id: string; name: string }>());
 
       const entity = { id: 'entity-123', name: 'My Entity' };
 
@@ -286,9 +282,7 @@ describe('useModal', () => {
     });
 
     it('should support create modal workflow', () => {
-      const { result } = renderHook(() =>
-        useModal<{ name: string; value: number }>()
-      );
+      const { result } = renderHook(() => useModal<{ name: string; value: number }>());
 
       // Open modal for creating (no data)
       act(() => {
@@ -307,9 +301,7 @@ describe('useModal', () => {
     });
 
     it('should support modal with form state reset on close', () => {
-      const { result } = renderHook(() =>
-        useModal<{ field1: string; field2: string }>()
-      );
+      const { result } = renderHook(() => useModal<{ field1: string; field2: string }>());
 
       const formData = { field1: 'value1', field2: 'value2' };
 
@@ -331,9 +323,7 @@ describe('useModal', () => {
 
   describe('type safety', () => {
     it('should enforce type safety with generics', () => {
-      const { result } = renderHook(() =>
-        useModal<{ id: string; active: boolean }>()
-      );
+      const { result } = renderHook(() => useModal<{ id: string; active: boolean }>());
 
       // This should compile without type errors
       const typedData = { id: 'typed', active: true };

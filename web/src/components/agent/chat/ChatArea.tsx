@@ -7,58 +7,62 @@
  * @module components/agent/chat/ChatArea
  */
 
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo } from 'react';
 
-import { Spin } from "antd";
+import { Spin } from 'antd';
 
-import { ExecutionTimeline } from "../execution/ExecutionTimeline";
-import { FollowUpPills } from "../execution/FollowUpPills";
-import { VirtualTimelineEventList } from "../VirtualTimelineEventList";
+import { ExecutionTimeline } from '../execution/ExecutionTimeline';
+import { FollowUpPills } from '../execution/FollowUpPills';
+import { VirtualTimelineEventList } from '../VirtualTimelineEventList';
 
-import {
-  IdleState,
-  type StarterTile,
-} from "./IdleState";
+import { IdleState, type StarterTile } from './IdleState';
 
-import type { WorkPlan, ToolExecution, TimelineStep, PlanDocument, PlanModeStatus, TimelineEvent } from "../../../types/agent";
+import type {
+  WorkPlan,
+  ToolExecution,
+  TimelineStep,
+  PlanDocument,
+  PlanModeStatus,
+  TimelineEvent,
+} from '../../../types/agent';
 
 // Default starter tiles
 const DEFAULT_STARTER_TILES: StarterTile[] = [
   {
-    id: "trends",
-    title: "Analyze project trends",
-    description: "Identify key patterns across multiple data streams",
-    color: "blue",
-    icon: "analytics",
+    id: 'trends',
+    title: 'Analyze project trends',
+    description: 'Identify key patterns across multiple data streams',
+    color: 'blue',
+    icon: 'analytics',
   },
   {
-    id: "reports",
-    title: "Synthesize Q4 reports",
-    description: "Aggregate complex findings into an executive summary",
-    color: "purple",
-    icon: "summarize",
+    id: 'reports',
+    title: 'Synthesize Q4 reports',
+    description: 'Aggregate complex findings into an executive summary',
+    color: 'purple',
+    icon: 'summarize',
   },
   {
-    id: "audit",
-    title: "Audit memory logs",
-    description: "Review system activity and trace data genealogy",
-    color: "emerald",
-    icon: "verified_user",
+    id: 'audit',
+    title: 'Audit memory logs',
+    description: 'Review system activity and trace data genealogy',
+    color: 'emerald',
+    icon: 'verified_user',
   },
   {
-    id: "compare",
-    title: "Cross-project comparison",
-    description: "Compare performance metrics between active projects",
-    color: "amber",
-    icon: "compare_arrows",
+    id: 'compare',
+    title: 'Cross-project comparison',
+    description: 'Compare performance metrics between active projects',
+    color: 'amber',
+    icon: 'compare_arrows',
   },
 ];
 
 const MOCK_SUGGESTIONS = [
-  "Compare with competitors?",
-  "Drill down into details",
-  "Export as PDF",
-  "Analyze related trends",
+  'Compare with competitors?',
+  'Drill down into details',
+  'Export as PDF',
+  'Analyze related trends',
 ];
 
 /**
@@ -140,10 +144,7 @@ interface ChatAreaProps {
  * Custom comparison function for ChatArea memo
  * Prevents unnecessary re-renders by only checking props that actually affect rendering
  */
-function areChatAreaPropsEqual(
-  prevProps: ChatAreaProps,
-  nextProps: ChatAreaProps
-): boolean {
+function areChatAreaPropsEqual(prevProps: ChatAreaProps, nextProps: ChatAreaProps): boolean {
   // Props that always trigger re-render
   const criticalPropsChanged =
     prevProps.timeline !== nextProps.timeline ||
@@ -161,58 +162,57 @@ function areChatAreaPropsEqual(
   // For the remaining props, use shallow comparison
   return (
     prevProps.currentStepNumber === nextProps.currentStepNumber &&
-    prevProps.currentWorkPlan?.current_step_index === nextProps.currentWorkPlan?.current_step_index &&
+    prevProps.currentWorkPlan?.current_step_index ===
+      nextProps.currentWorkPlan?.current_step_index &&
     prevProps.executionTimeline.length === nextProps.executionTimeline.length &&
     prevProps.toolExecutionHistory.length === nextProps.toolExecutionHistory.length
   );
 }
 
-export const ChatArea: React.FC<ChatAreaProps> = memo(({
-  timeline,
-  currentConversation,
-  isStreaming,
-  messagesLoading,
-  currentWorkPlan,
-  currentStepNumber,
-  executionTimeline,
-  toolExecutionHistory,
-  matchedPattern,
-  planModeStatus: _planModeStatus,
-  showPlanEditor: _showPlanEditor,
-  currentPlan: _currentPlan,
-  planLoading: _planLoading,
-  scrollContainerRef,
-  messagesEndRef: _messagesEndRef,
-  onViewPlan: _onViewPlan,
-  onExitPlanMode: _onExitPlanMode,
-  onUpdatePlan: _onUpdatePlan,
-  onSend,
-  onTileClick,
-  hasEarlierMessages,
-  onLoadEarlier,
-  streamingContent,
-  streamingThought,
-  isThinkingStreaming,
-}) => {
-  // Memoize sorted timeline events (they should already be sorted by sequence)
-  const sortedTimeline = useMemo(
-    () =>
-      [...timeline].sort(
-        (a, b) => a.sequenceNumber - b.sequenceNumber
-      ),
-    [timeline]
-  );
-
-  // Determine if rich ExecutionTimeline should be shown
-  const showRichTimeline = shouldShowRichExecutionTimeline(
+export const ChatArea: React.FC<ChatAreaProps> = memo(
+  ({
+    timeline,
+    currentConversation,
+    isStreaming,
+    messagesLoading,
     currentWorkPlan,
+    currentStepNumber,
     executionTimeline,
-    toolExecutionHistory
-  );
+    toolExecutionHistory,
+    matchedPattern,
+    planModeStatus: _planModeStatus,
+    showPlanEditor: _showPlanEditor,
+    currentPlan: _currentPlan,
+    planLoading: _planLoading,
+    scrollContainerRef,
+    messagesEndRef: _messagesEndRef,
+    onViewPlan: _onViewPlan,
+    onExitPlanMode: _onExitPlanMode,
+    onUpdatePlan: _onUpdatePlan,
+    onSend,
+    onTileClick,
+    hasEarlierMessages,
+    onLoadEarlier,
+    streamingContent,
+    streamingThought,
+    isThinkingStreaming,
+  }) => {
+    // Memoize sorted timeline events (they should already be sorted by sequence)
+    const sortedTimeline = useMemo(
+      () => [...timeline].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+      [timeline]
+    );
 
-  // Scroll handling for backward pagination
-  // TODO: Apply this scroll handler to the scroll container for backward pagination
-  /*
+    // Determine if rich ExecutionTimeline should be shown
+    const showRichTimeline = shouldShowRichExecutionTimeline(
+      currentWorkPlan,
+      executionTimeline,
+      toolExecutionHistory
+    );
+
+    // Scroll handling for backward pagination
+    // TODO: Apply this scroll handler to the scroll container for backward pagination
+    /*
   const isLoadingEarlierRef = useRef(false);
   const previousScrollHeightRef = useRef(0);
 
@@ -247,9 +247,9 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   );
   */
 
-  // Restore scroll position after loading earlier messages
-  // TODO: Enable when backward pagination is implemented
-  /*
+    // Restore scroll position after loading earlier messages
+    // TODO: Enable when backward pagination is implemented
+    /*
   const previousScrollHeightRef = useRef(0);
   useEffect(() => {
     if (!messagesLoading && previousScrollHeightRef.current > 0 && scrollContainerRef.current) {
@@ -263,96 +263,95 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(({
   }, [messagesLoading, scrollContainerRef]);
   */
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Loading indicator for earlier messages - 更加低调的样式 */}
-      {messagesLoading && hasEarlierMessages && (
-        <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
-          <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
-            <Spin size="small" />
-            <span className="ml-2 text-xs text-slate-500">加载中...</span>
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Loading indicator for earlier messages - 更加低调的样式 */}
+        {messagesLoading && hasEarlierMessages && (
+          <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
+            <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
+              <Spin size="small" />
+              <span className="ml-2 text-xs text-slate-500">加载中...</span>
+            </div>
           </div>
+        )}
+
+        {/* Main content area */}
+        <div className="flex-1 overflow-hidden">
+          {/* Idle State - Only show when truly idle (not streaming, not loading messages) */}
+          {(!currentConversation ||
+            (currentConversation &&
+              sortedTimeline.length === 0 &&
+              !isStreaming &&
+              !messagesLoading)) && (
+            <div
+              ref={scrollContainerRef}
+              className="h-full overflow-y-auto px-4 pt-6 scroll-smooth chat-messages"
+            >
+              <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
+                <div className="flex flex-col items-center justify-center min-h-full py-12 animate-fade-in">
+                  <div className="w-full text-center space-y-12">
+                    <IdleState
+                      greeting="How can I help you today?"
+                      subtitle="Access your intelligent memory workspace. Start a conversation or select a suggested task below."
+                      starterTiles={DEFAULT_STARTER_TILES}
+                      onTileClick={onTileClick}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Chat - Show when there are timeline events OR when streaming */}
+          {currentConversation && (sortedTimeline.length > 0 || isStreaming) && (
+            <div className="h-full flex flex-col">
+              {/* Rich ExecutionTimeline for complex multi-step execution during streaming */}
+              {showRichTimeline && isStreaming && (
+                <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+                  <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
+                    <ExecutionTimeline
+                      workPlan={currentWorkPlan}
+                      steps={executionTimeline}
+                      toolExecutionHistory={toolExecutionHistory}
+                      isStreaming={isStreaming}
+                      currentStepNumber={currentStepNumber}
+                      matchedPattern={matchedPattern}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Virtualized Timeline Event List */}
+              <div className="flex-1 overflow-hidden">
+                <VirtualTimelineEventList
+                  timeline={sortedTimeline}
+                  isStreaming={isStreaming}
+                  className="chat-messages"
+                  hasEarlierMessages={hasEarlierMessages}
+                  isLoadingEarlier={messagesLoading && hasEarlierMessages}
+                  onLoadEarlier={onLoadEarlier}
+                  conversationId={currentConversation?.id}
+                  streamingContent={streamingContent}
+                  streamingThought={streamingThought}
+                  isThinkingStreaming={isThinkingStreaming}
+                />
+              </div>
+
+              {/* Follow-up suggestions after conversation ends */}
+              {!isStreaming && sortedTimeline.length > 0 && (
+                <div className="px-4 py-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+                  <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
+                    <FollowUpPills suggestions={MOCK_SUGGESTIONS} onSuggestionClick={onSend} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* Main content area */}
-      <div className="flex-1 overflow-hidden">
-        {/* Idle State - Only show when truly idle (not streaming, not loading messages) */}
-        {(!currentConversation ||
-          (currentConversation &&
-           sortedTimeline.length === 0 &&
-           !isStreaming &&
-           !messagesLoading)) && (
-          <div
-            ref={scrollContainerRef}
-            className="h-full overflow-y-auto px-4 pt-6 scroll-smooth chat-messages"
-          >
-            <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
-              <div className="flex flex-col items-center justify-center min-h-full py-12 animate-fade-in">
-                <div className="w-full text-center space-y-12">
-                  <IdleState
-                    greeting="How can I help you today?"
-                    subtitle="Access your intelligent memory workspace. Start a conversation or select a suggested task below."
-                    starterTiles={DEFAULT_STARTER_TILES}
-                    onTileClick={onTileClick}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Active Chat - Show when there are timeline events OR when streaming */}
-        {currentConversation && (sortedTimeline.length > 0 || isStreaming) && (
-          <div className="h-full flex flex-col">
-            {/* Rich ExecutionTimeline for complex multi-step execution during streaming */}
-            {showRichTimeline && isStreaming && (
-              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
-                <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
-                  <ExecutionTimeline
-                    workPlan={currentWorkPlan}
-                    steps={executionTimeline}
-                    toolExecutionHistory={toolExecutionHistory}
-                    isStreaming={isStreaming}
-                    currentStepNumber={currentStepNumber}
-                    matchedPattern={matchedPattern}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Virtualized Timeline Event List */}
-            <div className="flex-1 overflow-hidden">
-              <VirtualTimelineEventList
-                timeline={sortedTimeline}
-                isStreaming={isStreaming}
-                className="chat-messages"
-                hasEarlierMessages={hasEarlierMessages}
-                isLoadingEarlier={messagesLoading && hasEarlierMessages}
-                onLoadEarlier={onLoadEarlier}
-                conversationId={currentConversation?.id}
-                streamingContent={streamingContent}
-                streamingThought={streamingThought}
-                isThinkingStreaming={isThinkingStreaming}
-              />
-            </div>
-
-            {/* Follow-up suggestions after conversation ends */}
-            {!isStreaming && sortedTimeline.length > 0 && (
-              <div className="px-4 py-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-                <div className="w-full max-w-3xl lg:max-w-5xl xl:max-w-7xl mx-auto">
-                  <FollowUpPills
-                    suggestions={MOCK_SUGGESTIONS}
-                    onSuggestionClick={onSend}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
-    </div>
-  );
-}, areChatAreaPropsEqual);
+    );
+  },
+  areChatAreaPropsEqual
+);
 
 ChatArea.displayName = 'ChatArea';

@@ -14,17 +14,18 @@ interface MemoryCreateModalProps {
 export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
 }) => {
-  const { createMemory, extractEntities, extractRelationships, isLoading, error } = useMemoryStore();
+  const { createMemory, extractEntities, extractRelationships, isLoading, error } =
+    useMemoryStore();
   const { currentProject } = useProjectStore();
-  
+
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     content_type: 'text' as const,
     author_id: '',
-    metadata: {} as any
+    metadata: {} as any,
   });
 
   const [extractedEntities, setExtractedEntities] = useState<any[]>([]);
@@ -35,15 +36,15 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentProject) return;
-    
+
     try {
       const memoryData = {
         ...formData,
         entities: extractedEntities,
         relationships: extractedRelationships,
-        project_id: currentProject.id
+        project_id: currentProject.id,
       };
-      
+
       await createMemory(currentProject.id, memoryData);
       onSuccess?.();
       onClose();
@@ -55,7 +56,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
 
   const handleExtractEntities = async () => {
     if (!currentProject || !formData.content.trim()) return;
-    
+
     setIsExtracting(true);
     try {
       const entities = await extractEntities(currentProject.id, formData.content);
@@ -69,7 +70,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
 
   const handleExtractRelationships = async () => {
     if (!currentProject || !formData.content.trim()) return;
-    
+
     setIsExtracting(true);
     try {
       const relationships = await extractRelationships(currentProject.id, formData.content);
@@ -87,7 +88,7 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
       content: '',
       content_type: 'text',
       author_id: '',
-      metadata: {}
+      metadata: {},
     });
     setExtractedEntities([]);
     setExtractedRelationships([]);
@@ -165,8 +166,15 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto" id="memory-form">
           <div className="p-6 space-y-4">
             {error && (
-              <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md" role="alert" aria-live="assertive">
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+              <div
+                className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md"
+                role="alert"
+                aria-live="assertive"
+              >
+                <AlertCircle
+                  className="h-4 w-4 text-red-600 dark:text-red-400"
+                  aria-hidden="true"
+                />
                 <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
               </div>
             )}
@@ -174,7 +182,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
             {activeTab === 'basic' && (
               <>
                 <div>
-                  <label htmlFor="memory-create-title" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="memory-create-title"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     记忆标题 *
                   </label>
                   <input
@@ -191,7 +202,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="memory-create-content" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="memory-create-content"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     记忆内容 *
                   </label>
                   <textarea
@@ -209,13 +223,18 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="memory-create-type" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label
+                      htmlFor="memory-create-type"
+                      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >
                       记忆类型
                     </label>
                     <select
                       id="memory-create-type"
                       value={formData.content_type}
-                      onChange={(e) => setFormData({ ...formData, content_type: e.target.value as any })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, content_type: e.target.value as any })
+                      }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                       disabled={isLoading}
                     >
@@ -227,7 +246,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                   </div>
 
                   <div>
-                    <label htmlFor="memory-create-author" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label
+                      htmlFor="memory-create-author"
+                      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >
                       用户ID
                     </label>
                     <input
@@ -240,7 +262,10 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                       disabled={isLoading}
                       aria-describedby="memory-create-author-help"
                     />
-                    <span id="memory-create-author-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    <span
+                      id="memory-create-author-help"
+                      className="text-xs text-gray-500 dark:text-slate-400"
+                    >
                       可选：记录创建此记忆的用户
                     </span>
                   </div>
@@ -253,7 +278,9 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/30 rounded-md p-4 mb-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-medium text-blue-800 dark:text-blue-200">AI 实体提取</span>
+                    <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                      AI 实体提取
+                    </span>
                   </div>
                   <p className="text-sm text-blue-700 dark:text-blue-300">
                     点击下面的按钮来自动提取文本中的实体和关系。确保你已经在基础信息中输入了内容。
@@ -295,13 +322,22 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
 
                 {extractedEntities.length > 0 && (
                   <div className="mb-4">
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">提取的实体</h4>
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                      提取的实体
+                    </h4>
                     <div className="grid grid-cols-2 gap-2">
                       {extractedEntities.map((entity, index) => (
-                        <div key={index} className="flex items-center space-x-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md">
+                        <div
+                          key={index}
+                          className="flex items-center space-x-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/30 rounded-md"
+                        >
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-green-800 dark:text-green-200">{entity.name}</span>
-                          <span className="text-xs text-green-600 dark:text-green-400">({entity.type})</span>
+                          <span className="text-sm text-green-800 dark:text-green-200">
+                            {entity.name}
+                          </span>
+                          <span className="text-xs text-green-600 dark:text-green-400">
+                            ({entity.type})
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -310,15 +346,22 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
 
                 {extractedRelationships.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">提取的关系</h4>
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                      提取的关系
+                    </h4>
                     <div className="space-y-2">
                       {extractedRelationships.map((relationship, index) => (
-                        <div key={index} className="flex items-center space-x-2 p-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-900/30 rounded-md">
+                        <div
+                          key={index}
+                          className="flex items-center space-x-2 p-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-900/30 rounded-md"
+                        >
                           <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                           <span className="text-sm text-purple-800 dark:text-purple-200">
                             {relationship.source_id} → {relationship.target_id}
                           </span>
-                          <span className="text-xs text-purple-600 dark:text-purple-400">({relationship.type})</span>
+                          <span className="text-xs text-purple-600 dark:text-purple-400">
+                            ({relationship.type})
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -339,17 +382,22 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         type="checkbox"
                         id="enable_search"
                         checked={formData.metadata?.enable_search ?? true}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          metadata: {
-                            ...formData.metadata,
-                            enable_search: e.target.checked
-                          }
-                        })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            metadata: {
+                              ...formData.metadata,
+                              enable_search: e.target.checked,
+                            },
+                          })
+                        }
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                         disabled={isLoading}
                       />
-                      <label htmlFor="enable_search" className="text-sm text-gray-700 dark:text-slate-300">
+                      <label
+                        htmlFor="enable_search"
+                        className="text-sm text-gray-700 dark:text-slate-300"
+                      >
                         启用搜索
                       </label>
                     </div>
@@ -358,17 +406,22 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                         type="checkbox"
                         id="enable_graph"
                         checked={formData.metadata?.enable_graph ?? true}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          metadata: {
-                            ...formData.metadata,
-                            enable_graph: e.target.checked
-                          }
-                        })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            metadata: {
+                              ...formData.metadata,
+                              enable_graph: e.target.checked,
+                            },
+                          })
+                        }
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                         disabled={isLoading}
                       />
-                      <label htmlFor="enable_graph" className="text-sm text-gray-700 dark:text-slate-300">
+                      <label
+                        htmlFor="enable_graph"
+                        className="text-sm text-gray-700 dark:text-slate-300"
+                      >
                         启用图谱
                       </label>
                     </div>
@@ -376,26 +429,37 @@ export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="memory-create-tags" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="memory-create-tags"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     标签
                   </label>
                   <input
                     type="text"
                     id="memory-create-tags"
                     value={formData.metadata?.tags?.join(', ') || ''}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      metadata: {
-                        ...formData.metadata,
-                        tags: e.target.value.split(',').map(tag => tag.trim()).filter(Boolean)
-                      }
-                    })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        metadata: {
+                          ...formData.metadata,
+                          tags: e.target.value
+                            .split(',')
+                            .map((tag) => tag.trim())
+                            .filter(Boolean),
+                        },
+                      })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入标签，用逗号分隔"
                     disabled={isLoading}
                     aria-describedby="memory-create-tags-help"
                   />
-                  <span id="memory-create-tags-help" className="text-xs text-gray-500 dark:text-slate-400">
+                  <span
+                    id="memory-create-tags-help"
+                    className="text-xs text-gray-500 dark:text-slate-400"
+                  >
                     使用逗号分隔多个标签
                   </span>
                 </div>

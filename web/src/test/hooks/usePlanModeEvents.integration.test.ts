@@ -24,7 +24,9 @@ vi.mock('../../services/sse', () => {
   emitter.setMaxListeners(100);
 
   // Add onPlanEvent method
-  (emitter as any).onPlanEvent = function(listener: (event: AgentEvent<unknown>) => void): () => void {
+  (emitter as any).onPlanEvent = function (
+    listener: (event: AgentEvent<unknown>) => void
+  ): () => void {
     this.on('plan_event', listener);
     return () => this.off('plan_event', listener);
   };
@@ -79,9 +81,7 @@ describe('usePlanModeEvents Integration Tests', () => {
 
   describe('Event Registration and Cleanup', () => {
     it('should register SSE event listeners on mount', () => {
-      const { unmount } = renderHook(() =>
-        usePlanModeEvents(mockHandlers)
-      );
+      const { unmount } = renderHook(() => usePlanModeEvents(mockHandlers));
 
       // Verify that listeners are registered
       const listenerCount = mockSSEEmitter.listenerCount('plan_event');
@@ -91,9 +91,7 @@ describe('usePlanModeEvents Integration Tests', () => {
     });
 
     it('should clean up event listeners on unmount', () => {
-      const { unmount } = renderHook(() =>
-        usePlanModeEvents(mockHandlers)
-      );
+      const { unmount } = renderHook(() => usePlanModeEvents(mockHandlers));
 
       const listenerCountBefore = mockSSEEmitter.listenerCount('plan_event');
       expect(listenerCountBefore).toBeGreaterThan(0);
@@ -109,14 +107,11 @@ describe('usePlanModeEvents Integration Tests', () => {
     });
 
     it('should re-register listeners when handlers change', () => {
-      const { rerender } = renderHook(
-        ({ handlers }) => usePlanModeEvents(handlers),
-        {
-          initialProps: {
-            handlers: mockHandlers,
-          },
-        }
-      );
+      const { rerender } = renderHook(({ handlers }) => usePlanModeEvents(handlers), {
+        initialProps: {
+          handlers: mockHandlers,
+        },
+      });
 
       const firstListenerCount = mockSSEEmitter.listenerCount('plan_event');
 
@@ -160,9 +155,7 @@ describe('usePlanModeEvents Integration Tests', () => {
 
       await waitFor(() => {
         expect(mockHandlers.onPlanModeEntered).toHaveBeenCalledTimes(1);
-        expect(mockHandlers.onPlanModeEntered).toHaveBeenCalledWith(
-          eventData.data
-        );
+        expect(mockHandlers.onPlanModeEntered).toHaveBeenCalledWith(eventData.data);
       });
     });
 
@@ -477,7 +470,13 @@ describe('usePlanModeEvents Integration Tests', () => {
         },
         {
           type: 'reflection_complete' as const,
-          data: { plan_id: 'plan-1', assessment: 'on_track', reasoning: 'Good', has_adjustments: false, adjustment_count: 0 },
+          data: {
+            plan_id: 'plan-1',
+            assessment: 'on_track',
+            reasoning: 'Good',
+            has_adjustments: false,
+            adjustment_count: 0,
+          },
         },
         {
           type: 'plan_execution_complete' as const,

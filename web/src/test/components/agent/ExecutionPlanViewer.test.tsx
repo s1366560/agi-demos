@@ -4,20 +4,20 @@
  * TDD Approach: Tests written first, implementation to follow
  */
 
-import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { ExecutionPlanViewer } from "../../../components/agent/ExecutionPlanViewer";
-import { ExecutionPlan, ExecutionPlanStatus, ExecutionStep } from "../../../types/agent";
+import { ExecutionPlanViewer } from '../../../components/agent/ExecutionPlanViewer';
+import { ExecutionPlan, ExecutionPlanStatus, ExecutionStep } from '../../../types/agent';
 
 // Mock the hook
 const mockUsePlanModeEvents = vi.fn();
 
-vi.mock("../../../hooks/usePlanModeEvents", () => ({
+vi.mock('../../../hooks/usePlanModeEvents', () => ({
   usePlanModeEvents: () => mockUsePlanModeEvents(),
 }));
 
-describe("ExecutionPlanViewer", () => {
+describe('ExecutionPlanViewer', () => {
   let mockPlan: ExecutionPlan;
   let mockSteps: ExecutionStep[];
 
@@ -26,64 +26,64 @@ describe("ExecutionPlanViewer", () => {
 
     mockSteps = [
       {
-        step_id: "step-1",
-        description: "Read file from disk",
-        tool_name: "read_file",
-        tool_input: { path: "/test/file.txt" },
+        step_id: 'step-1',
+        description: 'Read file from disk',
+        tool_name: 'read_file',
+        tool_input: { path: '/test/file.txt' },
         dependencies: [],
-        status: "completed",
-        result: "File content",
-        started_at: "2026-01-29T00:00:00Z",
-        completed_at: "2026-01-29T00:00:01Z",
+        status: 'completed',
+        result: 'File content',
+        started_at: '2026-01-29T00:00:00Z',
+        completed_at: '2026-01-29T00:00:01Z',
       },
       {
-        step_id: "step-2",
-        description: "Process data with transformation",
-        tool_name: "transform_data",
-        tool_input: { data: "test" },
-        dependencies: ["step-1"],
-        status: "running",
-        started_at: "2026-01-29T00:00:02Z",
+        step_id: 'step-2',
+        description: 'Process data with transformation',
+        tool_name: 'transform_data',
+        tool_input: { data: 'test' },
+        dependencies: ['step-1'],
+        status: 'running',
+        started_at: '2026-01-29T00:00:02Z',
       },
       {
-        step_id: "step-3",
-        description: "Write results to database",
-        tool_name: "write_db",
-        tool_input: { table: "results" },
-        dependencies: ["step-2"],
-        status: "pending",
+        step_id: 'step-3',
+        description: 'Write results to database',
+        tool_name: 'write_db',
+        tool_input: { table: 'results' },
+        dependencies: ['step-2'],
+        status: 'pending',
       },
       {
-        step_id: "step-4",
-        description: "Failed step example",
-        tool_name: "failing_tool",
+        step_id: 'step-4',
+        description: 'Failed step example',
+        tool_name: 'failing_tool',
         tool_input: {},
         dependencies: [],
-        status: "failed",
-        error: "Tool execution failed",
-        started_at: "2026-01-29T00:00:00Z",
-        completed_at: "2026-01-29T00:00:01Z",
+        status: 'failed',
+        error: 'Tool execution failed',
+        started_at: '2026-01-29T00:00:00Z',
+        completed_at: '2026-01-29T00:00:01Z',
       },
     ];
 
     mockPlan = {
-      id: "plan-123",
-      conversation_id: "conv-123",
-      user_query: "Test query for planning",
+      id: 'plan-123',
+      conversation_id: 'conv-123',
+      user_query: 'Test query for planning',
       steps: mockSteps,
-      status: "executing" as ExecutionPlanStatus,
+      status: 'executing' as ExecutionPlanStatus,
       reflection_enabled: true,
       max_reflection_cycles: 3,
-      completed_steps: ["step-1"],
-      failed_steps: ["step-4"],
+      completed_steps: ['step-1'],
+      failed_steps: ['step-4'],
       progress_percentage: 25,
       is_complete: false,
-      started_at: "2026-01-29T00:00:00Z",
+      started_at: '2026-01-29T00:00:00Z',
     };
   });
 
-  describe("Progress Overview", () => {
-    it("displays progress overview with correct statistics", () => {
+  describe('Progress Overview', () => {
+    it('displays progress overview with correct statistics', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -104,7 +104,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/25%/)).toBeInTheDocument();
     });
 
-    it("displays progress bar with correct percentage", () => {
+    it('displays progress bar with correct percentage', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -113,12 +113,12 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // Progress bar should be visible
-      const progressBar = screen.getByRole("progressbar");
+      const progressBar = screen.getByRole('progressbar');
       expect(progressBar).toBeInTheDocument();
-      expect(progressBar).toHaveAttribute("aria-valuenow", "25");
+      expect(progressBar).toHaveAttribute('aria-valuenow', '25');
     });
 
-    it("calculates remaining steps correctly", () => {
+    it('calculates remaining steps correctly', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -130,7 +130,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/Remaining:\s*2/i)).toBeInTheDocument();
     });
 
-    it("shows estimated time remaining when available", () => {
+    it('shows estimated time remaining when available', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -138,7 +138,7 @@ describe("ExecutionPlanViewer", () => {
 
       const planWithTiming = {
         ...mockPlan,
-        started_at: "2026-01-29T00:00:00Z",
+        started_at: '2026-01-29T00:00:00Z',
       };
 
       render(<ExecutionPlanViewer planId="plan-123" plan={planWithTiming} />);
@@ -148,8 +148,8 @@ describe("ExecutionPlanViewer", () => {
     });
   });
 
-  describe("Steps List", () => {
-    it("renders all steps in order", () => {
+  describe('Steps List', () => {
+    it('renders all steps in order', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -158,13 +158,13 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // All step descriptions should be visible
-      expect(screen.getByText("Read file from disk")).toBeInTheDocument();
-      expect(screen.getByText("Process data with transformation")).toBeInTheDocument();
-      expect(screen.getByText("Write results to database")).toBeInTheDocument();
-      expect(screen.getByText("Failed step example")).toBeInTheDocument();
+      expect(screen.getByText('Read file from disk')).toBeInTheDocument();
+      expect(screen.getByText('Process data with transformation')).toBeInTheDocument();
+      expect(screen.getByText('Write results to database')).toBeInTheDocument();
+      expect(screen.getByText('Failed step example')).toBeInTheDocument();
     });
 
-    it("displays correct status icons for each step", () => {
+    it('displays correct status icons for each step', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -177,23 +177,23 @@ describe("ExecutionPlanViewer", () => {
       expect(stepItems).toHaveLength(4);
 
       // Completed step should have success indicator
-      const completedStep = screen.getByTestId("step-item-step-1");
+      const completedStep = screen.getByTestId('step-item-step-1');
       expect(completedStep).toHaveClass(/status-completed/);
 
       // Running step should have loading indicator
-      const runningStep = screen.getByTestId("step-item-step-2");
+      const runningStep = screen.getByTestId('step-item-step-2');
       expect(runningStep).toHaveClass(/status-running/);
 
       // Pending step should have default indicator
-      const pendingStep = screen.getByTestId("step-item-step-3");
+      const pendingStep = screen.getByTestId('step-item-step-3');
       expect(pendingStep).toHaveClass(/status-pending/);
 
       // Failed step should have error indicator
-      const failedStep = screen.getByTestId("step-item-step-4");
+      const failedStep = screen.getByTestId('step-item-step-4');
       expect(failedStep).toHaveClass(/status-failed/);
     });
 
-    it("shows step details on expansion", async () => {
+    it('shows step details on expansion', async () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -202,22 +202,22 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // Click on a step to expand
-      const stepItem = screen.getByTestId("step-item-step-1");
+      const stepItem = screen.getByTestId('step-item-step-1');
 
       // Before expansion, details should not be visible
-      expect(screen.queryByTestId("step-details-step-1")).not.toBeInTheDocument();
+      expect(screen.queryByTestId('step-details-step-1')).not.toBeInTheDocument();
 
       // Click to expand using fireEvent
       fireEvent.click(stepItem);
 
       // After expansion, details should be visible
       await waitFor(() => {
-        expect(screen.getByTestId("step-details-step-1")).toBeInTheDocument();
+        expect(screen.getByTestId('step-details-step-1')).toBeInTheDocument();
         expect(screen.getByText(/Tool:/i)).toBeInTheDocument();
       });
     });
 
-    it("displays step tool information", () => {
+    it('displays step tool information', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -232,7 +232,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/failing_tool/)).toBeInTheDocument();
     });
 
-    it("displays error message for failed steps", async () => {
+    it('displays error message for failed steps', async () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -241,16 +241,16 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // Failed step - need to expand to see error
-      const failedStep = screen.getByTestId("step-item-step-4");
+      const failedStep = screen.getByTestId('step-item-step-4');
       fireEvent.click(failedStep);
 
       await waitFor(() => {
-        expect(screen.getByTestId("step-details-step-4")).toBeInTheDocument();
+        expect(screen.getByTestId('step-details-step-4')).toBeInTheDocument();
         expect(screen.getByText(/Tool execution failed/i)).toBeInTheDocument();
       });
     });
 
-    it("shows dependencies between steps", async () => {
+    it('shows dependencies between steps', async () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -259,33 +259,33 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // step-2 depends on step-1 - need to expand
-      const step2 = screen.getByTestId("step-item-step-2");
+      const step2 = screen.getByTestId('step-item-step-2');
       fireEvent.click(step2);
 
       await waitFor(() => {
-        expect(screen.getByTestId("step-details-step-2")).toBeInTheDocument();
+        expect(screen.getByTestId('step-details-step-2')).toBeInTheDocument();
         expect(screen.getByText(/Depends on:/i)).toBeInTheDocument();
       });
 
       // step-3 depends on step-2 - need to expand
-      const step3 = screen.getByTestId("step-item-step-3");
+      const step3 = screen.getByTestId('step-item-step-3');
       fireEvent.click(step3);
 
       await waitFor(() => {
-        expect(screen.getByTestId("step-details-step-3")).toBeInTheDocument();
+        expect(screen.getByTestId('step-details-step-3')).toBeInTheDocument();
       });
     });
   });
 
-  describe("Reflections List", () => {
-    it("displays reflections when present", () => {
+  describe('Reflections List', () => {
+    it('displays reflections when present', () => {
       const mockReflections = [
         {
-          id: "ref-1",
-          timestamp: "2026-01-29T00:00:10Z",
+          id: 'ref-1',
+          timestamp: '2026-01-29T00:00:10Z',
           cycle_number: 1,
-          summary: "Plan needs adjustment",
-          suggested_changes: ["Add validation step", "Improve error handling"],
+          summary: 'Plan needs adjustment',
+          suggested_changes: ['Add validation step', 'Improve error handling'],
         },
       ];
 
@@ -297,18 +297,18 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       expect(screen.getByText(/Reflections/i)).toBeInTheDocument();
-      expect(screen.getByText("Plan needs adjustment")).toBeInTheDocument();
-      expect(screen.getByText("Add validation step")).toBeInTheDocument();
-      expect(screen.getByText("Improve error handling")).toBeInTheDocument();
+      expect(screen.getByText('Plan needs adjustment')).toBeInTheDocument();
+      expect(screen.getByText('Add validation step')).toBeInTheDocument();
+      expect(screen.getByText('Improve error handling')).toBeInTheDocument();
     });
 
-    it("shows reflection cycle number", () => {
+    it('shows reflection cycle number', () => {
       const mockReflections = [
         {
-          id: "ref-1",
-          timestamp: "2026-01-29T00:00:10Z",
+          id: 'ref-1',
+          timestamp: '2026-01-29T00:00:10Z',
           cycle_number: 2,
-          summary: "Second reflection",
+          summary: 'Second reflection',
           suggested_changes: [],
         },
       ];
@@ -323,7 +323,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/Cycle 2/i)).toBeInTheDocument();
     });
 
-    it("does not display reflections section when no reflections", () => {
+    it('does not display reflections section when no reflections', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -335,15 +335,15 @@ describe("ExecutionPlanViewer", () => {
     });
   });
 
-  describe("Adjustments History", () => {
-    it("displays plan adjustments when present", () => {
+  describe('Adjustments History', () => {
+    it('displays plan adjustments when present', () => {
       const mockAdjustments = [
         {
-          id: "adj-1",
-          timestamp: "2026-01-29T00:00:20Z",
-          type: "step_added",
-          description: "Added validation step",
-          step_id: "step-5",
+          id: 'adj-1',
+          timestamp: '2026-01-29T00:00:20Z',
+          type: 'step_added',
+          description: 'Added validation step',
+          step_id: 'step-5',
         },
       ];
 
@@ -355,17 +355,17 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       expect(screen.getByText(/Adjustments/i)).toBeInTheDocument();
-      expect(screen.getByText("Added validation step")).toBeInTheDocument();
+      expect(screen.getByText('Added validation step')).toBeInTheDocument();
     });
 
-    it("shows adjustment type with appropriate icon", () => {
+    it('shows adjustment type with appropriate icon', () => {
       const mockAdjustments = [
         {
-          id: "adj-1",
-          timestamp: "2026-01-29T00:00:20Z",
-          type: "step_removed" as const,
-          description: "Removed redundant step",
-          step_id: "step-2",
+          id: 'adj-1',
+          timestamp: '2026-01-29T00:00:20Z',
+          type: 'step_removed' as const,
+          description: 'Removed redundant step',
+          step_id: 'step-2',
         },
       ];
 
@@ -376,11 +376,11 @@ describe("ExecutionPlanViewer", () => {
 
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
-      const adjustmentCard = screen.getByTestId("adjustment-adj-1");
+      const adjustmentCard = screen.getByTestId('adjustment-adj-1');
       expect(adjustmentCard).toHaveClass(/adjustment-item/);
     });
 
-    it("does not display adjustments section when no adjustments", () => {
+    it('does not display adjustments section when no adjustments', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -392,21 +392,19 @@ describe("ExecutionPlanViewer", () => {
     });
   });
 
-  describe("Real-time Updates", () => {
-    it("updates step status when SSE event received", async () => {
-      const { rerender } = render(
-        <ExecutionPlanViewer planId="plan-123" plan={mockPlan} />
-      );
+  describe('Real-time Updates', () => {
+    it('updates step status when SSE event received', async () => {
+      const { rerender } = render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // Initial state: step-3 is pending
-      expect(screen.getByTestId("step-item-step-3")).toHaveClass(/status-pending/);
+      expect(screen.getByTestId('step-item-step-3')).toHaveClass(/status-pending/);
 
       // Simulate SSE update
       const updatedPlan: ExecutionPlan = {
         ...mockPlan,
         steps: mockSteps.map((s) =>
-          s.step_id === "step-3"
-            ? { ...s, status: "running" as const, started_at: "2026-01-29T00:00:05Z" }
+          s.step_id === 'step-3'
+            ? { ...s, status: 'running' as const, started_at: '2026-01-29T00:00:05Z' }
             : s
         ),
       };
@@ -415,27 +413,30 @@ describe("ExecutionPlanViewer", () => {
 
       // After update: step-3 should be running
       await waitFor(() => {
-        expect(screen.getByTestId("step-item-step-3")).toHaveClass(/status-running/);
+        expect(screen.getByTestId('step-item-step-3')).toHaveClass(/status-running/);
       });
     });
 
-    it("updates progress percentage when steps complete", async () => {
-      const { rerender } = render(
-        <ExecutionPlanViewer planId="plan-123" plan={mockPlan} />
-      );
+    it('updates progress percentage when steps complete', async () => {
+      const { rerender } = render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // Initial progress: 25%
-      expect(screen.getByText("25%")).toBeInTheDocument();
+      expect(screen.getByText('25%')).toBeInTheDocument();
 
       // Complete more steps
       const updatedPlan: ExecutionPlan = {
         ...mockPlan,
         steps: mockSteps.map((s) =>
-          s.step_id === "step-3"
-            ? { ...s, status: "completed" as const, result: "Done", completed_at: "2026-01-29T00:00:06Z" }
+          s.step_id === 'step-3'
+            ? {
+                ...s,
+                status: 'completed' as const,
+                result: 'Done',
+                completed_at: '2026-01-29T00:00:06Z',
+              }
             : s
         ),
-        completed_steps: ["step-1", "step-3"],
+        completed_steps: ['step-1', 'step-3'],
         progress_percentage: 50,
       };
 
@@ -443,13 +444,13 @@ describe("ExecutionPlanViewer", () => {
 
       // Updated progress: 50%
       await waitFor(() => {
-        expect(screen.getByText("50%")).toBeInTheDocument();
+        expect(screen.getByText('50%')).toBeInTheDocument();
       });
     });
   });
 
-  describe("Execution Statistics", () => {
-    it("displays execution duration when plan is running", () => {
+  describe('Execution Statistics', () => {
+    it('displays execution duration when plan is running', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -460,7 +461,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/Duration:/i)).toBeInTheDocument();
     });
 
-    it("shows completion time when plan is completed", () => {
+    it('shows completion time when plan is completed', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -468,8 +469,8 @@ describe("ExecutionPlanViewer", () => {
 
       const completedPlan: ExecutionPlan = {
         ...mockPlan,
-        status: "completed" as ExecutionPlanStatus,
-        completed_at: "2026-01-29T00:01:00Z",
+        status: 'completed' as ExecutionPlanStatus,
+        completed_at: '2026-01-29T00:01:00Z',
         is_complete: true,
         progress_percentage: 100,
       };
@@ -479,7 +480,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/Completed at:/i)).toBeInTheDocument();
     });
 
-    it("displays reflection cycles info when enabled", () => {
+    it('displays reflection cycles info when enabled', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -491,8 +492,8 @@ describe("ExecutionPlanViewer", () => {
     });
   });
 
-  describe("Empty States", () => {
-    it("displays loading state when plan is null", () => {
+  describe('Empty States', () => {
+    it('displays loading state when plan is null', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -503,7 +504,7 @@ describe("ExecutionPlanViewer", () => {
       expect(screen.getByText(/Loading plan.../i)).toBeInTheDocument();
     });
 
-    it("displays message when plan has no steps", () => {
+    it('displays message when plan has no steps', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -522,8 +523,8 @@ describe("ExecutionPlanViewer", () => {
     });
   });
 
-  describe("Accessibility", () => {
-    it("has proper ARIA labels", () => {
+  describe('Accessibility', () => {
+    it('has proper ARIA labels', () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -532,15 +533,15 @@ describe("ExecutionPlanViewer", () => {
       render(<ExecutionPlanViewer planId="plan-123" plan={mockPlan} />);
 
       // Progress bar should have aria-label
-      const progressBar = screen.getByRole("progressbar");
-      expect(progressBar).toHaveAttribute("aria-label", "Plan execution progress");
+      const progressBar = screen.getByRole('progressbar');
+      expect(progressBar).toHaveAttribute('aria-label', 'Plan execution progress');
 
       // Steps should be in a list
-      const stepsList = screen.getByRole("list");
+      const stepsList = screen.getByRole('list');
       expect(stepsList).toBeInTheDocument();
     });
 
-    it("supports keyboard navigation", async () => {
+    it('supports keyboard navigation', async () => {
       mockUsePlanModeEvents.mockReturnValue({
         reflections: [],
         adjustments: [],
@@ -553,14 +554,14 @@ describe("ExecutionPlanViewer", () => {
       expect(stepItems.length).toBeGreaterThan(0);
 
       const firstStep = stepItems[0];
-      expect(firstStep).toHaveAttribute("role", "button");
-      expect(firstStep).toHaveAttribute("tabIndex", "0");
+      expect(firstStep).toHaveAttribute('role', 'button');
+      expect(firstStep).toHaveAttribute('tabIndex', '0');
 
       // Test keyboard navigation - Enter key
-      fireEvent.keyDown(firstStep, { key: "Enter", code: "Enter" });
+      fireEvent.keyDown(firstStep, { key: 'Enter', code: 'Enter' });
 
       await waitFor(() => {
-        expect(screen.getByTestId("step-details-step-1")).toBeInTheDocument();
+        expect(screen.getByTestId('step-details-step-1')).toBeInTheDocument();
       });
     });
   });

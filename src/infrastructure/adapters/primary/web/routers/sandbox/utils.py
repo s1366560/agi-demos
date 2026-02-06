@@ -117,7 +117,16 @@ def get_sandbox_orchestrator() -> SandboxOrchestrator:
     """Get or create the sandbox orchestrator singleton with thread-safe initialization."""
     global _sandbox_orchestrator, _event_publisher
 
+    # Fast path: if already initialized, return immediately (no lock needed)
+    if _sandbox_orchestrator is not None:
+        return _sandbox_orchestrator
+
+    # Get adapter BEFORE acquiring the lock to avoid deadlock
+    # (get_sandbox_adapter also acquires _singleton_lock)
+    adapter = get_sandbox_adapter()
+
     with _singleton_lock:
+        # Double-check after acquiring lock
         if _sandbox_orchestrator is None:
             from src.configuration.config import get_settings
             from src.configuration.di_container import DIContainer
@@ -130,7 +139,7 @@ def get_sandbox_orchestrator() -> SandboxOrchestrator:
                 _event_publisher = container.sandbox_event_publisher()
 
             _sandbox_orchestrator = SandboxOrchestrator(
-                sandbox_adapter=get_sandbox_adapter(),
+                sandbox_adapter=adapter,
                 event_publisher=_event_publisher,
                 default_timeout=settings.sandbox_timeout_seconds,
             )

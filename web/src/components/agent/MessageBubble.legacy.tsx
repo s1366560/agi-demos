@@ -15,7 +15,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
-  Clock
+  Clock,
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 
@@ -23,7 +23,12 @@ import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
 
 // Lazy load syntax highlighter to reduce initial bundle size (bundle-dynamic-imports)
 // ~400KB savings - only loaded when code blocks are actually rendered
-import type { TimelineEvent, ActEvent, ObserveEvent, ArtifactCreatedEvent } from '../../types/agent';
+import type {
+  TimelineEvent,
+  ActEvent,
+  ObserveEvent,
+  ArtifactCreatedEvent,
+} from '../../types/agent';
 
 // Dynamic import hook for syntax highlighter
 const useSyntaxHighlighter = () => {
@@ -40,7 +45,7 @@ const useSyntaxHighlighter = () => {
       try {
         const [{ Prism }, { vscDarkPlus: styles }] = await Promise.all([
           import('react-syntax-highlighter'),
-          import('react-syntax-highlighter/dist/esm/styles/prism')
+          import('react-syntax-highlighter/dist/esm/styles/prism'),
         ]);
         if (mounted) {
           setSyntaxHighlighter(() => Prism);
@@ -54,7 +59,9 @@ const useSyntaxHighlighter = () => {
     };
 
     loadHighlighter();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [isLoading, SyntaxHighlighter]);
 
   return { SyntaxHighlighter, vscDarkPlus, isLoading };
@@ -73,11 +80,7 @@ const CodeBlock: React.FC<{ language: string; children: string }> = ({ language,
   }
 
   return (
-    <SyntaxHighlighter
-      style={vscDarkPlus}
-      language={language}
-      PreTag="div"
-    >
+    <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div">
       {String(children).replace(/\n$/, '')}
     </SyntaxHighlighter>
   );
@@ -130,7 +133,10 @@ const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; conte
 };
 
 // Find matching observe event for act
-const findMatchingObserve = (actEvent: ActEvent, events: TimelineEvent[]): ObserveEvent | undefined => {
+const findMatchingObserve = (
+  actEvent: ActEvent,
+  events: TimelineEvent[]
+): ObserveEvent | undefined => {
   if (!events || !actEvent) return undefined;
   const actIndex = events.indexOf(actEvent as unknown as TimelineEvent);
   if (actIndex === -1) return undefined;
@@ -156,7 +162,9 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => {
     <div className="flex items-start justify-end gap-3 mb-4 animate-slide-up">
       <div className="max-w-[85%] md:max-w-[75%]">
         <div className="bg-primary/10 border border-primary/20 rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-          <p className="text-base leading-relaxed whitespace-pre-wrap break-words text-slate-900 dark:text-slate-100 font-sans">{content}</p>
+          <p className="text-base leading-relaxed whitespace-pre-wrap break-words text-slate-900 dark:text-slate-100 font-sans">
+            {content}
+          </p>
         </div>
       </div>
       <LazyAvatar className="w-8 h-8 bg-slate-200 dark:bg-slate-700 flex-shrink-0">
@@ -169,7 +177,7 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => {
 // Assistant Message Component
 const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({
   content,
-  isStreaming
+  isStreaming,
 }) => {
   if (!content && !isStreaming) return null;
   return (
@@ -187,7 +195,9 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                   code({ node, inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
                     return !inline && match ? (
-                      <CodeBlock language={match[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>
+                      <CodeBlock language={match[1]}>
+                        {String(children).replace(/\n$/, '')}
+                      </CodeBlock>
                     ) : (
                       <code className={`${className} font-mono text-sm`} {...props}>
                         {children}
@@ -213,9 +223,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
 };
 
 // Text Delta Component (for streaming content)
-const TextDeltaBubble: React.FC<{ content: string }> = ({
-  content,
-}) => {
+const TextDeltaBubble: React.FC<{ content: string }> = ({ content }) => {
   if (!content) return null;
   return (
     <div className="flex items-start gap-3 mb-4 animate-slide-up">
@@ -225,20 +233,16 @@ const TextDeltaBubble: React.FC<{ content: string }> = ({
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
           <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {content}
-            </ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           </div>
         </div>
       </div>
     </div>
   );
-}
+};
 
 // Thought/Reasoning Component - Uses same styling as ReasoningLogCard
-const ThoughtBubble: React.FC<{ content: string }> = ({
-  content,
-}) => {
+const ThoughtBubble: React.FC<{ content: string }> = ({ content }) => {
   if (!content) return null;
 
   return (
@@ -271,35 +275,41 @@ const ToolExecution: React.FC<{
   if (!event) return null;
 
   const hasError = observeEvent?.isError;
-  const duration = observeEvent && event
-    ? (observeEvent.timestamp || 0) - (event.timestamp || 0)
-    : null;
+  const duration =
+    observeEvent && event ? (observeEvent.timestamp || 0) - (event.timestamp || 0) : null;
 
   const statusIcon = observeEvent ? (
-    hasError ? <XCircle size={16} className="text-red-500" /> : <CheckCircle2 size={16} className="text-emerald-500" />
+    hasError ? (
+      <XCircle size={16} className="text-red-500" />
+    ) : (
+      <CheckCircle2 size={16} className="text-emerald-500" />
+    )
   ) : (
     <Loader2 size={16} className="text-primary animate-spin" />
   );
 
-  const statusText = observeEvent
-    ? (hasError ? 'Failed' : 'Success')
-    : 'Running';
+  const statusText = observeEvent ? (hasError ? 'Failed' : 'Success') : 'Running';
 
   return (
     <div className="flex items-start gap-3 mb-3 animate-slide-up">
-      <div className={`
+      <div
+        className={`
         w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0
-        ${observeEvent
-          ? (hasError ? 'bg-red-50 dark:bg-red-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20')
-          : 'bg-blue-50 dark:bg-blue-900/20'
+        ${
+          observeEvent
+            ? hasError
+              ? 'bg-red-50 dark:bg-red-900/20'
+              : 'bg-emerald-50 dark:bg-emerald-900/20'
+            : 'bg-blue-50 dark:bg-blue-900/20'
         }
-      `}>
-        <Wrench size={16} className={`
-          ${observeEvent
-            ? (hasError ? 'text-red-500' : 'text-emerald-500')
-            : 'text-primary'
-          }
-        `} />
+      `}
+      >
+        <Wrench
+          size={16}
+          className={`
+          ${observeEvent ? (hasError ? 'text-red-500' : 'text-emerald-500') : 'text-primary'}
+        `}
+        />
       </div>
       <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm max-w-full">
@@ -312,13 +322,18 @@ const ToolExecution: React.FC<{
               <span className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
                 {event.toolName || 'Unknown Tool'}
               </span>
-              <LazyTag className={`
+              <LazyTag
+                className={`
                 flex-shrink-0
-                ${observeEvent
-                  ? (hasError ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200')
-                  : 'bg-blue-50 text-primary border-blue-200'
+                ${
+                  observeEvent
+                    ? hasError
+                      ? 'bg-red-50 text-red-600 border-red-200'
+                      : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                    : 'bg-blue-50 text-primary border-blue-200'
                 }
-              `}>
+              `}
+              >
                 <span className="flex items-center gap-1">
                   {statusIcon}
                   {statusText}
@@ -332,7 +347,11 @@ const ToolExecution: React.FC<{
                   {duration}ms
                 </span>
               )}
-              {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+              {expanded ? (
+                <ChevronUp size={16} className="text-slate-400" />
+              ) : (
+                <ChevronDown size={16} className="text-slate-400" />
+              )}
             </div>
           </button>
 
@@ -341,7 +360,9 @@ const ToolExecution: React.FC<{
             <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700 max-w-full">
               {/* Input */}
               <div className="mt-3 max-w-full">
-                <p className="text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Input</p>
+                <p className="text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
+                  Input
+                </p>
                 <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 max-w-full">
                   <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
                     JSON
@@ -357,7 +378,9 @@ const ToolExecution: React.FC<{
               {/* Output */}
               {observeEvent && (
                 <div className="mt-3 max-w-full">
-                  <p className="text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Output</p>
+                  <p className="text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
+                    Output
+                  </p>
                   {(() => {
                     const formatted = formatToolOutput(observeEvent.toolOutput);
                     if (formatted.type === 'error') {
@@ -379,7 +402,9 @@ const ToolExecution: React.FC<{
                             JSON
                           </div>
                           <pre className="bg-slate-50 dark:bg-slate-900 p-3 text-xs overflow-x-auto whitespace-pre-wrap break-words max-w-full">
-                            <code className="text-slate-700 dark:text-slate-300 font-mono">{formatted.content}</code>
+                            <code className="text-slate-700 dark:text-slate-300 font-mono">
+                              {formatted.content}
+                            </code>
                           </pre>
                         </div>
                       );
@@ -430,7 +455,9 @@ const WorkPlanBubble: React.FC<{ event: any }> = ({ event }) => {
                 <span className="w-6 h-6 rounded-full bg-white dark:bg-slate-800 text-xs font-medium flex items-center justify-center text-purple-600 flex-shrink-0">
                   {index + 1}
                 </span>
-                <span className="text-sm text-slate-700 dark:text-slate-300 break-words">{step.description || 'No description'}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-300 break-words">
+                  {step.description || 'No description'}
+                </span>
               </div>
             ))}
           </div>
@@ -450,7 +477,9 @@ const StepStartBubble: React.FC<{ event: any }> = ({ event }) => {
   return (
     <div className="flex items-start gap-3 my-2 opacity-70 animate-slide-up">
       <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
-        <span className="text-amber-600 text-xs">{stepIndex !== undefined ? stepIndex + 1 : '•'}</span>
+        <span className="text-amber-600 text-xs">
+          {stepIndex !== undefined ? stepIndex + 1 : '•'}
+        </span>
       </div>
       <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1 break-words">
         {stepDesc}
@@ -463,7 +492,7 @@ const StepStartBubble: React.FC<{ event: any }> = ({ event }) => {
 const TextEndBubble: React.FC<{ event: TimelineEvent }> = ({ event }) => {
   // Type guard for text_end event
   if (event.type !== 'text_end') return null;
-  
+
   const fullText = 'fullText' in event ? (event.fullText as string) : '';
   if (!fullText || !fullText.trim()) return null;
 
@@ -475,9 +504,7 @@ const TextEndBubble: React.FC<{ event: TimelineEvent }> = ({ event }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
           <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {fullText}
-            </ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullText}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -495,14 +522,22 @@ const ArtifactCreatedBubble: React.FC<{ event: ArtifactCreatedEvent }> = ({ even
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'image': return 'image';
-      case 'video': return 'movie';
-      case 'audio': return 'audio_file';
-      case 'document': return 'description';
-      case 'code': return 'code';
-      case 'data': return 'table_chart';
-      case 'archive': return 'folder_zip';
-      default: return 'attach_file';
+      case 'image':
+        return 'image';
+      case 'video':
+        return 'movie';
+      case 'audio':
+        return 'audio_file';
+      case 'document':
+        return 'description';
+      case 'code':
+        return 'code';
+      case 'data':
+        return 'table_chart';
+      case 'archive':
+        return 'folder_zip';
+      default:
+        return 'attach_file';
     }
   };
 
@@ -581,9 +616,7 @@ const ArtifactCreatedBubble: React.FC<{ event: ArtifactCreatedEvent }> = ({ even
                 className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                 download={event.filename}
               >
-                <span className="material-symbols-outlined text-base">
-                  download
-                </span>
+                <span className="material-symbols-outlined text-base">download</span>
                 下载
               </a>
             )}
@@ -605,84 +638,71 @@ const ArtifactCreatedBubble: React.FC<{ event: ArtifactCreatedEvent }> = ({ even
 };
 
 // Main Message Bubble Component
-export const MessageBubble: React.FC<MessageBubbleProps> = memo(({
-  event,
-  isStreaming,
-  allEvents,
-}) => {
-  if (!event) return null;
+export const MessageBubble: React.FC<MessageBubbleProps> = memo(
+  ({ event, isStreaming, allEvents }) => {
+    if (!event) return null;
 
-  switch (event.type) {
-    case 'user_message':
-      return <UserMessage content={getContent(event)} />;
+    switch (event.type) {
+      case 'user_message':
+        return <UserMessage content={getContent(event)} />;
 
-    case 'assistant_message':
-      return (
-        <AssistantMessage
-          content={getContent(event)}
-          isStreaming={isStreaming}
-        />
-      );
+      case 'assistant_message':
+        return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} />;
 
-    case 'text_delta':
-      return (
-        <TextDeltaBubble
-          content={getContent(event)}
-        />
-      );
+      case 'text_delta':
+        return <TextDeltaBubble content={getContent(event)} />;
 
-    case 'thought':
-      return (
-        <ThoughtBubble
-          content={getContent(event)}
-        />
-      );
+      case 'thought':
+        return <ThoughtBubble content={getContent(event)} />;
 
-    case 'act': {
-      const observeEvent = allEvents ? findMatchingObserve(event as ActEvent, allEvents) : undefined;
-      return (
-        <ToolExecution
-          event={event as ActEvent}
-          observeEvent={observeEvent}
-          allEvents={allEvents}
-        />
-      );
+      case 'act': {
+        const observeEvent = allEvents
+          ? findMatchingObserve(event as ActEvent, allEvents)
+          : undefined;
+        return (
+          <ToolExecution
+            event={event as ActEvent}
+            observeEvent={observeEvent}
+            allEvents={allEvents}
+          />
+        );
+      }
+
+      case 'observe':
+        // Observe events are rendered as part of act
+        return null;
+
+      case 'work_plan':
+        return <WorkPlanBubble event={event} />;
+
+      case 'step_start':
+        return <StepStartBubble event={event} />;
+
+      case 'text_end':
+        // Display final assistant response after streaming completes
+        return <TextEndBubble event={event} />;
+
+      case 'step_end':
+      case 'text_start':
+        // These are control events, no visual output needed
+        return null;
+
+      case 'artifact_created':
+        console.log('[MessageBubble] Rendering artifact_created event:', event);
+        return <ArtifactCreatedBubble event={event as unknown as ArtifactCreatedEvent} />;
+
+      // These artifact events don't need visual rendering
+      case 'artifact_ready':
+      case 'artifact_error':
+      case 'artifacts_batch':
+        return null;
+
+      default:
+        // Unknown event type - log for debugging
+        console.warn('Unknown event type in MessageBubble:', (event as any).type);
+        return null;
     }
-
-    case 'observe':
-      // Observe events are rendered as part of act
-      return null;
-
-    case 'work_plan':
-      return <WorkPlanBubble event={event} />;
-
-    case 'step_start':
-      return <StepStartBubble event={event} />;
-
-    case 'text_end':
-      // Display final assistant response after streaming completes
-      return <TextEndBubble event={event} />;
-
-    case 'step_end':
-    case 'text_start':
-      // These are control events, no visual output needed
-      return null;
-
-    case 'artifact_created':
-      console.log('[MessageBubble] Rendering artifact_created event:', event);
-      return <ArtifactCreatedBubble event={event as unknown as ArtifactCreatedEvent} />;
-
-    // These artifact events don't need visual rendering
-    case 'artifact_ready':
-    case 'artifact_error':
-    case 'artifacts_batch':
-      return null;
-
-    default:
-      // Unknown event type - log for debugging
-      console.warn('Unknown event type in MessageBubble:', (event as any).type);
-      return null;
   }
-});
+);
 
 MessageBubble.displayName = 'MessageBubble';

@@ -7,119 +7,130 @@
  * Only re-renders when toolName, status, result, or input change.
  */
 
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo } from 'react';
 
-import { CheckCircleOutlined, SyncOutlined, CloseCircleOutlined, ClockCircleOutlined } from "@ant-design/icons";
-import { Card, Tag, Collapse, Typography } from "antd";
+import {
+  CheckCircleOutlined,
+  SyncOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
+} from '@ant-design/icons';
+import { Card, Tag, Collapse, Typography } from 'antd';
 
-import { foldText } from "../../utils/toolResultUtils";
+import { foldText } from '../../utils/toolResultUtils';
 
 const { Panel } = Collapse;
 const { Text } = Typography;
 
 interface ToolCardProps {
-    toolName: string;
-    input: Record<string, unknown>;
-    result?: string;
-    status: "running" | "success" | "failed";
-    startTime?: number;
-    endTime?: number;
-    duration?: number;
-    embedded?: boolean; // When true, use compact styling for timeline embedding
+  toolName: string;
+  input: Record<string, unknown>;
+  result?: string;
+  status: 'running' | 'success' | 'failed';
+  startTime?: number;
+  endTime?: number;
+  duration?: number;
+  embedded?: boolean; // When true, use compact styling for timeline embedding
 }
 
-export const ToolCard: React.FC<ToolCardProps> = memo(({
-    toolName,
-    input,
-    result,
-    status,
-    startTime,
-    endTime,
-    duration,
-    embedded = false,
-}) => {
+export const ToolCard: React.FC<ToolCardProps> = memo(
+  ({ toolName, input, result, status, startTime, endTime, duration, embedded = false }) => {
     // Memoize JSON.stringify to avoid re-computing on every render
     const formattedInput = useMemo(() => JSON.stringify(input, null, 2), [input]);
 
     const getIcon = () => {
-        switch (status) {
-            case "running":
-                return <SyncOutlined spin className="text-blue-500" />;
-            case "success":
-                return <CheckCircleOutlined className="text-green-500" />;
-            case "failed":
-                return <CloseCircleOutlined className="text-red-500" />;
-        }
+      switch (status) {
+        case 'running':
+          return <SyncOutlined spin className="text-blue-500" />;
+        case 'success':
+          return <CheckCircleOutlined className="text-green-500" />;
+        case 'failed':
+          return <CloseCircleOutlined className="text-red-500" />;
+      }
     };
 
     const formatDuration = (ms: number) => {
-        if (ms < 1000) return `${ms}ms`;
-        return `${(ms / 1000).toFixed(2)}s`;
+      if (ms < 1000) return `${ms}ms`;
+      return `${(ms / 1000).toFixed(2)}s`;
     };
 
     const getHeader = () => (
-        <div className="flex items-center gap-2 w-full">
-            {getIcon()}
-            <span className="font-semibold text-sm">{toolName}</span>
-            <div className="ml-auto flex items-center gap-2">
-                {duration && (
-                    <Tag icon={<ClockCircleOutlined />} className="mr-0 text-xs">
-                        {formatDuration(duration)}
-                    </Tag>
-                )}
-                <Tag className="mr-0 text-xs" color={status === 'success' ? 'success' : status === 'failed' ? 'error' : 'processing'}>
-                    {status.toUpperCase()}
-                </Tag>
-            </div>
+      <div className="flex items-center gap-2 w-full">
+        {getIcon()}
+        <span className="font-semibold text-sm">{toolName}</span>
+        <div className="ml-auto flex items-center gap-2">
+          {duration && (
+            <Tag icon={<ClockCircleOutlined />} className="mr-0 text-xs">
+              {formatDuration(duration)}
+            </Tag>
+          )}
+          <Tag
+            className="mr-0 text-xs"
+            color={status === 'success' ? 'success' : status === 'failed' ? 'error' : 'processing'}
+          >
+            {status.toUpperCase()}
+          </Tag>
         </div>
+      </div>
     );
 
     const content = (
-        <Collapse ghost size="small" defaultActiveKey={[]}>
-            <Panel header={getHeader()} key="1">
-                <div className="space-y-2">
-                    {/* Timing Info */}
-                    {(startTime || endTime) && !embedded && (
-                        <div className="flex gap-4 text-xs text-slate-400 mb-2 border-b border-slate-100 pb-2">
-                            {startTime && <span>Start: {new Date(startTime).toLocaleTimeString()}</span>}
-                            {endTime && <span>End: {new Date(endTime).toLocaleTimeString()}</span>}
-                        </div>
-                    )}
+      <Collapse ghost size="small" defaultActiveKey={[]}>
+        <Panel header={getHeader()} key="1">
+          <div className="space-y-2">
+            {/* Timing Info */}
+            {(startTime || endTime) && !embedded && (
+              <div className="flex gap-4 text-xs text-slate-400 mb-2 border-b border-slate-100 pb-2">
+                {startTime && <span>Start: {new Date(startTime).toLocaleTimeString()}</span>}
+                {endTime && <span>End: {new Date(endTime).toLocaleTimeString()}</span>}
+              </div>
+            )}
 
-                    <div>
-                        <Text type="secondary" className="text-xs uppercase font-bold">Input</Text>
-                        <pre className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
-                            embedded ? 'bg-white/80 border-slate-200' : 'bg-white border-slate-100'
-                        }`}>
-                            {formattedInput}
-                        </pre>
-                    </div>
-                    {result && (
-                        <div>
-                            <Text type="secondary" className="text-xs uppercase font-bold">Result</Text>
-                            <pre className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
-                                embedded ? 'bg-white/80 border-slate-200 max-h-40' : 'bg-white border-slate-100 max-h-60'
-                            }`}>
-                                {foldText(result, 5)}
-                            </pre>
-                        </div>
-                    )}
-                </div>
-            </Panel>
-        </Collapse>
+            <div>
+              <Text type="secondary" className="text-xs uppercase font-bold">
+                Input
+              </Text>
+              <pre
+                className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
+                  embedded ? 'bg-white/80 border-slate-200' : 'bg-white border-slate-100'
+                }`}
+              >
+                {formattedInput}
+              </pre>
+            </div>
+            {result && (
+              <div>
+                <Text type="secondary" className="text-xs uppercase font-bold">
+                  Result
+                </Text>
+                <pre
+                  className={`p-2 rounded text-xs border overflow-x-auto max-w-full whitespace-pre-wrap break-all ${
+                    embedded
+                      ? 'bg-white/80 border-slate-200 max-h-40'
+                      : 'bg-white border-slate-100 max-h-60'
+                  }`}
+                >
+                  {foldText(result, 5)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </Panel>
+      </Collapse>
     );
 
     // When embedded, skip the Card wrapper (parent TimelineNode provides styling)
     if (embedded) {
-        return content;
+      return content;
     }
 
     return (
-        <Card size="small" className="mb-2 border-slate-200 shadow-sm bg-slate-50">
-            {content}
-        </Card>
+      <Card size="small" className="mb-2 border-slate-200 shadow-sm bg-slate-50">
+        {content}
+      </Card>
     );
-});
+  }
+);
 
 ToolCard.displayName = 'ToolCard';
 

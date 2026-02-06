@@ -454,7 +454,8 @@ describe('httpClient retry integration', () => {
 
   it('should retry request when retry is enabled', async () => {
     const { httpClient, ApiError } = await import('@/services/client/httpClient');
-    const mockGet = vi.fn()
+    const mockGet = vi
+      .fn()
       .mockRejectedValueOnce(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'))
       .mockResolvedValueOnce({ data: 'success' });
 
@@ -477,13 +478,13 @@ describe('httpClient retry integration', () => {
 
   it('should not retry when retry is not enabled', async () => {
     const { httpClient, ApiError } = await import('@/services/client/httpClient');
-    const mockGet = vi.fn().mockRejectedValue(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'));
+    const mockGet = vi
+      .fn()
+      .mockRejectedValue(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'));
 
     httpClient.instance.get = mockGet as any;
 
-    await expect(
-      httpClient.get('/api/test', { retry: false })
-    ).rejects.toThrow();
+    await expect(httpClient.get('/api/test', { retry: false })).rejects.toThrow();
 
     // Only called once, no retry
     expect(mockGet).toHaveBeenCalledTimes(1);
@@ -491,7 +492,8 @@ describe('httpClient retry integration', () => {
 
   it('should use custom retry config when provided', async () => {
     const { httpClient, ApiError } = await import('@/services/client/httpClient');
-    const mockGet = vi.fn()
+    const mockGet = vi
+      .fn()
       .mockRejectedValueOnce(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error'))
       .mockRejectedValueOnce(new ApiError('NETWORK' as any, 'NETWORK_ERROR', 'Network error 2'))
       .mockResolvedValueOnce({ data: 'success' });
@@ -513,19 +515,12 @@ describe('httpClient retry integration', () => {
 
   it('should not retry on non-retryable errors (4xx)', async () => {
     const { httpClient, ApiError } = await import('@/services/client/httpClient');
-    const mockError = new ApiError(
-      'VALIDATION' as any,
-      'INVALID_INPUT',
-      'Invalid input',
-      400
-    );
+    const mockError = new ApiError('VALIDATION' as any, 'INVALID_INPUT', 'Invalid input', 400);
     const mockGet = vi.fn().mockRejectedValue(mockError);
 
     httpClient.instance.get = mockGet as any;
 
-    await expect(
-      httpClient.get('/api/test', { retry: true })
-    ).rejects.toThrow();
+    await expect(httpClient.get('/api/test', { retry: true })).rejects.toThrow();
 
     // Only called once, 4xx errors are not retried
     expect(mockGet).toHaveBeenCalledTimes(1);

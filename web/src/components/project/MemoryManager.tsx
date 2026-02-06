@@ -15,16 +15,16 @@ interface MemoryManagerProps {
 
 export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) => {
   const { currentProject } = useProjectStore();
-  const { 
-    memories, 
-    currentMemory, 
-    listMemories, 
-    deleteMemory, 
-    setCurrentMemory, 
-    isLoading, 
-    error 
+  const {
+    memories,
+    currentMemory,
+    listMemories,
+    deleteMemory,
+    setCurrentMemory,
+    isLoading,
+    error,
   } = useMemoryStore();
-  
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,14 +34,14 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
   const loadMemories = useCallback(async () => {
     if (!currentProject) return;
-    
+
     const params: any = {};
     if (searchTerm) params.search = searchTerm;
     if (filterType !== 'all') params.content_type = filterType;
     if (filterUser) params.author_id = filterUser;
     if (dateRange.start) params.start_date = dateRange.start.toISOString();
     if (dateRange.end) params.end_date = dateRange.end.toISOString();
-    
+
     try {
       await listMemories(currentProject.id, params);
     } catch (_error) {
@@ -67,7 +67,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
   const handleDeleteMemory = async (memoryId: string) => {
     if (!currentProject) return;
-    
+
     if (window.confirm('确定要删除这条记忆吗？此操作不可恢复。')) {
       try {
         await deleteMemory(currentProject.id, memoryId);
@@ -79,11 +79,16 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'text': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-      case 'document': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
-      case 'image': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
-      case 'video': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-200';
+      case 'text':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+      case 'document':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+      case 'image':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
+      case 'video':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-slate-800 dark:text-slate-200';
     }
   };
 
@@ -93,7 +98,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -126,7 +131,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
           <div className="flex items-center space-x-2">
             <Brain className="h-5 w-5 text-gray-600 dark:text-slate-400" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">记忆管理</h3>
-            <span className="text-sm text-gray-500 dark:text-slate-500">({memories.length} 条)</span>
+            <span className="text-sm text-gray-500 dark:text-slate-500">
+              ({memories.length} 条)
+            </span>
           </div>
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -149,7 +156,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
             />
           </div>
-          
+
           <div>
             <select
               value={filterType}
@@ -213,8 +220,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
             <p className="text-gray-600 dark:text-slate-400 mb-4">
               {searchTerm || filterType !== 'all' || filterUser
                 ? '没有找到匹配的记忆'
-                : '开始创建你的第一条记忆'
-              }
+                : '开始创建你的第一条记忆'}
             </p>
             {!searchTerm && filterType === 'all' && !filterUser && (
               <button
@@ -239,7 +245,9 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center space-x-3 flex-1">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(memory.content_type)}`}>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(memory.content_type)}`}
+                    >
                       {memory.content_type}
                     </span>
                     <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-slate-500">
@@ -278,8 +286,12 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
                 </div>
 
                 <div className="mb-3">
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">{memory.title}</h4>
-                  <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-3">{memory.content}</p>
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    {memory.title}
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-3">
+                    {memory.content}
+                  </p>
                 </div>
 
                 {memory.entities && memory.entities.length > 0 && (

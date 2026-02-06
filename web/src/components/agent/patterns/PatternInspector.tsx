@@ -98,7 +98,11 @@ export function PatternInspector({
   if (!pattern) {
     return (
       <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-8 flex flex-col items-center justify-center text-center min-h-[400px]">
-        <MaterialIcon name="account_tree" size={48} className="text-slate-300 dark:text-slate-700 mb-3" />
+        <MaterialIcon
+          name="account_tree"
+          size={48}
+          className="text-slate-300 dark:text-slate-700 mb-3"
+        />
         <p className="text-slate-500">Select a pattern to view details</p>
       </div>
     );
@@ -149,17 +153,13 @@ export function PatternInspector({
           {pattern.avgRuntime && (
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Avg Runtime</p>
-              <p className="text-sm text-slate-900 dark:text-white">
-                {pattern.avgRuntime}ms
-              </p>
+              <p className="text-sm text-slate-900 dark:text-white">{pattern.avgRuntime}ms</p>
             </div>
           )}
           {pattern.successRate !== undefined && (
             <div>
               <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Success Rate</p>
-              <p className="text-sm text-slate-900 dark:text-white">
-                {pattern.successRate}%
-              </p>
+              <p className="text-sm text-slate-900 dark:text-white">{pattern.successRate}%</p>
             </div>
           )}
           {pattern.usageCount !== undefined && (

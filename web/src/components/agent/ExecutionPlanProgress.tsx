@@ -6,11 +6,11 @@
  * Part of Plan Mode UI.
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo } from 'react';
 
-import { Progress, Typography, Badge } from "antd";
+import { Progress, Typography, Badge } from 'antd';
 
-import { ExecutionPlan, ExecutionPlanStatus } from "../../types/agent";
+import { ExecutionPlan, ExecutionPlanStatus } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -23,22 +23,22 @@ interface ExecutionPlanProgressProps {
  */
 const getStatusColor = (status: ExecutionPlanStatus): string => {
   switch (status) {
-    case "draft":
-      return "default";
-    case "approved":
-      return "blue";
-    case "executing":
-      return "processing";
-    case "paused":
-      return "warning";
-    case "completed":
-      return "success";
-    case "failed":
-      return "error";
-    case "cancelled":
-      return "default";
+    case 'draft':
+      return 'default';
+    case 'approved':
+      return 'blue';
+    case 'executing':
+      return 'processing';
+    case 'paused':
+      return 'warning';
+    case 'completed':
+      return 'success';
+    case 'failed':
+      return 'error';
+    case 'cancelled':
+      return 'default';
     default:
-      return "default";
+      return 'default';
   }
 };
 
@@ -47,47 +47,48 @@ const getStatusColor = (status: ExecutionPlanStatus): string => {
  */
 const getStatusText = (status: ExecutionPlanStatus): string => {
   switch (status) {
-    case "draft":
-      return "Draft";
-    case "approved":
-      return "Approved";
-    case "executing":
-      return "Executing";
-    case "paused":
-      return "Paused";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
+    case 'draft':
+      return 'Draft';
+    case 'approved':
+      return 'Approved';
+    case 'executing':
+      return 'Executing';
+    case 'paused':
+      return 'Paused';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
     default:
-      return "Unknown";
+      return 'Unknown';
   }
 };
 
 export const ExecutionPlanProgress: React.FC<ExecutionPlanProgressProps> = ({ plan }) => {
-  const { percent, completedCount, failedCount, totalCount, statusColor, statusText } = useMemo(() => {
-    if (!plan) {
-      return {
-        percent: 0,
-        completedCount: 0,
-        failedCount: 0,
-        totalCount: 0,
-        statusColor: "default",
-        statusText: "No Plan",
-      };
-    }
+  const { percent, completedCount, failedCount, totalCount, statusColor, statusText } =
+    useMemo(() => {
+      if (!plan) {
+        return {
+          percent: 0,
+          completedCount: 0,
+          failedCount: 0,
+          totalCount: 0,
+          statusColor: 'default',
+          statusText: 'No Plan',
+        };
+      }
 
-    const completedCount = plan.completed_steps.length;
-    const failedCount = plan.failed_steps.length;
-    const totalCount = plan.steps.length;
-    const percent = totalCount > 0 ? plan.progress_percentage : 0;
-    const statusColor = getStatusColor(plan.status);
-    const statusText = getStatusText(plan.status);
+      const completedCount = plan.completed_steps.length;
+      const failedCount = plan.failed_steps.length;
+      const totalCount = plan.steps.length;
+      const percent = totalCount > 0 ? plan.progress_percentage : 0;
+      const statusColor = getStatusColor(plan.status);
+      const statusText = getStatusText(plan.status);
 
-    return { percent, completedCount, failedCount, totalCount, statusColor, statusText };
-  }, [plan]);
+      return { percent, completedCount, failedCount, totalCount, statusColor, statusText };
+    }, [plan]);
 
   if (!plan) {
     return (
@@ -111,10 +112,16 @@ export const ExecutionPlanProgress: React.FC<ExecutionPlanProgressProps> = ({ pl
 
       <Progress
         percent={Math.round(percent)}
-        status={plan.status === "failed" ? "exception" : plan.status === "completed" ? "success" : "active"}
+        status={
+          plan.status === 'failed'
+            ? 'exception'
+            : plan.status === 'completed'
+              ? 'success'
+              : 'active'
+        }
         strokeColor={{
-          "0%": "#108ee9",
-          "100%": "#87d068",
+          '0%': '#108ee9',
+          '100%': '#87d068',
         }}
       />
 

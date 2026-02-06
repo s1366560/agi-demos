@@ -6,7 +6,7 @@
  * Now supports artifact display for rich outputs (images, videos, etc.)
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo } from 'react';
 
 import {
   CopyOutlined,
@@ -18,14 +18,13 @@ import {
   EditOutlined,
   FolderOutlined,
   PictureOutlined,
-} from "@ant-design/icons";
-import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from "antd";
+} from '@ant-design/icons';
+import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from 'antd';
 
-import { ArtifactRenderer } from "../../artifact";
+import { ArtifactRenderer } from '../../artifact';
 
-import type { Artifact } from "../../../types/agent";
-import type { CollapseProps } from "antd";
-
+import type { Artifact } from '../../../types/agent';
+import type { CollapseProps } from 'antd';
 
 const { Text } = Typography;
 
@@ -64,12 +63,12 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
 
 // Tool colors mapping
 const TOOL_COLORS: Record<string, string> = {
-  read: "blue",
-  write: "green",
-  edit: "orange",
-  glob: "purple",
-  grep: "cyan",
-  bash: "default",
+  read: 'blue',
+  write: 'green',
+  edit: 'orange',
+  glob: 'purple',
+  grep: 'cyan',
+  bash: 'default',
 };
 
 function ToolExecutionCard({
@@ -84,44 +83,44 @@ function ToolExecutionCard({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    const content = execution.output || execution.error || "";
+    const content = execution.output || execution.error || '';
     await navigator.clipboard.writeText(content);
     setCopied(true);
-    message.success("Copied to clipboard");
+    message.success('Copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
   };
 
   // Format input for display
   const formattedInput = useMemo(() => {
     const input = execution.input;
-    if (execution.toolName === "read" || execution.toolName === "write") {
+    if (execution.toolName === 'read' || execution.toolName === 'write') {
       return input.file_path as string;
     }
-    if (execution.toolName === "edit") {
+    if (execution.toolName === 'edit') {
       return `${input.file_path} (${(input.old_string as string)?.length || 0} → ${(input.new_string as string)?.length || 0} chars)`;
     }
-    if (execution.toolName === "glob") {
+    if (execution.toolName === 'glob') {
       return input.pattern as string;
     }
-    if (execution.toolName === "grep") {
-      return `${input.pattern} ${input.path ? `in ${input.path}` : ""}`;
+    if (execution.toolName === 'grep') {
+      return `${input.pattern} ${input.path ? `in ${input.path}` : ''}`;
     }
-    if (execution.toolName === "bash") {
+    if (execution.toolName === 'bash') {
       const cmd = input.command as string;
-      return cmd.length > 50 ? cmd.slice(0, 50) + "..." : cmd;
+      return cmd.length > 50 ? cmd.slice(0, 50) + '...' : cmd;
     }
     return JSON.stringify(input);
   }, [execution]);
 
   // Determine if output looks like code
   const isCodeOutput = useMemo(() => {
-    const output = execution.output || "";
+    const output = execution.output || '';
     return (
-      execution.toolName === "read" ||
-      execution.toolName === "bash" ||
-      output.includes("\n") ||
-      output.startsWith("{") ||
-      output.startsWith("[")
+      execution.toolName === 'read' ||
+      execution.toolName === 'bash' ||
+      output.includes('\n') ||
+      output.startsWith('{') ||
+      output.startsWith('[')
     );
   }, [execution]);
 
@@ -130,18 +129,14 @@ function ToolExecutionCard({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
         <div className="flex items-center gap-2">
-          <Tag
-            icon={TOOL_ICONS[execution.toolName]}
-            color={TOOL_COLORS[execution.toolName]}
-          >
+          <Tag icon={TOOL_ICONS[execution.toolName]} color={TOOL_COLORS[execution.toolName]}>
             {execution.toolName}
           </Tag>
           <Text
             className="text-sm text-slate-600 cursor-pointer hover:text-blue-600"
             onClick={() => {
               const filePath =
-                (execution.input.file_path as string) ||
-                (execution.input.path as string);
+                (execution.input.file_path as string) || (execution.input.path as string);
               if (filePath && onFileClick) {
                 onFileClick(filePath);
               }
@@ -152,11 +147,9 @@ function ToolExecutionCard({
         </div>
         <div className="flex items-center gap-2">
           {execution.durationMs && (
-            <Text className="text-xs text-slate-400">
-              {execution.durationMs}ms
-            </Text>
+            <Text className="text-xs text-slate-400">{execution.durationMs}ms</Text>
           )}
-          <Tooltip title={copied ? "Copied!" : "Copy output"}>
+          <Tooltip title={copied ? 'Copied!' : 'Copy output'}>
             <Button
               type="text"
               size="small"
@@ -177,10 +170,10 @@ function ToolExecutionCard({
             </Text>
           </div>
         ) : execution.output ? (
-          <div className={`p-3 ${isCodeOutput ? "bg-slate-900" : "bg-white"}`}>
+          <div className={`p-3 ${isCodeOutput ? 'bg-slate-900' : 'bg-white'}`}>
             <pre
               className={`text-sm font-mono whitespace-pre-wrap m-0 ${
-                isCodeOutput ? "text-slate-200" : "text-slate-700"
+                isCodeOutput ? 'text-slate-200' : 'text-slate-700'
               }`}
             >
               {execution.output}
@@ -201,10 +194,13 @@ function ToolExecutionCard({
           <div className="px-3 py-2 bg-slate-50 flex items-center gap-2">
             <PictureOutlined className="text-blue-500" />
             <Text className="text-xs text-slate-600">
-              {execution.artifacts.length} artifact{execution.artifacts.length > 1 ? "s" : ""}
+              {execution.artifacts.length} artifact{execution.artifacts.length > 1 ? 's' : ''}
             </Text>
           </div>
-          <div className="p-3 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+          <div
+            className="p-3 grid gap-2"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}
+          >
             {execution.artifacts.map((artifact) => (
               <ArtifactRenderer
                 key={artifact.id}
@@ -223,20 +219,14 @@ function ToolExecutionCard({
 
 export function SandboxOutputViewer({
   executions,
-  maxHeight = "100%",
+  maxHeight = '100%',
   onFileClick,
   onArtifactExpand,
 }: SandboxOutputViewerProps) {
   if (executions.length === 0) {
     return (
-      <div
-        className="flex items-center justify-center h-full"
-        style={{ maxHeight }}
-      >
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="No tool executions yet"
-        />
+      <div className="flex items-center justify-center h-full" style={{ maxHeight }}>
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tool executions yet" />
       </div>
     );
   }
@@ -245,15 +235,11 @@ export function SandboxOutputViewer({
   const useCollapse = executions.length > 3;
 
   if (useCollapse) {
-    const items: CollapseProps["items"] = executions.map((exec, _index) => ({
+    const items: CollapseProps['items'] = executions.map((exec, _index) => ({
       key: exec.id,
       label: (
         <div className="flex items-center gap-2">
-          <Tag
-            icon={TOOL_ICONS[exec.toolName]}
-            color={TOOL_COLORS[exec.toolName]}
-            className="m-0"
-          >
+          <Tag icon={TOOL_ICONS[exec.toolName]} color={TOOL_COLORS[exec.toolName]} className="m-0">
             {exec.toolName}
           </Tag>
           <Text className="text-sm text-slate-600">

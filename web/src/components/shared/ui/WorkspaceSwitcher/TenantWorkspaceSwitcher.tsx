@@ -4,22 +4,18 @@
  * Pre-configured WorkspaceSwitcher for tenant mode.
  */
 
-import { useEffect } from 'react'
+import { useEffect } from 'react';
 
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom';
 
-import { useTenantStore } from '@/stores/tenant'
+import { useTenantStore } from '@/stores/tenant';
 
-import {
-  WorkspaceSwitcherRoot,
-  WorkspaceSwitcherTrigger,
-  WorkspaceSwitcherMenu,
-} from './compound'
-import { TenantList } from './TenantList'
+import { WorkspaceSwitcherRoot, WorkspaceSwitcherTrigger, WorkspaceSwitcherMenu } from './compound';
+import { TenantList } from './TenantList';
 
-import type { Tenant } from '@/types/memory'
+import type { Tenant } from '@/types/memory';
 
-import type { TenantWorkspaceSwitcherProps } from './types'
+import type { TenantWorkspaceSwitcherProps } from './types';
 
 export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = ({
   onTenantSelect,
@@ -28,28 +24,28 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
   triggerClassName = '',
   menuClassName = '',
 }) => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   // Store hooks - use selective selectors to prevent unnecessary re-renders
-  const tenants = useTenantStore((state) => state.tenants)
-  const currentTenant = useTenantStore((state) => state.currentTenant)
-  const listTenants = useTenantStore((state) => state.listTenants)
-  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant)
+  const tenants = useTenantStore((state) => state.tenants);
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const listTenants = useTenantStore((state) => state.listTenants);
+  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
 
   // Load data if missing
   useEffect(() => {
-    if (tenants.length === 0) listTenants()
-  }, [tenants.length, listTenants])
+    if (tenants.length === 0) listTenants();
+  }, [tenants.length, listTenants]);
 
   const handleTenantSelect = (tenant: Tenant) => {
-    setCurrentTenant(tenant)
-    onTenantSelect?.(tenant)
-    navigate(`/tenant/${tenant.id}`)
-  }
+    setCurrentTenant(tenant);
+    onTenantSelect?.(tenant);
+    navigate(`/tenant/${tenant.id}`);
+  };
 
   const handleCreateTenant = () => {
-    onCreateTenant?.() ?? navigate('/tenants/new')
-  }
+    onCreateTenant?.() ?? navigate('/tenants/new');
+  };
 
   return (
     <WorkspaceSwitcherRoot mode="tenant">
@@ -80,5 +76,5 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
         />
       </WorkspaceSwitcherMenu>
     </WorkspaceSwitcherRoot>
-  )
-}
+  );
+};

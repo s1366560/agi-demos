@@ -89,10 +89,10 @@ describe('Multiple Assistant Messages Rendering', () => {
   });
 
   it('should have unique event IDs for each assistant_message', () => {
-    const assistantEvents = mockTimeline.filter(e => e.type === 'assistant_message');
+    const assistantEvents = mockTimeline.filter((e) => e.type === 'assistant_message');
 
     // Each should have a unique ID
-    const ids = assistantEvents.map(e => e.id);
+    const ids = assistantEvents.map((e) => e.id);
     const uniqueIds = new Set(ids);
 
     expect(ids.length).toBe(3);

@@ -203,7 +203,12 @@ const SubAgentListInternal: React.FC<SubAgentListProps> = ({ className = '' }) =
 
   // Compute filtered subagents
   const filteredSubagents = useMemo(
-    () => filterSubAgents(subagentsData, { ...filtersData, search, enabled: statusFilter === 'all' ? null : statusFilter === 'enabled' }),
+    () =>
+      filterSubAgents(subagentsData, {
+        ...filtersData,
+        search,
+        enabled: statusFilter === 'all' ? null : statusFilter === 'enabled',
+      }),
     [subagentsData, filtersData, search, statusFilter]
   );
 
@@ -235,36 +240,45 @@ const SubAgentListInternal: React.FC<SubAgentListProps> = ({ className = '' }) =
       setEditingSubAgent(null);
       setIsModalOpen(true);
     }, []),
-    handleCreateFromTemplate: useCallback(async (templateId: string) => {
-      try {
-        const created = await createFromTemplate(templateId);
-        message.success(TEXTS.createFromTemplateSuccess);
-        setEditingSubAgent(created);
-        setIsModalOpen(true);
-      } catch {
-        // Error handled by store
-      }
-    }, [createFromTemplate]),
+    handleCreateFromTemplate: useCallback(
+      async (templateId: string) => {
+        try {
+          const created = await createFromTemplate(templateId);
+          message.success(TEXTS.createFromTemplateSuccess);
+          setEditingSubAgent(created);
+          setIsModalOpen(true);
+        } catch {
+          // Error handled by store
+        }
+      },
+      [createFromTemplate]
+    ),
     handleEdit: useCallback((subagent: SubAgentResponse) => {
       setEditingSubAgent(subagent);
       setIsModalOpen(true);
     }, []),
-    handleToggle: useCallback(async (id: string, enabled: boolean) => {
-      try {
-        await toggleSubAgent(id, enabled);
-        message.success(enabled ? TEXTS.enableSuccess : TEXTS.disableSuccess);
-      } catch {
-        // Error handled by store
-      }
-    }, [toggleSubAgent]),
-    handleDelete: useCallback(async (id: string) => {
-      try {
-        await deleteSubAgent(id);
-        message.success(TEXTS.deleteSuccess);
-      } catch {
-        // Error handled by store
-      }
-    }, [deleteSubAgent]),
+    handleToggle: useCallback(
+      async (id: string, enabled: boolean) => {
+        try {
+          await toggleSubAgent(id, enabled);
+          message.success(enabled ? TEXTS.enableSuccess : TEXTS.disableSuccess);
+        } catch {
+          // Error handled by store
+        }
+      },
+      [toggleSubAgent]
+    ),
+    handleDelete: useCallback(
+      async (id: string) => {
+        try {
+          await deleteSubAgent(id);
+          message.success(TEXTS.deleteSuccess);
+        } catch {
+          // Error handled by store
+        }
+      },
+      [deleteSubAgent]
+    ),
     handleRefresh: useCallback(() => {
       listSubAgents();
     }, [listSubAgents]),
@@ -353,7 +367,10 @@ interface HeaderProps {
 
 const HeaderInternal: React.FC<HeaderProps> = (props) => {
   // Only use context if props are not provided (for testing)
-  const hasProps = props.onCreate !== undefined || props.onCreateFromTemplate !== undefined || props.templates !== undefined;
+  const hasProps =
+    props.onCreate !== undefined ||
+    props.onCreateFromTemplate !== undefined ||
+    props.templates !== undefined;
   const context = hasProps ? null : useSubAgentListContextOptional();
   const state = context?.state;
   const actions = context?.actions;
@@ -391,12 +408,8 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          {TEXTS.title}
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          {TEXTS.subtitle}
-        </p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{TEXTS.title}</h1>
+        <p className="text-sm text-slate-500 mt-1">{TEXTS.subtitle}</p>
       </div>
       <div className="flex items-center gap-3">
         <Dropdown menu={{ items: templateMenuItems }} trigger={['click']}>
@@ -433,7 +446,11 @@ interface StatsProps {
 
 const StatsInternal: React.FC<StatsProps> = (props) => {
   // Only use context if props are not provided (for testing)
-  const hasProps = props.total !== undefined || props.enabledCount !== undefined || props.avgSuccessRate !== undefined || props.totalInvocations !== undefined;
+  const hasProps =
+    props.total !== undefined ||
+    props.enabledCount !== undefined ||
+    props.avgSuccessRate !== undefined ||
+    props.totalInvocations !== undefined;
   const context = hasProps ? null : useSubAgentListContextOptional();
   const state = context?.state;
 
@@ -443,7 +460,12 @@ const StatsInternal: React.FC<StatsProps> = (props) => {
   const avgSuccessRate = props.avgSuccessRate ?? state?.avgSuccessRate ?? 0;
   const totalInvocations = props.totalInvocations ?? state?.totalInvocations ?? 0;
 
-  const StatsCard: React.FC<{ title: string; value: string | number; icon: string; iconColor: string }> = ({ title, value, icon, iconColor }) => (
+  const StatsCard: React.FC<{
+    title: string;
+    value: string | number;
+    icon: string;
+    iconColor: string;
+  }> = ({ title, value, icon, iconColor }) => (
     <div className="bg-surface-light dark:bg-surface-dark p-6 rounded-xl border border-slate-200 dark:border-slate-700">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
@@ -455,10 +477,30 @@ const StatsInternal: React.FC<StatsProps> = (props) => {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatsCard title={TEXTS.stats.total} value={total} icon="smart_toy" iconColor="text-slate-400" />
-      <StatsCard title={TEXTS.stats.enabled} value={enabledCount} icon="check_circle" iconColor="text-green-500" />
-      <StatsCard title={TEXTS.stats.successRate} value={`${avgSuccessRate}%`} icon="trending_up" iconColor="text-blue-500" />
-      <StatsCard title={TEXTS.stats.invocations} value={totalInvocations.toLocaleString()} icon="bolt" iconColor="text-purple-500" />
+      <StatsCard
+        title={TEXTS.stats.total}
+        value={total}
+        icon="smart_toy"
+        iconColor="text-slate-400"
+      />
+      <StatsCard
+        title={TEXTS.stats.enabled}
+        value={enabledCount}
+        icon="check_circle"
+        iconColor="text-green-500"
+      />
+      <StatsCard
+        title={TEXTS.stats.successRate}
+        value={`${avgSuccessRate}%`}
+        icon="trending_up"
+        iconColor="text-blue-500"
+      />
+      <StatsCard
+        title={TEXTS.stats.invocations}
+        value={totalInvocations.toLocaleString()}
+        icon="bolt"
+        iconColor="text-purple-500"
+      />
     </div>
   );
 };
@@ -481,7 +523,10 @@ interface FilterBarProps {
 
 const FilterBarInternal: React.FC<FilterBarProps> = (props) => {
   // Only use context if props are not provided (for testing)
-  const hasProps = props.onSearchChange !== undefined || props.onStatusFilterChange !== undefined || props.onRefresh !== undefined;
+  const hasProps =
+    props.onSearchChange !== undefined ||
+    props.onStatusFilterChange !== undefined ||
+    props.onRefresh !== undefined;
   const context = hasProps ? null : useSubAgentListContextOptional();
   const state = context?.state;
   const actions = context?.actions;
@@ -554,7 +599,9 @@ const StatusBadgeInternal: React.FC<StatusBadgeProps> = React.memo(({ enabled })
         : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
     }`}
   >
-    <span className={`h-1.5 w-1.5 rounded-full ${enabled ? 'bg-green-500' : 'bg-slate-400'}`}></span>
+    <span
+      className={`h-1.5 w-1.5 rounded-full ${enabled ? 'bg-green-500' : 'bg-slate-400'}`}
+    ></span>
     {enabled ? TEXTS.enabled : TEXTS.disabled}
   </span>
 ));
@@ -573,9 +620,12 @@ interface CardProps {
 }
 
 const CardInternal: React.FC<CardProps> = React.memo(({ subagent, onToggle, onEdit, onDelete }) => {
-  const handleToggle = useCallback((checked: boolean) => {
-    onToggle(subagent.id, checked);
-  }, [subagent.id, onToggle]);
+  const handleToggle = useCallback(
+    (checked: boolean) => {
+      onToggle(subagent.id, checked);
+    },
+    [subagent.id, onToggle]
+  );
 
   const handleEdit = useCallback(() => {
     onEdit(subagent);
@@ -624,7 +674,9 @@ const CardInternal: React.FC<CardProps> = React.memo(({ subagent, onToggle, onEd
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="material-symbols-outlined text-sm text-slate-400">label</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{TEXTS.triggerKeywords}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {TEXTS.triggerKeywords}
+            </span>
           </div>
           <div className="flex flex-wrap gap-1">
             {subagent.trigger.keywords.slice(0, 4).map((keyword, idx) => (
@@ -681,7 +733,9 @@ const CardInternal: React.FC<CardProps> = React.memo(({ subagent, onToggle, onEd
           </div>
           <div>
             <p className="text-lg font-semibold text-slate-900 dark:text-white">
-              {subagent.avg_execution_time_ms > 0 ? `${Math.round(subagent.avg_execution_time_ms / 1000)}s` : '-'}
+              {subagent.avg_execution_time_ms > 0
+                ? `${Math.round(subagent.avg_execution_time_ms / 1000)}s`
+                : '-'}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">{TEXTS.avgTime}</p>
           </div>
@@ -745,7 +799,8 @@ interface EmptyProps {
 
 const EmptyInternal: React.FC<EmptyProps> = (props) => {
   // Only use context if props are not provided (for testing)
-  const hasProps = props.search !== undefined || props.statusFilter !== undefined || props.onCreate !== undefined;
+  const hasProps =
+    props.search !== undefined || props.statusFilter !== undefined || props.onCreate !== undefined;
   const context = hasProps ? null : useSubAgentListContextOptional();
   const state = context?.state;
   const actions = context?.actions;
@@ -789,19 +844,21 @@ interface GridProps {
   onDelete: (id: string) => void;
 }
 
-const GridInternal: React.FC<GridProps> = React.memo(({ subagents, onToggle, onEdit, onDelete }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-    {subagents.map((subagent) => (
-      <CardInternal
-        key={subagent.id}
-        subagent={subagent}
-        onToggle={onToggle}
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />
-    ))}
-  </div>
-));
+const GridInternal: React.FC<GridProps> = React.memo(
+  ({ subagents, onToggle, onEdit, onDelete }) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      {subagents.map((subagent) => (
+        <CardInternal
+          key={subagent.id}
+          subagent={subagent}
+          onToggle={onToggle}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  )
+);
 
 GridInternal.displayName = 'SubAgentList.Grid';
 

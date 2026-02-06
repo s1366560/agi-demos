@@ -5,18 +5,18 @@
  * Supports three-level scoping: system, tenant, and project skills.
  */
 
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
-import { skillAPI, tenantSkillConfigAPI } from "../services/skillService";
+import { skillAPI, tenantSkillConfigAPI } from '../services/skillService';
 
 import type {
   SkillResponse,
   SkillCreate,
   SkillUpdate,
   TenantSkillConfigResponse,
-} from "../types/agent";
-import type { UnknownError } from "../types/common";
+} from '../types/agent';
+import type { UnknownError } from '../types/common';
 
 /**
  * Helper function to extract error message from unknown error
@@ -25,7 +25,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
   const err = error as UnknownError;
   if (err.response?.data?.detail) {
     const detail = err.response.data.detail;
-    return typeof detail === "string" ? detail : JSON.stringify(detail);
+    return typeof detail === 'string' ? detail : JSON.stringify(detail);
   }
   if (err.message) {
     return err.message;
@@ -39,9 +39,9 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 interface SkillFilters {
   search: string;
-  status: "active" | "disabled" | "deprecated" | null;
-  scope: "system" | "tenant" | "project" | null;
-  trigger_type: "keyword" | "semantic" | "hybrid" | null;
+  status: 'active' | 'disabled' | 'deprecated' | null;
+  scope: 'system' | 'tenant' | 'project' | null;
+  trigger_type: 'keyword' | 'semantic' | 'hybrid' | null;
 }
 
 interface SkillState {
@@ -79,10 +79,7 @@ interface SkillState {
   createSkill: (data: SkillCreate) => Promise<SkillResponse>;
   updateSkill: (id: string, data: SkillUpdate) => Promise<SkillResponse>;
   deleteSkill: (id: string) => Promise<void>;
-  updateSkillStatus: (
-    id: string,
-    status: "active" | "disabled" | "deprecated"
-  ) => Promise<void>;
+  updateSkillStatus: (id: string, status: 'active' | 'disabled' | 'deprecated') => Promise<void>;
   updateSkillContent: (id: string, content: string) => Promise<SkillResponse>;
   setCurrentSkill: (skill: SkillResponse | null) => void;
 
@@ -90,10 +87,7 @@ interface SkillState {
   listTenantConfigs: () => Promise<void>;
   disableSystemSkill: (systemSkillName: string) => Promise<void>;
   enableSystemSkill: (systemSkillName: string) => Promise<void>;
-  overrideSystemSkill: (
-    systemSkillName: string,
-    overrideSkillId: string
-  ) => Promise<void>;
+  overrideSystemSkill: (systemSkillName: string, overrideSkillId: string) => Promise<void>;
 
   // Actions - Filters
   setFilters: (filters: Partial<SkillFilters>) => void;
@@ -109,7 +103,7 @@ interface SkillState {
 // ============================================================================
 
 const initialFilters: SkillFilters = {
-  search: "",
+  search: '',
   status: null,
   scope: null,
   trigger_type: null,
@@ -134,280 +128,266 @@ const initialState = {
 // ============================================================================
 
 export const useSkillStore = create<SkillState>()(
-  devtools((set, get) => ({
-  ...initialState,
+  devtools(
+    (set, get) => ({
+      ...initialState,
 
-  // ========== Skill CRUD ==========
+      // ========== Skill CRUD ==========
 
-  listSkills: async (params = {}) => {
-    set({ isLoading: true, error: null });
-    try {
-      const { filters } = get();
-      const queryParams = {
-        ...params,
-        status: filters.status || undefined,
-        scope: filters.scope || undefined,
-        trigger_type: filters.trigger_type || undefined,
-      };
-      const response = await skillAPI.list(queryParams);
-      set({
-        skills: response.skills || [],
-        total: response.total || 0,
-        isLoading: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to list skills");
-      set({ error: errorMessage, isLoading: false });
-      throw error;
+      listSkills: async (params = {}) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { filters } = get();
+          const queryParams = {
+            ...params,
+            status: filters.status || undefined,
+            scope: filters.scope || undefined,
+            trigger_type: filters.trigger_type || undefined,
+          };
+          const response = await skillAPI.list(queryParams);
+          set({
+            skills: response.skills || [],
+            total: response.total || 0,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to list skills');
+          set({ error: errorMessage, isLoading: false });
+          throw error;
+        }
+      },
+
+      listSystemSkills: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await skillAPI.listSystemSkills();
+          set({
+            systemSkills: response.skills || [],
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to list system skills');
+          set({ error: errorMessage, isLoading: false });
+          throw error;
+        }
+      },
+
+      getSkill: async (id: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await skillAPI.get(id);
+          set({ currentSkill: response, isLoading: false });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to get skill');
+          set({ error: errorMessage, isLoading: false });
+          throw error;
+        }
+      },
+
+      createSkill: async (data: SkillCreate) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await skillAPI.create(data);
+          const { skills } = get();
+          set({
+            skills: [response, ...skills],
+            total: get().total + 1,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to create skill');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      updateSkill: async (id: string, data: SkillUpdate) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await skillAPI.update(id, data);
+          const { skills } = get();
+          set({
+            skills: skills.map((s) => (s.id === id ? response : s)),
+            currentSkill: response,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to update skill');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      deleteSkill: async (id: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          await skillAPI.delete(id);
+          const { skills } = get();
+          set({
+            skills: skills.filter((s) => s.id !== id),
+            total: get().total - 1,
+            isSubmitting: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to delete skill');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      updateSkillStatus: async (id: string, status: 'active' | 'disabled' | 'deprecated') => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await skillAPI.updateStatus(id, status);
+          const { skills } = get();
+          set({
+            skills: skills.map((s) => (s.id === id ? response : s)),
+            isSubmitting: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to update skill status');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      setCurrentSkill: (skill: SkillResponse | null) => {
+        set({ currentSkill: skill });
+      },
+
+      updateSkillContent: async (id: string, content: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await skillAPI.updateContent(id, content);
+          const { skills } = get();
+          set({
+            skills: skills.map((s) => (s.id === id ? response : s)),
+            currentSkill: response,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to update skill content');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      // ========== Tenant Skill Config ==========
+
+      listTenantConfigs: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await tenantSkillConfigAPI.list();
+          set({
+            tenantConfigs: response.configs || [],
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to list tenant configs');
+          set({ error: errorMessage, isLoading: false });
+          throw error;
+        }
+      },
+
+      disableSystemSkill: async (systemSkillName: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const config = await tenantSkillConfigAPI.disable(systemSkillName);
+          const { tenantConfigs } = get();
+          const existingIndex = tenantConfigs.findIndex(
+            (c) => c.system_skill_name === systemSkillName
+          );
+          if (existingIndex >= 0) {
+            set({
+              tenantConfigs: tenantConfigs.map((c, i) => (i === existingIndex ? config : c)),
+              isSubmitting: false,
+            });
+          } else {
+            set({
+              tenantConfigs: [...tenantConfigs, config],
+              isSubmitting: false,
+            });
+          }
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to disable system skill');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      enableSystemSkill: async (systemSkillName: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          await tenantSkillConfigAPI.enable(systemSkillName);
+          const { tenantConfigs } = get();
+          set({
+            tenantConfigs: tenantConfigs.filter((c) => c.system_skill_name !== systemSkillName),
+            isSubmitting: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to enable system skill');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      overrideSystemSkill: async (systemSkillName: string, overrideSkillId: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const config = await tenantSkillConfigAPI.override(systemSkillName, overrideSkillId);
+          const { tenantConfigs } = get();
+          const existingIndex = tenantConfigs.findIndex(
+            (c) => c.system_skill_name === systemSkillName
+          );
+          if (existingIndex >= 0) {
+            set({
+              tenantConfigs: tenantConfigs.map((c, i) => (i === existingIndex ? config : c)),
+              isSubmitting: false,
+            });
+          } else {
+            set({
+              tenantConfigs: [...tenantConfigs, config],
+              isSubmitting: false,
+            });
+          }
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to override system skill');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      // ========== Filters ==========
+
+      setFilters: (filters: Partial<SkillFilters>) => {
+        set((state) => ({
+          filters: { ...state.filters, ...filters },
+        }));
+      },
+
+      resetFilters: () => {
+        set({ filters: initialFilters });
+      },
+
+      // ========== Utility ==========
+
+      clearError: () => {
+        set({ error: null });
+      },
+
+      reset: () => {
+        set(initialState);
+      },
+    }),
+    {
+      name: 'SkillStore',
+      enabled: import.meta.env.DEV,
     }
-  },
-
-  listSystemSkills: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await skillAPI.listSystemSkills();
-      set({
-        systemSkills: response.skills || [],
-        isLoading: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to list system skills");
-      set({ error: errorMessage, isLoading: false });
-      throw error;
-    }
-  },
-
-  getSkill: async (id: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await skillAPI.get(id);
-      set({ currentSkill: response, isLoading: false });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to get skill");
-      set({ error: errorMessage, isLoading: false });
-      throw error;
-    }
-  },
-
-  createSkill: async (data: SkillCreate) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const response = await skillAPI.create(data);
-      const { skills } = get();
-      set({
-        skills: [response, ...skills],
-        total: get().total + 1,
-        isSubmitting: false,
-      });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to create skill");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  updateSkill: async (id: string, data: SkillUpdate) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const response = await skillAPI.update(id, data);
-      const { skills } = get();
-      set({
-        skills: skills.map((s) => (s.id === id ? response : s)),
-        currentSkill: response,
-        isSubmitting: false,
-      });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to update skill");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  deleteSkill: async (id: string) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      await skillAPI.delete(id);
-      const { skills } = get();
-      set({
-        skills: skills.filter((s) => s.id !== id),
-        total: get().total - 1,
-        isSubmitting: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to delete skill");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  updateSkillStatus: async (
-    id: string,
-    status: "active" | "disabled" | "deprecated"
-  ) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const response = await skillAPI.updateStatus(id, status);
-      const { skills } = get();
-      set({
-        skills: skills.map((s) => (s.id === id ? response : s)),
-        isSubmitting: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to update skill status");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  setCurrentSkill: (skill: SkillResponse | null) => {
-    set({ currentSkill: skill });
-  },
-
-  updateSkillContent: async (id: string, content: string) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const response = await skillAPI.updateContent(id, content);
-      const { skills } = get();
-      set({
-        skills: skills.map((s) => (s.id === id ? response : s)),
-        currentSkill: response,
-        isSubmitting: false,
-      });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to update skill content");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  // ========== Tenant Skill Config ==========
-
-  listTenantConfigs: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await tenantSkillConfigAPI.list();
-      set({
-        tenantConfigs: response.configs || [],
-        isLoading: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to list tenant configs");
-      set({ error: errorMessage, isLoading: false });
-      throw error;
-    }
-  },
-
-  disableSystemSkill: async (systemSkillName: string) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const config = await tenantSkillConfigAPI.disable(systemSkillName);
-      const { tenantConfigs } = get();
-      const existingIndex = tenantConfigs.findIndex(
-        (c) => c.system_skill_name === systemSkillName
-      );
-      if (existingIndex >= 0) {
-        set({
-          tenantConfigs: tenantConfigs.map((c, i) =>
-            i === existingIndex ? config : c
-          ),
-          isSubmitting: false,
-        });
-      } else {
-        set({
-          tenantConfigs: [...tenantConfigs, config],
-          isSubmitting: false,
-        });
-      }
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to disable system skill");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  enableSystemSkill: async (systemSkillName: string) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      await tenantSkillConfigAPI.enable(systemSkillName);
-      const { tenantConfigs } = get();
-      set({
-        tenantConfigs: tenantConfigs.filter(
-          (c) => c.system_skill_name !== systemSkillName
-        ),
-        isSubmitting: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to enable system skill");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  overrideSystemSkill: async (
-    systemSkillName: string,
-    overrideSkillId: string
-  ) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const config = await tenantSkillConfigAPI.override(
-        systemSkillName,
-        overrideSkillId
-      );
-      const { tenantConfigs } = get();
-      const existingIndex = tenantConfigs.findIndex(
-        (c) => c.system_skill_name === systemSkillName
-      );
-      if (existingIndex >= 0) {
-        set({
-          tenantConfigs: tenantConfigs.map((c, i) =>
-            i === existingIndex ? config : c
-          ),
-          isSubmitting: false,
-        });
-      } else {
-        set({
-          tenantConfigs: [...tenantConfigs, config],
-          isSubmitting: false,
-        });
-      }
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to override system skill");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  // ========== Filters ==========
-
-  setFilters: (filters: Partial<SkillFilters>) => {
-    set((state) => ({
-      filters: { ...state.filters, ...filters },
-    }));
-  },
-
-  resetFilters: () => {
-    set({ filters: initialFilters });
-  },
-
-  // ========== Utility ==========
-
-  clearError: () => {
-    set({ error: null });
-  },
-
-  reset: () => {
-    set(initialState);
-  },
-}),
-{
-  name: "SkillStore",
-  enabled: import.meta.env.DEV,
-}
-)
+  )
 );
 
 // ============================================================================
@@ -430,9 +410,7 @@ export const useFilteredSkills = () =>
       if (filters.search) {
         const search = filters.search.toLowerCase();
         const matchesName = skill.name.toLowerCase().includes(search);
-        const matchesDescription = skill.description
-          .toLowerCase()
-          .includes(search);
+        const matchesDescription = skill.description.toLowerCase().includes(search);
         if (!matchesName && !matchesDescription) {
           return false;
         }
@@ -460,28 +438,23 @@ export const useFilteredSkills = () =>
 /**
  * Get system skills
  */
-export const useSystemSkills = () =>
-  useSkillStore((state) => state.systemSkills);
+export const useSystemSkills = () => useSkillStore((state) => state.systemSkills);
 
 /**
  * Get tenant configs
  */
-export const useTenantConfigs = () =>
-  useSkillStore((state) => state.tenantConfigs);
+export const useTenantConfigs = () => useSkillStore((state) => state.tenantConfigs);
 
 /**
  * Get config for a specific system skill
  */
 export const useTenantConfigForSkill = (skillName: string) =>
-  useSkillStore((state) =>
-    state.tenantConfigs.find((c) => c.system_skill_name === skillName)
-  );
+  useSkillStore((state) => state.tenantConfigs.find((c) => c.system_skill_name === skillName));
 
 /**
  * Get current skill
  */
-export const useCurrentSkill = () =>
-  useSkillStore((state) => state.currentSkill);
+export const useCurrentSkill = () => useSkillStore((state) => state.currentSkill);
 
 /**
  * Get loading state
@@ -491,8 +464,7 @@ export const useSkillLoading = () => useSkillStore((state) => state.isLoading);
 /**
  * Get submitting state
  */
-export const useSkillSubmitting = () =>
-  useSkillStore((state) => state.isSubmitting);
+export const useSkillSubmitting = () => useSkillStore((state) => state.isSubmitting);
 
 /**
  * Get error state
@@ -513,9 +485,7 @@ export const useSkillFilters = () => useSkillStore((state) => state.filters);
  * Get active skills count
  */
 export const useActiveSkillsCount = () =>
-  useSkillStore(
-    (state) => state.skills.filter((s) => s.status === "active").length
-  );
+  useSkillStore((state) => state.skills.filter((s) => s.status === 'active').length);
 
 /**
  * Get average success rate
@@ -532,8 +502,6 @@ export const useAverageSuccessRate = () =>
  * Get total usage count
  */
 export const useTotalUsageCount = () =>
-  useSkillStore((state) =>
-    state.skills.reduce((sum, s) => sum + s.usage_count, 0)
-  );
+  useSkillStore((state) => state.skills.reduce((sum, s) => sum + s.usage_count, 0));
 
 export default useSkillStore;

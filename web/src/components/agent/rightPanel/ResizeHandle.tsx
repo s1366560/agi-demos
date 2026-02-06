@@ -33,14 +33,17 @@ export const ResizeHandle = ({
   const [isDragging, setIsDragging] = useState(false);
   const startPosRef = useRef(0);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-    startPosRef.current = direction === 'horizontal' ? e.clientX : e.clientY;
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = direction === 'horizontal' ? 'ew-resize' : 'ns-resize';
-  }, [direction]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(true);
+      startPosRef.current = direction === 'horizontal' ? e.clientX : e.clientY;
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = direction === 'horizontal' ? 'ew-resize' : 'ns-resize';
+    },
+    [direction]
+  );
 
   useEffect(() => {
     if (!isDragging) return;
@@ -104,14 +107,16 @@ export const ResizeHandle = ({
       data-testid="resize-handle"
     >
       {/* Visual indicator - subtle line */}
-      <div className={`
+      <div
+        className={`
         ${direction === 'horizontal' ? 'w-0.5 h-6' : 'h-0.5 w-6'}
         rounded-full
         bg-slate-400/50 dark:bg-slate-500/50
         opacity-0 group-hover:opacity-100
         ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
         transition-all duration-150
-      `} />
+      `}
+      />
     </div>
   );
 };

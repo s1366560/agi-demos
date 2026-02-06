@@ -21,7 +21,7 @@ export const contentVisibility = {
   auto: 'content-visibility-auto',
   /** Hidden: Content is not rendered but space is reserved */
   hidden: 'content-visibility-hidden',
-} as const
+} as const;
 
 /**
  * Contain property utilities
@@ -35,7 +35,7 @@ export const contain = {
   layoutPaint: 'contain-layout-paint',
   /** Strict containment (layout + paint + style + size) */
   strict: 'contain-strict',
-} as const
+} as const;
 
 /**
  * Preset optimization classes for common UI patterns
@@ -49,7 +49,7 @@ export const presets = {
   card: 'card-optimized',
   /** Low priority rendering for non-critical UI */
   lowPriority: 'render-priority-low',
-} as const
+} as const;
 
 /**
  * Animation performance hints
@@ -63,7 +63,7 @@ export const animation = {
   willChangeTopLeft: 'will-change-top-left',
   /** Force GPU acceleration */
   gpuAccelerated: 'gpu-accelerated',
-} as const
+} as const;
 
 /**
  * Layout optimization utilities
@@ -73,48 +73,48 @@ export const layout = {
   noThrashing: 'no-layout-thrashing',
   /** Composite layer for animated elements */
   compositeLayer: 'composite-layer',
-} as const
+} as const;
 
 /**
  * Combine multiple containment classes
  */
 export function combineContainment(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(' ')
+  return classes.filter(Boolean).join(' ');
 }
 
 /**
  * Get containment class for list items
  */
 export function listItemOptimized(extra?: string): string {
-  return combineContainment(presets.listItem, extra)
+  return combineContainment(presets.listItem, extra);
 }
 
 /**
  * Get containment class for table rows
  */
 export function tableRowOptimized(extra?: string): string {
-  return combineContainment(presets.tableRow, extra)
+  return combineContainment(presets.tableRow, extra);
 }
 
 /**
  * Get containment class for cards
  */
 export function cardOptimized(extra?: string): string {
-  return combineContainment(presets.card, extra)
+  return combineContainment(presets.card, extra);
 }
 
 /**
  * Get containment class for low-priority elements
  */
 export function lowPriority(extra?: string): string {
-  return combineContainment(presets.lowPriority, extra)
+  return combineContainment(presets.lowPriority, extra);
 }
 
 /**
  * Get GPU acceleration hint for animated elements
  */
 export function gpuAccelerated(extra?: string): string {
-  return combineContainment(animation.gpuAccelerated, extra)
+  return combineContainment(animation.gpuAccelerated, extra);
 }
 
 /**
@@ -126,6 +126,6 @@ export const containmentClasses = {
   ...presets,
   ...animation,
   ...layout,
-} as const
+} as const;
 
-export type ContainmentClass = typeof containmentClasses[keyof typeof containmentClasses]
+export type ContainmentClass = (typeof containmentClasses)[keyof typeof containmentClasses];

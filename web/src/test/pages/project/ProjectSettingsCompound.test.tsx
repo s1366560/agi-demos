@@ -234,12 +234,7 @@ describe('ProjectSettings Compound Component', () => {
 
     it('should not render when message is null', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
-      render(
-        <ProjectSettings.Message
-          message={null}
-          onClose={vi.fn()}
-        />
-      );
+      render(<ProjectSettings.Message message={null} onClose={vi.fn()} />);
       expect(screen.queryByTestId('alert-icon')).not.toBeInTheDocument();
     });
 
@@ -247,10 +242,7 @@ describe('ProjectSettings Compound Component', () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       const onClose = vi.fn();
       render(
-        <ProjectSettings.Message
-          message={{ type: 'success', text: 'Success' }}
-          onClose={onClose}
-        />
+        <ProjectSettings.Message message={{ type: 'success', text: 'Success' }} onClose={onClose} />
       );
       // The message should have a close button
       const closeButton = screen.getByRole('button');
@@ -509,23 +501,13 @@ describe('ProjectSettings Compound Component', () => {
   describe('Danger Zone Sub-Component', () => {
     it('should render danger title', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
-      render(
-        <ProjectSettings.Danger
-          projectName="Test Project"
-          onDelete={vi.fn()}
-        />
-      );
+      render(<ProjectSettings.Danger projectName="Test Project" onDelete={vi.fn()} />);
       expect(screen.getByText('Danger Zone')).toBeInTheDocument();
     });
 
     it('should render delete button', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
-      render(
-        <ProjectSettings.Danger
-          projectName="Test Project"
-          onDelete={vi.fn()}
-        />
-      );
+      render(<ProjectSettings.Danger projectName="Test Project" onDelete={vi.fn()} />);
       const deleteButton = screen.getByText('Delete Project');
       expect(deleteButton).toBeInTheDocument();
     });

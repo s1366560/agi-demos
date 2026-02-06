@@ -5,22 +5,22 @@
  * and backward compatibility with the legacy context prop.
  */
 
-import * as React from 'react'
-import { useState, useCallback } from 'react'
+import * as React from 'react';
+import { useState, useCallback } from 'react';
 
-import { SidebarBrand } from './SidebarBrand'
-import { SidebarProvider, useSidebarContext } from './SidebarContext'
-import { SidebarNavigation } from './SidebarNavigation'
-import { SidebarUser } from './SidebarUser'
+import { SidebarBrand } from './SidebarBrand';
+import { SidebarProvider, useSidebarContext } from './SidebarContext';
+import { SidebarNavigation } from './SidebarNavigation';
+import { SidebarUser } from './SidebarUser';
 
-import type { AppSidebarProps, SidebarVariant } from './types'
-import type { SidebarConfig } from '@/config/navigation'
+import type { AppSidebarProps, SidebarVariant } from './types';
+import type { SidebarConfig } from '@/config/navigation';
 
 /**
  * Collapse toggle button component
  */
 function CollapseToggleButton() {
-  const { isCollapsed, onCollapseToggle } = useSidebarContext()
+  const { isCollapsed, onCollapseToggle } = useSidebarContext();
 
   return (
     <button
@@ -37,7 +37,7 @@ function CollapseToggleButton() {
         )}
       </svg>
     </button>
-  )
+  );
 }
 
 /**
@@ -50,13 +50,13 @@ function SidebarContent({
   user,
   onLogout,
 }: {
-  config: SidebarConfig
-  variant?: SidebarVariant
-  brand?: React.ReactNode
-  user?: { name: string; email: string }
-  onLogout?: () => void
+  config: SidebarConfig;
+  variant?: SidebarVariant;
+  brand?: React.ReactNode;
+  user?: { name: string; email: string };
+  onLogout?: () => void;
 }) {
-  const { isCollapsed } = useSidebarContext()
+  const { isCollapsed } = useSidebarContext();
 
   return (
     <aside
@@ -64,7 +64,9 @@ function SidebarContent({
       className={`flex flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark flex-none z-20 transition-all duration-300 ease-in-out relative ${
         isCollapsed ? 'collapsed w-20' : 'w-64'
       }`}
-      style={{ width: isCollapsed ? `${config.collapsedWidth ?? 80}px` : `${config.width ?? 256}px` }}
+      style={{
+        width: isCollapsed ? `${config.collapsedWidth ?? 80}px` : `${config.width ?? 256}px`,
+      }}
     >
       {/* Brand Header */}
       <div className="h-16 flex items-center px-4 border-b border-slate-100 dark:border-slate-800/50 shrink-0">
@@ -75,7 +77,7 @@ function SidebarContent({
             </div>
           </div>
         ) : (
-          brand ?? <SidebarBrand variant={variant} />
+          (brand ?? <SidebarBrand variant={variant} />)
         )}
       </div>
 
@@ -88,7 +90,7 @@ function SidebarContent({
       {/* Collapse Toggle Button */}
       <CollapseToggleButton />
     </aside>
-  )
+  );
 }
 
 /**
@@ -116,43 +118,46 @@ export function AppSidebar({
   children,
 }: AppSidebarProps & { children?: React.ReactNode }) {
   // Use variant prop, fall back to context prop for backward compatibility
-  const sidebarVariant: SidebarVariant = variant ?? context ?? 'tenant'
+  const sidebarVariant: SidebarVariant = variant ?? context ?? 'tenant';
 
   // Internal state for uncontrolled mode
-  const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed)
+  const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const [internalOpenGroups, setInternalOpenGroups] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {}
+    const initial: Record<string, boolean> = {};
     config.groups.forEach((group) => {
       if (group.defaultOpen !== undefined) {
-        initial[group.id] = group.defaultOpen
+        initial[group.id] = group.defaultOpen;
       }
-    })
-    return initial
-  })
+    });
+    return initial;
+  });
 
   // Determine collapsed state (controlled vs uncontrolled)
-  const isCollapsed = controlledCollapsed ?? internalCollapsed
+  const isCollapsed = controlledCollapsed ?? internalCollapsed;
 
   // Determine open groups state (controlled vs uncontrolled)
-  const isOpenGroups = controlledOpenGroups ?? internalOpenGroups
+  const isOpenGroups = controlledOpenGroups ?? internalOpenGroups;
 
   // Handle collapse toggle
   const handleCollapseToggle = useCallback(() => {
     if (onCollapseToggle) {
-      onCollapseToggle()
+      onCollapseToggle();
     } else {
-      setInternalCollapsed(!isCollapsed)
+      setInternalCollapsed(!isCollapsed);
     }
-  }, [isCollapsed, onCollapseToggle])
+  }, [isCollapsed, onCollapseToggle]);
 
   // Handle group toggle
-  const handleGroupToggle = useCallback((groupId: string) => {
-    if (onGroupToggle) {
-      onGroupToggle(groupId)
-    } else {
-      setInternalOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
-    }
-  }, [onGroupToggle])
+  const handleGroupToggle = useCallback(
+    (groupId: string) => {
+      if (onGroupToggle) {
+        onGroupToggle(groupId);
+      } else {
+        setInternalOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+      }
+    },
+    [onGroupToggle]
+  );
 
   // Context value
   const contextValue = {
@@ -164,13 +169,21 @@ export function AppSidebar({
     onLogout,
     t,
     basePath,
-  }
+  };
 
   return (
     <SidebarProvider value={contextValue}>
-      {children ?? <SidebarContent config={config} variant={sidebarVariant} brand={brand} user={user} onLogout={onLogout} />}
+      {children ?? (
+        <SidebarContent
+          config={config}
+          variant={sidebarVariant}
+          brand={brand}
+          user={user}
+          onLogout={onLogout}
+        />
+      )}
     </SidebarProvider>
-  )
+  );
 }
 
-export default AppSidebar
+export default AppSidebar;

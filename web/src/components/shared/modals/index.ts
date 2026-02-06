@@ -4,4 +4,4 @@
  * Reusable modal components used across the application.
  */
 
-export { DeleteConfirmationModal } from './DeleteConfirmationModal'
+export { DeleteConfirmationModal } from './DeleteConfirmationModal';

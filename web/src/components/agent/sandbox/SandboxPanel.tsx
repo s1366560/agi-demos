@@ -27,21 +27,16 @@
  * ```
  */
 
-import { useState, useCallback, Children } from "react";
+import { useState, useCallback, Children } from 'react';
 
-import {
-  CodeOutlined,
-  FileTextOutlined,
-  DesktopOutlined,
-  CloseOutlined,
-} from "@ant-design/icons";
-import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
+import { CodeOutlined, FileTextOutlined, DesktopOutlined, CloseOutlined } from '@ant-design/icons';
+import { Tabs, Empty, Button, Tooltip, Badge, Space } from 'antd';
 
-import { RemoteDesktopViewer } from "./RemoteDesktopViewer";
-import { SandboxControlPanel } from "./SandboxControlPanel";
-import { SandboxOutputViewer } from "./SandboxOutputViewer";
-import { SandboxPanelProvider } from "./SandboxPanelContext";
-import { SandboxTerminal } from "./SandboxTerminal";
+import { RemoteDesktopViewer } from './RemoteDesktopViewer';
+import { SandboxControlPanel } from './SandboxControlPanel';
+import { SandboxOutputViewer } from './SandboxOutputViewer';
+import { SandboxPanelProvider } from './SandboxPanelContext';
+import { SandboxTerminal } from './SandboxTerminal';
 
 import type {
   SandboxTabKey,
@@ -51,17 +46,17 @@ import type {
   SandboxControlProps,
   SandboxOutputProps,
   SandboxHeaderProps,
-} from "./types";
+} from './types';
 
 // ========================================
 // Marker Symbols for Sub-Components
 // ========================================
 
-const TERMINAL_SYMBOL = Symbol("SandboxPanelTerminal");
-const DESKTOP_SYMBOL = Symbol("SandboxPanelDesktop");
-const CONTROL_SYMBOL = Symbol("SandboxPanelControl");
-const OUTPUT_SYMBOL = Symbol("SandboxPanelOutput");
-const HEADER_SYMBOL = Symbol("SandboxPanelHeader");
+const TERMINAL_SYMBOL = Symbol('SandboxPanelTerminal');
+const DESKTOP_SYMBOL = Symbol('SandboxPanelDesktop');
+const CONTROL_SYMBOL = Symbol('SandboxPanelControl');
+const OUTPUT_SYMBOL = Symbol('SandboxPanelOutput');
+const HEADER_SYMBOL = Symbol('SandboxPanelHeader');
 
 // ========================================
 // Sub-Components (Marker Components)
@@ -93,11 +88,11 @@ SandboxPanel.Header = function SandboxPanelHeaderMarker(_props: SandboxHeaderPro
 (SandboxPanel.Header as any)[HEADER_SYMBOL] = true;
 
 // Set display names for testing
-(SandboxPanel.Terminal as any).displayName = "SandboxPanelTerminal";
-(SandboxPanel.Desktop as any).displayName = "SandboxPanelDesktop";
-(SandboxPanel.Control as any).displayName = "SandboxPanelControl";
-(SandboxPanel.Output as any).displayName = "SandboxPanelOutput";
-(SandboxPanel.Header as any).displayName = "SandboxPanelHeader";
+(SandboxPanel.Terminal as any).displayName = 'SandboxPanelTerminal';
+(SandboxPanel.Desktop as any).displayName = 'SandboxPanelDesktop';
+(SandboxPanel.Control as any).displayName = 'SandboxPanelControl';
+(SandboxPanel.Output as any).displayName = 'SandboxPanelOutput';
+(SandboxPanel.Header as any).displayName = 'SandboxPanelHeader';
 
 // ========================================
 // Internal Components
@@ -115,11 +110,7 @@ function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderPr
       <div className="flex items-center gap-2">
         <CodeOutlined className="text-slate-500" />
         <span className="font-medium text-slate-700">Sandbox</span>
-        {sandboxId && (
-          <span className="text-xs text-slate-400">
-            ({sandboxId.slice(0, 12)})
-          </span>
-        )}
+        {sandboxId && <span className="text-xs text-slate-400">({sandboxId.slice(0, 12)})</span>}
       </div>
       <div className="flex items-center gap-1">
         {currentTool && (
@@ -193,7 +184,24 @@ function DesktopTabContent({ sandboxId, desktopStatus }: TabContentProps) {
   );
 }
 
-function ControlTabContent({ sandboxId, desktopStatus, terminalStatus, onDesktopStart, onDesktopStop, onTerminalStart, onTerminalStop, isDesktopLoading, isTerminalLoading }: TabContentProps & { isDesktopLoading?: boolean; isTerminalLoading?: boolean; onDesktopStart?: () => void; onDesktopStop?: () => void; onTerminalStart?: () => void; onTerminalStop?: () => void; }) {
+function ControlTabContent({
+  sandboxId,
+  desktopStatus,
+  terminalStatus,
+  onDesktopStart,
+  onDesktopStop,
+  onTerminalStart,
+  onTerminalStop,
+  isDesktopLoading,
+  isTerminalLoading,
+}: TabContentProps & {
+  isDesktopLoading?: boolean;
+  isTerminalLoading?: boolean;
+  onDesktopStart?: () => void;
+  onDesktopStop?: () => void;
+  onTerminalStart?: () => void;
+  onTerminalStop?: () => void;
+}) {
   return sandboxId ? (
     <div className="h-full overflow-y-auto p-4">
       <SandboxControlPanel
@@ -215,21 +223,14 @@ function ControlTabContent({ sandboxId, desktopStatus, terminalStatus, onDesktop
 
 function OutputTabContent({ toolExecutions = [], onFileClick }: TabContentProps) {
   return (
-    <SandboxOutputViewer
-      executions={toolExecutions}
-      onFileClick={onFileClick}
-      maxHeight="100%"
-    />
+    <SandboxOutputViewer executions={toolExecutions} onFileClick={onFileClick} maxHeight="100%" />
   );
 }
 
 function EmptyState() {
   return (
     <div className="h-full flex items-center justify-center">
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="No sandbox connected"
-      />
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sandbox connected" />
     </div>
   );
 }
@@ -241,7 +242,7 @@ function EmptyState() {
 export function SandboxPanel(props: SandboxPanelRootProps) {
   const {
     sandboxId,
-    defaultTab = "terminal",
+    defaultTab = 'terminal',
     toolExecutions = [],
     currentTool = null,
     onClose,
@@ -259,18 +260,10 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 
   // Parse children to detect sub-components
   const childrenArray = Children.toArray(children);
-  const terminalChild = childrenArray.find(
-    (child: any) => child?.type?.[TERMINAL_SYMBOL]
-  ) as any;
-  const desktopChild = childrenArray.find(
-    (child: any) => child?.type?.[DESKTOP_SYMBOL]
-  ) as any;
-  const controlChild = childrenArray.find(
-    (child: any) => child?.type?.[CONTROL_SYMBOL]
-  ) as any;
-  const outputChild = childrenArray.find(
-    (child: any) => child?.type?.[OUTPUT_SYMBOL]
-  ) as any;
+  const terminalChild = childrenArray.find((child: any) => child?.type?.[TERMINAL_SYMBOL]) as any;
+  const desktopChild = childrenArray.find((child: any) => child?.type?.[DESKTOP_SYMBOL]) as any;
+  const controlChild = childrenArray.find((child: any) => child?.type?.[CONTROL_SYMBOL]) as any;
+  const outputChild = childrenArray.find((child: any) => child?.type?.[OUTPUT_SYMBOL]) as any;
 
   // Determine if using compound mode (has explicit sub-components)
   const hasSubComponents = terminalChild || desktopChild || controlChild || outputChild;
@@ -289,17 +282,17 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
   // In compound mode, use defaultTab if that tab is included, otherwise use first available
   const getAvailableTabs = (): SandboxTabKey[] => {
     const tabs: SandboxTabKey[] = [];
-    if (includeTerminal) tabs.push("terminal");
-    if (includeDesktop) tabs.push("desktop");
-    if (includeControl) tabs.push("control");
-    if (includeOutput) tabs.push("output");
+    if (includeTerminal) tabs.push('terminal');
+    if (includeDesktop) tabs.push('desktop');
+    if (includeControl) tabs.push('control');
+    if (includeOutput) tabs.push('output');
     return tabs;
   };
 
   const availableTabs = getAvailableTabs();
   const actualDefaultTab = availableTabs.includes(defaultTab)
     ? defaultTab
-    : availableTabs[0] || "terminal";
+    : availableTabs[0] || 'terminal';
 
   // Build tab items based on included sub-components
   const tabItems: any[] = [];
@@ -308,7 +301,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 
   if (includeTerminal) {
     tabItems.push({
-      key: "terminal",
+      key: 'terminal',
       label: (
         <Space size={4}>
           <CodeOutlined />
@@ -321,14 +314,12 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 
   if (includeDesktop) {
     tabItems.push({
-      key: "desktop",
+      key: 'desktop',
       label: (
         <Space size={4}>
           <DesktopOutlined />
           <span>Desktop</span>
-          {desktopStatus?.running && (
-            <Badge status="success" className="ml-1" />
-          )}
+          {desktopStatus?.running && <Badge status="success" className="ml-1" />}
         </Space>
       ),
       children: <DesktopTabContent sandboxId={sandboxId} desktopStatus={desktopStatus} />,
@@ -337,7 +328,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 
   if (includeControl) {
     tabItems.push({
-      key: "control",
+      key: 'control',
       label: (
         <Space size={4}>
           <DesktopOutlined />
@@ -362,17 +353,13 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 
   if (includeOutput) {
     tabItems.push({
-      key: "output",
+      key: 'output',
       label: (
         <Space size={4}>
           <FileTextOutlined />
           <span>Output</span>
           {toolExecutions.length > 0 && (
-            <Badge
-              count={toolExecutions.length}
-              size="small"
-              className="ml-1"
-            />
+            <Badge count={toolExecutions.length} size="small" className="ml-1" />
           )}
         </Space>
       ),
@@ -400,11 +387,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
       <div className="h-full flex flex-col bg-white border-l border-slate-200">
         {/* Header */}
         {includeHeader && (
-          <SandboxHeaderRender
-            currentTool={currentTool}
-            sandboxId={sandboxId}
-            onClose={onClose}
-          />
+          <SandboxHeaderRender currentTool={currentTool} sandboxId={sandboxId} onClose={onClose} />
         )}
 
         {/* Tabs */}
@@ -447,6 +430,6 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
 SandboxPanel.Root = SandboxPanel;
 
 // Set display name
-SandboxPanel.displayName = "SandboxPanel";
+SandboxPanel.displayName = 'SandboxPanel';
 
 export default SandboxPanel;

@@ -6,11 +6,11 @@
  * Now uses ReactMarkdown with GFM support for proper rendering.
  */
 
-import { useState } from "react";
+import { useState } from 'react';
 
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown from 'react-markdown';
 
-import remarkGfm from "remark-gfm";
+import remarkGfm from 'remark-gfm';
 
 export interface FinalResponseDisplayProps {
   /** Report content (markdown) */
@@ -35,7 +35,7 @@ export interface FinalResponseDisplayProps {
  */
 export function FinalResponseDisplay({
   content,
-  version = "v1.0 Final",
+  version = 'v1.0 Final',
   generatedAt,
 }: FinalResponseDisplayProps) {
   const [copied, setCopied] = useState(false);
@@ -49,7 +49,7 @@ export function FinalResponseDisplay({
     if (diffMins < 60) return `${diffMins}m ago`;
     const diffHours = Math.floor(diffMins / 3600000);
     if (diffHours < 24) return `${diffHours}h ago`;
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   const handleCopy = async () => {
@@ -58,18 +58,18 @@ export function FinalResponseDisplay({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error);
+      console.error('Failed to copy:', error);
     }
   };
 
   const handleExportPDF = () => {
     // TODO: Implement PDF export
-    console.log("Export PDF");
+    console.log('Export PDF');
   };
 
   const handleShare = () => {
     // TODO: Implement share
-    console.log("Share");
+    console.log('Share');
   };
 
   return (
@@ -87,9 +87,7 @@ export function FinalResponseDisplay({
         </div>
 
         {/* Content with ReactMarkdown */}
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {content}
-        </ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
       </div>
 
       {/* Action Sidebar */}
@@ -103,19 +101,15 @@ export function FinalResponseDisplay({
               onClick={handleCopy}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md"
             >
-              <span className="material-symbols-outlined text-[20px]">
-                content_copy
-              </span>
-              {copied ? "Copied!" : "Copy to Clipboard"}
+              <span className="material-symbols-outlined text-[20px]">content_copy</span>
+              {copied ? 'Copied!' : 'Copy to Clipboard'}
             </button>
 
             <button
               onClick={handleExportPDF}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md"
             >
-              <span className="material-symbols-outlined text-[20px]">
-                picture_as_pdf
-              </span>
+              <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
               Export as PDF
             </button>
 
@@ -123,9 +117,7 @@ export function FinalResponseDisplay({
               onClick={handleShare}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-surface-dark hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-all duration-200 border border-slate-200 dark:border-border-dark hover:border-primary dark:hover:border-primary hover:shadow-md"
             >
-              <span className="material-symbols-outlined text-[20px]">
-                share
-              </span>
+              <span className="material-symbols-outlined text-[20px]">share</span>
               Share with Team
             </button>
           </div>
@@ -133,12 +125,8 @@ export function FinalResponseDisplay({
           {generatedAt && (
             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-border-dark">
               <div className="flex items-center gap-2 text-text-muted">
-                <span className="material-symbols-outlined text-sm">
-                  schedule
-                </span>
-                <span className="text-[10px]">
-                  Generated {formatTimeAgo(generatedAt)}
-                </span>
+                <span className="material-symbols-outlined text-sm">schedule</span>
+                <span className="text-[10px]">Generated {formatTimeAgo(generatedAt)}</span>
               </div>
             </div>
           )}

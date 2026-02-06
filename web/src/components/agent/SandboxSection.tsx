@@ -4,26 +4,32 @@
  * Provides Terminal and Remote Desktop functionality in a modern tabbed interface.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-import { 
-  Terminal, 
-  Monitor, 
-  Play, 
-  Square, 
+import {
+  Terminal,
+  Monitor,
+  Play,
+  Square,
   RefreshCw,
   Maximize2,
   Minimize2,
-  Settings
+  Settings,
 } from 'lucide-react';
 
-import { LazyTabs, LazyButton, LazyBadge, LazyEmpty, Empty, LazyTooltip } from '@/components/ui/lazyAntd';
+import {
+  LazyTabs,
+  LazyButton,
+  LazyBadge,
+  LazyEmpty,
+  Empty,
+  LazyTooltip,
+} from '@/components/ui/lazyAntd';
 
 import { useSandboxStore } from '../../stores/sandbox';
 
 import { RemoteDesktopViewer } from './sandbox/RemoteDesktopViewer';
 import { SandboxTerminal } from './sandbox/SandboxTerminal';
-
 
 import type { ToolExecution } from './sandbox/SandboxOutputViewer';
 
@@ -37,7 +43,7 @@ interface SandboxSectionProps {
 }
 
 // Terminal Tab Content
-const TerminalTab: React.FC<{ 
+const TerminalTab: React.FC<{
   sandboxId: string;
   projectId?: string;
   terminalStatus: any;
@@ -46,13 +52,23 @@ const TerminalTab: React.FC<{
 }> = ({ sandboxId, projectId, terminalStatus, onStartTerminal, isTerminalLoading }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  // Use ref to track auto-start attempt (avoids setState in effect)
+  const autoStartAttemptedRef = useRef(false);
 
-  // Auto-start terminal if not running
+  // Auto-start terminal if not running (only once per component mount)
   useEffect(() => {
-    if (!terminalStatus?.running && !isTerminalLoading && !isConnected) {
+    // Only auto-start once, and only if sandbox is available
+    if (
+      !autoStartAttemptedRef.current &&
+      !terminalStatus?.running &&
+      !isTerminalLoading &&
+      !isConnected &&
+      sandboxId
+    ) {
+      autoStartAttemptedRef.current = true;
       onStartTerminal();
     }
-  }, [terminalStatus?.running, isTerminalLoading, isConnected, onStartTerminal]);
+  }, [terminalStatus?.running, isTerminalLoading, isConnected, sandboxId, onStartTerminal]);
 
   // If terminal is not running, show start button
   if (!terminalStatus?.running && !isConnected) {
@@ -83,15 +99,13 @@ const TerminalTab: React.FC<{
       {/* Terminal Status Bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-700">
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} />
+          <div
+            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`}
+          />
           <span className="text-xs text-slate-400">
             {isConnected ? 'Connected' : 'Connecting...'}
           </span>
-          {sessionId && (
-            <span className="text-xs text-slate-600">
-              ({sessionId.slice(0, 8)})
-            </span>
-          )}
+          {sessionId && <span className="text-xs text-slate-600">({sessionId.slice(0, 8)})</span>}
         </div>
         <div className="flex items-center gap-1">
           <LazyTooltip title="Reconnect">
@@ -130,21 +144,30 @@ const TerminalTab: React.FC<{
 };
 
 // Desktop Tab Content
-const DesktopTab: React.FC<{ 
-  sandboxId: string; 
+const DesktopTab: React.FC<{
+  sandboxId: string;
   desktopStatus: any;
   onStartDesktop: () => Promise<void>;
   onStopDesktop: () => Promise<void>;
   isDesktopLoading: boolean;
 }> = ({ sandboxId, desktopStatus, onStartDesktop, onStopDesktop, isDesktopLoading }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Use ref to track auto-start attempt (avoids setState in effect)
+  const autoStartAttemptedRef = useRef(false);
 
-  // Auto-start desktop if not running
+  // Auto-start desktop if not running (only once per component mount)
   useEffect(() => {
-    if (!desktopStatus?.running && !isDesktopLoading) {
+    // Only auto-start once, and only if sandbox is available
+    if (
+      !autoStartAttemptedRef.current &&
+      !desktopStatus?.running &&
+      !isDesktopLoading &&
+      sandboxId
+    ) {
+      autoStartAttemptedRef.current = true;
       onStartDesktop();
     }
-  }, [desktopStatus?.running, isDesktopLoading, onStartDesktop]);
+  }, [desktopStatus?.running, isDesktopLoading, sandboxId, onStartDesktop]);
 
   if (!desktopStatus?.running) {
     return (
@@ -179,7 +202,7 @@ const DesktopTab: React.FC<{
           <span className="text-xs text-slate-500">({sandboxId.slice(0, 8)})</span>
         </div>
         <div className="flex items-center gap-1">
-          <LazyTooltip title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+          <LazyTooltip title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
             <LazyButton
               type="text"
               size="small"
@@ -219,10 +242,7 @@ const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) =>
   return (
     <div className="h-full overflow-y-auto p-4">
       {executions.length === 0 ? (
-        <LazyEmpty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="No tool executions yet"
-        />
+        <LazyEmpty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tool executions yet" />
       ) : (
         <div className="space-y-3">
           {[...executions].reverse().map((exec, index) => (
@@ -255,9 +275,7 @@ const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) =>
                 </div>
               )}
               {exec.durationMs && (
-                <p className="text-xs text-slate-400 mt-2">
-                  Duration: {exec.durationMs}ms
-                </p>
+                <p className="text-xs text-slate-400 mt-2">Duration: {exec.durationMs}ms</p>
               )}
             </div>
           ))}
@@ -274,15 +292,15 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
   className,
 }) => {
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
-  const { 
+  const {
     activeProjectId,
-    desktopStatus, 
-    terminalStatus, 
-    startDesktop, 
-    stopDesktop, 
+    desktopStatus,
+    terminalStatus,
+    startDesktop,
+    stopDesktop,
     startTerminal,
-    isDesktopLoading, 
-    isTerminalLoading 
+    isDesktopLoading,
+    isTerminalLoading,
   } = useSandboxStore();
 
   const tabItems = [
@@ -292,14 +310,12 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         <div className="flex items-center gap-2">
           <Terminal size={16} />
           <span>Terminal</span>
-          {terminalStatus?.running && (
-            <LazyBadge status="success" className="ml-1" />
-          )}
+          {terminalStatus?.running && <LazyBadge status="success" className="ml-1" />}
         </div>
       ),
       children: sandboxId ? (
-        <TerminalTab 
-          sandboxId={sandboxId} 
+        <TerminalTab
+          sandboxId={sandboxId}
           projectId={activeProjectId || undefined}
           terminalStatus={terminalStatus}
           onStartTerminal={startTerminal}
@@ -317,15 +333,13 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         <div className="flex items-center gap-2">
           <Monitor size={16} />
           <span>Desktop</span>
-          {desktopStatus?.running && (
-            <LazyBadge status="success" className="ml-1" />
-          )}
+          {desktopStatus?.running && <LazyBadge status="success" className="ml-1" />}
         </div>
       ),
       children: sandboxId ? (
-        <DesktopTab 
-          sandboxId={sandboxId} 
-          desktopStatus={desktopStatus} 
+        <DesktopTab
+          sandboxId={sandboxId}
+          desktopStatus={desktopStatus}
           onStartDesktop={startDesktop}
           onStopDesktop={stopDesktop}
           isDesktopLoading={isDesktopLoading}
@@ -357,18 +371,10 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2">
           <Terminal size={18} className="text-slate-500" />
-          <span className="font-medium text-slate-900 dark:text-slate-100">
-            Sandbox
-          </span>
-          {sandboxId && (
-            <span className="text-xs text-slate-400">
-              ({sandboxId.slice(0, 12)})
-            </span>
-          )}
+          <span className="font-medium text-slate-900 dark:text-slate-100">Sandbox</span>
+          {sandboxId && <span className="text-xs text-slate-400">({sandboxId.slice(0, 12)})</span>}
         </div>
-        {currentTool && (
-          <LazyBadge status="processing" text={currentTool.name} />
-        )}
+        {currentTool && <LazyBadge status="processing" text={currentTool.name} />}
       </div>
 
       {/* Tabs */}

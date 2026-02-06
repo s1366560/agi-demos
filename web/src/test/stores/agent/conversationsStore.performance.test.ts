@@ -12,46 +12,42 @@
  * They should initially FAIL and then drive the implementation.
  */
 
-import { renderHook } from "@testing-library/react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { renderHook } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import {
   useConversationsStore,
   useConversations,
   useCurrentConversation,
   useConversationsLoading,
-} from "../../../stores/agent/conversationsStore";
+} from '../../../stores/agent/conversationsStore';
 
 // Helper to create a mock conversation
 const createMockConversation = (
   id: string,
   projectId: string,
-  title: string,
-): import("../../../types/agent").Conversation => ({
+  title: string
+): import('../../../types/agent').Conversation => ({
   id,
   project_id: projectId,
-  tenant_id: "tenant-1",
-  user_id: "user-1",
+  tenant_id: 'tenant-1',
+  user_id: 'user-1',
   title,
-  status: "active",
+  status: 'active',
   message_count: 0,
-  created_at: "2024-01-01T00:00:00Z",
-  updated_at: "2024-01-01T00:00:00Z",
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
 });
 
-describe("ConversationsStore - Selector Memoization", () => {
+describe('ConversationsStore - Selector Memoization', () => {
   beforeEach(() => {
     useConversationsStore.getState().reset();
     vi.clearAllMocks();
   });
 
-  describe("State Immutability", () => {
-    it("should not mutate existing conversations array when adding", () => {
-      const conv1 = createMockConversation(
-        "conv-1",
-        "proj-1",
-        "Conversation 1",
-      );
+  describe('State Immutability', () => {
+    it('should not mutate existing conversations array when adding', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
 
       useConversationsStore.setState({
         conversations: [conv1],
@@ -60,11 +56,7 @@ describe("ConversationsStore - Selector Memoization", () => {
       const firstArray = useConversationsStore.getState().conversations;
 
       // Add a new conversation
-      const conv2 = createMockConversation(
-        "conv-2",
-        "proj-1",
-        "Conversation 2",
-      );
+      const conv2 = createMockConversation('conv-2', 'proj-1', 'Conversation 2');
       useConversationsStore.setState({
         conversations: [...firstArray, conv2],
       });
@@ -77,12 +69,8 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(secondArray).toHaveLength(2);
     });
 
-    it("should keep same array reference when state not changed", () => {
-      const conv1 = createMockConversation(
-        "conv-1",
-        "proj-1",
-        "Conversation 1",
-      );
+    it('should keep same array reference when state not changed', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
 
       useConversationsStore.setState({
         conversations: [conv1],
@@ -103,18 +91,10 @@ describe("ConversationsStore - Selector Memoization", () => {
     });
   });
 
-  describe("Selector Behavior", () => {
-    it("should return current conversations state correctly", () => {
-      const conv1 = createMockConversation(
-        "conv-1",
-        "proj-1",
-        "Conversation 1",
-      );
-      const conv2 = createMockConversation(
-        "conv-2",
-        "proj-1",
-        "Conversation 2",
-      );
+  describe('Selector Behavior', () => {
+    it('should return current conversations state correctly', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
+      const conv2 = createMockConversation('conv-2', 'proj-1', 'Conversation 2');
 
       useConversationsStore.setState({
         conversations: [conv1, conv2],
@@ -126,12 +106,8 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(result.current[1]).toEqual(conv2);
     });
 
-    it("should return current conversation correctly", () => {
-      const conv1 = createMockConversation(
-        "conv-1",
-        "proj-1",
-        "Conversation 1",
-      );
+    it('should return current conversation correctly', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
 
       useConversationsStore.setState({
         currentConversation: conv1,
@@ -139,10 +115,10 @@ describe("ConversationsStore - Selector Memoization", () => {
 
       const { result } = renderHook(() => useCurrentConversation());
       expect(result.current).toEqual(conv1);
-      expect(result.current?.id).toBe("conv-1");
+      expect(result.current?.id).toBe('conv-1');
     });
 
-    it("should return loading state correctly", () => {
+    it('should return loading state correctly', () => {
       useConversationsStore.setState({
         conversationsLoading: true,
       });
@@ -151,19 +127,15 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(result.current).toBe(true);
     });
 
-    it("should return null for current conversation when none set", () => {
+    it('should return null for current conversation when none set', () => {
       const { result } = renderHook(() => useCurrentConversation());
       expect(result.current).toBeNull();
     });
   });
 
-  describe("Update Isolation", () => {
-    it("should only update the slice being changed", () => {
-      const conv1 = createMockConversation(
-        "conv-1",
-        "proj-1",
-        "Conversation 1",
-      );
+  describe('Update Isolation', () => {
+    it('should only update the slice being changed', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
 
       useConversationsStore.setState({
         conversations: [conv1],
@@ -188,17 +160,9 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(stateAfter.conversationsLoading).toBe(true);
     });
 
-    it("should not affect currentConversation when updating list", () => {
-      const conv1 = createMockConversation(
-        "conv-1",
-        "proj-1",
-        "Conversation 1",
-      );
-      const conv2 = createMockConversation(
-        "conv-2",
-        "proj-1",
-        "Conversation 2",
-      );
+    it('should not affect currentConversation when updating list', () => {
+      const conv1 = createMockConversation('conv-1', 'proj-1', 'Conversation 1');
+      const conv2 = createMockConversation('conv-2', 'proj-1', 'Conversation 2');
 
       useConversationsStore.setState({
         conversations: [conv1],
@@ -217,13 +181,13 @@ describe("ConversationsStore - Selector Memoization", () => {
     });
   });
 
-  describe("Performance", () => {
-    it("should handle multiple rapid state updates efficiently", () => {
+  describe('Performance', () => {
+    it('should handle multiple rapid state updates efficiently', () => {
       const startTime = performance.now();
 
       // Perform many state updates
       for (let i = 0; i < 100; i++) {
-        const conv = createMockConversation(`conv-${i}`, "proj-1", `Conv ${i}`);
+        const conv = createMockConversation(`conv-${i}`, 'proj-1', `Conv ${i}`);
         useConversationsStore.setState({
           conversations: [conv],
         });
@@ -236,12 +200,12 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(duration).toBeLessThan(100);
     });
 
-    it("should not leak memory with many state changes", () => {
+    it('should not leak memory with many state changes', () => {
       const initialMemory = (performance as any).memory?.usedJSHeapSize;
 
       // Perform many state updates
       for (let i = 0; i < 1000; i++) {
-        const conv = createMockConversation(`conv-${i}`, "proj-1", `Conv ${i}`);
+        const conv = createMockConversation(`conv-${i}`, 'proj-1', `Conv ${i}`);
         useConversationsStore.setState({
           conversations: [conv],
         });
@@ -264,8 +228,8 @@ describe("ConversationsStore - Selector Memoization", () => {
     });
   });
 
-  describe("Edge Cases", () => {
-    it("should handle empty conversations array", () => {
+  describe('Edge Cases', () => {
+    it('should handle empty conversations array', () => {
       useConversationsStore.setState({
         conversations: [],
       });
@@ -275,7 +239,7 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(result.current).toHaveLength(0);
     });
 
-    it("should handle null currentConversation", () => {
+    it('should handle null currentConversation', () => {
       useConversationsStore.setState({
         currentConversation: null,
       });
@@ -284,7 +248,7 @@ describe("ConversationsStore - Selector Memoization", () => {
       expect(result.current).toBeNull();
     });
 
-    it("should handle undefined error state", () => {
+    it('should handle undefined error state', () => {
       useConversationsStore.setState({
         conversationsError: null,
       });

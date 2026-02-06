@@ -43,13 +43,8 @@ import {
   Progress,
 } from 'antd';
 
-
 import { dlqService } from '@/services/dlqService';
-import type {
-  DLQMessage,
-  DLQMessageStatus,
-  DLQStats,
-} from '@/services/dlqService';
+import type { DLQMessage, DLQMessageStatus, DLQStats } from '@/services/dlqService';
 
 import type { ColumnsType } from 'antd/es/table';
 
@@ -61,36 +56,34 @@ const { TextArea } = Input;
 // ============================================================================
 
 const StatusTag: React.FC<{ status: DLQMessageStatus }> = ({ status }) => {
-  const config: Record<
-    DLQMessageStatus,
-    { color: string; icon: React.ReactNode; label: string }
-  > = {
-    pending: {
-      color: 'warning',
-      icon: <ClockCircleOutlined />,
-      label: 'Pending',
-    },
-    retrying: {
-      color: 'processing',
-      icon: <RetweetOutlined />,
-      label: 'Retrying',
-    },
-    discarded: {
-      color: 'default',
-      icon: <DeleteOutlined />,
-      label: 'Discarded',
-    },
-    expired: {
-      color: 'default',
-      icon: <StopOutlined />,
-      label: 'Expired',
-    },
-    resolved: {
-      color: 'success',
-      icon: <CheckCircleOutlined />,
-      label: 'Resolved',
-    },
-  };
+  const config: Record<DLQMessageStatus, { color: string; icon: React.ReactNode; label: string }> =
+    {
+      pending: {
+        color: 'warning',
+        icon: <ClockCircleOutlined />,
+        label: 'Pending',
+      },
+      retrying: {
+        color: 'processing',
+        icon: <RetweetOutlined />,
+        label: 'Retrying',
+      },
+      discarded: {
+        color: 'default',
+        icon: <DeleteOutlined />,
+        label: 'Discarded',
+      },
+      expired: {
+        color: 'default',
+        icon: <StopOutlined />,
+        label: 'Expired',
+      },
+      resolved: {
+        color: 'success',
+        icon: <CheckCircleOutlined />,
+        label: 'Resolved',
+      },
+    };
 
   const { color, icon, label } = config[status] || config.pending;
 
@@ -123,20 +116,12 @@ const DeadLetterQueue: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-  const [statusFilter, setStatusFilter] = useState<DLQMessageStatus | undefined>(
-    undefined
-  );
-  const [eventTypeFilter, setEventTypeFilter] = useState<string | undefined>(
-    undefined
-  );
-  const [errorTypeFilter, setErrorTypeFilter] = useState<string | undefined>(
-    undefined
-  );
+  const [statusFilter, setStatusFilter] = useState<DLQMessageStatus | undefined>(undefined);
+  const [eventTypeFilter, setEventTypeFilter] = useState<string | undefined>(undefined);
+  const [errorTypeFilter, setErrorTypeFilter] = useState<string | undefined>(undefined);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20 });
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<DLQMessage | null>(
-    null
-  );
+  const [selectedMessage, setSelectedMessage] = useState<DLQMessage | null>(null);
   const [discardReason, setDiscardReason] = useState('');
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [messagesForDiscard, setMessagesForDiscard] = useState<string[]>([]);
@@ -202,9 +187,7 @@ const DeadLetterQueue: React.FC = () => {
     if (selectedRowKeys.length === 0) return;
 
     try {
-      const result = await dlqService.retryMessages(
-        selectedRowKeys as string[]
-      );
+      const result = await dlqService.retryMessages(selectedRowKeys as string[]);
       message.success(
         `Retry initiated: ${result.success_count} succeeded, ${result.failure_count} failed`
       );
@@ -233,10 +216,7 @@ const DeadLetterQueue: React.FC = () => {
         await dlqService.discardMessage(messagesForDiscard[0], discardReason);
         message.success('Message discarded');
       } else {
-        const result = await dlqService.discardMessages(
-          messagesForDiscard,
-          discardReason
-        );
+        const result = await dlqService.discardMessages(messagesForDiscard, discardReason);
         message.success(
           `Discarded: ${result.success_count} succeeded, ${result.failure_count} failed`
         );
@@ -398,12 +378,8 @@ const DeadLetterQueue: React.FC = () => {
   };
 
   // Get unique values for filters
-  const eventTypes = stats
-    ? Object.keys(stats.event_type_counts)
-    : [];
-  const errorTypes = stats
-    ? Object.keys(stats.error_type_counts)
-    : [];
+  const eventTypes = stats ? Object.keys(stats.event_type_counts) : [];
+  const errorTypes = stats ? Object.keys(stats.error_type_counts) : [];
 
   return (
     <div style={{ padding: 24 }}>
@@ -414,9 +390,7 @@ const DeadLetterQueue: React.FC = () => {
             <WarningOutlined style={{ marginRight: 8, color: '#faad14' }} />
             Dead Letter Queue
           </Title>
-          <Text type="secondary">
-            Failed events awaiting manual review or automatic retry
-          </Text>
+          <Text type="secondary">Failed events awaiting manual review or automatic retry</Text>
         </Col>
         <Col>
           <Space>
@@ -510,11 +484,7 @@ const DeadLetterQueue: React.FC = () => {
 
       {/* Error Type Distribution */}
       {stats && Object.keys(stats.error_type_counts).length > 0 && (
-        <Card
-          title="Error Type Distribution"
-          style={{ marginBottom: 24 }}
-          loading={statsLoading}
-        >
+        <Card title="Error Type Distribution" style={{ marginBottom: 24 }} loading={statsLoading}>
           <Row gutter={[16, 8]}>
             {Object.entries(stats.error_type_counts)
               .sort(([, a], [, b]) => b - a)
@@ -524,9 +494,7 @@ const DeadLetterQueue: React.FC = () => {
                   <Space style={{ width: '100%' }}>
                     <Tag color="red">{type.split('.').pop()}</Tag>
                     <Progress
-                      percent={Math.round(
-                        (count / stats.pending_count) * 100
-                      )}
+                      percent={Math.round((count / stats.pending_count) * 100)}
                       size="small"
                       format={() => count}
                       style={{ flex: 1 }}
@@ -595,19 +563,13 @@ const DeadLetterQueue: React.FC = () => {
               </Col>
               <Col>
                 <Space>
-                  <Button
-                    type="primary"
-                    icon={<RetweetOutlined />}
-                    onClick={handleRetryBatch}
-                  >
+                  <Button type="primary" icon={<RetweetOutlined />} onClick={handleRetryBatch}>
                     Retry Selected
                   </Button>
                   <Button
                     danger
                     icon={<DeleteOutlined />}
-                    onClick={() =>
-                      openDiscardModal(selectedRowKeys as string[])
-                    }
+                    onClick={() => openDiscardModal(selectedRowKeys as string[])}
                   >
                     Discard Selected
                   </Button>
@@ -631,8 +593,7 @@ const DeadLetterQueue: React.FC = () => {
             pageSize: pagination.pageSize,
             showSizeChanger: true,
             showTotal: (total) => `Total ${total} messages`,
-            onChange: (page, pageSize) =>
-              setPagination({ current: page, pageSize }),
+            onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
           }}
           scroll={{ x: 900 }}
         />
@@ -716,11 +677,7 @@ const DeadLetterQueue: React.FC = () => {
                   fontSize: 12,
                 }}
               >
-                {JSON.stringify(
-                  JSON.parse(selectedMessage.event_data),
-                  null,
-                  2
-                )}
+                {JSON.stringify(JSON.parse(selectedMessage.event_data), null, 2)}
               </pre>
             </Descriptions.Item>
             {selectedMessage.error_traceback && (

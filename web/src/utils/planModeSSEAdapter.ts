@@ -16,20 +16,20 @@
  * - reflection_complete: Reflection completed
  */
 
-import type { AgentEvent } from "../types/agent";
+import type { AgentEvent } from '../types/agent';
 
 /**
  * Plan Mode UI action types
  */
 export type PlanModeAction =
-  | { type: "ENTER_PLAN_MODE"; payload: EnterPlanModePayload }
-  | { type: "EXIT_PLAN_MODE"; payload: ExitPlanModePayload }
-  | { type: "LOAD_PLAN"; payload: LoadPlanPayload }
-  | { type: "UPDATE_PLAN"; payload: UpdatePlanPayload }
-  | { type: "EXECUTION_START"; payload: ExecutionStartPayload }
-  | { type: "STEP_COMPLETE"; payload: StepCompletePayload }
-  | { type: "REFLECTION_COMPLETE"; payload: ReflectionCompletePayload }
-  | { type: "UNKNOWN"; payload: null };
+  | { type: 'ENTER_PLAN_MODE'; payload: EnterPlanModePayload }
+  | { type: 'EXIT_PLAN_MODE'; payload: ExitPlanModePayload }
+  | { type: 'LOAD_PLAN'; payload: LoadPlanPayload }
+  | { type: 'UPDATE_PLAN'; payload: UpdatePlanPayload }
+  | { type: 'EXECUTION_START'; payload: ExecutionStartPayload }
+  | { type: 'STEP_COMPLETE'; payload: StepCompletePayload }
+  | { type: 'REFLECTION_COMPLETE'; payload: ReflectionCompletePayload }
+  | { type: 'UNKNOWN'; payload: null };
 
 /**
  * Enter plan mode payload
@@ -46,7 +46,7 @@ export interface EnterPlanModePayload {
 export interface ExitPlanModePayload {
   conversationId: string;
   planId: string;
-  planStatus?: "draft" | "reviewing" | "approved" | "archived";
+  planStatus?: 'draft' | 'reviewing' | 'approved' | 'archived';
   approved?: boolean;
 }
 
@@ -74,7 +74,7 @@ export interface UpdatePlanPayload {
  */
 export interface CriticalFile {
   path: string;
-  type: "create" | "modify" | "delete";
+  type: 'create' | 'modify' | 'delete';
 }
 
 /**
@@ -92,7 +92,7 @@ export interface ExecutionStartPayload {
 export interface StepCompletePayload {
   planId: string;
   stepId: string;
-  status: "pending" | "running" | "completed" | "failed" | "skipped" | "cancelled";
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled';
   result?: string;
   error?: string;
 }
@@ -102,7 +102,7 @@ export interface StepCompletePayload {
  */
 export interface ReflectionCompletePayload {
   planId: string;
-  assessment: "on_track" | "needs_adjustment" | "off_track" | "complete" | "failed";
+  assessment: 'on_track' | 'needs_adjustment' | 'off_track' | 'complete' | 'failed';
   reasoning: string;
   hasAdjustments: boolean;
   adjustmentCount: number;
@@ -114,63 +114,61 @@ export interface ReflectionCompletePayload {
  * @param event - Raw SSE event from backend
  * @returns Standardized UI action or null for unknown events
  */
-export function planModeSSEAdapter(
-  event: AgentEvent
-): PlanModeAction | null {
+export function planModeSSEAdapter(event: AgentEvent): PlanModeAction | null {
   if (!event) {
     return null;
   }
 
   switch (event.type) {
-    case "plan_mode_enter": {
+    case 'plan_mode_enter': {
       const data = (event.data || {}) as {
         conversation_id?: string;
         plan_id?: string;
         plan_title?: string;
       };
       return {
-        type: "ENTER_PLAN_MODE",
+        type: 'ENTER_PLAN_MODE',
         payload: {
-          conversationId: data.conversation_id || "",
-          planId: data.plan_id || "",
+          conversationId: data.conversation_id || '',
+          planId: data.plan_id || '',
           planTitle: data.plan_title,
         },
       };
     }
 
-    case "plan_mode_exit": {
+    case 'plan_mode_exit': {
       const data = (event.data || {}) as {
         conversation_id?: string;
         plan_id?: string;
-        plan_status?: "draft" | "reviewing" | "approved" | "archived";
+        plan_status?: 'draft' | 'reviewing' | 'approved' | 'archived';
         approved?: boolean;
       };
       return {
-        type: "EXIT_PLAN_MODE",
+        type: 'EXIT_PLAN_MODE',
         payload: {
-          conversationId: data.conversation_id || "",
-          planId: data.plan_id || "",
+          conversationId: data.conversation_id || '',
+          planId: data.plan_id || '',
           planStatus: data.plan_status,
           approved: data.approved,
         },
       };
     }
 
-    case "plan_created": {
+    case 'plan_created': {
       const data = (event.data || {}) as {
         plan_id?: string;
         title?: string;
         conversation_id?: string;
       };
       return {
-        type: "LOAD_PLAN",
+        type: 'LOAD_PLAN',
         payload: {
-          planId: data.plan_id || "",
+          planId: data.plan_id || '',
         },
       };
     }
 
-    case "plan_updated": {
+    case 'plan_updated': {
       const data = (event.data || {}) as {
         plan_id?: string;
         content?: string;
@@ -178,9 +176,9 @@ export function planModeSSEAdapter(
         title?: string;
       };
       return {
-        type: "UPDATE_PLAN",
+        type: 'UPDATE_PLAN',
         payload: {
-          planId: data.plan_id || "",
+          planId: data.plan_id || '',
           content: data.content,
           version: data.version,
           title: data.title,
@@ -188,56 +186,56 @@ export function planModeSSEAdapter(
       };
     }
 
-    case "plan_execution_start": {
+    case 'plan_execution_start': {
       const data = (event.data || {}) as {
         plan_id?: string;
         total_steps?: number;
         user_query?: string;
       };
       return {
-        type: "EXECUTION_START",
+        type: 'EXECUTION_START',
         payload: {
-          planId: data.plan_id || "",
+          planId: data.plan_id || '',
           totalSteps: data.total_steps || 0,
-          userQuery: data.user_query || "",
+          userQuery: data.user_query || '',
         },
       };
     }
 
-    case "plan_step_complete": {
+    case 'plan_step_complete': {
       const data = (event.data || {}) as {
         plan_id?: string;
         step_id?: string;
-        status?: "pending" | "running" | "completed" | "failed" | "skipped" | "cancelled";
+        status?: 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled';
         result?: string;
         error?: string;
       };
       return {
-        type: "STEP_COMPLETE",
+        type: 'STEP_COMPLETE',
         payload: {
-          planId: data.plan_id || "",
-          stepId: data.step_id || "",
-          status: data.status || "pending",
+          planId: data.plan_id || '',
+          stepId: data.step_id || '',
+          status: data.status || 'pending',
           result: data.result,
           error: data.error,
         },
       };
     }
 
-    case "reflection_complete": {
+    case 'reflection_complete': {
       const data = (event.data || {}) as {
         plan_id?: string;
-        assessment?: "on_track" | "needs_adjustment" | "off_track" | "complete" | "failed";
+        assessment?: 'on_track' | 'needs_adjustment' | 'off_track' | 'complete' | 'failed';
         reasoning?: string;
         has_adjustments?: boolean;
         adjustment_count?: number;
       };
       return {
-        type: "REFLECTION_COMPLETE",
+        type: 'REFLECTION_COMPLETE',
         payload: {
-          planId: data.plan_id || "",
-          assessment: data.assessment || "on_track",
-          reasoning: data.reasoning || "",
+          planId: data.plan_id || '',
+          assessment: data.assessment || 'on_track',
+          reasoning: data.reasoning || '',
           hasAdjustments: data.has_adjustments || false,
           adjustmentCount: data.adjustment_count || 0,
         },
@@ -259,17 +257,15 @@ export function planModeSSEAdapter(
  * @param event - Raw SSE event
  * @returns Updated timeline with new event appended
  */
-export function appendPlanModeEventToTimeline<T extends { type: string; timestamp?: number | string; sequenceNumber?: number }>(
-  timeline: T[],
-  event: AgentEvent
-): T[] {
+export function appendPlanModeEventToTimeline<
+  T extends { type: string; timestamp?: number | string; sequenceNumber?: number },
+>(timeline: T[], event: AgentEvent): T[] {
   // Use current timestamp since AgentEvent doesn't include timestamp
   const timestamp = Date.now();
 
   // Generate sequence number
-  const sequenceNumber = timeline.length > 0
-    ? (timeline[timeline.length - 1]?.sequenceNumber ?? 0) + 1
-    : 1;
+  const sequenceNumber =
+    timeline.length > 0 ? (timeline[timeline.length - 1]?.sequenceNumber ?? 0) + 1 : 1;
 
   // Create timeline event
   const timelineEvent = {

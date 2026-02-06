@@ -88,7 +88,6 @@ describe('ProjectSettingsModal', () => {
 
   describe('Save Functionality', () => {
     it('should call onSave when save button is clicked', async () => {
-
       render(<ProjectSettingsModal {...defaultProps} />);
 
       const saveButton = screen.getByText('保存更改');
@@ -111,7 +110,6 @@ describe('ProjectSettingsModal', () => {
 
   describe('Delete Functionality', () => {
     it('should show confirmation dialog when delete button is clicked', async () => {
-
       render(<ProjectSettingsModal {...defaultProps} />);
 
       const deleteButton = screen.getByText('删除项目');
@@ -121,7 +119,6 @@ describe('ProjectSettingsModal', () => {
     });
 
     it('should call onDelete when confirmed', async () => {
-
       render(<ProjectSettingsModal {...defaultProps} />);
 
       const deleteButton = screen.getByText('删除项目');

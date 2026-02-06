@@ -44,10 +44,7 @@ describe('memoryService', () => {
 
       const result = await memoryService.updateMemory(memoryId, updates);
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(
-        `/memories/${memoryId}`,
-        updates
-      );
+      expect(apiFetch.patch).toHaveBeenCalledWith(`/memories/${memoryId}`, updates);
       expect(result).toEqual({ id: memoryId, ...updates });
     });
 
@@ -93,10 +90,7 @@ describe('memoryService', () => {
 
       const result = await memoryService.shareMemory(memoryId, shareData);
 
-      expect(apiFetch.post).toHaveBeenCalledWith(
-        `/memories/${memoryId}/shares`,
-        shareData
-      );
+      expect(apiFetch.post).toHaveBeenCalledWith(`/memories/${memoryId}/shares`, shareData);
       expect(result).toEqual(mockResponse);
     });
 
@@ -136,24 +130,17 @@ describe('memoryService', () => {
 
       await memoryService.deleteMemoryShare(memoryId, shareId);
 
-      expect(apiFetch.delete).toHaveBeenCalledWith(
-        `/memories/${memoryId}/shares/${shareId}`
-      );
+      expect(apiFetch.delete).toHaveBeenCalledWith(`/memories/${memoryId}/shares/${shareId}`);
     });
 
     it('should propagate ApiError on failed deletion', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      const mockError = new ApiError(
-        ApiErrorType.NOT_FOUND,
-        'NOT_FOUND',
-        'Share not found',
-        404
-      );
+      const mockError = new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Share not found', 404);
       vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
 
-      await expect(
-        memoryService.deleteMemoryShare('memory-1', 'share-1')
-      ).rejects.toThrow(ApiError);
+      await expect(memoryService.deleteMemoryShare('memory-1', 'share-1')).rejects.toThrow(
+        ApiError
+      );
     });
   });
 });

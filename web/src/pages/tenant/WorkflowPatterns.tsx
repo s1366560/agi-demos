@@ -98,9 +98,7 @@ export function WorkflowPatterns() {
       setPatterns(uiPatterns);
     } catch (err) {
       const errorMessage =
-        err instanceof PatternServiceError
-          ? err.message
-          : 'Failed to load patterns';
+        err instanceof PatternServiceError ? err.message : 'Failed to load patterns';
       setError(errorMessage);
       message?.error(errorMessage);
     } finally {
@@ -175,9 +173,7 @@ export function WorkflowPatterns() {
           }
         } catch (err) {
           const errorMessage =
-            err instanceof PatternServiceError
-              ? err.message
-              : 'Failed to delete pattern';
+            err instanceof PatternServiceError ? err.message : 'Failed to delete pattern';
           message?.error(errorMessage);
         } finally {
           setDeleting(false);
@@ -187,7 +183,9 @@ export function WorkflowPatterns() {
   };
 
   const handleNewPattern = () => {
-    message?.info('Pattern creation is not yet implemented. Patterns are learned automatically from successful agent executions.');
+    message?.info(
+      'Pattern creation is not yet implemented. Patterns are learned automatically from successful agent executions.'
+    );
   };
 
   // Error state

@@ -118,7 +118,9 @@ describe('requestDeduplicator', () => {
       const key = 'GET-/api/test';
       const mockExecutor = vi.fn().mockRejectedValue(new Error('Request failed'));
 
-      await expect(requestDeduplicator.deduplicate(key, mockExecutor)).rejects.toThrow('Request failed');
+      await expect(requestDeduplicator.deduplicate(key, mockExecutor)).rejects.toThrow(
+        'Request failed'
+      );
 
       const retrieved = requestDeduplicator.getPromise(key);
       expect(retrieved).toBeUndefined();
@@ -150,11 +152,7 @@ describe('requestDeduplicator', () => {
 
       const results = await Promise.all(promises);
 
-      expect(results).toEqual([
-        { data: 'shared' },
-        { data: 'shared' },
-        { data: 'shared' },
-      ]);
+      expect(results).toEqual([{ data: 'shared' }, { data: 'shared' }, { data: 'shared' }]);
       expect(mockExecutor).toHaveBeenCalledTimes(1);
     });
   });
@@ -163,9 +161,12 @@ describe('requestDeduplicator', () => {
     it('tracks deduplication statistics', async () => {
       const key = 'GET-/api/test';
       let resolveExecutor: (value: { data: string }) => void;
-      const mockExecutor = vi.fn(() => new Promise<{ data: string }>((resolve) => {
-        resolveExecutor = resolve;
-      }));
+      const mockExecutor = vi.fn(
+        () =>
+          new Promise<{ data: string }>((resolve) => {
+            resolveExecutor = resolve;
+          })
+      );
 
       // Start first request - not deduplicated, promise stays pending
       const firstPromise = requestDeduplicator.deduplicate(key, mockExecutor);

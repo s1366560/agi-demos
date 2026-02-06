@@ -60,9 +60,7 @@ describe('tenantService', () => {
       );
       vi.mocked(apiFetch.get).mockRejectedValueOnce(mockError);
 
-      await expect(
-        tenantService.listMembers('tenant-1')
-      ).rejects.toThrow(ApiError);
+      await expect(tenantService.listMembers('tenant-1')).rejects.toThrow(ApiError);
     });
   });
 
@@ -79,10 +77,10 @@ describe('tenantService', () => {
 
       await tenantService.addMember('tenant-1', 'user-2', 'member');
 
-      expect(apiFetch.post).toHaveBeenCalledWith(
-        `/tenants/tenant-1/members`,
-        { user_id: 'user-2', role: 'member' }
-      );
+      expect(apiFetch.post).toHaveBeenCalledWith(`/tenants/tenant-1/members`, {
+        user_id: 'user-2',
+        role: 'member',
+      });
     });
 
     it('should propagate ApiError on failed add', async () => {
@@ -95,9 +93,9 @@ describe('tenantService', () => {
       );
       vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
-      await expect(
-        tenantService.addMember('tenant-1', 'user-2', 'member')
-      ).rejects.toThrow(ApiError);
+      await expect(tenantService.addMember('tenant-1', 'user-2', 'member')).rejects.toThrow(
+        ApiError
+      );
     });
   });
 
@@ -114,9 +112,7 @@ describe('tenantService', () => {
 
       await tenantService.removeMember('tenant-1', 'user-2');
 
-      expect(apiFetch.delete).toHaveBeenCalledWith(
-        `/tenants/tenant-1/members/user-2`
-      );
+      expect(apiFetch.delete).toHaveBeenCalledWith(`/tenants/tenant-1/members/user-2`);
     });
 
     it('should propagate ApiError on failed removal', async () => {
@@ -129,9 +125,7 @@ describe('tenantService', () => {
       );
       vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
 
-      await expect(
-        tenantService.removeMember('tenant-1', 'user-2')
-      ).rejects.toThrow(ApiError);
+      await expect(tenantService.removeMember('tenant-1', 'user-2')).rejects.toThrow(ApiError);
     });
   });
 
@@ -148,10 +142,9 @@ describe('tenantService', () => {
 
       await tenantService.updateMemberRole('tenant-1', 'user-2', 'admin');
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(
-        `/tenants/tenant-1/members/user-2`,
-        { role: 'admin' }
-      );
+      expect(apiFetch.patch).toHaveBeenCalledWith(`/tenants/tenant-1/members/user-2`, {
+        role: 'admin',
+      });
     });
 
     it('should propagate ApiError on failed update', async () => {
@@ -164,9 +157,9 @@ describe('tenantService', () => {
       );
       vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
-      await expect(
-        tenantService.updateMemberRole('tenant-1', 'user-2', 'admin')
-      ).rejects.toThrow(ApiError);
+      await expect(tenantService.updateMemberRole('tenant-1', 'user-2', 'admin')).rejects.toThrow(
+        ApiError
+      );
     });
   });
 
@@ -239,9 +232,7 @@ describe('tenantService', () => {
       );
       vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
-      await expect(
-        tenantService.createTenant('Test', 'Description')
-      ).rejects.toThrow(ApiError);
+      await expect(tenantService.createTenant('Test', 'Description')).rejects.toThrow(ApiError);
     });
   });
 
@@ -277,9 +268,9 @@ describe('tenantService', () => {
       );
       vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
-      await expect(
-        tenantService.updateTenant('tenant-1', { name: 'Test' })
-      ).rejects.toThrow(ApiError);
+      await expect(tenantService.updateTenant('tenant-1', { name: 'Test' })).rejects.toThrow(
+        ApiError
+      );
     });
   });
 });

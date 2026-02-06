@@ -9,15 +9,15 @@
  * All possible sandbox event types
  */
 export type SandboxEventType =
-  | "sandbox_created"
-  | "sandbox_terminated"
-  | "sandbox_status"
-  | "desktop_started"
-  | "desktop_stopped"
-  | "desktop_status"
-  | "terminal_started"
-  | "terminal_stopped"
-  | "terminal_status";
+  | 'sandbox_created'
+  | 'sandbox_terminated'
+  | 'sandbox_status'
+  | 'desktop_started'
+  | 'desktop_stopped'
+  | 'desktop_status'
+  | 'terminal_started'
+  | 'terminal_stopped'
+  | 'terminal_status';
 
 /**
  * Base sandbox SSE event format
@@ -43,7 +43,7 @@ export interface SandboxCreatedEventData {
  * Sandbox created SSE event
  */
 export interface SandboxCreatedSSEEvent extends BaseSandboxSSEEvent {
-  type: "sandbox_created";
+  type: 'sandbox_created';
   data: SandboxCreatedEventData;
 }
 
@@ -58,7 +58,7 @@ export interface SandboxTerminatedEventData {
  * Sandbox terminated SSE event
  */
 export interface SandboxTerminatedSSEEvent extends BaseSandboxSSEEvent {
-  type: "sandbox_terminated";
+  type: 'sandbox_terminated';
   data: SandboxTerminatedEventData;
 }
 
@@ -74,7 +74,7 @@ export interface SandboxStatusEventData {
  * Sandbox status SSE event
  */
 export interface SandboxStatusSSEEvent extends BaseSandboxSSEEvent {
-  type: "sandbox_status";
+  type: 'sandbox_status';
   data: SandboxStatusEventData;
 }
 
@@ -93,7 +93,7 @@ export interface DesktopStartedEventData {
  * Desktop started SSE event
  */
 export interface DesktopStartedSSEEvent extends BaseSandboxSSEEvent {
-  type: "desktop_started";
+  type: 'desktop_started';
   data: DesktopStartedEventData;
 }
 
@@ -108,7 +108,7 @@ export interface DesktopStoppedEventData {
  * Desktop stopped SSE event
  */
 export interface DesktopStoppedSSEEvent extends BaseSandboxSSEEvent {
-  type: "desktop_stopped";
+  type: 'desktop_stopped';
   data: DesktopStoppedEventData;
 }
 
@@ -128,7 +128,7 @@ export interface DesktopStatusEventData {
  * Desktop status SSE event
  */
 export interface DesktopStatusSSEEvent extends BaseSandboxSSEEvent {
-  type: "desktop_status";
+  type: 'desktop_status';
   data: DesktopStatusEventData;
 }
 
@@ -147,7 +147,7 @@ export interface TerminalStartedEventData {
  * Terminal started SSE event
  */
 export interface TerminalStartedSSEEvent extends BaseSandboxSSEEvent {
-  type: "terminal_started";
+  type: 'terminal_started';
   data: TerminalStartedEventData;
 }
 
@@ -163,7 +163,7 @@ export interface TerminalStoppedEventData {
  * Terminal stopped SSE event
  */
 export interface TerminalStoppedSSEEvent extends BaseSandboxSSEEvent {
-  type: "terminal_stopped";
+  type: 'terminal_stopped';
   data: TerminalStoppedEventData;
 }
 
@@ -183,7 +183,7 @@ export interface TerminalStatusEventData {
  * Terminal status SSE event
  */
 export interface TerminalStatusSSEEvent extends BaseSandboxSSEEvent {
-  type: "terminal_status";
+  type: 'terminal_status';
   data: TerminalStatusEventData;
 }
 
@@ -214,28 +214,22 @@ export function isSandboxEventType(
 /**
  * Type guard for sandbox_created event
  */
-export function isSandboxCreatedEvent(
-  event: SandboxSSEEvent
-): event is SandboxCreatedSSEEvent {
-  return event.type === "sandbox_created";
+export function isSandboxCreatedEvent(event: SandboxSSEEvent): event is SandboxCreatedSSEEvent {
+  return event.type === 'sandbox_created';
 }
 
 /**
  * Type guard for desktop_started event
  */
-export function isDesktopStartedEvent(
-  event: SandboxSSEEvent
-): event is DesktopStartedSSEEvent {
-  return event.type === "desktop_started";
+export function isDesktopStartedEvent(event: SandboxSSEEvent): event is DesktopStartedSSEEvent {
+  return event.type === 'desktop_started';
 }
 
 /**
  * Type guard for terminal_started event
  */
-export function isTerminalStartedEvent(
-  event: SandboxSSEEvent
-): event is TerminalStartedSSEEvent {
-  return event.type === "terminal_started";
+export function isTerminalStartedEvent(event: SandboxSSEEvent): event is TerminalStartedSSEEvent {
+  return event.type === 'terminal_started';
 }
 
 // ============================================================================
@@ -246,13 +240,13 @@ export function isTerminalStartedEvent(
  * Project sandbox lifecycle status
  */
 export type ProjectSandboxStatus =
-  | "pending"
-  | "creating"
-  | "running"
-  | "unhealthy"
-  | "stopped"
-  | "terminated"
-  | "error";
+  | 'pending'
+  | 'creating'
+  | 'running'
+  | 'unhealthy'
+  | 'stopped'
+  | 'terminated'
+  | 'error';
 
 /**
  * Project sandbox information (v2 API)

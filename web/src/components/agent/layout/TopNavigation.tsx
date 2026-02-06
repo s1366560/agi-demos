@@ -50,9 +50,7 @@ export function TopNavigation({
     <header className="h-16 flex items-center justify-between px-6 border-b border-slate-200 dark:border-border-dark bg-surface-light dark:bg-surface-dark">
       {/* Breadcrumbs / Workspace Name */}
       <div className="flex items-center gap-4">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
-          {workspaceName}
-        </h1>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{workspaceName}</h1>
 
         {/* Navigation Tabs */}
         <nav className="flex items-center gap-1 ml-6" aria-label="主导航">
@@ -121,7 +119,7 @@ export function TopNavigation({
           {/* Notifications */}
           <button
             className="relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
-            aria-label={notificationCount > 0 ? `通知 (${notificationCount} 条未读)` : "通知"}
+            aria-label={notificationCount > 0 ? `通知 (${notificationCount} 条未读)` : '通知'}
           >
             <MaterialIcon name="notifications" size={20} />
             {notificationCount > 0 && (

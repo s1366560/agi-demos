@@ -10,17 +10,17 @@
  * @module components/agent/StepAdjustmentModal
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo } from 'react';
 
 import {
   CheckOutlined,
   CloseOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-} from "@ant-design/icons";
-import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from "antd";
+} from '@ant-design/icons';
+import { Modal, List, Tag, Button, Space, Typography, Empty, Alert } from 'antd';
 
-import type { StepAdjustment, AdjustmentType } from "../../types/agent";
+import type { StepAdjustment, AdjustmentType } from '../../types/agent';
 
 const { Text, Paragraph } = Typography;
 
@@ -51,19 +51,19 @@ export interface StepAdjustmentModalProps {
  */
 const getAdjustmentTypeColor = (type: AdjustmentType): string => {
   switch (type) {
-    case "modify":
-      return "blue";
-    case "retry":
-      return "orange";
-    case "skip":
-      return "default";
-    case "add_before":
-    case "add_after":
-      return "green";
-    case "replace":
-      return "purple";
+    case 'modify':
+      return 'blue';
+    case 'retry':
+      return 'orange';
+    case 'skip':
+      return 'default';
+    case 'add_before':
+    case 'add_after':
+      return 'green';
+    case 'replace':
+      return 'purple';
     default:
-      return "default";
+      return 'default';
   }
 };
 
@@ -76,13 +76,9 @@ interface AdjustmentItemProps {
   onReject: (stepId: string) => void;
 }
 
-const AdjustmentItem: React.FC<AdjustmentItemProps> = ({
-  adjustment,
-  onApprove,
-  onReject,
-}) => {
-  const hasNewInput = adjustment.new_tool_input &&
-    Object.keys(adjustment.new_tool_input).length > 0;
+const AdjustmentItem: React.FC<AdjustmentItemProps> = ({ adjustment, onApprove, onReject }) => {
+  const hasNewInput =
+    adjustment.new_tool_input && Object.keys(adjustment.new_tool_input).length > 0;
 
   return (
     <List.Item
@@ -123,9 +119,7 @@ const AdjustmentItem: React.FC<AdjustmentItemProps> = ({
         }
         description={
           <div className="mt-1">
-            <Paragraph className="mb-1 text-sm">
-              {adjustment.reason}
-            </Paragraph>
+            <Paragraph className="mb-1 text-sm">{adjustment.reason}</Paragraph>
             {hasNewInput && (
               <Alert
                 type="info"
@@ -160,7 +154,7 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
   onApproveAll,
   onRejectAll,
   onClose,
-  className = "",
+  className = '',
 }) => {
   const { hasAdjustments, adjustmentCount, footer } = useMemo(() => {
     const count = adjustments?.length ?? 0;
@@ -169,29 +163,27 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
     const modalFooter = has ? (
       <div className="flex justify-between">
         <Space>
-          <Button
-            icon={<CloseCircleOutlined />}
-            onClick={onRejectAll}
-            className="text-red-500"
-          >
+          <Button icon={<CloseCircleOutlined />} onClick={onRejectAll} className="text-red-500">
             Reject All
           </Button>
-          <Button
-            icon={<CheckCircleOutlined />}
-            onClick={onApproveAll}
-            type="primary"
-          >
+          <Button icon={<CheckCircleOutlined />} onClick={onApproveAll} type="primary">
             Approve All
           </Button>
         </Space>
         <Button onClick={onClose}>Cancel</Button>
-        <Button type="primary" onClick={() => { onApproveAll(); onClose(); }}>
+        <Button
+          type="primary"
+          onClick={() => {
+            onApproveAll();
+            onClose();
+          }}
+        >
           Confirm
         </Button>
       </div>
     ) : (
       <Button onClick={onClose}>Close</Button>
-      );
+    );
 
     return { hasAdjustments: has, adjustmentCount: count, footer: modalFooter };
   }, [adjustments, onApproveAll, onRejectAll, onClose]);
@@ -202,9 +194,7 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
         <Space>
           <CheckCircleOutlined className="text-blue-500" />
           <span>Step Adjustments Review</span>
-          {hasAdjustments && (
-            <Tag color="blue">{adjustmentCount} pending</Tag>
-          )}
+          {hasAdjustments && <Tag color="blue">{adjustmentCount} pending</Tag>}
         </Space>
       }
       open={visible}
@@ -215,10 +205,7 @@ export const StepAdjustmentModal: React.FC<StepAdjustmentModalProps> = ({
       className={className}
     >
       {!hasAdjustments ? (
-        <Empty
-          description="No adjustments to review"
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
+        <Empty description="No adjustments to review" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (
         <List
           dataSource={adjustments!}

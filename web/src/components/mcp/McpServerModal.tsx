@@ -5,25 +5,15 @@
  * transport configuration.
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useTranslation } from "react-i18next";
+import { useTranslation } from 'react-i18next';
 
-import { Modal, Form, Input, Select, Switch, message, Alert } from "antd";
+import { Modal, Form, Input, Select, Switch, message, Alert } from 'antd';
 
-import { useMCPStore } from "../../stores/mcp";
+import { useMCPStore } from '../../stores/mcp';
 
-import type {
-  MCPServerResponse,
-  MCPServerCreate,
-  MCPServerType,
-} from "../../types/agent";
+import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '../../types/agent';
 
 const { TextArea } = Input;
 
@@ -36,10 +26,10 @@ interface McpServerModalProps {
 
 // Default transport configs by type
 const DEFAULT_TRANSPORT_CONFIGS: Record<MCPServerType, object> = {
-  stdio: { command: "", args: [], env: {} },
-  sse: { url: "", headers: {} },
-  http: { url: "", headers: {} },
-  websocket: { url: "" },
+  stdio: { command: '', args: [], env: {} },
+  sse: { url: '', headers: {} },
+  http: { url: '', headers: {} },
+  websocket: { url: '' },
 };
 
 export const McpServerModal: React.FC<McpServerModalProps> = ({
@@ -75,10 +65,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // Check if server actually changed
-    if (
-      prevServerIdRef.current === server?.id &&
-      prevServerIdRef.current !== undefined
-    ) {
+    if (prevServerIdRef.current === server?.id && prevServerIdRef.current !== undefined) {
       return;
     }
     prevServerIdRef.current = server?.id;
@@ -95,7 +82,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
     } else {
       form.resetFields();
       form.setFieldsValue({
-        server_type: "stdio",
+        server_type: 'stdio',
         enabled: true,
       });
       setJsonConfig(JSON.stringify(DEFAULT_TRANSPORT_CONFIGS.stdio, null, 2));
@@ -123,10 +110,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   }, []);
 
   // Build transport config from JSON
-  const buildTransportConfig = useCallback((): Record<
-    string,
-    unknown
-  > | null => {
+  const buildTransportConfig = useCallback((): Record<string, unknown> | null => {
     if (!validateJsonConfig(jsonConfig)) {
       return null;
     }
@@ -136,13 +120,13 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   // Handle submit
   const handleSubmit = useCallback(async () => {
     try {
-      await form.validateFields(["name", "server_type"]);
+      await form.validateFields(['name', 'server_type']);
 
       const values = form.getFieldsValue();
       const transportConfig = buildTransportConfig();
 
       if (!transportConfig) {
-        message.error(t("tenant.mcpServers.invalidConfig"));
+        message.error(t('tenant.mcpServers.invalidConfig'));
         return;
       }
 
@@ -156,10 +140,10 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
 
       if (isEdit && server) {
         await updateServer(server.id, data);
-        message.success(t("tenant.mcpServers.updateSuccess"));
+        message.success(t('tenant.mcpServers.updateSuccess'));
       } else {
         await createServer(data);
-        message.success(t("tenant.mcpServers.createSuccess"));
+        message.success(t('tenant.mcpServers.createSuccess'));
       }
 
       onSuccess();
@@ -167,83 +151,64 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
       const err = error as { errorFields?: unknown };
       if (!err.errorFields) {
         // Not a form validation error
-        console.error("Submit error:", error);
+        console.error('Submit error:', error);
       }
     }
-  }, [
-    form,
-    buildTransportConfig,
-    isEdit,
-    server,
-    updateServer,
-    createServer,
-    onSuccess,
-    t,
-  ]);
+  }, [form, buildTransportConfig, isEdit, server, updateServer, createServer, onSuccess, t]);
 
   return (
     <Modal
-      title={
-        isEdit
-          ? t("tenant.mcpServers.editTitle")
-          : t("tenant.mcpServers.createTitle")
-      }
+      title={isEdit ? t('tenant.mcpServers.editTitle') : t('tenant.mcpServers.createTitle')}
       open={isOpen}
       onCancel={onClose}
       onOk={handleSubmit}
       confirmLoading={isSubmitting}
-      okText={isEdit ? t("common.save") : t("common.create")}
-      cancelText={t("common.cancel")}
+      okText={isEdit ? t('common.save') : t('common.create')}
+      cancelText={t('common.cancel')}
       width={600}
       destroyOnHidden
     >
       <Form form={form} layout="vertical" className="mt-4">
         {/* Name */}
         <Form.Item
-          label={t("tenant.mcpServers.fields.name")}
+          label={t('tenant.mcpServers.fields.name')}
           name="name"
           rules={[
             {
               required: true,
-              message: t("tenant.mcpServers.validation.nameRequired"),
+              message: t('tenant.mcpServers.validation.nameRequired'),
             },
             {
               max: 100,
-              message: t("tenant.mcpServers.validation.nameTooLong"),
+              message: t('tenant.mcpServers.validation.nameTooLong'),
             },
           ]}
         >
-          <Input placeholder={t("tenant.mcpServers.placeholders.name")} />
+          <Input placeholder={t('tenant.mcpServers.placeholders.name')} />
         </Form.Item>
 
         {/* Description */}
-        <Form.Item
-          label={t("tenant.mcpServers.fields.description")}
-          name="description"
-        >
-          <TextArea
-            rows={2}
-            placeholder={t("tenant.mcpServers.placeholders.description")}
-          />
+        <Form.Item label={t('tenant.mcpServers.fields.description')} name="description">
+          <TextArea rows={2} placeholder={t('tenant.mcpServers.placeholders.description')} />
         </Form.Item>
 
         {/* Server Type */}
         <Form.Item
-          label={t("tenant.mcpServers.fields.serverType")}
+          label={t('tenant.mcpServers.fields.serverType')}
           name="server_type"
           rules={[
             {
               required: true,
-              message: t("tenant.mcpServers.validation.typeRequired"),
+              message: t('tenant.mcpServers.validation.typeRequired'),
             },
           ]}
         >
           <Select
             options={[
-              { label: "STDIO (Standard I/O)", value: "stdio" },
-              { label: "SSE (Server-Sent Events)", value: "sse" },
-              { label: "HTTP", value: "http" },
-              { label: "WebSocket", value: "websocket" },
+              { label: 'STDIO (Standard I/O)', value: 'stdio' },
+              { label: 'SSE (Server-Sent Events)', value: 'sse' },
+              { label: 'HTTP', value: 'http' },
+              { label: 'WebSocket', value: 'websocket' },
             ]}
             onChange={handleServerTypeChange}
           />
@@ -251,7 +216,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
 
         {/* Enabled */}
         <Form.Item
-          label={t("tenant.mcpServers.fields.enabled")}
+          label={t('tenant.mcpServers.fields.enabled')}
           name="enabled"
           valuePropName="checked"
         >
@@ -259,7 +224,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         </Form.Item>
 
         {/* JSON Config */}
-        <Form.Item label={t("tenant.mcpServers.fields.transportConfig")}>
+        <Form.Item label={t('tenant.mcpServers.fields.transportConfig')}>
           <TextArea
             value={jsonConfig}
             onChange={(e) => {
@@ -268,11 +233,9 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
             }}
             rows={8}
             className="font-mono text-sm"
-            status={jsonError ? "error" : undefined}
+            status={jsonError ? 'error' : undefined}
           />
-          {jsonError && (
-            <Alert type="error" message={jsonError} showIcon className="mt-2" />
-          )}
+          {jsonError && <Alert type="error" message={jsonError} showIcon className="mt-2" />}
         </Form.Item>
       </Form>
     </Modal>

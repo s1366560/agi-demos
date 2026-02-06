@@ -4,12 +4,12 @@
  * Tests for the Agent layout component.
  */
 
-import { BrowserRouter, Route, Routes, MemoryRouter } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, MemoryRouter } from 'react-router-dom';
 
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { AgentLayout } from '@/layouts/AgentLayout'
+import { AgentLayout } from '@/layouts/AgentLayout';
 
 // Mock stores
 vi.mock('@/stores/project', () => ({
@@ -19,41 +19,37 @@ vi.mock('@/stores/project', () => ({
     setCurrentProject: vi.fn(),
     getProject: vi.fn(),
   }),
-}))
+}));
 
 vi.mock('@/stores/tenant', () => ({
   useTenantStore: () => ({
     currentTenant: { id: 'tenant-123', name: 'Test Tenant' },
   }),
-}))
+}));
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     user: { name: 'Test User', email: 'test@example.com' },
     logout: vi.fn(),
   }),
-}))
+}));
 
 vi.mock('@/components/common/RouteErrorBoundary', () => ({
   RouteErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}))
+}));
 
 function renderWithRouter(ui: React.ReactElement, initialEntries = ['/project/proj-123/agent']) {
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      {ui}
-    </MemoryRouter>
-  )
+  return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
 }
 
 describe('AgentLayout', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+  });
 
   afterEach(() => {
-    vi.restoreAllMocks()
-  })
+    vi.restoreAllMocks();
+  });
 
   describe('Rendering', () => {
     it('should render the layout with sidebar and main content', () => {
@@ -62,12 +58,12 @@ describe('AgentLayout', () => {
           <Route path="/project/:projectId/agent" element={<AgentLayout />}>
             <Route path="" element={<div>Agent Content</div>} />
           </Route>
-        </Routes>,
-      )
+        </Routes>
+      );
 
       // Check that the main layout structure exists
-      expect(screen.getByText('Agent Content')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Agent Content')).toBeInTheDocument();
+    });
 
     it('should render the brand header', () => {
       renderWithRouter(
@@ -75,13 +71,13 @@ describe('AgentLayout', () => {
           <Route path="/project/:projectId/agent" element={<AgentLayout />}>
             <Route path="" element={<div>Content</div>} />
           </Route>
-        </Routes>,
-      )
+        </Routes>
+      );
 
       // Check for brand indicator
-      const brandIcon = document.querySelector('.material-symbols-outlined')
-      expect(brandIcon).toBeTruthy()
-    })
+      const brandIcon = document.querySelector('.material-symbols-outlined');
+      expect(brandIcon).toBeTruthy();
+    });
 
     it('should render navigation items', () => {
       renderWithRouter(
@@ -91,14 +87,14 @@ describe('AgentLayout', () => {
           </Route>
         </Routes>,
         ['/project/proj-123/agent']
-      )
+      );
 
       // Check for navigation items
-      expect(screen.getByText('Back to Project')).toBeInTheDocument()
-      expect(screen.getByText('Project Overview')).toBeInTheDocument()
-      expect(screen.getByText('Memories')).toBeInTheDocument()
-      expect(screen.getByText('Entities')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Back to Project')).toBeInTheDocument();
+      expect(screen.getByText('Project Overview')).toBeInTheDocument();
+      expect(screen.getByText('Memories')).toBeInTheDocument();
+      expect(screen.getByText('Entities')).toBeInTheDocument();
+    });
 
     it('should render the top tabs', () => {
       renderWithRouter(
@@ -106,14 +102,14 @@ describe('AgentLayout', () => {
           <Route path="/project/:projectId/agent" element={<AgentLayout />}>
             <Route path="" element={<div>Content</div>} />
           </Route>
-        </Routes>,
-      )
+        </Routes>
+      );
 
-      expect(screen.getByText('Dashboard')).toBeInTheDocument()
-      expect(screen.getByText('Activity Logs')).toBeInTheDocument()
-      expect(screen.getByText('Patterns')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      expect(screen.getByText('Activity Logs')).toBeInTheDocument();
+      expect(screen.getByText('Patterns')).toBeInTheDocument();
+    });
+  });
 
   describe('Sidebar Collapse', () => {
     it('should render expandable sidebar', () => {
@@ -122,14 +118,14 @@ describe('AgentLayout', () => {
           <Route path="/project/:projectId/agent" element={<AgentLayout />}>
             <Route path="" element={<div>Content</div>} />
           </Route>
-        </Routes>,
-      )
+        </Routes>
+      );
 
       // Should have collapse toggle button
-      const collapseButton = document.querySelector('button[title*="sidebar" i]')
-      expect(collapseButton).toBeTruthy()
-    })
-  })
+      const collapseButton = document.querySelector('button[title*="sidebar" i]');
+      expect(collapseButton).toBeTruthy();
+    });
+  });
 
   describe('User Profile', () => {
     it('should display user information', () => {
@@ -138,12 +134,12 @@ describe('AgentLayout', () => {
           <Route path="/project/:projectId/agent" element={<AgentLayout />}>
             <Route path="" element={<div>Content</div>} />
           </Route>
-        </Routes>,
-      )
+        </Routes>
+      );
 
-      expect(screen.getByText('Test User')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Test User')).toBeInTheDocument();
+    });
+  });
 
   describe('Agent Status', () => {
     it('should display online status badge', () => {
@@ -152,10 +148,10 @@ describe('AgentLayout', () => {
           <Route path="/project/:projectId/agent" element={<AgentLayout />}>
             <Route path="" element={<div>Content</div>} />
           </Route>
-        </Routes>,
-      )
+        </Routes>
+      );
 
-      expect(screen.getByText('Agent Online')).toBeInTheDocument()
-    })
-  })
-})
+      expect(screen.getByText('Agent Online')).toBeInTheDocument();
+    });
+  });
+});

@@ -69,8 +69,17 @@ export function ToolExecutionLive({
 
   const getToolIcon = (name: string) => {
     const lowerName = name.toLowerCase();
-    if (lowerName.includes('web_search') || (lowerName.includes('web') && lowerName.includes('search'))) return 'language';
-    if (lowerName.includes('web_scrape') || (lowerName.includes('scrape') || lowerName.includes('web'))) return 'public';
+    if (
+      lowerName.includes('web_search') ||
+      (lowerName.includes('web') && lowerName.includes('search'))
+    )
+      return 'language';
+    if (
+      lowerName.includes('web_scrape') ||
+      lowerName.includes('scrape') ||
+      lowerName.includes('web')
+    )
+      return 'public';
     if (lowerName.includes('search') || lowerName.includes('memory')) return 'search';
     if (lowerName.includes('entity')) return 'account_tree';
     if (lowerName.includes('episode')) return 'history';
@@ -92,12 +101,8 @@ export function ToolExecutionLive({
 
           {/* Tool Name */}
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-              {toolName}
-            </h4>
-            {executionMode && (
-              <p className="text-xs text-slate-500">{executionMode}</p>
-            )}
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{toolName}</h4>
+            {executionMode && <p className="text-xs text-slate-500">{executionMode}</p>}
           </div>
         </div>
 

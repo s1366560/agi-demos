@@ -2,9 +2,9 @@
  * ImageViewer - Display images with zoom and preview capabilities
  */
 
-import React, { useState } from "react";
+import React, { useState } from 'react';
 
-import { Image, Spin } from "antd";
+import { Image, Spin } from 'antd';
 
 export interface ImageViewerProps {
   /** Image source URL */
@@ -25,7 +25,7 @@ export interface ImageViewerProps {
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({
   src,
-  alt = "Artifact image",
+  alt = 'Artifact image',
   previewSrc,
   maxHeight = 400,
   compact: _compact = false,
@@ -48,8 +48,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
     <div
       className="image-viewer relative"
       style={{
-        maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
-        overflow: "hidden",
+        maxHeight: typeof maxHeight === 'number' ? maxHeight : undefined,
+        overflow: 'hidden',
       }}
     >
       {loading && (
@@ -73,10 +73,10 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           )
         }
         style={{
-          maxHeight: typeof maxHeight === "number" ? maxHeight : undefined,
-          maxWidth: "100%",
-          objectFit: "contain",
-          display: loading ? "none" : "block",
+          maxHeight: typeof maxHeight === 'number' ? maxHeight : undefined,
+          maxWidth: '100%',
+          objectFit: 'contain',
+          display: loading ? 'none' : 'block',
         }}
         onLoad={handleLoad}
         onError={handleError}

@@ -28,8 +28,7 @@ export interface UnknownError extends Error {
  */
 export function isUnknownError(error: unknown): error is UnknownError {
   return (
-    error instanceof Error ||
-    (typeof error === 'object' && error !== null && 'message' in error)
+    error instanceof Error || (typeof error === 'object' && error !== null && 'message' in error)
   );
 }
 

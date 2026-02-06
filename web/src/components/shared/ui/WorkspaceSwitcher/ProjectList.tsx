@@ -4,11 +4,11 @@
  * Renders a list of project options with back to tenant button.
  */
 
-import { useEffect, type KeyboardEvent } from 'react'
+import { useEffect, type KeyboardEvent } from 'react';
 
-import { useWorkspaceContext } from './WorkspaceContext'
+import { useWorkspaceContext } from './WorkspaceContext';
 
-import type { ProjectListProps } from './types'
+import type { ProjectListProps } from './types';
 
 export const ProjectList: React.FC<ProjectListProps> = ({
   projects,
@@ -17,72 +17,67 @@ export const ProjectList: React.FC<ProjectListProps> = ({
   onBackToTenant,
   backToTenantLabel = 'Back to Tenant',
 }) => {
-  const {
-    focusedIndex,
-    setFocusedIndex,
-    registerMenuItemRef,
-    getMenuItemRef,
-    setMenuItemsCount,
-  } = useWorkspaceContext()
+  const { focusedIndex, setFocusedIndex, registerMenuItemRef, getMenuItemRef, setMenuItemsCount } =
+    useWorkspaceContext();
 
-  const totalItems = projects.length + 1 // projects + back button
+  const totalItems = projects.length + 1; // projects + back button
 
   // Update menu items count
   useEffect(() => {
-    setMenuItemsCount(totalItems)
-  }, [totalItems, setMenuItemsCount])
+    setMenuItemsCount(totalItems);
+  }, [totalItems, setMenuItemsCount]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
     switch (e.key) {
       case 'ArrowDown': {
-        e.preventDefault()
-        const nextIndex = (index + 1) % totalItems
-        setFocusedIndex(nextIndex)
-        getMenuItemRef(nextIndex)?.focus()
-        break
+        e.preventDefault();
+        const nextIndex = (index + 1) % totalItems;
+        setFocusedIndex(nextIndex);
+        getMenuItemRef(nextIndex)?.focus();
+        break;
       }
       case 'ArrowUp': {
-        e.preventDefault()
-        const prevIndex = (index - 1 + totalItems) % totalItems
-        setFocusedIndex(prevIndex)
-        getMenuItemRef(prevIndex)?.focus()
-        break
+        e.preventDefault();
+        const prevIndex = (index - 1 + totalItems) % totalItems;
+        setFocusedIndex(prevIndex);
+        getMenuItemRef(prevIndex)?.focus();
+        break;
       }
       case 'Home': {
-        e.preventDefault()
-        setFocusedIndex(0)
-        getMenuItemRef(0)?.focus()
-        break
+        e.preventDefault();
+        setFocusedIndex(0);
+        getMenuItemRef(0)?.focus();
+        break;
       }
       case 'End': {
-        e.preventDefault()
-        const lastIndex = totalItems - 1
-        setFocusedIndex(lastIndex)
-        getMenuItemRef(lastIndex)?.focus()
-        break
+        e.preventDefault();
+        const lastIndex = totalItems - 1;
+        setFocusedIndex(lastIndex);
+        getMenuItemRef(lastIndex)?.focus();
+        break;
       }
       case 'Escape': {
-        e.preventDefault()
+        e.preventDefault();
         // Close handled by parent
-        break
+        break;
       }
       case 'Enter':
       case ' ': {
-        e.preventDefault()
+        e.preventDefault();
         // Trigger click on the button element to select the project
-        const currentButton = getMenuItemRef(index)
+        const currentButton = getMenuItemRef(index);
         if (currentButton) {
-          currentButton.click()
+          currentButton.click();
         }
-        break
+        break;
       }
     }
-  }
+  };
 
   return (
     <>
       {projects.map((project, index) => {
-        const isSelected = currentProjectId === project.id
+        const isSelected = currentProjectId === project.id;
 
         return (
           <button
@@ -101,9 +96,11 @@ export const ProjectList: React.FC<ProjectListProps> = ({
           >
             <span className="material-symbols-outlined text-[18px] opacity-70">folder</span>
             <span className="truncate text-sm font-medium">{project.name}</span>
-            {isSelected && <span className="material-symbols-outlined text-[16px] ml-auto">check</span>}
+            {isSelected && (
+              <span className="material-symbols-outlined text-[16px] ml-auto">check</span>
+            )}
           </button>
-        )
+        );
       })}
       <div className="h-px bg-slate-100 dark:bg-slate-700 my-2" />
       <button
@@ -118,5 +115,5 @@ export const ProjectList: React.FC<ProjectListProps> = ({
         <span className="text-sm font-medium">{backToTenantLabel}</span>
       </button>
     </>
-  )
-}
+  );
+};

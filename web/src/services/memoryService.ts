@@ -166,7 +166,10 @@ export const memoryService = {
    * });
    * ```
    */
-  shareMemory: async (memoryId: string, shareData: MemoryShareCreate): Promise<MemoryShareResponse> => {
+  shareMemory: async (
+    memoryId: string,
+    shareData: MemoryShareCreate
+  ): Promise<MemoryShareResponse> => {
     const response = await apiFetch.post(`/memories/${memoryId}/shares`, shareData);
     return response.json();
   },

@@ -208,7 +208,7 @@ class SandboxOrchestrator:
             # Parse result
             status = self._parse_desktop_result(result)
 
-            logger.info(f"Desktop started for sandbox {sandbox_id}: {status.url}")
+            logger.info(f"Desktop started for sandbox {sandbox_id}: {status.url}, running={status.running}")
 
             return status
 
@@ -259,6 +259,7 @@ class SandboxOrchestrator:
         config = config or TerminalConfig()
 
         try:
+            logger.debug(f"Starting terminal for sandbox {sandbox_id} with config: port={config.port}")
             result = await self._adapter.call_tool(
                 sandbox_id,
                 "start_terminal",
@@ -268,10 +269,14 @@ class SandboxOrchestrator:
                 },
                 timeout=self._default_timeout,
             )
+            logger.debug(f"MCP call_tool result for start_terminal: {result}")
 
             status = self._parse_terminal_result(result)
 
-            logger.info(f"Terminal started for sandbox {sandbox_id}: {status.url}")
+            if status.running:
+                logger.info(f"Terminal started for sandbox {sandbox_id}: {status.url}")
+            else:
+                logger.warning(f"Terminal did not start for sandbox {sandbox_id}, status: {status}")
 
             return status
 
@@ -374,12 +379,14 @@ class SandboxOrchestrator:
         """Parse MCP tool result to DesktopStatus."""
         content_list = result.get("content", [])
         if not content_list:
+            logger.warning(f"Desktop result has no content: {result}")
             return DesktopStatus(running=False, url=None, display="", resolution="", port=0)
 
         try:
             import json
 
-            data = json.loads(content_list[0].get("text", "{}"))
+            text_content = content_list[0].get("text", "{}")
+            data = json.loads(text_content)
             # If success is True, consider desktop as running
             running = data.get("running", data.get("success", False))
             return DesktopStatus(
@@ -390,19 +397,24 @@ class SandboxOrchestrator:
                 port=data.get("port", 0),
                 pid=data.get("xvfb_pid") or data.get("xvnc_pid"),
             )
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.error(f"Failed to parse desktop result: {e}, content: {content_list}")
             return DesktopStatus(running=False, url=None, display="", resolution="", port=0)
 
     def _parse_terminal_result(self, result: Dict[str, Any]) -> TerminalStatus:
         """Parse MCP tool result to TerminalStatus."""
+        logger.debug(f"Parsing terminal result: {result}")
         content_list = result.get("content", [])
         if not content_list:
+            logger.warning(f"Terminal result has no content: {result}")
             return TerminalStatus(running=False, url=None, port=0)
 
         try:
             import json
 
-            data = json.loads(content_list[0].get("text", "{}"))
+            text_content = content_list[0].get("text", "{}")
+            logger.debug(f"Terminal result text: {text_content}")
+            data = json.loads(text_content)
             # If success is True, consider terminal as running
             running = data.get("running", data.get("success", False))
             return TerminalStatus(
@@ -411,5 +423,6 @@ class SandboxOrchestrator:
                 port=data.get("port", 0),
                 pid=data.get("pid"),
             )
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.error(f"Failed to parse terminal result: {e}, content: {content_list}")
             return TerminalStatus(running=False, url=None, port=0)

@@ -16,14 +16,17 @@ interface PlanModeBannerProps {
   onExit: () => void;
 }
 
-const modeConfig: Record<AgentMode, {
-  icon: React.ReactNode;
-  label: string;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-  description: string;
-}> = {
+const modeConfig: Record<
+  AgentMode,
+  {
+    icon: React.ReactNode;
+    label: string;
+    color: string;
+    bgColor: string;
+    borderColor: string;
+    description: string;
+  }
+> = {
   build: {
     icon: <Hammer size={16} />,
     label: 'Build Mode',
@@ -50,44 +53,42 @@ const modeConfig: Record<AgentMode, {
   },
 };
 
-export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({
-  status,
-  onViewPlan,
-  onExit,
-}) => {
+export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({ status, onViewPlan, onExit }) => {
   const currentMode = status.current_mode || 'plan';
   const config = modeConfig[currentMode];
 
   return (
-    <div className={`
+    <div
+      className={`
       mx-4 mt-4 mb-2 p-4 rounded-xl border
       ${config.bgColor} ${config.borderColor}
       animate-slide-down
-    `}>
+    `}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={`
+          <div
+            className={`
             w-10 h-10 rounded-lg bg-white dark:bg-slate-800 shadow-sm
             flex items-center justify-center
             ${config.color}
-          `}>
+          `}
+          >
             {config.icon}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className={`font-semibold ${config.color}`}>
-                {config.label}
-              </h3>
-              <LazyTag className={`
+              <h3 className={`font-semibold ${config.color}`}>{config.label}</h3>
+              <LazyTag
+                className={`
                 ${config.bgColor} ${config.color} border-0
                 text-xs font-medium
-              `}>
+              `}
+              >
                 Active
               </LazyTag>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              {config.description}
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">{config.description}</p>
           </div>
         </div>
 
@@ -103,13 +104,7 @@ export const PlanModeBanner: React.FC<PlanModeBannerProps> = ({
               View Plan
             </LazyButton>
           )}
-          <LazyButton
-            type="primary"
-            danger
-            size="small"
-            icon={<X size={14} />}
-            onClick={onExit}
-          >
+          <LazyButton type="primary" danger size="small" icon={<X size={14} />} onClick={onExit}>
             Exit
           </LazyButton>
         </div>

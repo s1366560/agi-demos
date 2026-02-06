@@ -4,14 +4,14 @@
  * Notification bell with badge count.
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { Bell } from 'lucide-react'
+import { Bell } from 'lucide-react';
 
 export interface NotificationsProps {
-  count?: number
-  onClick?: () => void
-  ariaLabel?: string
+  count?: number;
+  onClick?: () => void;
+  ariaLabel?: string;
 }
 
 export const Notifications = React.memo(function Notifications({
@@ -31,7 +31,7 @@ export const Notifications = React.memo(function Notifications({
         <span className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 size-2 bg-red-500 rounded-full border-2 border-white dark:border-surface-dark" />
       )}
     </button>
-  )
-})
+  );
+});
 
-Notifications.displayName = 'AppHeader.Notifications'
+Notifications.displayName = 'AppHeader.Notifications';

@@ -113,16 +113,14 @@ describe('useWebSocket', () => {
     global.WebSocket = originalWebSocket;
 
     // Clean up instances
-    allCreatedWebSockets.forEach(ws => ws.close());
+    allCreatedWebSockets.forEach((ws) => ws.close());
     lastCreatedWebSocket = null;
     allCreatedWebSockets = [];
   });
 
   describe('Initial State', () => {
     it('should start with closed status', () => {
-      const { result } = renderHook(() =>
-        useWebSocket({ url: 'ws://localhost:8080' })
-      );
+      const { result } = renderHook(() => useWebSocket({ url: 'ws://localhost:8080' }));
 
       expect(result.current.status).toBe('closed');
       expect(result.current.ws).toBeNull();
@@ -142,9 +140,7 @@ describe('useWebSocket', () => {
 
     it('should accept function for url', () => {
       const getUrl = () => 'ws://localhost:8080';
-      const { result } = renderHook(() =>
-        useWebSocket({ url: getUrl })
-      );
+      const { result } = renderHook(() => useWebSocket({ url: getUrl }));
 
       expect(result.current.status).toBe('closed');
     });

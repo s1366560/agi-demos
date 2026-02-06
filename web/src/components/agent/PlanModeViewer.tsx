@@ -7,7 +7,7 @@
  * Part of Plan Mode UI.
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo } from 'react';
 
 import {
   CheckCircleOutlined,
@@ -16,19 +16,15 @@ import {
   ClockCircleOutlined,
   MinusCircleOutlined,
   StopOutlined,
-} from "@ant-design/icons";
-import {
-  Typography,
-  Card,
-  Tag,
-  Space,
-  Collapse,
-  Alert,
-  Descriptions,
-  Badge,
-} from "antd";
+} from '@ant-design/icons';
+import { Typography, Card, Tag, Space, Collapse, Alert, Descriptions, Badge } from 'antd';
 
-import { ExecutionPlan, ExecutionStep, ExecutionStepStatus, ReflectionResult } from "../../types/agent";
+import {
+  ExecutionPlan,
+  ExecutionStep,
+  ExecutionStepStatus,
+  ReflectionResult,
+} from '../../types/agent';
 
 const { Title, Text, Paragraph } = Typography;
 const { Panel } = Collapse;
@@ -44,15 +40,15 @@ interface PlanModeViewerProps {
  */
 const getStepIcon = (status: ExecutionStepStatus) => {
   switch (status) {
-    case "completed":
+    case 'completed':
       return <CheckCircleOutlined className="text-emerald-500" />;
-    case "failed":
+    case 'failed':
       return <CloseCircleOutlined className="text-red-500" />;
-    case "running":
+    case 'running':
       return <LoadingOutlined className="text-blue-500" />;
-    case "skipped":
+    case 'skipped':
       return <MinusCircleOutlined className="text-slate-400" />;
-    case "cancelled":
+    case 'cancelled':
       return <StopOutlined className="text-slate-400" />;
     default:
       return <ClockCircleOutlined className="text-slate-300" />;
@@ -64,18 +60,18 @@ const getStepIcon = (status: ExecutionStepStatus) => {
  */
 const getStepColor = (status: ExecutionStepStatus): string => {
   switch (status) {
-    case "completed":
-      return "success";
-    case "failed":
-      return "error";
-    case "running":
-      return "processing";
-    case "skipped":
-      return "default";
-    case "cancelled":
-      return "warning";
+    case 'completed':
+      return 'success';
+    case 'failed':
+      return 'error';
+    case 'running':
+      return 'processing';
+    case 'skipped':
+      return 'default';
+    case 'cancelled':
+      return 'warning';
     default:
-      return "default";
+      return 'default';
   }
 };
 
@@ -84,20 +80,20 @@ const getStepColor = (status: ExecutionStepStatus): string => {
  */
 const getStepStatusText = (status: ExecutionStepStatus): string => {
   switch (status) {
-    case "pending":
-      return "Pending";
-    case "running":
-      return "Running";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-    case "skipped":
-      return "Skipped";
-    case "cancelled":
-      return "Cancelled";
+    case 'pending':
+      return 'Pending';
+    case 'running':
+      return 'Running';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'skipped':
+      return 'Skipped';
+    case 'cancelled':
+      return 'Cancelled';
     default:
-      return "Unknown";
+      return 'Unknown';
   }
 };
 
@@ -141,7 +137,7 @@ const StepDisplay: React.FC<StepDisplayProps> = ({ step, index }) => {
           {hasDependencies && (
             <div className="mb-2">
               <Text type="secondary" className="text-xs">
-                Dependencies: {step.dependencies.join(", ")}
+                Dependencies: {step.dependencies.join(', ')}
               </Text>
             </div>
           )}
@@ -188,7 +184,7 @@ const StepDisplay: React.FC<StepDisplayProps> = ({ step, index }) => {
 export const PlanModeViewer: React.FC<PlanModeViewerProps> = ({
   plan,
   reflection,
-  className = "",
+  className = '',
 }) => {
   const { sortedSteps, reflectionBadge, reflectionSummary } = useMemo(() => {
     if (!plan) {
@@ -210,24 +206,28 @@ export const PlanModeViewer: React.FC<PlanModeViewerProps> = ({
 
     if (reflection) {
       const assessmentColors: Record<string, string> = {
-        on_track: "success",
-        needs_adjustment: "warning",
-        off_track: "error",
-        complete: "success",
-        failed: "error",
+        on_track: 'success',
+        needs_adjustment: 'warning',
+        off_track: 'error',
+        complete: 'success',
+        failed: 'error',
       };
 
       reflectionBadge = (
         <Badge
           status={assessmentColors[reflection.assessment] as any}
-          text={reflection.assessment.replace(/_/g, " ")}
+          text={reflection.assessment.replace(/_/g, ' ')}
         />
       );
 
       reflectionSummary = (
         <Alert
-          type={reflection.assessment === "on_track" || reflection.assessment === "complete" ? "success" : "warning"}
-          message={reflection.assessment.replace(/_/g, " ").toUpperCase()}
+          type={
+            reflection.assessment === 'on_track' || reflection.assessment === 'complete'
+              ? 'success'
+              : 'warning'
+          }
+          message={reflection.assessment.replace(/_/g, ' ').toUpperCase()}
           description={reflection.reasoning}
           className="mb-4"
         />
@@ -264,7 +264,9 @@ export const PlanModeViewer: React.FC<PlanModeViewerProps> = ({
           <Descriptions.Item label="Total Steps">{plan.steps.length}</Descriptions.Item>
           <Descriptions.Item label="Completed">{plan.completed_steps.length}</Descriptions.Item>
           <Descriptions.Item label="Failed">{plan.failed_steps.length}</Descriptions.Item>
-          <Descriptions.Item label="Reflection">{plan.reflection_enabled ? "Enabled" : "Disabled"}</Descriptions.Item>
+          <Descriptions.Item label="Reflection">
+            {plan.reflection_enabled ? 'Enabled' : 'Disabled'}
+          </Descriptions.Item>
           <Descriptions.Item label="Max Cycles">{plan.max_reflection_cycles}</Descriptions.Item>
         </Descriptions>
 
@@ -291,7 +293,9 @@ export const PlanModeViewer: React.FC<PlanModeViewerProps> = ({
                 header={
                   <div className="flex items-center gap-2 pr-4">
                     {getStepIcon(step.status)}
-                    <span>Step {index + 1}: {step.description}</span>
+                    <span>
+                      Step {index + 1}: {step.description}
+                    </span>
                     <Tag color={getStepColor(step.status) as any} className="ml-auto">
                       {getStepStatusText(step.status)}
                     </Tag>
@@ -311,9 +315,7 @@ export const PlanModeViewer: React.FC<PlanModeViewerProps> = ({
         <div className="mt-4 pt-4 border-t border-slate-200 text-xs text-slate-500">
           Started: {new Date(plan.started_at).toLocaleString()}
           {plan.completed_at && (
-            <span className="ml-4">
-              Completed: {new Date(plan.completed_at).toLocaleString()}
-            </span>
+            <span className="ml-4">Completed: {new Date(plan.completed_at).toLocaleString()}</span>
           )}
         </div>
       )}

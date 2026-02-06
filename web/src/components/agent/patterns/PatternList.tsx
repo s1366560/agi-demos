@@ -9,7 +9,7 @@
  * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
  */
 
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo } from 'react';
 
 import { MaterialIcon } from '../shared';
 
@@ -152,17 +152,15 @@ export function PatternList({
 }: PatternListProps) {
   // Support legacy boolean props for backwards compatibility
   // If legacy props are provided, they take precedence (migration path)
-  const resolvedViewMode: PatternListViewMode = showAllColumns === true
-    ? 'detailed'
-    : showAllColumns === false
-      ? 'compact'
-      : viewMode;
+  const resolvedViewMode: PatternListViewMode =
+    showAllColumns === true ? 'detailed' : showAllColumns === false ? 'compact' : viewMode;
 
-  const resolvedSelectionPolicy: PatternListSelectionPolicy = allowSelectDeprecated === true
-    ? 'all'
-    : allowSelectDeprecated === false
-      ? 'active-only'
-      : selectionPolicy;
+  const resolvedSelectionPolicy: PatternListSelectionPolicy =
+    allowSelectDeprecated === true
+      ? 'all'
+      : allowSelectDeprecated === false
+        ? 'active-only'
+        : selectionPolicy;
 
   const showUsageColumn = resolvedViewMode === 'detailed';
   const canSelectDeprecated = resolvedSelectionPolicy === 'all';
@@ -174,11 +172,12 @@ export function PatternList({
       isSelected: pattern.id === selectedId,
       canSelect: pattern.status !== 'deprecated' || canSelectDeprecated,
       isClickable: pattern.status !== 'deprecated' || canSelectDeprecated,
-      rowClassName: pattern.id === selectedId
-        ? 'bg-primary/10 dark:bg-primary/20'
-        : pattern.status === 'deprecated' && !canSelectDeprecated
-          ? 'opacity-50 cursor-not-allowed'
-          : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
+      rowClassName:
+        pattern.id === selectedId
+          ? 'bg-primary/10 dark:bg-primary/20'
+          : pattern.status === 'deprecated' && !canSelectDeprecated
+            ? 'opacity-50 cursor-not-allowed'
+            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
     }));
   }, [patterns, selectedId, canSelectDeprecated]);
 
@@ -214,16 +213,16 @@ export function PatternList({
             className={`grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer transition-colors ${pattern.rowClassName}`}
           >
             {/* Status */}
-            <div className="col-span-1"><StatusBadge status={pattern.status} /></div>
+            <div className="col-span-1">
+              <StatusBadge status={pattern.status} />
+            </div>
 
             {/* Name & Signature */}
             <div className="col-span-4 min-w-0">
               <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                 {pattern.name}
               </p>
-              <p className="text-xs text-slate-500 truncate font-mono">
-                {pattern.signature}
-              </p>
+              <p className="text-xs text-slate-500 truncate font-mono">{pattern.signature}</p>
             </div>
 
             {/* Usage Count */}
@@ -264,7 +263,11 @@ export function PatternList({
         {/* Empty State */}
         {patterns.length === 0 && (
           <div className="px-4 py-12 text-center">
-            <MaterialIcon name="account_tree" size={48} className="text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+            <MaterialIcon
+              name="account_tree"
+              size={48}
+              className="text-slate-300 dark:text-slate-700 mx-auto mb-3"
+            />
             <p className="text-sm text-slate-500">No patterns found</p>
           </div>
         )}

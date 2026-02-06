@@ -4,15 +4,15 @@
  * Defines the type system for the compound SandboxPanel component.
  */
 
-import type { DesktopStatus, TerminalStatus } from "../../../types/agent";
+import type { DesktopStatus, TerminalStatus } from '../../../types/agent';
 
 // Re-export ToolExecution from SandboxOutputViewer
-export type { ToolExecution } from "./SandboxOutputViewer";
+export type { ToolExecution } from './SandboxOutputViewer';
 
 /**
  * Available tabs in the SandboxPanel
  */
-export type SandboxTabKey = "terminal" | "desktop" | "control" | "output";
+export type SandboxTabKey = 'terminal' | 'desktop' | 'control' | 'output';
 
 /**
  * Sandbox panel context shared across compound components
@@ -55,7 +55,7 @@ export interface SandboxPanelToolExecution {
   input: Record<string, unknown>;
   output: string | unknown;
   timestamp: number;
-  status?: "pending" | "running" | "success" | "error";
+  status?: 'pending' | 'running' | 'success' | 'error';
 }
 
 /**

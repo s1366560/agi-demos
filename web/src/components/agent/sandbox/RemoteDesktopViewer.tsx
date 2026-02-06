@@ -5,7 +5,7 @@
  * embedded in an iframe.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 import {
   DesktopOutlined,
@@ -13,10 +13,10 @@ import {
   ExpandOutlined,
   CompressOutlined,
   CloseOutlined,
-} from "@ant-design/icons";
-import { Button, Spin, Alert, Space, Tooltip, Badge } from "antd";
+} from '@ant-design/icons';
+import { Button, Spin, Alert, Space, Tooltip, Badge } from 'antd';
 
-import type { DesktopStatus } from "../../../types/agent";
+import type { DesktopStatus } from '../../../types/agent';
 
 export interface RemoteDesktopViewerProps {
   /** Sandbox container ID */
@@ -35,7 +35,7 @@ export interface RemoteDesktopViewerProps {
   showToolbar?: boolean;
 }
 
-type ViewerStatus = "loading" | "ready" | "error";
+type ViewerStatus = 'loading' | 'ready' | 'error';
 
 export function RemoteDesktopViewer({
   sandboxId,
@@ -43,7 +43,7 @@ export function RemoteDesktopViewer({
   onReady,
   onError,
   onClose,
-  height = "100%",
+  height = '100%',
   showToolbar = true,
 }: RemoteDesktopViewerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -55,7 +55,7 @@ export function RemoteDesktopViewer({
   const prevDesktopUrlRef = useRef<string | null>(null);
 
   // Initialize state based on desktopUrl
-  const [viewerStatus, setViewerStatus] = useState<ViewerStatus>("loading");
+  const [viewerStatus, setViewerStatus] = useState<ViewerStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
@@ -68,7 +68,7 @@ export function RemoteDesktopViewer({
       setTimeout(() => {
         setIframeKey((prev) => prev + 1);
         setErrorMessage(null);
-        setViewerStatus("loading");
+        setViewerStatus('loading');
       }, 0);
     }
   }, [desktopUrl]);
@@ -76,23 +76,23 @@ export function RemoteDesktopViewer({
   // Handle iframe load event
   const handleIframeLoad = useCallback(() => {
     if (desktopUrl) {
-      setViewerStatus("ready");
+      setViewerStatus('ready');
       onReady?.();
     }
   }, [desktopUrl, onReady]);
 
   // Handle iframe error event
   const handleIframeError = useCallback(() => {
-    const error = "Failed to load desktop viewer";
+    const error = 'Failed to load desktop viewer';
     setErrorMessage(error);
-    setViewerStatus("error");
+    setViewerStatus('error');
     onError?.(error);
   }, [onError]);
 
   // Refresh desktop
   const handleRefresh = useCallback(() => {
     setIframeKey((prev) => prev + 1);
-    setViewerStatus("loading");
+    setViewerStatus('loading');
     setErrorMessage(null);
   }, []);
 
@@ -103,24 +103,24 @@ export function RemoteDesktopViewer({
 
   // Status text
   const statusText = {
-    loading: "Connecting...",
-    ready: "Desktop Ready",
-    error: errorMessage || "Connection Error",
+    loading: 'Connecting...',
+    ready: 'Desktop Ready',
+    error: errorMessage || 'Connection Error',
   };
 
   // Container style
   const containerStyle: React.CSSProperties = {
-    height: isFullscreen ? "100vh" : height,
-    position: isFullscreen ? "fixed" : "relative",
-    top: isFullscreen ? 0 : "auto",
-    left: isFullscreen ? 0 : "auto",
-    width: isFullscreen ? "100vw" : "100%",
-    zIndex: isFullscreen ? 50 : "auto",
+    height: isFullscreen ? '100vh' : height,
+    position: isFullscreen ? 'fixed' : 'relative',
+    top: isFullscreen ? 0 : 'auto',
+    left: isFullscreen ? 0 : 'auto',
+    width: isFullscreen ? '100vw' : '100%',
+    zIndex: isFullscreen ? 50 : 'auto',
   };
 
   return (
     <div
-      className={`flex flex-col bg-gray-900 ${isFullscreen ? "fixed inset-0 z-50" : ""}`}
+      className={`flex flex-col bg-gray-900 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}
       style={containerStyle}
     >
       {/* Toolbar */}
@@ -131,7 +131,13 @@ export function RemoteDesktopViewer({
             <span className="text-sm text-gray-300">Remote Desktop</span>
             <span className="text-xs text-gray-500">({sandboxId.slice(0, 8)})</span>
             <Badge
-              status={viewerStatus === "ready" ? "success" : viewerStatus === "error" ? "error" : "processing"}
+              status={
+                viewerStatus === 'ready'
+                  ? 'success'
+                  : viewerStatus === 'error'
+                    ? 'error'
+                    : 'processing'
+              }
               text={statusText[viewerStatus]}
               className="ml-2"
             />
@@ -150,14 +156,14 @@ export function RemoteDesktopViewer({
                 />
               </Tooltip>
             )}
-            <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+            <Tooltip title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
               <Button
                 type="text"
                 size="small"
                 icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
                 onClick={toggleFullscreen}
                 className="text-gray-400 hover:text-white"
-                aria-label={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
               />
             </Tooltip>
             {onClose && (
@@ -188,18 +194,18 @@ export function RemoteDesktopViewer({
           </div>
         ) : (
           <>
-            {viewerStatus === "loading" && (
+            {viewerStatus === 'loading' && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10">
                 <Spin size="large" />
                 <span className="text-white">Connecting to desktop...</span>
               </div>
             )}
 
-            {viewerStatus === "error" && (
+            {viewerStatus === 'error' && (
               <div className="absolute inset-0 flex items-center justify-center z-10">
                 <Alert
                   type="error"
-                  message={errorMessage || "Failed to load desktop"}
+                  message={errorMessage || 'Failed to load desktop'}
                   showIcon
                   action={
                     <Button size="small" onClick={handleRefresh}>

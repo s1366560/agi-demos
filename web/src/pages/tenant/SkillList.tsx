@@ -10,7 +10,13 @@ import { useTranslation } from 'react-i18next';
 
 import { Input } from 'antd';
 
-import { useLazyMessage, LazyPopconfirm, LazySelect, LazyEmpty, LazySpin } from '@/components/ui/lazyAntd';
+import {
+  useLazyMessage,
+  LazyPopconfirm,
+  LazySelect,
+  LazyEmpty,
+  LazySpin,
+} from '@/components/ui/lazyAntd';
 
 import { SkillModal } from '../../components/skill/SkillModal';
 import {
@@ -31,8 +37,12 @@ export const SkillList: React.FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deprecated'>('all');
-  const [triggerTypeFilter, setTriggerTypeFilter] = useState<'all' | 'keyword' | 'semantic' | 'hybrid'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deprecated'>(
+    'all'
+  );
+  const [triggerTypeFilter, setTriggerTypeFilter] = useState<
+    'all' | 'keyword' | 'semantic' | 'hybrid'
+  >('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillResponse | null>(null);
 
@@ -72,12 +82,7 @@ export const SkillList: React.FC = () => {
     });
   }, [skills, search, statusFilter, triggerTypeFilter]);
 
-  const {
-    listSkills,
-    deleteSkill,
-    updateSkillStatus,
-    clearError,
-  } = useSkillStore();
+  const { listSkills, deleteSkill, updateSkillStatus, clearError } = useSkillStore();
 
   // Load data on mount
   useEffect(() => {
@@ -107,23 +112,29 @@ export const SkillList: React.FC = () => {
     setIsModalOpen(true);
   }, []);
 
-  const handleStatusChange = useCallback(async (id: string, status: 'active' | 'disabled' | 'deprecated') => {
-    try {
-      await updateSkillStatus(id, status);
-      message?.success(t('tenant.skills.statusUpdateSuccess'));
-    } catch {
-      // Error handled by store
-    }
-  }, [updateSkillStatus, t]);
+  const handleStatusChange = useCallback(
+    async (id: string, status: 'active' | 'disabled' | 'deprecated') => {
+      try {
+        await updateSkillStatus(id, status);
+        message?.success(t('tenant.skills.statusUpdateSuccess'));
+      } catch {
+        // Error handled by store
+      }
+    },
+    [updateSkillStatus, t]
+  );
 
-  const handleDelete = useCallback(async (id: string) => {
-    try {
-      await deleteSkill(id);
-      message?.success(t('tenant.skills.deleteSuccess'));
-    } catch {
-      // Error handled by store
-    }
-  }, [deleteSkill, t]);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      try {
+        await deleteSkill(id);
+        message?.success(t('tenant.skills.deleteSuccess'));
+      } catch {
+        // Error handled by store
+      }
+    },
+    [deleteSkill, t]
+  );
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -143,13 +154,27 @@ export const SkillList: React.FC = () => {
   // Status badge component
   const StatusBadge = ({ status }: { status: 'active' | 'disabled' | 'deprecated' }) => {
     const config = {
-      active: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300', dot: 'bg-green-500' },
-      disabled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', dot: 'bg-slate-400' },
-      deprecated: { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-800 dark:text-orange-300', dot: 'bg-orange-500' },
+      active: {
+        bg: 'bg-green-100 dark:bg-green-900/30',
+        text: 'text-green-800 dark:text-green-300',
+        dot: 'bg-green-500',
+      },
+      disabled: {
+        bg: 'bg-slate-100 dark:bg-slate-700',
+        text: 'text-slate-800 dark:text-slate-300',
+        dot: 'bg-slate-400',
+      },
+      deprecated: {
+        bg: 'bg-orange-100 dark:bg-orange-900/30',
+        text: 'text-orange-800 dark:text-orange-300',
+        dot: 'bg-orange-500',
+      },
     };
     const { bg, text, dot } = config[status];
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}>
+      <span
+        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${bg} ${text}`}
+      >
         <span className={`h-1.5 w-1.5 rounded-full ${dot}`}></span>
         {t(`common.status.${status}`)}
       </span>
@@ -164,9 +189,7 @@ export const SkillList: React.FC = () => {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             {t('tenant.skills.title')}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            {t('tenant.skills.subtitle')}
-          </p>
+          <p className="text-sm text-slate-500 mt-1">{t('tenant.skills.subtitle')}</p>
         </div>
         <button
           onClick={handleCreate}
@@ -182,7 +205,9 @@ export const SkillList: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">{t('tenant.skills.stats.total')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {t('tenant.skills.stats.total')}
+              </p>
               <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{total}</p>
             </div>
             <span className="material-symbols-outlined text-4xl text-primary-500">school</span>
@@ -192,8 +217,12 @@ export const SkillList: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">{t('tenant.skills.stats.active')}</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{activeCount}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {t('tenant.skills.stats.active')}
+              </p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                {activeCount}
+              </p>
             </div>
             <span className="material-symbols-outlined text-4xl text-green-500">check_circle</span>
           </div>
@@ -202,7 +231,9 @@ export const SkillList: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">{t('tenant.skills.stats.successRate')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {t('tenant.skills.stats.successRate')}
+              </p>
               <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
                 {(avgSuccessRate * 100).toFixed(1)}%
               </p>
@@ -214,8 +245,12 @@ export const SkillList: React.FC = () => {
         <div className="bg-white dark:bg-slate-800 rounded-lg p-6 border border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">{t('tenant.skills.stats.totalUsage')}</p>
-              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">{totalUsageCount}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {t('tenant.skills.stats.totalUsage')}
+              </p>
+              <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
+                {totalUsageCount}
+              </p>
             </div>
             <span className="material-symbols-outlined text-4xl text-purple-500">bar_chart</span>
           </div>
@@ -270,10 +305,7 @@ export const SkillList: React.FC = () => {
           <LazySpin size="large" />
         </div>
       ) : skills.length === 0 ? (
-        <LazyEmpty
-          description={t('tenant.skills.empty')}
-          className="py-12"
-        />
+        <LazyEmpty description={t('tenant.skills.empty')} className="py-12" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredSkills.map((skill) => (
@@ -299,7 +331,7 @@ export const SkillList: React.FC = () => {
               {/* Trigger Type */}
               <div className="mb-4">
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('tenant.skills.triggerType')}: 
+                  {t('tenant.skills.triggerType')}:
                 </span>
                 <span className="ml-2 text-xs font-medium text-primary-600 dark:text-primary-400">
                   {skill.trigger_type}
@@ -338,17 +370,25 @@ export const SkillList: React.FC = () => {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-4 mb-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                 <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('common.stats.usage')}</p>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{skill.usage_count}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t('common.stats.usage')}
+                  </p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {skill.usage_count}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('common.stats.successRate')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t('common.stats.successRate')}
+                  </p>
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
                     {(skill.success_rate * 100).toFixed(0)}%
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('common.stats.success')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t('common.stats.success')}
+                  </p>
                   <p className="text-sm font-semibold text-green-600 dark:text-green-400">
                     {skill.success_count}
                   </p>

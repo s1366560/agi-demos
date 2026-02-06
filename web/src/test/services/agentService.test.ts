@@ -128,12 +128,15 @@ describe('agentService - WebSocket Token Handling', () => {
 
       // Create a spy to capture WebSocket URL
       let capturedWsUrl: string | undefined;
-      vi.stubGlobal('WebSocket', class extends MockWebSocket {
-        constructor(url: string) {
-          super(url);
-          capturedWsUrl = url;
+      vi.stubGlobal(
+        'WebSocket',
+        class extends MockWebSocket {
+          constructor(url: string) {
+            super(url);
+            capturedWsUrl = url;
+          }
         }
-      });
+      );
 
       await agentService.connect();
 
@@ -160,12 +163,15 @@ describe('agentService - WebSocket Token Handling', () => {
 
       // Capture WebSocket URL to verify correct token used
       let capturedWsUrl: string | undefined;
-      vi.stubGlobal('WebSocket', class extends MockWebSocket {
-        constructor(url: string) {
-          super(url);
-          capturedWsUrl = url;
+      vi.stubGlobal(
+        'WebSocket',
+        class extends MockWebSocket {
+          constructor(url: string) {
+            super(url);
+            capturedWsUrl = url;
+          }
         }
-      });
+      );
 
       await agentService.connect();
 

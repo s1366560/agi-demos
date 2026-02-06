@@ -1,8 +1,8 @@
 /**
  * Event Envelope Types - TypeScript definitions matching Python EventEnvelope.
- * 
+ *
  * Auto-generated structure matching src/domain/events/envelope.py
- * 
+ *
  * The EventEnvelope provides a standardized wrapper for all domain events,
  * enabling:
  * - Schema versioning for backward/forward compatibility
@@ -14,7 +14,7 @@ import type { AgentEventType } from './eventTypes';
 
 /**
  * Event Envelope - wrapper for all domain events.
- * 
+ *
  * Wire format:
  * {
  *   "schema_version": "1.0",
@@ -31,28 +31,28 @@ import type { AgentEventType } from './eventTypes';
 export interface EventEnvelope<T = Record<string, unknown>> {
   /** Version of the event schema (e.g., "1.0") */
   schema_version: string;
-  
+
   /** Unique identifier for this event */
   event_id: string;
-  
+
   /** Type of the event (from AgentEventType) */
   event_type: AgentEventType;
-  
+
   /** When the event occurred (ISO 8601 format) */
   timestamp: string;
-  
+
   /** System that generated the event */
   source: string;
-  
+
   /** Optional ID for correlating related events (e.g., same request chain) */
   correlation_id?: string;
-  
+
   /** Optional ID of the event that caused this event */
   causation_id?: string;
-  
+
   /** Event-specific data */
   payload: T;
-  
+
   /** Additional context (e.g., user_id, tenant_id) */
   metadata?: Record<string, unknown>;
 }
@@ -166,8 +166,7 @@ export function createChildEnvelope<T = Record<string, unknown>>(
  * Generate a short unique ID (matches Python's uuid.uuid4().hex[:12])
  */
 function generateShortId(): string {
-  return Math.random().toString(36).substring(2, 14) + 
-         Math.random().toString(36).substring(2, 6);
+  return Math.random().toString(36).substring(2, 14) + Math.random().toString(36).substring(2, 6);
 }
 
 /**
@@ -185,4 +184,4 @@ export const EVENT_SOURCES = {
   SANDBOX: 'sandbox',
 } as const;
 
-export type EventSource = typeof EVENT_SOURCES[keyof typeof EVENT_SOURCES];
+export type EventSource = (typeof EVENT_SOURCES)[keyof typeof EVENT_SOURCES];

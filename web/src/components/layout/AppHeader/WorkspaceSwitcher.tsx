@@ -4,13 +4,13 @@
  * Workspace switcher wrapper.
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { WorkspaceSwitcher as BaseWorkspaceSwitcher } from '@/components/shared/ui/WorkspaceSwitcher'
+import { WorkspaceSwitcher as BaseWorkspaceSwitcher } from '@/components/shared/ui/WorkspaceSwitcher';
 
 export interface WorkspaceSwitcherProps {
-  mode: 'tenant' | 'project'
-  as?: React.ElementType
+  mode: 'tenant' | 'project';
+  as?: React.ElementType;
 }
 
 export const WorkspaceSwitcher = React.memo(function WorkspaceSwitcher({
@@ -18,15 +18,13 @@ export const WorkspaceSwitcher = React.memo(function WorkspaceSwitcher({
   as: Component = BaseWorkspaceSwitcher,
 }: WorkspaceSwitcherProps) {
   // Responsive width classes
-  const widthClass = mode === 'project'
-    ? 'w-full min-w-0'
-    : 'w-full min-w-0'
+  const widthClass = mode === 'project' ? 'w-full min-w-0' : 'w-full min-w-0';
 
   return (
     <div className={widthClass}>
       <Component mode={mode} />
     </div>
-  )
-})
+  );
+});
 
-WorkspaceSwitcher.displayName = 'AppHeader.WorkspaceSwitcher'
+WorkspaceSwitcher.displayName = 'AppHeader.WorkspaceSwitcher';

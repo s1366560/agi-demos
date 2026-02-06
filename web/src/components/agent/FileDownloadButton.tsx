@@ -5,10 +5,10 @@
  * Files are accessed via S3 presigned URLs returned from the backend.
  */
 
-import React from "react";
+import React from 'react';
 
-import { DownloadOutlined, FileOutlined, FilePdfOutlined } from "@ant-design/icons";
-import { Button, Tooltip } from "antd";
+import { DownloadOutlined, FileOutlined, FilePdfOutlined } from '@ant-design/icons';
+import { Button, Tooltip } from 'antd';
 
 interface FileDownloadButtonProps {
   /** The filename to display */
@@ -20,30 +20,26 @@ interface FileDownloadButtonProps {
 }
 
 const formatFileSize = (bytes?: number): string => {
-  if (bytes === undefined) return "";
+  if (bytes === undefined) return '';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 const getFileIcon = (filename: string) => {
-  const ext = filename.toLowerCase().split(".").pop();
+  const ext = filename.toLowerCase().split('.').pop();
   switch (ext) {
-    case "pdf":
+    case 'pdf':
       return <FilePdfOutlined />;
     default:
       return <FileOutlined />;
   }
 };
 
-export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({
-  filename,
-  url,
-  size,
-}) => {
+export const FileDownloadButton: React.FC<FileDownloadButtonProps> = ({ filename, url, size }) => {
   const handleDownload = () => {
     // Open in new tab - browser will handle download based on Content-Disposition
-    window.open(url, "_blank");
+    window.open(url, '_blank');
   };
 
   const sizeText = formatFileSize(size);

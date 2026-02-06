@@ -4,13 +4,13 @@
  * Brand section of the sidebar, showing the MemStack logo and name.
  */
 
-import type { SidebarVariant } from './types'
+import type { SidebarVariant } from './types';
 
 export interface SidebarBrandProps {
   /** Variant to determine branding style */
-  variant?: SidebarVariant
+  variant?: SidebarVariant;
   /** Custom brand element (overrides default) */
-  children?: React.ReactNode
+  children?: React.ReactNode;
 }
 
 /**
@@ -26,18 +26,18 @@ function getDefaultBrand(_variant?: SidebarVariant): React.ReactNode {
         MemStack<span className="text-primary">.ai</span>
       </h1>
     </div>
-  )
+  );
 }
 
 /**
  * SidebarBrand component - displays the brand/logo section
  */
 export function SidebarBrand({ variant, children }: SidebarBrandProps) {
-  const content = children ?? getDefaultBrand(variant)
+  const content = children ?? getDefaultBrand(variant);
 
   return (
     <div data-testid="sidebar-brand" data-variant={variant}>
       {content}
     </div>
-  )
+  );
 }

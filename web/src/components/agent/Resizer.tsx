@@ -1,6 +1,6 @@
 /**
  * Resizer - Draggable resize handle component
- * 
+ *
  * Supports horizontal (left/right) and vertical (up/down) resizing
  * Unified subtle styling for all resize handles
  */
@@ -40,17 +40,20 @@ export const Resizer: React.FC<ResizerProps> = ({
   const startPosRef = useRef(0);
   const startSizeRef = useRef(currentSize);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-    startPosRef.current = direction === 'horizontal' ? e.clientX : e.clientY;
-    startSizeRef.current = currentSize;
-    
-    // Prevent text selection during drag
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = direction === 'horizontal' ? 'ew-resize' : 'ns-resize';
-  }, [direction, currentSize]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(true);
+      startPosRef.current = direction === 'horizontal' ? e.clientX : e.clientY;
+      startSizeRef.current = currentSize;
+
+      // Prevent text selection during drag
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = direction === 'horizontal' ? 'ew-resize' : 'ns-resize';
+    },
+    [direction, currentSize]
+  );
 
   useEffect(() => {
     if (!isDragging) return;
@@ -58,7 +61,7 @@ export const Resizer: React.FC<ResizerProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       const currentPos = direction === 'horizontal' ? e.clientX : e.clientY;
       const delta = currentPos - startPosRef.current;
-      
+
       // Calculate new size based on position
       let newSize: number;
       if (position === 'right' || position === 'bottom') {
@@ -66,7 +69,7 @@ export const Resizer: React.FC<ResizerProps> = ({
       } else {
         newSize = startSizeRef.current - delta;
       }
-      
+
       // Clamp to min/max
       newSize = Math.max(minSize, Math.min(maxSize, newSize));
       onResize(newSize);
@@ -80,7 +83,7 @@ export const Resizer: React.FC<ResizerProps> = ({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    
+
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -100,9 +103,7 @@ export const Resizer: React.FC<ResizerProps> = ({
   };
 
   const cursorClass = direction === 'horizontal' ? 'cursor-ew-resize' : 'cursor-ns-resize';
-  const sizeClass = direction === 'horizontal' 
-    ? 'w-1.5 hover:w-2' 
-    : 'h-1.5 hover:h-2';
+  const sizeClass = direction === 'horizontal' ? 'w-1.5 hover:w-2' : 'h-1.5 hover:h-2';
 
   return (
     <div
@@ -125,17 +126,16 @@ export const Resizer: React.FC<ResizerProps> = ({
       }}
     >
       {/* Visual indicator - subtle dots */}
-      <div className={`
-        ${direction === 'horizontal' 
-          ? 'w-0.5 h-6' 
-          : 'h-0.5 w-6'
-        }
+      <div
+        className={`
+        ${direction === 'horizontal' ? 'w-0.5 h-6' : 'h-0.5 w-6'}
         rounded-full
         bg-slate-400/50 dark:bg-slate-500/50
         opacity-0 group-hover:opacity-100
         ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
         transition-all duration-150
-      `} />
+      `}
+      />
     </div>
   );
 };

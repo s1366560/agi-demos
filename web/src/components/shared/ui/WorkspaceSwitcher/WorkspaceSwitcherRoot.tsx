@@ -4,8 +4,8 @@
  * Provides context and manages open state for all child components.
  */
 
-import { type WorkspaceSwitcherRootProps } from './types'
-import { WorkspaceProvider } from './WorkspaceContext'
+import { type WorkspaceSwitcherRootProps } from './types';
+import { WorkspaceProvider } from './WorkspaceContext';
 
 export const WorkspaceSwitcherRoot: React.FC<WorkspaceSwitcherRootProps> = ({
   children,
@@ -17,5 +17,5 @@ export const WorkspaceSwitcherRoot: React.FC<WorkspaceSwitcherRootProps> = ({
     <WorkspaceProvider mode={mode} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       {children}
     </WorkspaceProvider>
-  )
-}
+  );
+};

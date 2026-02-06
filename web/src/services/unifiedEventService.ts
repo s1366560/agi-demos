@@ -17,10 +17,10 @@
  * @packageDocumentation
  */
 
-import { logger } from "../utils/logger";
-import { getAuthToken } from "../utils/tokenResolver";
+import { logger } from '../utils/logger';
+import { getAuthToken } from '../utils/tokenResolver';
 
-import { createWebSocketUrl } from "./client/urlUtils";
+import { createWebSocketUrl } from './client/urlUtils';
 
 // =============================================================================
 // Types
@@ -29,16 +29,12 @@ import { createWebSocketUrl } from "./client/urlUtils";
 /**
  * Topic types supported by the unified event service
  */
-export type TopicType = "agent" | "sandbox" | "system" | "lifecycle";
+export type TopicType = 'agent' | 'sandbox' | 'system' | 'lifecycle';
 
 /**
  * WebSocket connection status
  */
-export type WebSocketStatus =
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "error";
+export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 /**
  * Generic event from the unified WebSocket
@@ -82,7 +78,7 @@ interface ServerMessage {
  * Generate a unique session ID for this browser tab
  */
 function generateSessionId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
@@ -96,7 +92,7 @@ function generateSessionId(): string {
  */
 class UnifiedEventServiceImpl {
   private ws: WebSocket | null = null;
-  private status: WebSocketStatus = "disconnected";
+  private status: WebSocketStatus = 'disconnected';
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -148,19 +144,17 @@ class UnifiedEventServiceImpl {
    */
   connect(): Promise<void> {
     if (this.connectingPromise) {
-      logger.debug(
-        "[UnifiedWS] Connection already in progress, returning existing promise"
-      );
+      logger.debug('[UnifiedWS] Connection already in progress, returning existing promise');
       return this.connectingPromise;
     }
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      logger.debug("[UnifiedWS] Already connected");
+      logger.debug('[UnifiedWS] Already connected');
       return Promise.resolve();
     }
 
     this.isManualClose = false;
-    this.setStatus("connecting");
+    this.setStatus('connecting');
     this.connectingPromise = this.doConnect();
     return this.connectingPromise;
   }
@@ -169,13 +163,13 @@ class UnifiedEventServiceImpl {
     return new Promise((resolve, reject) => {
       const token = getAuthToken();
       if (!token) {
-        this.setStatus("error");
+        this.setStatus('error');
         this.connectingPromise = null;
-        reject(new Error("No authentication token"));
+        reject(new Error('No authentication token'));
         return;
       }
 
-      const wsUrl = createWebSocketUrl("/agent/ws", {
+      const wsUrl = createWebSocketUrl('/agent/ws', {
         token,
         session_id: this.sessionId,
       });
@@ -184,10 +178,8 @@ class UnifiedEventServiceImpl {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-          logger.debug(
-            `[UnifiedWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`
-          );
-          this.setStatus("connected");
+          logger.debug(`[UnifiedWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`);
+          this.setStatus('connected');
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
           this.connectingPromise = null;
@@ -209,33 +201,30 @@ class UnifiedEventServiceImpl {
             const message: ServerMessage = JSON.parse(event.data);
             this.handleMessage(message);
           } catch (err) {
-            logger.error("[UnifiedWS] Failed to parse message:", err);
+            logger.error('[UnifiedWS] Failed to parse message:', err);
           }
         };
 
         this.ws.onclose = (event) => {
-          logger.debug("[UnifiedWS] Disconnected", event.code, event.reason);
-          this.setStatus("disconnected");
+          logger.debug('[UnifiedWS] Disconnected', event.code, event.reason);
+          this.setStatus('disconnected');
           this.stopHeartbeat();
 
-          if (
-            !this.isManualClose &&
-            this.reconnectAttempts < this.maxReconnectAttempts
-          ) {
+          if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnect();
           }
         };
 
         this.ws.onerror = (error) => {
-          logger.error("[UnifiedWS] Error:", error);
-          this.setStatus("error");
+          logger.error('[UnifiedWS] Error:', error);
+          this.setStatus('error');
           this.stopHeartbeat();
           this.connectingPromise = null;
           reject(error);
         };
       } catch (err) {
-        logger.error("[UnifiedWS] Connection error:", err);
-        this.setStatus("error");
+        logger.error('[UnifiedWS] Connection error:', err);
+        this.setStatus('error');
         this.connectingPromise = null;
         this.scheduleReconnect();
         reject(err);
@@ -260,7 +249,7 @@ class UnifiedEventServiceImpl {
       this.ws = null;
     }
 
-    this.setStatus("disconnected");
+    this.setStatus('disconnected');
   }
 
   /**
@@ -291,7 +280,7 @@ class UnifiedEventServiceImpl {
     this.subscriptions.get(topic)!.add(handler);
 
     // Send subscribe message to server
-    const [topicType] = topic.split(":");
+    const [topicType] = topic.split(':');
     this.sendSubscribeMessage(topicType, topic);
 
     logger.debug(`[UnifiedWS] Subscribed to ${topic}`);
@@ -310,7 +299,7 @@ class UnifiedEventServiceImpl {
       if (handlers.size === 0) {
         this.subscriptions.delete(topic);
         // Send unsubscribe message to server
-        const [topicType] = topic.split(":");
+        const [topicType] = topic.split(':');
         this.sendUnsubscribeMessage(topicType, topic);
       }
     }
@@ -320,10 +309,7 @@ class UnifiedEventServiceImpl {
   /**
    * Subscribe to multiple topics at once
    */
-  subscribeMultiple(
-    topics: string[],
-    handler: EventHandler
-  ): () => void {
+  subscribeMultiple(topics: string[], handler: EventHandler): () => void {
     const unsubscribeFns = topics.map((topic) => this.subscribe(topic, handler));
     return () => unsubscribeFns.forEach((fn) => fn());
   }
@@ -347,7 +333,7 @@ class UnifiedEventServiceImpl {
 
     // Send specific sandbox subscription message
     this.sendOrQueue({
-      type: "subscribe_sandbox",
+      type: 'subscribe_sandbox',
       project_id: projectId,
     });
 
@@ -366,7 +352,7 @@ class UnifiedEventServiceImpl {
         if (handlers.size === 0) {
           this.subscriptions.delete(topic);
           this.sendOrQueue({
-            type: "unsubscribe_sandbox",
+            type: 'unsubscribe_sandbox',
             project_id: projectId,
           });
         }
@@ -381,7 +367,7 @@ class UnifiedEventServiceImpl {
     const topic = `lifecycle:${projectId}`;
 
     this.sendOrQueue({
-      type: "subscribe_lifecycle_state",
+      type: 'subscribe_lifecycle_state',
       project_id: projectId,
     });
 
@@ -397,7 +383,7 @@ class UnifiedEventServiceImpl {
         if (handlers.size === 0) {
           this.subscriptions.delete(topic);
           this.sendOrQueue({
-            type: "unsubscribe_lifecycle_state",
+            type: 'unsubscribe_lifecycle_state',
             project_id: projectId,
           });
         }
@@ -437,7 +423,7 @@ class UnifiedEventServiceImpl {
     const { type, routing_key, conversation_id, project_id, data } = message;
 
     // Handle internal messages
-    if (type === "connected" || type === "pong" || type === "ack") {
+    if (type === 'connected' || type === 'pong' || type === 'ack') {
       logger.debug(`[UnifiedWS] ${type}:`, data);
       return;
     }
@@ -449,11 +435,11 @@ class UnifiedEventServiceImpl {
       topic = routing_key;
     } else if (conversation_id) {
       topic = `agent:${conversation_id}`;
-    } else if (type === "sandbox_event" && project_id) {
+    } else if (type === 'sandbox_event' && project_id) {
       topic = `sandbox:${project_id}`;
-    } else if (type === "lifecycle_state_change" && project_id) {
+    } else if (type === 'lifecycle_state_change' && project_id) {
       topic = `lifecycle:${project_id}`;
-    } else if (type === "sandbox_state_change" && project_id) {
+    } else if (type === 'sandbox_state_change' && project_id) {
       topic = `sandbox:${project_id}`;
     }
 
@@ -482,37 +468,37 @@ class UnifiedEventServiceImpl {
     }
 
     // Also emit to wildcard listeners if any
-    const wildcardHandlers = this.subscriptions.get("*");
+    const wildcardHandlers = this.subscriptions.get('*');
     if (wildcardHandlers) {
       const event: UnifiedEvent = { type, routing_key, data };
       wildcardHandlers.forEach((handler) => {
         try {
           handler(event);
         } catch (err) {
-          logger.error("[UnifiedWS] Wildcard handler error:", err);
+          logger.error('[UnifiedWS] Wildcard handler error:', err);
         }
       });
     }
   }
 
   private sendSubscribeMessage(topicType: string, topic: string): void {
-    const parts = topic.split(":");
+    const parts = topic.split(':');
     switch (topicType) {
-      case "agent":
+      case 'agent':
         this.sendOrQueue({
-          type: "subscribe",
+          type: 'subscribe',
           conversation_id: parts[1],
         });
         break;
-      case "sandbox":
+      case 'sandbox':
         this.sendOrQueue({
-          type: "subscribe_sandbox",
+          type: 'subscribe_sandbox',
           project_id: parts[1],
         });
         break;
-      case "lifecycle":
+      case 'lifecycle':
         this.sendOrQueue({
-          type: "subscribe_lifecycle_state",
+          type: 'subscribe_lifecycle_state',
           project_id: parts[1],
         });
         break;
@@ -520,23 +506,23 @@ class UnifiedEventServiceImpl {
   }
 
   private sendUnsubscribeMessage(topicType: string, topic: string): void {
-    const parts = topic.split(":");
+    const parts = topic.split(':');
     switch (topicType) {
-      case "agent":
+      case 'agent':
         this.sendOrQueue({
-          type: "unsubscribe",
+          type: 'unsubscribe',
           conversation_id: parts[1],
         });
         break;
-      case "sandbox":
+      case 'sandbox':
         this.sendOrQueue({
-          type: "unsubscribe_sandbox",
+          type: 'unsubscribe_sandbox',
           project_id: parts[1],
         });
         break;
-      case "lifecycle":
+      case 'lifecycle':
         this.sendOrQueue({
-          type: "unsubscribe_lifecycle_state",
+          type: 'unsubscribe_lifecycle_state',
           project_id: parts[1],
         });
         break;
@@ -554,7 +540,7 @@ class UnifiedEventServiceImpl {
 
   private resubscribeAll(): void {
     this.subscriptions.forEach((_, topic) => {
-      const [topicType] = topic.split(":");
+      const [topicType] = topic.split(':');
       this.sendSubscribeMessage(topicType, topic);
     });
   }
@@ -565,7 +551,7 @@ class UnifiedEventServiceImpl {
       try {
         listener(status);
       } catch (err) {
-        logger.error("[UnifiedWS] Status listener error:", err);
+        logger.error('[UnifiedWS] Status listener error:', err);
       }
     });
   }
@@ -576,8 +562,7 @@ class UnifiedEventServiceImpl {
     }
 
     this.reconnectAttempts++;
-    const delay =
-      this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     logger.debug(
       `[UnifiedWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
@@ -586,7 +571,7 @@ class UnifiedEventServiceImpl {
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
       this.connect().catch((err) => {
-        logger.error("[UnifiedWS] Reconnect failed:", err);
+        logger.error('[UnifiedWS] Reconnect failed:', err);
       });
     }, delay);
   }
@@ -595,7 +580,7 @@ class UnifiedEventServiceImpl {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected()) {
-        this.send({ type: "heartbeat" });
+        this.send({ type: 'heartbeat' });
       }
     }, this.HEARTBEAT_INTERVAL_MS);
   }
@@ -623,7 +608,7 @@ class UnifiedEventServiceImpl {
     };
 
     this.subscriptions.forEach((_, topic) => {
-      const [type] = topic.split(":");
+      const [type] = topic.split(':');
       if (type in topicsByType) {
         topicsByType[type]++;
       }

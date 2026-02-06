@@ -26,44 +26,43 @@
 
 // Common components (ErrorBoundary, SkeletonLoader, EmptyState)
 export {
-    ErrorBoundary,
-    SkeletonLoader,
-    EmptyState,
-    type EmptyStateProps,
-    type SkeletonLoaderProps,
-} from './common'
+  ErrorBoundary,
+  SkeletonLoader,
+  EmptyState,
+  type EmptyStateProps,
+  type SkeletonLoaderProps,
+} from './common';
 
 // Agent components (modern agent chat UI)
 export {
-    ChatLayout,
-    ConversationSidebar,
-    MessageArea,
-    MessageBubble,
-    InputBar,
-    RightPanel,
-    PlanModeBanner,
-    SandboxSection,
-} from './agent'
+  ChatLayout,
+  ConversationSidebar,
+  MessageArea,
+  MessageBubble,
+  InputBar,
+  RightPanel,
+  PlanModeBanner,
+  SandboxSection,
+} from './agent';
 
 // Shared components (layouts, modals, UI components)
 export {
-    AppLayout,
-    ResponsiveLayout,
-    Layout,
-    DeleteConfirmationModal,
-    LanguageSwitcher,
-    NotificationPanel,
-    ThemeToggle,
-    WorkspaceSwitcher,
-} from './shared'
+  AppLayout,
+  ResponsiveLayout,
+  Layout,
+  DeleteConfirmationModal,
+  LanguageSwitcher,
+  NotificationPanel,
+  ThemeToggle,
+  WorkspaceSwitcher,
+} from './shared';
 
 // Graph components (knowledge graph visualization)
 export {
-    GraphVisualization,
-    CytoscapeGraph,
-    EntityCard,
-    getEntityTypeColor,
-    type Entity,
-    type EntityCardProps,
-} from './graph'
-
+  GraphVisualization,
+  CytoscapeGraph,
+  EntityCard,
+  getEntityTypeColor,
+  type Entity,
+  type EntityCardProps,
+} from './graph';

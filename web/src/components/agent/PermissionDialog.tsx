@@ -1,6 +1,6 @@
 /**
  * PermissionDialog Component
- * 
+ *
  * Displays a permission request from the agent when it needs user approval
  * to execute a tool with elevated privileges or sensitive operations.
  */
@@ -9,7 +9,15 @@ import React from 'react';
 
 import { SafetyOutlined, WarningOutlined, CodeOutlined } from '@ant-design/icons';
 
-import { Modal, Space, Button, Tag, Typography, Alert, Descriptions } from '@/components/ui/lazyAntd';
+import {
+  Modal,
+  Space,
+  Button,
+  Tag,
+  Typography,
+  Alert,
+  Descriptions,
+} from '@/components/ui/lazyAntd';
 
 import type { PermissionAskedEventData } from '../../types/agent';
 
@@ -61,9 +69,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
         <Space>
           {riskLevelIcons[riskLevel]}
           <span>工具权限请求</span>
-          <Tag color={riskLevelColors[riskLevel]}>
-            {riskLevelLabels[riskLevel]}
-          </Tag>
+          <Tag color={riskLevelColors[riskLevel]}>{riskLevelLabels[riskLevel]}</Tag>
         </Space>
       }
       onCancel={onCancel}
@@ -71,12 +77,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
         <Button key="deny" danger onClick={handleDeny}>
           拒绝
         </Button>,
-        <Button
-          key="grant"
-          type="primary"
-          onClick={handleGrant}
-          icon={<SafetyOutlined />}
-        >
+        <Button key="grant" type="primary" onClick={handleGrant} icon={<SafetyOutlined />}>
           授权执行
         </Button>,
       ]}
@@ -95,12 +96,30 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
 
         {/* Tool Information */}
         <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label={<Space><CodeOutlined /> 工具名称</Space>}>
+          <Descriptions.Item
+            label={
+              <Space>
+                <CodeOutlined /> 工具名称
+              </Space>
+            }
+          >
             <Text code>{data.tool_name}</Text>
           </Descriptions.Item>
           <Descriptions.Item label="权限类型">
-            <Tag color={data.permission_type === 'ask' ? 'blue' : data.permission_type === 'allow' ? 'green' : 'red'}>
-              {data.permission_type === 'ask' ? '需要确认' : data.permission_type === 'allow' ? '允许' : '禁止'}
+            <Tag
+              color={
+                data.permission_type === 'ask'
+                  ? 'blue'
+                  : data.permission_type === 'allow'
+                    ? 'green'
+                    : 'red'
+              }
+            >
+              {data.permission_type === 'ask'
+                ? '需要确认'
+                : data.permission_type === 'allow'
+                  ? '允许'
+                  : '禁止'}
             </Tag>
           </Descriptions.Item>
         </Descriptions>

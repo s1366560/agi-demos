@@ -1,6 +1,6 @@
 /**
  * HITL Store - State management for Human-in-the-Loop interactions
- * 
+ *
  * Manages pending HITL requests, timeouts, and responses.
  */
 
@@ -35,19 +35,19 @@ import type {
 interface HITLState {
   /** Map of request ID → pending HITL request */
   pendingRequests: Map<string, HITLRequest>;
-  
+
   /** Map of conversation ID → array of request IDs */
   requestsByConversation: Map<string, Set<string>>;
-  
+
   /** History of answered requests (limited) */
   answeredHistory: HITLRequest[];
-  
+
   /** Maximum history size */
   maxHistorySize: number;
-  
+
   /** Whether a response is being submitted */
   isSubmitting: boolean;
-  
+
   /** Last error message */
   error: string | null;
 }
@@ -57,30 +57,30 @@ interface HITLActions {
   addRequest: (request: HITLRequest) => void;
   removeRequest: (requestId: string) => void;
   updateRequestStatus: (requestId: string, status: HITLRequestStatus) => void;
-  
+
   // Event handling
   handleHITLEvent: (
     eventType: AgentEventType,
     data: Record<string, unknown>,
     conversationId: string
   ) => void;
-  
+
   // Response submission
   submitResponse: (
     conversationId: string,
     request: HITLRequest,
     response: HITLResponse
   ) => Promise<void>;
-  
+
   // Queries
   getRequest: (requestId: string) => HITLRequest | undefined;
   getRequestsForConversation: (conversationId: string) => HITLRequest[];
   getPendingCount: (conversationId?: string) => number;
-  
+
   // Timeout handling
   checkTimeouts: () => void;
   startTimeoutChecker: () => () => void;
-  
+
   // Cleanup
   clearConversation: (conversationId: string) => void;
   clearError: () => void;
@@ -116,64 +116,35 @@ export const useHITLStore = create<HITLStore>()(
       // =========================================================================
 
       addRequest: (request: HITLRequest) => {
-        set((state) => {
-          const newPending = new Map(state.pendingRequests);
-          newPending.set(request.requestId, request);
+        set(
+          (state) => {
+            const newPending = new Map(state.pendingRequests);
+            newPending.set(request.requestId, request);
 
-          const newByConv = new Map(state.requestsByConversation);
-          const convRequests = newByConv.get(request.conversationId) || new Set();
-          convRequests.add(request.requestId);
-          newByConv.set(request.conversationId, convRequests);
+            const newByConv = new Map(state.requestsByConversation);
+            const convRequests = newByConv.get(request.conversationId) || new Set();
+            convRequests.add(request.requestId);
+            newByConv.set(request.conversationId, convRequests);
 
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-          };
-        }, false, 'hitl/addRequest');
+            return {
+              pendingRequests: newPending,
+              requestsByConversation: newByConv,
+            };
+          },
+          false,
+          'hitl/addRequest'
+        );
       },
 
       removeRequest: (requestId: string) => {
-        set((state) => {
-          const request = state.pendingRequests.get(requestId);
-          if (!request) return state;
+        set(
+          (state) => {
+            const request = state.pendingRequests.get(requestId);
+            if (!request) return state;
 
-          const newPending = new Map(state.pendingRequests);
-          newPending.delete(requestId);
-
-          const newByConv = new Map(state.requestsByConversation);
-          const convRequests = newByConv.get(request.conversationId);
-          if (convRequests) {
-            convRequests.delete(requestId);
-            if (convRequests.size === 0) {
-              newByConv.delete(request.conversationId);
-            }
-          }
-
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-          };
-        }, false, 'hitl/removeRequest');
-      },
-
-      updateRequestStatus: (requestId: string, status: HITLRequestStatus) => {
-        set((state) => {
-          const request = state.pendingRequests.get(requestId);
-          if (!request) return state;
-
-          const updatedRequest = { ...request, status };
-          const newPending = new Map(state.pendingRequests);
-
-          if (status === 'pending') {
-            newPending.set(requestId, updatedRequest);
-          } else {
-            // Move to history
+            const newPending = new Map(state.pendingRequests);
             newPending.delete(requestId);
-            
-            const newHistory = [updatedRequest, ...state.answeredHistory]
-              .slice(0, state.maxHistorySize);
 
-            // Remove from conversation map
             const newByConv = new Map(state.requestsByConversation);
             const convRequests = newByConv.get(request.conversationId);
             if (convRequests) {
@@ -186,12 +157,55 @@ export const useHITLStore = create<HITLStore>()(
             return {
               pendingRequests: newPending,
               requestsByConversation: newByConv,
-              answeredHistory: newHistory,
             };
-          }
+          },
+          false,
+          'hitl/removeRequest'
+        );
+      },
 
-          return { pendingRequests: newPending };
-        }, false, 'hitl/updateRequestStatus');
+      updateRequestStatus: (requestId: string, status: HITLRequestStatus) => {
+        set(
+          (state) => {
+            const request = state.pendingRequests.get(requestId);
+            if (!request) return state;
+
+            const updatedRequest = { ...request, status };
+            const newPending = new Map(state.pendingRequests);
+
+            if (status === 'pending') {
+              newPending.set(requestId, updatedRequest);
+            } else {
+              // Move to history
+              newPending.delete(requestId);
+
+              const newHistory = [updatedRequest, ...state.answeredHistory].slice(
+                0,
+                state.maxHistorySize
+              );
+
+              // Remove from conversation map
+              const newByConv = new Map(state.requestsByConversation);
+              const convRequests = newByConv.get(request.conversationId);
+              if (convRequests) {
+                convRequests.delete(requestId);
+                if (convRequests.size === 0) {
+                  newByConv.delete(request.conversationId);
+                }
+              }
+
+              return {
+                pendingRequests: newPending,
+                requestsByConversation: newByConv,
+                answeredHistory: newHistory,
+              };
+            }
+
+            return { pendingRequests: newPending };
+          },
+          false,
+          'hitl/updateRequestStatus'
+        );
       },
 
       // =========================================================================
@@ -212,7 +226,7 @@ export const useHITLStore = create<HITLStore>()(
         }
         // Check if this is an "answered" event
         else if (
-          eventType.endsWith('_answered') || 
+          eventType.endsWith('_answered') ||
           eventType === 'env_var_provided' ||
           eventType === 'permission_replied'
         ) {
@@ -260,7 +274,7 @@ export const useHITLStore = create<HITLStore>()(
         if (!requestIds) return [];
 
         return Array.from(requestIds)
-          .map(id => state.pendingRequests.get(id))
+          .map((id) => state.pendingRequests.get(id))
           .filter((r): r is HITLRequest => r !== undefined);
       },
 
@@ -301,23 +315,27 @@ export const useHITLStore = create<HITLStore>()(
       // =========================================================================
 
       clearConversation: (conversationId: string) => {
-        set((state) => {
-          const requestIds = state.requestsByConversation.get(conversationId);
-          if (!requestIds) return state;
+        set(
+          (state) => {
+            const requestIds = state.requestsByConversation.get(conversationId);
+            if (!requestIds) return state;
 
-          const newPending = new Map(state.pendingRequests);
-          for (const id of requestIds) {
-            newPending.delete(id);
-          }
+            const newPending = new Map(state.pendingRequests);
+            for (const id of requestIds) {
+              newPending.delete(id);
+            }
 
-          const newByConv = new Map(state.requestsByConversation);
-          newByConv.delete(conversationId);
+            const newByConv = new Map(state.requestsByConversation);
+            newByConv.delete(conversationId);
 
-          return {
-            pendingRequests: newPending,
-            requestsByConversation: newByConv,
-          };
-        }, false, 'hitl/clearConversation');
+            return {
+              pendingRequests: newPending,
+              requestsByConversation: newByConv,
+            };
+          },
+          false,
+          'hitl/clearConversation'
+        );
       },
 
       clearError: () => {
@@ -343,12 +361,10 @@ export function useClarificationRequests(conversationId: string): ClarificationR
   return useHITLStore((state) => {
     const requests = state.requestsByConversation.get(conversationId);
     if (!requests) return [];
-    
+
     return Array.from(requests)
-      .map(id => state.pendingRequests.get(id))
-      .filter((r): r is ClarificationRequest => 
-        r !== undefined && isClarificationRequest(r)
-      );
+      .map((id) => state.pendingRequests.get(id))
+      .filter((r): r is ClarificationRequest => r !== undefined && isClarificationRequest(r));
   });
 }
 
@@ -359,12 +375,10 @@ export function usePermissionRequests(conversationId: string): PermissionRequest
   return useHITLStore((state) => {
     const requests = state.requestsByConversation.get(conversationId);
     if (!requests) return [];
-    
+
     return Array.from(requests)
-      .map(id => state.pendingRequests.get(id))
-      .filter((r): r is PermissionRequest => 
-        r !== undefined && isPermissionRequest(r)
-      );
+      .map((id) => state.pendingRequests.get(id))
+      .filter((r): r is PermissionRequest => r !== undefined && isPermissionRequest(r));
   });
 }
 
@@ -375,12 +389,10 @@ export function useDecisionRequests(conversationId: string): DecisionRequest[] {
   return useHITLStore((state) => {
     const requests = state.requestsByConversation.get(conversationId);
     if (!requests) return [];
-    
+
     return Array.from(requests)
-      .map(id => state.pendingRequests.get(id))
-      .filter((r): r is DecisionRequest => 
-        r !== undefined && isDecisionRequest(r)
-      );
+      .map((id) => state.pendingRequests.get(id))
+      .filter((r): r is DecisionRequest => r !== undefined && isDecisionRequest(r));
   });
 }
 
@@ -391,12 +403,10 @@ export function useEnvVarRequests(conversationId: string): EnvVarRequest[] {
   return useHITLStore((state) => {
     const requests = state.requestsByConversation.get(conversationId);
     if (!requests) return [];
-    
+
     return Array.from(requests)
-      .map(id => state.pendingRequests.get(id))
-      .filter((r): r is EnvVarRequest => 
-        r !== undefined && isEnvVarRequest(r)
-      );
+      .map((id) => state.pendingRequests.get(id))
+      .filter((r): r is EnvVarRequest => r !== undefined && isEnvVarRequest(r));
   });
 }
 

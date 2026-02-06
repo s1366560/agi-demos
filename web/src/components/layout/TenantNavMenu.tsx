@@ -1,9 +1,9 @@
 /**
  * TenantNavMenu - Secondary navigation menu for tenant pages
- * 
+ *
  * This component provides access to the original tenant navigation items
  * that have been moved from the primary sidebar to a secondary location.
- * 
+ *
  * Includes: Platform, Administration sections
  */
 
@@ -11,7 +11,7 @@ import React, { useState } from 'react';
 
 import { useNavigate, useLocation } from 'react-router-dom';
 
-import { 
+import {
   LayoutDashboard,
   Folder,
   Users,
@@ -26,7 +26,7 @@ import {
   Settings,
   CreditCard,
   ChevronDown,
-  LayoutGrid
+  LayoutGrid,
 } from 'lucide-react';
 
 import { LazyDropdown } from '@/components/ui/lazyAntd';
@@ -52,10 +52,7 @@ interface NavItem {
   badge?: number;
 }
 
-export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({ 
-  tenantId,
-  mode = 'dropdown'
-}) => {
+export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({ tenantId, mode = 'dropdown' }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -67,25 +64,75 @@ export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({
       id: 'platform',
       title: 'Platform',
       items: [
-        { id: 'overview', icon: <LayoutDashboard size={16} />, label: 'Overview', path: `${basePath}/overview` },
-        { id: 'projects', icon: <Folder size={16} />, label: 'Projects', path: `${basePath}/projects` },
+        {
+          id: 'overview',
+          icon: <LayoutDashboard size={16} />,
+          label: 'Overview',
+          path: `${basePath}/overview`,
+        },
+        {
+          id: 'projects',
+          icon: <Folder size={16} />,
+          label: 'Projects',
+          path: `${basePath}/projects`,
+        },
         { id: 'users', icon: <Users size={16} />, label: 'Users', path: `${basePath}/users` },
-        { id: 'analytics', icon: <BarChart3 size={16} />, label: 'Analytics', path: `${basePath}/analytics` },
+        {
+          id: 'analytics',
+          icon: <BarChart3 size={16} />,
+          label: 'Analytics',
+          path: `${basePath}/analytics`,
+        },
         { id: 'tasks', icon: <CheckSquare size={16} />, label: 'Tasks', path: `${basePath}/tasks` },
-        { id: 'agents', icon: <Headphones size={16} />, label: 'Agents', path: `${basePath}/agents` },
-        { id: 'subagents', icon: <Bot size={16} />, label: 'Sub Agents', path: `${basePath}/subagents` },
+        {
+          id: 'agents',
+          icon: <Headphones size={16} />,
+          label: 'Agents',
+          path: `${basePath}/agents`,
+        },
+        {
+          id: 'subagents',
+          icon: <Bot size={16} />,
+          label: 'Sub Agents',
+          path: `${basePath}/subagents`,
+        },
         { id: 'skills', icon: <Brain size={16} />, label: 'Skills', path: `${basePath}/skills` },
-        { id: 'mcp-servers', icon: <Cable size={16} />, label: 'MCP Servers', path: `${basePath}/mcp-servers` },
-        { id: 'patterns', icon: <GitBranch size={16} />, label: 'Workflow Patterns', path: `${basePath}/patterns` },
-        { id: 'providers', icon: <ToyBrick size={16} />, label: 'Providers', path: `${basePath}/providers` },
+        {
+          id: 'mcp-servers',
+          icon: <Cable size={16} />,
+          label: 'MCP Servers',
+          path: `${basePath}/mcp-servers`,
+        },
+        {
+          id: 'patterns',
+          icon: <GitBranch size={16} />,
+          label: 'Workflow Patterns',
+          path: `${basePath}/patterns`,
+        },
+        {
+          id: 'providers',
+          icon: <ToyBrick size={16} />,
+          label: 'Providers',
+          path: `${basePath}/providers`,
+        },
       ],
     },
     {
       id: 'administration',
       title: 'Administration',
       items: [
-        { id: 'billing', icon: <CreditCard size={16} />, label: 'Billing', path: `${basePath}/billing` },
-        { id: 'settings', icon: <Settings size={16} />, label: 'Settings', path: `${basePath}/settings` },
+        {
+          id: 'billing',
+          icon: <CreditCard size={16} />,
+          label: 'Billing',
+          path: `${basePath}/billing`,
+        },
+        {
+          id: 'settings',
+          icon: <Settings size={16} />,
+          label: 'Settings',
+          path: `${basePath}/settings`,
+        },
       ],
     },
   ];
@@ -135,14 +182,14 @@ export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({
         ),
         onClick: () => handleNavigate(item.path),
       })),
-      ...(sectionIndex < navSections.length - 1 ? [{ key: `divider-${section.id}`, type: 'divider' as const }] : []),
+      ...(sectionIndex < navSections.length - 1
+        ? [{ key: `divider-${section.id}`, type: 'divider' as const }]
+        : []),
     ]),
   ];
 
   // Check if any nav item is active (excluding agent-workspace)
-  const isInNav = navSections.some(section => 
-    section.items.some(item => isActive(item.path))
-  );
+  const isInNav = navSections.some((section) => section.items.some((item) => isActive(item.path)));
 
   if (mode === 'horizontal') {
     return (
@@ -164,9 +211,10 @@ export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({
               className={`
                 px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200
                 flex items-center gap-1.5
-                ${section.items.some(item => isActive(item.path))
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ${
+                  section.items.some((item) => isActive(item.path))
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }
               `}
             >
@@ -194,9 +242,10 @@ export const TenantNavMenu: React.FC<TenantNavMenuProps> = ({
       <button
         className={`
           flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200
-          ${isInNav 
-            ? 'bg-primary/10 text-primary border border-primary/20' 
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+          ${
+            isInNav
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
           }
         `}
       >

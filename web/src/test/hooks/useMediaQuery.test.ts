@@ -26,8 +26,14 @@ interface MockMediaQueryList {
   onchange: null | ((this: MediaQueryList, ev: MediaQueryListEvent) => any);
   addListener: (callback: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
   removeListener: (callback: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
-  addEventListener: (type: string, callback: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
-  removeEventListener: (type: string, callback: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
+  addEventListener: (
+    type: string,
+    callback: (this: MediaQueryList, ev: MediaQueryListEvent) => any
+  ) => void;
+  removeEventListener: (
+    type: string,
+    callback: (this: MediaQueryList, ev: MediaQueryListEvent) => any
+  ) => void;
   dispatchEvent: (event: Event) => boolean;
 }
 
@@ -200,16 +206,14 @@ describe('useMediaQuery', () => {
       unmount();
 
       // At least one should have been called (depending on browser API)
-      const wasRemoved = removeEventListenerSpy.mock.calls.length > 0 ||
-                          removeListenerSpy.mock.calls.length > 0;
+      const wasRemoved =
+        removeEventListenerSpy.mock.calls.length > 0 || removeListenerSpy.mock.calls.length > 0;
       expect(wasRemoved).toBe(true);
     });
 
     it('should not update after unmount', () => {
       currentMatches = false;
-      const { result, unmount } = renderHook(() =>
-        useMediaQuery('(min-width: 768px)')
-      );
+      const { result, unmount } = renderHook(() => useMediaQuery('(min-width: 768px)'));
 
       expect(result.current).toBe(false);
 
@@ -318,12 +322,9 @@ describe('useMediaQuery', () => {
         return createMockMediaQueryList(query, queryMatches);
       });
 
-      const { result, rerender } = renderHook(
-        ({ query }) => useMediaQuery(query),
-        {
-          initialProps: { query: '(min-width: 768px)' },
-        }
-      );
+      const { result, rerender } = renderHook(({ query }) => useMediaQuery(query), {
+        initialProps: { query: '(min-width: 768px)' },
+      });
 
       expect(result.current).toBe(true);
 

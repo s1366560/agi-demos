@@ -7,35 +7,35 @@ import { render, screen, fireEvent } from '../utils';
 
 // Mock the store
 vi.mock('../../stores/theme', async () => {
-    const actual = await vi.importActual<typeof import('../../stores/theme')>('../../stores/theme');
-    return {
-        ...actual,
-        useThemeStore: vi.fn(),
-    };
+  const actual = await vi.importActual<typeof import('../../stores/theme')>('../../stores/theme');
+  return {
+    ...actual,
+    useThemeStore: vi.fn(),
+  };
 });
 
 describe('ThemeToggle', () => {
-    const setThemeMock = vi.fn();
+  const setThemeMock = vi.fn();
 
-    beforeEach(() => {
-        vi.clearAllMocks();
-        (useThemeStore as any).mockReturnValue({
-            theme: 'light',
-            setTheme: setThemeMock,
-        });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (useThemeStore as any).mockReturnValue({
+      theme: 'light',
+      setTheme: setThemeMock,
     });
+  });
 
-    it('renders all theme options', () => {
-        render(<ThemeToggle />);
-        expect(screen.getByTitle('Light Mode')).toBeInTheDocument();
-        expect(screen.getByTitle('Dark Mode')).toBeInTheDocument();
-        expect(screen.getByTitle('System Mode')).toBeInTheDocument();
-    });
+  it('renders all theme options', () => {
+    render(<ThemeToggle />);
+    expect(screen.getByTitle('Light Mode')).toBeInTheDocument();
+    expect(screen.getByTitle('Dark Mode')).toBeInTheDocument();
+    expect(screen.getByTitle('System Mode')).toBeInTheDocument();
+  });
 
-    it('calls setTheme when buttons are clicked', () => {
-        render(<ThemeToggle />);
+  it('calls setTheme when buttons are clicked', () => {
+    render(<ThemeToggle />);
 
-        fireEvent.click(screen.getByTitle('Dark Mode'));
-        expect(setThemeMock).toHaveBeenCalledWith('dark');
-    });
+    fireEvent.click(screen.getByTitle('Dark Mode'));
+    expect(setThemeMock).toHaveBeenCalledWith('dark');
+  });
 });

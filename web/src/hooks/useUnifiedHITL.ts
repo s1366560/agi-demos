@@ -69,16 +69,20 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
 
     if (pendingClarification && pendingClarification.request_id) {
       // Construct SSE-like data from old format
-      handleSSEEvent('clarification_asked', {
-        request_id: pendingClarification.request_id,
-        message: pendingClarification.message || pendingClarification.question,
-        question: pendingClarification.question || pendingClarification.message,
-        options: pendingClarification.options,
-        allow_custom: pendingClarification.allow_custom ?? true,
-        timeout_seconds: pendingClarification.timeout_seconds || 300,
-        context: pendingClarification.context || {},
-        clarification_type: pendingClarification.clarification_type || 'custom',
-      }, conversationId);
+      handleSSEEvent(
+        'clarification_asked',
+        {
+          request_id: pendingClarification.request_id,
+          message: pendingClarification.message || pendingClarification.question,
+          question: pendingClarification.question || pendingClarification.message,
+          options: pendingClarification.options,
+          allow_custom: pendingClarification.allow_custom ?? true,
+          timeout_seconds: pendingClarification.timeout_seconds || 300,
+          context: pendingClarification.context || {},
+          clarification_type: pendingClarification.clarification_type || 'custom',
+        },
+        conversationId
+      );
     }
   }, [conversationId, pendingClarification, handleSSEEvent]);
 
@@ -86,16 +90,20 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
     if (!conversationId) return;
 
     if (pendingDecision && pendingDecision.request_id) {
-      handleSSEEvent('decision_asked', {
-        request_id: pendingDecision.request_id,
-        title: pendingDecision.title,
-        description: pendingDecision.description,
-        options: pendingDecision.options,
-        default_option: pendingDecision.default_option,
-        timeout_seconds: pendingDecision.timeout_seconds || 300,
-        context: pendingDecision.context || {},
-        decision_type: pendingDecision.decision_type || 'custom',
-      }, conversationId);
+      handleSSEEvent(
+        'decision_asked',
+        {
+          request_id: pendingDecision.request_id,
+          title: pendingDecision.title,
+          description: pendingDecision.description,
+          options: pendingDecision.options,
+          default_option: pendingDecision.default_option,
+          timeout_seconds: pendingDecision.timeout_seconds || 300,
+          context: pendingDecision.context || {},
+          decision_type: pendingDecision.decision_type || 'custom',
+        },
+        conversationId
+      );
     }
   }, [conversationId, pendingDecision, handleSSEEvent]);
 
@@ -103,15 +111,19 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
     if (!conversationId) return;
 
     if (pendingEnvVarRequest && pendingEnvVarRequest.request_id) {
-      handleSSEEvent('env_var_requested', {
-        request_id: pendingEnvVarRequest.request_id,
-        tool_name: pendingEnvVarRequest.tool_name,
-        message: pendingEnvVarRequest.message,
-        fields: pendingEnvVarRequest.fields,
-        allow_save: pendingEnvVarRequest.allow_save ?? true,
-        timeout_seconds: pendingEnvVarRequest.timeout_seconds || 300,
-        context: pendingEnvVarRequest.context || {},
-      }, conversationId);
+      handleSSEEvent(
+        'env_var_requested',
+        {
+          request_id: pendingEnvVarRequest.request_id,
+          tool_name: pendingEnvVarRequest.tool_name,
+          message: pendingEnvVarRequest.message,
+          fields: pendingEnvVarRequest.fields,
+          allow_save: pendingEnvVarRequest.allow_save ?? true,
+          timeout_seconds: pendingEnvVarRequest.timeout_seconds || 300,
+          context: pendingEnvVarRequest.context || {},
+        },
+        conversationId
+      );
     }
   }, [conversationId, pendingEnvVarRequest, handleSSEEvent]);
 
@@ -121,47 +133,51 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
     if (pendingPermission && pendingPermission.request_id) {
       // Map from PermissionAskedEventData to unified format
       // Note: Some fields may not exist in the old format
-      handleSSEEvent('permission_asked', {
-        request_id: pendingPermission.request_id,
-        tool_name: pendingPermission.tool_name,
-        // 'action' maps to 'permission_type' in old format
-        action: pendingPermission.permission_type || 'ask',
-        risk_level: pendingPermission.risk_level || 'medium',
-        description: pendingPermission.description,
-        // These may not exist in old format
-        details: pendingPermission.context || {},
-        allow_remember: true,
-        default_action: undefined,
-        timeout_seconds: 300,
-        context: pendingPermission.context || {},
-      }, conversationId);
+      handleSSEEvent(
+        'permission_asked',
+        {
+          request_id: pendingPermission.request_id,
+          tool_name: pendingPermission.tool_name,
+          // 'action' maps to 'permission_type' in old format
+          action: pendingPermission.permission_type || 'ask',
+          risk_level: pendingPermission.risk_level || 'medium',
+          description: pendingPermission.description,
+          // These may not exist in old format
+          details: pendingPermission.context || {},
+          allow_remember: true,
+          default_action: undefined,
+          timeout_seconds: 300,
+          context: pendingPermission.context || {},
+        },
+        conversationId
+      );
     }
   }, [conversationId, pendingPermission, handleSSEEvent]);
 
   // Computed values
   const currentRequest = useMemo(() => {
     if (pendingRequests.length === 0) return null;
-    
+
     // 按 createdAt 排序（最早的在前）
     const sorted = [...pendingRequests].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-    
+
     // 返回第一个 pending 状态的请求
     // 在多次 HITL 场景下，这确保用户按顺序处理每个请求
-    return sorted.find(r => r.status === 'pending') || sorted[0];
+    return sorted.find((r) => r.status === 'pending') || sorted[0];
   }, [pendingRequests]);
 
   // 获取下一个待处理请求的函数（用于处理多个 HITL）
   const getNextPendingRequest = useMemo(() => {
     return (currentRequestId: string) => {
       if (pendingRequests.length <= 1) return null;
-      
+
       const sorted = [...pendingRequests].sort(
         (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
-      
-      const currentIndex = sorted.findIndex(r => r.requestId === currentRequestId);
+
+      const currentIndex = sorted.findIndex((r) => r.requestId === currentRequestId);
       return sorted[currentIndex + 1] || null;
     };
   }, [pendingRequests]);

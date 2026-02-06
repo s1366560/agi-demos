@@ -14,52 +14,52 @@
  * - Text Muted: #95a0c6
  */
 
-import type { ThemeConfig } from "antd";
+import type { ThemeConfig } from 'antd';
 
 // Design System Colors
 export const colors = {
   // Primary
-  primary: "#1e3fae",
-  primaryDark: "#152d7e",
-  primaryLight: "#3b5fc9",
-  primaryGlow: "#4b6fd9",
+  primary: '#1e3fae',
+  primaryDark: '#152d7e',
+  primaryLight: '#3b5fc9',
+  primaryGlow: '#4b6fd9',
 
   // Background
-  bgLight: "#f6f6f8",
-  bgDark: "#0a0a0b",
+  bgLight: '#f6f6f8',
+  bgDark: '#0a0a0b',
 
   // Surface
-  surfaceLight: "#ffffff",
-  surfaceDark: "#161618",
-  surfaceDarkAlt: "#1a1f2e",
+  surfaceLight: '#ffffff',
+  surfaceDark: '#161618',
+  surfaceDarkAlt: '#1a1f2e',
 
   // Border
-  borderLight: "#e2e8f0",
-  borderDark: "#252d46",
+  borderLight: '#e2e8f0',
+  borderDark: '#252d46',
 
   // Text
-  textPrimary: "#0f172a",
-  textSecondary: "#475569",
-  textMuted: "#95a0c6",
-  textMutedLight: "#64748b",
+  textPrimary: '#0f172a',
+  textSecondary: '#475569',
+  textMuted: '#95a0c6',
+  textMutedLight: '#64748b',
 
   // Status
-  success: "#10b981",
-  successLight: "#d1fae5",
-  warning: "#f59e0b",
-  warningLight: "#fef3c7",
-  error: "#ef4444",
-  errorLight: "#fee2e2",
-  info: "#3b82f6",
-  infoLight: "#dbeafe",
+  success: '#10b981',
+  successLight: '#d1fae5',
+  warning: '#f59e0b',
+  warningLight: '#fef3c7',
+  error: '#ef4444',
+  errorLight: '#fee2e2',
+  info: '#3b82f6',
+  infoLight: '#dbeafe',
 
   // Accent colors for tiles/cards
-  tileBlue: "#3b82f6",
-  tilePurple: "#8b5cf6",
-  tileEmerald: "#10b981",
-  tileAmber: "#f59e0b",
-  tileIndigo: "#6366f1",
-  tileRose: "#f43f5e",
+  tileBlue: '#3b82f6',
+  tilePurple: '#8b5cf6',
+  tileEmerald: '#10b981',
+  tileAmber: '#f59e0b',
+  tileIndigo: '#6366f1',
+  tileRose: '#f43f5e',
 };
 
 // Light Theme Configuration
@@ -69,10 +69,10 @@ export const lightTheme: ThemeConfig = {
     colorPrimary: colors.primary,
     colorPrimaryHover: colors.primaryLight,
     colorPrimaryActive: colors.primaryDark,
-    colorPrimaryBg: "#eef2ff",
-    colorPrimaryBgHover: "#e0e7ff",
-    colorPrimaryBorder: "#c7d2fe",
-    colorPrimaryBorderHover: "#a5b4fc",
+    colorPrimaryBg: '#eef2ff',
+    colorPrimaryBgHover: '#e0e7ff',
+    colorPrimaryBorder: '#c7d2fe',
+    colorPrimaryBorderHover: '#a5b4fc',
     colorPrimaryText: colors.primary,
     colorPrimaryTextHover: colors.primaryLight,
     colorPrimaryTextActive: colors.primaryDark,
@@ -82,35 +82,35 @@ export const lightTheme: ThemeConfig = {
     colorBgContainer: colors.surfaceLight,
     colorBgElevated: colors.surfaceLight,
     colorBgLayout: colors.bgLight,
-    colorBgSpotlight: "rgba(30, 63, 174, 0.1)",
-    colorBgMask: "rgba(0, 0, 0, 0.45)",
+    colorBgSpotlight: 'rgba(30, 63, 174, 0.1)',
+    colorBgMask: 'rgba(0, 0, 0, 0.45)',
 
     // Border Colors
     colorBorder: colors.borderLight,
-    colorBorderSecondary: "#f1f5f9",
+    colorBorderSecondary: '#f1f5f9',
 
     // Text Colors
     colorText: colors.textPrimary,
     colorTextSecondary: colors.textSecondary,
     colorTextTertiary: colors.textMutedLight,
-    colorTextQuaternary: "#94a3b8",
+    colorTextQuaternary: '#94a3b8',
     colorTextDescription: colors.textMutedLight,
-    colorTextDisabled: "#94a3b8",
-    colorTextPlaceholder: "#94a3b8",
+    colorTextDisabled: '#94a3b8',
+    colorTextPlaceholder: '#94a3b8',
 
     // Status Colors
     colorSuccess: colors.success,
     colorSuccessBg: colors.successLight,
-    colorSuccessBorder: "#a7f3d0",
+    colorSuccessBorder: '#a7f3d0',
     colorWarning: colors.warning,
     colorWarningBg: colors.warningLight,
-    colorWarningBorder: "#fde68a",
+    colorWarningBorder: '#fde68a',
     colorError: colors.error,
     colorErrorBg: colors.errorLight,
-    colorErrorBorder: "#fecaca",
+    colorErrorBorder: '#fecaca',
     colorInfo: colors.info,
     colorInfoBg: colors.infoLight,
-    colorInfoBorder: "#93c5fd",
+    colorInfoBorder: '#93c5fd',
 
     // Typography
     fontFamily:
@@ -136,9 +136,9 @@ export const lightTheme: ThemeConfig = {
 
     // Shadows - Subtle and sophisticated
     boxShadow:
-      "0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02)",
+      '0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02)',
     boxShadowSecondary:
-      "0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)",
+      '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
 
     // Control
     controlHeight: 36,
@@ -147,11 +147,11 @@ export const lightTheme: ThemeConfig = {
 
     // Motion
     motion: true,
-    motionDurationFast: "0.1s",
-    motionDurationMid: "0.2s",
-    motionDurationSlow: "0.3s",
-    motionEaseInOut: "cubic-bezier(0.4, 0, 0.2, 1)",
-    motionEaseOut: "cubic-bezier(0, 0, 0.2, 1)",
+    motionDurationFast: '0.1s',
+    motionDurationMid: '0.2s',
+    motionDurationSlow: '0.3s',
+    motionEaseInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    motionEaseOut: 'cubic-bezier(0, 0, 0.2, 1)',
   },
   components: {
     Layout: {
@@ -162,28 +162,28 @@ export const lightTheme: ThemeConfig = {
       triggerBg: colors.bgLight,
     },
     Menu: {
-      itemBg: "transparent",
+      itemBg: 'transparent',
       itemColor: colors.textSecondary,
-      itemHoverBg: "#f1f5f9",
+      itemHoverBg: '#f1f5f9',
       itemHoverColor: colors.textPrimary,
-      itemSelectedBg: "rgba(30, 63, 174, 0.1)",
+      itemSelectedBg: 'rgba(30, 63, 174, 0.1)',
       itemSelectedColor: colors.primary,
-      itemActiveBg: "rgba(30, 63, 174, 0.15)",
+      itemActiveBg: 'rgba(30, 63, 174, 0.15)',
     },
     Button: {
-      primaryShadow: "0 2px 4px rgba(30, 63, 174, 0.2)",
-      defaultShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
+      primaryShadow: '0 2px 4px rgba(30, 63, 174, 0.2)',
+      defaultShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
       fontWeight: 500,
     },
     Card: {
-      headerBg: "transparent",
+      headerBg: 'transparent',
       colorBorderSecondary: colors.borderLight,
       paddingLG: 24,
     },
     Table: {
-      headerBg: "#f8fafc",
+      headerBg: '#f8fafc',
       headerColor: colors.textSecondary,
-      rowHoverBg: "#f8fafc",
+      rowHoverBg: '#f8fafc',
       borderColor: colors.borderLight,
     },
     Input: {
@@ -191,7 +191,7 @@ export const lightTheme: ThemeConfig = {
       hoverBorderColor: colors.primaryLight,
     },
     Select: {
-      optionSelectedBg: "rgba(30, 63, 174, 0.1)",
+      optionSelectedBg: 'rgba(30, 63, 174, 0.1)',
       optionSelectedColor: colors.primary,
     },
     Modal: {
@@ -205,7 +205,7 @@ export const lightTheme: ThemeConfig = {
       itemHoverColor: colors.primaryLight,
     },
     Tag: {
-      defaultBg: "#f1f5f9",
+      defaultBg: '#f1f5f9',
       defaultColor: colors.textSecondary,
     },
     Badge: {
@@ -216,7 +216,7 @@ export const lightTheme: ThemeConfig = {
       lastItemColor: colors.textPrimary,
       linkColor: colors.textMutedLight,
       linkHoverColor: colors.primary,
-      separatorColor: "#cbd5e1",
+      separatorColor: '#cbd5e1',
     },
     Statistic: {
       titleFontSize: 12,
@@ -229,8 +229,8 @@ export const lightTheme: ThemeConfig = {
       colorPrimary: colors.primary,
     },
     Tooltip: {
-      colorBgSpotlight: "#1e293b",
-      colorTextLightSolid: "#f8fafc",
+      colorBgSpotlight: '#1e293b',
+      colorTextLightSolid: '#f8fafc',
     },
   },
 };
@@ -242,10 +242,10 @@ export const darkTheme: ThemeConfig = {
     colorPrimary: colors.primaryLight,
     colorPrimaryHover: colors.primaryGlow,
     colorPrimaryActive: colors.primary,
-    colorPrimaryBg: "rgba(59, 95, 201, 0.15)",
-    colorPrimaryBgHover: "rgba(59, 95, 201, 0.25)",
-    colorPrimaryBorder: "rgba(59, 95, 201, 0.4)",
-    colorPrimaryBorderHover: "rgba(59, 95, 201, 0.6)",
+    colorPrimaryBg: 'rgba(59, 95, 201, 0.15)',
+    colorPrimaryBgHover: 'rgba(59, 95, 201, 0.25)',
+    colorPrimaryBorder: 'rgba(59, 95, 201, 0.4)',
+    colorPrimaryBorderHover: 'rgba(59, 95, 201, 0.6)',
     colorPrimaryText: colors.primaryLight,
     colorPrimaryTextHover: colors.primaryGlow,
     colorPrimaryTextActive: colors.primary,
@@ -255,35 +255,35 @@ export const darkTheme: ThemeConfig = {
     colorBgContainer: colors.surfaceDark,
     colorBgElevated: colors.surfaceDarkAlt,
     colorBgLayout: colors.bgDark,
-    colorBgSpotlight: "rgba(59, 95, 201, 0.15)",
-    colorBgMask: "rgba(0, 0, 0, 0.65)",
+    colorBgSpotlight: 'rgba(59, 95, 201, 0.15)',
+    colorBgMask: 'rgba(0, 0, 0, 0.65)',
 
     // Border Colors
     colorBorder: colors.borderDark,
-    colorBorderSecondary: "#1e293b",
+    colorBorderSecondary: '#1e293b',
 
     // Text Colors
-    colorText: "#f8fafc",
-    colorTextSecondary: "#cbd5e1",
+    colorText: '#f8fafc',
+    colorTextSecondary: '#cbd5e1',
     colorTextTertiary: colors.textMuted,
-    colorTextQuaternary: "#64748b",
+    colorTextQuaternary: '#64748b',
     colorTextDescription: colors.textMuted,
-    colorTextDisabled: "#475569",
-    colorTextPlaceholder: "#64748b",
+    colorTextDisabled: '#475569',
+    colorTextPlaceholder: '#64748b',
 
     // Status Colors
-    colorSuccess: "#34d399",
-    colorSuccessBg: "rgba(16, 185, 129, 0.15)",
-    colorSuccessBorder: "rgba(16, 185, 129, 0.4)",
-    colorWarning: "#fbbf24",
-    colorWarningBg: "rgba(245, 158, 11, 0.15)",
-    colorWarningBorder: "rgba(245, 158, 11, 0.4)",
-    colorError: "#f87171",
-    colorErrorBg: "rgba(239, 68, 68, 0.15)",
-    colorErrorBorder: "rgba(239, 68, 68, 0.4)",
-    colorInfo: "#60a5fa",
-    colorInfoBg: "rgba(59, 130, 246, 0.15)",
-    colorInfoBorder: "rgba(59, 130, 246, 0.4)",
+    colorSuccess: '#34d399',
+    colorSuccessBg: 'rgba(16, 185, 129, 0.15)',
+    colorSuccessBorder: 'rgba(16, 185, 129, 0.4)',
+    colorWarning: '#fbbf24',
+    colorWarningBg: 'rgba(245, 158, 11, 0.15)',
+    colorWarningBorder: 'rgba(245, 158, 11, 0.4)',
+    colorError: '#f87171',
+    colorErrorBg: 'rgba(239, 68, 68, 0.15)',
+    colorErrorBorder: 'rgba(239, 68, 68, 0.4)',
+    colorInfo: '#60a5fa',
+    colorInfoBg: 'rgba(59, 130, 246, 0.15)',
+    colorInfoBorder: 'rgba(59, 130, 246, 0.4)',
 
     // Typography
     fontFamily:
@@ -303,9 +303,9 @@ export const darkTheme: ThemeConfig = {
 
     // Shadows
     boxShadow:
-      "0 1px 2px 0 rgba(0, 0, 0, 0.2), 0 1px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px 0 rgba(0, 0, 0, 0.1)",
+      '0 1px 2px 0 rgba(0, 0, 0, 0.2), 0 1px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px 0 rgba(0, 0, 0, 0.1)',
     boxShadowSecondary:
-      "0 6px 16px 0 rgba(0, 0, 0, 0.32), 0 3px 6px -4px rgba(0, 0, 0, 0.48), 0 9px 28px 8px rgba(0, 0, 0, 0.2)",
+      '0 6px 16px 0 rgba(0, 0, 0, 0.32), 0 3px 6px -4px rgba(0, 0, 0, 0.48), 0 9px 28px 8px rgba(0, 0, 0, 0.2)',
 
     // Control
     controlHeight: 36,
@@ -318,42 +318,42 @@ export const darkTheme: ThemeConfig = {
   components: {
     Layout: {
       headerBg: colors.surfaceDark,
-      headerColor: "#f8fafc",
+      headerColor: '#f8fafc',
       siderBg: colors.surfaceDark,
       bodyBg: colors.bgDark,
       triggerBg: colors.surfaceDarkAlt,
     },
     Menu: {
-      itemBg: "transparent",
+      itemBg: 'transparent',
       itemColor: colors.textMuted,
       itemHoverBg: colors.borderDark,
-      itemHoverColor: "#f8fafc",
-      itemSelectedBg: "rgba(59, 95, 201, 0.15)",
+      itemHoverColor: '#f8fafc',
+      itemSelectedBg: 'rgba(59, 95, 201, 0.15)',
       itemSelectedColor: colors.primaryLight,
-      itemActiveBg: "rgba(59, 95, 201, 0.2)",
-      darkItemBg: "transparent",
+      itemActiveBg: 'rgba(59, 95, 201, 0.2)',
+      darkItemBg: 'transparent',
       darkItemColor: colors.textMuted,
       darkItemHoverBg: colors.borderDark,
-      darkItemHoverColor: "#f8fafc",
-      darkItemSelectedBg: "rgba(59, 95, 201, 0.15)",
+      darkItemHoverColor: '#f8fafc',
+      darkItemSelectedBg: 'rgba(59, 95, 201, 0.15)',
       darkItemSelectedColor: colors.primaryLight,
     },
     Button: {
-      primaryShadow: "0 2px 8px rgba(59, 95, 201, 0.3)",
+      primaryShadow: '0 2px 8px rgba(59, 95, 201, 0.3)',
       defaultBg: colors.surfaceDarkAlt,
-      defaultColor: "#f8fafc",
+      defaultColor: '#f8fafc',
       defaultBorderColor: colors.borderDark,
       fontWeight: 500,
     },
     Card: {
       colorBgContainer: colors.surfaceDark,
-      headerBg: "transparent",
+      headerBg: 'transparent',
       colorBorderSecondary: colors.borderDark,
     },
     Table: {
       headerBg: colors.surfaceDarkAlt,
       headerColor: colors.textMuted,
-      rowHoverBg: "rgba(37, 45, 70, 0.5)",
+      rowHoverBg: 'rgba(37, 45, 70, 0.5)',
       borderColor: colors.borderDark,
       colorBgContainer: colors.surfaceDark,
     },
@@ -366,7 +366,7 @@ export const darkTheme: ThemeConfig = {
     Select: {
       colorBgContainer: colors.surfaceDarkAlt,
       colorBorder: colors.borderDark,
-      optionSelectedBg: "rgba(59, 95, 201, 0.2)",
+      optionSelectedBg: 'rgba(59, 95, 201, 0.2)',
       optionSelectedColor: colors.primaryLight,
     },
     Modal: {
@@ -385,14 +385,14 @@ export const darkTheme: ThemeConfig = {
       defaultColor: colors.textMuted,
     },
     Badge: {
-      colorBgContainer: "#f87171",
+      colorBgContainer: '#f87171',
     },
     Breadcrumb: {
       itemColor: colors.textMuted,
-      lastItemColor: "#f8fafc",
+      lastItemColor: '#f8fafc',
       linkColor: colors.textMuted,
       linkHoverColor: colors.primaryLight,
-      separatorColor: "#475569",
+      separatorColor: '#475569',
     },
     Statistic: {
       titleFontSize: 12,
@@ -406,7 +406,7 @@ export const darkTheme: ThemeConfig = {
     },
     Tooltip: {
       colorBgSpotlight: colors.surfaceDarkAlt,
-      colorTextLightSolid: "#f8fafc",
+      colorTextLightSolid: '#f8fafc',
     },
     Dropdown: {
       colorBgElevated: colors.surfaceDark,

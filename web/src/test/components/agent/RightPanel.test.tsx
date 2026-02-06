@@ -7,25 +7,19 @@
  * - RightPanel (refactored to use extracted components)
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock antd components completely to avoid complex dependencies
 vi.mock('antd', () => ({
   Tabs: ({ children, activeKey, onChange, items }: any) => (
     <div data-testid="tabs">
       {items?.map((item: any) => (
-        <button
-          key={item.key}
-          data-testid={`tab-${item.key}`}
-          onClick={() => onChange?.(item.key)}
-        >
+        <button key={item.key} data-testid={`tab-${item.key}`} onClick={() => onChange?.(item.key)}>
           {typeof item.label === 'string' ? item.label : 'Tab'}
         </button>
       ))}
-      <div data-testid="tabs-content">
-        {items?.find((i: any) => i.key === activeKey)?.children}
-      </div>
+      <div data-testid="tabs-content">{items?.find((i: any) => i.key === activeKey)?.children}</div>
     </div>
   ),
   Button: ({ children, onClick, icon, ...props }: any) => (
@@ -43,7 +37,7 @@ vi.mock('antd', () => ({
     </div>
   ),
   Spin: () => <div data-testid="spin">Loading...</div>,
-}))
+}));
 
 // Mock stores before importing components
 vi.mock('@/stores/agent/planModeStore', () => ({
@@ -53,7 +47,7 @@ vi.mock('@/stores/agent/planModeStore', () => ({
     planLoading: false,
     planError: null,
   })),
-}))
+}));
 
 vi.mock('@/stores/sandbox', () => ({
   useSandboxStore: vi.fn(() => ({
@@ -61,7 +55,7 @@ vi.mock('@/stores/sandbox', () => ({
     toolExecutions: [],
     currentTool: null,
   })),
-}))
+}));
 
 // Mock SandboxSection to avoid complex dependencies
 vi.mock('@/components/agent/SandboxSection', () => ({
@@ -72,7 +66,7 @@ vi.mock('@/components/agent/SandboxSection', () => ({
       <div>Sandbox Section Mock</div>
     </div>
   ),
-}))
+}));
 
 // Mock PlanEditor to avoid complex dependencies
 vi.mock('@/components/agent/PlanEditor', () => ({
@@ -82,106 +76,104 @@ vi.mock('@/components/agent/PlanEditor', () => ({
       Plan Editor Mock
     </div>
   ),
-}))
+}));
 
 // Import components after mocking
-import { RightPanel } from '@/components/agent/RightPanel'
-import { PlanContent } from '@/components/agent/rightPanel/PlanContent'
-import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle'
+import { RightPanel } from '@/components/agent/RightPanel';
+import { PlanContent } from '@/components/agent/rightPanel/PlanContent';
+import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
 
 // Types for test data
-import type { WorkPlan, ExecutionPlan } from '@/types/agent'
+import type { WorkPlan, ExecutionPlan } from '@/types/agent';
 
 describe('ResizeHandle (Extracted Component)', () => {
   it('should render resize handle with correct classes', () => {
-    const onResize = vi.fn()
-    const { container } = render(<ResizeHandle onResize={onResize} />)
+    const onResize = vi.fn();
+    const { container } = render(<ResizeHandle onResize={onResize} />);
 
-    const handle = container.querySelector('.left-0.top-0.bottom-0')
-    expect(handle).toBeInTheDocument()
-  })
+    const handle = container.querySelector('.left-0.top-0.bottom-0');
+    expect(handle).toBeInTheDocument();
+  });
 
   it('should have cursor-ew-resize class', () => {
-    const onResize = vi.fn()
-    const { container } = render(<ResizeHandle onResize={onResize} />)
+    const onResize = vi.fn();
+    const { container } = render(<ResizeHandle onResize={onResize} />);
 
-    const handle = container.querySelector('.cursor-ew-resize')
-    expect(handle).toBeInTheDocument()
-  })
+    const handle = container.querySelector('.cursor-ew-resize');
+    expect(handle).toBeInTheDocument();
+  });
 
   it('should call onResize when dragging', async () => {
-    const onResize = vi.fn()
-    const { container } = render(<ResizeHandle onResize={onResize} />)
+    const onResize = vi.fn();
+    const { container } = render(<ResizeHandle onResize={onResize} />);
 
-    const handle = container.firstChild as HTMLElement
-    expect(handle).toBeInTheDocument()
+    const handle = container.firstChild as HTMLElement;
+    expect(handle).toBeInTheDocument();
 
     // Simulate mouse down
-    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseDown(handle, { clientX: 100 });
 
     // Simulate mouse move
-    const moveEvent = new MouseEvent('mousemove', { clientX: 150 })
-    Object.defineProperty(moveEvent, 'clientX', { value: 150 })
-    document.dispatchEvent(moveEvent)
+    const moveEvent = new MouseEvent('mousemove', { clientX: 150 });
+    Object.defineProperty(moveEvent, 'clientX', { value: 150 });
+    document.dispatchEvent(moveEvent);
 
     await waitFor(() => {
       // The delta should be calculated (150 - 100 = 50)
-      expect(onResize).toHaveBeenCalledWith(50)
-    })
+      expect(onResize).toHaveBeenCalledWith(50);
+    });
 
     // Cleanup
-    const upEvent = new MouseEvent('mouseup', {})
-    document.dispatchEvent(upEvent)
-  })
+    const upEvent = new MouseEvent('mouseup', {});
+    document.dispatchEvent(upEvent);
+  });
 
   it('should show dragging state during drag', async () => {
-    const onResize = vi.fn()
-    const { container } = render(<ResizeHandle onResize={onResize} />)
+    const onResize = vi.fn();
+    const { container } = render(<ResizeHandle onResize={onResize} />);
 
-    const handle = container.firstChild as HTMLElement
+    const handle = container.firstChild as HTMLElement;
 
     // Initially not dragging
-    expect(handle).not.toHaveClass('bg-slate-300/70')
+    expect(handle).not.toHaveClass('bg-slate-300/70');
 
     // Start dragging
-    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseDown(handle, { clientX: 100 });
 
     await waitFor(() => {
-      expect(handle).toHaveClass('bg-slate-300/70')
-    })
+      expect(handle).toHaveClass('bg-slate-300/70');
+    });
 
     // Cleanup
-    const upEvent = new MouseEvent('mouseup', {})
-    document.dispatchEvent(upEvent)
-  })
+    const upEvent = new MouseEvent('mouseup', {});
+    document.dispatchEvent(upEvent);
+  });
 
   it('should prevent default on mouse down', () => {
-    const onResize = vi.fn()
-    const { container } = render(<ResizeHandle onResize={onResize} />)
+    const onResize = vi.fn();
+    const { container } = render(<ResizeHandle onResize={onResize} />);
 
-    const handle = container.firstChild as HTMLElement
-    const event = new MouseEvent('mousedown', { clientX: 100, bubbles: true, cancelable: true })
-    event.preventDefault = vi.fn()
+    const handle = container.firstChild as HTMLElement;
+    const event = new MouseEvent('mousedown', { clientX: 100, bubbles: true, cancelable: true });
+    event.preventDefault = vi.fn();
 
-    fireEvent(handle, event)
+    fireEvent(handle, event);
 
-    expect(event.preventDefault).toHaveBeenCalled()
-  })
-})
+    expect(event.preventDefault).toHaveBeenCalled();
+  });
+});
 
 describe('PlanContent (Extracted Component)', () => {
   beforeEach(() => {
     // Reset mocks before each test
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+  });
 
   it('should show empty state when no plans', () => {
-    const { container } = render(
-      <PlanContent workPlan={null} executionPlan={null} />
-    )
+    const { container } = render(<PlanContent workPlan={null} executionPlan={null} />);
 
-    expect(screen.getByText('No active plan')).toBeInTheDocument()
-  })
+    expect(screen.getByText('No active plan')).toBeInTheDocument();
+  });
 
   it('should display execution plan steps', () => {
     const executionPlan: ExecutionPlan = {
@@ -192,16 +184,14 @@ describe('PlanContent (Extracted Component)', () => {
         { description: 'Step 2', expected_output: 'Output 2' },
       ],
       current_step_index: 1,
-    } as any
+    } as any;
 
-    const { container } = render(
-      <PlanContent workPlan={null} executionPlan={executionPlan} />
-    )
+    const { container } = render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
 
-    expect(screen.getByText('Execution Plan')).toBeInTheDocument()
-    expect(screen.getByText('Step 1')).toBeInTheDocument()
-    expect(screen.getByText('Step 2')).toBeInTheDocument()
-  })
+    expect(screen.getByText('Execution Plan')).toBeInTheDocument();
+    expect(screen.getByText('Step 1')).toBeInTheDocument();
+    expect(screen.getByText('Step 2')).toBeInTheDocument();
+  });
 
   it('should display work plan steps', () => {
     const workPlan: WorkPlan = {
@@ -212,83 +202,82 @@ describe('PlanContent (Extracted Component)', () => {
         { description: 'Task 2', expected_output: 'Result 2' },
       ],
       current_step_index: 0,
-    } as any
+    } as any;
 
-    const { container } = render(
-      <PlanContent workPlan={workPlan} executionPlan={null} />
-    )
+    const { container } = render(<PlanContent workPlan={workPlan} executionPlan={null} />);
 
-    expect(screen.getByText('Work Plan')).toBeInTheDocument()
-    expect(screen.getByText('Task 1')).toBeInTheDocument()
-  })
+    expect(screen.getByText('Work Plan')).toBeInTheDocument();
+    expect(screen.getByText('Task 1')).toBeInTheDocument();
+  });
 
   it('should show correct progress percentage', () => {
     const executionPlan: ExecutionPlan = {
       id: 'plan-1',
-      steps: [{ description: 'Step 1' }, { description: 'Step 2' }, { description: 'Step 3' }, { description: 'Step 4' }],
+      steps: [
+        { description: 'Step 1' },
+        { description: 'Step 2' },
+        { description: 'Step 3' },
+        { description: 'Step 4' },
+      ],
       current_step_index: 2,
-    } as any
+    } as any;
 
-    render(<PlanContent workPlan={null} executionPlan={executionPlan} />)
+    render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
 
     // 2 completed out of 4 = 50%
-    expect(screen.getByText('50%')).toBeInTheDocument()
-  })
+    expect(screen.getByText('50%')).toBeInTheDocument();
+  });
 
   it('should show completed step with checkmark', () => {
     const executionPlan: ExecutionPlan = {
       id: 'plan-1',
       steps: [{ description: 'Completed Step' }, { description: 'Pending Step' }],
       current_step_index: 1,
-    } as any
+    } as any;
 
-    render(<PlanContent workPlan={null} executionPlan={executionPlan} />)
+    render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
 
     // Completed step should have emerald color class
-    const stepElements = screen.getAllByText(/Step/)
-    expect(stepElements[0]).toBeInTheDocument()
-  })
+    const stepElements = screen.getAllByText(/Step/);
+    expect(stepElements[0]).toBeInTheDocument();
+  });
 
   it('should show current step with play icon', () => {
     const executionPlan: ExecutionPlan = {
       id: 'plan-1',
       steps: [{ description: 'Completed Step' }, { description: 'Current Step' }],
       current_step_index: 1,
-    } as any
+    } as any;
 
-    render(<PlanContent workPlan={null} executionPlan={executionPlan} />)
+    render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
 
     // Current step should be present
-    expect(screen.getByText('Current Step')).toBeInTheDocument()
-  })
-})
+    expect(screen.getByText('Current Step')).toBeInTheDocument();
+  });
+});
 
 describe('RightPanel (Refactored)', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+  });
 
   it('should not render when collapsed', () => {
     const { container } = render(
-      <RightPanel
-        workPlan={null}
-        executionPlan={null}
-        collapsed={true}
-      />
-    )
+      <RightPanel workPlan={null} executionPlan={null} collapsed={true} />
+    );
 
-    expect(container.firstChild).toBe(null)
-  })
+    expect(container.firstChild).toBe(null);
+  });
 
   // Note: Full integration tests for RightPanel are skipped due to antd Tabs complexity
   // The core components (ResizeHandle, PlanContent) are fully tested above
   // RightPanel is a thin wrapper that uses these tested components
 
   it('should be defined and exportable', () => {
-    expect(RightPanel).toBeDefined()
-  })
+    expect(RightPanel).toBeDefined();
+  });
 
   it('should have displayName for debugging', () => {
-    expect(RightPanel.displayName).toBe('RightPanel')
-  })
-})
+    expect(RightPanel.displayName).toBe('RightPanel');
+  });
+});

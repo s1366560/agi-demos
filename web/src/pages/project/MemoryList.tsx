@@ -255,7 +255,9 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
       if (!projectId) return;
       try {
         await memoryAPI.reprocess(projectId, id);
-        setMemories((prev) => prev.map((m) => (m.id === id ? { ...m, processing_status: 'PENDING' } : m)));
+        setMemories((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, processing_status: 'PENDING' } : m))
+        );
       } catch (error) {
         console.error('Failed to reprocess:', error);
       }
@@ -348,7 +350,9 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '', projectId: prop
   return (
     <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{TEXTS.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          {TEXTS.title}
+        </h1>
         <p className="text-sm text-slate-500">{TEXTS.subtitle}</p>
       </div>
       <Link to={`/project/${projectId}/memories/new`}>
@@ -373,13 +377,19 @@ interface ToolbarProps {
   onSearchChange?: (value: string) => void;
 }
 
-const ToolbarInternal: React.FC<ToolbarProps> = ({ className = '', search: propSearch, onSearchChange: propOnSearchChange }) => {
+const ToolbarInternal: React.FC<ToolbarProps> = ({
+  className = '',
+  search: propSearch,
+  onSearchChange: propOnSearchChange,
+}) => {
   const context = useMemoryListContextOptional();
   const search = propSearch ?? context?.state.search ?? '';
   const onSearchChange = propOnSearchChange ?? context?.actions.setSearch;
 
   return (
-    <div className={`flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-surface-dark p-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm ${className}`}>
+    <div
+      className={`flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-surface-dark p-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm ${className}`}
+    >
       <div className="relative w-full md:max-w-md">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <span className="material-symbols-outlined text-slate-400">search</span>
@@ -393,7 +403,9 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({ className = '', search: propS
         />
       </div>
       <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 px-2 md:px-0">
-        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">{TEXTS.filterLabel}</span>
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
+          {TEXTS.filterLabel}
+        </span>
         <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-600/20 text-sm font-medium whitespace-nowrap transition-colors">
           {TEXTS.allTypes}
           <span className="material-symbols-outlined text-lg">arrow_drop_down</span>
@@ -419,7 +431,6 @@ interface VirtualListProps {
 
 const VirtualListInternal: React.FC<VirtualListProps> = memo(
   ({ parentRef, virtualizer, filteredMemories, totalSize, className = '' }) => {
-     
     const { state: _state, actions: _actions, projectId: _projectId } = useMemoryListContext();
 
     return (
@@ -427,11 +438,21 @@ const VirtualListInternal: React.FC<VirtualListProps> = memo(
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
             <tr>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">{TEXTS.tableName}</th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">{TEXTS.tableType}</th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">{TEXTS.tableStatus}</th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">{TEXTS.tableProcessing}</th>
-              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400 text-right">{TEXTS.tableCreated}</th>
+              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                {TEXTS.tableName}
+              </th>
+              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                {TEXTS.tableType}
+              </th>
+              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                {TEXTS.tableStatus}
+              </th>
+              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                {TEXTS.tableProcessing}
+              </th>
+              <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400 text-right">
+                {TEXTS.tableCreated}
+              </th>
               <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400"></th>
             </tr>
           </thead>
@@ -441,7 +462,10 @@ const VirtualListInternal: React.FC<VirtualListProps> = memo(
           className="overflow-auto"
           style={{ height: `${Math.min(filteredMemories.length * ROW_HEIGHT, 600)}px` }}
         >
-          <table className="w-full text-left text-sm" style={{ position: 'relative', height: `${totalSize}px` }}>
+          <table
+            className="w-full text-left text-sm"
+            style={{ position: 'relative', height: `${totalSize}px` }}
+          >
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {virtualizer.getVirtualItems().map((virtualRow) => (
                 <MemoryList.MemoryRow
@@ -485,26 +509,30 @@ const getStatusText = (status: string | undefined): string => {
   }
 };
 
-const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(({ status, progress, className = '' }) => {
-  const styles = getProcessingStatusStyles(status);
+const StatusBadgeInternal: React.FC<StatusBadgeProps> = memo(
+  ({ status, progress, className = '' }) => {
+    const styles = getProcessingStatusStyles(status);
 
-  return (
-    <div className={`flex flex-col gap-1 ${className}`}>
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles.badge}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${styles.dot}`}></span>
-        {progress !== undefined ? `${progress}%` : getStatusText(status)}
-      </span>
-      {progress !== undefined && (
-        <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      )}
-    </div>
-  );
-});
+    return (
+      <div className={`flex flex-col gap-1 ${className}`}>
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles.badge}`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${styles.dot}`}></span>
+          {progress !== undefined ? `${progress}%` : getStatusText(status)}
+        </span>
+        {progress !== undefined && (
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+);
 
 StatusBadgeInternal.displayName = 'MemoryList.StatusBadge';
 
@@ -519,106 +547,110 @@ interface MemoryRowProps {
   projectId?: string;
 }
 
-const MemoryRowInternal: React.FC<MemoryRowProps> = memo(({ memory, index, onDelete: propOnDelete, projectId: propProjectId }) => {
-  const context = useMemoryListContextOptional();
-  const state = context?.state;
-  const actions = context?.actions;
-  const projectId = propProjectId ?? context?.projectId ?? 'test-project-1';
-  const onDelete = propOnDelete ?? actions?.confirmDelete;
-  const progress = state?.taskProgress[memory.id]?.progress;
+const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
+  ({ memory, index, onDelete: propOnDelete, projectId: propProjectId }) => {
+    const context = useMemoryListContextOptional();
+    const state = context?.state;
+    const actions = context?.actions;
+    const projectId = propProjectId ?? context?.projectId ?? 'test-project-1';
+    const onDelete = propOnDelete ?? actions?.confirmDelete;
+    const progress = state?.taskProgress[memory.id]?.progress;
 
-  return (
-    <tr
-      key={memory.id}
-      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        transform: `translateY(${index * ROW_HEIGHT}px)`,
-      }}
-    >
-      <td className="px-6 py-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-              description
-            </span>
-          </div>
-          <div>
-            <Link
-              to={`/project/${projectId}/memory/${memory.id}`}
-              className="font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            >
-              {memory.title || 'Untitled'}
-            </Link>
-            <div className="text-xs text-slate-500">
-              <span className="font-mono opacity-70">{memory.id.substring(0, 8)}...</span>
+    return (
+      <tr
+        key={memory.id}
+        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          transform: `translateY(${index * ROW_HEIGHT}px)`,
+        }}
+      >
+        <td className="px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                description
+              </span>
+            </div>
+            <div>
+              <Link
+                to={`/project/${projectId}/memory/${memory.id}`}
+                className="font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                {memory.title || 'Untitled'}
+              </Link>
+              <div className="text-xs text-slate-500">
+                <span className="font-mono opacity-70">{memory.id.substring(0, 8)}...</span>
+              </div>
             </div>
           </div>
-        </div>
-      </td>
-      <td className="px-6 py-3 text-slate-600 dark:text-slate-300 capitalize">
-        {memory.content_type || 'Unknown'}
-      </td>
-      <td className="px-6 py-3">
-        <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-            memory.status === 'DISABLED'
-              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-          }`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${memory.status === 'DISABLED' ? 'bg-red-500' : 'bg-green-500'}`}></span>
-          {memory.status || TEXTS.statusEnabled}
-        </span>
-      </td>
-      <td className="px-6 py-3">
-        <MemoryList.StatusBadge
-          status={memory.processing_status}
-          progress={progress}
-        />
-      </td>
-      <td className="px-6 py-3 text-slate-600 dark:text-slate-300 text-right">
-        {memory.created_at ? new Date(memory.created_at).toLocaleDateString() : '-'}
-      </td>
-      <td className="px-6 py-3 text-right">
-        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          {actions && (
-            <button
-              onClick={() => actions.handleReprocess(memory.id)}
-              className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-              title={TEXTS.reprocess}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                refresh
-              </span>
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={() => onDelete(memory)}
-              disabled={state?.deletingId === memory.id}
-              className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-              title={TEXTS.deleteMemory}
-            >
-              {state?.deletingId === memory.id ? (
-                <span className="material-symbols-outlined animate-spin" style={{ fontSize: '20px' }}>
-                  progress_activity
-                </span>
-              ) : (
+        </td>
+        <td className="px-6 py-3 text-slate-600 dark:text-slate-300 capitalize">
+          {memory.content_type || 'Unknown'}
+        </td>
+        <td className="px-6 py-3">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+              memory.status === 'DISABLED'
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${memory.status === 'DISABLED' ? 'bg-red-500' : 'bg-green-500'}`}
+            ></span>
+            {memory.status || TEXTS.statusEnabled}
+          </span>
+        </td>
+        <td className="px-6 py-3">
+          <MemoryList.StatusBadge status={memory.processing_status} progress={progress} />
+        </td>
+        <td className="px-6 py-3 text-slate-600 dark:text-slate-300 text-right">
+          {memory.created_at ? new Date(memory.created_at).toLocaleDateString() : '-'}
+        </td>
+        <td className="px-6 py-3 text-right">
+          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            {actions && (
+              <button
+                onClick={() => actions.handleReprocess(memory.id)}
+                className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                title={TEXTS.reprocess}
+              >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  delete
+                  refresh
                 </span>
-              )}
-            </button>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
-});
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={() => onDelete(memory)}
+                disabled={state?.deletingId === memory.id}
+                className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                title={TEXTS.deleteMemory}
+              >
+                {state?.deletingId === memory.id ? (
+                  <span
+                    className="material-symbols-outlined animate-spin"
+                    style={{ fontSize: '20px' }}
+                  >
+                    progress_activity
+                  </span>
+                ) : (
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                    delete
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  }
+);
 
 MemoryRowInternal.displayName = 'MemoryList.MemoryRow';
 
@@ -689,9 +721,13 @@ const DeleteModalInternal: React.FC<DeleteModalProps> = memo(
     if (!isOpen) return null;
 
     return (
-      <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${className}`}>
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${className}`}
+      >
         <div className="bg-white dark:bg-surface-dark rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">{TEXTS.deleteTitle}</h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+            {TEXTS.deleteTitle}
+          </h3>
           <p className="text-slate-600 dark:text-slate-300 mb-6">
             {TEXTS.deleteMessage}
             <br />

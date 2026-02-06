@@ -2,19 +2,19 @@
  * SandboxPanelContext - Shared state for SandboxPanel compound components
  */
 
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
-import type { SandboxPanelContextValue, SandboxTabKey } from "./types";
+import type { SandboxPanelContextValue, SandboxTabKey } from './types';
 
 const SandboxPanelContext = createContext<SandboxPanelContextValue | null>(null);
 
 export interface SandboxProviderProps {
   sandboxId: string | null;
   defaultTab?: SandboxTabKey;
-  toolExecutions: SandboxPanelContextValue["toolExecutions"];
-  currentTool: SandboxPanelContextValue["currentTool"];
-  desktopStatus: SandboxPanelContextValue["desktopStatus"];
-  terminalStatus: SandboxPanelContextValue["terminalStatus"];
+  toolExecutions: SandboxPanelContextValue['toolExecutions'];
+  currentTool: SandboxPanelContextValue['currentTool'];
+  desktopStatus: SandboxPanelContextValue['desktopStatus'];
+  terminalStatus: SandboxPanelContextValue['terminalStatus'];
   onDesktopStart?: () => void;
   onDesktopStop?: () => void;
   onTerminalStart?: () => void;
@@ -31,7 +31,7 @@ export interface SandboxProviderProps {
  */
 export const SandboxPanelProvider: React.FC<SandboxProviderProps> = ({
   sandboxId,
-  defaultTab = "terminal",
+  defaultTab = 'terminal',
   toolExecutions,
   currentTool,
   desktopStatus,
@@ -79,7 +79,7 @@ export const SandboxPanelProvider: React.FC<SandboxProviderProps> = ({
 export const useSandboxPanelContext = (): SandboxPanelContextValue => {
   const context = useContext(SandboxPanelContext);
   if (!context) {
-    throw new Error("SandboxPanel compound components must be used within SandboxPanel");
+    throw new Error('SandboxPanel compound components must be used within SandboxPanel');
   }
   return context;
 };

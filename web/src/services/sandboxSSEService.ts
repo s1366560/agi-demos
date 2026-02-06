@@ -10,23 +10,23 @@
  * Events now come via WebSocket: subscribe_sandbox message type
  */
 
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 
-import { unifiedEventService, UnifiedEvent } from "./unifiedEventService";
+import { unifiedEventService, UnifiedEvent } from './unifiedEventService';
 
 /**
  * Sandbox event types from backend
  */
 export type SandboxEventType =
-  | "sandbox_created"
-  | "sandbox_terminated"
-  | "sandbox_status"
-  | "desktop_started"
-  | "desktop_stopped"
-  | "desktop_status"
-  | "terminal_started"
-  | "terminal_stopped"
-  | "terminal_status";
+  | 'sandbox_created'
+  | 'sandbox_terminated'
+  | 'sandbox_status'
+  | 'desktop_started'
+  | 'desktop_stopped'
+  | 'desktop_status'
+  | 'terminal_started'
+  | 'terminal_stopped'
+  | 'terminal_status';
 
 /**
  * Sandbox SSE event format (from backend)
@@ -54,7 +54,7 @@ export interface SandboxEventHandler {
 /**
  * SSE connection status
  */
-export type SSEStatus = "connecting" | "connected" | "disconnected" | "error";
+export type SSEStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 /**
  * Sandbox SSE Service implementation
@@ -63,7 +63,7 @@ export type SSEStatus = "connecting" | "connected" | "disconnected" | "error";
  * The API remains the same for backward compatibility.
  */
 class SandboxSSEService {
-  private status: SSEStatus = "disconnected";
+  private status: SSEStatus = 'disconnected';
   private projectId: string | null = null;
   private handlers: Set<SandboxEventHandler> = new Set();
   private unsubscribeFn: (() => void) | null = null;
@@ -98,31 +98,34 @@ class SandboxSSEService {
    */
   private connect(): void {
     if (!this.projectId) {
-      logger.warn("[SandboxWS] No project_id set");
+      logger.warn('[SandboxWS] No project_id set');
       return;
     }
 
-    this.status = "connecting";
+    this.status = 'connecting';
 
     // Ensure unified service is connected
-    unifiedEventService.connect().then(() => {
-      if (!this.projectId) return;
+    unifiedEventService
+      .connect()
+      .then(() => {
+        if (!this.projectId) return;
 
-      // Subscribe to sandbox events via unified WebSocket
-      this.unsubscribeFn = unifiedEventService.subscribeSandbox(
-        this.projectId,
-        (event: UnifiedEvent) => {
-          this.handleEvent(event);
-        }
-      );
+        // Subscribe to sandbox events via unified WebSocket
+        this.unsubscribeFn = unifiedEventService.subscribeSandbox(
+          this.projectId,
+          (event: UnifiedEvent) => {
+            this.handleEvent(event);
+          }
+        );
 
-      this.status = "connected";
-      logger.debug(`[SandboxWS] Connected to project ${this.projectId}`);
-    }).catch((err) => {
-      logger.error("[SandboxWS] Failed to connect:", err);
-      this.status = "error";
-      this.notifyHandlers("onError", err as Error);
-    });
+        this.status = 'connected';
+        logger.debug(`[SandboxWS] Connected to project ${this.projectId}`);
+      })
+      .catch((err) => {
+        logger.error('[SandboxWS] Failed to connect:', err);
+        this.status = 'error';
+        this.notifyHandlers('onError', err as Error);
+      });
   }
 
   /**
@@ -130,7 +133,9 @@ class SandboxSSEService {
    */
   private handleEvent(event: UnifiedEvent): void {
     // Extract the actual sandbox event from the data
-    const eventData = event.data as { type?: string; data?: unknown; timestamp?: string } | undefined;
+    const eventData = event.data as
+      | { type?: string; data?: unknown; timestamp?: string }
+      | undefined;
     if (!eventData) return;
 
     const sandboxEvent: BaseSandboxSSEEvent = {
@@ -150,28 +155,28 @@ class SandboxSSEService {
     const { type } = event;
 
     switch (type) {
-      case "sandbox_created":
-        this.notifyHandlers("onSandboxCreated", event);
+      case 'sandbox_created':
+        this.notifyHandlers('onSandboxCreated', event);
         break;
-      case "sandbox_terminated":
-        this.notifyHandlers("onSandboxTerminated", event);
+      case 'sandbox_terminated':
+        this.notifyHandlers('onSandboxTerminated', event);
         break;
-      case "desktop_started":
-        this.notifyHandlers("onDesktopStarted", event);
+      case 'desktop_started':
+        this.notifyHandlers('onDesktopStarted', event);
         break;
-      case "desktop_stopped":
-        this.notifyHandlers("onDesktopStopped", event);
+      case 'desktop_stopped':
+        this.notifyHandlers('onDesktopStopped', event);
         break;
-      case "terminal_started":
-        this.notifyHandlers("onTerminalStarted", event);
+      case 'terminal_started':
+        this.notifyHandlers('onTerminalStarted', event);
         break;
-      case "terminal_stopped":
-        this.notifyHandlers("onTerminalStopped", event);
+      case 'terminal_stopped':
+        this.notifyHandlers('onTerminalStopped', event);
         break;
-      case "sandbox_status":
-      case "desktop_status":
-      case "terminal_status":
-        this.notifyHandlers("onStatusUpdate", event);
+      case 'sandbox_status':
+      case 'desktop_status':
+      case 'terminal_status':
+        this.notifyHandlers('onStatusUpdate', event);
         break;
       default:
         logger.debug(`[SandboxWS] Unknown event type: ${type}`);
@@ -188,7 +193,7 @@ class SandboxSSEService {
     this.handlers.forEach((handler) => {
       try {
         const fn = handler[handlerKey];
-        if (typeof fn === "function") {
+        if (typeof fn === 'function') {
           (fn as (...args: unknown[]) => void)(...args);
         }
       } catch (err) {
@@ -206,7 +211,7 @@ class SandboxSSEService {
       this.unsubscribeFn = null;
     }
 
-    this.status = "disconnected";
+    this.status = 'disconnected';
     this.projectId = null;
   }
 

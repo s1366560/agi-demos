@@ -120,14 +120,13 @@ class SqlAgentExecutionEventRepository(
 
         if before_sequence is not None:
             # Backward pagination
-            query = (
-                query.where(DBAgentExecutionEvent.sequence_number < before_sequence)
-                .order_by(DBAgentExecutionEvent.sequence_number.desc())
-                .limit(limit)
-            )
+            query = query.where(DBAgentExecutionEvent.sequence_number < before_sequence)
 
+            # Apply event_types filter BEFORE limit to ensure correct pagination
             if event_types:
                 query = query.where(DBAgentExecutionEvent.event_type.in_(event_types))
+
+            query = query.order_by(DBAgentExecutionEvent.sequence_number.desc()).limit(limit)
 
             result = await self._session.execute(query)
             db_events = list(reversed(result.scalars().all()))

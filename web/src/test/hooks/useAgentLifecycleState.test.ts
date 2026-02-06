@@ -4,11 +4,11 @@
  * Tests React hook for subscribing to agent lifecycle state changes via WebSocket.
  */
 
-import { renderHook, waitFor, act, cleanup } from "@testing-library/react";
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { renderHook, waitFor, act, cleanup } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock agentService module with inline mocks (vitest hoisting requirement)
-vi.mock("../../services/agentService", () => ({
+vi.mock('../../services/agentService', () => ({
   agentService: {
     isConnected: vi.fn(() => true),
     onStatusChange: vi.fn(() => vi.fn()),
@@ -18,12 +18,12 @@ vi.mock("../../services/agentService", () => ({
 }));
 
 // Import after mock declaration
-import { useAgentLifecycleState } from "../../hooks/useAgentLifecycleState";
-import { agentService } from "../../services/agentService";
+import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
+import { agentService } from '../../services/agentService';
 
-describe("useAgentLifecycleState", () => {
-  const mockProjectId = "proj-123";
-  const mockTenantId = "tenant-456";
+describe('useAgentLifecycleState', () => {
+  const mockProjectId = 'proj-123';
+  const mockTenantId = 'tenant-456';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -39,7 +39,7 @@ describe("useAgentLifecycleState", () => {
     localStorage.clear();
   });
 
-  it("should initialize with null state", () => {
+  it('should initialize with null state', () => {
     const { result } = renderHook(() =>
       useAgentLifecycleState({
         projectId: mockProjectId,
@@ -53,7 +53,7 @@ describe("useAgentLifecycleState", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("should subscribe to lifecycle state when enabled", async () => {
+  it('should subscribe to lifecycle state when enabled', async () => {
     const { result } = renderHook(() =>
       useAgentLifecycleState({
         projectId: mockProjectId,
@@ -73,7 +73,7 @@ describe("useAgentLifecycleState", () => {
     expect(result.current.isConnected).toBe(true);
   });
 
-  it("should update state when lifecycle change callback is invoked", async () => {
+  it('should update state when lifecycle change callback is invoked', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -99,7 +99,7 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "ready",
+          lifecycleState: 'ready',
           isInitialized: true,
           isActive: true,
           toolCount: 10,
@@ -109,7 +109,7 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "ready",
+      lifecycleState: 'ready',
       isInitialized: true,
       isActive: true,
       toolCount: 10,
@@ -117,7 +117,7 @@ describe("useAgentLifecycleState", () => {
     });
   });
 
-  it("should handle initializing state", async () => {
+  it('should handle initializing state', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -142,7 +142,7 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "initializing",
+          lifecycleState: 'initializing',
           isInitialized: false,
           isActive: false,
         });
@@ -150,17 +150,17 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "initializing",
+      lifecycleState: 'initializing',
       isInitialized: false,
       isActive: false,
     });
 
     // Check derived status
-    expect(result.current.status.label).toBe("初始化中");
-    expect(result.current.status.icon).toBe("Loader2");
+    expect(result.current.status.label).toBe('初始化中');
+    expect(result.current.status.icon).toBe('Loader2');
   });
 
-  it("should handle ready state", async () => {
+  it('should handle ready state', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -185,7 +185,7 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "ready",
+          lifecycleState: 'ready',
           isInitialized: true,
           isActive: true,
           toolCount: 10,
@@ -195,7 +195,7 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "ready",
+      lifecycleState: 'ready',
       isInitialized: true,
       isActive: true,
       toolCount: 10,
@@ -203,11 +203,11 @@ describe("useAgentLifecycleState", () => {
     });
 
     // Check derived status
-    expect(result.current.status.label).toBe("就绪");
-    expect(result.current.status.icon).toBe("CheckCircle");
+    expect(result.current.status.label).toBe('就绪');
+    expect(result.current.status.icon).toBe('CheckCircle');
   });
 
-  it("should handle executing state with conversation", async () => {
+  it('should handle executing state with conversation', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -232,8 +232,8 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "executing",
-          conversationId: "conv-456",
+          lifecycleState: 'executing',
+          conversationId: 'conv-456',
           isInitialized: true,
           isActive: true,
         });
@@ -241,17 +241,17 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "executing",
-      conversationId: "conv-456",
+      lifecycleState: 'executing',
+      conversationId: 'conv-456',
       isInitialized: true,
       isActive: true,
     });
 
-    expect(result.current.status.label).toBe("执行中");
-    expect(result.current.status.icon).toBe("Cpu");
+    expect(result.current.status.label).toBe('执行中');
+    expect(result.current.status.icon).toBe('Cpu');
   });
 
-  it("should handle paused state", async () => {
+  it('should handle paused state', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -276,7 +276,7 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "paused",
+          lifecycleState: 'paused',
           isInitialized: true,
           isActive: false,
         });
@@ -284,16 +284,16 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "paused",
+      lifecycleState: 'paused',
       isInitialized: true,
       isActive: false,
     });
 
-    expect(result.current.status.label).toBe("已暂停");
-    expect(result.current.status.icon).toBe("Pause");
+    expect(result.current.status.label).toBe('已暂停');
+    expect(result.current.status.icon).toBe('Pause');
   });
 
-  it("should handle shutting_down state", async () => {
+  it('should handle shutting_down state', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -318,7 +318,7 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "shutting_down",
+          lifecycleState: 'shutting_down',
           isInitialized: false,
           isActive: false,
         });
@@ -326,16 +326,16 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "shutting_down",
+      lifecycleState: 'shutting_down',
       isInitialized: false,
       isActive: false,
     });
 
-    expect(result.current.status.label).toBe("关闭中");
-    expect(result.current.status.icon).toBe("Power");
+    expect(result.current.status.label).toBe('关闭中');
+    expect(result.current.status.icon).toBe('Power');
   });
 
-  it("should handle error state", async () => {
+  it('should handle error state', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -360,8 +360,8 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "error",
-          errorMessage: "Connection failed",
+          lifecycleState: 'error',
+          errorMessage: 'Connection failed',
           isInitialized: false,
           isActive: false,
         });
@@ -369,17 +369,17 @@ describe("useAgentLifecycleState", () => {
     });
 
     expect(result.current.lifecycleState).toEqual({
-      lifecycleState: "error",
-      errorMessage: "Connection failed",
+      lifecycleState: 'error',
+      errorMessage: 'Connection failed',
       isInitialized: false,
       isActive: false,
     });
 
-    expect(result.current.status.label).toBe("错误");
-    expect(result.current.status.icon).toBe("AlertCircle");
+    expect(result.current.status.label).toBe('错误');
+    expect(result.current.status.icon).toBe('AlertCircle');
   });
 
-  it("should unsubscribe on unmount", async () => {
+  it('should unsubscribe on unmount', async () => {
     const { unmount } = renderHook(() =>
       useAgentLifecycleState({
         projectId: mockProjectId,
@@ -397,7 +397,7 @@ describe("useAgentLifecycleState", () => {
     expect(agentService.unsubscribeLifecycleState).toHaveBeenCalled();
   });
 
-  it("should not subscribe when disabled", () => {
+  it('should not subscribe when disabled', () => {
     const { result } = renderHook(() =>
       useAgentLifecycleState({
         projectId: mockProjectId,
@@ -410,7 +410,7 @@ describe("useAgentLifecycleState", () => {
     expect(result.current.lifecycleState).toBeNull();
   });
 
-  it("should handle connection status changes", async () => {
+  it('should handle connection status changes', async () => {
     let statusChangeCallback: ((status: string) => void) | null = null;
 
     vi.mocked(agentService.onStatusChange).mockImplementation(
@@ -433,14 +433,14 @@ describe("useAgentLifecycleState", () => {
 
     act(() => {
       if (statusChangeCallback) {
-        statusChangeCallback("connected");
+        statusChangeCallback('connected');
       }
     });
 
     expect(result.current.isConnected).toBe(true);
   });
 
-  it("should update status when tool_count changes", async () => {
+  it('should update status when tool_count changes', async () => {
     let capturedCallback: ((state: unknown) => void) | null = null;
 
     vi.mocked(agentService.subscribeLifecycleState).mockImplementation(
@@ -465,7 +465,7 @@ describe("useAgentLifecycleState", () => {
     act(() => {
       if (capturedCallback) {
         capturedCallback({
-          lifecycleState: "ready",
+          lifecycleState: 'ready',
           isInitialized: true,
           isActive: true,
           toolCount: 15,

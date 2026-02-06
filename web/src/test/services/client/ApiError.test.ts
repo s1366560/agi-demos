@@ -6,7 +6,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { ApiError, ApiErrorType, parseResponseError, parseAxiosError, parseError } from '@/services/client/ApiError';
+import {
+  ApiError,
+  ApiErrorType,
+  parseResponseError,
+  parseAxiosError,
+  parseError,
+} from '@/services/client/ApiError';
 
 describe('ApiError', () => {
   describe('constructor', () => {
@@ -41,11 +47,7 @@ describe('ApiError', () => {
 
   describe('getUserMessage', () => {
     it('should return user-friendly message for validation errors', () => {
-      const error = new ApiError(
-        ApiErrorType.VALIDATION,
-        'INVALID_EMAIL',
-        'Invalid email format'
-      );
+      const error = new ApiError(ApiErrorType.VALIDATION, 'INVALID_EMAIL', 'Invalid email format');
 
       // INVALID_EMAIL maps to 'Please enter a valid email address.'
       expect(error.getUserMessage()).toBe('Please enter a valid email address.');
@@ -69,15 +71,13 @@ describe('ApiError', () => {
       );
 
       // NETWORK_ERROR maps to 'Network connection failed. Please check your internet connection.'
-      expect(error.getUserMessage()).toBe('Network connection failed. Please check your internet connection.');
+      expect(error.getUserMessage()).toBe(
+        'Network connection failed. Please check your internet connection.'
+      );
     });
 
     it('should return user-friendly message for not found errors', () => {
-      const error = new ApiError(
-        ApiErrorType.NOT_FOUND,
-        'TENANT_NOT_FOUND',
-        'Tenant not found'
-      );
+      const error = new ApiError(ApiErrorType.NOT_FOUND, 'TENANT_NOT_FOUND', 'Tenant not found');
 
       // TENANT_NOT_FOUND maps to 'The requested tenant could not be found.'
       expect(error.getUserMessage()).toBe('The requested tenant could not be found.');
@@ -97,11 +97,7 @@ describe('ApiError', () => {
 
   describe('isType', () => {
     it('should return true when type matches', () => {
-      const error = new ApiError(
-        ApiErrorType.VALIDATION,
-        'INVALID_EMAIL',
-        'Invalid email format'
-      );
+      const error = new ApiError(ApiErrorType.VALIDATION, 'INVALID_EMAIL', 'Invalid email format');
 
       expect(error.isType(ApiErrorType.VALIDATION)).toBe(true);
       expect(error.isType(ApiErrorType.NETWORK)).toBe(false);
@@ -277,11 +273,7 @@ describe('parseAxiosError', () => {
 
 describe('parseError', () => {
   it('should return ApiError as-is', () => {
-    const apiError = new ApiError(
-      ApiErrorType.VALIDATION,
-      'INVALID_INPUT',
-      'Invalid input'
-    );
+    const apiError = new ApiError(ApiErrorType.VALIDATION, 'INVALID_INPUT', 'Invalid input');
 
     const result = parseError(apiError);
 

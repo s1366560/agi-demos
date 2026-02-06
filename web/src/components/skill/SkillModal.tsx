@@ -4,29 +4,15 @@
  * Modal for creating and editing Skills with tabbed form layout.
  */
 
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 
-import { useTranslation } from "react-i18next";
+import { useTranslation } from 'react-i18next';
 
-import {
-  Modal,
-  Form,
-  Input,
-  Select,
-  Tabs,
-  Tag,
-  message,
-  InputNumber,
-} from "antd";
+import { Modal, Form, Input, Select, Tabs, Tag, message, InputNumber } from 'antd';
 
-import { useSkillStore, useSkillSubmitting } from "../../stores/skill";
+import { useSkillStore, useSkillSubmitting } from '../../stores/skill';
 
-import type {
-  SkillResponse,
-  SkillCreate,
-  SkillUpdate,
-  TriggerPattern,
-} from "../../types/agent";
+import type { SkillResponse, SkillCreate, SkillUpdate, TriggerPattern } from '../../types/agent';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -40,27 +26,22 @@ interface SkillModalProps {
 
 // Available trigger types
 const TRIGGER_TYPES = [
-  { value: "keyword", label: "Keyword" },
-  { value: "semantic", label: "Semantic" },
-  { value: "hybrid", label: "Hybrid" },
+  { value: 'keyword', label: 'Keyword' },
+  { value: 'semantic', label: 'Semantic' },
+  { value: 'hybrid', label: 'Hybrid' },
 ];
 
-export const SkillModal: React.FC<SkillModalProps> = ({
-  isOpen,
-  onClose,
-  onSuccess,
-  skill,
-}) => {
+export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, skill }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
-  const [activeTab, setActiveTab] = useState("basic");
+  const [activeTab, setActiveTab] = useState('basic');
   const [patterns, setPatterns] = useState<TriggerPattern[]>([]);
-  const [patternInput, setPatternInput] = useState("");
+  const [patternInput, setPatternInput] = useState('');
   const [patternWeight, setPatternWeight] = useState(1.0);
   const [patternExamples, setPatternExamples] = useState<string[]>([]);
-  const [currentExample, setCurrentExample] = useState("");
+  const [currentExample, setCurrentExample] = useState('');
   const [tools, setTools] = useState<string[]>([]);
-  const [toolInput, setToolInput] = useState("");
+  const [toolInput, setToolInput] = useState('');
 
   const isSubmitting = useSkillSubmitting();
   const { createSkill, updateSkill } = useSkillStore();
@@ -91,7 +72,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
       }
       // Defer tab update to avoid synchronous setState in effect
       if (openStateChanged) {
-        setTimeout(() => setActiveTab("basic"), 0);
+        setTimeout(() => setActiveTab('basic'), 0);
       }
     }
 
@@ -108,21 +89,21 @@ export const SkillModal: React.FC<SkillModalProps> = ({
       setTimeout(() => {
         setPatterns(skill.trigger_patterns);
         setTools(skill.tools);
-        setPatternInput("");
+        setPatternInput('');
         setPatternWeight(1.0);
         setPatternExamples([]);
-        setCurrentExample("");
-        setToolInput("");
+        setCurrentExample('');
+        setToolInput('');
       }, 0);
     } else if (isOpen && !skill && skillChanged) {
       setTimeout(() => {
         setPatterns([]);
         setTools([]);
-        setPatternInput("");
+        setPatternInput('');
         setPatternWeight(1.0);
         setPatternExamples([]);
-        setCurrentExample("");
-        setToolInput("");
+        setCurrentExample('');
+        setToolInput('');
       }, 0);
     }
   }, [isOpen, skill]);
@@ -134,22 +115,22 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
       // Validate that at least one pattern exists
       if (patterns.length === 0) {
-        message.error(t("tenant.skills.modal.requirePatterns"));
-        setActiveTab("trigger");
+        message.error(t('tenant.skills.modal.requirePatterns'));
+        setActiveTab('trigger');
         return;
       }
 
       // Validate that at least one tool exists
       if (tools.length === 0) {
-        message.error(t("tenant.skills.modal.requireTools"));
-        setActiveTab("tools");
+        message.error(t('tenant.skills.modal.requireTools'));
+        setActiveTab('tools');
         return;
       }
 
       const data: SkillCreate | SkillUpdate = {
         name: values.name,
         description: values.description,
-        trigger_type: values.trigger_type || "keyword",
+        trigger_type: values.trigger_type || 'keyword',
         trigger_patterns: patterns,
         tools: tools,
         prompt_template: values.prompt_template || undefined,
@@ -157,10 +138,10 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
       if (isEditMode && skill) {
         await updateSkill(skill.id, data);
-        message.success(t("tenant.skills.updateSuccess"));
+        message.success(t('tenant.skills.updateSuccess'));
       } else {
         await createSkill(data as SkillCreate);
-        message.success(t("tenant.skills.createSuccess"));
+        message.success(t('tenant.skills.createSuccess'));
       }
 
       onSuccess();
@@ -169,23 +150,13 @@ export const SkillModal: React.FC<SkillModalProps> = ({
       if (err.errorFields) {
         // Form validation error - switch to the tab with the error
         const firstErrorField = err.errorFields[0]?.name?.[0];
-        if (firstErrorField && ["name", "description", "trigger_type"].includes(firstErrorField)) {
-          setActiveTab("basic");
+        if (firstErrorField && ['name', 'description', 'trigger_type'].includes(firstErrorField)) {
+          setActiveTab('basic');
         }
       }
       // API errors handled by store
     }
-  }, [
-    form,
-    isEditMode,
-    skill,
-    patterns,
-    tools,
-    createSkill,
-    updateSkill,
-    onSuccess,
-    t,
-  ]);
+  }, [form, isEditMode, skill, patterns, tools, createSkill, updateSkill, onSuccess, t]);
 
   // Handle pattern addition
   const handleAddPattern = useCallback(() => {
@@ -196,7 +167,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
         examples: patternExamples,
       };
       setPatterns([...patterns, newPattern]);
-      setPatternInput("");
+      setPatternInput('');
       setPatternWeight(1.0);
       setPatternExamples([]);
     }
@@ -212,12 +183,9 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
   // Handle example addition for current pattern
   const handleAddExample = useCallback(() => {
-    if (
-      currentExample.trim() &&
-      !patternExamples.includes(currentExample.trim())
-    ) {
+    if (currentExample.trim() && !patternExamples.includes(currentExample.trim())) {
       setPatternExamples([...patternExamples, currentExample.trim()]);
-      setCurrentExample("");
+      setCurrentExample('');
     }
   }, [currentExample, patternExamples]);
 
@@ -233,7 +201,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
   const handleAddTool = useCallback(() => {
     if (toolInput.trim() && !tools.includes(toolInput.trim())) {
       setTools([...tools, toolInput.trim()]);
-      setToolInput("");
+      setToolInput('');
     }
   }, [toolInput, tools]);
 
@@ -248,53 +216,47 @@ export const SkillModal: React.FC<SkillModalProps> = ({
   // Tab items
   const tabItems = [
     {
-      key: "basic",
-      label: t("tenant.skills.modal.basicInfo"),
+      key: 'basic',
+      label: t('tenant.skills.modal.basicInfo'),
       children: (
         <div className="space-y-4">
           <Form.Item
             name="name"
-            label={t("tenant.skills.modal.name")}
+            label={t('tenant.skills.modal.name')}
             rules={[
               {
                 required: true,
-                message: t("tenant.skills.modal.nameRequired"),
+                message: t('tenant.skills.modal.nameRequired'),
               },
               {
                 pattern: /^[a-zA-Z][a-zA-Z0-9_-]*$/,
-                message: t("tenant.skills.modal.namePattern"),
+                message: t('tenant.skills.modal.namePattern'),
               },
             ]}
           >
-            <Input
-              placeholder="e.g., data_analysis_skill"
-              disabled={isEditMode}
-            />
+            <Input placeholder="e.g., data_analysis_skill" disabled={isEditMode} />
           </Form.Item>
 
           <Form.Item
             name="description"
-            label={t("tenant.skills.modal.description")}
+            label={t('tenant.skills.modal.description')}
             rules={[
               {
                 required: true,
-                message: t("tenant.skills.modal.descriptionRequired"),
+                message: t('tenant.skills.modal.descriptionRequired'),
               },
             ]}
           >
-            <TextArea
-              rows={4}
-              placeholder={t("tenant.skills.modal.descriptionPlaceholder")}
-            />
+            <TextArea rows={4} placeholder={t('tenant.skills.modal.descriptionPlaceholder')} />
           </Form.Item>
 
           <Form.Item
             name="trigger_type"
-            label={t("tenant.skills.modal.triggerType")}
+            label={t('tenant.skills.modal.triggerType')}
             rules={[
               {
                 required: true,
-                message: t("tenant.skills.modal.triggerTypeRequired"),
+                message: t('tenant.skills.modal.triggerTypeRequired'),
               },
             ]}
             initialValue="keyword"
@@ -310,25 +272,22 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
           <Form.Item
             name="prompt_template"
-            label={t("tenant.skills.modal.promptTemplate")}
-            tooltip={t("tenant.skills.modal.promptTemplateTooltip")}
+            label={t('tenant.skills.modal.promptTemplate')}
+            tooltip={t('tenant.skills.modal.promptTemplateTooltip')}
           >
-            <TextArea
-              rows={6}
-              placeholder={t("tenant.skills.modal.promptTemplatePlaceholder")}
-            />
+            <TextArea rows={6} placeholder={t('tenant.skills.modal.promptTemplatePlaceholder')} />
           </Form.Item>
         </div>
       ),
     },
     {
-      key: "trigger",
-      label: t("tenant.skills.modal.triggerConfig"),
+      key: 'trigger',
+      label: t('tenant.skills.modal.triggerConfig'),
       children: (
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              {t("tenant.skills.modal.triggerPatterns")}
+              {t('tenant.skills.modal.triggerPatterns')}
               <span className="text-red-500 ml-1">*</span>
             </label>
 
@@ -337,10 +296,10 @@ export const SkillModal: React.FC<SkillModalProps> = ({
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
-                    {t("tenant.skills.modal.patternText")}
+                    {t('tenant.skills.modal.patternText')}
                   </label>
                   <Input
-                    placeholder={t("tenant.skills.modal.addPattern")}
+                    placeholder={t('tenant.skills.modal.addPattern')}
                     value={patternInput}
                     onChange={(e) => setPatternInput(e.target.value)}
                   />
@@ -348,8 +307,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
                 <div>
                   <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
-                    {t("tenant.skills.modal.patternWeight")} (
-                    {patternWeight.toFixed(1)})
+                    {t('tenant.skills.modal.patternWeight')} ({patternWeight.toFixed(1)})
                   </label>
                   <InputNumber
                     min={0}
@@ -363,11 +321,11 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
                 <div>
                   <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
-                    {t("tenant.skills.modal.patternExamples")}
+                    {t('tenant.skills.modal.patternExamples')}
                   </label>
                   <div className="flex gap-2 mb-2">
                     <Input
-                      placeholder={t("tenant.skills.modal.addExample")}
+                      placeholder={t('tenant.skills.modal.addExample')}
                       value={currentExample}
                       onChange={(e) => setCurrentExample(e.target.value)}
                       onPressEnter={handleAddExample}
@@ -377,7 +335,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
                       onClick={handleAddExample}
                       className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors whitespace-nowrap"
                     >
-                      {t("common.add")}
+                      {t('common.add')}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -400,7 +358,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
                   disabled={!patternInput.trim()}
                   className="w-full px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
-                  {t("tenant.skills.modal.addPatternButton")}
+                  {t('tenant.skills.modal.addPatternButton')}
                 </button>
               </div>
             </div>
@@ -418,8 +376,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
                         {pattern.pattern}
                       </div>
                       <div className="text-sm text-slate-500 dark:text-slate-400">
-                        {t("tenant.skills.modal.weight")}:{" "}
-                        {pattern.weight.toFixed(1)}
+                        {t('tenant.skills.modal.weight')}: {pattern.weight.toFixed(1)}
                       </div>
                     </div>
                     <button
@@ -427,9 +384,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
                       onClick={() => handleRemovePattern(idx)}
                       className="text-slate-400 hover:text-red-500 transition-colors"
                     >
-                      <span className="material-symbols-outlined text-lg">
-                        close
-                      </span>
+                      <span className="material-symbols-outlined text-lg">close</span>
                     </button>
                   </div>
                   {pattern.examples && pattern.examples.length > 0 && (
@@ -445,7 +400,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
               ))}
               {patterns.length === 0 && (
                 <div className="text-center py-8 text-slate-400">
-                  {t("tenant.skills.modal.noPatterns")}
+                  {t('tenant.skills.modal.noPatterns')}
                 </div>
               )}
             </div>
@@ -454,18 +409,18 @@ export const SkillModal: React.FC<SkillModalProps> = ({
       ),
     },
     {
-      key: "tools",
-      label: t("tenant.skills.modal.tools"),
+      key: 'tools',
+      label: t('tenant.skills.modal.tools'),
       children: (
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              {t("tenant.skills.modal.allowedTools")}
+              {t('tenant.skills.modal.allowedTools')}
               <span className="text-red-500 ml-1">*</span>
             </label>
             <div className="flex gap-2 mb-3">
               <Input
-                placeholder={t("tenant.skills.modal.addTool")}
+                placeholder={t('tenant.skills.modal.addTool')}
                 value={toolInput}
                 onChange={(e) => setToolInput(e.target.value)}
                 onPressEnter={handleAddTool}
@@ -475,7 +430,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
                 onClick={handleAddTool}
                 className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors whitespace-nowrap"
               >
-                {t("common.add")}
+                {t('common.add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -491,7 +446,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
               ))}
               {tools.length === 0 && (
                 <div className="text-center w-full py-8 text-slate-400">
-                  {t("tenant.skills.modal.noTools")}
+                  {t('tenant.skills.modal.noTools')}
                 </div>
               )}
             </div>
@@ -503,7 +458,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({
                 info
               </span>
               <div className="text-sm text-blue-700 dark:text-blue-300">
-                {t("tenant.skills.modal.toolsHint")}
+                {t('tenant.skills.modal.toolsHint')}
               </div>
             </div>
           </div>
@@ -514,16 +469,12 @@ export const SkillModal: React.FC<SkillModalProps> = ({
 
   return (
     <Modal
-      title={
-        isEditMode
-          ? t("tenant.skills.modal.editTitle")
-          : t("tenant.skills.modal.createTitle")
-      }
+      title={isEditMode ? t('tenant.skills.modal.editTitle') : t('tenant.skills.modal.createTitle')}
       open={isOpen}
       onCancel={onClose}
       onOk={handleSubmit}
-      okText={isEditMode ? t("common.save") : t("common.create")}
-      cancelText={t("common.cancel")}
+      okText={isEditMode ? t('common.save') : t('common.create')}
+      cancelText={t('common.cancel')}
       confirmLoading={isSubmitting}
       width={800}
       destroyOnHidden

@@ -62,9 +62,7 @@ export function ExportActions({
       // Dynamic import to avoid loading html2pdf until needed
       const html2pdf = (await import('html2pdf.js')).default;
 
-      const element = elementId
-        ? document.getElementById(elementId)
-        : document.body;
+      const element = elementId ? document.getElementById(elementId) : document.body;
 
       if (element) {
         html2pdf()
@@ -98,9 +96,10 @@ export function ExportActions({
     }
   };
 
-  const buttonClass = variant === 'sidebar'
-    ? 'flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors w-full text-left'
-    : 'flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors';
+  const buttonClass =
+    variant === 'sidebar'
+      ? 'flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors w-full text-left'
+      : 'flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors';
 
   return (
     <div className={variant === 'sidebar' ? 'space-y-1' : 'flex items-center gap-2'}>
@@ -113,11 +112,7 @@ export function ExportActions({
         title="Copy to clipboard"
       >
         <MaterialIcon name={copied ? 'check' : 'content_copy'} size={18} />
-        {showLabels && (
-          <span className="text-sm font-medium">
-            {copied ? 'Copied!' : 'Copy'}
-          </span>
-        )}
+        {showLabels && <span className="text-sm font-medium">{copied ? 'Copied!' : 'Copy'}</span>}
       </button>
 
       {/* Export to PDF */}
@@ -130,9 +125,7 @@ export function ExportActions({
       >
         <MaterialIcon name={exporting ? 'hourglass_empty' : 'picture_as_pdf'} size={18} />
         {showLabels && (
-          <span className="text-sm font-medium">
-            {exporting ? 'Exporting...' : 'PDF'}
-          </span>
+          <span className="text-sm font-medium">{exporting ? 'Exporting...' : 'PDF'}</span>
         )}
       </button>
 
@@ -146,9 +139,7 @@ export function ExportActions({
       >
         <MaterialIcon name={copied ? 'check' : 'share'} size={18} />
         {showLabels && (
-          <span className="text-sm font-medium">
-            {copied ? 'Link copied!' : 'Share'}
-          </span>
+          <span className="text-sm font-medium">{copied ? 'Link copied!' : 'Share'}</span>
         )}
       </button>
     </div>

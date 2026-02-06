@@ -25,35 +25,22 @@
  * ```
  */
 
-import React, { useMemo, useState, memo, useCallback, Children } from "react";
+import React, { useMemo, useState, memo, useCallback, Children } from 'react';
 
-import {
-  BulbOutlined,
-  FieldTimeOutlined,
-  ToolOutlined,
-  BarChartOutlined,
-} from "@ant-design/icons";
-import { Segmented } from "antd";
+import { BulbOutlined, FieldTimeOutlined, ToolOutlined, BarChartOutlined } from '@ant-design/icons';
+import { Segmented } from 'antd';
 
 import {
   adaptTimelineData,
   adaptToolVisualizationData,
   extractTokenData,
   hasExecutionData,
-} from "../../utils/agentDataAdapters";
+} from '../../utils/agentDataAdapters';
 
-import { ActivityTimeline } from "./execution/ActivityTimeline";
-import {
-  TokenUsageChart,
-  type TokenData,
-  type CostData,
-} from "./execution/TokenUsageChart";
-import {
-  ToolCallVisualization,
-  type ToolExecutionItem,
-} from "./execution/ToolCallVisualization";
-import { ThinkingChain } from "./ThinkingChain";
-
+import { ActivityTimeline } from './execution/ActivityTimeline';
+import { TokenUsageChart, type TokenData, type CostData } from './execution/TokenUsageChart';
+import { ToolCallVisualization, type ToolExecutionItem } from './execution/ToolCallVisualization';
+import { ThinkingChain } from './ThinkingChain';
 
 import type {
   ViewType,
@@ -64,17 +51,17 @@ import type {
   ExecutionTokensProps,
   ExecutionViewSelectorProps,
   ExecutionDetailsPanelCompound,
-} from "./executionTypes";
+} from './executionTypes';
 
 // ========================================
 // Marker Symbols for Sub-Components
 // ========================================
 
-const THINKING_SYMBOL = Symbol("ExecutionDetailsPanelThinking");
-const ACTIVITY_SYMBOL = Symbol("ExecutionDetailsPanelActivity");
-const TOOLS_SYMBOL = Symbol("ExecutionDetailsPanelTools");
-const TOKENS_SYMBOL = Symbol("ExecutionDetailsPanelTokens");
-const SELECTOR_SYMBOL = Symbol("ExecutionDetailsPanelViewSelector");
+const THINKING_SYMBOL = Symbol('ExecutionDetailsPanelThinking');
+const ACTIVITY_SYMBOL = Symbol('ExecutionDetailsPanelActivity');
+const TOOLS_SYMBOL = Symbol('ExecutionDetailsPanelTools');
+const TOKENS_SYMBOL = Symbol('ExecutionDetailsPanelTokens');
+const SELECTOR_SYMBOL = Symbol('ExecutionDetailsPanelViewSelector');
 
 // ========================================
 // View Option Configuration
@@ -95,7 +82,7 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   message,
   isStreaming = false,
   compact = false,
-  defaultView = "thinking",
+  defaultView = 'thinking',
   showViewSelector = true,
   children,
 }) => {
@@ -130,21 +117,11 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
 
   // Parse children to detect sub-components
   const childrenArray = Children.toArray(children);
-  const thinkingChild = childrenArray.find(
-    (child: any) => child?.type?.[THINKING_SYMBOL]
-  ) as any;
-  const activityChild = childrenArray.find(
-    (child: any) => child?.type?.[ACTIVITY_SYMBOL]
-  ) as any;
-  const toolsChild = childrenArray.find(
-    (child: any) => child?.type?.[TOOLS_SYMBOL]
-  ) as any;
-  const tokensChild = childrenArray.find(
-    (child: any) => child?.type?.[TOKENS_SYMBOL]
-  ) as any;
-  const selectorChild = childrenArray.find(
-    (child: any) => child?.type?.[SELECTOR_SYMBOL]
-  ) as any;
+  const thinkingChild = childrenArray.find((child: any) => child?.type?.[THINKING_SYMBOL]) as any;
+  const activityChild = childrenArray.find((child: any) => child?.type?.[ACTIVITY_SYMBOL]) as any;
+  const toolsChild = childrenArray.find((child: any) => child?.type?.[TOOLS_SYMBOL]) as any;
+  const tokensChild = childrenArray.find((child: any) => child?.type?.[TOKENS_SYMBOL]) as any;
+  const selectorChild = childrenArray.find((child: any) => child?.type?.[SELECTOR_SYMBOL]) as any;
 
   // Determine if using compound mode
   const hasSubComponents =
@@ -158,16 +135,18 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   const includeTokens = hasSubComponents ? !!tokensChild : true;
 
   // Count included views for selector logic
-  const includedViewCount = [includeThinking, includeActivity, includeTools, includeTokens]
-    .filter(Boolean).length;
+  const includedViewCount = [includeThinking, includeActivity, includeTools, includeTokens].filter(
+    Boolean
+  ).length;
 
   // View selector logic:
   // - In legacy mode: respect showViewSelector
   // - In compound mode with ViewSelector: respect showViewSelector
   // - In compound mode without ViewSelector: show only if multiple views included and prop is true
-  const includeSelector = !hasSubComponents || !!selectorChild
-    ? showViewSelector
-    : showViewSelector && includedViewCount > 1;
+  const includeSelector =
+    !hasSubComponents || !!selectorChild
+      ? showViewSelector
+      : showViewSelector && includedViewCount > 1;
 
   // Determine which views are available
   const viewOptions = useMemo<ViewOption[]>(() => {
@@ -179,26 +158,26 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
     // All potential views
     const allViews = [
       {
-        value: "thinking" as ViewType,
-        label: "Thinking",
+        value: 'thinking' as ViewType,
+        label: 'Thinking',
         icon: <BulbOutlined />,
         available: hasTimeline || hasThoughts || hasToolCalls,
       },
       {
-        value: "activity" as ViewType,
-        label: "Activity",
+        value: 'activity' as ViewType,
+        label: 'Activity',
         icon: <FieldTimeOutlined />,
         available: hasTimeline,
       },
       {
-        value: "tools" as ViewType,
-        label: "Tools",
+        value: 'tools' as ViewType,
+        label: 'Tools',
         icon: <ToolOutlined />,
         available: toolVisualizationData.length > 0,
       },
       {
-        value: "tokens" as ViewType,
-        label: "Tokens",
+        value: 'tokens' as ViewType,
+        label: 'Tokens',
         icon: <BarChartOutlined />,
         available: hasTokens,
       },
@@ -207,10 +186,10 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
     // In compound mode, only include views for which sub-components are provided
     if (hasSubComponents) {
       return allViews.filter((view) => {
-        if (view.value === "thinking") return !!thinkingChild;
-        if (view.value === "activity") return !!activityChild;
-        if (view.value === "tools") return !!toolsChild;
-        if (view.value === "tokens") return !!tokensChild;
+        if (view.value === 'thinking') return !!thinkingChild;
+        if (view.value === 'activity') return !!activityChild;
+        if (view.value === 'tools') return !!toolsChild;
+        if (view.value === 'tokens') return !!tokensChild;
         return false;
       });
     }
@@ -230,19 +209,14 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   ]);
 
   // Filter to only available views
-  const availableViews = useMemo(
-    () => viewOptions.filter((opt) => opt.available),
-    [viewOptions]
-  );
+  const availableViews = useMemo(() => viewOptions.filter((opt) => opt.available), [viewOptions]);
 
   // Auto-switch to available view if current is not available
   const effectiveView = useMemo(() => {
-    const isCurrentAvailable = availableViews.some(
-      (v) => v.value === currentView
-    );
+    const isCurrentAvailable = availableViews.some((v) => v.value === currentView);
     if (isCurrentAvailable) return currentView;
     // Fall back to first available or 'thinking'
-    return availableViews[0]?.value || "thinking";
+    return availableViews[0]?.value || 'thinking';
   }, [currentView, availableViews]);
 
   // Handle view change
@@ -253,10 +227,10 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   // Render view content based on effectiveView
   const renderViewContent = () => {
     switch (effectiveView) {
-      case "thinking":
+      case 'thinking':
         return includeThinking ? <ThinkingChain {...thinkingChainProps} /> : null;
 
-      case "activity":
+      case 'activity':
         return includeActivity ? (
           <ActivityTimeline
             timeline={timelineData.timeline}
@@ -268,7 +242,7 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
           />
         ) : null;
 
-      case "tools":
+      case 'tools':
         return includeTools ? (
           <ToolCallVisualization
             toolExecutions={toolVisualizationData}
@@ -279,12 +253,12 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
           />
         ) : null;
 
-      case "tokens":
+      case 'tokens':
         return includeTokens && tokenInfo.tokenData ? (
           <TokenUsageChart
             tokenData={tokenInfo.tokenData as TokenData}
             costData={tokenInfo.costData as CostData | undefined}
-            variant={compact ? "compact" : "detailed"}
+            variant={compact ? 'compact' : 'detailed'}
           />
         ) : null;
 
@@ -294,16 +268,17 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
   };
 
   // Memoized segmented options
-  const segmentedOptions = useMemo(() =>
-    availableViews.map((opt) => ({
-      value: opt.value,
-      label: (
-        <div className="flex items-center gap-1.5 px-1">
-          {opt.icon}
-          {!compact && <span className="text-xs">{opt.label}</span>}
-        </div>
-      ),
-    })),
+  const segmentedOptions = useMemo(
+    () =>
+      availableViews.map((opt) => ({
+        value: opt.value,
+        label: (
+          <div className="flex items-center gap-1.5 px-1">
+            {opt.icon}
+            {!compact && <span className="text-xs">{opt.label}</span>}
+          </div>
+        ),
+      })),
     [availableViews, compact]
   );
 
@@ -349,12 +324,16 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
 // Sub-Components (Marker Components)
 // ========================================
 
-const ThinkingMarker = function ExecutionDetailsPanelThinkingMarker(_props: ExecutionThinkingProps) {
+const ThinkingMarker = function ExecutionDetailsPanelThinkingMarker(
+  _props: ExecutionThinkingProps
+) {
   return null;
 };
 (ThinkingMarker as any)[THINKING_SYMBOL] = true;
 
-const ActivityMarker = function ExecutionDetailsPanelActivityMarker(_props: ExecutionActivityProps) {
+const ActivityMarker = function ExecutionDetailsPanelActivityMarker(
+  _props: ExecutionActivityProps
+) {
   return null;
 };
 (ActivityMarker as any)[ACTIVITY_SYMBOL] = true;
@@ -369,24 +348,27 @@ const TokensMarker = function ExecutionDetailsPanelTokensMarker(_props: Executio
 };
 (TokensMarker as any)[TOKENS_SYMBOL] = true;
 
-const ViewSelectorMarker = function ExecutionDetailsPanelViewSelectorMarker(_props: ExecutionViewSelectorProps) {
+const ViewSelectorMarker = function ExecutionDetailsPanelViewSelectorMarker(
+  _props: ExecutionViewSelectorProps
+) {
   return null;
 };
 (ViewSelectorMarker as any)[SELECTOR_SYMBOL] = true;
 
 // Set display names for testing
-(ThinkingMarker as any).displayName = "ExecutionDetailsPanelThinking";
-(ActivityMarker as any).displayName = "ExecutionDetailsPanelActivity";
-(ToolsMarker as any).displayName = "ExecutionDetailsPanelTools";
-(TokensMarker as any).displayName = "ExecutionDetailsPanelTokens";
-(ViewSelectorMarker as any).displayName = "ExecutionDetailsPanelViewSelector";
+(ThinkingMarker as any).displayName = 'ExecutionDetailsPanelThinking';
+(ActivityMarker as any).displayName = 'ExecutionDetailsPanelActivity';
+(ToolsMarker as any).displayName = 'ExecutionDetailsPanelTools';
+(TokensMarker as any).displayName = 'ExecutionDetailsPanelTokens';
+(ViewSelectorMarker as any).displayName = 'ExecutionDetailsPanelViewSelector';
 
 // Create compound component with sub-components
 const ExecutionDetailsPanelMemo = memo(ExecutionDetailsPanelInner);
-ExecutionDetailsPanelMemo.displayName = "ExecutionDetailsPanel";
+ExecutionDetailsPanelMemo.displayName = 'ExecutionDetailsPanel';
 
 // Create compound component object
-const ExecutionDetailsPanelCompound = ExecutionDetailsPanelMemo as unknown as ExecutionDetailsPanelCompound;
+const ExecutionDetailsPanelCompound =
+  ExecutionDetailsPanelMemo as unknown as ExecutionDetailsPanelCompound;
 ExecutionDetailsPanelCompound.Thinking = ThinkingMarker;
 ExecutionDetailsPanelCompound.Activity = ActivityMarker;
 ExecutionDetailsPanelCompound.Tools = ToolsMarker;

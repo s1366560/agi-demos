@@ -397,7 +397,7 @@ describe('EntityTypeList Compound Component', () => {
       );
       // Find the X button by looking for a button containing an SVG
       const buttons = screen.getAllByRole('button');
-      const closeButton = buttons.find(btn => btn.querySelector('svg'));
+      const closeButton = buttons.find((btn) => btn.querySelector('svg'));
       if (closeButton) {
         fireEvent.click(closeButton);
         expect(onClose).toHaveBeenCalled();

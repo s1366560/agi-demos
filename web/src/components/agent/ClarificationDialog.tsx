@@ -1,6 +1,6 @@
 /**
  * ClarificationDialog Component
- * 
+ *
  * Displays a clarification question from the agent with selectable options.
  * Used during planning phase when the agent needs user input to resolve ambiguity.
  */
@@ -44,7 +44,7 @@ export const ClarificationDialog: React.FC<ClarificationDialogProps> = ({
   onCancel,
 }) => {
   const [selectedOption, setSelectedOption] = useState<string | null>(
-    data.options.find(opt => opt.recommended)?.id || null
+    data.options.find((opt) => opt.recommended)?.id || null
   );
   const [customInput, setCustomInput] = useState('');
 
@@ -58,9 +58,7 @@ export const ClarificationDialog: React.FC<ClarificationDialogProps> = ({
     }
   };
 
-  const isSubmitDisabled = 
-    !selectedOption || 
-    (selectedOption === 'custom' && !customInput.trim());
+  const isSubmitDisabled = !selectedOption || (selectedOption === 'custom' && !customInput.trim());
 
   return (
     <Modal
@@ -109,12 +107,8 @@ export const ClarificationDialog: React.FC<ClarificationDialogProps> = ({
             <div className="mt-2 space-y-1">
               {Object.entries(data.context).map(([key, value]) => (
                 <div key={key} className="text-sm">
-                  <Text className="text-blue-600 dark:text-blue-400">
-                    {key}:
-                  </Text>{' '}
-                  <Text className="text-blue-800 dark:text-blue-200">
-                    {JSON.stringify(value)}
-                  </Text>
+                  <Text className="text-blue-600 dark:text-blue-400">{key}:</Text>{' '}
+                  <Text className="text-blue-800 dark:text-blue-200">{JSON.stringify(value)}</Text>
                 </div>
               ))}
             </div>

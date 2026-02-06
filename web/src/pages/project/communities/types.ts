@@ -9,35 +9,35 @@
 // ========================================
 
 export interface Community {
-  uuid: string
-  name: string
-  summary: string
-  member_count: number
-  formed_at?: string
-  created_at?: string
+  uuid: string;
+  name: string;
+  summary: string;
+  member_count: number;
+  formed_at?: string;
+  created_at?: string;
 }
 
 export interface Entity {
-  uuid: string
-  name: string
-  entity_type: string
-  summary: string
+  uuid: string;
+  name: string;
+  entity_type: string;
+  summary: string;
 }
 
 export interface BackgroundTask {
-  task_id: string
-  task_type: string
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-  created_at: string
-  started_at?: string
-  completed_at?: string
-  progress: number
-  message: string
+  task_id: string;
+  task_type: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  progress: number;
+  message: string;
   result?: {
-    communities_count?: number
-    edges_count?: number
-  }
-  error?: string
+    communities_count?: number;
+    edges_count?: number;
+  };
+  error?: string;
 }
 
 // ========================================

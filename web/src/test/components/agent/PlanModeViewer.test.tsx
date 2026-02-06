@@ -2,25 +2,25 @@
  * Tests for PlanModeViewer component
  */
 
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 
-import { PlanModeViewer } from "../../../components/agent/PlanModeViewer";
-import { ExecutionPlan, ExecutionPlanStatus, ReflectionResult } from "../../../types/agent";
+import { PlanModeViewer } from '../../../components/agent/PlanModeViewer';
+import { ExecutionPlan, ExecutionPlanStatus, ReflectionResult } from '../../../types/agent';
 
-describe("PlanModeViewer", () => {
-  it("renders no plan message when plan is null", () => {
+describe('PlanModeViewer', () => {
+  it('renders no plan message when plan is null', () => {
     render(<PlanModeViewer plan={null} />);
-    expect(screen.getByText("No execution plan available")).toBeInTheDocument();
+    expect(screen.getByText('No execution plan available')).toBeInTheDocument();
   });
 
-  it("renders plan header with basic info", () => {
+  it('renders plan header with basic info', () => {
     const plan: ExecutionPlan = {
-      id: "plan-12345678",
-      conversation_id: "conv-1",
-      user_query: "Search for Python memories",
+      id: 'plan-12345678',
+      conversation_id: 'conv-1',
+      user_query: 'Search for Python memories',
       steps: [],
-      status: "draft" as ExecutionPlanStatus,
+      status: 'draft' as ExecutionPlanStatus,
       reflection_enabled: true,
       max_reflection_cycles: 3,
       completed_steps: [],
@@ -31,41 +31,41 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} />);
 
-    expect(screen.getByText("Execution Plan")).toBeInTheDocument();
+    expect(screen.getByText('Execution Plan')).toBeInTheDocument();
     expect(screen.getByText(/plan-123/)).toBeInTheDocument();
     expect(screen.getByText(/Query:/, { exact: false })).toBeInTheDocument();
     expect(screen.getByText(/Search for Python memories/, { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    expect(screen.getByText('Enabled')).toBeInTheDocument();
   });
 
-  it("renders plan steps", () => {
+  it('renders plan steps', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test query",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test query',
       steps: [
         {
-          step_id: "step-1",
-          description: "Search memory",
-          tool_name: "MemorySearch",
-          tool_input: { query: "Python" },
+          step_id: 'step-1',
+          description: 'Search memory',
+          tool_name: 'MemorySearch',
+          tool_input: { query: 'Python' },
           dependencies: [],
-          status: "completed",
-          result: "Found 5 memories",
+          status: 'completed',
+          result: 'Found 5 memories',
         },
         {
-          step_id: "step-2",
-          description: "Summarize results",
-          tool_name: "Summary",
+          step_id: 'step-2',
+          description: 'Summarize results',
+          tool_name: 'Summary',
           tool_input: {},
-          dependencies: ["step-1"],
-          status: "pending",
+          dependencies: ['step-1'],
+          status: 'pending',
         },
       ],
-      status: "executing" as ExecutionPlanStatus,
+      status: 'executing' as ExecutionPlanStatus,
       reflection_enabled: true,
       max_reflection_cycles: 3,
-      completed_steps: ["step-1"],
+      completed_steps: ['step-1'],
       failed_steps: [],
       progress_percentage: 50,
       is_complete: false,
@@ -73,18 +73,18 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} />);
 
-    expect(screen.getByText("Steps (2)")).toBeInTheDocument();
+    expect(screen.getByText('Steps (2)')).toBeInTheDocument();
     expect(screen.getByText(/Step 1: Search memory/)).toBeInTheDocument();
     expect(screen.getByText(/Step 2: Summarize results/)).toBeInTheDocument();
   });
 
-  it("renders reflection badge when reflection is provided", () => {
+  it('renders reflection badge when reflection is provided', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test query",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test query',
       steps: [],
-      status: "executing" as ExecutionPlanStatus,
+      status: 'executing' as ExecutionPlanStatus,
       reflection_enabled: true,
       max_reflection_cycles: 3,
       completed_steps: [],
@@ -94,8 +94,8 @@ describe("PlanModeViewer", () => {
     };
 
     const reflection: ReflectionResult = {
-      assessment: "on_track",
-      reasoning: "Everything is progressing well",
+      assessment: 'on_track',
+      reasoning: 'Everything is progressing well',
       adjustments: [],
       is_terminal: false,
       reflection_metadata: {},
@@ -103,17 +103,17 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} reflection={reflection} />);
 
-    expect(screen.getByText("on track")).toBeInTheDocument();
-    expect(screen.getByText("Everything is progressing well")).toBeInTheDocument();
+    expect(screen.getByText('on track')).toBeInTheDocument();
+    expect(screen.getByText('Everything is progressing well')).toBeInTheDocument();
   });
 
-  it("renders reflection with needs_adjustment assessment", () => {
+  it('renders reflection with needs_adjustment assessment', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test query",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test query',
       steps: [],
-      status: "executing" as ExecutionPlanStatus,
+      status: 'executing' as ExecutionPlanStatus,
       reflection_enabled: true,
       max_reflection_cycles: 3,
       completed_steps: [],
@@ -123,13 +123,13 @@ describe("PlanModeViewer", () => {
     };
 
     const reflection: ReflectionResult = {
-      assessment: "needs_adjustment",
-      reasoning: "Step failed, needs retry",
+      assessment: 'needs_adjustment',
+      reasoning: 'Step failed, needs retry',
       adjustments: [
         {
-          step_id: "step-1",
-          adjustment_type: "retry",
-          reason: "Timeout occurred",
+          step_id: 'step-1',
+          adjustment_type: 'retry',
+          reason: 'Timeout occurred',
         },
       ],
       is_terminal: false,
@@ -138,30 +138,30 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} reflection={reflection} />);
 
-    expect(screen.getByText("needs adjustment")).toBeInTheDocument();
-    expect(screen.getByText("Step failed, needs retry")).toBeInTheDocument();
+    expect(screen.getByText('needs adjustment')).toBeInTheDocument();
+    expect(screen.getByText('Step failed, needs retry')).toBeInTheDocument();
   });
 
-  it("renders step with completed status", () => {
+  it('renders step with completed status', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test',
       steps: [
         {
-          step_id: "step-1",
-          description: "Test step",
-          tool_name: "TestTool",
+          step_id: 'step-1',
+          description: 'Test step',
+          tool_name: 'TestTool',
           tool_input: {},
           dependencies: [],
-          status: "completed",
-          result: "Success!",
+          status: 'completed',
+          result: 'Success!',
         },
       ],
-      status: "completed" as ExecutionPlanStatus,
+      status: 'completed' as ExecutionPlanStatus,
       reflection_enabled: false,
       max_reflection_cycles: 3,
-      completed_steps: ["step-1"],
+      completed_steps: ['step-1'],
       failed_steps: [],
       progress_percentage: 100,
       is_complete: true,
@@ -174,30 +174,30 @@ describe("PlanModeViewer", () => {
     fireEvent.click(stepHeaders[0]);
 
     // After expanding, we should see the result
-    expect(screen.getByText("Success!")).toBeInTheDocument();
+    expect(screen.getByText('Success!')).toBeInTheDocument();
   });
 
-  it("renders step with failed status and error", () => {
+  it('renders step with failed status and error', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test',
       steps: [
         {
-          step_id: "step-1",
-          description: "Failing step",
-          tool_name: "TestTool",
+          step_id: 'step-1',
+          description: 'Failing step',
+          tool_name: 'TestTool',
           tool_input: {},
           dependencies: [],
-          status: "failed",
-          error: "Connection timeout",
+          status: 'failed',
+          error: 'Connection timeout',
         },
       ],
-      status: "failed" as ExecutionPlanStatus,
+      status: 'failed' as ExecutionPlanStatus,
       reflection_enabled: false,
       max_reflection_cycles: 3,
       completed_steps: [],
-      failed_steps: ["step-1"],
+      failed_steps: ['step-1'],
       progress_percentage: 0,
       is_complete: false,
     };
@@ -209,16 +209,16 @@ describe("PlanModeViewer", () => {
     fireEvent.click(stepHeaders[0]);
 
     // After expanding, we should see the error
-    expect(screen.getByText("Connection timeout")).toBeInTheDocument();
+    expect(screen.getByText('Connection timeout')).toBeInTheDocument();
   });
 
-  it("renders empty steps message", () => {
+  it('renders empty steps message', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test',
       steps: [],
-      status: "draft" as ExecutionPlanStatus,
+      status: 'draft' as ExecutionPlanStatus,
       reflection_enabled: false,
       max_reflection_cycles: 3,
       completed_steps: [],
@@ -229,25 +229,25 @@ describe("PlanModeViewer", () => {
 
     render(<PlanModeViewer plan={plan} />);
 
-    expect(screen.getByText("No steps in this plan")).toBeInTheDocument();
+    expect(screen.getByText('No steps in this plan')).toBeInTheDocument();
   });
 
-  it("renders step dependencies", () => {
+  it('renders step dependencies', () => {
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test',
       steps: [
         {
-          step_id: "step-2",
-          description: "Dependent step",
-          tool_name: "TestTool",
+          step_id: 'step-2',
+          description: 'Dependent step',
+          tool_name: 'TestTool',
           tool_input: {},
-          dependencies: ["step-1"],
-          status: "pending",
+          dependencies: ['step-1'],
+          status: 'pending',
         },
       ],
-      status: "draft" as ExecutionPlanStatus,
+      status: 'draft' as ExecutionPlanStatus,
       reflection_enabled: false,
       max_reflection_cycles: 3,
       completed_steps: [],
@@ -265,16 +265,16 @@ describe("PlanModeViewer", () => {
     expect(screen.getByText(/Dependencies: step-1/)).toBeInTheDocument();
   });
 
-  it("renders timestamps when available", () => {
-    const startedAt = new Date("2024-01-15T10:30:00Z").toISOString();
-    const completedAt = new Date("2024-01-15T10:35:00Z").toISOString();
+  it('renders timestamps when available', () => {
+    const startedAt = new Date('2024-01-15T10:30:00Z').toISOString();
+    const completedAt = new Date('2024-01-15T10:35:00Z').toISOString();
 
     const plan: ExecutionPlan = {
-      id: "plan-1",
-      conversation_id: "conv-1",
-      user_query: "Test",
+      id: 'plan-1',
+      conversation_id: 'conv-1',
+      user_query: 'Test',
       steps: [],
-      status: "completed" as ExecutionPlanStatus,
+      status: 'completed' as ExecutionPlanStatus,
       reflection_enabled: false,
       max_reflection_cycles: 3,
       completed_steps: [],

@@ -46,39 +46,41 @@ interface TimelineEventRendererProps {
  * }
  * ```
  */
-export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(({
-  events,
-  isStreaming = false,
-  showExecutionDetails: _showExecutionDetails = true,
-  className = '',
-}) => {
-  // Empty state
-  if (events.length === 0) {
+export const TimelineEventRenderer: React.FC<TimelineEventRendererProps> = memo(
+  ({
+    events,
+    isStreaming = false,
+    showExecutionDetails: _showExecutionDetails = true,
+    className = '',
+  }) => {
+    // Empty state
+    if (events.length === 0) {
+      return (
+        <MessageStream className={className}>
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center text-slate-500 dark:text-slate-400">
+              <span className="material-symbols-outlined text-4xl mb-2">chat</span>
+              <p>No messages yet. Start a conversation!</p>
+            </div>
+          </div>
+        </MessageStream>
+      );
+    }
+
     return (
       <MessageStream className={className}>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center text-slate-500 dark:text-slate-400">
-            <span className="material-symbols-outlined text-4xl mb-2">chat</span>
-            <p>No messages yet. Start a conversation!</p>
-          </div>
-        </div>
+        {events.map((event) => (
+          <TimelineEventItem
+            key={event.id}
+            event={event}
+            isStreaming={isStreaming}
+            allEvents={events}
+          />
+        ))}
       </MessageStream>
     );
   }
-
-  return (
-    <MessageStream className={className}>
-      {events.map((event) => (
-        <TimelineEventItem
-          key={event.id}
-          event={event}
-          isStreaming={isStreaming}
-          allEvents={events}
-        />
-      ))}
-    </MessageStream>
-  );
-});
+);
 
 TimelineEventRenderer.displayName = 'TimelineEventRenderer';
 

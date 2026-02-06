@@ -6,35 +6,35 @@
  * the AppSidebar module to avoid circular dependencies.
  */
 
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
 
-import { useNavigation } from '@/hooks/useNavigation'
+import { useNavigation } from '@/hooks/useNavigation';
 
-import { LazyTooltip } from '@/components/ui/lazyAntd'
+import { LazyTooltip } from '@/components/ui/lazyAntd';
 
-import type { NavItem } from '@/config/navigation'
+import type { NavItem } from '@/config/navigation';
 
 export interface SidebarNavItemProps {
   /** Navigation item configuration */
-  item: NavItem
+  item: NavItem;
   /** Whether the sidebar is collapsed (show tooltip) */
-  collapsed?: boolean
+  collapsed?: boolean;
   /** Base path for generating links */
-  basePath: string
+  basePath: string;
   /** Current location pathname (for testing) */
-  currentPathname?: string
+  currentPathname?: string;
   /** Whether to show as active */
-  forceActive?: boolean
+  forceActive?: boolean;
   /** Translation function (defaults to identity) */
-  t?: (key: string) => string
+  t?: (key: string) => string;
 }
 
 /**
  * Normalize a path to ensure it starts with /
  */
 function normalizePath(path: string): string {
-  if (path === '') return ''
-  return path.startsWith('/') ? path : `/${path}`
+  if (path === '') return '';
+  return path.startsWith('/') ? path : `/${path}`;
 }
 
 /**
@@ -47,12 +47,12 @@ export function SidebarNavItem({
   forceActive = false,
   t = (key: string) => key,
 }: SidebarNavItemProps) {
-  const { isActive: checkIsActive } = useNavigation(basePath)
+  const { isActive: checkIsActive } = useNavigation(basePath);
 
-  const isActive = forceActive || checkIsActive(item.path)
+  const isActive = forceActive || checkIsActive(item.path);
 
   // Translate label if it looks like an i18n key (contains dot or starts with nav.)
-  const label = item.label.includes('.') ? t(item.label) : item.label
+  const label = item.label.includes('.') ? t(item.label) : item.label;
 
   const linkContent = (
     <Link
@@ -66,18 +66,12 @@ export function SidebarNavItem({
       data-testid={`nav-${item.id}`}
     >
       {/* Icon */}
-      <span
-        className={`material-symbols-outlined text-[20px] ${
-          isActive ? 'icon-filled' : ''
-        }`}
-      >
+      <span className={`material-symbols-outlined text-[20px] ${isActive ? 'icon-filled' : ''}`}>
         {item.icon}
       </span>
 
       {/* Label */}
-      {!collapsed && (
-        <span className="text-sm whitespace-nowrap">{label}</span>
-      )}
+      {!collapsed && <span className="text-sm whitespace-nowrap">{label}</span>}
 
       {/* Badge */}
       {!collapsed && item.badge !== undefined && item.badge > 0 && (
@@ -88,10 +82,12 @@ export function SidebarNavItem({
 
       {/* Active indicator line */}
       {isActive && (
-        <div className={`absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full ${collapsed ? '' : 'hidden'}`} />
+        <div
+          className={`absolute left-0 w-0.5 h-5 bg-slate-400 dark:bg-slate-500 rounded-r-full ${collapsed ? '' : 'hidden'}`}
+        />
       )}
     </Link>
-  )
+  );
 
   // Show tooltip when collapsed
   if (collapsed) {
@@ -99,8 +95,8 @@ export function SidebarNavItem({
       <LazyTooltip title={label} placement="right">
         {linkContent}
       </LazyTooltip>
-    )
+    );
   }
 
-  return linkContent
+  return linkContent;
 }

@@ -46,13 +46,7 @@ export const CreateModal: FC<ProjectManagerCreateModalProps> = ({
     }
   };
 
-  return (
-    <ProjectCreateModal
-      isOpen={isOpen}
-      onClose={handleClose}
-      onSuccess={handleSuccess}
-    />
-  );
+  return <ProjectCreateModal isOpen={isOpen} onClose={handleClose} onSuccess={handleSuccess} />;
 };
 
 // ============================================================================

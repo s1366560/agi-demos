@@ -10,38 +10,38 @@
  * - Min/max height constraints
  */
 
-import { GripHorizontal } from 'lucide-react'
+import { GripHorizontal } from 'lucide-react';
 
-import { InputBar } from './InputBar'
-import { Resizer } from './Resizer'
+import { InputBar } from './InputBar';
+import { Resizer } from './Resizer';
 
-import type { INPUT_MIN_HEIGHT, INPUT_MAX_HEIGHT } from './AgentChatHooks'
+import type { INPUT_MIN_HEIGHT, INPUT_MAX_HEIGHT } from './AgentChatHooks';
 
 export interface AgentChatInputAreaProps {
   /** Current height of the input area */
-  inputHeight: number
+  inputHeight: number;
   /** Callback when height changes */
-  onHeightChange: (height: number) => void
+  onHeightChange: (height: number) => void;
   /** Callback when user sends a message */
-  onSend: (content: string, attachmentIds?: string[]) => void | Promise<void>
+  onSend: (content: string, attachmentIds?: string[]) => void | Promise<void>;
   /** Callback when user aborts streaming */
-  onAbort: () => void
+  onAbort: () => void;
   /** Whether agent is currently streaming */
-  isStreaming: boolean
+  isStreaming: boolean;
   /** Whether input is disabled */
-  disabled?: boolean
+  disabled?: boolean;
   /** Whether in plan mode */
-  isPlanMode?: boolean
+  isPlanMode?: boolean;
   /** Callback to toggle plan mode (required by InputBar) */
-  onTogglePlanMode: () => void
+  onTogglePlanMode: () => void;
   /** Minimum height constraint */
-  minHeight?: typeof INPUT_MIN_HEIGHT
+  minHeight?: typeof INPUT_MIN_HEIGHT;
   /** Maximum height constraint */
-  maxHeight?: typeof INPUT_MAX_HEIGHT
+  maxHeight?: typeof INPUT_MAX_HEIGHT;
   /** Current conversation ID for file attachments */
-  conversationId?: string
+  conversationId?: string;
   /** Current project ID for file attachments */
-  projectId?: string
+  projectId?: string;
 }
 
 /**
@@ -95,7 +95,7 @@ export const AgentChatInputArea = ({
         projectId={projectId}
       />
     </div>
-  )
-}
+  );
+};
 
-export default AgentChatInputArea
+export default AgentChatInputArea;

@@ -43,23 +43,22 @@ import type {
 
 // Skip this entire test suite as it tests non-existent methods
 describe.skip('Agent Store - Execution Plan State', () => {
+  // Mock services
+  vi.mock('../../../services/agentService', () => ({
+    agentService: {
+      chat: vi.fn(),
+    },
+  }));
 
-// Mock services
-vi.mock('../../../services/agentService', () => ({
-  agentService: {
-    chat: vi.fn(),
-  },
-}));
-
-vi.mock('../../../services/planService', () => ({
-  planService: {
-    enterPlanMode: vi.fn(),
-    exitPlanMode: vi.fn(),
-    getPlan: vi.fn(),
-    updatePlan: vi.fn(),
-    getPlanModeStatus: vi.fn(),
-  },
-}));
+  vi.mock('../../../services/planService', () => ({
+    planService: {
+      enterPlanMode: vi.fn(),
+      exitPlanMode: vi.fn(),
+      getPlan: vi.fn(),
+      updatePlan: vi.fn(),
+      getPlanModeStatus: vi.fn(),
+    },
+  }));
 
   beforeEach(() => {
     // Reset store before each test

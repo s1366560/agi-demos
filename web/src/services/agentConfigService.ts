@@ -82,13 +82,9 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
     request: UpdateTenantAgentConfigRequest
   ): Promise<TenantAgentConfig> {
     try {
-      return await api.put<TenantAgentConfig>(
-        '/agent/config',
-        request,
-        {
-          params: { tenant_id: tenantId },
-        }
-      );
+      return await api.put<TenantAgentConfig>('/agent/config', request, {
+        params: { tenant_id: tenantId },
+      });
     } catch (error) {
       this._handleError(error, 'Failed to update tenant agent configuration');
     }
@@ -136,27 +132,15 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
       }
 
       if (statusCode === 404) {
-        throw new TenantAgentConfigError(
-          'Tenant not found',
-          404,
-          detail
-        );
+        throw new TenantAgentConfigError('Tenant not found', 404, detail);
       }
 
       if (statusCode === 422) {
-        throw new TenantAgentConfigError(
-          'Invalid configuration values',
-          422,
-          detail
-        );
+        throw new TenantAgentConfigError('Invalid configuration values', 422, detail);
       }
 
       // Generic error with detail if available
-      throw new TenantAgentConfigError(
-        error.getUserMessage(),
-        statusCode,
-        detail
-      );
+      throw new TenantAgentConfigError(error.getUserMessage(), statusCode, detail);
     }
 
     // Non-ApiError errors

@@ -7,16 +7,12 @@
  * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
  */
 
-import React, { useState, memo } from "react";
+import React, { useState, memo } from 'react';
 
-import {
-  BulbOutlined,
-  CaretDownOutlined,
-  CaretRightOutlined,
-} from "@ant-design/icons";
-import { Card, Typography, Space, Tag } from "antd";
+import { BulbOutlined, CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons';
+import { Card, Typography, Space, Tag } from 'antd';
 
-import type { ThoughtLevel } from "../../types/agent";
+import type { ThoughtLevel } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -28,16 +24,13 @@ interface ThoughtBubbleProps {
   isThinking?: boolean;
 }
 
-const levelConfig: Record<
-  ThoughtLevel,
-  { color: string; label: string; class: string }
-> = {
+const levelConfig: Record<ThoughtLevel, { color: string; label: string; class: string }> = {
   work: {
-    color: "purple",
-    label: "Work-level Thinking",
-    class: "thought-work",
+    color: 'purple',
+    label: 'Work-level Thinking',
+    class: 'thought-work',
   },
-  task: { color: "cyan", label: "Task-level Thinking", class: "thought-task" },
+  task: { color: 'cyan', label: 'Task-level Thinking', class: 'thought-task' },
 };
 
 export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
@@ -52,8 +45,8 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
 
   // Handle empty thought
   if (!thought) {
-    const bgClass = level === "work" ? "bg-purple-50" : "bg-cyan-50";
-    const borderClass = level === "work" ? "border-purple-300" : "border-cyan-300";
+    const bgClass = level === 'work' ? 'bg-purple-50' : 'bg-cyan-50';
+    const borderClass = level === 'work' ? 'border-purple-300' : 'border-cyan-300';
 
     return (
       <div
@@ -64,7 +57,7 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         <Space>
           <BulbOutlined />
           <Text type="secondary" italic>
-            {isThinking ? "Thinking..." : "Processing..."}
+            {isThinking ? 'Thinking...' : 'Processing...'}
           </Text>
         </Space>
       </div>
@@ -72,15 +65,13 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   }
 
   const displayThought =
-    collapsed && thought.length > 100
-      ? `${thought.substring(0, 100)}...`
-      : thought;
+    collapsed && thought.length > 100 ? `${thought.substring(0, 100)}...` : thought;
 
-  const bgClass = level === "work" ? "bg-purple-50" : "bg-cyan-50";
-  const borderClass = level === "work" ? "border-purple-300" : "border-cyan-300";
-  const animationClass = isThinking ? "animate-pulse" : "";
-  const maxHeightClass = collapsed ? "max-h-none" : "max-h-[200px]";
-  const overflowClass = collapsed ? "overflow-visible" : "overflow-auto";
+  const bgClass = level === 'work' ? 'bg-purple-50' : 'bg-cyan-50';
+  const borderClass = level === 'work' ? 'border-purple-300' : 'border-cyan-300';
+  const animationClass = isThinking ? 'animate-pulse' : '';
+  const maxHeightClass = collapsed ? 'max-h-none' : 'max-h-[200px]';
+  const overflowClass = collapsed ? 'overflow-visible' : 'overflow-auto';
 
   return (
     <Card
@@ -93,23 +84,18 @@ export const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         {/* Header */}
         <Space className="w-full justify-between">
           <Space>
-            <BulbOutlined
-              className={animationClass}
-              data-testid="thinking-indicator"
-            />
+            <BulbOutlined className={animationClass} data-testid="thinking-indicator" />
             <Tag color={config.color} className="m-0">
               {config.label}
             </Tag>
-            {stepNumber !== undefined ? (
-              <Tag color="default">Step {stepNumber + 1}</Tag>
-            ) : null}
+            {stepNumber !== undefined ? <Tag color="default">Step {stepNumber + 1}</Tag> : null}
           </Space>
 
           {thought.length > 100 ? (
             <Typography.Link
               onClick={() => setCollapsed(!collapsed)}
               className="text-xs"
-              aria-label={collapsed ? "Expand thought" : "Collapse thought"}
+              aria-label={collapsed ? 'Expand thought' : 'Collapse thought'}
             >
               {collapsed ? <CaretRightOutlined /> : <CaretDownOutlined />}
             </Typography.Link>

@@ -6,8 +6,8 @@
  * @packageDocumentation
  */
 
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
 import {
   poolService,
@@ -17,8 +17,8 @@ import {
   type ProjectTier,
   type InstanceStatus,
   type ListInstancesParams,
-} from "../services/poolService";
-import { logger } from "../utils/logger";
+} from '../services/poolService';
+import { logger } from '../utils/logger';
 
 // ============================================================================
 // Types
@@ -69,11 +69,7 @@ export interface PoolActions {
   terminateInstance: (instanceKey: string) => Promise<boolean>;
 
   // Project tier
-  setProjectTier: (
-    projectId: string,
-    tenantId: string,
-    tier: ProjectTier
-  ) => Promise<boolean>;
+  setProjectTier: (projectId: string, tenantId: string, tier: ProjectTier) => Promise<boolean>;
 
   // Metrics
   fetchMetrics: () => Promise<void>;
@@ -131,12 +127,11 @@ export const usePoolStore = create<PoolState & PoolActions>()(
         try {
           const status = await poolService.getStatus();
           set({ status, isStatusLoading: false });
-          logger.debug("[PoolStore] Status fetched:", status);
+          logger.debug('[PoolStore] Status fetched:', status);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Failed to fetch status";
+          const message = error instanceof Error ? error.message : 'Failed to fetch status';
           set({ statusError: message, isStatusLoading: false });
-          logger.error("[PoolStore] Failed to fetch status:", error);
+          logger.error('[PoolStore] Failed to fetch status:', error);
         }
       },
 
@@ -164,16 +159,11 @@ export const usePoolStore = create<PoolState & PoolActions>()(
             isInstancesLoading: false,
           });
 
-          logger.debug(
-            `[PoolStore] Instances fetched: ${response.total} total`
-          );
+          logger.debug(`[PoolStore] Instances fetched: ${response.total} total`);
         } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : "Failed to fetch instances";
+          const message = error instanceof Error ? error.message : 'Failed to fetch instances';
           set({ instancesError: message, isInstancesLoading: false });
-          logger.error("[PoolStore] Failed to fetch instances:", error);
+          logger.error('[PoolStore] Failed to fetch instances:', error);
         }
       },
 
@@ -211,10 +201,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
           }
           return result.success;
         } catch (error) {
-          logger.error(
-            `[PoolStore] Failed to pause instance ${instanceKey}:`,
-            error
-          );
+          logger.error(`[PoolStore] Failed to pause instance ${instanceKey}:`, error);
           return false;
         }
       },
@@ -228,10 +215,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
           }
           return result.success;
         } catch (error) {
-          logger.error(
-            `[PoolStore] Failed to resume instance ${instanceKey}:`,
-            error
-          );
+          logger.error(`[PoolStore] Failed to resume instance ${instanceKey}:`, error);
           return false;
         }
       },
@@ -245,10 +229,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
           }
           return result.success;
         } catch (error) {
-          logger.error(
-            `[PoolStore] Failed to terminate instance ${instanceKey}:`,
-            error
-          );
+          logger.error(`[PoolStore] Failed to terminate instance ${instanceKey}:`, error);
           return false;
         }
       },
@@ -257,30 +238,16 @@ export const usePoolStore = create<PoolState & PoolActions>()(
       // Project Tier
       // ======================================================================
 
-      setProjectTier: async (
-        projectId: string,
-        tenantId: string,
-        tier: ProjectTier
-      ) => {
+      setProjectTier: async (projectId: string, tenantId: string, tier: ProjectTier) => {
         try {
-          const result = await poolService.setProjectTier(
-            projectId,
-            tenantId,
-            tier
-          );
-          logger.info(
-            `[PoolStore] Project ${projectId} tier set to ${tier}:`,
-            result.message
-          );
+          const result = await poolService.setProjectTier(projectId, tenantId, tier);
+          logger.info(`[PoolStore] Project ${projectId} tier set to ${tier}:`, result.message);
           // Refresh data
           await get().fetchStatus();
           await get().fetchInstances();
           return true;
         } catch (error) {
-          logger.error(
-            `[PoolStore] Failed to set tier for project ${projectId}:`,
-            error
-          );
+          logger.error(`[PoolStore] Failed to set tier for project ${projectId}:`, error);
           return false;
         }
       },
@@ -294,12 +261,11 @@ export const usePoolStore = create<PoolState & PoolActions>()(
         try {
           const metrics = await poolService.getMetrics();
           set({ metrics, isMetricsLoading: false });
-          logger.debug("[PoolStore] Metrics fetched:", metrics);
+          logger.debug('[PoolStore] Metrics fetched:', metrics);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Failed to fetch metrics";
+          const message = error instanceof Error ? error.message : 'Failed to fetch metrics';
           set({ metricsError: message, isMetricsLoading: false });
-          logger.error("[PoolStore] Failed to fetch metrics:", error);
+          logger.error('[PoolStore] Failed to fetch metrics:', error);
         }
       },
 
@@ -323,7 +289,7 @@ export const usePoolStore = create<PoolState & PoolActions>()(
         set(initialState);
       },
     }),
-    { name: "pool-store" }
+    { name: 'pool-store' }
   )
 );
 

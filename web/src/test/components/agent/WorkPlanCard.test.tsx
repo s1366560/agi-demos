@@ -5,13 +5,13 @@
  * showing all steps with their status and dependencies.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
 
-import '@testing-library/jest-dom/vitest'
-import { WorkPlanCard } from '../../../components/agent/WorkPlanCard'
+import '@testing-library/jest-dom/vitest';
+import { WorkPlanCard } from '../../../components/agent/WorkPlanCard';
 
-import type { WorkPlan, PlanStatus } from '../../../types/agent'
+import type { WorkPlan, PlanStatus } from '../../../types/agent';
 
 describe('WorkPlanCard', () => {
   const mockWorkPlan: WorkPlan = {
@@ -48,142 +48,142 @@ describe('WorkPlanCard', () => {
     workflow_pattern_id: 'pattern-successful-query',
     created_at: '2025-01-08T10:00:00Z',
     updated_at: '2025-01-08T10:05:00Z',
-  }
+  };
 
   describe('Rendering', () => {
     it('should render work plan card with title', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      expect(screen.getByText(/work plan/i)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/work plan/i)).toBeInTheDocument();
+    });
 
     it('should display all steps', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      expect(screen.getByText(/Search for memories about project planning/i)).toBeInTheDocument()
-      expect(screen.getByText(/Analyze the retrieved memories/i)).toBeInTheDocument()
-      expect(screen.getByText(/Generate final response/i)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/Search for memories about project planning/i)).toBeInTheDocument();
+      expect(screen.getByText(/Analyze the retrieved memories/i)).toBeInTheDocument();
+      expect(screen.getByText(/Generate final response/i)).toBeInTheDocument();
+    });
 
     it('should show step numbers', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
       // Steps are 0-indexed, displayed as stepNumber + 1
-      expect(screen.getByText(/Step 1:/)).toBeInTheDocument()
-      expect(screen.getByText(/Step 2:/)).toBeInTheDocument()
-      expect(screen.getByText(/Step 3:/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/Step 1:/)).toBeInTheDocument();
+      expect(screen.getByText(/Step 2:/)).toBeInTheDocument();
+      expect(screen.getByText(/Step 3:/)).toBeInTheDocument();
+    });
 
     it('should display required tools for each step', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      expect(screen.getByText('memory_search')).toBeInTheDocument()
-      expect(screen.getByText('analyze')).toBeInTheDocument()
-      expect(screen.getByText('summarize')).toBeInTheDocument()
-    })
+      expect(screen.getByText('memory_search')).toBeInTheDocument();
+      expect(screen.getByText('analyze')).toBeInTheDocument();
+      expect(screen.getByText('summarize')).toBeInTheDocument();
+    });
 
     it('should show workflow pattern indicator when present', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
       // The component shows "Pattern Matched" as a tooltip trigger
-      expect(screen.getByText(/Pattern Matched/i)).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText(/Pattern Matched/i)).toBeInTheDocument();
+    });
+  });
 
   describe('Step Status Indicators', () => {
     it('should show completed status for steps before current step', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
       // Step 0 should be completed (before current_step_index 1)
-      const step0 = document.querySelector('[data-step-number="0"]')
-      expect(step0).toHaveClass('step-completed')
-    })
+      const step0 = document.querySelector('[data-step-number="0"]');
+      expect(step0).toHaveClass('step-completed');
+    });
 
     it('should show running status for current step', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
       // Step 1 should be running (at current_step_index 1)
-      const step1 = document.querySelector('[data-step-number="1"]')
-      expect(step1).toHaveClass('step-running')
-    })
+      const step1 = document.querySelector('[data-step-number="1"]');
+      expect(step1).toHaveClass('step-running');
+    });
 
     it('should show pending status for steps after current step', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
       // Step 2 should be pending (after current_step_index 1)
-      const step2 = document.querySelector('[data-step-number="2"]')
-      expect(step2).toHaveClass('step-pending')
-    })
+      const step2 = document.querySelector('[data-step-number="2"]');
+      expect(step2).toHaveClass('step-pending');
+    });
 
     it('should show all steps as completed when plan status is completed', () => {
       const completedPlan: WorkPlan = {
         ...mockWorkPlan,
         status: 'completed' as PlanStatus,
-      }
-      render(<WorkPlanCard workPlan={completedPlan} />)
+      };
+      render(<WorkPlanCard workPlan={completedPlan} />);
 
       // All steps should have completed class
-      const steps = document.querySelectorAll('[data-step-number]')
+      const steps = document.querySelectorAll('[data-step-number]');
       steps.forEach((step) => {
-        expect(step).toHaveClass('step-completed')
-      })
-    })
+        expect(step).toHaveClass('step-completed');
+      });
+    });
 
     it('should show failed status for all steps when plan fails', () => {
       const failedPlan: WorkPlan = {
         ...mockWorkPlan,
         status: 'failed' as PlanStatus,
-      }
-      render(<WorkPlanCard workPlan={failedPlan} />)
+      };
+      render(<WorkPlanCard workPlan={failedPlan} />);
 
       // Should show failed status tag
-      expect(screen.getByText(/Failed/)).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText(/Failed/)).toBeInTheDocument();
+    });
+  });
 
   describe('Progress Bar', () => {
     it('should display progress percentage', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      const percentageElements = screen.getAllByText(/33%/)
-      expect(percentageElements.length).toBeGreaterThan(0) // 1/3 steps completed
-    })
+      const percentageElements = screen.getAllByText(/33%/);
+      expect(percentageElements.length).toBeGreaterThan(0); // 1/3 steps completed
+    });
 
     it('should show visual progress bar', () => {
-      const { container } = render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      const { container } = render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      const progressBar = container.querySelector('.ant-progress')
-      expect(progressBar).toBeInTheDocument()
-    })
-  })
+      const progressBar = container.querySelector('.ant-progress');
+      expect(progressBar).toBeInTheDocument();
+    });
+  });
 
   describe('Collapsibility', () => {
     it('should be collapsible', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      const collapseButton = screen.getByRole('button', { name: /collapse/i })
-      expect(collapseButton).toBeInTheDocument()
-    })
+      const collapseButton = screen.getByRole('button', { name: /collapse/i });
+      expect(collapseButton).toBeInTheDocument();
+    });
 
     it('should toggle step visibility on collapse', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
-      const collapseButton = screen.getByRole('button', { name: /collapse/i })
+      const collapseButton = screen.getByRole('button', { name: /collapse/i });
 
       // Initially expanded
-      expect(screen.getByText(/Search for memories/)).toBeInTheDocument()
+      expect(screen.getByText(/Search for memories/)).toBeInTheDocument();
 
       // Collapse
-      fireEvent.click(collapseButton)
+      fireEvent.click(collapseButton);
       // The Collapse component with ghost prop doesn't actually hide content
       // Just verify the button is clickable
-      expect(collapseButton).toBeInTheDocument()
+      expect(collapseButton).toBeInTheDocument();
 
       // Expand again
-      fireEvent.click(collapseButton)
-      expect(screen.getByText(/Search for memories/)).toBeInTheDocument()
-    })
-  })
+      fireEvent.click(collapseButton);
+      expect(screen.getByText(/Search for memories/)).toBeInTheDocument();
+    });
+  });
 
   describe('Dependencies', () => {
     it('should display step dependencies', () => {
@@ -200,20 +200,20 @@ describe('WorkPlanCard', () => {
             dependencies: [0, 1, 2],
           },
         ],
-      }
-      render(<WorkPlanCard workPlan={planWithDeps} />)
+      };
+      render(<WorkPlanCard workPlan={planWithDeps} />);
 
       // Dependencies are displayed as 1-indexed
-      expect(screen.getByText(/Depends on: Steps 1, 2, 3/i)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/Depends on: Steps 1, 2, 3/i)).toBeInTheDocument();
+    });
 
     it('should show no dependencies message for independent steps', () => {
-      render(<WorkPlanCard workPlan={mockWorkPlan} />)
+      render(<WorkPlanCard workPlan={mockWorkPlan} />);
 
       // Step 0 has no dependencies
-      expect(screen.getByText(/no dependencies/i)).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText(/no dependencies/i)).toBeInTheDocument();
+    });
+  });
 
   describe('Empty State', () => {
     it('should handle plan with no steps gracefully', () => {
@@ -224,10 +224,10 @@ describe('WorkPlanCard', () => {
         steps: [],
         current_step_index: 0,
         created_at: '2025-01-08T10:00:00Z',
-      }
-      render(<WorkPlanCard workPlan={emptyPlan} />)
+      };
+      render(<WorkPlanCard workPlan={emptyPlan} />);
 
-      expect(screen.getByText(/no steps in this plan/i)).toBeInTheDocument()
-    })
-  })
-})
+      expect(screen.getByText(/no steps in this plan/i)).toBeInTheDocument();
+    });
+  });
+});

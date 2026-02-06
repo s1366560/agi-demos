@@ -58,9 +58,7 @@ export function ReasoningLog({
           />
 
           {/* Title */}
-          <span className="text-sm font-medium text-slate-900 dark:text-white">
-            {title}
-          </span>
+          <span className="text-sm font-medium text-slate-900 dark:text-white">{title}</span>
         </div>
 
         {/* Status Badge */}
@@ -88,9 +86,7 @@ export function ReasoningLog({
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-0.5">
                     {step.title}
                   </h4>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {step.description}
-                  </p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">{step.description}</p>
                 </div>
               </div>
             ))}

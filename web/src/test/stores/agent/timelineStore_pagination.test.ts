@@ -50,7 +50,14 @@ describe('TimelineStore Pagination Improvements', () => {
   describe('Default limit requirement', () => {
     it('should use limit=50 for initial timeline load', async () => {
       const mockTimeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Msg 1',
+          role: 'user',
+        },
       ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(
@@ -65,12 +72,28 @@ describe('TimelineStore Pagination Improvements', () => {
 
     it('should use limit=50 for loadEarlierMessages', async () => {
       useTimelineStore.setState({
-        timeline: [{ id: '50', type: 'user_message', sequenceNumber: 50, timestamp: 50000, content: 'Msg 50', role: 'user' }] as any,
+        timeline: [
+          {
+            id: '50',
+            type: 'user_message',
+            sequenceNumber: 50,
+            timestamp: 50000,
+            content: 'Msg 50',
+            role: 'user',
+          },
+        ] as any,
         earliestLoadedSequence: 50,
       });
 
       const earlierTimeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Msg 1',
+          role: 'user',
+        },
       ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(
@@ -111,7 +134,14 @@ describe('TimelineStore Pagination Improvements', () => {
 
     it('should set hasEarlier to false when no more messages', async () => {
       const mockTimeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Msg 1',
+          role: 'user',
+        },
       ];
 
       // API returns has_more=false
@@ -169,7 +199,14 @@ describe('TimelineStore Pagination Improvements', () => {
       });
 
       const earlierTimeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Msg 1',
+          role: 'user',
+        },
       ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(
@@ -203,16 +240,44 @@ describe('TimelineStore Pagination Improvements', () => {
     it('should prepend loaded events to existing timeline', async () => {
       useTimelineStore.setState({
         timeline: [
-          { id: '51', type: 'user_message', sequenceNumber: 51, timestamp: 51000, content: 'Msg 51', role: 'user' },
-          { id: '52', type: 'user_message', sequenceNumber: 52, timestamp: 52000, content: 'Msg 52', role: 'user' },
+          {
+            id: '51',
+            type: 'user_message',
+            sequenceNumber: 51,
+            timestamp: 51000,
+            content: 'Msg 51',
+            role: 'user',
+          },
+          {
+            id: '52',
+            type: 'user_message',
+            sequenceNumber: 52,
+            timestamp: 52000,
+            content: 'Msg 52',
+            role: 'user',
+          },
         ] as any,
         earliestLoadedSequence: 51,
         latestLoadedSequence: 52,
       });
 
       const earlierTimeline = [
-        { id: '49', type: 'user_message', sequenceNumber: 49, timestamp: 49000, content: 'Msg 49', role: 'user' },
-        { id: '50', type: 'user_message', sequenceNumber: 50, timestamp: 50000, content: 'Msg 50', role: 'user' },
+        {
+          id: '49',
+          type: 'user_message',
+          sequenceNumber: 49,
+          timestamp: 49000,
+          content: 'Msg 49',
+          role: 'user',
+        },
+        {
+          id: '50',
+          type: 'user_message',
+          sequenceNumber: 50,
+          timestamp: 50000,
+          content: 'Msg 50',
+          role: 'user',
+        },
       ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(
@@ -238,7 +303,14 @@ describe('TimelineStore Pagination Improvements', () => {
       });
 
       const earlierTimeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Msg 1',
+          role: 'user',
+        },
       ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(
@@ -325,7 +397,14 @@ describe('TimelineStore Pagination Improvements', () => {
       });
 
       const earlierTimeline = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Msg 1', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Msg 1',
+          role: 'user',
+        },
       ];
 
       vi.mocked(getConversationMessages).mockResolvedValue(

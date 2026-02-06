@@ -7,7 +7,7 @@
  * - Flow: Flow diagram showing execution sequence
  */
 
-import React, { useState, useMemo, memo } from "react";
+import React, { useState, useMemo, memo } from 'react';
 
 import {
   CheckCircleOutlined,
@@ -23,8 +23,8 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   NodeIndexOutlined,
-} from "@ant-design/icons";
-import { Tooltip, Drawer, Tag, Empty, Segmented } from "antd";
+} from '@ant-design/icons';
+import { Tooltip, Drawer, Tag, Empty, Segmented } from 'antd';
 
 /**
  * Tool execution item for visualization
@@ -34,7 +34,7 @@ export interface ToolExecutionItem {
   toolName: string;
   input: Record<string, unknown>;
   output?: string;
-  status: "running" | "success" | "failed";
+  status: 'running' | 'success' | 'failed';
   startTime: number;
   endTime?: number;
   duration?: number;
@@ -46,7 +46,7 @@ export interface ToolCallVisualizationProps {
   /** Tool execution records */
   toolExecutions: ToolExecutionItem[];
   /** Display mode */
-  mode?: "grid" | "timeline" | "flow";
+  mode?: 'grid' | 'timeline' | 'flow';
   /** Show input/output details */
   showDetails?: boolean;
   /** Click handler for tool selection */
@@ -83,24 +83,22 @@ const formatDuration = (ms: number): string => {
 // Format timestamp
 const formatTime = (timestamp: number): string => {
   return new Date(timestamp).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
 };
 
 /**
  * Status icon component
  */
-const StatusIcon: React.FC<{ status: "running" | "success" | "failed" }> = ({
-  status,
-}) => {
+const StatusIcon: React.FC<{ status: 'running' | 'success' | 'failed' }> = ({ status }) => {
   switch (status) {
-    case "running":
+    case 'running':
       return <SyncOutlined spin className="text-blue-500" />;
-    case "success":
+    case 'success':
       return <CheckCircleOutlined className="text-emerald-500" />;
-    case "failed":
+    case 'failed':
       return <CloseCircleOutlined className="text-red-500" />;
   }
 };
@@ -114,17 +112,11 @@ interface GridViewProps {
   compact?: boolean;
 }
 
-const GridView: React.FC<GridViewProps> = ({
-  executions,
-  onToolClick,
-  compact = false,
-}) => {
+const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = false }) => {
   return (
     <div
       className={`grid gap-3 ${
-        compact
-          ? "grid-cols-2 sm:grid-cols-3"
-          : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+        compact ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
       }`}
     >
       {executions.map((exec) => (
@@ -132,18 +124,18 @@ const GridView: React.FC<GridViewProps> = ({
           key={exec.id}
           onClick={() => onToolClick?.(exec)}
           className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-            exec.status === "running"
-              ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
-              : exec.status === "success"
-              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800"
-              : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+            exec.status === 'running'
+              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+              : exec.status === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
           }`}
         >
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">{getToolIcon(exec.toolName)}</span>
             <span
               className={`font-medium ${
-                compact ? "text-xs" : "text-sm"
+                compact ? 'text-xs' : 'text-sm'
               } text-slate-700 dark:text-slate-200 truncate`}
             >
               {exec.toolName}
@@ -160,11 +152,11 @@ const GridView: React.FC<GridViewProps> = ({
             )}
             <Tag
               color={
-                exec.status === "success"
-                  ? "success"
-                  : exec.status === "failed"
-                  ? "error"
-                  : "processing"
+                exec.status === 'success'
+                  ? 'success'
+                  : exec.status === 'failed'
+                    ? 'error'
+                    : 'processing'
               }
               className="mr-0 text-[10px]"
             >
@@ -185,10 +177,7 @@ interface TimelineViewProps {
   onToolClick?: (execution: ToolExecutionItem) => void;
 }
 
-const TimelineView: React.FC<TimelineViewProps> = ({
-  executions,
-  onToolClick,
-}) => {
+const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) => {
   // Calculate time range
   const timeRange = useMemo(() => {
     if (executions.length === 0) return { min: 0, max: 1000, range: 1000 };
@@ -204,8 +193,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
   // Calculate position and width for each execution
   const getBarStyle = (exec: ToolExecutionItem) => {
     const left = ((exec.startTime - timeRange.min) / timeRange.range) * 100;
-    const end =
-      exec.endTime || exec.startTime + (exec.duration || timeRange.range * 0.1);
+    const end = exec.endTime || exec.startTime + (exec.duration || timeRange.range * 0.1);
     const width = ((end - exec.startTime) / timeRange.range) * 100;
     return { left: `${left}%`, width: `${Math.max(width, 2)}%` };
   };
@@ -243,9 +231,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                 title={
                   <div>
                     <div>{exec.toolName}</div>
-                    {exec.duration && (
-                      <div>Duration: {formatDuration(exec.duration)}</div>
-                    )}
+                    {exec.duration && <div>Duration: {formatDuration(exec.duration)}</div>}
                     <div>Status: {exec.status}</div>
                   </div>
                 }
@@ -253,16 +239,16 @@ const TimelineView: React.FC<TimelineViewProps> = ({
                 <div
                   onClick={() => onToolClick?.(exec)}
                   className={`absolute top-1/2 -translate-y-1/2 h-6 rounded cursor-pointer transition-all hover:opacity-80 ${
-                    exec.status === "running"
-                      ? "bg-blue-500 animate-pulse"
-                      : exec.status === "success"
-                      ? "bg-emerald-500"
-                      : "bg-red-500"
+                    exec.status === 'running'
+                      ? 'bg-blue-500 animate-pulse'
+                      : exec.status === 'success'
+                        ? 'bg-emerald-500'
+                        : 'bg-red-500'
                   }`}
                   style={{
                     left: `calc(7rem + ${barStyle.left})`,
                     width: barStyle.width,
-                    minWidth: "8px",
+                    minWidth: '8px',
                   }}
                 />
               </Tooltip>
@@ -292,9 +278,7 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
             title={
               <div>
                 <div className="font-medium">{exec.toolName}</div>
-                {exec.duration && (
-                  <div>Duration: {formatDuration(exec.duration)}</div>
-                )}
+                {exec.duration && <div>Duration: {formatDuration(exec.duration)}</div>}
                 <div>Status: {exec.status}</div>
               </div>
             }
@@ -302,11 +286,11 @@ const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {
             <div
               onClick={() => onToolClick?.(exec)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-                exec.status === "running"
-                  ? "bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700"
-                  : exec.status === "success"
-                  ? "bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700"
-                  : "bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700"
+                exec.status === 'running'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
+                  : exec.status === 'success'
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300 dark:border-emerald-700'
+                    : 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700'
               }`}
             >
               <span className="text-lg">{getToolIcon(exec.toolName)}</span>
@@ -343,11 +327,7 @@ interface DetailDrawerProps {
   onClose: () => void;
 }
 
-const DetailDrawer: React.FC<DetailDrawerProps> = ({
-  execution,
-  visible,
-  onClose,
-}) => {
+const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose }) => {
   if (!execution) return null;
 
   return (
@@ -367,16 +347,14 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
         {/* Status and timing */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-              Status
-            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Status</div>
             <Tag
               color={
-                execution.status === "success"
-                  ? "success"
-                  : execution.status === "failed"
-                  ? "error"
-                  : "processing"
+                execution.status === 'success'
+                  ? 'success'
+                  : execution.status === 'failed'
+                    ? 'error'
+                    : 'processing'
               }
             >
               {execution.status.toUpperCase()}
@@ -384,39 +362,25 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
           </div>
           {execution.duration !== undefined && (
             <div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                Duration
-              </div>
-              <span className="font-mono">
-                {formatDuration(execution.duration)}
-              </span>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Duration</div>
+              <span className="font-mono">{formatDuration(execution.duration)}</span>
             </div>
           )}
           <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-              Start Time
-            </div>
-            <span className="font-mono text-sm">
-              {formatTime(execution.startTime)}
-            </span>
+            <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Start Time</div>
+            <span className="font-mono text-sm">{formatTime(execution.startTime)}</span>
           </div>
           {execution.endTime && (
             <div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
-                End Time
-              </div>
-              <span className="font-mono text-sm">
-                {formatTime(execution.endTime)}
-              </span>
+              <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">End Time</div>
+              <span className="font-mono text-sm">{formatTime(execution.endTime)}</span>
             </div>
           )}
         </div>
 
         {/* Input */}
         <div>
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
-            INPUT
-          </div>
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">INPUT</div>
           <pre className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-xs overflow-x-auto max-h-60">
             {JSON.stringify(execution.input, null, 2)}
           </pre>
@@ -454,15 +418,14 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({
  */
 const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
   toolExecutions,
-  mode: initialMode = "grid",
+  mode: initialMode = 'grid',
   showDetails = true,
   onToolClick,
   allowModeSwitch = true,
   compact = false,
 }) => {
-  const [mode, setMode] = useState<"grid" | "timeline" | "flow">(initialMode);
-  const [selectedExecution, setSelectedExecution] =
-    useState<ToolExecutionItem | null>(null);
+  const [mode, setMode] = useState<'grid' | 'timeline' | 'flow'>(initialMode);
+  const [selectedExecution, setSelectedExecution] = useState<ToolExecutionItem | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
 
   // Handle tool click
@@ -492,9 +455,9 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
   }
 
   const modeOptions = [
-    { value: "grid", icon: <AppstoreOutlined />, label: "Grid" },
-    { value: "timeline", icon: <UnorderedListOutlined />, label: "Timeline" },
-    { value: "flow", icon: <NodeIndexOutlined />, label: "Flow" },
+    { value: 'grid', icon: <AppstoreOutlined />, label: 'Grid' },
+    { value: 'timeline', icon: <UnorderedListOutlined />, label: 'Timeline' },
+    { value: 'flow', icon: <NodeIndexOutlined />, label: 'Flow' },
   ];
 
   return (
@@ -519,22 +482,13 @@ const ToolCallVisualizationInternal: React.FC<ToolCallVisualizationProps> = ({
       )}
 
       {/* Visualization */}
-      {mode === "grid" && (
-        <GridView
-          executions={sortedExecutions}
-          onToolClick={handleToolClick}
-          compact={compact}
-        />
+      {mode === 'grid' && (
+        <GridView executions={sortedExecutions} onToolClick={handleToolClick} compact={compact} />
       )}
-      {mode === "timeline" && (
-        <TimelineView
-          executions={sortedExecutions}
-          onToolClick={handleToolClick}
-        />
+      {mode === 'timeline' && (
+        <TimelineView executions={sortedExecutions} onToolClick={handleToolClick} />
       )}
-      {mode === "flow" && (
-        <FlowView executions={sortedExecutions} onToolClick={handleToolClick} />
-      )}
+      {mode === 'flow' && <FlowView executions={sortedExecutions} onToolClick={handleToolClick} />}
 
       {/* Detail drawer */}
       {showDetails && (

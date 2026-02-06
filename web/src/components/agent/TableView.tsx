@@ -7,11 +7,7 @@
 
 import React, { useState, useMemo } from 'react';
 
-import {
-  DownloadOutlined,
-  SearchOutlined,
-  FileTextOutlined,
-} from '@ant-design/icons';
+import { DownloadOutlined, SearchOutlined, FileTextOutlined } from '@ant-design/icons';
 import { Typography } from 'antd';
 
 import { LazyTable, LazyButton, LazyCard, LazyInput, LazySpace } from '@/components/ui/lazyAntd';
@@ -94,7 +90,9 @@ export const TableView: React.FC<TableViewProps> = ({
     const lowerValue = value.toLowerCase();
     const filtered = data.filter((row) =>
       Object.values(row).some((cellValue) =>
-        String(cellValue || '').toLowerCase().includes(lowerValue)
+        String(cellValue || '')
+          .toLowerCase()
+          .includes(lowerValue)
       )
     );
     setFilteredData(filtered);

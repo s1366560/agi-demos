@@ -325,6 +325,12 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
                 return True
             except Exception as e:
                 logger.warning(f"Failed to acquire advisory lock for {project_id}: {e}")
+                # CRITICAL: Rollback to clear the aborted transaction state
+                # before any further operations on this session
+                try:
+                    await self._session.rollback()
+                except Exception:
+                    pass
                 # Reset lock timeout to default (0 = no timeout) on failure
                 try:
                     await self._session.execute(text("SET SESSION lock_timeout = '0'"))

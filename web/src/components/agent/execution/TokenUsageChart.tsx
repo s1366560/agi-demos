@@ -8,15 +8,10 @@
  * - Dark mode support
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo } from 'react';
 
-import {
-  InfoCircleOutlined,
-  DownOutlined,
-  RightOutlined,
-  DollarOutlined,
-} from "@ant-design/icons";
-import { Tooltip } from "antd";
+import { InfoCircleOutlined, DownOutlined, RightOutlined, DollarOutlined } from '@ant-design/icons';
+import { Tooltip } from 'antd';
 
 /**
  * Token usage data structure
@@ -46,7 +41,7 @@ export interface TokenUsageChartProps {
   /** Cost data (optional) */
   costData?: CostData;
   /** Display mode */
-  variant?: "compact" | "detailed";
+  variant?: 'compact' | 'detailed';
   /** Maximum tokens for percentage calculation (optional) */
   maxTokens?: number;
   /** Show trend indicator (requires historical data) */
@@ -58,25 +53,25 @@ export interface TokenUsageChartProps {
 // Color scheme for token types - aligned with design tokens
 const COLORS = {
   input: {
-    bg: "bg-blue-500",
-    bgLight: "bg-blue-100 dark:bg-blue-900/30",
-    text: "text-blue-600 dark:text-blue-400",
-    border: "border-blue-300 dark:border-blue-700",
-    hex: "#3b82f6", // Secondary color
+    bg: 'bg-blue-500',
+    bgLight: 'bg-blue-100 dark:bg-blue-900/30',
+    text: 'text-blue-600 dark:text-blue-400',
+    border: 'border-blue-300 dark:border-blue-700',
+    hex: '#3b82f6', // Secondary color
   },
   output: {
-    bg: "bg-emerald-500",
-    bgLight: "bg-emerald-100 dark:bg-emerald-900/30",
-    text: "text-emerald-600 dark:text-emerald-400",
-    border: "border-emerald-300 dark:border-emerald-700",
-    hex: "#10b981", // Success color
+    bg: 'bg-emerald-500',
+    bgLight: 'bg-emerald-100 dark:bg-emerald-900/30',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    border: 'border-emerald-300 dark:border-emerald-700',
+    hex: '#10b981', // Success color
   },
   reasoning: {
-    bg: "bg-purple-500",
-    bgLight: "bg-purple-100 dark:bg-purple-900/30",
-    text: "text-purple-600 dark:text-purple-400",
-    border: "border-purple-300 dark:border-purple-700",
-    hex: "#8b5cf6", // Purple for reasoning
+    bg: 'bg-purple-500',
+    bgLight: 'bg-purple-100 dark:bg-purple-900/30',
+    text: 'text-purple-600 dark:text-purple-400',
+    border: 'border-purple-300 dark:border-purple-700',
+    hex: '#8b5cf6', // Purple for reasoning
   },
 };
 
@@ -87,7 +82,7 @@ const formatNumber = (num: number): string => {
 
 // Format cost with appropriate precision
 const formatCost = (cost: number): string => {
-  if (cost < 0.0001) return "$0.0000";
+  if (cost < 0.0001) return '$0.0000';
   if (cost < 0.01) return `$${cost.toFixed(4)}`;
   if (cost < 1) return `$${cost.toFixed(3)}`;
   return `$${cost.toFixed(2)}`;
@@ -154,11 +149,7 @@ const StackedBar: React.FC<StackedBarProps> = ({
       {showLabels && (
         <div className="flex justify-between mt-1 text-[10px] text-slate-500 dark:text-slate-400">
           <span>0</span>
-          {maxTokens && (
-            <span className="font-medium">
-              {Math.round(totalPercent)}% used
-            </span>
-          )}
+          {maxTokens && <span className="font-medium">{Math.round(totalPercent)}% used</span>}
           <span>{formatNumber(effectiveMax)}</span>
         </div>
       )}
@@ -176,18 +167,11 @@ interface LegendItemProps {
   percentage: number;
 }
 
-const LegendItem: React.FC<LegendItemProps> = ({
-  color,
-  label,
-  value,
-  percentage,
-}) => {
+const LegendItem: React.FC<LegendItemProps> = ({ color, label, value, percentage }) => {
   return (
     <div className="flex items-center gap-2">
       <div className={`w-3 h-3 rounded-sm ${color}`} />
-      <span className="text-xs text-slate-600 dark:text-slate-300">
-        {label}
-      </span>
+      <span className="text-xs text-slate-600 dark:text-slate-300">{label}</span>
       <span className="text-xs font-mono text-slate-700 dark:text-slate-200 ml-auto">
         {formatNumber(value)}
       </span>
@@ -204,7 +188,7 @@ const LegendItem: React.FC<LegendItemProps> = ({
 export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
   tokenData,
   costData,
-  variant = "compact",
+  variant = 'compact',
   maxTokens,
   warningThreshold = 90,
 }) => {
@@ -230,7 +214,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
   }
 
   // Compact variant - inline display
-  if (variant === "compact") {
+  if (variant === 'compact') {
     return (
       <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
         <button
@@ -242,11 +226,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
           ) : (
             <RightOutlined className="text-[10px]" />
           )}
-          <span
-            className={
-              isOverThreshold ? "text-amber-600 dark:text-amber-400" : ""
-            }
-          >
+          <span className={isOverThreshold ? 'text-amber-600 dark:text-amber-400' : ''}>
             {formatNumber(tokenData.total)} tokens
           </span>
           {costData && (
@@ -276,9 +256,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
             <InfoCircleOutlined className="text-blue-500" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Token Usage
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Token Usage</h3>
             {costData && (
               <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <DollarOutlined />
@@ -292,8 +270,8 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
         <div
           className={`px-3 py-1 rounded-full text-sm font-mono ${
             isOverThreshold
-              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
-              : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+              : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
           }`}
         >
           {formatNumber(tokenData.total)}
@@ -302,11 +280,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
 
       {/* Progress bar */}
       <div className="mb-4">
-        <StackedBar
-          {...tokenData}
-          maxTokens={maxTokens}
-          showLabels={!!maxTokens}
-        />
+        <StackedBar {...tokenData} maxTokens={maxTokens} showLabels={!!maxTokens} />
       </div>
 
       {/* Legend / Breakdown */}
@@ -341,26 +315,20 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
           </h4>
           <div className="space-y-1">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300">
-                Input cost:
-              </span>
+              <span className="text-slate-600 dark:text-slate-300">Input cost:</span>
               <span className="font-mono text-slate-700 dark:text-slate-200">
                 {formatCost(costData.breakdown.input_cost)}
               </span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-slate-600 dark:text-slate-300">
-                Output cost:
-              </span>
+              <span className="text-slate-600 dark:text-slate-300">Output cost:</span>
               <span className="font-mono text-slate-700 dark:text-slate-200">
                 {formatCost(costData.breakdown.output_cost)}
               </span>
             </div>
             {costData.breakdown.reasoning_cost !== undefined && (
               <div className="flex justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-300">
-                  Reasoning cost:
-                </span>
+                <span className="text-slate-600 dark:text-slate-300">Reasoning cost:</span>
                 <span className="font-mono text-slate-700 dark:text-slate-200">
                   {formatCost(costData.breakdown.reasoning_cost)}
                 </span>

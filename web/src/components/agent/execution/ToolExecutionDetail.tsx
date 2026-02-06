@@ -9,17 +9,17 @@
  * - Image rendering for URL and base64 results
  */
 
-import { useState } from "react";
+import { useState } from 'react';
 
 import {
   isImageUrl as _isImageUrl,
   parseBase64Image,
   extractImageUrl,
   foldTextWithMetadata,
-} from "../../../utils/toolResultUtils";
-import { MaterialIcon } from "../shared";
+} from '../../../utils/toolResultUtils';
+import { MaterialIcon } from '../shared';
 
-import type { ToolExecution } from "../../../types/agent";
+import type { ToolExecution } from '../../../types/agent';
 
 // Keep reference to suppress unused warning - may be used in future
 void _isImageUrl;
@@ -37,27 +37,25 @@ export interface ToolExecutionDetailProps {
 function getToolIcon(name: string): string {
   const lowerName = name.toLowerCase();
   if (
-    lowerName.includes("web_search") ||
-    (lowerName.includes("web") && lowerName.includes("search"))
+    lowerName.includes('web_search') ||
+    (lowerName.includes('web') && lowerName.includes('search'))
   )
-    return "language";
-  if (lowerName.includes("web_scrape") || lowerName.includes("scrape"))
-    return "public";
-  if (lowerName.includes("search") || lowerName.includes("memory"))
-    return "search";
-  if (lowerName.includes("entity")) return "account_tree";
-  if (lowerName.includes("episode")) return "history";
-  if (lowerName.includes("create")) return "add_circle";
-  if (lowerName.includes("graph") || lowerName.includes("query")) return "hub";
-  if (lowerName.includes("summary")) return "summarize";
-  return "extension";
+    return 'language';
+  if (lowerName.includes('web_scrape') || lowerName.includes('scrape')) return 'public';
+  if (lowerName.includes('search') || lowerName.includes('memory')) return 'search';
+  if (lowerName.includes('entity')) return 'account_tree';
+  if (lowerName.includes('episode')) return 'history';
+  if (lowerName.includes('create')) return 'add_circle';
+  if (lowerName.includes('graph') || lowerName.includes('query')) return 'hub';
+  if (lowerName.includes('summary')) return 'summarize';
+  return 'extension';
 }
 
 /**
  * Format duration
  */
 function formatDuration(ms: number | undefined): string {
-  if (!ms) return "-";
+  if (!ms) return '-';
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
@@ -66,63 +64,55 @@ function formatDuration(ms: number | undefined): string {
  * Format timestamp
  */
 function formatTime(isoString: string | undefined): string {
-  if (!isoString) return "-";
+  if (!isoString) return '-';
   try {
     const date = new Date(isoString);
-    return date.toLocaleTimeString("en-US", {
+    return date.toLocaleTimeString('en-US', {
       hour12: false,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
   } catch {
-    return "-";
+    return '-';
   }
 }
 
 /**
  * ToolExecutionDetail component
  */
-export function ToolExecutionDetail({
-  execution,
-  compact = false,
-}: ToolExecutionDetailProps) {
+export function ToolExecutionDetail({ execution, compact = false }: ToolExecutionDetailProps) {
   const [showFullInput, setShowFullInput] = useState(false);
   const [showFullResult, setShowFullResult] = useState(false);
 
   const inputJson = JSON.stringify(execution.input, null, 2);
-  const resultText = execution.result || execution.error || "";
+  const resultText = execution.result || execution.error || '';
   const { text: foldedResult, folded: isResultFolded } = foldTextWithMetadata(resultText, 5);
 
   // Detect image content in result
-  const imageUrl =
-    execution.result && !execution.error
-      ? extractImageUrl(execution.result)
-      : null;
+  const imageUrl = execution.result && !execution.error ? extractImageUrl(execution.result) : null;
   const base64Image =
-    execution.result && !execution.error
-      ? parseBase64Image(execution.result)
-      : null;
+    execution.result && !execution.error ? parseBase64Image(execution.result) : null;
   const hasImageResult = imageUrl !== null || base64Image !== null;
 
   const statusConfig = {
     running: {
-      bg: "bg-amber-100 dark:bg-amber-900/30",
-      text: "text-amber-600 dark:text-amber-400",
-      icon: "hourglass_empty",
-      label: "Running",
+      bg: 'bg-amber-100 dark:bg-amber-900/30',
+      text: 'text-amber-600 dark:text-amber-400',
+      icon: 'hourglass_empty',
+      label: 'Running',
     },
     success: {
-      bg: "bg-emerald-100 dark:bg-emerald-900/30",
-      text: "text-emerald-600 dark:text-emerald-400",
-      icon: "check_circle",
-      label: "Success",
+      bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      icon: 'check_circle',
+      label: 'Success',
     },
     failed: {
-      bg: "bg-red-100 dark:bg-red-900/30",
-      text: "text-red-600 dark:text-red-400",
-      icon: "error",
-      label: "Failed",
+      bg: 'bg-red-100 dark:bg-red-900/30',
+      text: 'text-red-600 dark:text-red-400',
+      icon: 'error',
+      label: 'Failed',
     },
   }[execution.status];
 
@@ -140,13 +130,9 @@ export function ToolExecutionDetail({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${statusConfig.text}`}>
-            {statusConfig.label}
-          </span>
+          <span className={`text-xs font-medium ${statusConfig.text}`}>{statusConfig.label}</span>
           {execution.duration && (
-            <span className="text-xs text-slate-500">
-              {formatDuration(execution.duration)}
-            </span>
+            <span className="text-xs text-slate-500">{formatDuration(execution.duration)}</span>
           )}
         </div>
       </div>
@@ -175,18 +161,16 @@ export function ToolExecutionDetail({
           <span
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}
           >
-            {execution.status === "running" && (
+            {execution.status === 'running' && (
               <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
             )}
-            {execution.status !== "running" && (
+            {execution.status !== 'running' && (
               <MaterialIcon name={statusConfig.icon as any} size={12} />
             )}
             {statusConfig.label}
           </span>
           {execution.duration && (
-            <span className="text-xs text-slate-500">
-              {formatDuration(execution.duration)}
-            </span>
+            <span className="text-xs text-slate-500">{formatDuration(execution.duration)}</span>
           )}
         </div>
       </div>
@@ -199,10 +183,7 @@ export function ToolExecutionDetail({
             onClick={() => setShowFullInput(!showFullInput)}
             className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-300"
           >
-            <MaterialIcon
-              name={showFullInput ? "expand_less" : "expand_more"}
-              size={14}
-            />
+            <MaterialIcon name={showFullInput ? 'expand_less' : 'expand_more'} size={14} />
             Input Parameters
           </button>
           {showFullInput && (
@@ -233,18 +214,14 @@ export function ToolExecutionDetail({
           <div>
             <div className="flex items-center justify-between">
               <h6 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                {execution.error
-                  ? "Error"
-                  : hasImageResult
-                  ? "Image Result"
-                  : "Result"}
+                {execution.error ? 'Error' : hasImageResult ? 'Image Result' : 'Result'}
               </h6>
               {!hasImageResult && isResultFolded && (
                 <button
                   onClick={() => setShowFullResult(!showFullResult)}
                   className="text-xs text-primary hover:underline"
                 >
-                  {showFullResult ? "Show Less" : "Show Full"}
+                  {showFullResult ? 'Show Less' : 'Show Full'}
                 </button>
               )}
             </div>
@@ -261,12 +238,12 @@ export function ToolExecutionDetail({
                       onError={(e) => {
                         // If image fails to load, show the URL as fallback
                         const target = e.target as HTMLImageElement;
-                        target.style.display = "none";
-                        target.nextElementSibling?.classList.remove("hidden");
+                        target.style.display = 'none';
+                        target.nextElementSibling?.classList.remove('hidden');
                       }}
                     />
                     <div className="hidden mt-2 text-sm text-slate-500">
-                      Failed to load image.{" "}
+                      Failed to load image.{' '}
                       <a
                         href={imageUrl}
                         target="_blank"
@@ -293,9 +270,7 @@ export function ToolExecutionDetail({
                       alt="Screenshot"
                       className="max-w-full max-h-96 rounded-md mx-auto border border-slate-200 dark:border-slate-600"
                     />
-                    <p className="mt-2 text-xs text-slate-500">
-                      Screenshot captured
-                    </p>
+                    <p className="mt-2 text-xs text-slate-500">Screenshot captured</p>
                   </div>
                 ) : null}
               </div>
@@ -303,8 +278,8 @@ export function ToolExecutionDetail({
               <div
                 className={`mt-1 p-2 rounded-md text-sm break-words whitespace-pre-wrap ${
                   execution.error
-                    ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
               >
                 {showFullResult ? resultText : foldedResult}
@@ -314,16 +289,14 @@ export function ToolExecutionDetail({
         )}
 
         {/* Running State Placeholder */}
-        {execution.status === "running" &&
-          !execution.result &&
-          !execution.error && (
-            <div className="flex items-center justify-center py-4">
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                Executing...
-              </div>
+        {execution.status === 'running' && !execution.result && !execution.error && (
+          <div className="flex items-center justify-center py-4">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              Executing...
             </div>
-          )}
+          </div>
+        )}
       </div>
     </div>
   );

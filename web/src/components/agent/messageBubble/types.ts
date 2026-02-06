@@ -4,7 +4,12 @@
  * Defines the type system for the compound MessageBubble component.
  */
 
-import type { TimelineEvent, ActEvent, ObserveEvent, ArtifactCreatedEvent } from '../../../types/agent';
+import type {
+  TimelineEvent,
+  ActEvent,
+  ObserveEvent,
+  ArtifactCreatedEvent,
+} from '../../../types/agent';
 
 // Re-export commonly used types
 export type { TimelineEvent, ActEvent, ObserveEvent, ArtifactCreatedEvent };

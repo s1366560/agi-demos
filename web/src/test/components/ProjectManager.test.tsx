@@ -10,10 +10,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Import the component and types
-import {
-  ProjectManager,
-  type ProjectManagerProps,
-} from '@/components/tenant/ProjectManager';
+import { ProjectManager, type ProjectManagerProps } from '@/components/tenant/ProjectManager';
 
 import type { Project } from '@/types/memory';
 
@@ -360,7 +357,9 @@ describe('ProjectManager.Filters', () => {
       { value: 'all', label: 'All' },
       { value: 'active', label: 'Active' },
     ];
-    render(<ProjectManager.Filters value="all" onChange={handleChange} options={options} />, { wrapper: Wrapper });
+    render(<ProjectManager.Filters value="all" onChange={handleChange} options={options} />, {
+      wrapper: Wrapper,
+    });
 
     const select = screen.getByTestId('filter-select');
     fireEvent.change(select, { target: { value: 'active' } });
@@ -389,16 +388,9 @@ describe('ProjectManager.List', () => {
   });
 
   it('should render children function for each project', () => {
-    const renderProject = vi.fn((project: Project) => (
-      <div key={project.id}>{project.name}</div>
-    ));
+    const renderProject = vi.fn((project: Project) => <div key={project.id}>{project.name}</div>);
 
-    render(
-      <ProjectManager.List>
-        {renderProject}
-      </ProjectManager.List>,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.List>{renderProject}</ProjectManager.List>, { wrapper: Wrapper });
 
     expect(screen.getByTestId('project-manager-list')).toBeInTheDocument();
   });
@@ -430,20 +422,18 @@ describe('ProjectManager.Item', () => {
   });
 
   it('should show selected state when isSelected is true', () => {
-    render(
-      <ProjectManager.Item project={mockProjects[0]} isSelected={true} />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.Item project={mockProjects[0]} isSelected={true} />, {
+      wrapper: Wrapper,
+    });
 
     const item = screen.getByTestId('project-item');
     expect(item.getAttribute('data-selected')).toBe('true');
   });
 
   it('should not show selected state when isSelected is false', () => {
-    render(
-      <ProjectManager.Item project={mockProjects[0]} isSelected={false} />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.Item project={mockProjects[0]} isSelected={false} />, {
+      wrapper: Wrapper,
+    });
 
     const item = screen.getByTestId('project-item');
     expect(item.getAttribute('data-selected')).toBe('false');
@@ -451,10 +441,9 @@ describe('ProjectManager.Item', () => {
 
   it('should call onClick when item is clicked', () => {
     const handleClick = vi.fn();
-    render(
-      <ProjectManager.Item project={mockProjects[0]} onClick={handleClick} />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.Item project={mockProjects[0]} onClick={handleClick} />, {
+      wrapper: Wrapper,
+    });
 
     const item = screen.getByTestId('project-item');
     fireEvent.click(item);
@@ -464,13 +453,9 @@ describe('ProjectManager.Item', () => {
 
   it('should call onSettingsClick when settings button is clicked', () => {
     const handleSettings = vi.fn();
-    render(
-      <ProjectManager.Item
-        project={mockProjects[0]}
-        onSettingsClick={handleSettings}
-      />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.Item project={mockProjects[0]} onSettingsClick={handleSettings} />, {
+      wrapper: Wrapper,
+    });
 
     const settingsBtn = screen.getByTestId('settings-btn');
     fireEvent.click(settingsBtn);
@@ -480,13 +465,9 @@ describe('ProjectManager.Item', () => {
 
   it('should call onDeleteClick when delete button is clicked', () => {
     const handleDelete = vi.fn();
-    render(
-      <ProjectManager.Item
-        project={mockProjects[0]}
-        onDeleteClick={handleDelete}
-      />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.Item project={mockProjects[0]} onDeleteClick={handleDelete} />, {
+      wrapper: Wrapper,
+    });
 
     const deleteBtn = screen.getByTestId('delete-btn');
     fireEvent.click(deleteBtn);
@@ -541,13 +522,9 @@ describe('ProjectManager.Empty', () => {
 
   it('should call onCreateClick when create button is clicked', () => {
     const handleCreate = vi.fn();
-    render(
-      <ProjectManager.Empty
-        showCreateButton={true}
-        onCreateClick={handleCreate}
-      />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.Empty showCreateButton={true} onCreateClick={handleCreate} />, {
+      wrapper: Wrapper,
+    });
 
     const createBtn = screen.getByText('创建项目');
     fireEvent.click(createBtn);
@@ -596,10 +573,9 @@ describe('ProjectManager.CreateModal', () => {
 
   it('should call onClose when close button is clicked', () => {
     const handleClose = vi.fn();
-    render(
-      <ProjectManager.CreateModal isOpen={true} onClose={handleClose} />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.CreateModal isOpen={true} onClose={handleClose} />, {
+      wrapper: Wrapper,
+    });
 
     const closeBtn = screen.getByText('Close');
     fireEvent.click(closeBtn);
@@ -615,25 +591,17 @@ describe('ProjectManager.SettingsModal', () => {
   );
 
   it('should not render when isOpen is false', () => {
-    render(
-      <ProjectManager.SettingsModal
-        project={mockProjects[0]}
-        isOpen={false}
-      />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.SettingsModal project={mockProjects[0]} isOpen={false} />, {
+      wrapper: Wrapper,
+    });
 
     expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument();
   });
 
   it('should render when isOpen is true', () => {
-    render(
-      <ProjectManager.SettingsModal
-        project={mockProjects[0]}
-        isOpen={true}
-      />,
-      { wrapper: Wrapper }
-    );
+    render(<ProjectManager.SettingsModal project={mockProjects[0]} isOpen={true} />, {
+      wrapper: Wrapper,
+    });
 
     const modal = screen.getByTestId('settings-modal');
     expect(modal).toBeInTheDocument();
@@ -703,9 +671,7 @@ describe('ProjectManager - Backward Compatibility', () => {
 
 describe('ProjectManager - Edge Cases', () => {
   it('should handle null children gracefully', () => {
-    const { container } = render(
-      <ProjectManager>{null}</ProjectManager>
-    );
+    const { container } = render(<ProjectManager>{null}</ProjectManager>);
 
     expect(container.firstChild).toBeInTheDocument();
   });

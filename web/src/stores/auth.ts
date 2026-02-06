@@ -19,158 +19,158 @@ import { authAPI } from '../services/api';
 import type { User } from '../types/memory';
 
 interface AuthState {
-    user: User | null;
-    token: string | null;
-    isLoading: boolean;
-    error: string | null;
-    isAuthenticated: boolean;
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  error: string | null;
+  isAuthenticated: boolean;
 
-    // Actions
-    login: (email: string, password: string) => Promise<void>;
-    logout: () => void;
-    checkAuth: () => Promise<void>;
-    clearError: () => void;
-    setUser: (user: User | null) => void;
+  // Actions
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+  checkAuth: () => Promise<void>;
+  clearError: () => void;
+  setUser: (user: User | null) => void;
 }
 
 interface ApiError {
-    response?: {
-        data?: {
-            detail?: string | Record<string, unknown>;
-        };
+  response?: {
+    data?: {
+      detail?: string | Record<string, unknown>;
     };
+  };
 }
 
 export const useAuthStore = create<AuthState>()(
-    devtools(
-        persist(
-            (set, get) => ({
+  devtools(
+    persist(
+      (set, get) => ({
+        user: null,
+        token: null,
+        isLoading: false,
+        error: null,
+        isAuthenticated: false,
+
+        /**
+         * User login
+         *
+         * Authenticates a user with email and password.
+         * On success, stores user and token in state.
+         *
+         * @param email - User email address
+         * @param password - User password
+         * @throws {ApiError} Login failure with detail message
+         * @example
+         * await login('user@example.com', 'password123');
+         */
+        login: async (email: string, password: string) => {
+          set({ isLoading: true, error: null });
+
+          try {
+            const response = await authAPI.login(email, password);
+            const { user, token } = response;
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+          } catch (error: unknown) {
+            const apiError = error as ApiError;
+            const detail = apiError.response?.data?.detail;
+            const errorMessage = detail
+              ? typeof detail === 'string'
+                ? detail
+                : JSON.stringify(detail)
+              : '登录失败，请检查您的凭据';
+            set({
+              error: errorMessage,
+              isLoading: false,
+            });
+            throw error;
+          }
+        },
+
+        /**
+         * User logout
+         *
+         * Clears user, token, and authentication state.
+         * Also clears tenant state to prevent stale data.
+         *
+         * @example
+         * logout();
+         */
+        logout: () => {
+          set({
             user: null,
             token: null,
-            isLoading: false,
-            error: null,
             isAuthenticated: false,
+            error: null,
+          });
 
-            /**
-             * User login
-             *
-             * Authenticates a user with email and password.
-             * On success, stores user and token in state.
-             *
-             * @param email - User email address
-             * @param password - User password
-             * @throws {ApiError} Login failure with detail message
-             * @example
-             * await login('user@example.com', 'password123');
-             */
-            login: async (email: string, password: string) => {
-                set({ isLoading: true, error: null });
+          // Clear tenant state as well
+          // Dynamic import to avoid circular dependency
+          import('./tenant').then(({ useTenantStore }) => {
+            useTenantStore.getState().setCurrentTenant(null);
+          });
+        },
 
-                try {
-                    const response = await authAPI.login(email, password);
-                    const { user, token } = response;
+        /**
+         * Verify authentication token
+         *
+         * Checks if the current token is valid by calling the verify API.
+         * Invalid tokens are cleared from state.
+         *
+         * @example
+         * await checkAuth();
+         */
+        checkAuth: async () => {
+          const { token } = get();
+          if (!token) {
+            set({ isAuthenticated: false });
+            return;
+          }
 
-                    set({
-                        user,
-                        token,
-                        isAuthenticated: true,
-                        isLoading: false,
-                        error: null,
-                    });
-                } catch (error: unknown) {
-                    const apiError = error as ApiError;
-                    const detail = apiError.response?.data?.detail;
-                    const errorMessage = detail
-                        ? (typeof detail === 'string'
-                            ? detail
-                            : JSON.stringify(detail))
-                        : '登录失败，请检查您的凭据';
-                    set({
-                        error: errorMessage,
-                        isLoading: false
-                    });
-                    throw error;
-                }
-            },
+          set({ isLoading: true });
 
-            /**
-             * User logout
-             *
-             * Clears user, token, and authentication state.
-             * Also clears tenant state to prevent stale data.
-             *
-             * @example
-             * logout();
-             */
-            logout: () => {
-                set({
-                    user: null,
-                    token: null,
-                    isAuthenticated: false,
-                    error: null,
-                });
+          try {
+            await authAPI.verifyToken(token);
 
-                // Clear tenant state as well
-                // Dynamic import to avoid circular dependency
-                import('./tenant').then(({ useTenantStore }) => {
-                    useTenantStore.getState().setCurrentTenant(null);
-                });
-            },
+            set({
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+          } catch (_error) {
+            // Token is invalid, clear it
+            set({
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          }
+        },
 
-            /**
-             * Verify authentication token
-             *
-             * Checks if the current token is valid by calling the verify API.
-             * Invalid tokens are cleared from state.
-             *
-             * @example
-             * await checkAuth();
-             */
-            checkAuth: async () => {
-                const { token } = get();
-                if (!token) {
-                    set({ isAuthenticated: false });
-                    return;
-                }
-
-                set({ isLoading: true });
-
-                try {
-                    await authAPI.verifyToken(token);
-
-                    set({
-                        isAuthenticated: true,
-                        isLoading: false,
-                        error: null,
-                    });
-                } catch (_error) {
-                    // Token is invalid, clear it
-                    set({
-                        user: null,
-                        token: null,
-                        isAuthenticated: false,
-                        isLoading: false,
-                    });
-                }
-            },
-
-            clearError: () => set({ error: null }),
-            setUser: (user) => set({ user }),
+        clearError: () => set({ error: null }),
+        setUser: (user) => set({ user }),
+      }),
+      {
+        name: 'memstack-auth-storage',
+        partialize: (state) => ({
+          user: state.user,
+          token: state.token,
+          isAuthenticated: state.isAuthenticated,
         }),
-            {
-                name: 'memstack-auth-storage',
-                partialize: (state) => ({
-                    user: state.user,
-                    token: state.token,
-                    isAuthenticated: state.isAuthenticated,
-                }),
-            }
-        ),
-        {
-            name: 'AuthStore',
-            enabled: import.meta.env.DEV,
-        }
-    )
+      }
+    ),
+    {
+      name: 'AuthStore',
+      enabled: import.meta.env.DEV,
+    }
+  )
 );
 
 // ============================================================================
@@ -230,10 +230,12 @@ export const useAuthError = () => useAuthStore((state) => state.error);
  * const { login, logout } = useAuthActions();
  */
 export const useAuthActions = () =>
-  useAuthStore(useShallow((state) => ({
-    login: state.login,
-    logout: state.logout,
-    checkAuth: state.checkAuth,
-    clearError: state.clearError,
-    setUser: state.setUser,
-  })));
+  useAuthStore(
+    useShallow((state) => ({
+      login: state.login,
+      logout: state.logout,
+      checkAuth: state.checkAuth,
+      clearError: state.clearError,
+      setUser: state.setUser,
+    }))
+  );

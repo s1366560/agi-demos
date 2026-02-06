@@ -17,7 +17,7 @@
  * - Returns 403 Forbidden for non-admin users
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
 
 import {
   Alert,
@@ -32,17 +32,11 @@ import {
   Tag,
   Typography,
   message,
-} from "antd";
+} from 'antd';
 
-import {
-  agentConfigService,
-  TenantAgentConfigError,
-} from "@/services/agentConfigService";
+import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
 
-import type {
-  TenantAgentConfig,
-  UpdateTenantAgentConfigRequest,
-} from "@/types/agent";
+import type { TenantAgentConfig, UpdateTenantAgentConfigRequest } from '@/types/agent';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -85,7 +79,7 @@ function parseToolList(value: string | undefined): string[] {
     return [];
   }
   return value
-    .split(",")
+    .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -94,7 +88,7 @@ function parseToolList(value: string | undefined): string[] {
  * Format tool list as comma-separated string
  */
 function formatToolList(tools: string[]): string {
-  return tools.join(", ");
+  return tools.join(', ');
 }
 
 /**
@@ -102,13 +96,13 @@ function formatToolList(tools: string[]): string {
  * In production, this could be fetched from API
  */
 const AVAILABLE_LLM_MODELS = [
-  { value: "default", label: "Default (System Setting)" },
-  { value: "gpt-4", label: "GPT-4" },
-  { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
-  { value: "claude-3-opus", label: "Claude 3 Opus" },
-  { value: "claude-3-sonnet", label: "Claude 3 Sonnet" },
-  { value: "gemini-pro", label: "Gemini Pro" },
+  { value: 'default', label: 'Default (System Setting)' },
+  { value: 'gpt-4', label: 'GPT-4' },
+  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+  { value: 'claude-3-opus', label: 'Claude 3 Opus' },
+  { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
+  { value: 'gemini-pro', label: 'Gemini Pro' },
 ];
 
 /**
@@ -148,8 +142,7 @@ export function TenantAgentConfigEditor({
       setLoading(true);
       setError(null);
       try {
-        const config =
-          initialConfig || (await agentConfigService.getConfig(tenantId));
+        const config = initialConfig || (await agentConfigService.getConfig(tenantId));
         form.setFieldsValue({
           llm_model: config.llm_model,
           llm_temperature: config.llm_temperature,
@@ -163,14 +156,10 @@ export function TenantAgentConfigEditor({
         setHasChanges(false);
       } catch (err) {
         const errorMsg =
-          err instanceof TenantAgentConfigError
-            ? err.message
-            : "Failed to load configuration";
+          err instanceof TenantAgentConfigError ? err.message : 'Failed to load configuration';
         setError(errorMsg);
         if (err instanceof TenantAgentConfigError && err.statusCode === 403) {
-          message.error(
-            "You do not have permission to edit tenant configuration"
-          );
+          message.error('You do not have permission to edit tenant configuration');
           onClose();
         }
       } finally {
@@ -207,16 +196,14 @@ export function TenantAgentConfigEditor({
 
       // Remove undefined values
       Object.keys(request).forEach((key) => {
-        if (
-          request[key as keyof UpdateTenantAgentConfigRequest] === undefined
-        ) {
+        if (request[key as keyof UpdateTenantAgentConfigRequest] === undefined) {
           delete request[key as keyof UpdateTenantAgentConfigRequest];
         }
       });
 
       await agentConfigService.updateConfig(tenantId, request);
 
-      message.success("Configuration updated successfully");
+      message.success('Configuration updated successfully');
       setHasChanges(false);
       onSave?.();
       onClose();
@@ -224,18 +211,14 @@ export function TenantAgentConfigEditor({
       if (err instanceof TenantAgentConfigError) {
         setError(err.message);
         if (err.statusCode === 403) {
-          message.error(
-            "You do not have permission to edit tenant configuration"
-          );
+          message.error('You do not have permission to edit tenant configuration');
           onClose();
         } else if (err.statusCode === 422) {
-          message.error(
-            "Invalid configuration values. Please check your inputs."
-          );
+          message.error('Invalid configuration values. Please check your inputs.');
         }
       } else {
-        setError("Failed to save configuration");
-        message.error("Failed to save configuration");
+        setError('Failed to save configuration');
+        message.error('Failed to save configuration');
       }
     } finally {
       setSaving(false);
@@ -246,11 +229,11 @@ export function TenantAgentConfigEditor({
   const handleCancel = () => {
     if (hasChanges) {
       Modal.confirm({
-        title: "Discard Changes?",
-        content: "You have unsaved changes. Are you sure you want to close?",
-        okText: "Discard",
+        title: 'Discard Changes?',
+        content: 'You have unsaved changes. Are you sure you want to close?',
+        okText: 'Discard',
         okButtonProps: { danger: true },
-        cancelText: "Keep Editing",
+        cancelText: 'Keep Editing',
         onOk: onClose,
       });
     } else {
@@ -282,12 +265,7 @@ export function TenantAgentConfigEditor({
       )}
 
       <Spin spinning={loading}>
-        <Form
-          form={form}
-          layout="vertical"
-          onValuesChange={onValuesChange}
-          autoComplete="off"
-        >
+        <Form form={form} layout="vertical" onValuesChange={onValuesChange} autoComplete="off">
           {/* LLM Settings Section */}
           <Alert
             type="info"
@@ -316,12 +294,12 @@ export function TenantAgentConfigEditor({
             name="llm_temperature"
             tooltip="Controls randomness: 0 = more focused, 2 = more creative"
             rules={[
-              { required: true, message: "Temperature is required" },
+              { required: true, message: 'Temperature is required' },
               {
-                type: "number",
+                type: 'number',
                 min: 0,
                 max: 2,
-                message: "Temperature must be between 0 and 2",
+                message: 'Temperature must be between 0 and 2',
               },
             ]}
           >
@@ -330,7 +308,7 @@ export function TenantAgentConfigEditor({
               max={2}
               step={0.1}
               precision={1}
-              style={{ width: "100%" }}
+              style={{ width: '100%' }}
               placeholder="0.7"
             />
           </Form.Item>
@@ -374,16 +352,11 @@ export function TenantAgentConfigEditor({
             name="max_work_plan_steps"
             tooltip="Maximum number of steps in a work plan"
             rules={[
-              { required: true, message: "Max steps is required" },
-              { type: "number", min: 1, message: "Must be at least 1" },
+              { required: true, message: 'Max steps is required' },
+              { type: 'number', min: 1, message: 'Must be at least 1' },
             ]}
           >
-            <InputNumber
-              min={1}
-              max={50}
-              style={{ width: "100%" }}
-              placeholder="10"
-            />
+            <InputNumber min={1} max={50} style={{ width: '100%' }} placeholder="10" />
           </Form.Item>
 
           <Form.Item
@@ -391,16 +364,11 @@ export function TenantAgentConfigEditor({
             name="tool_timeout_seconds"
             tooltip="Default timeout for tool execution"
             rules={[
-              { required: true, message: "Timeout is required" },
-              { type: "number", min: 1, message: "Must be at least 1 second" },
+              { required: true, message: 'Timeout is required' },
+              { type: 'number', min: 1, message: 'Must be at least 1 second' },
             ]}
           >
-            <InputNumber
-              min={1}
-              max={300}
-              style={{ width: "100%" }}
-              placeholder="30"
-            />
+            <InputNumber min={1} max={300} style={{ width: '100%' }} placeholder="30" />
           </Form.Item>
 
           {/* Tool Configuration Section */}
@@ -417,10 +385,7 @@ export function TenantAgentConfigEditor({
             name="enabled_tools"
             tooltip="Comma-separated list of tools to explicitly enable. Leave empty to enable all."
           >
-            <TextArea
-              rows={2}
-              placeholder="e.g., search, calculator, memory_lookup"
-            />
+            <TextArea rows={2} placeholder="e.g., search, calculator, memory_lookup" />
           </Form.Item>
 
           <Form.Item
@@ -436,11 +401,9 @@ export function TenantAgentConfigEditor({
             <Space orientation="vertical" size="small">
               <Text type="secondary">Available tools:</Text>
               <div className="flex flex-wrap gap-1">
-                {["search", "memory_lookup", "calculator", "web_browse"].map(
-                  (tool) => (
-                    <Tag key={tool}>{tool}</Tag>
-                  )
-                )}
+                {['search', 'memory_lookup', 'calculator', 'web_browse'].map((tool) => (
+                  <Tag key={tool}>{tool}</Tag>
+                ))}
                 <Tag>...</Tag>
               </div>
             </Space>

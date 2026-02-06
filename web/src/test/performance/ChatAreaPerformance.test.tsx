@@ -25,9 +25,7 @@ vi.mock('antd', () => ({
 vi.mock('../../components/agent/chat/IdleState', () => ({
   IdleState: ({ onTileClick }: any) => (
     <div data-testid="idle-state">
-      <button onClick={() => onTileClick({ id: 'test', title: 'Test' })}>
-        Test Tile
-      </button>
+      <button onClick={() => onTileClick({ id: 'test', title: 'Test' })}>Test Tile</button>
     </div>
   ),
 }));
@@ -36,9 +34,7 @@ vi.mock('../../components/agent/chat/MessageStream', () => ({
   MessageStream: ({ children }: any) => <div data-testid="message-stream">{children}</div>,
   UserMessage: ({ content }: any) => <div data-testid="user-message">{content}</div>,
   AgentSection: ({ children }: any) => <div data-testid="agent-section">{children}</div>,
-  ReasoningLogCard: ({ steps }: any) => (
-    <div data-testid="reasoning-log">{steps?.join(', ')}</div>
-  ),
+  ReasoningLogCard: ({ steps }: any) => <div data-testid="reasoning-log">{steps?.join(', ')}</div>,
   ToolExecutionCardDisplay: ({ toolName }: any) => (
     <div data-testid="tool-execution">{toolName}</div>
   ),
@@ -84,7 +80,14 @@ describe('ChatArea Performance', () => {
 
     it('should have consistent props to enable effective memoization', () => {
       const timeline = [
-        { id: '1', type: 'user_message' as const, sequenceNumber: 1, timestamp: Date.now(), content: 'Hello', role: 'user' as const },
+        {
+          id: '1',
+          type: 'user_message' as const,
+          sequenceNumber: 1,
+          timestamp: Date.now(),
+          content: 'Hello',
+          role: 'user' as const,
+        },
       ];
       const currentConversation = { id: 'conv-1' };
 
@@ -150,10 +153,7 @@ describe('ChatArea Performance', () => {
       // Read the ChatArea source to verify useMemo usage
       // Dynamic import to avoid require() statement
       const fs = await import('fs');
-      const chatAreaContent = fs.readFileSync(
-        chatAreaPath,
-        'utf-8'
-      );
+      const chatAreaContent = fs.readFileSync(chatAreaPath, 'utf-8');
 
       // Verify useMemo is used for sortedTimeline
       expect(chatAreaContent).toContain('useMemo');
@@ -163,10 +163,7 @@ describe('ChatArea Performance', () => {
     it('should not re-sort timeline on every render', async () => {
       // Dynamic import to avoid require() statement
       const fs = await import('fs');
-      const chatAreaContent = fs.readFileSync(
-        chatAreaPath,
-        'utf-8'
-      );
+      const chatAreaContent = fs.readFileSync(chatAreaPath, 'utf-8');
 
       // Verify that sortedTimeline depends only on timeline array
       // Just check for useMemo usage with timeline as dependency
@@ -179,7 +176,14 @@ describe('ChatArea Performance', () => {
     it('should handle streaming state efficiently', () => {
       // Test that rapid streaming updates don't cause excessive re-renders
       const timeline = [
-        { id: '1', type: 'user_message' as const, sequenceNumber: 1, timestamp: Date.now(), content: 'Hello', role: 'user' as const },
+        {
+          id: '1',
+          type: 'user_message' as const,
+          sequenceNumber: 1,
+          timestamp: Date.now(),
+          content: 'Hello',
+          role: 'user' as const,
+        },
       ];
 
       const { rerender } = render(
@@ -215,7 +219,14 @@ describe('ChatArea Performance', () => {
         for (let i = 0; i < 10; i++) {
           const updatedTimeline = [
             ...timeline,
-            { id: `msg-${i}`, type: 'assistant_message' as const, sequenceNumber: i + 2, timestamp: Date.now(), content: `Response ${i}`, role: 'assistant' as const },
+            {
+              id: `msg-${i}`,
+              type: 'assistant_message' as const,
+              sequenceNumber: i + 2,
+              timestamp: Date.now(),
+              content: `Response ${i}`,
+              role: 'assistant' as const,
+            },
           ];
           rerender(
             <ChatArea
@@ -252,10 +263,7 @@ describe('ChatArea Performance', () => {
     it('should only re-render when relevant props change', async () => {
       // Dynamic import to avoid require() statement
       const fs = await import('fs');
-      const chatAreaContent = fs.readFileSync(
-        chatAreaPath,
-        'utf-8'
-      );
+      const chatAreaContent = fs.readFileSync(chatAreaPath, 'utf-8');
 
       // Check for memo with custom comparison or proper prop handling
       // Component should use memo() to prevent unnecessary re-renders

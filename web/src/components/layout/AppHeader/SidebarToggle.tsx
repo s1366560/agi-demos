@@ -4,16 +4,16 @@
  * Sidebar toggle button for collapsing/expanding the sidebar.
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { PanelLeft, PanelRight } from 'lucide-react'
+import { PanelLeft, PanelRight } from 'lucide-react';
 
 export interface SidebarToggleProps {
-  collapsed: boolean
-  onToggle: () => void
-  ariaLabel?: string
+  collapsed: boolean;
+  onToggle: () => void;
+  ariaLabel?: string;
   /** @internal Slot for positioning */
-  slot?: 'left' | 'right'
+  slot?: 'left' | 'right';
 }
 
 export const SidebarToggle = React.memo(function SidebarToggle({
@@ -22,10 +22,10 @@ export const SidebarToggle = React.memo(function SidebarToggle({
   ariaLabel,
 }: SidebarToggleProps) {
   if (!onToggle) {
-    return null
+    return null;
   }
 
-  const defaultLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
+  const defaultLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 
   return (
     <button
@@ -35,13 +35,9 @@ export const SidebarToggle = React.memo(function SidebarToggle({
       title={ariaLabel || defaultLabel}
       type="button"
     >
-      {collapsed ? (
-        <PanelRight className="w-5 h-5" />
-      ) : (
-        <PanelLeft className="w-5 h-5" />
-      )}
+      {collapsed ? <PanelRight className="w-5 h-5" /> : <PanelLeft className="w-5 h-5" />}
     </button>
-  )
-})
+  );
+});
 
-SidebarToggle.displayName = 'AppHeader.SidebarToggle'
+SidebarToggle.displayName = 'AppHeader.SidebarToggle';

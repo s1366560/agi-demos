@@ -12,22 +12,22 @@
  * @module components/agent/TimelineEventItem
  */
 
-import { memo, lazy, Suspense, useState } from "react";
+import { memo, lazy, Suspense, useState } from 'react';
 
-import { useAgentV3Store } from "../../stores/agentV3";
-import { formatDistanceToNowCN, formatReadableTime } from "../../utils/date";
+import { useAgentV3Store } from '../../stores/agentV3';
+import { formatDistanceToNowCN, formatReadableTime } from '../../utils/date';
 
-import { AssistantMessage } from "./chat/AssistantMessage";
+import { AssistantMessage } from './chat/AssistantMessage';
 import {
   UserMessage,
   AgentSection,
   ToolExecutionCardDisplay,
- ReasoningLogCard } from "./chat/MessageStream";
+  ReasoningLogCard,
+} from './chat/MessageStream';
 
-
-import type { 
-  TimelineEvent, 
-  ActEvent, 
+import type {
+  TimelineEvent,
+  ActEvent,
   ObserveEvent,
   ClarificationAskedTimelineEvent,
   DecisionAskedTimelineEvent,
@@ -36,8 +36,7 @@ import type {
   DecisionOption,
   EnvVarField,
   ArtifactCreatedEvent,
-} from "../../types/agent";
-
+} from '../../types/agent';
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
 // Using dynamic import with a wrapper to handle type issues
@@ -47,9 +46,7 @@ const MarkdownRenderer = lazy(async () => {
 
   // Create a wrapper component that uses the plugins
   const MarkdownWrapper = ({ children }: { children: string }) => (
-    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-      {children}
-    </ReactMarkdown>
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
   );
 
   return { default: MarkdownWrapper };
@@ -62,9 +59,9 @@ const MarkdownRenderer = lazy(async () => {
 function TimeBadge({ timestamp }: { timestamp: number }) {
   const naturalTime = formatDistanceToNowCN(timestamp);
   const readableTime = formatReadableTime(timestamp);
-  
+
   return (
-    <span 
+    <span
       className="text-[10px] text-slate-400 dark:text-slate-500 select-none"
       title={new Date(timestamp).toLocaleString('zh-CN')}
     >
@@ -93,7 +90,7 @@ function findMatchingObserve(
 
   for (let i = actIndex + 1; i < events.length; i++) {
     const event = events[i];
-    if (event.type !== "observe") continue;
+    if (event.type !== 'observe') continue;
 
     // Priority 1: Match by execution_id
     if (actEvent.execution_id && event.execution_id) {
@@ -114,14 +111,8 @@ function findMatchingObserve(
 /**
  * Render thought event
  */
-function ThoughtItem({
-  event,
-  isStreaming,
-}: {
-  event: TimelineEvent;
-  isStreaming: boolean;
-}) {
-  if (event.type !== "thought") return null;
+function ThoughtItem({ event, isStreaming }: { event: TimelineEvent; isStreaming: boolean }) {
+  if (event.type !== 'thought') return null;
 
   return (
     <div className="flex flex-col gap-1">
@@ -144,47 +135,35 @@ function ThoughtItem({
  * Render act (tool call) event
  * 工具调用事件渲染 - 带状态跟踪
  */
-function ActItem({
-  event,
-  allEvents,
-}: {
-  event: TimelineEvent;
-  allEvents?: TimelineEvent[];
-}) {
-  if (event.type !== "act") return null;
+function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] }) {
+  if (event.type !== 'act') return null;
 
   const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
   const hasCompleted = !!observeEvent;
 
-  const ToolCard = hasCompleted && observeEvent ? (
-    <AgentSection
-      icon="construction"
-      iconBg="bg-slate-100 dark:bg-slate-800"
-      opacity={true}
-    >
-      <ToolExecutionCardDisplay
-        toolName={event.toolName}
-        status={observeEvent.isError ? "error" : "success"}
-        parameters={event.toolInput}
-        result={observeEvent.isError ? undefined : observeEvent.toolOutput}
-        error={observeEvent.isError ? observeEvent.toolOutput : undefined}
-        duration={observeEvent.timestamp - event.timestamp}
-        defaultExpanded={false}
-      />
-    </AgentSection>
-  ) : (
-    <AgentSection
-      icon="construction"
-      iconBg="bg-slate-100 dark:bg-slate-800"
-    >
-      <ToolExecutionCardDisplay
-        toolName={event.toolName}
-        status="running"
-        parameters={event.toolInput}
-        defaultExpanded={true}
-      />
-    </AgentSection>
-  );
+  const ToolCard =
+    hasCompleted && observeEvent ? (
+      <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
+        <ToolExecutionCardDisplay
+          toolName={event.toolName}
+          status={observeEvent.isError ? 'error' : 'success'}
+          parameters={event.toolInput}
+          result={observeEvent.isError ? undefined : observeEvent.toolOutput}
+          error={observeEvent.isError ? observeEvent.toolOutput : undefined}
+          duration={observeEvent.timestamp - event.timestamp}
+          defaultExpanded={false}
+        />
+      </AgentSection>
+    ) : (
+      <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800">
+        <ToolExecutionCardDisplay
+          toolName={event.toolName}
+          status="running"
+          parameters={event.toolInput}
+          defaultExpanded={true}
+        />
+      </AgentSection>
+    );
 
   return (
     <div className="flex flex-col gap-1">
@@ -200,18 +179,12 @@ function ActItem({
  * Render observe (tool result) event
  * 工具结果事件渲染 - 孤儿observe（无对应act）时显示
  */
-function ObserveItem({
-  event,
-  allEvents,
-}: {
-  event: TimelineEvent;
-  allEvents?: TimelineEvent[];
-}) {
-  if (event.type !== "observe") return null;
+function ObserveItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] }) {
+  if (event.type !== 'observe') return null;
 
   const hasMatchingAct = allEvents
     ? allEvents.some((e) => {
-        if (e.type !== "act") return false;
+        if (e.type !== 'act') return false;
         if ((e as ActEvent).execution_id && event.execution_id) {
           return (e as ActEvent).execution_id === event.execution_id;
         }
@@ -225,14 +198,10 @@ function ObserveItem({
 
   return (
     <div className="flex flex-col gap-1">
-      <AgentSection
-        icon="construction"
-        iconBg="bg-slate-100 dark:bg-slate-800"
-        opacity={true}
-      >
+      <AgentSection icon="construction" iconBg="bg-slate-100 dark:bg-slate-800" opacity={true}>
         <ToolExecutionCardDisplay
           toolName={event.toolName}
-          status={event.isError ? "error" : "success"}
+          status={event.isError ? 'error' : 'success'}
           result={event.toolOutput}
           error={event.isError ? event.toolOutput : undefined}
           defaultExpanded={false}
@@ -249,7 +218,7 @@ function ObserveItem({
  * Render work_plan event
  */
 function WorkPlanItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== "work_plan") return null;
+  if (event.type !== 'work_plan') return null;
 
   return (
     <div className="flex flex-col gap-1">
@@ -257,8 +226,8 @@ function WorkPlanItem({ event }: { event: TimelineEvent }) {
         <ReasoningLogCard
           steps={event.steps.map((s) => s.description)}
           summary={`Work Plan: ${event.steps.length} steps`}
-          completed={event.status === "completed"}
-          expanded={event.status !== "completed"}
+          completed={event.status === 'completed'}
+          expanded={event.status !== 'completed'}
         />
       </AgentSection>
       <div className="pl-12">
@@ -272,10 +241,10 @@ function WorkPlanItem({ event }: { event: TimelineEvent }) {
  * Render step_start event
  */
 function StepStartItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== "step_start") return null;
+  if (event.type !== 'step_start') return null;
 
   const stepDesc = event.stepDescription;
-  if (!stepDesc || stepDesc.trim() === "") {
+  if (!stepDesc || stepDesc.trim() === '') {
     return null;
   }
 
@@ -285,12 +254,10 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-3 opacity-70">
         <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-amber-600 text-xs">
-            play_arrow
-          </span>
+          <span className="material-symbols-outlined text-amber-600 text-xs">play_arrow</span>
         </div>
         <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1">
-          {stepIndex !== undefined ? `Step ${stepIndex}: ` : ""}
+          {stepIndex !== undefined ? `Step ${stepIndex}: ` : ''}
           {stepDesc}
         </div>
       </div>
@@ -305,28 +272,18 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
  * Render text_delta event (typewriter effect)
  * Uses ReactMarkdown for consistent rendering with final message
  */
-function TextDeltaItem({
-  event,
-}: {
-  event: TimelineEvent;
-}) {
-  if (event.type !== "text_delta") return null;
+function TextDeltaItem({ event }: { event: TimelineEvent }) {
+  if (event.type !== 'text_delta') return null;
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-4">
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-          <span className="material-symbols-outlined text-primary text-lg">
-            smart_toy
-          </span>
+          <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div
-          className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed"
-        >
+        <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
           <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
-            <MarkdownRenderer>
-              {event.content}
-            </MarkdownRenderer>
+            <MarkdownRenderer>{event.content}</MarkdownRenderer>
           </Suspense>
         </div>
       </div>
@@ -341,12 +298,8 @@ function TextDeltaItem({
  * Render text_end event as formal assistant message
  * This displays the final content after streaming completes
  */
-function TextEndItem({
-  event,
-}: {
-  event: TimelineEvent;
-}) {
-  if (event.type !== "text_end") return null;
+function TextEndItem({ event }: { event: TimelineEvent }) {
+  if (event.type !== 'text_end') return null;
 
   const fullText = event.fullText || '';
   if (!fullText || !fullText.trim()) return null;
@@ -355,17 +308,11 @@ function TextEndItem({
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-4">
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
-          <span className="material-symbols-outlined text-primary text-lg">
-            smart_toy
-          </span>
+          <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div
-          className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed"
-        >
+        <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
           <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
-            <MarkdownRenderer>
-              {fullText}
-            </MarkdownRenderer>
+            <MarkdownRenderer>{fullText}</MarkdownRenderer>
           </Suspense>
         </div>
       </div>
@@ -402,11 +349,12 @@ function OptionButton({
       disabled={disabled}
       className={`
         w-full text-left p-3 rounded-lg border transition-all
-        ${isSelected
-          ? "border-primary bg-primary/10 dark:bg-primary/20"
-          : "border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-800"
+        ${
+          isSelected
+            ? 'border-primary bg-primary/10 dark:bg-primary/20'
+            : 'border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-800'
         }
-        ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
       `}
     >
       <div className="flex items-center gap-2">
@@ -418,9 +366,7 @@ function OptionButton({
         )}
       </div>
       {option.description && (
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          {option.description}
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{option.description}</p>
       )}
     </button>
   );
@@ -431,7 +377,7 @@ function OptionButton({
  */
 function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEvent }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [customAnswer, setCustomAnswer] = useState("");
+  const [customAnswer, setCustomAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { respondToClarification } = useAgentV3Store();
   const isAnswered = event.answered || false;
@@ -467,9 +413,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
-            {event.question}
-          </p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">{event.question}</p>
 
           {!isAnswered ? (
             <>
@@ -482,7 +426,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
                     isRecommended={option.recommended}
                     onClick={() => {
                       setSelectedOption(option.id);
-                      setCustomAnswer("");
+                      setCustomAnswer('');
                     }}
                     disabled={isSubmitting}
                   />
@@ -510,7 +454,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
                 disabled={isSubmitting || (!selectedOption && !customAnswer)}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSubmitting ? "提交中..." : "确认"}
+                {isSubmitting ? '提交中...' : '确认'}
               </button>
             </>
           ) : (
@@ -532,7 +476,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
  */
 function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
   const [selectedOption, setSelectedOption] = useState<string | null>(event.defaultOption || null);
-  const [customDecision, setCustomDecision] = useState("");
+  const [customDecision, setCustomDecision] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { respondToDecision } = useAgentV3Store();
   const isAnswered = event.answered || false;
@@ -568,9 +512,7 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
-            {event.question}
-          </p>
+          <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">{event.question}</p>
 
           {!isAnswered ? (
             <>
@@ -583,7 +525,7 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
                     isRecommended={option.recommended}
                     onClick={() => {
                       setSelectedOption(option.id);
-                      setCustomDecision("");
+                      setCustomDecision('');
                     }}
                     disabled={isSubmitting}
                   />
@@ -611,7 +553,7 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
                 disabled={isSubmitting || (!selectedOption && !customDecision)}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSubmitting ? "提交中..." : "确认决策"}
+                {isSubmitting ? '提交中...' : '确认决策'}
               </button>
             </>
           ) : (
@@ -643,9 +585,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
 
   const handleSubmit = async () => {
     // Check required fields
-    const missingRequired = event.fields.filter(
-      (f: EnvVarField) => f.required && !values[f.name]
-    );
+    const missingRequired = event.fields.filter((f: EnvVarField) => f.required && !values[f.name]);
     if (missingRequired.length > 0) {
       return;
     }
@@ -675,9 +615,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
             <span className="text-xs font-medium text-purple-700 dark:text-purple-400 uppercase tracking-wider">
               需要配置
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {event.toolName}
-            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{event.toolName}</span>
             {isAnswered && (
               <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded">
                 已提供
@@ -685,9 +623,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
             )}
           </div>
           {event.message && (
-            <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">
-              {event.message}
-            </p>
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-3">{event.message}</p>
           )}
 
           {!isAnswered ? (
@@ -697,19 +633,17 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                   <div key={field.name}>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       {field.label}
-                      {field.required && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
+                      {field.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
                     {field.description && (
                       <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                         {field.description}
                       </p>
                     )}
-                    {field.input_type === "textarea" ? (
+                    {field.input_type === 'textarea' ? (
                       <textarea
                         placeholder={field.placeholder || `请输入 ${field.label}`}
-                        value={values[field.name] || field.default_value || ""}
+                        value={values[field.name] || field.default_value || ''}
                         onChange={(e) => handleChange(field.name, e.target.value)}
                         disabled={isSubmitting}
                         rows={3}
@@ -717,9 +651,9 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                       />
                     ) : (
                       <input
-                        type={field.input_type === "password" ? "password" : "text"}
+                        type={field.input_type === 'password' ? 'password' : 'text'}
                         placeholder={field.placeholder || `请输入 ${field.label}`}
-                        value={values[field.name] || field.default_value || ""}
+                        value={values[field.name] || field.default_value || ''}
                         onChange={(e) => handleChange(field.name, e.target.value)}
                         disabled={isSubmitting}
                         className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -734,12 +668,12 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                 disabled={isSubmitting || !requiredFilled}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSubmitting ? "保存中..." : "保存配置"}
+                {isSubmitting ? '保存中...' : '保存配置'}
               </button>
             </>
           ) : (
             <div className="text-sm text-slate-600 dark:text-slate-400 bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-              <span className="font-medium">已配置:</span> {event.providedVariables?.join(", ")}
+              <span className="font-medium">已配置:</span> {event.providedVariables?.join(', ')}
             </div>
           )}
         </div>
@@ -762,22 +696,22 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case "image":
-        return "image";
-      case "video":
-        return "movie";
-      case "audio":
-        return "audio_file";
-      case "document":
-        return "description";
-      case "code":
-        return "code";
-      case "data":
-        return "table_chart";
-      case "archive":
-        return "folder_zip";
+      case 'image':
+        return 'image';
+      case 'video':
+        return 'movie';
+      case 'audio':
+        return 'audio_file';
+      case 'document':
+        return 'description';
+      case 'code':
+        return 'code';
+      case 'data':
+        return 'table_chart';
+      case 'archive':
+        return 'folder_zip';
       default:
-        return "attach_file";
+        return 'attach_file';
     }
   };
 
@@ -788,7 +722,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const isImage = event.category === "image";
+  const isImage = event.category === 'image';
   const url = event.url || event.previewUrl;
 
   return (
@@ -831,7 +765,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
                   src={url}
                   alt={event.filename}
                   className={`max-w-full max-h-75 rounded-lg shadow-sm object-contain ${
-                    imageLoaded ? "opacity-100" : "opacity-0"
+                    imageLoaded ? 'opacity-100' : 'opacity-0'
                   } transition-opacity duration-300`}
                   onLoad={() => setImageLoaded(true)}
                   onError={() => setImageError(true)}
@@ -860,9 +794,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
                   className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
                   download={event.filename}
                 >
-                  <span className="material-symbols-outlined text-base">
-                    download
-                  </span>
+                  <span className="material-symbols-outlined text-base">download</span>
                   下载
                 </a>
               )}
@@ -895,7 +827,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
     const events = allEvents ?? [event];
 
     switch (event.type) {
-      case "user_message":
+      case 'user_message':
         return (
           <div className="my-4 animate-slide-up">
             <div className="flex items-start justify-end gap-3">
@@ -907,7 +839,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
           </div>
         );
 
-      case "assistant_message":
+      case 'assistant_message':
         return (
           <div className="my-4 animate-slide-up">
             <div className="flex items-start gap-3">
@@ -925,36 +857,36 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
           </div>
         );
 
-      case "thought":
+      case 'thought':
         return (
           <div className="my-3 animate-slide-up">
             <ThoughtItem event={event} isStreaming={isStreaming} />
           </div>
         );
 
-      case "act":
+      case 'act':
         return (
           <div className="my-3 animate-slide-up">
             <ActItem event={event} allEvents={events} />
           </div>
         );
 
-      case "observe":
+      case 'observe':
         return (
           <div className="my-3 animate-slide-up">
             <ObserveItem event={event} allEvents={events} />
           </div>
         );
 
-      case "work_plan":
+      case 'work_plan':
         return (
           <div className="my-3 animate-slide-up">
             <WorkPlanItem event={event} />
           </div>
         );
 
-      case "step_start":
-        if (!event.stepDescription || event.stepDescription.trim() === "") {
+      case 'step_start':
+        if (!event.stepDescription || event.stepDescription.trim() === '') {
           return null;
         }
         return (
@@ -963,20 +895,20 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
           </div>
         );
 
-      case "step_end":
+      case 'step_end':
         return null;
 
-      case "text_delta":
+      case 'text_delta':
         return (
           <div className="my-4 animate-slide-up">
             <TextDeltaItem event={event} />
           </div>
         );
 
-      case "text_start":
+      case 'text_start':
         return null;
 
-      case "text_end":
+      case 'text_end':
         return (
           <div className="my-4 animate-slide-up">
             <TextEndItem event={event} />
@@ -984,62 +916,59 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
         );
 
       // Human-in-the-loop events
-      case "clarification_asked":
+      case 'clarification_asked':
         return (
           <div className="my-3 animate-slide-up">
             <ClarificationAskedItem event={event} />
           </div>
         );
 
-      case "clarification_answered":
+      case 'clarification_answered':
         // Already shown as part of clarification_asked when answered
         return null;
 
-      case "decision_asked":
+      case 'decision_asked':
         return (
           <div className="my-3 animate-slide-up">
             <DecisionAskedItem event={event} />
           </div>
         );
 
-      case "decision_answered":
+      case 'decision_answered':
         // Already shown as part of decision_asked when answered
         return null;
 
-      case "env_var_requested":
+      case 'env_var_requested':
         return (
           <div className="my-3 animate-slide-up">
             <EnvVarRequestedItem event={event} />
           </div>
         );
 
-      case "env_var_provided":
+      case 'env_var_provided':
         // Already shown as part of env_var_requested when answered
         return null;
 
-      case "artifact_created":
+      case 'artifact_created':
         return (
           <div className="my-3 animate-slide-up">
             <ArtifactCreatedItem event={event as ArtifactCreatedEvent} />
           </div>
         );
 
-      case "artifact_ready":
-      case "artifact_error":
-      case "artifacts_batch":
+      case 'artifact_ready':
+      case 'artifact_error':
+      case 'artifacts_batch':
         // These can be handled similarly or ignored for now
         return null;
 
       default:
-        console.warn(
-          "Unknown event type in TimelineEventItem:",
-          (event as { type: string }).type
-        );
+        console.warn('Unknown event type in TimelineEventItem:', (event as { type: string }).type);
         return null;
     }
   }
 );
 
-TimelineEventItem.displayName = "TimelineEventItem";
+TimelineEventItem.displayName = 'TimelineEventItem';
 
 export default TimelineEventItem;

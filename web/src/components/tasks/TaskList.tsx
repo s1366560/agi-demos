@@ -11,75 +11,68 @@
  * - TaskList.EmptyState: Empty state display
  */
 
-import React, { useState, useCallback, useEffect, useMemo, createContext, useContext } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, createContext, useContext } from 'react';
 
-import { format } from 'date-fns'
-import {
-  RefreshCw,
-  Search,
-  MoreVertical,
-  ChevronLeft,
-  ChevronRight,
-  Ban
-} from 'lucide-react'
+import { format } from 'date-fns';
+import { RefreshCw, Search, MoreVertical, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
 
-import { taskAPI } from '../../services/api'
+import { taskAPI } from '../../services/api';
 
 interface Task {
-  id: string
-  task_type?: string
-  name: string
-  status: string
-  created_at: string
-  completed_at?: string | null
-  error?: string | null
-  worker_id?: string | null
-  retries?: number
-  duration?: string | null
-  entity_id?: string
-  entity_type?: string
+  id: string;
+  task_type?: string;
+  name: string;
+  status: string;
+  created_at: string;
+  completed_at?: string | null;
+  error?: string | null;
+  worker_id?: string | null;
+  retries?: number;
+  duration?: string | null;
+  entity_id?: string;
+  entity_type?: string;
   // Computed properties
-  statusColor?: string
-  statusDot?: string
-  formattedDate?: string
-  shortId?: string
-  canRetry?: boolean
-  canStop?: boolean
+  statusColor?: string;
+  statusDot?: string;
+  formattedDate?: string;
+  shortId?: string;
+  canRetry?: boolean;
+  canStop?: boolean;
 }
 
 interface TaskListContextValue {
-  tasks: Task[]
-  loading: boolean
-  refreshing: boolean
-  searchQuery: string
-  setSearchQuery: (query: string) => void
-  statusFilter: string
-  setStatusFilter: (filter: string) => void
-  offset: number
-  setOffset: (offset: number) => void
-  limit: number
-  handleRefresh: () => void
-  handleRetry: (taskId: string) => Promise<void>
-  handleStop: (taskId: string) => Promise<void>
-  entityId?: string
-  entityType?: string
-  embedded?: boolean
+  tasks: Task[];
+  loading: boolean;
+  refreshing: boolean;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  statusFilter: string;
+  setStatusFilter: (filter: string) => void;
+  offset: number;
+  setOffset: (offset: number) => void;
+  limit: number;
+  handleRefresh: () => void;
+  handleRetry: (taskId: string) => Promise<void>;
+  handleStop: (taskId: string) => Promise<void>;
+  entityId?: string;
+  entityType?: string;
+  embedded?: boolean;
 }
 
-const TaskListContext = createContext<TaskListContextValue | null>(null)
+const TaskListContext = createContext<TaskListContextValue | null>(null);
 
 const useTaskListContext = () => {
-  const context = useContext(TaskListContext)
+  const context = useContext(TaskListContext);
   if (!context) {
-    throw new Error('TaskList compound components must be used within TaskList')
+    throw new Error('TaskList compound components must be used within TaskList');
   }
-  return context
-}
+  return context;
+};
 
 interface TaskListProps {
-  entityId?: string
-  entityType?: string
-  embedded?: boolean
+  entityId?: string;
+  entityType?: string;
+  embedded?: boolean;
 }
 
 // ============================================
@@ -87,17 +80,20 @@ interface TaskListProps {
 // ============================================
 
 interface HeaderProps {
-  children?: React.ReactNode
+  children?: React.ReactNode;
 }
 
 export const Header: React.FC<HeaderProps> = ({ children }) => {
-  const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, handleRefresh, refreshing } = useTaskListContext()
+  const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, handleRefresh, refreshing } =
+    useTaskListContext();
 
   return (
     <>
       {children || (
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-800">
-          <h3 className="text-slate-900 dark:text-white text-base font-bold whitespace-nowrap">Tasks</h3>
+          <h3 className="text-slate-900 dark:text-white text-base font-bold whitespace-nowrap">
+            Tasks
+          </h3>
           <div className="flex flex-wrap gap-3 w-full sm:w-auto">
             <div className="relative grow sm:grow-0">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -133,28 +129,32 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
         </div>
       )}
     </>
-  )
-}
+  );
+};
 
 // ============================================
 // TaskList.Item
 // ============================================
 
 interface ItemProps {
-  task: Task
-  children?: React.ReactNode
+  task: Task;
+  children?: React.ReactNode;
 }
 
 export const Item: React.FC<ItemProps> = ({ task, children }) => {
-  const { handleRetry, handleStop, entityId } = useTaskListContext()
+  const { handleRetry, handleStop, entityId } = useTaskListContext();
 
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
       {children || (
         <>
           <td className="px-6 py-4 whitespace-nowrap">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${task.statusColor}`}>
-              <span className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse' : ''} ${task.statusDot}`}></span>
+            <span
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${task.statusColor}`}
+            >
+              <span
+                className={`size-1.5 rounded-full mr-1.5 ${task.status === 'Processing' ? 'animate-pulse' : ''} ${task.statusDot}`}
+              ></span>
               {task.status}
             </span>
           </td>
@@ -199,19 +199,20 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
         </>
       )}
     </tr>
-  )
-}
+  );
+};
 
 // ============================================
 // TaskList.Pagination
 // ============================================
 
 interface PaginationProps {
-  children?: React.ReactNode
+  children?: React.ReactNode;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({ children }) => {
-  const { filteredTasks, offset, setOffset, limit, tasks } = useTaskListContext() as TaskListContextValue & { filteredTasks: Task[] }
+  const { filteredTasks, offset, setOffset, limit, tasks } =
+    useTaskListContext() as TaskListContextValue & { filteredTasks: Task[] };
 
   return (
     <>
@@ -239,16 +240,16 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
         </div>
       )}
     </>
-  )
-}
+  );
+};
 
 // ============================================
 // TaskList.EmptyState
 // ============================================
 
 interface EmptyStateProps {
-  children?: React.ReactNode
-  colSpan?: number
+  children?: React.ReactNode;
+  colSpan?: number;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ children, colSpan = 6 }) => {
@@ -263,23 +264,23 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ children, colSpan = 6 })
         )}
       </td>
     </tr>
-  )
-}
+  );
+};
 
 // ============================================
 // TaskList (Main Container)
 // ============================================
 
 const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded = false }) => {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All Statuses')
-  const [limit] = useState(50)
-  const [offset, setOffset] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [limit] = useState(50);
+  const [offset, setOffset] = useState(0);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -288,56 +289,56 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
         offset,
         search: searchQuery || undefined,
         status: statusFilter !== 'All Statuses' ? statusFilter : undefined,
-        task_type: entityType
-      })
-      const tasks: Task[] = data.map(item => ({
+        task_type: entityType,
+      });
+      const tasks: Task[] = data.map((item) => ({
         id: item.id,
         task_type: item.task_type,
         name: item.task_type || item.id,
         status: item.status,
         created_at: item.created_at,
-      }))
-      setTasks(tasks)
-      setLoading(false)
-      setRefreshing(false)
+      }));
+      setTasks(tasks);
+      setLoading(false);
+      setRefreshing(false);
     } catch (error) {
-      console.error('Failed to fetch tasks:', error)
-      setLoading(false)
-      setRefreshing(false)
+      console.error('Failed to fetch tasks:', error);
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [limit, offset, searchQuery, statusFilter, entityType])
+  }, [limit, offset, searchQuery, statusFilter, entityType]);
 
   useEffect(() => {
-    fetchTasks()
-    const interval = setInterval(fetchTasks, 5000)
-    return () => clearInterval(interval)
-  }, [fetchTasks])
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 5000);
+    return () => clearInterval(interval);
+  }, [fetchTasks]);
 
   const handleRefresh = () => {
-    setRefreshing(true)
-    fetchTasks()
-  }
+    setRefreshing(true);
+    fetchTasks();
+  };
 
   const handleRetry = async (taskId: string) => {
     try {
-      await taskAPI.retryTask(taskId)
-      fetchTasks()
+      await taskAPI.retryTask(taskId);
+      fetchTasks();
     } catch (error) {
-      console.error(`Failed to retry task ${taskId}:`, error)
-      alert('Failed to retry task. Please try again.')
+      console.error(`Failed to retry task ${taskId}:`, error);
+      alert('Failed to retry task. Please try again.');
     }
-  }
+  };
 
   const handleStop = async (taskId: string) => {
-    if (!confirm('Are you sure you want to stop this task?')) return
+    if (!confirm('Are you sure you want to stop this task?')) return;
     try {
-      await taskAPI.stopTask(taskId)
-      fetchTasks()
+      await taskAPI.stopTask(taskId);
+      fetchTasks();
     } catch (error) {
-      console.error(`Failed to stop task ${taskId}:`, error)
-      alert('Failed to stop task. Please try again.')
+      console.error(`Failed to stop task ${taskId}:`, error);
+      alert('Failed to stop task. Please try again.');
     }
-  }
+  };
 
   // Status color helpers
   const getStatusColor = useCallback((status: string): string => {
@@ -347,9 +348,12 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       processing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200',
       stopped: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
       pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-200',
-    }
-    return colorMap[status.toLowerCase()] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-  }, [])
+    };
+    return (
+      colorMap[status.toLowerCase()] ||
+      'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+    );
+  }, []);
 
   const getStatusDot = useCallback((status: string): string => {
     const dotMap: Record<string, string> = {
@@ -358,13 +362,13 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       processing: 'bg-blue-600',
       stopped: 'bg-gray-600',
       pending: 'bg-yellow-600',
-    }
-    return dotMap[status.toLowerCase()] || 'bg-gray-500'
-  }, [])
+    };
+    return dotMap[status.toLowerCase()] || 'bg-gray-500';
+  }, []);
 
   // Memoize filtered and formatted tasks
   const filteredTasks = useMemo(() => {
-    return tasks.map(task => ({
+    return tasks.map((task) => ({
       ...task,
       statusColor: getStatusColor(task.status),
       statusDot: getStatusDot(task.status),
@@ -372,8 +376,8 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       shortId: task.id.substring(0, 8),
       canRetry: task.status === 'Failed',
       canStop: task.status === 'Pending' || task.status === 'Processing',
-    }))
-  }, [tasks, getStatusColor, getStatusDot])
+    }));
+  }, [tasks, getStatusColor, getStatusDot]);
 
   const contextValue: TaskListContextValue = {
     tasks,
@@ -392,35 +396,62 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
     entityId,
     entityType,
     embedded,
-  }
+  };
 
   // Provide filteredTasks to child components through context
-  ;(contextValue as any).filteredTasks = filteredTasks
+  (contextValue as any).filteredTasks = filteredTasks;
 
   if (loading && !tasks.length) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
-    )
+    );
   }
 
   return (
     <TaskListContext.Provider value={contextValue}>
-      <div className={`flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden ${embedded ? 'border-0 shadow-none' : ''}`}>
+      <div
+        className={`flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden ${embedded ? 'border-0 shadow-none' : ''}`}
+      >
         {!embedded && <Header />}
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
             <thead className="bg-slate-50 dark:bg-slate-800/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" scope="col">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" scope="col">Type</th>
+                <th
+                  className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                  scope="col"
+                >
+                  Status
+                </th>
+                <th
+                  className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                  scope="col"
+                >
+                  Type
+                </th>
                 {!entityId && (
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" scope="col">Entity</th>
+                  <th
+                    className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                    scope="col"
+                  >
+                    Entity
+                  </th>
                 )}
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" scope="col">Duration</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider" scope="col">Timestamp</th>
+                <th
+                  className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                  scope="col"
+                >
+                  Duration
+                </th>
+                <th
+                  className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                  scope="col"
+                >
+                  Timestamp
+                </th>
                 <th className="relative px-6 py-3" scope="col">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -428,9 +459,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
             </thead>
             <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
               {filteredTasks.length > 0 ? (
-                filteredTasks.map((task) => (
-                  <Item key={task.id} task={task} />
-                ))
+                filteredTasks.map((task) => <Item key={task.id} task={task} />)
               ) : (
                 <EmptyState colSpan={entityId ? 5 : 6} />
               )}
@@ -441,8 +470,8 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
         {!embedded && <Pagination />}
       </div>
     </TaskListContext.Provider>
-  )
-}
+  );
+};
 
 // Attach compound components
 const TaskList = Object.assign(TaskListImpl, {
@@ -450,7 +479,7 @@ const TaskList = Object.assign(TaskListImpl, {
   Item,
   Pagination,
   EmptyState,
-})
+});
 
-export default TaskList
-export { TaskList }
+export default TaskList;
+export { TaskList };

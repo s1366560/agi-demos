@@ -4,7 +4,7 @@
  * Provides status display and control buttons for desktop and terminal services.
  */
 
-import { useCallback } from "react";
+import { useCallback } from 'react';
 
 import {
   DesktopOutlined,
@@ -12,10 +12,10 @@ import {
   PlayCircleOutlined,
   StopOutlined,
   LinkOutlined,
-} from "@ant-design/icons";
-import { Card, Space, Button, Badge, Typography, Divider, Tooltip } from "antd";
+} from '@ant-design/icons';
+import { Card, Space, Button, Badge, Typography, Divider, Tooltip } from 'antd';
 
-import type { DesktopStatus, TerminalStatus } from "../../../types/agent";
+import type { DesktopStatus, TerminalStatus } from '../../../types/agent';
 
 const { Text } = Typography;
 
@@ -41,30 +41,26 @@ export interface SandboxControlPanelProps {
 }
 
 interface ServiceStatusProps {
-  type: "desktop" | "terminal";
+  type: 'desktop' | 'terminal';
   status: DesktopStatus | TerminalStatus | null;
   isLoading: boolean;
   onStart: () => void;
   onStop: () => void;
 }
 
-function ServiceStatusCard({
-  type,
-  status,
-  isLoading,
-  onStart,
-  onStop,
-}: ServiceStatusProps) {
+function ServiceStatusCard({ type, status, isLoading, onStart, onStop }: ServiceStatusProps) {
   const isRunning = status?.running ?? false;
-  const icon = type === "desktop" ? <DesktopOutlined /> : <CodeOutlined />;
-  const name = type === "desktop" ? "Remote Desktop" : "Web Terminal";
+  const icon = type === 'desktop' ? <DesktopOutlined /> : <CodeOutlined />;
+  const name = type === 'desktop' ? 'Remote Desktop' : 'Web Terminal';
 
   return (
     <Card
       size="small"
-      className={type === "desktop" ? "bg-blue-50 dark:bg-blue-950" : "bg-green-50 dark:bg-green-950"}
+      className={
+        type === 'desktop' ? 'bg-blue-50 dark:bg-blue-950' : 'bg-green-50 dark:bg-green-950'
+      }
     >
-      <Space direction="vertical" className="w-full" style={{ width: "100%" }}>
+      <Space direction="vertical" className="w-full" style={{ width: '100%' }}>
         {/* Header */}
         <div className="flex items-center justify-between">
           <Space>
@@ -89,31 +85,29 @@ function ServiceStatusCard({
                 <div className="flex items-center gap-2">
                   <LinkOutlined className="text-gray-500 text-xs" />
                   <Text copyable={{ text: status.url }} className="text-xs text-gray-600">
-                    {status.url.length > 50
-                      ? `${status.url.slice(0, 47)}...`
-                      : status.url}
+                    {status.url.length > 50 ? `${status.url.slice(0, 47)}...` : status.url}
                   </Text>
                 </div>
               )}
-              {type === "desktop" && "resolution" in status && (
+              {type === 'desktop' && 'resolution' in status && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Resolution:</span>
                   <span className="text-gray-700">{status.resolution}</span>
                 </div>
               )}
-              {"display" in status && (
+              {'display' in status && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Display:</span>
                   <span className="text-gray-700">{status.display}</span>
                 </div>
               )}
-              {"port" in status && (
+              {'port' in status && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Port:</span>
                   <span className="text-gray-700">{status.port}</span>
                 </div>
               )}
-              {"sessionId" in status && status.sessionId && (
+              {'sessionId' in status && status.sessionId && (
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Session:</span>
                   <span className="text-gray-700">{status.sessionId.slice(0, 8)}...</span>

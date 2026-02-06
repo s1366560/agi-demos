@@ -64,7 +64,14 @@ describe.skip('Agent Store - Concurrent Conversation Switching (RED Phase)', () 
       const conv2Id = 'conv-2';
 
       const mockTimeline: TimelineEvent[] = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Hello', role: 'user' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Hello',
+          role: 'user',
+        },
       ];
       const mockResponse = createMockResponse(conv1Id, mockTimeline);
       vi.mocked(agentService.getConversationMessages).mockResolvedValue(mockResponse);
@@ -143,7 +150,14 @@ describe.skip('Agent Store - Concurrent Conversation Switching (RED Phase)', () 
         conversation_id: conv1Id,
         status: 'in_progress',
         steps: [
-          { step_number: 1, description: 'Step 1', thought_prompt: '', required_tools: [], expected_output: '', dependencies: [] },
+          {
+            step_number: 1,
+            description: 'Step 1',
+            thought_prompt: '',
+            required_tools: [],
+            expected_output: '',
+            dependencies: [],
+          },
         ],
         current_step_index: 0,
         created_at: new Date().toISOString(),
@@ -205,7 +219,7 @@ describe.skip('Agent Store - Concurrent Conversation Switching (RED Phase)', () 
 
       // Wait a tick for state to update
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
       const state = useAgentStore.getState();
@@ -218,8 +232,8 @@ describe.skip('Agent Store - Concurrent Conversation Switching (RED Phase)', () 
       });
 
       // NEW BEHAVIOR: Second sendMessage should succeed because it's for a different conversation
-      const warnCalls = consoleWarnSpy.mock.calls.filter(call =>
-        call.some(arg => typeof arg === 'string' && arg.includes('already in progress'))
+      const warnCalls = consoleWarnSpy.mock.calls.filter((call) =>
+        call.some((arg) => typeof arg === 'string' && arg.includes('already in progress'))
       );
 
       // Verify lock did NOT block second call (different conversation)

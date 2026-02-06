@@ -1,6 +1,6 @@
 /**
  * DoomLoopInterventionModal Component
- * 
+ *
  * Displays when the agent is detected to be stuck in a doom loop
  * (repeating the same tool calls without progress).
  * Allows user to intervene with various options.
@@ -16,7 +16,16 @@ import {
   BulbOutlined,
 } from '@ant-design/icons';
 
-import { Modal, Radio, Space, Button, Alert, Divider, List, Typography } from '@/components/ui/lazyAntd';
+import {
+  Modal,
+  Radio,
+  Space,
+  Button,
+  Alert,
+  Divider,
+  List,
+  Typography,
+} from '@/components/ui/lazyAntd';
 
 const { Text, Title } = Typography;
 
@@ -38,12 +47,12 @@ interface DoomLoopInterventionModalProps {
   onCancel?: () => void;
 }
 
-type InterventionAction = 
-  | 'stop'           // Stop execution
+type InterventionAction =
+  | 'stop' // Stop execution
   | 'retry_modified' // Retry with modified approach
-  | 'skip_step'      // Skip current step
-  | 'provide_hint'   // Provide hint to agent
-  | 'continue';      // Continue anyway (ignore warning)
+  | 'skip_step' // Skip current step
+  | 'provide_hint' // Provide hint to agent
+  | 'continue'; // Continue anyway (ignore warning)
 
 const interventionOptions = [
   {
@@ -129,8 +138,10 @@ export const DoomLoopInterventionModal: React.FC<DoomLoopInterventionModalProps>
             <div>
               <Text>
                 检测到工具 <Text code>{data.tool_name}</Text> 被重复调用{' '}
-                <Text strong style={{ color: '#ff4d4f' }}>{data.call_count}</Text> 次，
-                可能陷入无限循环。需要您的干预来解决此问题。
+                <Text strong style={{ color: '#ff4d4f' }}>
+                  {data.call_count}
+                </Text>{' '}
+                次， 可能陷入无限循环。需要您的干预来解决此问题。
               </Text>
             </div>
           }
@@ -149,13 +160,18 @@ export const DoomLoopInterventionModal: React.FC<DoomLoopInterventionModalProps>
               size="small"
               dataSource={data.last_calls.slice(0, 5)}
               renderItem={(call, idx) => (
-                <List.Item key={idx} className="border-b border-slate-200 dark:border-slate-700 last:border-b-0">
+                <List.Item
+                  key={idx}
+                  className="border-b border-slate-200 dark:border-slate-700 last:border-b-0"
+                >
                   <div className="w-full">
                     <div className="flex items-center gap-2 mb-1">
                       <Text type="secondary" className="text-xs">
                         #{idx + 1}
                       </Text>
-                      <Text code className="text-sm">{call.tool}</Text>
+                      <Text code className="text-sm">
+                        {call.tool}
+                      </Text>
                       <Text type="secondary" className="text-xs">
                         {new Date(call.timestamp).toLocaleTimeString()}
                       </Text>
@@ -189,9 +205,10 @@ export const DoomLoopInterventionModal: React.FC<DoomLoopInterventionModalProps>
                   onClick={() => setSelectedAction(option.id)}
                   className={`
                     p-4 rounded-lg border-2 cursor-pointer transition-all
-                    ${selectedAction === option.id
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+                    ${
+                      selectedAction === option.id
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
                     }
                   `}
                 >
@@ -200,7 +217,9 @@ export const DoomLoopInterventionModal: React.FC<DoomLoopInterventionModalProps>
                       <div className="mt-1">{option.icon}</div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Text strong className="text-base">{option.label}</Text>
+                          <Text strong className="text-base">
+                            {option.label}
+                          </Text>
                           {option.recommended && (
                             <span className="px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400 rounded">
                               推荐
@@ -228,12 +247,8 @@ export const DoomLoopInterventionModal: React.FC<DoomLoopInterventionModalProps>
             <div className="mt-2 space-y-1">
               {Object.entries(data.context).map(([key, value]) => (
                 <div key={key} className="text-sm">
-                  <Text className="text-blue-600 dark:text-blue-400">
-                    {key}:
-                  </Text>{' '}
-                  <Text className="text-blue-800 dark:text-blue-200">
-                    {JSON.stringify(value)}
-                  </Text>
+                  <Text className="text-blue-600 dark:text-blue-400">{key}:</Text>{' '}
+                  <Text className="text-blue-800 dark:text-blue-200">{JSON.stringify(value)}</Text>
                 </div>
               ))}
             </div>

@@ -161,12 +161,47 @@ describe.skip('Agent Store - Title Generation', () => {
     it('should count only message events, not all timeline events', () => {
       // Arrange
       const timeline: TimelineEvent[] = [
-        { id: '1', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'Hello', role: 'user' },
-        { id: '2', type: 'assistant_message', sequenceNumber: 2, timestamp: 2000, content: 'Hi', role: 'assistant' },
+        {
+          id: '1',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'Hello',
+          role: 'user',
+        },
+        {
+          id: '2',
+          type: 'assistant_message',
+          sequenceNumber: 2,
+          timestamp: 2000,
+          content: 'Hi',
+          role: 'assistant',
+        },
         { id: '3', type: 'thought', sequenceNumber: 3, timestamp: 3000, content: 'Thinking...' },
-        { id: '4', type: 'act', sequenceNumber: 4, timestamp: 4000, toolName: 'test_tool', toolInput: {} },
-        { id: '5', type: 'observe', sequenceNumber: 5, timestamp: 5000, toolName: 'test_tool', toolOutput: 'result', isError: false },
-        { id: '6', type: 'thought', sequenceNumber: 6, timestamp: 6000, content: 'More thinking...' },
+        {
+          id: '4',
+          type: 'act',
+          sequenceNumber: 4,
+          timestamp: 4000,
+          toolName: 'test_tool',
+          toolInput: {},
+        },
+        {
+          id: '5',
+          type: 'observe',
+          sequenceNumber: 5,
+          timestamp: 5000,
+          toolName: 'test_tool',
+          toolOutput: 'result',
+          isError: false,
+        },
+        {
+          id: '6',
+          type: 'thought',
+          sequenceNumber: 6,
+          timestamp: 6000,
+          content: 'More thinking...',
+        },
       ];
 
       // Act - Simulate the condition check in onComplete
@@ -182,16 +217,17 @@ describe.skip('Agent Store - Title Generation', () => {
     it('should evaluate trigger condition correctly for various states', () => {
       // Test cases: [title, messageCount, isGeneratingTitle, shouldTrigger]
       const testCases: [string, number, boolean, boolean][] = [
-        ['New Conversation', 1, false, true],   // New conv, 1 message
-        ['New Conversation', 2, false, true],   // New conv, 2 messages
-        ['New Conversation', 4, false, true],   // New conv, 4 messages (boundary)
-        ['New Conversation', 5, false, false],  // New conv, 5 messages (too many)
-        ['Custom Title', 2, false, false],      // Custom title, don't override
-        ['New Conversation', 2, true, false],   // Already generating
+        ['New Conversation', 1, false, true], // New conv, 1 message
+        ['New Conversation', 2, false, true], // New conv, 2 messages
+        ['New Conversation', 4, false, true], // New conv, 4 messages (boundary)
+        ['New Conversation', 5, false, false], // New conv, 5 messages (too many)
+        ['Custom Title', 2, false, false], // Custom title, don't override
+        ['New Conversation', 2, true, false], // Already generating
       ];
 
       for (const [title, messageCount, isGeneratingTitle, expected] of testCases) {
-        const shouldTrigger = title === 'New Conversation' && messageCount <= 4 && !isGeneratingTitle;
+        const shouldTrigger =
+          title === 'New Conversation' && messageCount <= 4 && !isGeneratingTitle;
         expect(shouldTrigger).toBe(expected);
       }
     });

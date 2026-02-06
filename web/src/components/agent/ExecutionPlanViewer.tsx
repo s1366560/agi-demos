@@ -15,7 +15,7 @@
  * @module components/agent/ExecutionPlanViewer
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo } from 'react';
 
 import {
   CheckCircleOutlined,
@@ -26,20 +26,11 @@ import {
   PlusCircleOutlined,
   EditOutlined,
   SwapOutlined,
-} from "@ant-design/icons";
-import {
-  Progress,
-  Typography,
-  Card,
-  List,
-  Tag,
-  Space,
-  Spin,
-  Empty,
-} from "antd";
+} from '@ant-design/icons';
+import { Progress, Typography, Card, List, Tag, Space, Spin, Empty } from 'antd';
 
-import { usePlanModeEvents, ReflectionResult, PlanAdjustment } from "../../hooks/usePlanModeEvents";
-import { ExecutionPlan, ExecutionStep } from "../../types/agent";
+import { usePlanModeEvents, ReflectionResult, PlanAdjustment } from '../../hooks/usePlanModeEvents';
+import { ExecutionPlan, ExecutionStep } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -56,15 +47,15 @@ interface ExecutionPlanViewerProps {
  */
 const getStepStatusIcon = (status: string): React.ReactNode => {
   switch (status) {
-    case "completed":
+    case 'completed':
       return <CheckCircleOutlined className="text-green-500" />;
-    case "running":
+    case 'running':
       return <LoadingOutlined className="text-blue-500 spin" />;
-    case "failed":
+    case 'failed':
       return <CloseCircleOutlined className="text-red-500" />;
-    case "skipped":
+    case 'skipped':
       return <MinusCircleOutlined className="text-gray-400" />;
-    case "cancelled":
+    case 'cancelled':
       return <MinusCircleOutlined className="text-gray-400" />;
     default:
       return <ClockCircleOutlined className="text-gray-400" />;
@@ -76,33 +67,33 @@ const getStepStatusIcon = (status: string): React.ReactNode => {
  */
 const getStepStatusColor = (status: string): string => {
   switch (status) {
-    case "completed":
-      return "success";
-    case "running":
-      return "processing";
-    case "failed":
-      return "error";
-    case "skipped":
-      return "default";
-    case "cancelled":
-      return "default";
+    case 'completed':
+      return 'success';
+    case 'running':
+      return 'processing';
+    case 'failed':
+      return 'error';
+    case 'skipped':
+      return 'default';
+    case 'cancelled':
+      return 'default';
     default:
-      return "default";
+      return 'default';
   }
 };
 
 /**
  * Get adjustment icon
  */
-const getAdjustmentIcon = (type: PlanAdjustment["type"]): React.ReactNode => {
+const getAdjustmentIcon = (type: PlanAdjustment['type']): React.ReactNode => {
   switch (type) {
-    case "step_added":
+    case 'step_added':
       return <PlusCircleOutlined className="text-green-500" />;
-    case "step_removed":
+    case 'step_removed':
       return <MinusCircleOutlined className="text-red-500" />;
-    case "step_modified":
+    case 'step_modified':
       return <EditOutlined className="text-blue-500" />;
-    case "step_reordered":
+    case 'step_reordered':
       return <SwapOutlined className="text-orange-500" />;
     default:
       return null;
@@ -131,14 +122,14 @@ const PlanProgressCard: React.FC<PlanProgressCardProps> = ({ plan }) => {
     }, [plan]);
 
   const progressStatus = useMemo(() => {
-    if (plan.status === "failed") return "exception";
-    if (plan.status === "completed") return "success";
-    return "active";
+    if (plan.status === 'failed') return 'exception';
+    if (plan.status === 'completed') return 'success';
+    return 'active';
   }, [plan.status]);
 
   // Calculate estimated time (simplified - in real implementation would use actual timing)
   const estimatedTimeRemaining = useMemo(() => {
-    if (plan.status === "completed" || remainingCount === 0) return null;
+    if (plan.status === 'completed' || remainingCount === 0) return null;
 
     // Rough estimate: 5 seconds per remaining step
     const seconds = remainingCount * 5;
@@ -152,7 +143,15 @@ const PlanProgressCard: React.FC<PlanProgressCardProps> = ({ plan }) => {
       <Space direction="vertical" className="w-full" size="small">
         <div className="flex items-center justify-between">
           <Text strong>Execution Progress</Text>
-          <Tag color={progressStatus === "exception" ? "red" : progressStatus === "success" ? "green" : "blue"}>
+          <Tag
+            color={
+              progressStatus === 'exception'
+                ? 'red'
+                : progressStatus === 'success'
+                  ? 'green'
+                  : 'blue'
+            }
+          >
             {plan.status.toUpperCase()}
           </Tag>
         </div>
@@ -161,8 +160,8 @@ const PlanProgressCard: React.FC<PlanProgressCardProps> = ({ plan }) => {
           percent={Math.round(progressPercentage)}
           status={progressStatus}
           strokeColor={{
-            "0%": "#108ee9",
-            "100%": "#87d068",
+            '0%': '#108ee9',
+            '100%': '#87d068',
           }}
           aria-label="Plan execution progress"
         />
@@ -207,7 +206,7 @@ const StepItem: React.FC<StepItemProps> = ({ step }) => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
+    if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       setExpanded(!expanded);
     }
@@ -237,7 +236,10 @@ const StepItem: React.FC<StepItemProps> = ({ step }) => {
       </div>
 
       {expanded && (
-        <div className="mt-3 pt-3 border-t border-gray-100" data-testid={`step-details-${step.step_id}`}>
+        <div
+          className="mt-3 pt-3 border-t border-gray-100"
+          data-testid={`step-details-${step.step_id}`}
+        >
           <Space orientation="vertical" className="w-full" size="small">
             <div className="text-xs">
               <Text strong>Tool:</Text> {step.tool_name}
@@ -245,11 +247,11 @@ const StepItem: React.FC<StepItemProps> = ({ step }) => {
 
             {step.dependencies.length > 0 && (
               <div className="text-xs">
-                <Text strong>Depends on:</Text> {step.dependencies.join(", ")}
+                <Text strong>Depends on:</Text> {step.dependencies.join(', ')}
               </div>
             )}
 
-            {step.status === "failed" && step.error && (
+            {step.status === 'failed' && step.error && (
               <div className="text-xs">
                 <Text type="danger">
                   <Text strong>Error:</Text> {step.error}
@@ -257,7 +259,7 @@ const StepItem: React.FC<StepItemProps> = ({ step }) => {
               </div>
             )}
 
-            {step.status === "completed" && step.result && (
+            {step.status === 'completed' && step.result && (
               <div className="text-xs">
                 <Text strong>Result:</Text> {step.result}
               </div>
@@ -389,7 +391,6 @@ const AdjustmentsList: React.FC<AdjustmentsListProps> = ({ adjustments }) => {
  * - Adjustments
  */
 export const ExecutionPlanViewer: React.FC<ExecutionPlanViewerProps> = ({ plan }) => {
-   
   usePlanModeEvents({});
 
   // Create empty reflections and adjustments arrays
@@ -449,10 +450,10 @@ export const ExecutionPlanViewer: React.FC<ExecutionPlanViewerProps> = ({ plan }
         <Card size="small" className="mt-4" title="Execution Statistics">
           <Space direction="vertical" className="w-full" size="small">
             <Text className="text-xs">
-              <Text strong>Duration:</Text>{" "}
+              <Text strong>Duration:</Text>{' '}
               {plan.completed_at
                 ? `${Math.round((new Date(plan.completed_at).getTime() - new Date(plan.started_at).getTime()) / 1000)}s`
-                : "Running..."}
+                : 'Running...'}
             </Text>
             <Text type="secondary" className="text-xs">
               Started: {new Date(plan.started_at).toLocaleString()}

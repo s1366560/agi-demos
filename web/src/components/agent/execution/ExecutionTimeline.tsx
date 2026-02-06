@@ -18,20 +18,16 @@
  * State Management: useReducer instead of multiple useState
  */
 
-import { useEffect, useRef, useCallback, useReducer, createContext, useContext } from "react";
+import { useEffect, useRef, useCallback, useReducer, createContext, useContext } from 'react';
 
-import { MaterialIcon } from "../shared";
+import { MaterialIcon } from '../shared';
 
-import { SimpleExecutionView } from "./SimpleExecutionView";
-import { TimelineNode } from "./TimelineNode";
+import { SimpleExecutionView } from './SimpleExecutionView';
+import { TimelineNode } from './TimelineNode';
 
-import type {
-  TimelineStep,
-  WorkPlan,
-  ToolExecution,
-} from "../../../types/agent";
+import type { TimelineStep, WorkPlan, ToolExecution } from '../../../types/agent';
 
-export type DisplayMode = "timeline" | "simple-timeline" | "direct";
+export type DisplayMode = 'timeline' | 'simple-timeline' | 'direct';
 
 export interface ExecutionTimelineProps {
   /** Work plan (if present, enables full timeline mode) */
@@ -69,18 +65,18 @@ function expansionReducer(state: ExpansionState, action: ExpansionAction): Expan
   switch (action.type) {
     case 'TOGGLE_STEP': {
       const stepNumber = action.payload;
-      const isExpanded = state.manuallyExpanded.has(stepNumber) ||
-        (!state.manuallyCollapsed.has(stepNumber));
+      const isExpanded =
+        state.manuallyExpanded.has(stepNumber) || !state.manuallyCollapsed.has(stepNumber);
 
       if (isExpanded) {
         return {
-          manuallyExpanded: new Set([...state.manuallyExpanded].filter(n => n !== stepNumber)),
+          manuallyExpanded: new Set([...state.manuallyExpanded].filter((n) => n !== stepNumber)),
           manuallyCollapsed: new Set([...state.manuallyCollapsed, stepNumber]),
         };
       } else {
         return {
           manuallyExpanded: new Set([...state.manuallyExpanded, stepNumber]),
-          manuallyCollapsed: new Set([...state.manuallyCollapsed].filter(n => n !== stepNumber)),
+          manuallyCollapsed: new Set([...state.manuallyCollapsed].filter((n) => n !== stepNumber)),
         };
       }
     }
@@ -149,16 +145,16 @@ export function getDisplayMode(
   // No work plan and minimal activity - use direct mode (no timeline shown)
   // This handles simple conversations like "hi" where no tools are needed
   if (!workPlan && steps.length <= 1 && toolExecutionHistory.length <= 1) {
-    return "direct";
+    return 'direct';
   }
 
   if (workPlan || steps.length > 0) {
-    return "timeline";
+    return 'timeline';
   }
   if (toolExecutionHistory.length > 0) {
-    return "simple-timeline";
+    return 'simple-timeline';
   }
-  return "direct";
+  return 'direct';
 }
 
 // ============================================
@@ -174,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
   // _workPlan kept for potential future use
   void _workPlan;
 
-  const completedSteps = steps.filter((s) => s.status === "completed").length;
+  const completedSteps = steps.filter((s) => s.status === 'completed').length;
   const totalSteps = steps.length;
   const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
 
@@ -185,16 +181,10 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <MaterialIcon
-                  name="checklist"
-                  size={20}
-                  className="text-primary"
-                />
+                <MaterialIcon name="checklist" size={20} className="text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">
-                  执行计划
-                </h3>
+                <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
                 <p className="text-sm text-slate-500">
                   {completedSteps}/{totalSteps} 步骤已完成
                 </p>
@@ -213,23 +203,25 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               <span
                 className={`px-2 py-1 rounded-full text-xs font-semibold ${
                   completedSteps === totalSteps
-                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
                     : isStreaming
-                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                 }`}
               >
-                {completedSteps === totalSteps
-                  ? "已完成"
-                  : isStreaming
-                  ? "执行中"
-                  : "等待中"}
+                {completedSteps === totalSteps ? '已完成' : isStreaming ? '执行中' : '等待中'}
               </span>
             </div>
           </div>
 
           {/* Progress Bar */}
-          <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
+          <div
+            className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3"
+            role="progressbar"
+            aria-valuenow={progressPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
             <div
               className="h-full bg-primary transition-all duration-500 ease-out"
               style={{ width: `${progressPercent}%` }}
@@ -246,7 +238,8 @@ interface ChecklistProps {
 }
 
 export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
-  const { workPlan, steps, currentStepNumber, isStreaming, isStepExpanded, toggleStep } = useExecutionTimelineContext();
+  const { workPlan, steps, currentStepNumber, isStreaming, isStepExpanded, toggleStep } =
+    useExecutionTimelineContext();
 
   if (!workPlan) return null;
 
@@ -255,20 +248,20 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
       {children || (
         <div className="space-y-2">
           {steps.map((step, idx) => {
-            const isCompleted = step.status === "completed";
-            const isActive = step.status === "running" || currentStepNumber === step.stepNumber;
-            const isFailed = step.status === "failed";
+            const isCompleted = step.status === 'completed';
+            const isActive = step.status === 'running' || currentStepNumber === step.stepNumber;
+            const isFailed = step.status === 'failed';
             return (
               <div
                 key={step.stepNumber}
                 className={`flex items-center gap-3 py-2 px-3 rounded-lg transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70 ${
                   isActive
-                    ? "bg-primary/5 border border-primary/20"
+                    ? 'bg-primary/5 border border-primary/20'
                     : isCompleted
-                    ? "bg-emerald-50 dark:bg-emerald-900/10"
-                    : isFailed
-                    ? "bg-red-50 dark:bg-red-900/10"
-                    : "bg-slate-50 dark:bg-slate-800/50"
+                      ? 'bg-emerald-50 dark:bg-emerald-900/10'
+                      : isFailed
+                        ? 'bg-red-50 dark:bg-red-900/10'
+                        : 'bg-slate-50 dark:bg-slate-800/50'
                 }`}
                 onClick={() => toggleStep(step.stepNumber)}
                 data-step-number={step.stepNumber}
@@ -276,12 +269,12 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                 <div
                   className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
                     isCompleted
-                      ? "bg-emerald-500 text-white"
+                      ? 'bg-emerald-500 text-white'
                       : isFailed
-                      ? "bg-red-500 text-white"
-                      : isActive
-                      ? "bg-primary text-white"
-                      : "bg-slate-200 dark:bg-slate-700"
+                        ? 'bg-red-500 text-white'
+                        : isActive
+                          ? 'bg-primary text-white'
+                          : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   {isCompleted ? (
@@ -297,26 +290,22 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                 <span
                   className={`text-sm flex-grow ${
                     isCompleted
-                      ? "text-emerald-700 dark:text-emerald-400"
+                      ? 'text-emerald-700 dark:text-emerald-400'
                       : isFailed
-                      ? "text-red-700 dark:text-red-400"
-                      : isActive
-                      ? "text-primary font-medium"
-                      : "text-slate-600 dark:text-slate-400"
+                        ? 'text-red-700 dark:text-red-400'
+                        : isActive
+                          ? 'text-primary font-medium'
+                          : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
                   {step.description}
                 </span>
                 {step.toolExecutions && step.toolExecutions.length > 0 && (
-                  <span className="text-xs text-slate-400">
-                    {step.toolExecutions.length} 工具
-                  </span>
+                  <span className="text-xs text-slate-400">{step.toolExecutions.length} 工具</span>
                 )}
-                {isActive && isStreaming && (
-                  <span className="text-xs text-primary">执行中...</span>
-                )}
+                {isActive && isStreaming && <span className="text-xs text-primary">执行中...</span>}
                 <MaterialIcon
-                  name={isStepExpanded(step.stepNumber) ? "expand_less" : "expand_more"}
+                  name={isStepExpanded(step.stepNumber) ? 'expand_less' : 'expand_more'}
                   size={18}
                   className="text-slate-400"
                 />
@@ -342,17 +331,11 @@ export const Controls: React.FC<ControlsProps> = ({ children }) => {
     <>
       {children || (
         <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-          <button
-            onClick={expandAll}
-            className="text-xs text-primary hover:underline"
-          >
+          <button onClick={expandAll} className="text-xs text-primary hover:underline">
             展开全部
           </button>
           <span className="text-slate-300">|</span>
-          <button
-            onClick={collapseAll}
-            className="text-xs text-primary hover:underline"
-          >
+          <button onClick={collapseAll} className="text-xs text-primary hover:underline">
             收起全部
           </button>
         </div>
@@ -409,10 +392,7 @@ export const SimpleView: React.FC<SimpleViewProps> = ({ children }) => {
   return (
     <>
       {children || (
-        <SimpleExecutionView
-          toolExecutions={toolExecutionHistory}
-          isStreaming={isStreaming}
-        />
+        <SimpleExecutionView toolExecutions={toolExecutionHistory} isStreaming={isStreaming} />
       )}
     </>
   );
@@ -429,7 +409,12 @@ interface SimpleTimelineModeProps {
   children: React.ReactNode;
 }
 
-function SimpleTimelineMode({ workPlan, currentStepNumber, isStreaming, children }: SimpleTimelineModeProps) {
+function SimpleTimelineMode({
+  workPlan,
+  currentStepNumber,
+  isStreaming,
+  children,
+}: SimpleTimelineModeProps) {
   return (
     <div className="w-full mb-4">
       {/* Work Plan Checklist - Only show if workPlan exists */}
@@ -437,15 +422,9 @@ function SimpleTimelineMode({ workPlan, currentStepNumber, isStreaming, children
         <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl p-4 mb-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <MaterialIcon
-                name="checklist"
-                size={18}
-                className="text-primary"
-              />
+              <MaterialIcon name="checklist" size={18} className="text-primary" />
             </div>
-            <h3 className="font-semibold text-slate-900 dark:text-white">
-              执行计划
-            </h3>
+            <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
           </div>
           <div className="space-y-2">
             {workPlan.steps.map((step, idx) => {
@@ -456,19 +435,19 @@ function SimpleTimelineMode({ workPlan, currentStepNumber, isStreaming, children
                   key={idx}
                   className={`flex items-center gap-3 py-2 px-3 rounded-lg transition-colors ${
                     isActive
-                      ? "bg-primary/5 border border-primary/20"
+                      ? 'bg-primary/5 border border-primary/20'
                       : isCompleted
-                      ? "bg-emerald-50 dark:bg-emerald-900/10"
-                      : "bg-slate-50 dark:bg-slate-800/50"
+                        ? 'bg-emerald-50 dark:bg-emerald-900/10'
+                        : 'bg-slate-50 dark:bg-slate-800/50'
                   }`}
                 >
                   <div
                     className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
                       isCompleted
-                        ? "bg-emerald-500 text-white"
+                        ? 'bg-emerald-500 text-white'
                         : isActive
-                        ? "bg-primary text-white"
-                        : "bg-slate-200 dark:bg-slate-700"
+                          ? 'bg-primary text-white'
+                          : 'bg-slate-200 dark:bg-slate-700'
                     }`}
                   >
                     {isCompleted ? (
@@ -476,26 +455,22 @@ function SimpleTimelineMode({ workPlan, currentStepNumber, isStreaming, children
                     ) : isActive ? (
                       <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
                     ) : (
-                      <span className="text-xs text-slate-500">
-                        {idx + 1}
-                      </span>
+                      <span className="text-xs text-slate-500">{idx + 1}</span>
                     )}
                   </div>
                   <span
                     className={`text-sm ${
                       isCompleted
-                        ? "text-emerald-700 dark:text-emerald-400 line-through"
+                        ? 'text-emerald-700 dark:text-emerald-400 line-through'
                         : isActive
-                        ? "text-primary font-medium"
-                        : "text-slate-600 dark:text-slate-400"
+                          ? 'text-primary font-medium'
+                          : 'text-slate-600 dark:text-slate-400'
                     }`}
                   >
                     {step.description}
                   </span>
                   {isActive && isStreaming && (
-                    <span className="ml-auto text-xs text-primary">
-                      执行中...
-                    </span>
+                    <span className="ml-auto text-xs text-primary">执行中...</span>
                   )}
                 </div>
               );
@@ -546,16 +521,12 @@ function ExecutionTimelineImpl({
 
   // Auto-scroll to current step
   useEffect(() => {
-    if (
-      currentStepNumber !== null &&
-      currentStepNumber !== undefined &&
-      timelineRef.current
-    ) {
+    if (currentStepNumber !== null && currentStepNumber !== undefined && timelineRef.current) {
       const stepElement = timelineRef.current.querySelector(
         `[data-step-number="${currentStepNumber}"]`
       );
       if (stepElement) {
-        stepElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        stepElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
   }, [currentStepNumber]);
@@ -588,16 +559,16 @@ function ExecutionTimelineImpl({
   };
 
   // Direct mode - nothing to show (handled by parent)
-  if (displayMode === "direct") {
+  if (displayMode === 'direct') {
     return null;
   }
 
-  const completedSteps = steps.filter((s) => s.status === "completed").length;
+  const completedSteps = steps.filter((s) => s.status === 'completed').length;
   const totalSteps = steps.length;
   const progressPercent = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
 
   // Simple timeline mode
-  if (displayMode === "simple-timeline") {
+  if (displayMode === 'simple-timeline') {
     return (
       <ExecutionTimelineContext.Provider value={contextValue}>
         <SimpleTimelineMode
@@ -620,16 +591,10 @@ function ExecutionTimelineImpl({
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <MaterialIcon
-                    name="checklist"
-                    size={20}
-                    className="text-primary"
-                  />
+                  <MaterialIcon name="checklist" size={20} className="text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white">
-                    执行计划
-                  </h3>
+                  <h3 className="font-semibold text-slate-900 dark:text-white">执行计划</h3>
                   <p className="text-sm text-slate-500">
                     {completedSteps}/{totalSteps} 步骤已完成
                   </p>
@@ -648,23 +613,25 @@ function ExecutionTimelineImpl({
                 <span
                   className={`px-2 py-1 rounded-full text-xs font-semibold ${
                     completedSteps === totalSteps
-                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
                       : isStreaming
-                      ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                   }`}
                 >
-                  {completedSteps === totalSteps
-                    ? "已完成"
-                    : isStreaming
-                    ? "执行中"
-                    : "等待中"}
+                  {completedSteps === totalSteps ? '已完成' : isStreaming ? '执行中' : '等待中'}
                 </span>
               </div>
             </div>
 
             {/* Progress Bar */}
-            <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3" role="progressbar" aria-valuenow={progressPercent} aria-valuemin={0} aria-valuemax={100}>
+            <div
+              className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-3"
+              role="progressbar"
+              aria-valuenow={progressPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
                 className="h-full bg-primary transition-all duration-500 ease-out"
                 style={{ width: `${progressPercent}%` }}

@@ -2,7 +2,7 @@
  * FileDownloader - Download button for non-previewable files
  */
 
-import React from "react";
+import React from 'react';
 
 import {
   DownloadOutlined,
@@ -11,8 +11,8 @@ import {
   FilePdfOutlined,
   FileWordOutlined,
   FileExcelOutlined,
-} from "@ant-design/icons";
-import { Button, Space, Typography, Card } from "antd";
+} from '@ant-design/icons';
+import { Button, Space, Typography, Card } from 'antd';
 
 const { Text } = Typography;
 
@@ -31,7 +31,7 @@ export interface FileDownloaderProps {
 
 // Format file size
 function formatFileSize(bytes?: number): string {
-  if (!bytes) return "";
+  if (!bytes) return '';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -43,23 +43,36 @@ function getFileIcon(mimeType?: string, filename?: string): React.ReactNode {
   if (!mimeType && !filename) return <FileOutlined />;
 
   // Check extension
-  const ext = filename?.split(".").pop()?.toLowerCase();
+  const ext = filename?.split('.').pop()?.toLowerCase();
 
-  if (mimeType?.includes("zip") || mimeType?.includes("tar") || mimeType?.includes("gzip") ||
-      ext === "zip" || ext === "tar" || ext === "gz" || ext === "rar" || ext === "7z") {
+  if (
+    mimeType?.includes('zip') ||
+    mimeType?.includes('tar') ||
+    mimeType?.includes('gzip') ||
+    ext === 'zip' ||
+    ext === 'tar' ||
+    ext === 'gz' ||
+    ext === 'rar' ||
+    ext === '7z'
+  ) {
     return <FileZipOutlined />;
   }
 
-  if (mimeType?.includes("pdf") || ext === "pdf") {
+  if (mimeType?.includes('pdf') || ext === 'pdf') {
     return <FilePdfOutlined />;
   }
 
-  if (mimeType?.includes("word") || ext === "doc" || ext === "docx") {
+  if (mimeType?.includes('word') || ext === 'doc' || ext === 'docx') {
     return <FileWordOutlined />;
   }
 
-  if (mimeType?.includes("excel") || mimeType?.includes("spreadsheet") ||
-      ext === "xls" || ext === "xlsx" || ext === "csv") {
+  if (
+    mimeType?.includes('excel') ||
+    mimeType?.includes('spreadsheet') ||
+    ext === 'xls' ||
+    ext === 'xlsx' ||
+    ext === 'csv'
+  ) {
     return <FileExcelOutlined />;
   }
 

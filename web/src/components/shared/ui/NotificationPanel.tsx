@@ -8,7 +8,15 @@ import { useNotificationStore } from '@/stores/notification';
 
 export const NotificationPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead, deleteNotification, isLoading } = useNotificationStore();
+  const {
+    notifications,
+    unreadCount,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    isLoading,
+  } = useNotificationStore();
   const navigate = useNavigate();
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -36,19 +44,22 @@ export const NotificationPanel: React.FC = () => {
   }, [isOpen]);
 
   // Stable callback for notification clicks
-  const handleNotificationClick = useCallback(async (notification: any) => {
-    if (!notification.is_read) {
-      await markAsRead(notification.id);
-    }
-    if (notification.action_url) {
-      navigate(notification.action_url);
-      setIsOpen(false);
-    }
-  }, [markAsRead, navigate]);
+  const handleNotificationClick = useCallback(
+    async (notification: any) => {
+      if (!notification.is_read) {
+        await markAsRead(notification.id);
+      }
+      if (notification.action_url) {
+        navigate(notification.action_url);
+        setIsOpen(false);
+      }
+    },
+    [markAsRead, navigate]
+  );
 
   // Stable callback for toggling panel
   const togglePanel = useCallback(() => {
-    setIsOpen(prev => !prev);
+    setIsOpen((prev) => !prev);
   }, []);
 
   // Stable callback for closing panel
@@ -57,16 +68,22 @@ export const NotificationPanel: React.FC = () => {
   }, []);
 
   // Stable callback for inline mark as read
-  const handleInlineMarkAsRead = useCallback((e: React.MouseEvent, notificationId: string) => {
-    e.stopPropagation();
-    markAsRead(notificationId);
-  }, [markAsRead]);
+  const handleInlineMarkAsRead = useCallback(
+    (e: React.MouseEvent, notificationId: string) => {
+      e.stopPropagation();
+      markAsRead(notificationId);
+    },
+    [markAsRead]
+  );
 
   // Stable callback for inline delete
-  const handleInlineDelete = useCallback((e: React.MouseEvent, notificationId: string) => {
-    e.stopPropagation();
-    deleteNotification(notificationId);
-  }, [deleteNotification]);
+  const handleInlineDelete = useCallback(
+    (e: React.MouseEvent, notificationId: string) => {
+      e.stopPropagation();
+      deleteNotification(notificationId);
+    },
+    [deleteNotification]
+  );
 
   return (
     <div className="relative" ref={panelRef}>
@@ -96,7 +113,9 @@ export const NotificationPanel: React.FC = () => {
                   全部已读
                 </button>
               )}
-              <button onClick={closePanel}><X className="w-4 h-4" /></button>
+              <button onClick={closePanel}>
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -121,8 +140,12 @@ export const NotificationPanel: React.FC = () => {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className="font-medium text-sm text-slate-900 dark:text-white">{notification.title}</p>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{notification.message}</p>
+                      <p className="font-medium text-sm text-slate-900 dark:text-white">
+                        {notification.title}
+                      </p>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        {notification.message}
+                      </p>
                       <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
                         {new Date(notification.created_at).toLocaleString('zh-CN')}
                       </p>

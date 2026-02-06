@@ -46,9 +46,17 @@ import {
 
 import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 
-import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
+import {
+  useUnifiedAgentStatus,
+  type ProjectAgentLifecycleState,
+} from '../../hooks/useUnifiedAgentStatus';
 import { agentService } from '../../services/agentService';
-import { poolService, type PoolInstance, type ProjectTier, type InstanceStatus } from '../../services/poolService';
+import {
+  poolService,
+  type PoolInstance,
+  type ProjectTier,
+  type InstanceStatus,
+} from '../../services/poolService';
 
 import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
 
@@ -68,7 +76,7 @@ interface ProjectAgentStatusBarProps {
  */
 function mapPoolStatusToLifecycle(status: InstanceStatus | undefined): ProjectAgentLifecycleState {
   if (!status) return 'uninitialized';
-  
+
   switch (status) {
     case 'created':
     case 'initializing':
@@ -218,7 +226,12 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 }) => {
   // Use the unified status hook for consolidated state
   // Always enable WebSocket for sandbox state sync, even when pool management is enabled
-  const { status, isLoading, error: wsError, isStreaming } = useUnifiedAgentStatus({
+  const {
+    status,
+    isLoading,
+    error: wsError,
+    isStreaming,
+  } = useUnifiedAgentStatus({
     projectId,
     tenantId,
     // Always enabled for WebSocket connection (needed for sandbox lifecycle events)
@@ -246,16 +259,18 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         // First check if pool is enabled
         const statusResponse = await poolService.getStatus();
         if (!isMounted) return;
-        
+
         setPoolEnabled(statusResponse.enabled);
-        
+
         if (statusResponse.enabled) {
           // Fetch instance for this project
           const instanceKey = `${tenantId}:${projectId}:chat`;
           const instances = await poolService.listInstances({ page: 1, page_size: 100 });
           if (!isMounted) return;
-          
-          const instance = instances.instances.find((i: PoolInstance) => i.instance_key === instanceKey);
+
+          const instance = instances.instances.find(
+            (i: PoolInstance) => i.instance_key === instanceKey
+          );
           setPoolInstance(instance || null);
         }
       } catch (err) {
@@ -287,10 +302,11 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const [isActionPending, setIsActionPending] = useState(false);
 
   // Determine lifecycle state based on pool status or WebSocket
-  const lifecycleState: ProjectAgentLifecycleState = enablePoolManagement && poolEnabled
-    ? mapPoolStatusToLifecycle(poolInstance?.status)
-    : status.lifecycle;
-  
+  const lifecycleState: ProjectAgentLifecycleState =
+    enablePoolManagement && poolEnabled
+      ? mapPoolStatusToLifecycle(poolInstance?.status)
+      : status.lifecycle;
+
   const config = lifecycleConfig[lifecycleState];
   const error = enablePoolManagement ? poolError : wsError;
 
@@ -300,13 +316,19 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   // Check if agent can be started (not running)
   const canStart = lifecycleState === 'uninitialized' || lifecycleState === 'error';
   // Check if agent can be stopped (is running)
-  const canStop = lifecycleState === 'ready' || lifecycleState === 'executing' || lifecycleState === 'paused';
+  const canStop =
+    lifecycleState === 'ready' || lifecycleState === 'executing' || lifecycleState === 'paused';
   // Check if agent can be restarted (exists)
-  const canRestart = lifecycleState !== 'uninitialized' && lifecycleState !== 'shutting_down' && lifecycleState !== 'initializing';
+  const canRestart =
+    lifecycleState !== 'uninitialized' &&
+    lifecycleState !== 'shutting_down' &&
+    lifecycleState !== 'initializing';
   // Check if agent can be paused (pool mode only)
-  const canPause = enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'ready';
+  const canPause =
+    enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'ready';
   // Check if agent can be resumed (pool mode only)
-  const canResume = enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'paused';
+  const canResume =
+    enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'paused';
 
   // Get instance key for pool operations
   const instanceKey = `${tenantId}:${projectId}:chat`;
@@ -420,7 +442,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                         </div>
                         <div className="flex justify-between">
                           <span className="opacity-70">健康:</span>
-                          <span className={poolInstance.health_status === 'healthy' ? 'text-emerald-400' : 'text-amber-400'}>
+                          <span
+                            className={
+                              poolInstance.health_status === 'healthy'
+                                ? 'text-emerald-400'
+                                : 'text-amber-400'
+                            }
+                          >
                             {poolInstance.health_status}
                           </span>
                         </div>
@@ -442,9 +470,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                       </div>
                     </>
                   ) : (
-                    <div className="text-xs opacity-70">
-                      尚未创建实例 - 首次请求时自动分配
-                    </div>
+                    <div className="text-xs opacity-70">尚未创建实例 - 首次请求时自动分配</div>
                   )}
                 </div>
               }
@@ -462,7 +488,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 ) : (
                   <TierIcon size={12} />
                 )}
-                <span>{poolInstance ? poolTierConfig?.label ?? 'POOL' : '待分配'}</span>
+                <span>{poolInstance ? (poolTierConfig?.label ?? 'POOL') : '待分配'}</span>
                 {poolInstance?.health_status === 'healthy' && (
                   <Heart size={10} className="text-emerald-500 fill-emerald-500" />
                 )}
@@ -474,10 +500,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         )}
 
         {/* Sandbox Status Indicator */}
-        <SandboxStatusIndicator
-          projectId={projectId}
-          tenantId={tenantId}
-        />
+        <SandboxStatusIndicator projectId={projectId} tenantId={tenantId} />
 
         {/* Separator */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
@@ -503,10 +526,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               transition-all duration-300 cursor-help
             `}
           >
-            <StatusIcon
-              size={12}
-              className={config.animate ? 'animate-spin' : ''}
-            />
+            <StatusIcon size={12} className={config.animate ? 'animate-spin' : ''} />
             <span>{config.label}</span>
             {status.resources.activeCalls > 0 ? (
               <span className="ml-0.5">({status.resources.activeCalls})</span>
@@ -556,7 +576,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           >
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <BrainCircuit size={11} />
-              <span>{status.skillStats.loaded}/{status.skillStats.total}</span>
+              <span>
+                {status.skillStats.loaded}/{status.skillStats.total}
+              </span>
             </div>
           </LazyTooltip>
         )}
@@ -573,10 +595,14 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {status.planMode.isActive && (
           <>
             <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-            <LazyTooltip title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}>
+            <LazyTooltip
+              title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}
+            >
               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                 <Zap size={11} />
-                <span>{status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}</span>
+                <span>
+                  {status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}
+                </span>
               </div>
             </LazyTooltip>
           </>
@@ -620,9 +646,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 disabled={isActionPending}
                 className={`
                   p-1 rounded transition-colors
-                  ${isActionPending 
-                    ? 'text-slate-400 cursor-not-allowed' 
-                    : 'text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                  ${
+                    isActionPending
+                      ? 'text-slate-400 cursor-not-allowed'
+                      : 'text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                   }
                 `}
               >
@@ -644,9 +671,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 disabled={isActionPending}
                 className={`
                   p-1 rounded transition-colors
-                  ${isActionPending 
-                    ? 'text-slate-400 cursor-not-allowed' 
-                    : 'text-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30'
+                  ${
+                    isActionPending
+                      ? 'text-slate-400 cursor-not-allowed'
+                      : 'text-orange-500 hover:bg-orange-100 dark:hover:bg-orange-900/30'
                   }
                 `}
               >
@@ -668,9 +696,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 disabled={isActionPending}
                 className={`
                   p-1 rounded transition-colors
-                  ${isActionPending 
-                    ? 'text-slate-400 cursor-not-allowed' 
-                    : 'text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                  ${
+                    isActionPending
+                      ? 'text-slate-400 cursor-not-allowed'
+                      : 'text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                   }
                 `}
               >
@@ -687,24 +716,26 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           {canStop && (
             <LazyPopconfirm
               title="停止 Agent"
-              description={enablePoolManagement && poolEnabled 
-                ? "确定要终止 Agent 实例吗？实例将被释放。" 
-                : "确定要停止 Agent 吗？正在进行的任务将被中断。"
+              description={
+                enablePoolManagement && poolEnabled
+                  ? '确定要终止 Agent 实例吗？实例将被释放。'
+                  : '确定要停止 Agent 吗？正在进行的任务将被中断。'
               }
               onConfirm={handleStopAgent}
               okText="停止"
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
-              <LazyTooltip title={enablePoolManagement && poolEnabled ? "终止实例" : "停止 Agent"}>
+              <LazyTooltip title={enablePoolManagement && poolEnabled ? '终止实例' : '停止 Agent'}>
                 <button
                   type="button"
                   disabled={isActionPending}
                   className={`
                     p-1 rounded transition-colors
-                    ${isActionPending 
-                      ? 'text-slate-400 cursor-not-allowed' 
-                      : 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30'
+                    ${
+                      isActionPending
+                        ? 'text-slate-400 cursor-not-allowed'
+                        : 'text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30'
                     }
                   `}
                 >
@@ -733,9 +764,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                   disabled={isActionPending}
                   className={`
                     p-1 rounded transition-colors
-                    ${isActionPending 
-                      ? 'text-slate-400 cursor-not-allowed' 
-                      : 'text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                    ${
+                      isActionPending
+                        ? 'text-slate-400 cursor-not-allowed'
+                        : 'text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30'
                     }
                   `}
                 >
@@ -757,7 +789,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         <LazyTooltip
           title={
             <div className="space-y-1">
-              <div>{isLoading ? '加载中...' : status.connection.websocket ? 'WebSocket 已连接' : '就绪'}</div>
+              <div>
+                {isLoading
+                  ? '加载中...'
+                  : status.connection.websocket
+                    ? 'WebSocket 已连接'
+                    : '就绪'}
+              </div>
               {status.resources.activeCalls > 0 && (
                 <div>活跃工具调用: {status.resources.activeCalls}</div>
               )}

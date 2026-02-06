@@ -4,55 +4,55 @@
  * Renders the dropdown menu when open and handles click-outside to close.
  */
 
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 
-import { useWorkspaceContext } from './WorkspaceContext'
+import { useWorkspaceContext } from './WorkspaceContext';
 
-import type { WorkspaceMenuProps } from './types'
+import type { WorkspaceMenuProps } from './types';
 
 export const WorkspaceSwitcherMenu: React.FC<WorkspaceMenuProps> = ({
   className = '',
   children,
   label,
 }) => {
-  const { isOpen, setIsOpen, triggerButtonRef } = useWorkspaceContext()
-  const menuRef = useRef<HTMLDivElement>(null)
+  const { isOpen, setIsOpen, triggerButtonRef } = useWorkspaceContext();
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        setIsOpen(false);
       }
-    }
+    };
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isOpen, setIsOpen])
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, setIsOpen]);
 
   // Handle keyboard navigation at menu level
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     switch (e.key) {
       case 'Escape':
-        e.preventDefault()
-        setIsOpen(false)
+        e.preventDefault();
+        setIsOpen(false);
         // Focus the trigger button after closing
         setTimeout(() => {
-          triggerButtonRef.current?.focus()
-        }, 0)
-        break
+          triggerButtonRef.current?.focus();
+        }, 0);
+        break;
       case 'Tab':
-        setIsOpen(false)
-        break
+        setIsOpen(false);
+        break;
     }
-  }
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   const baseClasses =
-    'absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100'
+    'absolute top-full left-0 w-64 mt-2 bg-white dark:bg-[#1e2332] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100';
 
   return (
     <div
@@ -73,5 +73,5 @@ export const WorkspaceSwitcherMenu: React.FC<WorkspaceMenuProps> = ({
         {children}
       </div>
     </div>
-  )
-}
+  );
+};

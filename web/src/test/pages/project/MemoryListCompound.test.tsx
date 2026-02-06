@@ -11,7 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock react-router-dom
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ projectId: 'test-project-1' }),
-  Link: ({ children, to, ...props }: any) => <a href={to} {...props}>{children}</a>,
+  Link: ({ children, to, ...props }: any) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
 }));
 
 // Mock i18n
@@ -38,12 +42,13 @@ vi.mock('use-debounce', () => ({
 // Mock @tanstack/react-virtual
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: vi.fn((options: any) => ({
-    getVirtualItems: () => Array.from({ length: Math.min(options.count, 10) }, (_, i) => ({
-      index: i,
-      key: i,
-      start: i * 80,
-      end: (i + 1) * 80,
-    })),
+    getVirtualItems: () =>
+      Array.from({ length: Math.min(options.count, 10) }, (_, i) => ({
+        index: i,
+        key: i,
+        start: i * 80,
+        end: (i + 1) * 80,
+      })),
     getTotalSize: () => options.count * 80,
   })),
 }));
@@ -220,24 +225,14 @@ describe('MemoryList Compound Component', () => {
   describe('Toolbar Sub-Component', () => {
     it('should render search input', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
-      render(
-        <MemoryList.Toolbar
-          search=""
-          onSearchChange={vi.fn()}
-        />
-      );
+      render(<MemoryList.Toolbar search="" onSearchChange={vi.fn()} />);
       expect(screen.getByPlaceholderText('Search memories...')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       const onSearchChange = vi.fn();
-      render(
-        <MemoryList.Toolbar
-          search=""
-          onSearchChange={onSearchChange}
-        />
-      );
+      render(<MemoryList.Toolbar search="" onSearchChange={onSearchChange} />);
       const input = screen.getByPlaceholderText('Search memories...');
       fireEvent.change(input, { target: { value: 'Meeting' } });
       expect(onSearchChange).toHaveBeenCalledWith('Meeting');

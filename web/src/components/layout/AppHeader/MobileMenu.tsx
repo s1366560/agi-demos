@@ -4,15 +4,15 @@
  * Mobile menu toggle button for responsive layouts.
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { Menu } from 'lucide-react'
+import { Menu } from 'lucide-react';
 
 export interface MobileMenuProps {
-  onToggle: () => void
-  ariaLabel?: string
+  onToggle: () => void;
+  ariaLabel?: string;
   /** @internal Slot for positioning */
-  slot?: 'left' | 'right'
+  slot?: 'left' | 'right';
 }
 
 export const MobileMenu = React.memo(function MobileMenu({
@@ -20,7 +20,7 @@ export const MobileMenu = React.memo(function MobileMenu({
   ariaLabel = 'Toggle menu',
 }: MobileMenuProps) {
   if (!onToggle) {
-    return null
+    return null;
   }
 
   return (
@@ -32,7 +32,7 @@ export const MobileMenu = React.memo(function MobileMenu({
     >
       <Menu className="w-5 h-5" />
     </button>
-  )
-})
+  );
+});
 
-MobileMenu.displayName = 'AppHeader.MobileMenu'
+MobileMenu.displayName = 'AppHeader.MobileMenu';

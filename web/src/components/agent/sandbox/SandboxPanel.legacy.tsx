@@ -5,22 +5,17 @@
  * including terminal access, remote desktop, and tool execution output viewing.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback } from 'react';
 
-import {
-  CodeOutlined,
-  FileTextOutlined,
-  DesktopOutlined,
-  CloseOutlined,
-} from "@ant-design/icons";
-import { Tabs, Empty, Button, Tooltip, Badge, Space } from "antd";
+import { CodeOutlined, FileTextOutlined, DesktopOutlined, CloseOutlined } from '@ant-design/icons';
+import { Tabs, Empty, Button, Tooltip, Badge, Space } from 'antd';
 
-import { RemoteDesktopViewer } from "./RemoteDesktopViewer";
-import { SandboxControlPanel } from "./SandboxControlPanel";
-import { SandboxOutputViewer, ToolExecution } from "./SandboxOutputViewer";
-import { SandboxTerminal } from "./SandboxTerminal";
+import { RemoteDesktopViewer } from './RemoteDesktopViewer';
+import { SandboxControlPanel } from './SandboxControlPanel';
+import { SandboxOutputViewer, ToolExecution } from './SandboxOutputViewer';
+import { SandboxTerminal } from './SandboxTerminal';
 
-import type { DesktopStatus, TerminalStatus } from "../../../types/agent";
+import type { DesktopStatus, TerminalStatus } from '../../../types/agent';
 
 export interface SandboxPanelProps {
   /** Active sandbox ID */
@@ -34,7 +29,7 @@ export interface SandboxPanelProps {
   /** Called when file is clicked in output */
   onFileClick?: (filePath: string) => void;
   /** Default tab (default: "terminal") */
-  defaultTab?: "terminal" | "output" | "desktop" | "control";
+  defaultTab?: 'terminal' | 'output' | 'desktop' | 'control';
   /** Desktop status information */
   desktopStatus?: DesktopStatus | null;
   /** Terminal status information */
@@ -53,7 +48,7 @@ export interface SandboxPanelProps {
   isTerminalLoading?: boolean;
 }
 
-type TabKey = "terminal" | "output" | "desktop" | "control";
+type TabKey = 'terminal' | 'output' | 'desktop' | 'control';
 
 export function SandboxPanel({
   sandboxId,
@@ -61,7 +56,7 @@ export function SandboxPanel({
   currentTool,
   onClose,
   onFileClick,
-  defaultTab = "terminal",
+  defaultTab = 'terminal',
   desktopStatus = null,
   terminalStatus = null,
   onDesktopStart,
@@ -72,9 +67,7 @@ export function SandboxPanel({
   isTerminalLoading = false,
 }: SandboxPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
-  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(
-    null
-  );
+  const [terminalSessionId, setTerminalSessionId] = useState<string | null>(null);
   const [isTerminalConnected, setIsTerminalConnected] = useState(false);
 
   // Handle terminal connection
@@ -90,14 +83,12 @@ export function SandboxPanel({
   // Tab items
   const tabItems = [
     {
-      key: "terminal" as TabKey,
+      key: 'terminal' as TabKey,
       label: (
         <Space size={4}>
           <CodeOutlined />
           <span>Terminal</span>
-          {isTerminalConnected && (
-            <Badge status="success" className="ml-1" />
-          )}
+          {isTerminalConnected && <Badge status="success" className="ml-1" />}
         </Space>
       ),
       children: sandboxId ? (
@@ -113,22 +104,17 @@ export function SandboxPanel({
         </div>
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No sandbox connected"
-          />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sandbox connected" />
         </div>
       ),
     },
     {
-      key: "desktop" as TabKey,
+      key: 'desktop' as TabKey,
       label: (
         <Space size={4}>
           <DesktopOutlined />
           <span>Desktop</span>
-          {desktopStatus?.running && (
-            <Badge status="success" className="ml-1" />
-          )}
+          {desktopStatus?.running && <Badge status="success" className="ml-1" />}
         </Space>
       ),
       children: sandboxId ? (
@@ -142,15 +128,12 @@ export function SandboxPanel({
         </div>
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No sandbox connected"
-          />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sandbox connected" />
         </div>
       ),
     },
     {
-      key: "control" as TabKey,
+      key: 'control' as TabKey,
       label: (
         <Space size={4}>
           <DesktopOutlined />
@@ -173,25 +156,18 @@ export function SandboxPanel({
         </div>
       ) : (
         <div className="h-full flex items-center justify-center">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="No sandbox connected"
-          />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No sandbox connected" />
         </div>
       ),
     },
     {
-      key: "output" as TabKey,
+      key: 'output' as TabKey,
       label: (
         <Space size={4}>
           <FileTextOutlined />
           <span>Output</span>
           {toolExecutions.length > 0 && (
-            <Badge
-              count={toolExecutions.length}
-              size="small"
-              className="ml-1"
-            />
+            <Badge count={toolExecutions.length} size="small" className="ml-1" />
           )}
         </Space>
       ),
@@ -212,11 +188,7 @@ export function SandboxPanel({
         <div className="flex items-center gap-2">
           <CodeOutlined className="text-slate-500" />
           <span className="font-medium text-slate-700">Sandbox</span>
-          {sandboxId && (
-            <span className="text-xs text-slate-400">
-              ({sandboxId.slice(0, 12)})
-            </span>
-          )}
+          {sandboxId && <span className="text-xs text-slate-400">({sandboxId.slice(0, 12)})</span>}
         </div>
         <div className="flex items-center gap-1">
           {currentTool && (

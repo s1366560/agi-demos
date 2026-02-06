@@ -23,10 +23,17 @@ import { Typography } from 'antd';
 
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
 
-import { LazyAlert, LazyButton, LazyCard, LazyDescriptions, Descriptions, LazySpin, LazyTag } from '@/components/ui/lazyAntd';
+import {
+  LazyAlert,
+  LazyButton,
+  LazyCard,
+  LazyDescriptions,
+  Descriptions,
+  LazySpin,
+  LazyTag,
+} from '@/components/ui/lazyAntd';
 
 import type { TenantAgentConfig } from '@/types/agent';
-
 
 const { Title, Text } = Typography;
 

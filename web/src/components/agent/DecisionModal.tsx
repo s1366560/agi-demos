@@ -23,7 +23,16 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 
-import { Modal, Radio, Input, Button, Tag, Divider, Typography, Alert } from '@/components/ui/lazyAntd';
+import {
+  Modal,
+  Radio,
+  Input,
+  Button,
+  Tag,
+  Divider,
+  Typography,
+  Alert,
+} from '@/components/ui/lazyAntd';
 
 import type { DecisionAskedEventData, DecisionOption } from '../../types/agent';
 
@@ -107,9 +116,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
               <div className="mt-2 space-y-1">
                 {Object.entries(data.context).map(([key, value]) => (
                   <div key={key} className="text-sm">
-                    <Text className="text-blue-600 dark:text-blue-400">
-                      {key}:
-                    </Text>{' '}
+                    <Text className="text-blue-600 dark:text-blue-400">{key}:</Text>{' '}
                     <Text className="text-blue-800 dark:text-blue-200">
                       {JSON.stringify(value)}
                     </Text>
@@ -123,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
             <Alert
               title="超时默认选项"
               description={`如果您未在限定时间内做出决策，系统将自动选择：${
-                data.options.find(opt => opt.id === data.default_option)?.label
+                data.options.find((opt) => opt.id === data.default_option)?.label
               }`}
               type="info"
               showIcon
@@ -167,9 +174,10 @@ export const Option: React.FC<OptionProps> = ({ option, children }) => {
       onClick={() => setSelectedOption(option.id)}
       className={`
         p-4 rounded-lg border-2 cursor-pointer transition-all
-        ${isSelected
-          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-          : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+        ${
+          isSelected
+            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+            : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
         }
       `}
     >
@@ -178,7 +186,9 @@ export const Option: React.FC<OptionProps> = ({ option, children }) => {
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2 flex-1">
               <Radio checked={isSelected} />
-              <Text strong className="text-base">{option.label}</Text>
+              <Text strong className="text-base">
+                {option.label}
+              </Text>
               {option.recommended && (
                 <Tag color="green" className="text-xs">
                   推荐
@@ -241,8 +251,12 @@ interface CustomInputProps {
   children?: React.ReactNode;
 }
 
-export const CustomInput: React.FC<CustomInputProps> = ({ placeholder = '输入您的决策...', children }) => {
-  const { data, selectedOption, setSelectedOption, customInput, setCustomInput } = useDecisionModalContext();
+export const CustomInput: React.FC<CustomInputProps> = ({
+  placeholder = '输入您的决策...',
+  children,
+}) => {
+  const { data, selectedOption, setSelectedOption, customInput, setCustomInput } =
+    useDecisionModalContext();
 
   if (!data.allow_custom) {
     return null;
@@ -255,9 +269,10 @@ export const CustomInput: React.FC<CustomInputProps> = ({ placeholder = '输入�
       onClick={() => setSelectedOption('custom')}
       className={`
         p-4 rounded-lg border-2 cursor-pointer transition-all
-        ${isSelected
-          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-          : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
+        ${
+          isSelected
+            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+            : 'border-slate-200 dark:border-slate-700 hover:border-primary-300'
         }
       `}
     >
@@ -295,7 +310,7 @@ interface FooterProps {
 export const Footer: React.FC<FooterProps> = ({ children }) => {
   const { data, selectedOption, customInput } = useDecisionModalContext();
 
-  const selectedOptionData = data.options.find(opt => opt.id === selectedOption);
+  const selectedOptionData = data.options.find((opt) => opt.id === selectedOption);
   const hasHighRisk = selectedOptionData?.risks && selectedOptionData.risks.length > 0;
 
   return (
@@ -322,13 +337,9 @@ export const Footer: React.FC<FooterProps> = ({ children }) => {
 // DecisionModal (Main Container)
 // ============================================
 
-const DecisionModalImpl: React.FC<DecisionModalProps> = ({
-  data,
-  onRespond,
-  onCancel,
-}) => {
+const DecisionModalImpl: React.FC<DecisionModalProps> = ({ data, onRespond, onCancel }) => {
   const [selectedOption, setSelectedOption] = useState<string | null>(
-    data.options.find(opt => opt.recommended)?.id || data.default_option || null
+    data.options.find((opt) => opt.recommended)?.id || data.default_option || null
   );
   const [customInput, setCustomInput] = useState('');
 
@@ -350,11 +361,9 @@ const DecisionModalImpl: React.FC<DecisionModalProps> = ({
     }
   };
 
-  const isSubmitDisabled =
-    !selectedOption ||
-    (selectedOption === 'custom' && !customInput.trim());
+  const isSubmitDisabled = !selectedOption || (selectedOption === 'custom' && !customInput.trim());
 
-  const selectedOptionData = data.options.find(opt => opt.id === selectedOption);
+  const selectedOptionData = data.options.find((opt) => opt.id === selectedOption);
   const hasHighRisk = selectedOptionData?.risks && selectedOptionData.risks.length > 0;
 
   return (

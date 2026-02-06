@@ -119,9 +119,7 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   config: RetryConfig = {}
 ): Promise<T> {
-  const {
-    maxRetries = DEFAULT_RETRY_CONFIG.maxRetries,
-  } = config;
+  const { maxRetries = DEFAULT_RETRY_CONFIG.maxRetries } = config;
 
   let lastError: Error | undefined;
 
@@ -173,16 +171,8 @@ function parseErrorAsApiError(error: unknown): ApiError {
   // For non-ApiError errors, create a generic one
   // Import parseError dynamically to avoid circular dependency
   if (error instanceof Error) {
-    return new ApiError(
-      'NETWORK' as any,
-      'UNKNOWN_ERROR',
-      error.message
-    );
+    return new ApiError('NETWORK' as any, 'UNKNOWN_ERROR', error.message);
   }
 
-  return new ApiError(
-    'NETWORK' as any,
-    'UNKNOWN_ERROR',
-    String(error)
-  );
+  return new ApiError('NETWORK' as any, 'UNKNOWN_ERROR', String(error));
 }

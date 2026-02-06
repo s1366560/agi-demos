@@ -4,9 +4,9 @@
  * Modal for creating and editing SubAgents with tabbed form layout.
  */
 
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 
-import { useTranslation } from "react-i18next";
+import { useTranslation } from 'react-i18next';
 
 import {
   Modal,
@@ -19,16 +19,12 @@ import {
   Tag,
   message,
   Slider,
-} from "antd";
+} from 'antd';
 
-import { useSubAgentStore, useSubAgentSubmitting } from "../../stores/subagent";
+import { useSubAgentStore, useSubAgentSubmitting } from '../../stores/subagent';
 
-import type {
-  SubAgentResponse,
-  SubAgentCreate,
-  SubAgentUpdate,
-} from "../../types/agent";
-import type { Color } from "antd/es/color-picker";
+import type { SubAgentResponse, SubAgentCreate, SubAgentUpdate } from '../../types/agent';
+import type { Color } from 'antd/es/color-picker';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -42,29 +38,29 @@ interface SubAgentModalProps {
 
 // Available LLM models
 const LLM_MODELS = [
-  { value: "inherit", label: "Inherit from Tenant Config" },
-  { value: "qwen-max", label: "Qwen Max" },
-  { value: "qwen-plus", label: "Qwen Plus" },
-  { value: "qwen-turbo", label: "Qwen Turbo" },
-  { value: "gpt-4", label: "GPT-4" },
-  { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo" },
-  { value: "claude-3-opus", label: "Claude 3 Opus" },
-  { value: "claude-3-sonnet", label: "Claude 3 Sonnet" },
-  { value: "gemini-pro", label: "Gemini Pro" },
-  { value: "deepseek-chat", label: "Deepseek Chat" },
+  { value: 'inherit', label: 'Inherit from Tenant Config' },
+  { value: 'qwen-max', label: 'Qwen Max' },
+  { value: 'qwen-plus', label: 'Qwen Plus' },
+  { value: 'qwen-turbo', label: 'Qwen Turbo' },
+  { value: 'gpt-4', label: 'GPT-4' },
+  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+  { value: 'claude-3-opus', label: 'Claude 3 Opus' },
+  { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
+  { value: 'gemini-pro', label: 'Gemini Pro' },
+  { value: 'deepseek-chat', label: 'Deepseek Chat' },
 ];
 
 // Color presets
 const COLOR_PRESETS = [
-  "#3B82F6", // Blue
-  "#10B981", // Green
-  "#F59E0B", // Yellow
-  "#EF4444", // Red
-  "#8B5CF6", // Purple
-  "#EC4899", // Pink
-  "#06B6D4", // Cyan
-  "#F97316", // Orange
+  '#3B82F6', // Blue
+  '#10B981', // Green
+  '#F59E0B', // Yellow
+  '#EF4444', // Red
+  '#8B5CF6', // Purple
+  '#EC4899', // Pink
+  '#06B6D4', // Cyan
+  '#F97316', // Orange
 ];
 
 export const SubAgentModal: React.FC<SubAgentModalProps> = ({
@@ -75,12 +71,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
-  const [activeTab, setActiveTab] = useState("basic");
+  const [activeTab, setActiveTab] = useState('basic');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [examples, setExamples] = useState<string[]>([]);
-  const [keywordInput, setKeywordInput] = useState("");
-  const [exampleInput, setExampleInput] = useState("");
-  const [selectedColor, setSelectedColor] = useState("#3B82F6");
+  const [keywordInput, setKeywordInput] = useState('');
+  const [exampleInput, setExampleInput] = useState('');
+  const [selectedColor, setSelectedColor] = useState('#3B82F6');
 
   const isSubmitting = useSubAgentSubmitting();
   const { createSubAgent, updateSubAgent } = useSubAgentStore();
@@ -108,8 +104,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           max_tokens: subagent.max_tokens,
           temperature: subagent.temperature,
           max_iterations: subagent.max_iterations,
-          allowed_tools: subagent.allowed_tools.join(", "),
-          allowed_skills: subagent.allowed_skills.join(", "),
+          allowed_tools: subagent.allowed_tools.join(', '),
+          allowed_skills: subagent.allowed_skills.join(', '),
         });
       } else {
         // Create mode - reset form
@@ -117,7 +113,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       }
       // Defer tab update to avoid synchronous setState in effect
       if (openStateChanged) {
-        setTimeout(() => setActiveTab("basic"), 0);
+        setTimeout(() => setActiveTab('basic'), 0);
       }
     }
 
@@ -140,7 +136,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       setTimeout(() => {
         setKeywords([]);
         setExamples([]);
-        setSelectedColor("#3B82F6");
+        setSelectedColor('#3B82F6');
       }, 0);
     }
   }, [isOpen, subagent]);
@@ -154,7 +150,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       const parseList = (str: string | undefined): string[] => {
         if (!str) return [];
         return str
-          .split(",")
+          .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
       };
@@ -166,21 +162,21 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         trigger_description: values.trigger_description,
         trigger_keywords: keywords,
         trigger_examples: examples,
-        model: values.model || "inherit",
+        model: values.model || 'inherit',
         color: selectedColor,
         max_tokens: values.max_tokens || 4096,
         temperature: values.temperature ?? 0.7,
         max_iterations: values.max_iterations || 10,
-        allowed_tools: parseList(values.allowed_tools) || ["*"],
+        allowed_tools: parseList(values.allowed_tools) || ['*'],
         allowed_skills: parseList(values.allowed_skills),
       };
 
       if (isEditMode && subagent) {
         await updateSubAgent(subagent.id, data);
-        message.success(t("tenant.subagents.updateSuccess"));
+        message.success(t('tenant.subagents.updateSuccess'));
       } else {
         await createSubAgent(data as SubAgentCreate);
-        message.success(t("tenant.subagents.createSuccess"));
+        message.success(t('tenant.subagents.createSuccess'));
       }
 
       onSuccess();
@@ -190,14 +186,10 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         // Form validation error - switch to the tab with the error
         const firstErrorField = err.errorFields[0]?.name?.[0];
         if (firstErrorField) {
-          if (
-            ["name", "display_name", "system_prompt", "model"].includes(
-              firstErrorField
-            )
-          ) {
-            setActiveTab("basic");
-          } else if (["trigger_description"].includes(firstErrorField)) {
-            setActiveTab("trigger");
+          if (['name', 'display_name', 'system_prompt', 'model'].includes(firstErrorField)) {
+            setActiveTab('basic');
+          } else if (['trigger_description'].includes(firstErrorField)) {
+            setActiveTab('trigger');
           }
         }
       }
@@ -220,7 +212,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   const handleAddKeyword = useCallback(() => {
     if (keywordInput.trim() && !keywords.includes(keywordInput.trim())) {
       setKeywords([...keywords, keywordInput.trim()]);
-      setKeywordInput("");
+      setKeywordInput('');
     }
   }, [keywordInput, keywords]);
 
@@ -236,7 +228,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   const handleAddExample = useCallback(() => {
     if (exampleInput.trim() && !examples.includes(exampleInput.trim())) {
       setExamples([...examples, exampleInput.trim()]);
-      setExampleInput("");
+      setExampleInput('');
     }
   }, [exampleInput, examples]);
 
@@ -256,21 +248,21 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   // Tab items
   const tabItems = [
     {
-      key: "basic",
-      label: t("tenant.subagents.modal.basicInfo"),
+      key: 'basic',
+      label: t('tenant.subagents.modal.basicInfo'),
       children: (
         <div className="space-y-4">
           <Form.Item
             name="name"
-            label={t("tenant.subagents.modal.name")}
+            label={t('tenant.subagents.modal.name')}
             rules={[
               {
                 required: true,
-                message: t("tenant.subagents.modal.nameRequired"),
+                message: t('tenant.subagents.modal.nameRequired'),
               },
               {
                 pattern: /^[a-z][a-z0-9_]*$/,
-                message: t("tenant.subagents.modal.namePattern"),
+                message: t('tenant.subagents.modal.namePattern'),
               },
             ]}
           >
@@ -279,11 +271,11 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
           <Form.Item
             name="display_name"
-            label={t("tenant.subagents.modal.displayName")}
+            label={t('tenant.subagents.modal.displayName')}
             rules={[
               {
                 required: true,
-                message: t("tenant.subagents.modal.displayNameRequired"),
+                message: t('tenant.subagents.modal.displayNameRequired'),
               },
             ]}
           >
@@ -292,24 +284,21 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
           <Form.Item
             name="system_prompt"
-            label={t("tenant.subagents.modal.systemPrompt")}
+            label={t('tenant.subagents.modal.systemPrompt')}
             rules={[
               {
                 required: true,
-                message: t("tenant.subagents.modal.systemPromptRequired"),
+                message: t('tenant.subagents.modal.systemPromptRequired'),
               },
             ]}
           >
-            <TextArea
-              rows={6}
-              placeholder={t("tenant.subagents.modal.systemPromptPlaceholder")}
-            />
+            <TextArea rows={6} placeholder={t('tenant.subagents.modal.systemPromptPlaceholder')} />
           </Form.Item>
 
           <div className="grid grid-cols-2 gap-4">
             <Form.Item
               name="model"
-              label={t("tenant.subagents.modal.model")}
+              label={t('tenant.subagents.modal.model')}
               initialValue="inherit"
             >
               <Select>
@@ -321,12 +310,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               </Select>
             </Form.Item>
 
-            <Form.Item label={t("tenant.subagents.modal.color")}>
+            <Form.Item label={t('tenant.subagents.modal.color')}>
               <div className="flex items-center gap-2">
                 <ColorPicker
                   value={selectedColor}
                   onChange={handleColorChange}
-                  presets={[{ label: "Presets", colors: COLOR_PRESETS }]}
+                  presets={[{ label: 'Presets', colors: COLOR_PRESETS }]}
                 />
                 <div
                   className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600"
@@ -339,35 +328,33 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       ),
     },
     {
-      key: "trigger",
-      label: t("tenant.subagents.modal.triggerConfig"),
+      key: 'trigger',
+      label: t('tenant.subagents.modal.triggerConfig'),
       children: (
         <div className="space-y-4">
           <Form.Item
             name="trigger_description"
-            label={t("tenant.subagents.modal.triggerDescription")}
+            label={t('tenant.subagents.modal.triggerDescription')}
             rules={[
               {
                 required: true,
-                message: t("tenant.subagents.modal.triggerDescriptionRequired"),
+                message: t('tenant.subagents.modal.triggerDescriptionRequired'),
               },
             ]}
           >
             <TextArea
               rows={3}
-              placeholder={t(
-                "tenant.subagents.modal.triggerDescriptionPlaceholder"
-              )}
+              placeholder={t('tenant.subagents.modal.triggerDescriptionPlaceholder')}
             />
           </Form.Item>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              {t("tenant.subagents.modal.triggerKeywords")}
+              {t('tenant.subagents.modal.triggerKeywords')}
             </label>
             <div className="flex gap-2 mb-2">
               <Input
-                placeholder={t("tenant.subagents.modal.addKeyword")}
+                placeholder={t('tenant.subagents.modal.addKeyword')}
                 value={keywordInput}
                 onChange={(e) => setKeywordInput(e.target.value)}
                 onPressEnter={handleAddKeyword}
@@ -377,7 +364,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 onClick={handleAddKeyword}
                 className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
               >
-                {t("common.add")}
+                {t('common.add')}
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -393,7 +380,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               ))}
               {keywords.length === 0 && (
                 <span className="text-sm text-slate-400">
-                  {t("tenant.subagents.modal.noKeywords")}
+                  {t('tenant.subagents.modal.noKeywords')}
                 </span>
               )}
             </div>
@@ -401,11 +388,11 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              {t("tenant.subagents.modal.triggerExamples")}
+              {t('tenant.subagents.modal.triggerExamples')}
             </label>
             <div className="flex gap-2 mb-2">
               <Input
-                placeholder={t("tenant.subagents.modal.addExample")}
+                placeholder={t('tenant.subagents.modal.addExample')}
                 value={exampleInput}
                 onChange={(e) => setExampleInput(e.target.value)}
                 onPressEnter={handleAddExample}
@@ -415,7 +402,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 onClick={handleAddExample}
                 className="px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
               >
-                {t("common.add")}
+                {t('common.add')}
               </button>
             </div>
             <div className="space-y-1">
@@ -430,15 +417,13 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                     onClick={() => handleRemoveExample(example)}
                     className="text-slate-400 hover:text-red-500 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-lg">
-                      close
-                    </span>
+                    <span className="material-symbols-outlined text-lg">close</span>
                   </button>
                 </div>
               ))}
               {examples.length === 0 && (
                 <span className="text-sm text-slate-400">
-                  {t("tenant.subagents.modal.noExamples")}
+                  {t('tenant.subagents.modal.noExamples')}
                 </span>
               )}
             </div>
@@ -447,14 +432,14 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       ),
     },
     {
-      key: "permissions",
-      label: t("tenant.subagents.modal.permissions"),
+      key: 'permissions',
+      label: t('tenant.subagents.modal.permissions'),
       children: (
         <div className="space-y-4">
           <Form.Item
             name="allowed_tools"
-            label={t("tenant.subagents.modal.allowedTools")}
-            tooltip={t("tenant.subagents.modal.allowedToolsTooltip")}
+            label={t('tenant.subagents.modal.allowedTools')}
+            tooltip={t('tenant.subagents.modal.allowedToolsTooltip')}
             initialValue="*"
           >
             <Input placeholder="* (all) or tool1, tool2, tool3" />
@@ -462,8 +447,8 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
           <Form.Item
             name="allowed_skills"
-            label={t("tenant.subagents.modal.allowedSkills")}
-            tooltip={t("tenant.subagents.modal.allowedSkillsTooltip")}
+            label={t('tenant.subagents.modal.allowedSkills')}
+            tooltip={t('tenant.subagents.modal.allowedSkillsTooltip')}
           >
             <Input placeholder="skill1, skill2 (leave empty for none)" />
           </Form.Item>
@@ -471,7 +456,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           <div className="grid grid-cols-3 gap-4">
             <Form.Item
               name="max_tokens"
-              label={t("tenant.subagents.modal.maxTokens")}
+              label={t('tenant.subagents.modal.maxTokens')}
               initialValue={4096}
             >
               <InputNumber min={100} max={32000} className="w-full" />
@@ -479,7 +464,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
             <Form.Item
               name="temperature"
-              label={t("tenant.subagents.modal.temperature")}
+              label={t('tenant.subagents.modal.temperature')}
               initialValue={0.7}
             >
               <Slider min={0} max={2} step={0.1} />
@@ -487,7 +472,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
             <Form.Item
               name="max_iterations"
-              label={t("tenant.subagents.modal.maxIterations")}
+              label={t('tenant.subagents.modal.maxIterations')}
               initialValue={10}
             >
               <InputNumber min={1} max={50} className="w-full" />
@@ -501,15 +486,13 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   return (
     <Modal
       title={
-        isEditMode
-          ? t("tenant.subagents.modal.editTitle")
-          : t("tenant.subagents.modal.createTitle")
+        isEditMode ? t('tenant.subagents.modal.editTitle') : t('tenant.subagents.modal.createTitle')
       }
       open={isOpen}
       onCancel={onClose}
       onOk={handleSubmit}
-      okText={isEditMode ? t("common.save") : t("common.create")}
-      cancelText={t("common.cancel")}
+      okText={isEditMode ? t('common.save') : t('common.create')}
+      cancelText={t('common.cancel')}
       confirmLoading={isSubmitting}
       width={700}
       destroyOnHidden

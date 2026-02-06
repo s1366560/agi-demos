@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 
-import { 
-  LayoutDashboard, 
-  Building2, 
-  Folder, 
-  Brain, 
-  Network, 
-  Settings, 
-  LogOut, 
-  Menu, 
+import {
+  LayoutDashboard,
+  Building2,
+  Folder,
+  Brain,
+  Network,
+  Settings,
+  LogOut,
+  Menu,
   X,
   ChevronDown,
   User,
-  Bell
+  Bell,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
@@ -28,11 +28,11 @@ interface ResponsiveLayoutProps {
 export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   children,
   activeTab,
-  onTabChange
+  onTabChange,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  
+
   const logout = useAuthStore((state) => state.logout);
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -54,7 +54,7 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   const NavItem = ({ item, isMobile = false }: { item: any; isMobile?: boolean }) => {
     const Icon = item.icon;
     const isActive = activeTab === item.id;
-    
+
     return (
       <button
         onClick={() => {
@@ -82,12 +82,12 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             <Brain className="h-6 w-6 text-blue-600" />
             <span className="text-lg font-bold text-gray-900">VIP Memory</span>
           </div>
-          
+
           <div className="flex items-center space-x-3">
             <button className="p-2 text-gray-400 hover:text-gray-600">
               <Bell className="h-5 w-5" />
             </button>
-            <button 
+            <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2 text-gray-400 hover:text-gray-600"
             >
@@ -102,9 +102,7 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             <div className="flex items-center justify-between">
               <div className="text-sm">
                 <p className="text-blue-600 font-medium">{currentTenant.name}</p>
-                {currentProject && (
-                  <p className="text-blue-500">{currentProject.name}</p>
-                )}
+                {currentProject && <p className="text-blue-500">{currentProject.name}</p>}
               </div>
               <ChevronDown className="h-4 w-4 text-blue-600" />
             </div>
@@ -114,26 +112,32 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div
+            className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
                 <Brain className="h-6 w-6 text-blue-600" />
                 <span className="text-lg font-bold text-gray-900">VIP Memory</span>
               </div>
-              <button 
+              <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="p-2 text-gray-400 hover:text-gray-600"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            
+
             <nav className="flex-1 p-4 space-y-2">
               {navigationItems.map((item) => (
                 <NavItem key={item.id} item={item} isMobile={true} />
               ))}
-              
+
               <div className="border-t border-gray-200 pt-4 mt-4">
                 <button
                   onClick={handleLogout}
@@ -155,12 +159,12 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             <Brain className="h-8 w-8 text-white" />
             <span className="ml-2 text-xl font-bold text-white">VIP Memory</span>
           </div>
-          
+
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navigationItems.map((item) => (
               <NavItem key={item.id} item={item} />
             ))}
-            
+
             <div className="border-t border-gray-200 pt-4 mt-4">
               <button
                 onClick={handleLogout}
@@ -195,17 +199,17 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           <div className="hidden lg:flex lg:items-center lg:justify-between lg:h-16 lg:px-6 lg:bg-white lg:border-b lg:border-gray-200">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-semibold text-gray-900">
-                {navigationItems.find(item => item.id === activeTab)?.label || 'VIP Memory'}
+                {navigationItems.find((item) => item.id === activeTab)?.label || 'VIP Memory'}
               </h1>
             </div>
-            
+
             <div className="flex items-center space-x-4">
               <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full">
                 <Bell className="h-5 w-5" />
               </button>
-              
+
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   className="flex items-center space-x-2 p-2 text-gray-600 hover:text-gray-900 rounded-lg"
                 >
@@ -214,7 +218,7 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
                   </div>
                   <ChevronDown className="h-4 w-4" />
                 </button>
-                
+
                 {isUserMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                     <div className="py-1">
@@ -246,9 +250,7 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           </div>
 
           {/* Content */}
-          <div className="p-4 lg:p-6">
-            {children}
-          </div>
+          <div className="p-4 lg:p-6">{children}</div>
         </div>
       </div>
     </div>

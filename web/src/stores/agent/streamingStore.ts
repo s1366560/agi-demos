@@ -64,117 +64,118 @@ export const initialState = {
  * Zustand store for managing streaming state.
  */
 export const useStreamingStore = create<StreamingState>()(
-  devtools((set) => ({
-  ...initialState,
+  devtools(
+    (set) => ({
+      ...initialState,
 
-  /**
-   * Start streaming
-   *
-   * Sets streaming to true and optionally sets the stream status.
-   * Clears draft content and text streaming flag.
-   *
-   * @param status - Optional stream status (default: 'connecting')
-   */
-  startStreaming: (status: StreamStatus = 'connecting') => {
-    set({
-      isStreaming: true,
-      streamStatus: status,
-      assistantDraftContent: '',
-      isTextStreaming: false,
-    });
-  },
+      /**
+       * Start streaming
+       *
+       * Sets streaming to true and optionally sets the stream status.
+       * Clears draft content and text streaming flag.
+       *
+       * @param status - Optional stream status (default: 'connecting')
+       */
+      startStreaming: (status: StreamStatus = 'connecting') => {
+        set({
+          isStreaming: true,
+          streamStatus: status,
+          assistantDraftContent: '',
+          isTextStreaming: false,
+        });
+      },
 
-  /**
-   * Stop streaming
-   *
-   * Resets all streaming state to initial values.
-   */
-  stopStreaming: () => {
-    set({
-      isStreaming: false,
-      streamStatus: 'idle',
-      assistantDraftContent: '',
-      isTextStreaming: false,
-    });
-  },
+      /**
+       * Stop streaming
+       *
+       * Resets all streaming state to initial values.
+       */
+      stopStreaming: () => {
+        set({
+          isStreaming: false,
+          streamStatus: 'idle',
+          assistantDraftContent: '',
+          isTextStreaming: false,
+        });
+      },
 
-  /**
-   * Set stream status
-   *
-   * Updates the stream status without changing other state.
-   *
-   * @param status - The new stream status
-   */
-  setStreamStatus: (status: StreamStatus) => {
-    set({ streamStatus: status });
-  },
+      /**
+       * Set stream status
+       *
+       * Updates the stream status without changing other state.
+       *
+       * @param status - The new stream status
+       */
+      setStreamStatus: (status: StreamStatus) => {
+        set({ streamStatus: status });
+      },
 
-  /**
-   * Start typewriter effect
-   *
-   * Clears draft content and sets text streaming to true.
-   */
-  onTextStart: () => {
-    set({
-      assistantDraftContent: '',
-      isTextStreaming: true,
-    });
-  },
+      /**
+       * Start typewriter effect
+       *
+       * Clears draft content and sets text streaming to true.
+       */
+      onTextStart: () => {
+        set({
+          assistantDraftContent: '',
+          isTextStreaming: true,
+        });
+      },
 
-  /**
-   * Append text delta to draft content
-   *
-   * Appends the delta to the current draft content.
-   *
-   * @param delta - The text delta to append
-   */
-  onTextDelta: (delta: string) => {
-    set((state) => ({
-      assistantDraftContent: state.assistantDraftContent + delta,
-    }));
-  },
+      /**
+       * Append text delta to draft content
+       *
+       * Appends the delta to the current draft content.
+       *
+       * @param delta - The text delta to append
+       */
+      onTextDelta: (delta: string) => {
+        set((state) => ({
+          assistantDraftContent: state.assistantDraftContent + delta,
+        }));
+      },
 
-  /**
-   * End typewriter effect
-   *
-   * Optionally sets final content and sets text streaming to false.
-   * Empty string fullText is treated as "use existing content".
-   *
-   * @param fullText - Optional final text content
-   */
-  onTextEnd: (fullText?: string) => {
-    set((state) => ({
-      assistantDraftContent: fullText || state.assistantDraftContent,
-      isTextStreaming: false,
-    }));
-  },
+      /**
+       * End typewriter effect
+       *
+       * Optionally sets final content and sets text streaming to false.
+       * Empty string fullText is treated as "use existing content".
+       *
+       * @param fullText - Optional final text content
+       */
+      onTextEnd: (fullText?: string) => {
+        set((state) => ({
+          assistantDraftContent: fullText || state.assistantDraftContent,
+          isTextStreaming: false,
+        }));
+      },
 
-  /**
-   * Clear draft content
-   *
-   * Clears draft content and sets text streaming to false.
-   */
-  clearDraft: () => {
-    set({
-      assistantDraftContent: '',
-      isTextStreaming: false,
-    });
-  },
+      /**
+       * Clear draft content
+       *
+       * Clears draft content and sets text streaming to false.
+       */
+      clearDraft: () => {
+        set({
+          assistantDraftContent: '',
+          isTextStreaming: false,
+        });
+      },
 
-  /**
-   * Reset store to initial state
-   *
-   * Completely resets all state in this store.
-   */
-  reset: () => {
-    set(initialState);
-  },
-}),
-{
-  name: 'StreamingStore',
-  enabled: import.meta.env.DEV,
-}
-)
+      /**
+       * Reset store to initial state
+       *
+       * Completely resets all state in this store.
+       */
+      reset: () => {
+        set(initialState);
+      },
+    }),
+    {
+      name: 'StreamingStore',
+      enabled: import.meta.env.DEV,
+    }
+  )
 );
 
 /**

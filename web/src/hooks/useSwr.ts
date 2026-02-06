@@ -23,12 +23,18 @@
  * ```
  */
 
-import useSWR, { SWRConfiguration, mutate as globalMutate } from 'swr'
+import useSWR, { SWRConfiguration, mutate as globalMutate } from 'swr';
 
-import { schemaAPI } from '@/services/api'
-import { httpClient } from '@/services/client/httpClient'
+import { schemaAPI } from '@/services/api';
+import { httpClient } from '@/services/client/httpClient';
 
-import type { MemoryListResponse, Project, SchemaEntityType, SchemaEdgeType, EdgeMapping } from '@/types/memory'
+import type {
+  MemoryListResponse,
+  Project,
+  SchemaEntityType,
+  SchemaEdgeType,
+  EdgeMapping,
+} from '@/types/memory';
 
 /**
  * SWR Configuration Options
@@ -46,7 +52,7 @@ const swrConfig: SWRConfiguration = {
   revalidateOnReconnect: false,
   errorRetryCount: 3,
   errorRetryInterval: 5000,
-}
+};
 
 /**
  * Generate SWR cache key for API requests
@@ -65,9 +71,9 @@ function generateCacheKey(
   params: Record<string, unknown> = {}
 ): [string, Record<string, unknown>] | null {
   if (!projectId) {
-    return null
+    return null;
   }
-  return [base, { ...params, project_id: projectId }]
+  return [base, { ...params, project_id: projectId }];
 }
 
 /**
@@ -75,18 +81,18 @@ function generateCacheKey(
  */
 export interface SwrHookResponse<T> {
   /** The fetched data */
-  data: T | undefined
+  data: T | undefined;
   /** Error object if request failed */
-  error: Error | undefined
+  error: Error | undefined;
   /** Whether the request is in progress */
-  isLoading: boolean
+  isLoading: boolean;
   /** Whether a revalidation is in progress */
-  isValidating: boolean
+  isValidating: boolean;
   /** Function to manually revalidate or mutate the cache */
   mutate: (
     data?: T | Promise<T> | MutatorCallback<T>,
     shouldRevalidate?: boolean
-  ) => Promise<T | undefined>
+  ) => Promise<T | undefined>;
 }
 
 /**
@@ -113,13 +119,16 @@ export function useProjectStats(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): SwrHookResponse<ProjectStats> {
-  const cacheKey = generateCacheKey(`/projects/${projectId}/stats`, projectId ? projectId.toString() : null)
+  const cacheKey = generateCacheKey(
+    `/projects/${projectId}/stats`,
+    projectId ? projectId.toString() : null
+  );
 
   const swrResponse = useSWR<ProjectStats>(
     cacheKey,
     () => httpClient.get<ProjectStats>(`/projects/${projectId}/stats`),
     { ...swrConfig, ...config }
-  )
+  );
 
   return {
     data: swrResponse.data,
@@ -127,7 +136,7 @@ export function useProjectStats(
     isLoading: swrResponse.isLoading,
     isValidating: swrResponse.isValidating,
     mutate: swrResponse.mutate,
-  }
+  };
 }
 
 /**
@@ -158,13 +167,16 @@ export function useMemories(
   params: { page?: number; page_size?: number; [key: string]: unknown } = {},
   config?: SWRConfiguration
 ): SwrHookResponse<MemoryListResponse> {
-  const cacheKey = generateCacheKey('/memories/', projectId, params)
+  const cacheKey = generateCacheKey('/memories/', projectId, params);
 
   const swrResponse = useSWR<MemoryListResponse>(
     cacheKey,
-    () => httpClient.get<MemoryListResponse>('/memories/', { params: { ...params, project_id: projectId } }),
+    () =>
+      httpClient.get<MemoryListResponse>('/memories/', {
+        params: { ...params, project_id: projectId },
+      }),
     { ...swrConfig, ...config }
-  )
+  );
 
   return {
     data: swrResponse.data,
@@ -172,7 +184,7 @@ export function useMemories(
     isLoading: swrResponse.isLoading,
     isValidating: swrResponse.isValidating,
     mutate: swrResponse.mutate,
-  }
+  };
 }
 
 /**
@@ -198,13 +210,13 @@ export function useProject(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): SwrHookResponse<Project> {
-  const cacheKey = projectId ? `/projects/${projectId}` : null
+  const cacheKey = projectId ? `/projects/${projectId}` : null;
 
   const swrResponse = useSWR<Project>(
     cacheKey,
     () => httpClient.get<Project>(`/projects/${projectId}`),
     { ...swrConfig, ...config }
-  )
+  );
 
   return {
     data: swrResponse.data,
@@ -212,7 +224,7 @@ export function useProject(
     isLoading: swrResponse.isLoading,
     isValidating: swrResponse.isValidating,
     mutate: swrResponse.mutate,
-  }
+  };
 }
 
 /**
@@ -228,13 +240,13 @@ export function useEntityTypes(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): SwrHookResponse<SchemaEntityType[]> {
-  const cacheKey = projectId ? `/projects/${projectId}/schema/entities` : null
+  const cacheKey = projectId ? `/projects/${projectId}/schema/entities` : null;
 
   const swrResponse = useSWR<SchemaEntityType[]>(
     cacheKey,
     () => schemaAPI.listEntityTypes(projectId!),
     { ...swrConfig, ...config }
-  )
+  );
 
   return {
     data: swrResponse.data,
@@ -242,7 +254,7 @@ export function useEntityTypes(
     isLoading: swrResponse.isLoading,
     isValidating: swrResponse.isValidating,
     mutate: swrResponse.mutate,
-  }
+  };
 }
 
 /**
@@ -258,13 +270,13 @@ export function useEdgeTypes(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): SwrHookResponse<SchemaEdgeType[]> {
-  const cacheKey = projectId ? `/projects/${projectId}/schema/edges` : null
+  const cacheKey = projectId ? `/projects/${projectId}/schema/edges` : null;
 
   const swrResponse = useSWR<SchemaEdgeType[]>(
     cacheKey,
     () => schemaAPI.listEdgeTypes(projectId!),
     { ...swrConfig, ...config }
-  )
+  );
 
   return {
     data: swrResponse.data,
@@ -272,7 +284,7 @@ export function useEdgeTypes(
     isLoading: swrResponse.isLoading,
     isValidating: swrResponse.isValidating,
     mutate: swrResponse.mutate,
-  }
+  };
 }
 
 /**
@@ -288,13 +300,12 @@ export function useEdgeMaps(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): SwrHookResponse<EdgeMapping[]> {
-  const cacheKey = projectId ? `/projects/${projectId}/schema/edge-maps` : null
+  const cacheKey = projectId ? `/projects/${projectId}/schema/edge-maps` : null;
 
-  const swrResponse = useSWR<EdgeMapping[]>(
-    cacheKey,
-    () => schemaAPI.listEdgeMaps(projectId!),
-    { ...swrConfig, ...config }
-  )
+  const swrResponse = useSWR<EdgeMapping[]>(cacheKey, () => schemaAPI.listEdgeMaps(projectId!), {
+    ...swrConfig,
+    ...config,
+  });
 
   return {
     data: swrResponse.data,
@@ -302,7 +313,7 @@ export function useEdgeMaps(
     isLoading: swrResponse.isLoading,
     isValidating: swrResponse.isValidating,
     mutate: swrResponse.mutate,
-  }
+  };
 }
 
 /**
@@ -319,21 +330,25 @@ export function useSchemaData(
   projectId: string | null | undefined,
   config?: SWRConfiguration
 ): {
-  entities: SchemaEntityType[] | undefined
-  edges: SchemaEdgeType[] | undefined
-  mappings: EdgeMapping[] | undefined
-  isLoading: boolean
-  isValidating: boolean
-  error: Error | undefined
+  entities: SchemaEntityType[] | undefined;
+  edges: SchemaEdgeType[] | undefined;
+  mappings: EdgeMapping[] | undefined;
+  isLoading: boolean;
+  isValidating: boolean;
+  error: Error | undefined;
   mutate: {
-    entities: (data?: SchemaEntityType[] | Promise<SchemaEntityType[]>) => Promise<SchemaEntityType[] | undefined>
-    edges: (data?: SchemaEdgeType[] | Promise<SchemaEdgeType[]>) => Promise<SchemaEdgeType[] | undefined>
-    mappings: (data?: EdgeMapping[] | Promise<EdgeMapping[]>) => Promise<EdgeMapping[] | undefined>
-  }
+    entities: (
+      data?: SchemaEntityType[] | Promise<SchemaEntityType[]>
+    ) => Promise<SchemaEntityType[] | undefined>;
+    edges: (
+      data?: SchemaEdgeType[] | Promise<SchemaEdgeType[]>
+    ) => Promise<SchemaEdgeType[] | undefined>;
+    mappings: (data?: EdgeMapping[] | Promise<EdgeMapping[]>) => Promise<EdgeMapping[] | undefined>;
+  };
 } {
-  const entities = useEntityTypes(projectId, config)
-  const edges = useEdgeTypes(projectId, config)
-  const mappings = useEdgeMaps(projectId, config)
+  const entities = useEntityTypes(projectId, config);
+  const edges = useEdgeTypes(projectId, config);
+  const mappings = useEdgeMaps(projectId, config);
 
   return {
     entities: entities.data,
@@ -347,7 +362,7 @@ export function useSchemaData(
       edges: edges.mutate,
       mappings: mappings.mutate,
     },
-  }
+  };
 }
 
 /**
@@ -368,45 +383,45 @@ export const swrUtils = {
    * Revalidate a specific cache key
    */
   revalidateKey: (key: string) => globalMutate(key),
-}
+};
 
 // Re-export types for convenience
-export type { MemoryListResponse, Project } from '@/types/memory'
+export type { MemoryListResponse, Project } from '@/types/memory';
 
 /**
  * Project Statistics Response
  */
 export interface ProjectStats {
-  memory_count: number
-  storage_used: number
-  storage_limit: number
-  active_nodes: number
-  collaborators: number
+  memory_count: number;
+  storage_used: number;
+  storage_limit: number;
+  active_nodes: number;
+  collaborators: number;
 }
 
 /**
  * Schema Types Response
  */
 export interface EntityTypesResponse {
-  entities: SchemaEntityType[]
-  total: number
+  entities: SchemaEntityType[];
+  total: number;
 }
 
 export interface EdgeTypesResponse {
-  edges: SchemaEdgeType[]
-  total: number
+  edges: SchemaEdgeType[];
+  total: number;
 }
 
 export interface EdgeMapsResponse {
-  mappings: EdgeMapping[]
-  total: number
+  mappings: EdgeMapping[];
+  total: number;
 }
 
 // Re-export schema types from memory.ts for convenience
-export type { SchemaEntityType as EntityType, SchemaEdgeType as EdgeType, EdgeMapping as EdgeMap }
+export type { SchemaEntityType as EntityType, SchemaEdgeType as EdgeType, EdgeMapping as EdgeMap };
 
 /**
  * SWR Mutator Callback Type
  * Re-exported for convenience
  */
-export type MutatorCallback<T> = (current?: T) => T
+export type MutatorCallback<T> = (current?: T) => T;

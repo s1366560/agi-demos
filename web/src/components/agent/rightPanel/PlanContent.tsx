@@ -20,8 +20,7 @@ import { LazyEmpty, Empty, LazyAlert, LazySpin } from '@/components/ui/lazyAntd'
 
 import { PlanEditor } from '../PlanEditor';
 
-
-import type { WorkPlan , ExecutionPlan } from '@/types/agent';
+import type { WorkPlan, ExecutionPlan } from '@/types/agent';
 
 export interface PlanContentProps {
   /** Current work plan */
@@ -33,7 +32,15 @@ export interface PlanContentProps {
 /**
  * Individual plan step component
  */
-const PlanStep = ({ step, index, currentStep }: { step: any; index: number; currentStep: number }) => {
+const PlanStep = ({
+  step,
+  index,
+  currentStep,
+}: {
+  step: any;
+  index: number;
+  currentStep: number;
+}) => {
   const isCompleted = index < currentStep;
   const isCurrent = index === currentStep;
 
@@ -41,24 +48,28 @@ const PlanStep = ({ step, index, currentStep }: { step: any; index: number; curr
     <div
       className={`
         p-3 rounded-xl border transition-all
-        ${isCompleted
-          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-          : isCurrent
-            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 shadow-sm'
-            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+        ${
+          isCompleted
+            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+            : isCurrent
+              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 shadow-sm'
+              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
         }
       `}
     >
       <div className="flex items-start gap-3">
-        <div className={`
+        <div
+          className={`
           w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0
-          ${isCompleted
-            ? 'bg-emerald-500 text-white'
-            : isCurrent
-              ? 'bg-blue-500 text-white animate-pulse'
-              : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+          ${
+            isCompleted
+              ? 'bg-emerald-500 text-white'
+              : isCurrent
+                ? 'bg-blue-500 text-white animate-pulse'
+                : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
           }
-        `}>
+        `}
+        >
           {isCompleted ? (
             <CheckCircle2 size={14} />
           ) : isCurrent ? (
@@ -68,26 +79,25 @@ const PlanStep = ({ step, index, currentStep }: { step: any; index: number; curr
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`
+          <p
+            className={`
             text-sm font-medium
-            ${isCompleted
-              ? 'text-emerald-700 dark:text-emerald-400'
-              : isCurrent
-                ? 'text-blue-700 dark:text-blue-400'
-                : 'text-slate-600 dark:text-slate-400'
+            ${
+              isCompleted
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : isCurrent
+                  ? 'text-blue-700 dark:text-blue-400'
+                  : 'text-slate-600 dark:text-slate-400'
             }
-          `}>
+          `}
+          >
             {step.description}
           </p>
           {isCurrent && step.thought_prompt && (
-            <p className="text-xs text-slate-500 mt-1">
-              {step.thought_prompt}
-            </p>
+            <p className="text-xs text-slate-500 mt-1">{step.thought_prompt}</p>
           )}
           {step.expected_output && (
-            <p className="text-xs text-slate-400 mt-1">
-              Expected: {step.expected_output}
-            </p>
+            <p className="text-xs text-slate-400 mt-1">Expected: {step.expected_output}</p>
           )}
         </div>
       </div>
@@ -202,7 +212,7 @@ export const PlanContent = ({ workPlan, executionPlan }: PlanContentProps) => {
   const plan = executionPlan || workPlan;
   const steps = plan?.steps || [];
   const currentStep = (plan as any)?.current_step_index || 0;
-  const progress = steps.length > 0 ? ((currentStep) / steps.length) * 100 : 0;
+  const progress = steps.length > 0 ? (currentStep / steps.length) * 100 : 0;
 
   return (
     <div className="p-4">
@@ -222,12 +232,7 @@ export const PlanContent = ({ workPlan, executionPlan }: PlanContentProps) => {
       {/* Steps */}
       <div className="space-y-3">
         {steps.map((step: any, index: number) => (
-          <PlanStep
-            key={index}
-            step={step}
-            index={index}
-            currentStep={currentStep}
-          />
+          <PlanStep key={index} step={step} index={index} currentStep={currentStep} />
         ))}
       </div>
 

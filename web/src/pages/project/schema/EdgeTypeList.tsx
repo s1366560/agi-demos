@@ -16,19 +16,19 @@ import React, { useCallback, useEffect, useState, useMemo, useContext } from 're
 import { useParams } from 'react-router-dom';
 
 import {
-    Plus,
-    Search,
-    Filter,
-    Download,
-    Code,
-    Info,
-    Pencil,
-    Share2,
-    Trash2,
-    X,
-    FileEdit,
-    ChevronDown,
-    History
+  Plus,
+  Search,
+  Filter,
+  Download,
+  Code,
+  Info,
+  Pencil,
+  Share2,
+  Trash2,
+  X,
+  FileEdit,
+  ChevronDown,
+  History,
 } from 'lucide-react';
 
 import { schemaAPI } from '../../../services/api';
@@ -308,33 +308,42 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     }
   }, [projectId, editingEdge, formData, attributes, loadData]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    if (!confirm(TEXTS.deleteConfirm)) return;
-    if (!projectId) return;
-    try {
-      await schemaAPI.deleteEdgeType(projectId, id);
-      if (selectedEdgeId === id) {
-        setSelectedEdgeId(null);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      if (!confirm(TEXTS.deleteConfirm)) return;
+      if (!projectId) return;
+      try {
+        await schemaAPI.deleteEdgeType(projectId, id);
+        if (selectedEdgeId === id) {
+          setSelectedEdgeId(null);
+        }
+        loadData();
+      } catch (error) {
+        console.error('Failed to delete:', error);
       }
-      loadData();
-    } catch (error) {
-      console.error('Failed to delete:', error);
-    }
-  }, [projectId, selectedEdgeId, loadData]);
+    },
+    [projectId, selectedEdgeId, loadData]
+  );
 
   const addAttribute = useCallback(() => {
     setAttributes([...attributes, { name: '', type: 'String', description: '', required: false }]);
   }, [attributes]);
 
-  const updateAttribute = useCallback((index: number, field: string, value: any) => {
-    const newAttrs = [...attributes];
-    newAttrs[index] = { ...newAttrs[index], [field]: value };
-    setAttributes(newAttrs);
-  }, [attributes]);
+  const updateAttribute = useCallback(
+    (index: number, field: string, value: any) => {
+      const newAttrs = [...attributes];
+      newAttrs[index] = { ...newAttrs[index], [field]: value };
+      setAttributes(newAttrs);
+    },
+    [attributes]
+  );
 
-  const removeAttribute = useCallback((index: number) => {
-    setAttributes(attributes.filter((_, i) => i !== index));
-  }, [attributes]);
+  const removeAttribute = useCallback(
+    (index: number) => {
+      setAttributes(attributes.filter((_, i) => i !== index));
+    },
+    [attributes]
+  );
 
   // Filter edges
   const filteredEdges = useMemo(() => {
@@ -343,7 +352,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
     return edges.filter(
       (e) =>
         e.name.toLowerCase().includes(lowerSearch) ||
-        (e.description?.toLowerCase().includes(lowerSearch))
+        e.description?.toLowerCase().includes(lowerSearch)
     );
   }, [edges, search]);
 
@@ -380,7 +389,12 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
 
   return (
     <EdgeTypeListContext.Provider value={{ state, actions }}>
-      <div className={className || 'flex flex-col h-full bg-slate-50 dark:bg-[#111521] text-slate-900 dark:text-white overflow-hidden'}>
+      <div
+        className={
+          className ||
+          'flex flex-col h-full bg-slate-50 dark:bg-[#111521] text-slate-900 dark:text-white overflow-hidden'
+        }
+      >
         <EdgeTypeList.Header />
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-[#111521] p-8">
           <div className="max-w-[1600px] mx-auto flex flex-col bg-white dark:bg-[#1e2128] rounded-xl border border-slate-200 dark:border-[#2d3748] overflow-hidden shadow-xl min-h-[600px]">
@@ -425,11 +439,17 @@ const HeaderInternal: React.FC<HeaderProps> = () => {
       <div className="max-w-[1600px] mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap justify-between items-end gap-4">
           <div className="flex flex-col gap-2 max-w-2xl">
-            <h1 className="text-slate-900 dark:text-white text-3xl font-black leading-tight tracking-tight">{TEXTS.title}</h1>
-            <p className="text-slate-500 dark:text-[#95a0c6] text-base font-normal">{TEXTS.subtitle}</p>
+            <h1 className="text-slate-900 dark:text-white text-3xl font-black leading-tight tracking-tight">
+              {TEXTS.title}
+            </h1>
+            <p className="text-slate-500 dark:text-[#95a0c6] text-base font-normal">
+              {TEXTS.subtitle}
+            </p>
           </div>
           <div className="flex gap-2">
-            <span className="px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-500/20">{TEXTS.systemActive}</span>
+            <span className="px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-500/20">
+              {TEXTS.systemActive}
+            </span>
           </div>
         </div>
       </div>
@@ -475,10 +495,16 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
           />
         </div>
         <div className="h-6 w-px bg-slate-200 dark:bg-[#2d3748] mx-2"></div>
-        <button className="p-2 text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors" title="Filter">
+        <button
+          className="p-2 text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors"
+          title="Filter"
+        >
           <Filter className="w-5 h-5" />
         </button>
-        <button className="p-2 text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors" title="Download Schema">
+        <button
+          className="p-2 text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/5 rounded-lg transition-colors"
+          title="Download Schema"
+        >
           <Download className="w-5 h-5" />
         </button>
       </div>
@@ -549,50 +575,57 @@ interface MasterPaneProps {
   onSelect: (id: string | null) => void;
 }
 
-const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(({ edges, selectedEdgeId, onSelect }) => {
-  if (edges.length === 0) {
-    return <EdgeTypeList.Empty />;
-  }
+const MasterPaneInternal: React.FC<MasterPaneProps> = React.memo(
+  ({ edges, selectedEdgeId, onSelect }) => {
+    if (edges.length === 0) {
+      return <EdgeTypeList.Empty />;
+    }
 
-  return (
-    <div className="w-1/3 border-r border-slate-200 dark:border-[#2d3748] overflow-y-auto bg-slate-50 dark:bg-[#151820]">
-      {edges.map((edge) => (
-        <div
-          key={edge.id}
-          onClick={() => onSelect(edge.id)}
-          className={`p-4 border-b border-slate-200 dark:border-[#2d3748] cursor-pointer transition-colors border-l-4 ${
-            selectedEdgeId === edge.id
-              ? 'bg-blue-50 dark:bg-[#193db3]/10 border-l-blue-600 dark:border-l-[#193db3] hover:bg-blue-100 dark:hover:bg-[#193db3]/20'
-              : 'border-l-transparent hover:bg-slate-100 dark:hover:bg-white/5'
-          }`}
-        >
-          <div className="flex justify-between items-start mb-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-slate-900 dark:text-white font-semibold text-sm">{edge.name}</h3>
-              {edge.source === 'generated' && <EdgeTypeList.SourceBadge source={edge.source} />}
+    return (
+      <div className="w-1/3 border-r border-slate-200 dark:border-[#2d3748] overflow-y-auto bg-slate-50 dark:bg-[#151820]">
+        {edges.map((edge) => (
+          <div
+            key={edge.id}
+            onClick={() => onSelect(edge.id)}
+            className={`p-4 border-b border-slate-200 dark:border-[#2d3748] cursor-pointer transition-colors border-l-4 ${
+              selectedEdgeId === edge.id
+                ? 'bg-blue-50 dark:bg-[#193db3]/10 border-l-blue-600 dark:border-l-[#193db3] hover:bg-blue-100 dark:hover:bg-[#193db3]/20'
+                : 'border-l-transparent hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          >
+            <div className="flex justify-between items-start mb-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-slate-900 dark:text-white font-semibold text-sm">
+                  {edge.name}
+                </h3>
+                {edge.source === 'generated' && <EdgeTypeList.SourceBadge source={edge.source} />}
+              </div>
+              {selectedEdgeId === edge.id && (
+                <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-[#193db3] font-bold bg-blue-100 dark:bg-[#193db3]/20 px-1.5 py-0.5 rounded">
+                  {TEXTS.master.active}
+                </span>
+              )}
             </div>
-            {selectedEdgeId === edge.id && (
-              <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-[#193db3] font-bold bg-blue-100 dark:bg-[#193db3]/20 px-1.5 py-0.5 rounded">
-                {TEXTS.master.active}
-              </span>
-            )}
-          </div>
-          <p className="text-slate-500 dark:text-[#95a0c6] text-xs mb-3 line-clamp-2">
-            {edge.description || TEXTS.master.noDescription}
-          </p>
-          <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-[#95a0c6]">
-            <div className="flex items-center gap-1">
-              <Code className="w-3.5 h-3.5" />
-              <span>
-                {TEXTS.master.attributesCount.replace('{{count}}', String(Object.keys(edge.schema || {}).length))}
-              </span>
+            <p className="text-slate-500 dark:text-[#95a0c6] text-xs mb-3 line-clamp-2">
+              {edge.description || TEXTS.master.noDescription}
+            </p>
+            <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-[#95a0c6]">
+              <div className="flex items-center gap-1">
+                <Code className="w-3.5 h-3.5" />
+                <span>
+                  {TEXTS.master.attributesCount.replace(
+                    '{{count}}',
+                    String(Object.keys(edge.schema || {}).length)
+                  )}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
-    </div>
-  );
-});
+        ))}
+      </div>
+    );
+  }
+);
 
 MasterPaneInternal.displayName = 'EdgeTypeList.MasterPane';
 
@@ -607,112 +640,124 @@ interface DetailPaneProps {
   onDelete: (id: string) => void;
 }
 
-const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(({ selectedEdgeId, edges, onEdit, onDelete }) => {
-  const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
+const DetailPaneInternal: React.FC<DetailPaneProps> = React.memo(
+  ({ selectedEdgeId, edges, onEdit, onDelete }) => {
+    const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
 
-  if (!selectedEdge) {
+    if (!selectedEdge) {
+      return (
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#1e2128] p-8">
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-[#95a0c6]">
+            <Share2 className="w-12 h-12 mb-4 opacity-50" />
+            <p>{TEXTS.detail.selectPrompt}</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex-1 overflow-y-auto bg-white dark:bg-[#1e2128] p-8">
-        <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-[#95a0c6]">
-          <Share2 className="w-12 h-12 mb-4 opacity-50" />
-          <p>{TEXTS.detail.selectPrompt}</p>
+        {/* Detail Header */}
+        <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-200 dark:border-[#2d3748]">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                {selectedEdge.name}
+              </h2>
+              <div title={`ID: ${selectedEdge.id}`}>
+                <Info className="text-slate-400 dark:text-[#95a0c6] cursor-help w-5 h-5" />
+              </div>
+              <div className="flex gap-2 ml-2">
+                <EdgeTypeList.StatusBadge status={selectedEdge.status} />
+                <EdgeTypeList.SourceBadge source={selectedEdge.source} />
+              </div>
+            </div>
+            <p className="text-slate-500 dark:text-[#95a0c6] text-sm max-w-xl">
+              {selectedEdge.description || TEXTS.detail.noDescription}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onDelete(selectedEdge.id)}
+              className="px-3 py-1.5 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-[#2d3748] rounded bg-white dark:bg-[#151820] hover:bg-slate-50 dark:hover:bg-[#252d46] transition-colors flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              {TEXTS.detail.delete}
+            </button>
+            <button
+              onClick={() => onEdit(selectedEdge)}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-[#193db3] hover:bg-blue-700 rounded transition-colors flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              {TEXTS.detail.edit}
+            </button>
+          </div>
+        </div>
+
+        {/* Attributes Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <Code className="text-blue-600 dark:text-[#193db3] w-5 h-5" />
+              {TEXTS.detail.attributesTitle}
+            </h3>
+            <span className="text-xs text-slate-500 dark:text-[#95a0c6] font-mono bg-slate-100 dark:bg-[#121521] px-2 py-1 rounded border border-slate-200 dark:border-[#2d3748]">
+              class {selectedEdge.name}(Edge)
+            </span>
+          </div>
+          <div className="border border-slate-200 dark:border-[#2d3748] rounded-lg overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 dark:bg-[#151820] text-slate-500 dark:text-[#95a0c6] border-b border-slate-200 dark:border-[#2d3748]">
+                <tr>
+                  <th className="px-4 py-3 font-medium">{TEXTS.detail.table.name}</th>
+                  <th className="px-4 py-3 font-medium">{TEXTS.detail.table.type}</th>
+                  <th className="px-4 py-3 font-medium">{TEXTS.detail.table.description}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-[#2d3748] bg-white dark:bg-[#121521]/50">
+                {Object.entries(selectedEdge.schema || {}).map(([key, val]: [string, any]) => (
+                  <tr
+                    key={key}
+                    className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-slate-900 dark:text-white font-mono text-xs">
+                      {key}
+                    </td>
+                    <td className="px-4 py-3 text-purple-600 dark:text-purple-400 font-mono text-xs">
+                      {typeof val === 'string' ? val : val.type}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-[#95a0c6] text-xs">
+                      {typeof val === 'string' ? '' : val.description}
+                    </td>
+                  </tr>
+                ))}
+                {Object.keys(selectedEdge.schema || {}).length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-4 py-8 text-center text-slate-500 dark:text-[#95a0c6]"
+                    >
+                      {TEXTS.detail.table.empty}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div className="bg-slate-50 dark:bg-[#151820] px-4 py-2 border-t border-slate-200 dark:border-[#2d3748]">
+              <button
+                onClick={() => onEdit(selectedEdge)}
+                className="text-xs text-blue-600 dark:text-[#193db3] font-bold flex items-center gap-1 hover:text-blue-800 dark:hover:text-white transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                {TEXTS.detail.addAttribute}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
-
-  return (
-    <div className="flex-1 overflow-y-auto bg-white dark:bg-[#1e2128] p-8">
-      {/* Detail Header */}
-      <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-200 dark:border-[#2d3748]">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{selectedEdge.name}</h2>
-            <div title={`ID: ${selectedEdge.id}`}>
-              <Info className="text-slate-400 dark:text-[#95a0c6] cursor-help w-5 h-5" />
-            </div>
-            <div className="flex gap-2 ml-2">
-              <EdgeTypeList.StatusBadge status={selectedEdge.status} />
-              <EdgeTypeList.SourceBadge source={selectedEdge.source} />
-            </div>
-          </div>
-          <p className="text-slate-500 dark:text-[#95a0c6] text-sm max-w-xl">
-            {selectedEdge.description || TEXTS.detail.noDescription}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onDelete(selectedEdge.id)}
-            className="px-3 py-1.5 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-red-600 dark:hover:text-red-400 border border-slate-200 dark:border-[#2d3748] rounded bg-white dark:bg-[#151820] hover:bg-slate-50 dark:hover:bg-[#252d46] transition-colors flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            {TEXTS.detail.delete}
-          </button>
-          <button
-            onClick={() => onEdit(selectedEdge)}
-            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 dark:bg-[#193db3] hover:bg-blue-700 rounded transition-colors flex items-center gap-2"
-          >
-            <Pencil className="w-4 h-4" />
-            {TEXTS.detail.edit}
-          </button>
-        </div>
-      </div>
-
-      {/* Attributes Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <Code className="text-blue-600 dark:text-[#193db3] w-5 h-5" />
-            {TEXTS.detail.attributesTitle}
-          </h3>
-          <span className="text-xs text-slate-500 dark:text-[#95a0c6] font-mono bg-slate-100 dark:bg-[#121521] px-2 py-1 rounded border border-slate-200 dark:border-[#2d3748]">
-            class {selectedEdge.name}(Edge)
-          </span>
-        </div>
-        <div className="border border-slate-200 dark:border-[#2d3748] rounded-lg overflow-hidden">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 dark:bg-[#151820] text-slate-500 dark:text-[#95a0c6] border-b border-slate-200 dark:border-[#2d3748]">
-              <tr>
-                <th className="px-4 py-3 font-medium">{TEXTS.detail.table.name}</th>
-                <th className="px-4 py-3 font-medium">{TEXTS.detail.table.type}</th>
-                <th className="px-4 py-3 font-medium">{TEXTS.detail.table.description}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-[#2d3748] bg-white dark:bg-[#121521]/50">
-              {Object.entries(selectedEdge.schema || {}).map(([key, val]: [string, any]) => (
-                <tr key={key} className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-slate-900 dark:text-white font-mono text-xs">{key}</td>
-                  <td className="px-4 py-3 text-purple-600 dark:text-purple-400 font-mono text-xs">
-                    {typeof val === 'string' ? val : val.type}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500 dark:text-[#95a0c6] text-xs">
-                    {typeof val === 'string' ? '' : val.description}
-                  </td>
-                </tr>
-              ))}
-              {Object.keys(selectedEdge.schema || {}).length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-slate-500 dark:text-[#95a0c6]">
-                    {TEXTS.detail.table.empty}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          <div className="bg-slate-50 dark:bg-[#151820] px-4 py-2 border-t border-slate-200 dark:border-[#2d3748]">
-            <button
-              onClick={() => onEdit(selectedEdge)}
-              className="text-xs text-blue-600 dark:text-[#193db3] font-bold flex items-center gap-1 hover:text-blue-800 dark:hover:text-white transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              {TEXTS.detail.addAttribute}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
+);
 
 DetailPaneInternal.displayName = 'EdgeTypeList.DetailPane';
 
@@ -721,7 +766,9 @@ DetailPaneInternal.displayName = 'EdgeTypeList.DetailPane';
 // ============================================================================
 
 const EmptyInternal: React.FC = () => (
-  <div className="p-6 text-center text-slate-500 dark:text-[#95a0c6] text-sm">{TEXTS.master.empty}</div>
+  <div className="p-6 text-center text-slate-500 dark:text-[#95a0c6] text-sm">
+    {TEXTS.master.empty}
+  </div>
 );
 
 EmptyInternal.displayName = 'EdgeTypeList.Empty';
@@ -747,249 +794,267 @@ interface ModalProps {
   editingEdge: EdgeType | null;
 }
 
-const ModalInternal: React.FC<ModalProps> = React.memo(({ isOpen, onClose, onSave, editingEdge }) => {
-  const [formData, setFormData] = useState({
-    name: editingEdge?.name || '',
-    description: editingEdge?.description || '',
-    schema: editingEdge?.schema || {},
-  });
-  const [attributes, setAttributes] = useState<Attribute[]>(
-    editingEdge
-      ? Object.entries(editingEdge.schema || {}).map(([key, val]: [string, any]) => ({
-          name: key,
-          type: typeof val === 'string' ? val : val.type || 'String',
-          description: typeof val === 'string' ? '' : val.description || '',
-          required: typeof val === 'string' ? false : !!val.required,
-        }))
-      : []
-  );
+const ModalInternal: React.FC<ModalProps> = React.memo(
+  ({ isOpen, onClose, onSave, editingEdge }) => {
+    const [formData, setFormData] = useState({
+      name: editingEdge?.name || '',
+      description: editingEdge?.description || '',
+      schema: editingEdge?.schema || {},
+    });
+    const [attributes, setAttributes] = useState<Attribute[]>(
+      editingEdge
+        ? Object.entries(editingEdge.schema || {}).map(([key, val]: [string, any]) => ({
+            name: key,
+            type: typeof val === 'string' ? val : val.type || 'String',
+            description: typeof val === 'string' ? '' : val.description || '',
+            required: typeof val === 'string' ? false : !!val.required,
+          }))
+        : []
+    );
 
-  // Reset form when editingEntity changes
-  React.useEffect(() => {
-    if (editingEdge) {
-      setFormData({
-        name: editingEdge.name,
-        description: editingEdge.description || '',
-        schema: editingEdge.schema,
-      });
-      setAttributes(
-        Object.entries(editingEdge.schema || {}).map(([key, val]: [string, any]) => ({
-          name: key,
-          type: typeof val === 'string' ? val : val.type || 'String',
-          description: typeof val === 'string' ? '' : val.description || '',
-          required: typeof val === 'string' ? false : !!val.required,
-        }))
-      );
-    } else {
-      setFormData({ name: '', description: '', schema: {} });
-      setAttributes([]);
-    }
-  }, [editingEdge]);
+    // Reset form when editingEntity changes
+    React.useEffect(() => {
+      if (editingEdge) {
+        setFormData({
+          name: editingEdge.name,
+          description: editingEdge.description || '',
+          schema: editingEdge.schema,
+        });
+        setAttributes(
+          Object.entries(editingEdge.schema || {}).map(([key, val]: [string, any]) => ({
+            name: key,
+            type: typeof val === 'string' ? val : val.type || 'String',
+            description: typeof val === 'string' ? '' : val.description || '',
+            required: typeof val === 'string' ? false : !!val.required,
+          }))
+        );
+      } else {
+        setFormData({ name: '', description: '', schema: {} });
+        setAttributes([]);
+      }
+    }, [editingEdge]);
 
-  const addAttribute = useCallback(() => {
-    setAttributes([...attributes, { name: '', type: 'String', description: '', required: false }]);
-  }, [attributes]);
+    const addAttribute = useCallback(() => {
+      setAttributes([
+        ...attributes,
+        { name: '', type: 'String', description: '', required: false },
+      ]);
+    }, [attributes]);
 
-  const updateAttribute = useCallback((index: number, field: string, value: any) => {
-    const newAttrs = [...attributes];
-    newAttrs[index] = { ...newAttrs[index], [field]: value };
-    setAttributes(newAttrs);
-  }, [attributes]);
+    const updateAttribute = useCallback(
+      (index: number, field: string, value: any) => {
+        const newAttrs = [...attributes];
+        newAttrs[index] = { ...newAttrs[index], [field]: value };
+        setAttributes(newAttrs);
+      },
+      [attributes]
+    );
 
-  const removeAttribute = useCallback((index: number) => {
-    setAttributes(attributes.filter((_, i) => i !== index));
-  }, [attributes]);
+    const removeAttribute = useCallback(
+      (index: number) => {
+        setAttributes(attributes.filter((_, i) => i !== index));
+      },
+      [attributes]
+    );
 
-  if (!isOpen) return null;
+    if (!isOpen) return null;
 
-  return (
-    <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end" role="dialog">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity" onClick={onClose}></div>
-      <div
-        className="relative w-full max-w-3xl bg-white dark:bg-[#111521] shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-[#2a324a] animate-in slide-in-from-right duration-300"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#2a324a] bg-slate-50 dark:bg-[#1e2433]">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
-              <Share2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-none">
-                {editingEdge
-                  ? `${TEXTS.modal.titleEdit.replace('{{name}}', editingEdge.name)}`
-                  : TEXTS.modal.titleNew}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-[#95a0c6] mt-1 font-mono">{editingEdge?.id || 'New ID'}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-[#95a0c6] hover:bg-slate-200 dark:hover:bg-[#2a324a] hover:text-slate-900 dark:hover:text-white transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <div className="flex border-b border-slate-200 dark:border-[#2a324a] sticky top-0 bg-white dark:bg-[#111521] z-10 px-6 pt-2">
-            <button className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 transition-colors bg-blue-50 dark:bg-blue-500/5">
-              {TEXTS.modal.tabAttributes}
-            </button>
-          </div>
-          <div className="p-6 flex flex-col gap-8">
-            {/* Basic Info */}
-            <div className="flex flex-col gap-4">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                {TEXTS.modal.basicInfo}
-              </h4>
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
-                    {TEXTS.modal.nameLabel}
-                  </label>
-                  <input
-                    className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={TEXTS.modal.namePlaceholder}
-                    disabled={!!editingEdge}
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
-                    {TEXTS.modal.descLabel}
-                  </label>
-                  <input
-                    className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
-                    type="text"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder={TEXTS.modal.descPlaceholder}
-                  />
-                </div>
+    return (
+      <div aria-modal="true" className="fixed inset-0 z-50 flex justify-end" role="dialog">
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity"
+          onClick={onClose}
+        ></div>
+        <div
+          className="relative w-full max-w-3xl bg-white dark:bg-[#111521] shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-[#2a324a] animate-in slide-in-from-right duration-300"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#2a324a] bg-slate-50 dark:bg-[#1e2433]">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
+                <Share2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-none">
+                  {editingEdge
+                    ? `${TEXTS.modal.titleEdit.replace('{{name}}', editingEdge.name)}`
+                    : TEXTS.modal.titleNew}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-[#95a0c6] mt-1 font-mono">
+                  {editingEdge?.id || 'New ID'}
+                </p>
               </div>
             </div>
-
-            {/* Attributes */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  {TEXTS.modal.definedAttributes}
-                </h4>
-                <button
-                  onClick={addAttribute}
-                  className="text-blue-600 dark:text-[#193db3] text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-[#254bcc] px-3 py-1.5 bg-blue-50 dark:bg-[#193db3]/10 rounded-lg border border-blue-200 dark:border-[#193db3]/20 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> {TEXTS.modal.addAttribute}
-                </button>
-              </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 dark:text-[#95a0c6] hover:bg-slate-200 dark:hover:bg-[#2a324a] hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex border-b border-slate-200 dark:border-[#2a324a] sticky top-0 bg-white dark:bg-[#111521] z-10 px-6 pt-2">
+              <button className="px-4 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 transition-colors bg-blue-50 dark:bg-blue-500/5">
+                {TEXTS.modal.tabAttributes}
+              </button>
+            </div>
+            <div className="p-6 flex flex-col gap-8">
+              {/* Basic Info */}
               <div className="flex flex-col gap-4">
-                {attributes.map((attr, idx) => (
-                  <div
-                    key={idx}
-                    className="border border-blue-200 dark:border-[#193db3]/50 bg-white dark:bg-[#1e2433] rounded-xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-blue-100 dark:ring-[#193db3]/30"
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  {TEXTS.modal.basicInfo}
+                </h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                      {TEXTS.modal.nameLabel}
+                    </label>
+                    <input
+                      className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder={TEXTS.modal.namePlaceholder}
+                      disabled={!!editingEdge}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                      {TEXTS.modal.descLabel}
+                    </label>
+                    <input
+                      className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                      type="text"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder={TEXTS.modal.descPlaceholder}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Attributes */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    {TEXTS.modal.definedAttributes}
+                  </h4>
+                  <button
+                    onClick={addAttribute}
+                    className="text-blue-600 dark:text-[#193db3] text-xs font-bold flex items-center gap-1 hover:text-blue-700 dark:hover:text-[#254bcc] px-3 py-1.5 bg-blue-50 dark:bg-[#193db3]/10 rounded-lg border border-blue-200 dark:border-[#193db3]/20 transition-colors"
                   >
-                    <div className="bg-slate-50 dark:bg-[#252d46] px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-[#2a324a]">
-                      <div className="flex items-center gap-2">
-                        <FileEdit className="w-4 h-4 text-blue-600 dark:text-[#193db3]" />
-                        <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wide">
-                          {TEXTS.modal.attributeTitle.replace('{{index}}', String(idx + 1))}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => removeAttribute(idx)}
-                        className="text-xs text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 font-medium flex items-center gap-1"
-                      >
-                        {TEXTS.modal.deleteField}
-                      </button>
-                    </div>
-                    <div className="p-5 flex flex-col gap-6">
-                      <div className="grid grid-cols-12 gap-4">
-                        <div className="col-span-5">
-                          <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
-                            {TEXTS.modal.attrNameLabel}
-                          </label>
-                          <input
-                            className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
-                            type="text"
-                            value={attr.name}
-                            onChange={(e) => updateAttribute(idx, 'name', e.target.value)}
-                            placeholder={TEXTS.modal.attrNamePlaceholder}
-                          />
+                    <Plus className="w-4 h-4" /> {TEXTS.modal.addAttribute}
+                  </button>
+                </div>
+                <div className="flex flex-col gap-4">
+                  {attributes.map((attr, idx) => (
+                    <div
+                      key={idx}
+                      className="border border-blue-200 dark:border-[#193db3]/50 bg-white dark:bg-[#1e2433] rounded-xl overflow-hidden shadow-xl shadow-black/5 dark:shadow-black/20 ring-1 ring-blue-100 dark:ring-[#193db3]/30"
+                    >
+                      <div className="bg-slate-50 dark:bg-[#252d46] px-4 py-2 flex items-center justify-between border-b border-slate-200 dark:border-[#2a324a]">
+                        <div className="flex items-center gap-2">
+                          <FileEdit className="w-4 h-4 text-blue-600 dark:text-[#193db3]" />
+                          <span className="text-xs font-bold text-slate-700 dark:text-white uppercase tracking-wide">
+                            {TEXTS.modal.attributeTitle.replace('{{index}}', String(idx + 1))}
+                          </span>
                         </div>
-                        <div className="col-span-4">
-                          <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
-                            {TEXTS.modal.dataTypeLabel}
-                          </label>
-                          <div className="relative">
-                            <select
-                              className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none appearance-none focus:border-blue-600 dark:focus:border-[#193db3]"
-                              value={attr.type}
-                              onChange={(e) => updateAttribute(idx, 'type', e.target.value)}
-                            >
-                              <option value="String">String</option>
-                              <option value="Integer">Integer</option>
-                              <option value="Float">Float</option>
-                              <option value="Boolean">Boolean</option>
-                              <option value="DateTime">DateTime</option>
-                              <option value="List">List</option>
-                              <option value="Dict">Dict</option>
-                            </select>
-                            <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-slate-400 dark:text-[#95a0c6] pointer-events-none" />
+                        <button
+                          onClick={() => removeAttribute(idx)}
+                          className="text-xs text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 font-medium flex items-center gap-1"
+                        >
+                          {TEXTS.modal.deleteField}
+                        </button>
+                      </div>
+                      <div className="p-5 flex flex-col gap-6">
+                        <div className="grid grid-cols-12 gap-4">
+                          <div className="col-span-5">
+                            <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                              {TEXTS.modal.attrNameLabel}
+                            </label>
+                            <input
+                              className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                              type="text"
+                              value={attr.name}
+                              onChange={(e) => updateAttribute(idx, 'name', e.target.value)}
+                              placeholder={TEXTS.modal.attrNamePlaceholder}
+                            />
+                          </div>
+                          <div className="col-span-4">
+                            <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                              {TEXTS.modal.dataTypeLabel}
+                            </label>
+                            <div className="relative">
+                              <select
+                                className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none appearance-none focus:border-blue-600 dark:focus:border-[#193db3]"
+                                value={attr.type}
+                                onChange={(e) => updateAttribute(idx, 'type', e.target.value)}
+                              >
+                                <option value="String">String</option>
+                                <option value="Integer">Integer</option>
+                                <option value="Float">Float</option>
+                                <option value="Boolean">Boolean</option>
+                                <option value="DateTime">DateTime</option>
+                                <option value="List">List</option>
+                                <option value="Dict">Dict</option>
+                              </select>
+                              <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-slate-400 dark:text-[#95a0c6] pointer-events-none" />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
-                          {TEXTS.modal.docstringLabel}
-                        </label>
-                        <input
-                          className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-500 dark:text-[#95a0c6] px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
-                          type="text"
-                          value={attr.description}
-                          onChange={(e) => updateAttribute(idx, 'description', e.target.value)}
-                          placeholder={TEXTS.modal.docstringPlaceholder}
-                        />
+                        <div>
+                          <label className="text-[10px] uppercase text-slate-500 dark:text-[#95a0c6] font-bold mb-1.5 block">
+                            {TEXTS.modal.docstringLabel}
+                          </label>
+                          <input
+                            className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-500 dark:text-[#95a0c6] px-3 py-2 focus:text-slate-900 dark:focus:text-white focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
+                            type="text"
+                            value={attr.description}
+                            onChange={(e) => updateAttribute(idx, 'description', e.target.value)}
+                            placeholder={TEXTS.modal.docstringPlaceholder}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="border-t border-slate-200 dark:border-[#2a324a] p-4 bg-slate-50 dark:bg-[#1e2433] flex justify-between items-center gap-3">
-          <div className="text-xs text-slate-500 dark:text-[#95a0c6] flex items-center gap-1">
-            <History className="w-4 h-4" />
-            <span>
-              {TEXTS.modal.lastSaved.replace(
-                '{{time}}',
-                editingEdge?.updated_at ? new Date(editingEdge.updated_at).toLocaleString() : TEXTS.modal.neverSaved
-              )}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2a324a] rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a324a] transition-colors"
-            >
-              {TEXTS.modal.discard}
-            </button>
-            <button
-              onClick={onSave}
-              className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-[#193db3] rounded-lg hover:bg-blue-700 dark:hover:bg-[#254bcc] shadow-lg shadow-blue-900/20 transition-all active:scale-95"
-            >
-              {TEXTS.modal.save}
-            </button>
+          <div className="border-t border-slate-200 dark:border-[#2a324a] p-4 bg-slate-50 dark:bg-[#1e2433] flex justify-between items-center gap-3">
+            <div className="text-xs text-slate-500 dark:text-[#95a0c6] flex items-center gap-1">
+              <History className="w-4 h-4" />
+              <span>
+                {TEXTS.modal.lastSaved.replace(
+                  '{{time}}',
+                  editingEdge?.updated_at
+                    ? new Date(editingEdge.updated_at).toLocaleString()
+                    : TEXTS.modal.neverSaved
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-[#95a0c6] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#2a324a] rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a324a] transition-colors"
+              >
+                {TEXTS.modal.discard}
+              </button>
+              <button
+                onClick={onSave}
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 dark:bg-[#193db3] rounded-lg hover:bg-blue-700 dark:hover:bg-[#254bcc] shadow-lg shadow-blue-900/20 transition-all active:scale-95"
+              >
+                {TEXTS.modal.save}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 ModalInternal.displayName = 'EdgeTypeList.Modal';
 

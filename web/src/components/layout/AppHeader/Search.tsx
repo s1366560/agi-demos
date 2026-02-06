@@ -4,16 +4,16 @@
  * Search input with icon and keyboard submit support.
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
-import { Search as SearchIcon } from 'lucide-react'
+import { Search as SearchIcon } from 'lucide-react';
 
 export interface SearchProps {
-  value?: string
-  onChange?: (value: string) => void
-  onSubmit?: (value: string) => void
-  placeholder?: string
-  ariaLabel?: string
+  value?: string;
+  onChange?: (value: string) => void;
+  onSubmit?: (value: string) => void;
+  placeholder?: string;
+  ariaLabel?: string;
 }
 
 export const Search = React.memo(function Search({
@@ -25,9 +25,9 @@ export const Search = React.memo(function Search({
 }: SearchProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && onSubmit) {
-      onSubmit(value)
+      onSubmit(value);
     }
-  }
+  };
 
   return (
     <div className="relative hidden md:block group">
@@ -42,7 +42,7 @@ export const Search = React.memo(function Search({
         className="input-search w-48 lg:w-64 transition-all duration-200"
       />
     </div>
-  )
-})
+  );
+});
 
-Search.displayName = 'AppHeader.Search'
+Search.displayName = 'AppHeader.Search';

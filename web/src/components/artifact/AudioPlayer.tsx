@@ -2,10 +2,10 @@
  * AudioPlayer - Audio playback with waveform visualization
  */
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState } from 'react';
 
-import { SoundOutlined } from "@ant-design/icons";
-import { Space, Typography, Spin, Alert } from "antd";
+import { SoundOutlined } from '@ant-design/icons';
+import { Space, Typography, Spin, Alert } from 'antd';
 
 const { Text } = Typography;
 
@@ -32,7 +32,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [duration, setDuration] = useState<string>("");
+  const [duration, setDuration] = useState<string>('');
 
   const handleLoadedMetadata = () => {
     setLoading(false);
@@ -40,7 +40,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       const secs = audioRef.current.duration;
       const mins = Math.floor(secs / 60);
       const remainingSecs = Math.floor(secs % 60);
-      setDuration(`${mins}:${remainingSecs.toString().padStart(2, "0")}`);
+      setDuration(`${mins}:${remainingSecs.toString().padStart(2, '0')}`);
     }
     onLoad?.();
   };
@@ -69,7 +69,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <Spin size="small" />
         </div>
       )}
-      <div className={loading ? "hidden" : ""}>
+      <div className={loading ? 'hidden' : ''}>
         <Space direction="vertical" className="w-full">
           {!compact && filename && (
             <Space>
@@ -89,7 +89,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             src={src}
             controls
             preload="metadata"
-            style={{ width: "100%" }}
+            style={{ width: '100%' }}
             onLoadedMetadata={handleLoadedMetadata}
             onError={handleError}
           >

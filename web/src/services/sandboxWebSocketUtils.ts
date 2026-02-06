@@ -5,18 +5,18 @@
  * supporting both development and production environments.
  */
 
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 
 /**
  * WebSocket service types
  */
-export type WebSocketServiceType = "terminal" | "desktop" | "mcp";
+export type WebSocketServiceType = 'terminal' | 'desktop' | 'mcp';
 
 /**
  * Get the base WebSocket URL protocol based on current page protocol
  */
 export function getWebSocketProtocol(): string {
-  return window.location.protocol === "https:" ? "wss:" : "ws:";
+  return window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 }
 
 /**
@@ -32,7 +32,7 @@ export function getApiHost(): string {
  * Get the API base path
  */
 export function getApiBasePath(): string {
-  return import.meta.env.VITE_API_BASE_PATH || "/api/v1";
+  return import.meta.env.VITE_API_BASE_PATH || '/api/v1';
 }
 
 /**
@@ -62,15 +62,13 @@ export function buildWebSocketUrl(
 
   let path: string;
   switch (service) {
-    case "terminal":
+    case 'terminal':
       path = `${basePath}/terminal/${sandboxId}/ws`;
       break;
-    case "desktop":
+    case 'desktop':
       // Desktop (noVNC) uses HTTP, not WebSocket directly
-      throw new Error(
-        "Desktop service uses HTTP, not WebSocket. Use buildDesktopUrl instead."
-      );
-    case "mcp":
+      throw new Error('Desktop service uses HTTP, not WebSocket. Use buildDesktopUrl instead.');
+    case 'mcp':
       path = `${basePath}/sandbox/${sandboxId}/mcp`;
       break;
     default:
@@ -121,11 +119,7 @@ export function buildDesktopUrl(sandboxId: string, path?: string): string {
  * @param path - Optional path
  * @returns Direct desktop URL
  */
-export function buildDirectDesktopUrl(
-  host: string,
-  port: number,
-  path = "vnc.html"
-): string {
+export function buildDirectDesktopUrl(host: string, port: number, path = 'vnc.html'): string {
   const protocol = window.location.protocol;
   return `${protocol}//${host}:${port}/${path}`;
 }
@@ -137,11 +131,8 @@ export function buildDirectDesktopUrl(
  * @param sessionId - Terminal session ID
  * @returns WebSocket URL for terminal
  */
-export function buildTerminalWebSocketUrl(
-  sandboxId: string,
-  sessionId: string
-): string {
-  return buildWebSocketUrl("terminal", sandboxId, { session_id: sessionId });
+export function buildTerminalWebSocketUrl(sandboxId: string, sessionId: string): string {
+  return buildWebSocketUrl('terminal', sandboxId, { session_id: sessionId });
 }
 
 /**
@@ -194,7 +185,7 @@ export function getWebSocketConfig(): {
 export function isValidWebSocketUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "ws:" || parsed.protocol === "wss:";
+    return parsed.protocol === 'ws:' || parsed.protocol === 'wss:';
   } catch {
     return false;
   }
@@ -220,27 +211,23 @@ export function parseSandboxConnection(sandbox: {
   if (sandbox.desktop_url) {
     return {
       desktopUrl: sandbox.desktop_url,
-      terminalWsUrl: sandbox.terminal_url
-        ? buildWebSocketUrlFromHttp(sandbox.terminal_url)
-        : null,
+      terminalWsUrl: sandbox.terminal_url ? buildWebSocketUrlFromHttp(sandbox.terminal_url) : null,
     };
   }
 
   // Priority 2: Build from ports (direct access)
   if (sandbox.desktop_port) {
-    const host = getApiHost().split(":")[0]; // Remove port if present
+    const host = getApiHost().split(':')[0]; // Remove port if present
     return {
       desktopUrl: buildDirectDesktopUrl(host, sandbox.desktop_port),
-      terminalWsUrl: sandbox.terminal_port
-        ? buildWebSocketUrl("terminal", sandbox.id)
-        : null,
+      terminalWsUrl: sandbox.terminal_port ? buildWebSocketUrl('terminal', sandbox.id) : null,
     };
   }
 
   // Fallback: Use API proxy
   return {
     desktopUrl: buildDesktopUrl(sandbox.id),
-    terminalWsUrl: buildWebSocketUrl("terminal", sandbox.id),
+    terminalWsUrl: buildWebSocketUrl('terminal', sandbox.id),
   };
 }
 
@@ -250,9 +237,9 @@ export function parseSandboxConnection(sandbox: {
 function buildWebSocketUrlFromHttp(httpUrl: string): string {
   try {
     const url = new URL(httpUrl);
-    const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${url.host}${url.pathname}`;
   } catch {
-    return "";
+    return '';
   }
 }

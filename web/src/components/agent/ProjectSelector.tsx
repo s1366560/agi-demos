@@ -57,13 +57,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   className,
 }) => {
   const { projects, currentProject, isLoading: projectsLoading } = useProjectStore();
-  const { 
-    activeConversationId, 
+  const {
+    activeConversationId,
     conversations,
     isLoadingHistory,
     error,
-    setActiveConversation, 
-    loadConversations 
+    setActiveConversation,
+    loadConversations,
   } = useAgentV3Store();
   const { currentTenant } = useTenantStore();
 
@@ -88,7 +88,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 
   // Derive current conversation from activeConversationId
   const currentConversation = useMemo(() => {
-    return conversations.find(c => c.id === activeConversationId) || null;
+    return conversations.find((c) => c.id === activeConversationId) || null;
   }, [conversations, activeConversationId]);
 
   // Handle project selection with confirmation for active conversation
@@ -179,9 +179,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       >
         {projectOptions.map((project) => {
           // Display label with tenant context if duplicate names exist
-          const label = hasDuplicateNames && currentTenant
-            ? `${project.name} (${project.tenant_id === currentTenant.id ? 'Current' : 'Other'} tenant)`
-            : project.name;
+          const label =
+            hasDuplicateNames && currentTenant
+              ? `${project.name} (${project.tenant_id === currentTenant.id ? 'Current' : 'Other'} tenant)`
+              : project.name;
 
           return (
             <Option key={project.id} value={project.id} title={label}>
@@ -207,11 +208,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         okButtonProps={{ danger: true }}
       >
         <p>
-          You have an active conversation in <strong>{currentProjectName || 'the current project'}</strong>.
-          Switching projects will clear this conversation from your view.
+          You have an active conversation in{' '}
+          <strong>{currentProjectName || 'the current project'}</strong>. Switching projects will
+          clear this conversation from your view.
         </p>
         <p style={{ color: '#666' }}>
-          The conversation will be preserved and can be accessed again by switching back to this project.
+          The conversation will be preserved and can be accessed again by switching back to this
+          project.
         </p>
       </Modal>
 

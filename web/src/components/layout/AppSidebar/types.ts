@@ -5,35 +5,35 @@
  * Uses explicit variant components instead of context prop switching.
  */
 
-import type { SidebarConfig, NavUser } from '@/config/navigation'
+import type { SidebarConfig, NavUser } from '@/config/navigation';
 
 /**
  * Sidebar variant type - explicit instead of context prop
  */
-export type SidebarVariant = 'tenant' | 'project' | 'agent'
+export type SidebarVariant = 'tenant' | 'project' | 'agent';
 
 /**
  * Common props shared across all sidebar components
  */
 export interface BaseSidebarProps {
   /** Base path for generating links */
-  basePath: string
+  basePath: string;
   /** Current collapsed state (controlled) */
-  collapsed?: boolean
+  collapsed?: boolean;
   /** Default collapsed state */
-  defaultCollapsed?: boolean
+  defaultCollapsed?: boolean;
   /** Callback when collapse state changes */
-  onCollapseToggle?: () => void
+  onCollapseToggle?: () => void;
   /** User information for profile section */
-  user?: NavUser
+  user?: NavUser;
   /** Callback when user logs out */
-  onLogout?: () => void
+  onLogout?: () => void;
   /** Currently open groups (controlled) */
-  openGroups?: Record<string, boolean>
+  openGroups?: Record<string, boolean>;
   /** Callback when group is toggled */
-  onGroupToggle?: (groupId: string) => void
+  onGroupToggle?: (groupId: string) => void;
   /** Translation function for labels */
-  t?: (key: string) => string
+  t?: (key: string) => string;
 }
 
 /**
@@ -42,13 +42,13 @@ export interface BaseSidebarProps {
  */
 export interface AppSidebarProps extends BaseSidebarProps {
   /** Sidebar configuration from navigation.ts */
-  config: SidebarConfig
+  config: SidebarConfig;
   /** Variant type (for backward compatibility, use explicit components instead) */
-  variant?: SidebarVariant
+  variant?: SidebarVariant;
   /** Brand element to display in header */
-  brand?: React.ReactNode
+  brand?: React.ReactNode;
   /** @deprecated Use variant prop or explicit variant components */
-  context?: SidebarVariant
+  context?: SidebarVariant;
 }
 
 /**
@@ -56,7 +56,7 @@ export interface AppSidebarProps extends BaseSidebarProps {
  */
 export interface TenantSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
   /** Current tenant ID for path generation */
-  tenantId?: string
+  tenantId?: string;
 }
 
 /**
@@ -64,7 +64,7 @@ export interface TenantSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
  */
 export interface ProjectSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
   /** Current project ID for path generation */
-  projectId?: string
+  projectId?: string;
 }
 
 /**
@@ -72,9 +72,9 @@ export interface ProjectSidebarProps extends Omit<BaseSidebarProps, 'basePath'> 
  */
 export interface AgentSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
   /** Current project ID for navigation */
-  projectId?: string
+  projectId?: string;
   /** Current conversation ID for navigation */
-  conversationId?: string
+  conversationId?: string;
 }
 
 /**
@@ -82,21 +82,21 @@ export interface AgentSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
  */
 export interface SidebarBrandProps {
   /** Variant to determine branding */
-  variant?: SidebarVariant
+  variant?: SidebarVariant;
   /** Custom brand element */
-  children?: React.ReactNode
+  children?: React.ReactNode;
 }
 
 export interface SidebarNavigationProps {
   /** Navigation configuration */
-  config: SidebarConfig
+  config: SidebarConfig;
   /** Base path for links */
-  basePath: string
+  basePath: string;
 }
 
 export interface SidebarUserProps {
   /** User information */
-  user: NavUser
+  user: NavUser;
   /** Callback when user logs out */
-  onLogout?: () => void
+  onLogout?: () => void;
 }

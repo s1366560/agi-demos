@@ -1,9 +1,9 @@
 /**
  * AgentChatContent - Agent Chat content for use in layouts
- * 
+ *
  * This version is designed to work inside layouts that already have
  * a conversation sidebar as the primary navigation.
- * 
+ *
  * Features:
  * - Draggable resize for right panel (horizontal)
  * - Draggable resize for input area (vertical)
@@ -26,17 +26,11 @@ import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 
-
 // Import design components
 import { EmptyState } from './EmptyState';
 import { Resizer } from './Resizer';
 
-import {
-  MessageArea,
-  InputBar,
-  RightPanel,
-  ProjectAgentStatusBar,
-} from './index';
+import { MessageArea, InputBar, RightPanel, ProjectAgentStatusBar } from './index';
 
 interface AgentChatContentProps {
   /** Optional className for styling */
@@ -62,7 +56,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   className = '',
   externalProjectId,
   basePath: customBasePath,
-  headerExtra
+  headerExtra,
 }) => {
   const { t } = useTranslation();
   const notification = useLazyNotification();
@@ -209,7 +203,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       notification?.error({
         message: t('agent.chat.errors.title'),
         description: error,
-        onClose: clearError
+        onClose: clearError,
       });
     }
   }, [error, clearError, t]);
@@ -219,9 +213,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     if (doomLoopDetected) {
       notification?.warning({
         message: t('agent.chat.doomLoop.title'),
-        description: t('agent.chat.doomLoop.description', { 
-          tool: doomLoopDetected.tool_name, 
-          count: doomLoopDetected.call_count 
+        description: t('agent.chat.doomLoop.description', {
+          tool: doomLoopDetected.tool_name,
+          count: doomLoopDetected.call_count,
         }),
       });
     }
@@ -240,18 +234,31 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     }
   }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
 
-  const handleSend = useCallback(async (content: string, attachmentIds?: string[]) => {
-    if (!projectId) return;
-    // Note: Sandbox auto-creation removed - backend should handle sandbox provisioning
-    const newId = await sendMessage(content, projectId, { onAct, onObserve, attachmentIds });
-    if (!conversationId && newId) {
-      if (customBasePath) {
-        navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
-      } else {
-        navigate(`${basePath}/${newId}`);
+  const handleSend = useCallback(
+    async (content: string, attachmentIds?: string[]) => {
+      if (!projectId) return;
+      // Note: Sandbox auto-creation removed - backend should handle sandbox provisioning
+      const newId = await sendMessage(content, projectId, { onAct, onObserve, attachmentIds });
+      if (!conversationId && newId) {
+        if (customBasePath) {
+          navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+        } else {
+          navigate(`${basePath}/${newId}`);
+        }
       }
-    }
-  }, [projectId, conversationId, sendMessage, onAct, onObserve, navigate, basePath, customBasePath, queryProjectId]);
+    },
+    [
+      projectId,
+      conversationId,
+      sendMessage,
+      onAct,
+      onObserve,
+      navigate,
+      basePath,
+      customBasePath,
+      queryProjectId,
+    ]
+  );
 
   const handleViewPlan = useCallback(() => {
     setPanelCollapsed(false);
@@ -266,89 +273,120 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     } catch (error) {
       notification?.error({
         message: t('agent.notifications.planModeExitFailed.title'),
-        description: t('agent.notifications.planModeExitFailed.description')
+        description: t('agent.notifications.planModeExitFailed.description'),
       });
     }
   }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t, notification]);
 
   // Memoized components
-  const messageArea = useMemo(() => (
-    timeline.length === 0 && !activeConversationId ? (
-      <EmptyState onNewConversation={handleNewConversation} />
-    ) : (
-      <MessageArea
-        timeline={timeline}
-        streamingContent={streamingContent}
-        streamingThought={streamingThought}
-        isStreaming={isStreaming}
-        isThinkingStreaming={isThinkingStreaming}
-        isLoading={isLoadingHistory}
-        planModeStatus={planModeStatus}
-        onViewPlan={handleViewPlan}
-        onExitPlanMode={handleExitPlanMode}
-        hasEarlierMessages={hasEarlier}
-        onLoadEarlier={() => {
-          if (activeConversationId && projectId) {
-            loadEarlierMessages(activeConversationId, projectId);
-          }
+  const messageArea = useMemo(
+    () =>
+      timeline.length === 0 && !activeConversationId ? (
+        <EmptyState onNewConversation={handleNewConversation} />
+      ) : (
+        <MessageArea
+          timeline={timeline}
+          streamingContent={streamingContent}
+          streamingThought={streamingThought}
+          isStreaming={isStreaming}
+          isThinkingStreaming={isThinkingStreaming}
+          isLoading={isLoadingHistory}
+          planModeStatus={planModeStatus}
+          onViewPlan={handleViewPlan}
+          onExitPlanMode={handleExitPlanMode}
+          hasEarlierMessages={hasEarlier}
+          onLoadEarlier={() => {
+            if (activeConversationId && projectId) {
+              loadEarlierMessages(activeConversationId, projectId);
+            }
+          }}
+          isLoadingEarlier={isLoadingEarlier}
+          conversationId={activeConversationId}
+        />
+      ),
+    [
+      timeline,
+      streamingContent,
+      streamingThought,
+      isStreaming,
+      isThinkingStreaming,
+      isLoadingHistory,
+      isLoadingEarlier,
+      activeConversationId,
+      planModeStatus,
+      handleViewPlan,
+      handleExitPlanMode,
+      handleNewConversation,
+      hasEarlier,
+      loadEarlierMessages,
+      projectId,
+      conversationId,
+    ]
+  );
+
+  const rightPanel = useMemo(
+    () => (
+      <RightPanel
+        workPlan={workPlan}
+        executionPlan={executionPlan}
+        sandboxId={activeSandboxId}
+        toolExecutions={toolExecutions}
+        currentTool={currentTool}
+        onClose={() => {
+          setPanelCollapsed(true);
+          togglePlanPanel();
         }}
-        isLoadingEarlier={isLoadingEarlier}
-        conversationId={activeConversationId}
+        collapsed={panelCollapsed}
+        width={clampedPanelWidth}
+        onWidthChange={setPanelWidth}
+        minWidth={PANEL_MIN_WIDTH}
+        maxWidth={maxPanelWidth}
       />
-    )
-  ), [timeline, streamingContent, streamingThought, isStreaming, isThinkingStreaming, isLoadingHistory, isLoadingEarlier, activeConversationId, planModeStatus, handleViewPlan, handleExitPlanMode, handleNewConversation, hasEarlier, loadEarlierMessages, projectId, conversationId]);
+    ),
+    [
+      workPlan,
+      executionPlan,
+      activeSandboxId,
+      toolExecutions,
+      currentTool,
+      panelCollapsed,
+      clampedPanelWidth,
+      togglePlanPanel,
+      maxPanelWidth,
+    ]
+  );
 
-
-
-  const rightPanel = useMemo(() => (
-    <RightPanel
-      workPlan={workPlan}
-      executionPlan={executionPlan}
-      sandboxId={activeSandboxId}
-      toolExecutions={toolExecutions}
-      currentTool={currentTool}
-      onClose={() => {
-        setPanelCollapsed(true);
-        togglePlanPanel();
-      }}
-      collapsed={panelCollapsed}
-      width={clampedPanelWidth}
-      onWidthChange={setPanelWidth}
-      minWidth={PANEL_MIN_WIDTH}
-      maxWidth={maxPanelWidth}
-    />
-  ), [workPlan, executionPlan, activeSandboxId, toolExecutions, currentTool, panelCollapsed, clampedPanelWidth, togglePlanPanel, maxPanelWidth]);
-
-  const statusBar = useMemo(() => (
-    <ProjectAgentStatusBar
-      projectId={projectId || ''}
-      tenantId={tenantId}
-      messageCount={timeline.length}
-      enablePoolManagement
-    />
-  ), [projectId, tenantId, timeline.length]);
+  const statusBar = useMemo(
+    () => (
+      <ProjectAgentStatusBar
+        projectId={projectId || ''}
+        tenantId={tenantId}
+        messageCount={timeline.length}
+        enablePoolManagement
+      />
+    ),
+    [projectId, tenantId, timeline.length]
+  );
 
   return (
-    <div className={`flex h-full w-full overflow-hidden bg-slate-50 dark:bg-slate-950 ${className}`}>
+    <div
+      className={`flex h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+    >
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         {/* Header Extra Content (if provided) */}
         {headerExtra && (
-          <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2">
+          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2">
             {headerExtra}
           </div>
         )}
 
-
-
         {/* Message Area - Takes remaining space */}
-        <div className="flex-1 overflow-hidden relative">
-          {messageArea}
-        </div>
+        <div className="flex-1 overflow-hidden relative">{messageArea}</div>
 
         {/* Resizable Input Area */}
-        <div 
-          className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 relative flex flex-col"
+        <div
+          className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
           style={{ height: inputHeight }}
         >
           {/* Resize handle for input area (at top) */}
@@ -365,7 +403,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
               <GripHorizontal size={12} />
             </div>
           </div>
-          
+
           <InputBar
             onSend={handleSend}
             onAbort={abortStream}
@@ -379,10 +417,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         </div>
 
         {/* Status Bar with Panel Toggle */}
-        <div className="flex-shrink-0 flex items-center border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-          <div className="flex-1">
-            {statusBar}
-          </div>
+        <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
+          <div className="flex-1">{statusBar}</div>
           <button
             type="button"
             title={panelCollapsed ? t('agent.chat.panel.show') : t('agent.chat.panel.hide')}
@@ -390,10 +426,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
               setPanelCollapsed(!panelCollapsed);
               togglePlanPanel();
             }}
-            className="h-7 px-2 mr-2 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            className="h-8 px-3 mr-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/50 transition-all"
             aria-label={panelCollapsed ? t('agent.chat.panel.show') : t('agent.chat.panel.hide')}
           >
-            {panelCollapsed ? <PanelRight size={14} /> : <PanelRight size={14} className="rotate-180" />}
+            {panelCollapsed ? (
+              <PanelRight size={16} />
+            ) : (
+              <PanelRight size={16} className="rotate-180" />
+            )}
           </button>
         </div>
       </main>
@@ -402,8 +442,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       <aside
         className={`
           flex-shrink-0 h-full
-          border-l border-slate-200 dark:border-slate-800
-          transition-opacity duration-300 ease-out overflow-hidden
+          border-l border-slate-200/60 dark:border-slate-700/50
+          bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm
+          transition-all duration-300 ease-out overflow-hidden
           ${panelCollapsed ? 'w-0 opacity-0' : 'opacity-100'}
         `}
         style={{ width: panelCollapsed ? 0 : clampedPanelWidth }}

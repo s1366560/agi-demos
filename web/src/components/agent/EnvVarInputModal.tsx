@@ -8,9 +8,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { FC, ReactNode } from 'react';
 
-import { KeyOutlined, CheckCircleOutlined, LockOutlined, FileTextOutlined } from '@ant-design/icons';
+import {
+  KeyOutlined,
+  CheckCircleOutlined,
+  LockOutlined,
+  FileTextOutlined,
+} from '@ant-design/icons';
 
-import { Modal, Form, Input, Space, Button, Tag, Typography, Alert } from '@/components/ui/lazyAntd';
+import {
+  Modal,
+  Form,
+  Input,
+  Space,
+  Button,
+  Tag,
+  Typography,
+  Alert,
+} from '@/components/ui/lazyAntd';
 
 import type { EnvVarRequestedEventData, EnvVarField, EnvVarInputType } from '../../types/agent';
 
@@ -35,11 +49,7 @@ const inputTypeLabels: Record<EnvVarInputType, string> = {
   textarea: '多行文本',
 };
 
-export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
-  data,
-  onSubmit,
-  onCancel,
-}) => {
+export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({ data, onSubmit, onCancel }) => {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,7 +71,7 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
     try {
       setSubmitting(true);
       const values = await form.validateFields();
-      
+
       // Filter out empty optional fields
       const filteredValues: Record<string, string> = {};
       Object.entries(values).forEach(([key, value]) => {
@@ -69,7 +79,7 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
           filteredValues[key] = String(value);
         }
       });
-      
+
       onSubmit(data.request_id, filteredValues);
     } catch (error) {
       console.error('Form validation failed:', error);
@@ -124,14 +134,7 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
     >
       <div className="space-y-4">
         {/* Message */}
-        {data.message && (
-          <Alert
-            message={data.message}
-            type="info"
-            showIcon
-            className="mb-4"
-          />
-        )}
+        {data.message && <Alert message={data.message} type="info" showIcon className="mb-4" />}
 
         {/* Context (if provided) */}
         {data.context && Object.keys(data.context).length > 0 && (
@@ -153,11 +156,7 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
         )}
 
         {/* Form Fields */}
-        <Form
-          form={form}
-          layout="vertical"
-          className="mt-4"
-        >
+        <Form form={form} layout="vertical" className="mt-4">
           {fields.map((field) => (
             <Form.Item
               key={field.name}
@@ -182,11 +181,13 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
                   message: `请输入${field.label}`,
                 },
               ]}
-              extra={field.description && (
-                <Paragraph type="secondary" className="text-xs mt-1 mb-0">
-                  {field.description}
-                </Paragraph>
-              )}
+              extra={
+                field.description && (
+                  <Paragraph type="secondary" className="text-xs mt-1 mb-0">
+                    {field.description}
+                  </Paragraph>
+                )
+              }
             >
               {renderInput(field)}
             </Form.Item>
@@ -194,7 +195,7 @@ export const EnvVarInputModal: FC<EnvVarInputModalProps> = ({
         </Form>
 
         {/* Security Notice for passwords */}
-        {data.fields.some(f => f.input_type === 'password') && (
+        {data.fields.some((f) => f.input_type === 'password') && (
           <Alert
             message="安全提示"
             description="密码类型的环境变量将被加密存储，保护您的敏感信息。"

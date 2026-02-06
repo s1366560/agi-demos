@@ -177,21 +177,13 @@ describe('VirtualTimelineEventList Pagination', () => {
   describe('IsStreaming prop', () => {
     it('should accept isStreaming prop', () => {
       const { rerender } = render(
-        <VirtualTimelineEventList
-          timeline={mockTimeline}
-          isStreaming={true}
-        />
+        <VirtualTimelineEventList timeline={mockTimeline} isStreaming={true} />
       );
 
       // Should render without errors
       expect(screen.getByTestId('virtual-scroll-container')).toBeInTheDocument();
 
-      rerender(
-        <VirtualTimelineEventList
-          timeline={mockTimeline}
-          isStreaming={false}
-        />
-      );
+      rerender(<VirtualTimelineEventList timeline={mockTimeline} isStreaming={false} />);
 
       // Should still render without errors
       expect(screen.getByTestId('virtual-scroll-container')).toBeInTheDocument();

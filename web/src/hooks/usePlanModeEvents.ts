@@ -11,11 +11,11 @@
  * @module hooks/usePlanModeEvents
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
 
-import { sseEmitter, type PlanModeEventHandlers } from "../services/sse";
+import { sseEmitter, type PlanModeEventHandlers } from '../services/sse';
 
-import type { AgentEvent } from "../types/agent";
+import type { AgentEvent } from '../types/agent';
 
 /**
  * Reflection result from plan execution
@@ -36,7 +36,7 @@ export interface ReflectionResult {
 export interface PlanAdjustment {
   id: string;
   timestamp: string;
-  type: "step_added" | "step_removed" | "step_modified" | "step_reordered";
+  type: 'step_added' | 'step_removed' | 'step_modified' | 'step_reordered';
   description: string;
   step_id?: string;
   previous_state?: unknown;
@@ -78,7 +78,7 @@ export function usePlanModeEvents(handlers: PlanModeEventHandlers): void {
 
       try {
         switch (event.type) {
-          case "plan_mode_enter": {
+          case 'plan_mode_enter': {
             const data = event.data as {
               conversation_id: string;
               plan_id: string;
@@ -88,13 +88,13 @@ export function usePlanModeEvents(handlers: PlanModeEventHandlers): void {
             break;
           }
 
-          case "plan_created": {
+          case 'plan_created': {
             const data = event.data as any;
             currentHandlers.onPlanGenerated?.({ plan: data });
             break;
           }
 
-          case "plan_step_complete": {
+          case 'plan_step_complete': {
             const data = event.data as {
               plan_id: string;
               step_id: string;
@@ -114,13 +114,13 @@ export function usePlanModeEvents(handlers: PlanModeEventHandlers): void {
             break;
           }
 
-          case "reflection_complete": {
+          case 'reflection_complete': {
             const data = event.data as any;
             currentHandlers.onReflectionComplete?.({ reflection: data });
             break;
           }
 
-          case "adjustment_applied": {
+          case 'adjustment_applied': {
             const data = event.data as {
               plan_id: string;
               adjustment_count: number;
@@ -130,7 +130,7 @@ export function usePlanModeEvents(handlers: PlanModeEventHandlers): void {
             break;
           }
 
-          case "plan_execution_complete": {
+          case 'plan_execution_complete': {
             const data = event.data as {
               plan_id: string;
               status: string;
@@ -150,7 +150,7 @@ export function usePlanModeEvents(handlers: PlanModeEventHandlers): void {
         }
       } catch (error) {
         // Log error but don't crash the hook
-        console.error("[usePlanModeEvents] Error handling event:", error);
+        console.error('[usePlanModeEvents] Error handling event:', error);
       }
     };
 

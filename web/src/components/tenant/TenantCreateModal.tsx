@@ -13,13 +13,13 @@ interface TenantCreateModalProps {
 export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
 }) => {
   const { createTenant, isLoading, error } = useTenantStore();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    plan: 'free' as const
+    plan: 'free' as const,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,14 +60,21 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md" role="alert" aria-live="assertive">
+            <div
+              className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md"
+              role="alert"
+              aria-live="assertive"
+            >
               <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
               <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
             </div>
           )}
 
           <div>
-            <label htmlFor="tenant-create-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="tenant-create-name"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               工作空间名称 *
             </label>
             <input
@@ -84,7 +91,10 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
           </div>
 
           <div>
-            <label htmlFor="tenant-create-description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="tenant-create-description"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               描述
             </label>
             <textarea
@@ -97,13 +107,19 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               disabled={isLoading}
               aria-describedby="tenant-create-description-help"
             />
-            <span id="tenant-create-description-help" className="text-xs text-gray-500 dark:text-slate-400">
+            <span
+              id="tenant-create-description-help"
+              className="text-xs text-gray-500 dark:text-slate-400"
+            >
               可选：描述工作空间的用途
             </span>
           </div>
 
           <div>
-            <label htmlFor="tenant-create-plan" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+            <label
+              htmlFor="tenant-create-plan"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+            >
               计划类型
             </label>
             <select

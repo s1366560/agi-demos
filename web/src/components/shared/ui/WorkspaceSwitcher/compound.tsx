@@ -6,8 +6,8 @@
  */
 
 // Export compound components
-export { WorkspaceSwitcherRoot } from './WorkspaceSwitcherRoot'
-export { WorkspaceSwitcherTrigger } from './Trigger'
-export { WorkspaceSwitcherMenu } from './Menu'
-export { TenantList } from './TenantList'
-export { ProjectList } from './ProjectList'
+export { WorkspaceSwitcherRoot } from './WorkspaceSwitcherRoot';
+export { WorkspaceSwitcherTrigger } from './Trigger';
+export { WorkspaceSwitcherMenu } from './Menu';
+export { TenantList } from './TenantList';
+export { ProjectList } from './ProjectList';

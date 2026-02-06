@@ -5,5 +5,5 @@
  * following React composition patterns.
  */
 
-export { SearchHeader } from './SearchHeader'
-export type { SearchHeaderProps } from './SearchHeader'
+export { SearchHeader } from './SearchHeader';
+export type { SearchHeaderProps } from './SearchHeader';

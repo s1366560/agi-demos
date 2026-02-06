@@ -7,26 +7,26 @@
  * @module hooks/useDateFormatter
  */
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback } from 'react';
 
 /**
  * Formatter cache to reuse Intl.DateTimeFormat instances
  * Key: locale string, Value: Intl.DateTimeFormat
  */
-const formatterCache = new Map<string, Intl.DateTimeFormat>()
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 /**
  * Result type for useDateFormatter hook
  */
 export interface DateFormatterResult {
   /** Format a date as a date string (e.g., "January 15, 2024") */
-  formatDate: (date: Date | string | number | null | undefined) => string
+  formatDate: (date: Date | string | number | null | undefined) => string;
   /** Format a date as a time string (e.g., "10:30 AM") */
-  formatTime: (date: Date | string | number | null | undefined) => string
+  formatTime: (date: Date | string | number | null | undefined) => string;
   /** Format a date as a date and time string (e.g., "January 15, 2024 at 10:30 AM") */
-  formatDateTime: (date: Date | string | number | null | undefined) => string
+  formatDateTime: (date: Date | string | number | null | undefined) => string;
   /** Format a date as relative time (e.g., "5m ago", "2h ago", "3d ago") */
-  formatRelative: (timestamp: number | string | Date) => string
+  formatRelative: (timestamp: number | string | Date) => string;
 }
 
 /**
@@ -40,13 +40,13 @@ function getCachedFormatter(
   locale: string,
   options: Intl.DateTimeFormatOptions
 ): Intl.DateTimeFormat {
-  const cacheKey = `${locale}-${JSON.stringify(options)}`
+  const cacheKey = `${locale}-${JSON.stringify(options)}`;
 
   if (!formatterCache.has(cacheKey)) {
-    formatterCache.set(cacheKey, new Intl.DateTimeFormat(locale, options))
+    formatterCache.set(cacheKey, new Intl.DateTimeFormat(locale, options));
   }
 
-  return formatterCache.get(cacheKey)!
+  return formatterCache.get(cacheKey)!;
 }
 
 /**
@@ -56,9 +56,9 @@ function getCachedFormatter(
  * @returns Date object or undefined if invalid
  */
 function parseDate(date: Date | string | number | null | undefined): Date | undefined {
-  if (!date) return undefined
-  if (date instanceof Date) return date
-  return new Date(date)
+  if (!date) return undefined;
+  if (date instanceof Date) return date;
+  return new Date(date);
 }
 
 /**
@@ -84,7 +84,7 @@ export function useDateFormatter(locale: string = 'en-US'): DateFormatterResult 
         day: 'numeric',
       }),
     [locale]
-  )
+  );
 
   const timeFormatter = useMemo(
     () =>
@@ -93,7 +93,7 @@ export function useDateFormatter(locale: string = 'en-US'): DateFormatterResult 
         minute: '2-digit',
       }),
     [locale]
-  )
+  );
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -105,64 +105,67 @@ export function useDateFormatter(locale: string = 'en-US'): DateFormatterResult 
         minute: '2-digit',
       }),
     [locale]
-  )
+  );
 
   // Memoize format functions to maintain stable references
   const formatDate = useCallback(
     (date: Date | string | number | null | undefined): string => {
-      const parsed = parseDate(date)
+      const parsed = parseDate(date);
       if (!parsed || isNaN(parsed.getTime())) {
-        return ''
+        return '';
       }
-      return dateFormatter.format(parsed)
+      return dateFormatter.format(parsed);
     },
     [dateFormatter]
-  )
+  );
 
   const formatTime = useCallback(
     (date: Date | string | number | null | undefined): string => {
-      const parsed = parseDate(date)
+      const parsed = parseDate(date);
       if (!parsed || isNaN(parsed.getTime())) {
-        return ''
+        return '';
       }
-      return timeFormatter.format(parsed)
+      return timeFormatter.format(parsed);
     },
     [timeFormatter]
-  )
+  );
 
   const formatDateTime = useCallback(
     (date: Date | string | number | null | undefined): string => {
-      const parsed = parseDate(date)
+      const parsed = parseDate(date);
       if (!parsed || isNaN(parsed.getTime())) {
-        return ''
+        return '';
       }
-      return dateTimeFormatter.format(parsed)
+      return dateTimeFormatter.format(parsed);
     },
     [dateTimeFormatter]
-  )
+  );
 
-  const formatRelative = useCallback((timestamp: number | string | Date): string => {
-    const date = typeof timestamp === 'object' ? timestamp : new Date(timestamp)
-    const now = Date.now()
-    const diffMs = now - date.getTime()
-    const diffSecs = Math.floor(diffMs / 1000)
-    const diffMins = Math.floor(diffSecs / 60)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
+  const formatRelative = useCallback(
+    (timestamp: number | string | Date): string => {
+      const date = typeof timestamp === 'object' ? timestamp : new Date(timestamp);
+      const now = Date.now();
+      const diffMs = now - date.getTime();
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
 
-    if (diffSecs < 60) {
-      return 'just now'
-    } else if (diffMins < 60) {
-      return `${diffMins}m ago`
-    } else if (diffHours < 24) {
-      return `${diffHours}h ago`
-    } else if (diffDays < 7) {
-      return `${diffDays}d ago`
-    } else {
-      // For older dates, return absolute date
-      return formatDate(date)
-    }
-  }, [formatDate])
+      if (diffSecs < 60) {
+        return 'just now';
+      } else if (diffMins < 60) {
+        return `${diffMins}m ago`;
+      } else if (diffHours < 24) {
+        return `${diffHours}h ago`;
+      } else if (diffDays < 7) {
+        return `${diffDays}d ago`;
+      } else {
+        // For older dates, return absolute date
+        return formatDate(date);
+      }
+    },
+    [formatDate]
+  );
 
   // Memoize the entire result object to maintain stable reference
   return useMemo(
@@ -173,7 +176,7 @@ export function useDateFormatter(locale: string = 'en-US'): DateFormatterResult 
       formatRelative,
     }),
     [formatDate, formatTime, formatDateTime, formatRelative]
-  )
+  );
 }
 
 /**
@@ -184,14 +187,14 @@ export function useDateFormatter(locale: string = 'en-US'): DateFormatterResult 
  * @returns Formatted string (e.g., "5.0 GB", "150 MB", "800 KB")
  */
 export function formatStorage(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024)
+  const gb = bytes / (1024 * 1024 * 1024);
   if (gb >= 1) {
-    return `${gb.toFixed(1)} GB`
+    return `${gb.toFixed(1)} GB`;
   }
-  const mb = bytes / (1024 * 1024)
+  const mb = bytes / (1024 * 1024);
   if (mb >= 1) {
-    return `${mb.toFixed(1)} MB`
+    return `${mb.toFixed(1)} MB`;
   }
-  const kb = bytes / 1024
-  return `${kb.toFixed(1)} KB`
+  const kb = bytes / 1024;
+  return `${kb.toFixed(1)} KB`;
 }

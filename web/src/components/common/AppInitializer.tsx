@@ -1,6 +1,6 @@
 /**
  * AppInitializer - Application initialization wrapper
- * 
+ *
  * Ensures all required resources (i18n, theme, auth) are loaded
  * before rendering the application to prevent FOUC/FOUT.
  */
@@ -31,7 +31,7 @@ const InitialLoadingScreen: React.FC = () => {
             MemStack<span className="text-primary">.ai</span>
           </h1>
         </div>
-        
+
         {/* Loading spinner */}
         <div className="flex items-center gap-2 text-slate-500">
           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -55,11 +55,11 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
     const checkReady = () => {
       const i18nReady = i18n.isInitialized;
       const authReady = !isAuthLoading;
-      
+
       if (i18nReady && authReady) {
         // Add ready class to html for CSS transitions
         document.documentElement.classList.add('app-ready');
-        
+
         // Small delay to ensure smooth transition
         setTimeout(() => {
           setIsReady(true);
@@ -74,7 +74,7 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
       const timer = setInterval(checkReady, 50);
       return () => clearInterval(timer);
     }
-    
+
     return undefined;
   }, [i18n.isInitialized, isAuthLoading, isReady]);
 

@@ -6,17 +6,17 @@
  * - Object vs string result handling
  */
 
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
 
-import '@testing-library/jest-dom/vitest'
+import '@testing-library/jest-dom/vitest';
 import {
   ToolExecutionCardDisplay,
   MessageStream,
   UserMessage,
   AgentSection,
   ReasoningLogCard,
-} from '../../../../components/agent/chat/MessageStream'
+} from '../../../../components/agent/chat/MessageStream';
 
 describe('ToolExecutionCardDisplay', () => {
   describe('Result Type Handling', () => {
@@ -27,17 +27,17 @@ describe('ToolExecutionCardDisplay', () => {
           status="success"
           result="Simple string result"
         />
-      )
+      );
 
-      expect(screen.getByText('Simple string result')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Simple string result')).toBeInTheDocument();
+    });
 
     it('should handle object result by converting to JSON string', () => {
       const objectResult = {
         title: 'Search Results',
         output: 'Found 5 items',
-        metadata: { count: 5 }
-      }
+        metadata: { count: 5 },
+      };
 
       // This should not throw "Objects are not valid as a React child" error
       expect(() => {
@@ -47,38 +47,29 @@ describe('ToolExecutionCardDisplay', () => {
             status="success"
             result={objectResult as any}
           />
-        )
-      }).not.toThrow()
+        );
+      }).not.toThrow();
 
       // The component should display the JSON stringified version
-      expect(screen.getByText(/Search Results/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/Search Results/)).toBeInTheDocument();
+    });
 
     it('should handle null result gracefully', () => {
       expect(() => {
         render(
-          <ToolExecutionCardDisplay
-            toolName="test_tool"
-            status="success"
-            result={null as any}
-          />
-        )
-      }).not.toThrow()
-    })
+          <ToolExecutionCardDisplay toolName="test_tool" status="success" result={null as any} />
+        );
+      }).not.toThrow();
+    });
 
     it('should handle undefined result', () => {
       expect(() => {
-        render(
-          <ToolExecutionCardDisplay
-            toolName="test_tool"
-            status="success"
-          />
-        )
-      }).not.toThrow()
-    })
+        render(<ToolExecutionCardDisplay toolName="test_tool" status="success" />);
+      }).not.toThrow();
+    });
 
     it('should handle array result', () => {
-      const arrayResult = ['item1', 'item2', 'item3']
+      const arrayResult = ['item1', 'item2', 'item3'];
 
       expect(() => {
         render(
@@ -87,22 +78,22 @@ describe('ToolExecutionCardDisplay', () => {
             status="success"
             result={arrayResult as any}
           />
-        )
-      }).not.toThrow()
+        );
+      }).not.toThrow();
 
-      expect(screen.getByText(/item1/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/item1/)).toBeInTheDocument();
+    });
 
     it('should handle nested object result with folding', () => {
       const nestedResult = {
         data: {
           items: [
             { id: 1, name: 'First' },
-            { id: 2, name: 'Second' }
-          ]
+            { id: 2, name: 'Second' },
+          ],
         },
-        pagination: { page: 1, total: 2 }
-      }
+        pagination: { page: 1, total: 2 },
+      };
 
       expect(() => {
         render(
@@ -111,38 +102,27 @@ describe('ToolExecutionCardDisplay', () => {
             status="success"
             result={nestedResult as any}
           />
-        )
-      }).not.toThrow()
+        );
+      }).not.toThrow();
 
-      // With folding enabled for long results (>10 lines), 
+      // With folding enabled for long results (>10 lines),
       // the full content may be collapsed. Look for the "Show Full" button instead
-      expect(screen.getByText(/Show Full/)).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText(/Show Full/)).toBeInTheDocument();
+    });
+  });
 
   describe('Status Display', () => {
     it('should show running status', () => {
-      render(
-        <ToolExecutionCardDisplay
-          toolName="running_tool"
-          status="running"
-        />
-      )
+      render(<ToolExecutionCardDisplay toolName="running_tool" status="running" />);
 
-      expect(screen.getByText('Running')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Running')).toBeInTheDocument();
+    });
 
     it('should show success status', () => {
-      render(
-        <ToolExecutionCardDisplay
-          toolName="success_tool"
-          status="success"
-          result="Done"
-        />
-      )
+      render(<ToolExecutionCardDisplay toolName="success_tool" status="success" result="Done" />);
 
-      expect(screen.getByText('Success')).toBeInTheDocument()
-    })
+      expect(screen.getByText('Success')).toBeInTheDocument();
+    });
 
     it('should show error status', () => {
       render(
@@ -151,12 +131,12 @@ describe('ToolExecutionCardDisplay', () => {
           status="error"
           error="Something went wrong"
         />
-      )
+      );
 
-      expect(screen.getByText('Failed')).toBeInTheDocument()
-      expect(screen.getByText('Something went wrong')).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText('Failed')).toBeInTheDocument();
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    });
+  });
 
   describe('Duration Formatting', () => {
     it('should format milliseconds', () => {
@@ -167,11 +147,11 @@ describe('ToolExecutionCardDisplay', () => {
           result="Done"
           duration={500}
         />
-      )
+      );
 
       // Duration is shown in parentheses after Success badge
-      expect(screen.getByText(/\(500ms\)/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/\(500ms\)/)).toBeInTheDocument();
+    });
 
     it('should format seconds', () => {
       render(
@@ -181,10 +161,10 @@ describe('ToolExecutionCardDisplay', () => {
           result="Done"
           duration={1500}
         />
-      )
+      );
 
-      expect(screen.getByText(/\(1\.5s\)/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/\(1\.5s\)/)).toBeInTheDocument();
+    });
 
     it('should format minutes', () => {
       render(
@@ -194,91 +174,73 @@ describe('ToolExecutionCardDisplay', () => {
           result="Done"
           duration={75000}
         />
-      )
+      );
 
-      expect(screen.getByText(/\(1\.3m\)/)).toBeInTheDocument()
-    })
-  })
+      expect(screen.getByText(/\(1\.3m\)/)).toBeInTheDocument();
+    });
+  });
 
   describe('Result Folding', () => {
     it('should fold long text results by default', () => {
       // Create a result with more than 10 lines (5+5 threshold)
-      const longResult = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}`).join('\n')
+      const longResult = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}`).join('\n');
 
       render(
-        <ToolExecutionCardDisplay
-          toolName="test_tool"
-          status="success"
-          result={longResult}
-        />
-      )
+        <ToolExecutionCardDisplay toolName="test_tool" status="success" result={longResult} />
+      );
 
       // Should show "Show Full" button for folded content
-      expect(screen.getByText(/Show Full/)).toBeInTheDocument()
+      expect(screen.getByText(/Show Full/)).toBeInTheDocument();
       // Check for the collapsed line indicator
-      expect(screen.getByText(/10 lines collapsed/)).toBeInTheDocument()
+      expect(screen.getByText(/10 lines collapsed/)).toBeInTheDocument();
       // Middle lines should be collapsed
-      expect(screen.queryByText('Line 10')).not.toBeInTheDocument()
-    })
+      expect(screen.queryByText('Line 10')).not.toBeInTheDocument();
+    });
 
     it('should not fold short text results', () => {
       // Create a result with exactly 10 lines (5+5 threshold)
-      const shortResult = Array.from({ length: 10 }, (_, i) => `Line ${i + 1}`).join('\n')
+      const shortResult = Array.from({ length: 10 }, (_, i) => `Line ${i + 1}`).join('\n');
 
       render(
-        <ToolExecutionCardDisplay
-          toolName="test_tool"
-          status="success"
-          result={shortResult}
-        />
-      )
+        <ToolExecutionCardDisplay toolName="test_tool" status="success" result={shortResult} />
+      );
 
       // Should NOT show "Show Full" button for non-folded content
-      expect(screen.queryByText(/Show Full/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Show Full/)).not.toBeInTheDocument();
       // All lines should be visible
-      expect(screen.getByText(/Line 1/)).toBeInTheDocument()
-      expect(screen.getByText(/Line 10/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/Line 1/)).toBeInTheDocument();
+      expect(screen.getByText(/Line 10/)).toBeInTheDocument();
+    });
 
     it('should expand folded content when Show Full is clicked', () => {
       // Create a result with more than 10 lines
-      const longResult = Array.from({ length: 15 }, (_, i) => `Line ${i + 1}`).join('\n')
+      const longResult = Array.from({ length: 15 }, (_, i) => `Line ${i + 1}`).join('\n');
 
       render(
-        <ToolExecutionCardDisplay
-          toolName="test_tool"
-          status="success"
-          result={longResult}
-        />
-      )
+        <ToolExecutionCardDisplay toolName="test_tool" status="success" result={longResult} />
+      );
 
       // Click "Show Full" button
-      const showFullButton = screen.getByText(/Show Full/)
-      fireEvent.click(showFullButton)
+      const showFullButton = screen.getByText(/Show Full/);
+      fireEvent.click(showFullButton);
 
       // After clicking, should show "Show Less"
-      expect(screen.getByText(/Show Less/)).toBeInTheDocument()
+      expect(screen.getByText(/Show Less/)).toBeInTheDocument();
       // All lines should now be visible
-      expect(screen.getByText(/Line 8/)).toBeInTheDocument()
-    })
+      expect(screen.getByText(/Line 8/)).toBeInTheDocument();
+    });
 
     it('should fold error results as well', () => {
       // Create a long error message
-      const longError = Array.from({ length: 15 }, (_, i) => `Error line ${i + 1}`).join('\n')
+      const longError = Array.from({ length: 15 }, (_, i) => `Error line ${i + 1}`).join('\n');
 
-      render(
-        <ToolExecutionCardDisplay
-          toolName="test_tool"
-          status="error"
-          error={longError}
-        />
-      )
+      render(<ToolExecutionCardDisplay toolName="test_tool" status="error" error={longError} />);
 
       // Should show "Show Full" button for folded error content
-      expect(screen.getByText(/Show Full/)).toBeInTheDocument()
-    })
-  })
-})
+      expect(screen.getByText(/Show Full/)).toBeInTheDocument();
+    });
+  });
+});
 
 describe('MessageStream', () => {
   it('should render children correctly', () => {
@@ -289,58 +251,58 @@ describe('MessageStream', () => {
           <ReasoningLogCard steps={['Thinking...']} summary="Thinking" />
         </AgentSection>
       </MessageStream>
-    )
+    );
 
-    expect(screen.getByText('Hello')).toBeInTheDocument()
-    expect(screen.getByText('Thinking...')).toBeInTheDocument()
-  })
-})
+    expect(screen.getByText('Hello')).toBeInTheDocument();
+    expect(screen.getByText('Thinking...')).toBeInTheDocument();
+  });
+});
 
 describe('formatToolResult utility', () => {
   // Helper function to format tool results
   function formatToolResult(result: unknown): string {
     if (result === null || result === undefined) {
-      return ''
+      return '';
     }
     if (typeof result === 'string') {
-      return result
+      return result;
     }
-    return JSON.stringify(result, null, 2)
+    return JSON.stringify(result, null, 2);
   }
 
   it('should return empty string for null', () => {
-    expect(formatToolResult(null)).toBe('')
-  })
+    expect(formatToolResult(null)).toBe('');
+  });
 
   it('should return empty string for undefined', () => {
-    expect(formatToolResult(undefined)).toBe('')
-  })
+    expect(formatToolResult(undefined)).toBe('');
+  });
 
   it('should return string as-is', () => {
-    expect(formatToolResult('test string')).toBe('test string')
-  })
+    expect(formatToolResult('test string')).toBe('test string');
+  });
 
   it('should convert object to JSON string', () => {
-    const obj = { key: 'value', nested: { data: 123 } }
-    const result = formatToolResult(obj)
-    expect(result).toContain('key')
-    expect(result).toContain('value')
-    expect(result).toContain('123')
-  })
+    const obj = { key: 'value', nested: { data: 123 } };
+    const result = formatToolResult(obj);
+    expect(result).toContain('key');
+    expect(result).toContain('value');
+    expect(result).toContain('123');
+  });
 
   it('should convert array to JSON string', () => {
-    const arr = ['a', 'b', 'c']
-    const result = formatToolResult(arr)
-    expect(result).toContain('a')
-    expect(result).toContain('b')
-    expect(result).toContain('c')
-  })
+    const arr = ['a', 'b', 'c'];
+    const result = formatToolResult(arr);
+    expect(result).toContain('a');
+    expect(result).toContain('b');
+    expect(result).toContain('c');
+  });
 
   it('should convert number to JSON string', () => {
-    expect(formatToolResult(42)).toBe('42')
-  })
+    expect(formatToolResult(42)).toBe('42');
+  });
 
   it('should convert boolean to JSON string', () => {
-    expect(formatToolResult(true)).toBe('true')
-  })
-})
+    expect(formatToolResult(true)).toBe('true');
+  });
+});

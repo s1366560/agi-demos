@@ -9,9 +9,9 @@
  * @module components/agent/sandbox/SandboxStatusIndicator
  */
 
-import { useCallback, useEffect, useMemo, useState, type FC } from "react";
+import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 
-import { Popover, Spin, Progress, message, Button } from "antd";
+import { Popover, Spin, Progress, message, Button } from 'antd';
 import {
   Terminal,
   Power,
@@ -24,17 +24,17 @@ import {
   Network,
   Clock,
   RefreshCw,
-} from "lucide-react";
+} from 'lucide-react';
 
-import { agentService } from "../../../services/agentService";
+import { agentService } from '../../../services/agentService';
 import {
   projectSandboxService,
   type ProjectSandbox,
   type SandboxStats,
   type ProjectSandboxStatus,
-} from "../../../services/projectSandboxService";
-import { type SandboxStateData } from "../../../types/agent";
-import { logger } from "../../../utils/logger";
+} from '../../../services/projectSandboxService';
+import { type SandboxStateData } from '../../../types/agent';
+import { logger } from '../../../utils/logger';
 
 interface SandboxStatusIndicatorProps {
   /** Project ID */
@@ -49,7 +49,7 @@ interface SandboxStatusIndicatorProps {
  * Status configuration for different sandbox states
  */
 const statusConfig: Record<
-  ProjectSandboxStatus | "none",
+  ProjectSandboxStatus | 'none',
   {
     label: string;
     icon: React.ElementType;
@@ -61,66 +61,66 @@ const statusConfig: Record<
   }
 > = {
   none: {
-    label: "未启动",
+    label: '未启动',
     icon: Power,
-    color: "text-slate-500",
-    bgColor: "bg-slate-100 dark:bg-slate-800",
-    description: "点击启动沙盒环境",
+    color: 'text-slate-500',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    description: '点击启动沙盒环境',
     clickable: true,
   },
   pending: {
-    label: "等待中",
+    label: '等待中',
     icon: Clock,
-    color: "text-amber-500",
-    bgColor: "bg-amber-100 dark:bg-amber-900/30",
-    description: "沙盒正在排队等待启动",
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-100 dark:bg-amber-900/30',
+    description: '沙盒正在排队等待启动',
     animate: true,
   },
   creating: {
-    label: "创建中",
+    label: '创建中',
     icon: Loader2,
-    color: "text-blue-500",
-    bgColor: "bg-blue-100 dark:bg-blue-900/30",
-    description: "正在创建沙盒容器",
+    color: 'text-blue-500',
+    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
+    description: '正在创建沙盒容器',
     animate: true,
   },
   running: {
-    label: "运行中",
+    label: '运行中',
     icon: CheckCircle2,
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-100 dark:bg-emerald-900/30",
-    description: "沙盒环境正常运行",
+    color: 'text-emerald-500',
+    bgColor: 'bg-emerald-100 dark:bg-emerald-900/30',
+    description: '沙盒环境正常运行',
   },
   unhealthy: {
-    label: "不健康",
+    label: '不健康',
     icon: AlertCircle,
-    color: "text-orange-500",
-    bgColor: "bg-orange-100 dark:bg-orange-900/30",
-    description: "沙盒运行异常，可能需要重启",
+    color: 'text-orange-500',
+    bgColor: 'bg-orange-100 dark:bg-orange-900/30',
+    description: '沙盒运行异常，可能需要重启',
     clickable: true,
   },
   stopped: {
-    label: "已停止",
+    label: '已停止',
     icon: Power,
-    color: "text-slate-500",
-    bgColor: "bg-slate-100 dark:bg-slate-800",
-    description: "沙盒已停止，点击重新启动",
+    color: 'text-slate-500',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    description: '沙盒已停止，点击重新启动',
     clickable: true,
   },
   terminated: {
-    label: "已终止",
+    label: '已终止',
     icon: Power,
-    color: "text-slate-400",
-    bgColor: "bg-slate-100 dark:bg-slate-800",
-    description: "沙盒已终止，点击创建新沙盒",
+    color: 'text-slate-400',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    description: '沙盒已终止，点击创建新沙盒',
     clickable: true,
   },
   error: {
-    label: "错误",
+    label: '错误',
     icon: AlertCircle,
-    color: "text-red-500",
-    bgColor: "bg-red-100 dark:bg-red-900/30",
-    description: "沙盒出现错误",
+    color: 'text-red-500',
+    bgColor: 'bg-red-100 dark:bg-red-900/30',
+    description: '沙盒出现错误',
     clickable: true,
   },
 };
@@ -129,9 +129,9 @@ const statusConfig: Record<
  * Format bytes to human readable string
  */
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+  if (bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
+  const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
@@ -178,12 +178,10 @@ const MetricsPopover: FC<{
       <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-2">
           <Terminal size={16} className="text-slate-600 dark:text-slate-400" />
-          <span className="font-medium text-slate-800 dark:text-slate-200">
-            沙盒环境
-          </span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">沙盒环境</span>
         </div>
         <div className={`flex items-center gap-1 text-xs ${config.color}`}>
-          <config.icon size={12} className={config.animate ? "animate-spin" : ""} />
+          <config.icon size={12} className={config.animate ? 'animate-spin' : ''} />
           <span>{config.label}</span>
         </div>
       </div>
@@ -213,7 +211,7 @@ const MetricsPopover: FC<{
                 percent={stats.cpu_percent}
                 size="small"
                 showInfo={false}
-                strokeColor={stats.cpu_percent > 80 ? "#ef4444" : "#3b82f6"}
+                strokeColor={stats.cpu_percent > 80 ? '#ef4444' : '#3b82f6'}
               />
             </div>
           </div>
@@ -232,7 +230,7 @@ const MetricsPopover: FC<{
                 percent={stats.memory_percent}
                 size="small"
                 showInfo={false}
-                strokeColor={stats.memory_percent > 80 ? "#ef4444" : "#8b5cf6"}
+                strokeColor={stats.memory_percent > 80 ? '#ef4444' : '#8b5cf6'}
               />
             </div>
           </div>
@@ -245,7 +243,8 @@ const MetricsPopover: FC<{
                 <div className="flex justify-between">
                   <span className="text-slate-600 dark:text-slate-400">网络</span>
                   <span className="text-slate-800 dark:text-slate-200">
-                    ↓{formatBytes(stats.network_rx_bytes || 0)} / ↑{formatBytes(stats.network_tx_bytes || 0)}
+                    ↓{formatBytes(stats.network_rx_bytes || 0)} / ↑
+                    {formatBytes(stats.network_tx_bytes || 0)}
                   </span>
                 </div>
               </div>
@@ -259,7 +258,10 @@ const MetricsPopover: FC<{
             </div>
             {stats.uptime_seconds !== undefined && (
               <div className="text-slate-500">
-                运行时间: <span className="text-slate-700 dark:text-slate-300">{formatDuration(stats.uptime_seconds)}</span>
+                运行时间:{' '}
+                <span className="text-slate-700 dark:text-slate-300">
+                  {formatDuration(stats.uptime_seconds)}
+                </span>
               </div>
             )}
           </div>
@@ -268,15 +270,10 @@ const MetricsPopover: FC<{
 
       {/* Actions */}
       <div className="flex gap-2 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
-        <Button
-          size="small"
-          icon={<RefreshCw size={12} />}
-          onClick={onRefresh}
-          loading={loading}
-        >
+        <Button size="small" icon={<RefreshCw size={12} />} onClick={onRefresh} loading={loading}>
           刷新
         </Button>
-        {sandbox.status === "running" && (
+        {sandbox.status === 'running' && (
           <>
             <Button size="small" onClick={onRestart}>
               重启
@@ -307,7 +304,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   // Determine current status
-  const currentStatus: ProjectSandboxStatus | "none" = sandbox?.status || "none";
+  const currentStatus: ProjectSandboxStatus | 'none' = sandbox?.status || 'none';
   const config = statusConfig[currentStatus] || statusConfig.none;
 
   /**
@@ -324,7 +321,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       // 404 means no sandbox exists - handle silently
       const apiError = error as { statusCode?: number };
       if (apiError?.statusCode !== 404) {
-        logger.error("[SandboxStatusIndicator] Failed to fetch sandbox:", error);
+        logger.error('[SandboxStatusIndicator] Failed to fetch sandbox:', error);
       }
       setSandbox(null);
     } finally {
@@ -336,7 +333,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
    * Fetch sandbox stats
    */
   const fetchStats = useCallback(async () => {
-    if (!projectId || !sandbox || sandbox.status !== "running") {
+    if (!projectId || !sandbox || sandbox.status !== 'running') {
       setStats(null);
       return;
     }
@@ -346,7 +343,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       const statsData = await projectSandboxService.getStats(projectId);
       setStats(statsData);
     } catch (error) {
-      logger.error("[SandboxStatusIndicator] Failed to fetch stats:", error);
+      logger.error('[SandboxStatusIndicator] Failed to fetch stats:', error);
       setStats(null);
     } finally {
       setStatsLoading(false);
@@ -365,11 +362,11 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
         auto_create: true,
       });
       setSandbox(info);
-      message.success("沙盒环境已启动");
+      message.success('沙盒环境已启动');
     } catch (error) {
-      logger.error("[SandboxStatusIndicator] Failed to start sandbox:", error);
-      const errMsg = error instanceof Error ? error.message : "未知错误";
-      message.error("启动沙盒失败: " + errMsg);
+      logger.error('[SandboxStatusIndicator] Failed to start sandbox:', error);
+      const errMsg = error instanceof Error ? error.message : '未知错误';
+      message.error('启动沙盒失败: ' + errMsg);
     } finally {
       setStarting(false);
     }
@@ -387,10 +384,10 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       if (result.sandbox) {
         setSandbox(result.sandbox);
       }
-      message.success("沙盒已重启");
+      message.success('沙盒已重启');
     } catch (error) {
-      logger.error("[SandboxStatusIndicator] Failed to restart sandbox:", error);
-      message.error("重启沙盒失败");
+      logger.error('[SandboxStatusIndicator] Failed to restart sandbox:', error);
+      message.error('重启沙盒失败');
     } finally {
       setLoading(false);
     }
@@ -407,10 +404,10 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       await projectSandboxService.terminateSandbox(projectId);
       setSandbox(null);
       setStats(null);
-      message.success("沙盒已停止");
+      message.success('沙盒已停止');
     } catch (error) {
-      logger.error("[SandboxStatusIndicator] Failed to stop sandbox:", error);
-      message.error("停止沙盒失败");
+      logger.error('[SandboxStatusIndicator] Failed to stop sandbox:', error);
+      message.error('停止沙盒失败');
     } finally {
       setLoading(false);
     }
@@ -421,9 +418,13 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
    */
   const handleClick = useCallback(() => {
     if (config.clickable && !starting && !loading) {
-      if (currentStatus === "none" || currentStatus === "stopped" || currentStatus === "terminated") {
+      if (
+        currentStatus === 'none' ||
+        currentStatus === 'stopped' ||
+        currentStatus === 'terminated'
+      ) {
         handleStartSandbox();
-      } else if (currentStatus === "unhealthy" || currentStatus === "error") {
+      } else if (currentStatus === 'unhealthy' || currentStatus === 'error') {
         handleRestart();
       }
     }
@@ -436,7 +437,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   // Fetch stats when popover opens and sandbox is running
   useEffect(() => {
-    if (popoverOpen && sandbox?.status === "running") {
+    if (popoverOpen && sandbox?.status === 'running') {
       fetchStats();
     }
   }, [popoverOpen, sandbox?.status, fetchStats]);
@@ -451,13 +452,18 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     // Events will be queued internally until WebSocket is connected
     agentService.subscribeSandboxState(
       projectId,
-      "", // tenantId can be empty as it's optional on backend
+      '', // tenantId can be empty as it's optional on backend
       (state: SandboxStateData) => {
-        logger.debug("[SandboxStatusIndicator] Sandbox state change:", state);
+        logger.debug('[SandboxStatusIndicator] Sandbox state change:', state);
 
-        switch (state.eventType) {
-          case "created":
-          case "restarted":
+        // Normalize event types from different sources:
+        // - broadcast_sandbox_state uses: "created", "restarted", "terminated"
+        // - Redis stream uses: "sandbox_created", "sandbox_terminated", "sandbox_status"
+        const eventType = state.eventType.replace(/^sandbox_/, '');
+
+        switch (eventType) {
+          case 'created':
+          case 'restarted':
             // On created/restarted, update sandbox info from event data
             if (state.status) {
               setSandbox((prev) => {
@@ -485,13 +491,14 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
             }
             break;
 
-          case "terminated":
-            logger.debug("[SandboxStatusIndicator] Sandbox terminated");
+          case 'terminated':
+            logger.debug('[SandboxStatusIndicator] Sandbox terminated');
             setSandbox(null);
             setStats(null);
             break;
 
-          case "status_changed":
+          case 'status':
+          case 'status_changed':
             // Update status from event data
             if (state.status) {
               setSandbox((prev) =>
@@ -521,7 +528,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   // Auto-refresh stats while popover is open
   useEffect(() => {
-    if (!popoverOpen || !sandbox || sandbox.status !== "running") return;
+    if (!popoverOpen || !sandbox || sandbox.status !== 'running') return;
 
     const interval = setInterval(fetchStats, 5000); // Refresh every 5 seconds
     return () => clearInterval(interval);
@@ -536,14 +543,9 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   const indicatorContent = (
     <>
-      <StatusIcon
-        size={12}
-        className={config.animate || starting ? "animate-spin" : ""}
-      />
-      <span>{starting ? "启动中" : config.label}</span>
-      {sandbox?.status === "running" && (
-        <PlayCircle size={10} className="text-emerald-500" />
-      )}
+      <StatusIcon size={12} className={config.animate || starting ? 'animate-spin' : ''} />
+      <span>{starting ? '启动中' : config.label}</span>
+      {sandbox?.status === 'running' && <PlayCircle size={10} className="text-emerald-500" />}
     </>
   );
 
@@ -573,7 +575,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
             transition-all duration-300
             cursor-pointer hover:opacity-80
             border-none outline-none
-            ${className || ""}
+            ${className || ''}
           `}
           onClick={handleClick}
         >
@@ -585,7 +587,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
             flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
             ${config.bgColor} ${config.color}
             transition-all duration-300
-            ${className || ""}
+            ${className || ''}
           `}
         >
           {indicatorContent}

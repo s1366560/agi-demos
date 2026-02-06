@@ -4,35 +4,35 @@
  * Tests the extended sandbox store with desktop and terminal status management.
  */
 
-import { renderHook, act, waitFor } from "@testing-library/react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { renderHook, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { useSandboxStore } from "../../stores/sandbox";
+import { useSandboxStore } from '../../stores/sandbox';
 
-import type { DesktopStatus, TerminalStatus } from "../../types/agent";
+import type { DesktopStatus, TerminalStatus } from '../../types/agent';
 
-describe("Sandbox Store - Desktop and Terminal Status", () => {
+describe('Sandbox Store - Desktop and Terminal Status', () => {
   beforeEach(() => {
     // Reset store before each test
     const { reset } = useSandboxStore.getState();
     reset();
   });
 
-  describe("Desktop Status", () => {
-    it("should have initial desktop status as null", () => {
+  describe('Desktop Status', () => {
+    it('should have initial desktop status as null', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       expect(result.current.desktopStatus).toBeNull();
     });
 
-    it("should update desktop status when setDesktopStatus is called", () => {
+    it('should update desktop status when setDesktopStatus is called', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const mockStatus: DesktopStatus = {
         running: true,
-        url: "http://localhost:6080/vnc.html",
-        display: ":0",
-        resolution: "1280x720",
+        url: 'http://localhost:6080/vnc.html',
+        display: ':0',
+        resolution: '1280x720',
         port: 6080,
       };
 
@@ -43,14 +43,14 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.desktopStatus).toEqual(mockStatus);
     });
 
-    it("should clear desktop status when set to null", () => {
+    it('should clear desktop status when set to null', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const mockStatus: DesktopStatus = {
         running: true,
-        url: "http://localhost:6080/vnc.html",
-        display: ":0",
-        resolution: "1280x720",
+        url: 'http://localhost:6080/vnc.html',
+        display: ':0',
+        resolution: '1280x720',
         port: 6080,
       };
 
@@ -67,7 +67,7 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.desktopStatus).toBeNull();
     });
 
-    it("should track desktop loading state", () => {
+    it('should track desktop loading state', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       expect(result.current.isDesktopLoading).toBe(false);
@@ -86,19 +86,19 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
     });
   });
 
-  describe("Terminal Status", () => {
-    it("should have initial terminal status as null", () => {
+  describe('Terminal Status', () => {
+    it('should have initial terminal status as null', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       expect(result.current.terminalStatus).toBeNull();
     });
 
-    it("should update terminal status when setTerminalStatus is called", () => {
+    it('should update terminal status when setTerminalStatus is called', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const mockStatus: TerminalStatus = {
         running: true,
-        url: "ws://localhost:7681",
+        url: 'ws://localhost:7681',
         port: 7681,
       };
 
@@ -109,12 +109,12 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.terminalStatus).toEqual(mockStatus);
     });
 
-    it("should clear terminal status when set to null", () => {
+    it('should clear terminal status when set to null', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const mockStatus: TerminalStatus = {
         running: true,
-        url: "ws://localhost:7681",
+        url: 'ws://localhost:7681',
         port: 7681,
       };
 
@@ -131,7 +131,7 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.terminalStatus).toBeNull();
     });
 
-    it("should track terminal loading state", () => {
+    it('should track terminal loading state', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       expect(result.current.isTerminalLoading).toBe(false);
@@ -150,8 +150,8 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
     });
   });
 
-  describe("Desktop Control Actions", () => {
-    it("should call onDesktopStart callback when provided", async () => {
+  describe('Desktop Control Actions', () => {
+    it('should call onDesktopStart callback when provided', async () => {
       const mockOnDesktopStart = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
@@ -165,7 +165,7 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.isDesktopLoading).toBe(false);
     });
 
-    it("should call onDesktopStop callback when provided", async () => {
+    it('should call onDesktopStop callback when provided', async () => {
       const mockOnDesktopStop = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
@@ -173,9 +173,9 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       // First set desktop as running
       const mockStatus: DesktopStatus = {
         running: true,
-        url: "http://localhost:6080/vnc.html",
-        display: ":0",
-        resolution: "1280x720",
+        url: 'http://localhost:6080/vnc.html',
+        display: ':0',
+        resolution: '1280x720',
         port: 6080,
       };
 
@@ -192,8 +192,8 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
     });
   });
 
-  describe("Terminal Control Actions", () => {
-    it("should call onTerminalStart callback when provided", async () => {
+  describe('Terminal Control Actions', () => {
+    it('should call onTerminalStart callback when provided', async () => {
       const mockOnTerminalStart = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
@@ -206,7 +206,7 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.isTerminalLoading).toBe(false);
     });
 
-    it("should call onTerminalStop callback when provided", async () => {
+    it('should call onTerminalStop callback when provided', async () => {
       const mockOnTerminalStop = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
@@ -214,7 +214,7 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       // First set terminal as running
       const mockStatus: TerminalStatus = {
         running: true,
-        url: "ws://localhost:7681",
+        url: 'ws://localhost:7681',
         port: 7681,
       };
 
@@ -231,21 +231,21 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
     });
   });
 
-  describe("SSE Event Handling", () => {
-    it("should update desktop status on desktop_started event", () => {
+  describe('SSE Event Handling', () => {
+    it('should update desktop status on desktop_started event', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const eventData = {
-        sandbox_id: "test-sandbox",
-        url: "http://localhost:6080/vnc.html",
-        display: ":0",
-        resolution: "1280x720",
+        sandbox_id: 'test-sandbox',
+        url: 'http://localhost:6080/vnc.html',
+        display: ':0',
+        resolution: '1280x720',
         port: 6080,
       };
 
       act(() => {
         result.current.handleSSEEvent({
-          type: "desktop_started",
+          type: 'desktop_started',
           data: eventData,
         } as any);
       });
@@ -254,15 +254,15 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.desktopStatus?.url).toBe(eventData.url);
     });
 
-    it("should update desktop status on desktop_stopped event", () => {
+    it('should update desktop status on desktop_stopped event', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       // First set desktop as running
       const mockStatus: DesktopStatus = {
         running: true,
-        url: "http://localhost:6080/vnc.html",
-        display: ":0",
-        resolution: "1280x720",
+        url: 'http://localhost:6080/vnc.html',
+        display: ':0',
+        resolution: '1280x720',
         port: 6080,
       };
 
@@ -274,8 +274,8 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
 
       act(() => {
         result.current.handleSSEEvent({
-          type: "desktop_stopped",
-          data: { sandbox_id: "test-sandbox" },
+          type: 'desktop_stopped',
+          data: { sandbox_id: 'test-sandbox' },
         } as any);
       });
 
@@ -283,19 +283,19 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.desktopStatus?.url).toBeNull();
     });
 
-    it("should update terminal status on terminal_started event", () => {
+    it('should update terminal status on terminal_started event', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const eventData = {
-        sandbox_id: "test-sandbox",
-        url: "ws://localhost:7681",
+        sandbox_id: 'test-sandbox',
+        url: 'ws://localhost:7681',
         port: 7681,
-        session_id: "session-123",
+        session_id: 'session-123',
       };
 
       act(() => {
         result.current.handleSSEEvent({
-          type: "terminal_started",
+          type: 'terminal_started',
           data: eventData,
         } as any);
       });
@@ -304,13 +304,13 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.terminalStatus?.url).toBe(eventData.url);
     });
 
-    it("should update terminal status on terminal_stopped event", () => {
+    it('should update terminal status on terminal_stopped event', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       // First set terminal as running
       const mockStatus: TerminalStatus = {
         running: true,
-        url: "ws://localhost:7681",
+        url: 'ws://localhost:7681',
         port: 7681,
       };
 
@@ -322,8 +322,8 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
 
       act(() => {
         result.current.handleSSEEvent({
-          type: "terminal_stopped",
-          data: { sandbox_id: "test-sandbox" },
+          type: 'terminal_stopped',
+          data: { sandbox_id: 'test-sandbox' },
         } as any);
       });
 
@@ -332,15 +332,15 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
     });
   });
 
-  describe("Selectors", () => {
-    it("should provide selector for desktop status", () => {
+  describe('Selectors', () => {
+    it('should provide selector for desktop status', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const mockStatus: DesktopStatus = {
         running: true,
-        url: "http://localhost:6080/vnc.html",
-        display: ":0",
-        resolution: "1280x720",
+        url: 'http://localhost:6080/vnc.html',
+        display: ':0',
+        resolution: '1280x720',
         port: 6080,
       };
 
@@ -352,12 +352,12 @@ describe("Sandbox Store - Desktop and Terminal Status", () => {
       expect(result.current.desktopStatus).toEqual(mockStatus);
     });
 
-    it("should provide selector for terminal status", () => {
+    it('should provide selector for terminal status', () => {
       const { result } = renderHook(() => useSandboxStore());
 
       const mockStatus: TerminalStatus = {
         running: true,
-        url: "ws://localhost:7681",
+        url: 'ws://localhost:7681',
         port: 7681,
       };
 

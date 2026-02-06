@@ -1,6 +1,6 @@
 /**
  * Event Version Migration
- * 
+ *
  * Handles migration of event payloads between schema versions.
  * Uses BFS to find the shortest migration path between versions.
  */
@@ -93,9 +93,7 @@ function findMigrationPath(
   }
 
   // BFS to find shortest path
-  const queue: { version: string; path: MigrationFn[] }[] = [
-    { version: fromVersion, path: [] },
-  ];
+  const queue: { version: string; path: MigrationFn[] }[] = [{ version: fromVersion, path: [] }];
   const visited = new Set<string>([fromVersion]);
 
   while (queue.length > 0) {
@@ -126,7 +124,7 @@ function findMigrationPath(
 
 /**
  * Migrate event data from one version to another
- * 
+ *
  * @param eventType - The event type
  * @param data - The event payload
  * @param fromVersion - Source schema version
@@ -146,11 +144,9 @@ export function migrateEventData<T = unknown>(
 
   // Find migration path
   const path = findMigrationPath(eventType, fromVersion, toVersion);
-  
+
   if (!path) {
-    console.warn(
-      `No migration path found for ${eventType} from ${fromVersion} to ${toVersion}`
-    );
+    console.warn(`No migration path found for ${eventType} from ${fromVersion} to ${toVersion}`);
     return data;
   }
 
@@ -212,7 +208,7 @@ export function initializeBuiltinMigrations(): void {
           ...d,
           thinking_chain: d.thinking_chain || [], // Add thinking chain
           metadata: {
-            ...(d.metadata as Record<string, unknown> || {}),
+            ...((d.metadata as Record<string, unknown>) || {}),
             migrated_from: '1.1',
           },
         };
@@ -262,7 +258,7 @@ export function initializeBuiltinMigrations(): void {
       to: '1.1',
       migrate: (data) => {
         const d = data as Record<string, unknown>;
-        const steps = d.steps as Array<Record<string, unknown>> || [];
+        const steps = (d.steps as Array<Record<string, unknown>>) || [];
         return {
           ...d,
           steps: steps.map((step, index) => ({

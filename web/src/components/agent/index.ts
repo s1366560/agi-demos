@@ -58,11 +58,11 @@ export { IdleState, FloatingInputBar } from './chat';
 export { VirtualTimelineEventList } from './VirtualTimelineEventList';
 export { TimelineEventItem } from './TimelineEventItem';
 export {
-    WorkPlanProgress,
-    ToolExecutionLive,
-    ReasoningLog,
-    FinalReport,
-    FollowUpPills,
+  WorkPlanProgress,
+  ToolExecutionLive,
+  ReasoningLog,
+  FinalReport,
+  FollowUpPills,
 } from './execution';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
 export { MaterialIcon } from './shared';

@@ -211,9 +211,9 @@ describe('ConversationsStore', () => {
       const error = { response: { data: { detail: 'Network error' } } };
       listConversationsMock.mockRejectedValue(error);
 
-      await expect(
-        useConversationsStore.getState().listConversations('proj-1')
-      ).rejects.toEqual(error);
+      await expect(useConversationsStore.getState().listConversations('proj-1')).rejects.toEqual(
+        error
+      );
 
       const { conversationsLoading, conversationsError } = useConversationsStore.getState();
 
@@ -225,11 +225,13 @@ describe('ConversationsStore', () => {
       const error = { message: 'Unknown error' };
       listConversationsMock.mockRejectedValue(error);
 
-      await expect(
-        useConversationsStore.getState().listConversations('proj-1')
-      ).rejects.toEqual(error);
+      await expect(useConversationsStore.getState().listConversations('proj-1')).rejects.toEqual(
+        error
+      );
 
-      expect(useConversationsStore.getState().conversationsError).toBe('Failed to list conversations');
+      expect(useConversationsStore.getState().conversationsError).toBe(
+        'Failed to list conversations'
+      );
     });
 
     it('should replace existing conversations on new fetch', async () => {
@@ -240,9 +242,7 @@ describe('ConversationsStore', () => {
         conversations: [existingConv],
       });
 
-      const newConversations: Conversation[] = [
-        createMockConversation('new', 'proj-1', 'New'),
-      ];
+      const newConversations: Conversation[] = [createMockConversation('new', 'proj-1', 'New')];
 
       listConversationsMock.mockResolvedValue(newConversations);
 
@@ -311,9 +311,9 @@ describe('ConversationsStore', () => {
       const error = { response: { data: { detail: 'Creation failed' } } };
       createConversationMock.mockRejectedValue(error);
 
-      await expect(
-        useConversationsStore.getState().createConversation('proj-1')
-      ).rejects.toEqual(error);
+      await expect(useConversationsStore.getState().createConversation('proj-1')).rejects.toEqual(
+        error
+      );
 
       const { conversationsLoading, conversationsError } = useConversationsStore.getState();
 
@@ -356,7 +356,9 @@ describe('ConversationsStore', () => {
       const result = await useConversationsStore.getState().getConversation('conv-1', 'proj-1');
 
       expect(result).toBe(null);
-      expect(useConversationsStore.getState().conversationsError).toBe('Failed to get conversation');
+      expect(useConversationsStore.getState().conversationsError).toBe(
+        'Failed to get conversation'
+      );
     });
   });
 

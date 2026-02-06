@@ -14,11 +14,11 @@ interface ProjectCreateModalProps {
 export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
 }) => {
   const { createProject, isLoading, error } = useProjectStore();
   const { currentTenant } = useTenantStore();
-  
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -27,13 +27,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
       max_episodes: 1000,
       retention_days: 30,
       auto_refresh: true,
-      refresh_interval: 24
+      refresh_interval: 24,
     },
     graph_config: {
       max_nodes: 5000,
       max_edges: 10000,
       similarity_threshold: 0.7,
-      community_detection: true
+      community_detection: true,
     },
     sandbox_config: {
       sandbox_type: 'cloud' as 'cloud' | 'local',
@@ -41,9 +41,9 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         workspace_path: '/workspace',
         tunnel_url: '',
         host: 'localhost',
-        port: 8765
-      }
-    }
+        port: 8765,
+      },
+    },
   });
 
   const [activeTab, setActiveTab] = useState<'basic' | 'memory' | 'graph' | 'sandbox'>('basic');
@@ -57,13 +57,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         max_episodes: 1000,
         retention_days: 30,
         auto_refresh: true,
-        refresh_interval: 24
+        refresh_interval: 24,
       },
       graph_config: {
         max_nodes: 5000,
         max_edges: 10000,
         similarity_threshold: 0.7,
-        community_detection: true
+        community_detection: true,
       },
       sandbox_config: {
         sandbox_type: 'cloud',
@@ -71,16 +71,16 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
           workspace_path: '/workspace',
           tunnel_url: '',
           host: 'localhost',
-          port: 8765
-        }
-      }
+          port: 8765,
+        },
+      },
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTenant) return;
-    
+
     try {
       // Only include local_config if sandbox_type is local
       const submitData = {
@@ -89,9 +89,9 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         sandbox_config: {
           sandbox_type: formData.sandbox_config.sandbox_type,
           ...(formData.sandbox_config.sandbox_type === 'local' && {
-            local_config: formData.sandbox_config.local_config
-          })
-        }
+            local_config: formData.sandbox_config.local_config,
+          }),
+        },
       };
       await createProject(currentTenant.id, submitData);
       onSuccess?.();
@@ -186,8 +186,15 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto" id="project-form">
           <div className="p-6 space-y-4">
             {error && (
-              <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md" role="alert" aria-live="assertive">
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+              <div
+                className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-md"
+                role="alert"
+                aria-live="assertive"
+              >
+                <AlertCircle
+                  className="h-4 w-4 text-red-600 dark:text-red-400"
+                  aria-hidden="true"
+                />
                 <span className="text-sm text-red-800 dark:text-red-300">{error}</span>
               </div>
             )}
@@ -195,7 +202,10 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
             {activeTab === 'basic' && (
               <>
                 <div>
-                  <label htmlFor="project-create-name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="project-create-name"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     项目名称 *
                   </label>
                   <input
@@ -212,7 +222,10 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                 </div>
 
                 <div>
-                  <label htmlFor="project-create-description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="project-create-description"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     项目描述
                   </label>
                   <textarea
@@ -225,13 +238,19 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     disabled={isLoading}
                     aria-describedby="project-create-description-help"
                   />
-                  <span id="project-create-description-help" className="text-xs text-gray-500 dark:text-slate-400">
+                  <span
+                    id="project-create-description-help"
+                    className="text-xs text-gray-500 dark:text-slate-400"
+                  >
                     可选：描述项目的目标和用途
                   </span>
                 </div>
 
                 <div>
-                  <label htmlFor="project-create-status" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="project-create-status"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     项目状态
                   </label>
                   <select
@@ -253,80 +272,104 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="project-create-max-episodes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label
+                      htmlFor="project-create-max-episodes"
+                      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >
                       最大记忆片段数
                     </label>
                     <input
                       type="number"
                       id="project-create-max-episodes"
                       value={formData.memory_rules.max_episodes}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        memory_rules: {
-                          ...formData.memory_rules,
-                          max_episodes: parseInt(e.target.value) || 1000
-                        }
-                      })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          memory_rules: {
+                            ...formData.memory_rules,
+                            max_episodes: parseInt(e.target.value) || 1000,
+                          },
+                        })
+                      }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="100"
                       max="10000"
                       disabled={isLoading}
                       aria-describedby="project-create-max-episodes-help"
                     />
-                    <span id="project-create-max-episodes-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    <span
+                      id="project-create-max-episodes-help"
+                      className="text-xs text-gray-500 dark:text-slate-400"
+                    >
                       范围：100 - 10000
                     </span>
                   </div>
 
                   <div>
-                    <label htmlFor="project-create-retention-days" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label
+                      htmlFor="project-create-retention-days"
+                      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >
                       保留天数
                     </label>
                     <input
                       type="number"
                       id="project-create-retention-days"
                       value={formData.memory_rules.retention_days}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        memory_rules: {
-                          ...formData.memory_rules,
-                          retention_days: parseInt(e.target.value) || 30
-                        }
-                      })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          memory_rules: {
+                            ...formData.memory_rules,
+                            retention_days: parseInt(e.target.value) || 30,
+                          },
+                        })
+                      }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="1"
                       max="365"
                       disabled={isLoading}
                       aria-describedby="project-create-retention-days-help"
                     />
-                    <span id="project-create-retention-days-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    <span
+                      id="project-create-retention-days-help"
+                      className="text-xs text-gray-500 dark:text-slate-400"
+                    >
                       范围：1 - 365 天
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="project-create-refresh-interval" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="project-create-refresh-interval"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     自动刷新间隔（小时）
                   </label>
                   <input
                     type="number"
                     id="project-create-refresh-interval"
                     value={formData.memory_rules.refresh_interval}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      memory_rules: {
-                        ...formData.memory_rules,
-                        refresh_interval: parseInt(e.target.value) || 24
-                      }
-                    })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        memory_rules: {
+                          ...formData.memory_rules,
+                          refresh_interval: parseInt(e.target.value) || 24,
+                        },
+                      })
+                    }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     min="1"
                     max="168"
                     disabled={isLoading}
                     aria-describedby="project-create-refresh-interval-help"
                   />
-                  <span id="project-create-refresh-interval-help" className="text-xs text-gray-500 dark:text-slate-400">
+                  <span
+                    id="project-create-refresh-interval-help"
+                    className="text-xs text-gray-500 dark:text-slate-400"
+                  >
                     范围：1 - 168 小时
                   </span>
                 </div>
@@ -336,17 +379,22 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     type="checkbox"
                     id="project-create-auto-refresh"
                     checked={formData.memory_rules.auto_refresh}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      memory_rules: {
-                        ...formData.memory_rules,
-                        auto_refresh: e.target.checked
-                      }
-                    })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        memory_rules: {
+                          ...formData.memory_rules,
+                          auto_refresh: e.target.checked,
+                        },
+                      })
+                    }
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                     disabled={isLoading}
                   />
-                  <label htmlFor="project-create-auto-refresh" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                  <label
+                    htmlFor="project-create-auto-refresh"
+                    className="text-sm font-medium text-gray-700 dark:text-slate-300"
+                  >
                     启用自动刷新
                   </label>
                 </div>
@@ -357,60 +405,79 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="project-create-max-nodes" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label
+                      htmlFor="project-create-max-nodes"
+                      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >
                       最大节点数
                     </label>
                     <input
                       type="number"
                       id="project-create-max-nodes"
                       value={formData.graph_config.max_nodes}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          max_nodes: parseInt(e.target.value) || 5000
-                        }
-                      })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          graph_config: {
+                            ...formData.graph_config,
+                            max_nodes: parseInt(e.target.value) || 5000,
+                          },
+                        })
+                      }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="100"
                       max="50000"
                       disabled={isLoading}
                       aria-describedby="project-create-max-nodes-help"
                     />
-                    <span id="project-create-max-nodes-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    <span
+                      id="project-create-max-nodes-help"
+                      className="text-xs text-gray-500 dark:text-slate-400"
+                    >
                       范围：100 - 50000
                     </span>
                   </div>
 
                   <div>
-                    <label htmlFor="project-create-max-edges" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                    <label
+                      htmlFor="project-create-max-edges"
+                      className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                    >
                       最大边数
                     </label>
                     <input
                       type="number"
                       id="project-create-max-edges"
                       value={formData.graph_config.max_edges}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        graph_config: {
-                          ...formData.graph_config,
-                          max_edges: parseInt(e.target.value) || 10000
-                        }
-                      })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          graph_config: {
+                            ...formData.graph_config,
+                            max_edges: parseInt(e.target.value) || 10000,
+                          },
+                        })
+                      }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="100"
                       max="100000"
                       disabled={isLoading}
                       aria-describedby="project-create-max-edges-help"
                     />
-                    <span id="project-create-max-edges-help" className="text-xs text-gray-500 dark:text-slate-400">
+                    <span
+                      id="project-create-max-edges-help"
+                      className="text-xs text-gray-500 dark:text-slate-400"
+                    >
                       范围：100 - 100000
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="project-create-similarity" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                  <label
+                    htmlFor="project-create-similarity"
+                    className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                  >
                     相似度阈值
                   </label>
                   <input
@@ -420,18 +487,23 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     max="1.0"
                     step="0.1"
                     value={formData.graph_config.similarity_threshold}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      graph_config: {
-                        ...formData.graph_config,
-                        similarity_threshold: parseFloat(e.target.value)
-                      }
-                    })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        graph_config: {
+                          ...formData.graph_config,
+                          similarity_threshold: parseFloat(e.target.value),
+                        },
+                      })
+                    }
                     className="w-full"
                     disabled={isLoading}
                     aria-describedby="project-create-similarity-value"
                   />
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400 mt-1" id="project-create-similarity-value">
+                  <div
+                    className="flex justify-between text-xs text-gray-500 dark:text-slate-400 mt-1"
+                    id="project-create-similarity-value"
+                  >
                     <span>0.1</span>
                     <span aria-live="polite">{formData.graph_config.similarity_threshold}</span>
                     <span>1.0</span>
@@ -443,17 +515,22 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     type="checkbox"
                     id="project-create-community-detection"
                     checked={formData.graph_config.community_detection}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      graph_config: {
-                        ...formData.graph_config,
-                        community_detection: e.target.checked
-                      }
-                    })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        graph_config: {
+                          ...formData.graph_config,
+                          community_detection: e.target.checked,
+                        },
+                      })
+                    }
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded bg-white dark:bg-slate-800"
                     disabled={isLoading}
                   />
-                  <label htmlFor="project-create-community-detection" className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                  <label
+                    htmlFor="project-create-community-detection"
+                    className="text-sm font-medium text-gray-700 dark:text-slate-300"
+                  >
                     启用社区检测
                   </label>
                 </div>
@@ -464,7 +541,8 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               <>
                 <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    <strong>沙箱</strong>是 Agent 执行代码和工具的安全隔离环境。您可以选择使用云端托管沙箱或在本地运行沙箱。
+                    <strong>沙箱</strong>是 Agent
+                    执行代码和工具的安全隔离环境。您可以选择使用云端托管沙箱或在本地运行沙箱。
                   </p>
                 </div>
 
@@ -472,7 +550,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                     沙箱类型
                   </label>
-                  
+
                   <div className="space-y-3">
                     <label className="flex items-start p-3 border border-gray-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                       <input
@@ -480,21 +558,27 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         name="sandbox_type"
                         value="cloud"
                         checked={formData.sandbox_config.sandbox_type === 'cloud'}
-                        onChange={() => setFormData({
-                          ...formData,
-                          sandbox_config: {
-                            ...formData.sandbox_config,
-                            sandbox_type: 'cloud'
-                          }
-                        })}
+                        onChange={() =>
+                          setFormData({
+                            ...formData,
+                            sandbox_config: {
+                              ...formData.sandbox_config,
+                              sandbox_type: 'cloud',
+                            },
+                          })
+                        }
                         className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                         disabled={isLoading}
                       />
                       <div className="ml-3 flex-1">
                         <div className="flex items-center space-x-2">
                           <Cloud className="w-4 h-4 text-blue-500" />
-                          <span className="font-medium text-gray-900 dark:text-white">云端沙箱</span>
-                          <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded">推荐</span>
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            云端沙箱
+                          </span>
+                          <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded">
+                            推荐
+                          </span>
                         </div>
                         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                           在云端 Docker 容器中运行，无需本地配置，开箱即用。适合大多数用户。
@@ -508,21 +592,27 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         name="sandbox_type"
                         value="local"
                         checked={formData.sandbox_config.sandbox_type === 'local'}
-                        onChange={() => setFormData({
-                          ...formData,
-                          sandbox_config: {
-                            ...formData.sandbox_config,
-                            sandbox_type: 'local'
-                          }
-                        })}
+                        onChange={() =>
+                          setFormData({
+                            ...formData,
+                            sandbox_config: {
+                              ...formData.sandbox_config,
+                              sandbox_type: 'local',
+                            },
+                          })
+                        }
                         className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                         disabled={isLoading}
                       />
                       <div className="ml-3 flex-1">
                         <div className="flex items-center space-x-2">
                           <Monitor className="w-4 h-4 text-purple-500" />
-                          <span className="font-medium text-gray-900 dark:text-white">本地沙箱</span>
-                          <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">高级</span>
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            本地沙箱
+                          </span>
+                          <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
+                            高级
+                          </span>
                         </div>
                         <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
                           在您的本地电脑运行，支持访问本地文件和资源。需要安装桌面客户端。
@@ -538,62 +628,73 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       <Monitor className="w-4 h-4" />
                       <span>本地沙箱配置</span>
                     </h4>
-                    
+
                     <div>
-                      <label htmlFor="project-create-tunnel-url" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                      <label
+                        htmlFor="project-create-tunnel-url"
+                        className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                      >
                         隧道 URL <span className="text-gray-400">(可选)</span>
                       </label>
                       <input
                         type="url"
                         id="project-create-tunnel-url"
                         value={formData.sandbox_config.local_config?.tunnel_url || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          sandbox_config: {
-                            ...formData.sandbox_config,
-                            local_config: {
-                              ...(formData.sandbox_config.local_config || {
-                                workspace_path: '/workspace',
-                                tunnel_url: '',
-                                host: 'localhost',
-                                port: 8765
-                              }),
-                              tunnel_url: e.target.value
-                            }
-                          }
-                        })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            sandbox_config: {
+                              ...formData.sandbox_config,
+                              local_config: {
+                                ...(formData.sandbox_config.local_config || {
+                                  workspace_path: '/workspace',
+                                  tunnel_url: '',
+                                  host: 'localhost',
+                                  port: 8765,
+                                }),
+                                tunnel_url: e.target.value,
+                              },
+                            },
+                          })
+                        }
                         placeholder="wss://your-tunnel.ngrok.io"
                         className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                         disabled={isLoading}
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                        使用 ngrok 或 cloudflare tunnel 生成的公网地址，用于云端平台连接到您的本地沙箱
+                        使用 ngrok 或 cloudflare tunnel
+                        生成的公网地址，用于云端平台连接到您的本地沙箱
                       </p>
                     </div>
 
                     <div>
-                      <label htmlFor="project-create-workspace-path" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
+                      <label
+                        htmlFor="project-create-workspace-path"
+                        className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1"
+                      >
                         工作目录 <span className="text-gray-400">(可选)</span>
                       </label>
                       <input
                         type="text"
                         id="project-create-workspace-path"
                         value={formData.sandbox_config.local_config?.workspace_path || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          sandbox_config: {
-                            ...formData.sandbox_config,
-                            local_config: {
-                              ...(formData.sandbox_config.local_config || {
-                                workspace_path: '/workspace',
-                                tunnel_url: '',
-                                host: 'localhost',
-                                port: 8765
-                              }),
-                              workspace_path: e.target.value
-                            }
-                          }
-                        })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            sandbox_config: {
+                              ...formData.sandbox_config,
+                              local_config: {
+                                ...(formData.sandbox_config.local_config || {
+                                  workspace_path: '/workspace',
+                                  tunnel_url: '',
+                                  host: 'localhost',
+                                  port: 8765,
+                                }),
+                                workspace_path: e.target.value,
+                              },
+                            },
+                          })
+                        }
                         placeholder="/home/user/workspace"
                         className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                         disabled={isLoading}

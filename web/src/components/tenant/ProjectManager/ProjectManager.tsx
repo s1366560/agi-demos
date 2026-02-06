@@ -49,8 +49,9 @@ export const Root: React.FC<ProjectManagerProps> = ({
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [selectedProjectForSettings, setSelectedProjectForSettings] =
-    useState<Project | null>(null);
+  const [selectedProjectForSettings, setSelectedProjectForSettings] = useState<Project | null>(
+    null
+  );
 
   // Load projects when tenant changes
   useEffect(() => {
@@ -85,14 +86,11 @@ export const Root: React.FC<ProjectManagerProps> = ({
   );
 
   // Handle opening settings modal
-  const handleOpenSettings = useCallback(
-    (project: Project, e: React.MouseEvent) => {
-      e.stopPropagation();
-      setSelectedProjectForSettings(project);
-      setIsSettingsModalOpen(true);
-    },
-    []
-  );
+  const handleOpenSettings = useCallback((project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedProjectForSettings(project);
+    setIsSettingsModalOpen(true);
+  }, []);
 
   // Handle saving settings
   const handleSaveSettings = useCallback(
@@ -228,13 +226,9 @@ export const Root: React.FC<ProjectManagerProps> = ({
       return (
         <>
           <Search />
-          <List>
-            {(project) => <Item key={project.id} project={project} />}
-          </List>
+          <List>{(project) => <Item key={project.id} project={project} />}</List>
           <CreateModal />
-          {selectedProjectForSettings && (
-            <SettingsModal project={selectedProjectForSettings} />
-          )}
+          {selectedProjectForSettings && <SettingsModal project={selectedProjectForSettings} />}
         </>
       );
     }

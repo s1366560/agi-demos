@@ -168,7 +168,9 @@ const CountdownTimer: React.FC<{
   return (
     <div className="flex items-center gap-2">
       <Clock className={`w-4 h-4 ${isUrgent ? 'text-red-500' : 'text-slate-400'}`} />
-      <span className={`text-sm font-mono ${isUrgent ? 'text-red-500 font-medium' : 'text-slate-500'}`}>
+      <span
+        className={`text-sm font-mono ${isUrgent ? 'text-red-500 font-medium' : 'text-slate-500'}`}
+      >
         {minutes}:{seconds.toString().padStart(2, '0')}
       </span>
       <LazyProgress
@@ -218,7 +220,9 @@ const ClarificationContent: React.FC<{
             <div className="flex items-center gap-2">
               <span>{option.label}</span>
               {option.recommended && (
-                <LazyTag color="green" className="text-xs">推荐</LazyTag>
+                <LazyTag color="green" className="text-xs">
+                  推荐
+                </LazyTag>
               )}
             </div>
             {option.description && (
@@ -226,9 +230,7 @@ const ClarificationContent: React.FC<{
             )}
           </Radio>
         ))}
-        {data.allow_custom && (
-          <Radio value="__custom__">自定义回答</Radio>
-        )}
+        {data.allow_custom && <Radio value="__custom__">自定义回答</Radio>}
       </Radio.Group>
 
       {selected === '__custom__' && data.allow_custom && (
@@ -287,27 +289,30 @@ const DecisionContent: React.FC<{
               key={option.id}
               className={`
                 border rounded-lg p-3 cursor-pointer transition-all
-                ${isSelected
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                ${
+                  isSelected
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
                 }
               `}
               onClick={() => setSelected(option.id)}
             >
               <div className="flex items-start gap-3">
-                <div className={`
+                <div
+                  className={`
                   w-4 h-4 rounded-full border-2 mt-0.5 flex-shrink-0
                   ${isSelected ? 'border-primary bg-primary' : 'border-slate-300'}
-                `}>
-                  {isSelected && (
-                    <CheckCircle2 className="w-full h-full text-white" />
-                  )}
+                `}
+                >
+                  {isSelected && <CheckCircle2 className="w-full h-full text-white" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm">{option.label}</span>
                     {option.recommended && (
-                      <LazyTag color="green" className="text-xs">推荐</LazyTag>
+                      <LazyTag color="green" className="text-xs">
+                        推荐
+                      </LazyTag>
                     )}
                     {option.risks?.length && (
                       <LazyTag color="orange" className="text-xs">
@@ -329,9 +334,7 @@ const DecisionContent: React.FC<{
                           {option.estimated_time}
                         </span>
                       )}
-                      {option.estimated_cost && (
-                        <span>💰 {option.estimated_cost}</span>
-                      )}
+                      {option.estimated_cost && <span>💰 {option.estimated_cost}</span>}
                     </div>
                   )}
 
@@ -344,7 +347,11 @@ const DecisionContent: React.FC<{
                         setExpanded(isExpanded ? null : option.id);
                       }}
                     >
-                      {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      {isExpanded ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
                       {isExpanded ? '收起详情' : '查看详情'}
                     </button>
                   )}
@@ -404,9 +411,7 @@ const EnvVarContent: React.FC<{
 
   return (
     <div className="space-y-3">
-      {data.message && (
-        <p className="text-sm text-slate-700 dark:text-slate-300">{data.message}</p>
-      )}
+      {data.message && <p className="text-sm text-slate-700 dark:text-slate-300">{data.message}</p>}
 
       <div className="text-xs text-slate-500 flex items-center gap-1">
         <Wrench className="w-3 h-3" />
@@ -444,12 +449,7 @@ const EnvVarContent: React.FC<{
           />
           保存配置以便下次使用
         </label>
-        <LazyButton
-          type="primary"
-          onClick={handleSubmit}
-          loading={isSubmitting}
-          size="small"
-        >
+        <LazyButton type="primary" onClick={handleSubmit} loading={isSubmitting} size="small">
           提交
         </LazyButton>
       </div>
@@ -527,14 +527,20 @@ const AnsweredState: React.FC<{
   createdAt?: string;
 }> = memo(({ hitlType, answeredValue, createdAt }) => {
   const color = getHITLColor(hitlType);
-  const title = hitlType === 'clarification' ? '已回答'
-    : hitlType === 'decision' ? '已确认'
-    : hitlType === 'env_var' ? '已配置'
-    : '已授权';
+  const title =
+    hitlType === 'clarification'
+      ? '已回答'
+      : hitlType === 'decision'
+        ? '已确认'
+        : hitlType === 'env_var'
+          ? '已配置'
+          : '已授权';
 
   return (
     <div className="flex items-start gap-3 animate-slide-up">
-      <div className={`w-8 h-8 rounded-full bg-${color}-100 dark:bg-${color}-900/50 flex items-center justify-center flex-shrink-0`}>
+      <div
+        className={`w-8 h-8 rounded-full bg-${color}-100 dark:bg-${color}-900/50 flex items-center justify-center flex-shrink-0`}
+      >
         <CheckCircle2 className={`w-4 h-4 text-${color}-600 dark:text-${color}-400`} />
       </div>
       <div className="flex-1">
@@ -547,9 +553,7 @@ const AnsweredState: React.FC<{
               <span className="text-xs text-slate-400">{formatTimeAgo(createdAt)}</span>
             )}
           </div>
-          {answeredValue && (
-            <p className="text-xs text-slate-500 mt-1">选择: {answeredValue}</p>
-          )}
+          {answeredValue && <p className="text-xs text-slate-500 mt-1">选择: {answeredValue}</p>}
         </div>
       </div>
     </div>
@@ -561,119 +565,127 @@ AnsweredState.displayName = 'AnsweredState';
 // Main Component
 // =============================================================================
 
-export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(({
-  hitlType,
-  requestId,
-  clarificationData,
-  decisionData,
-  envVarData,
-  permissionData,
-  isAnswered: isAnsweredProp = false,
-  answeredValue: answeredValueProp,
-  createdAt,
-  expiresAt,
-  timeoutSeconds = 300,
-}) => {
-  // Use useShallow to avoid infinite re-renders from object selector
-  const { submitResponse, isSubmitting, submittingRequestId, requestStatuses } = useUnifiedHITLStore(
-    useShallow((state) => ({
-      submitResponse: state.submitResponse,
-      isSubmitting: state.isSubmitting,
-      submittingRequestId: state.submittingRequestId,
-      requestStatuses: state.requestStatuses,
-    }))
-  );
+export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
+  ({
+    hitlType,
+    requestId,
+    clarificationData,
+    decisionData,
+    envVarData,
+    permissionData,
+    isAnswered: isAnsweredProp = false,
+    answeredValue: answeredValueProp,
+    createdAt,
+    expiresAt,
+    timeoutSeconds = 300,
+  }) => {
+    // Use useShallow to avoid infinite re-renders from object selector
+    const { submitResponse, isSubmitting, submittingRequestId, requestStatuses } =
+      useUnifiedHITLStore(
+        useShallow((state) => ({
+          submitResponse: state.submitResponse,
+          isSubmitting: state.isSubmitting,
+          submittingRequestId: state.submittingRequestId,
+          requestStatuses: state.requestStatuses,
+        }))
+      );
 
-  // Check if answered from either props (history) or store (real-time)
-  const storeStatus = requestId ? requestStatuses.get(requestId) : undefined;
-  const isAnsweredFromStore = storeStatus === 'answered' || storeStatus === 'completed';
-  const isAnswered = isAnsweredProp || isAnsweredFromStore;
+    // Check if answered from either props (history) or store (real-time)
+    const storeStatus = requestId ? requestStatuses.get(requestId) : undefined;
+    const isAnsweredFromStore = storeStatus === 'answered' || storeStatus === 'completed';
+    const isAnswered = isAnsweredProp || isAnsweredFromStore;
 
-  // For real-time answered, we don't have the value yet, use prop or placeholder
-  const answeredValue = answeredValueProp || (isAnsweredFromStore ? '已提交' : undefined);
+    // For real-time answered, we don't have the value yet, use prop or placeholder
+    const answeredValue = answeredValueProp || (isAnsweredFromStore ? '已提交' : undefined);
 
-  const isCurrentlySubmitting = isSubmitting && submittingRequestId === requestId;
+    const isCurrentlySubmitting = isSubmitting && submittingRequestId === requestId;
 
-  const handleSubmit = useCallback(async (responseData: HITLResponseData) => {
-    try {
-      await submitResponse(requestId, hitlType, responseData);
-    } catch (error) {
-      console.error('Failed to submit HITL response:', error);
-    }
-  }, [requestId, hitlType, submitResponse]);
-
-  // Show answered state
-  if (isAnswered) {
-    return (
-      <AnsweredState
-        hitlType={hitlType}
-        answeredValue={answeredValue}
-        createdAt={createdAt}
-      />
+    const handleSubmit = useCallback(
+      async (responseData: HITLResponseData) => {
+        try {
+          await submitResponse(requestId, hitlType, responseData);
+        } catch (error) {
+          console.error('Failed to submit HITL response:', error);
+        }
+      },
+      [requestId, hitlType, submitResponse]
     );
-  }
 
-  const icon = getHITLIcon(hitlType);
-  const title = getHITLTitle(hitlType);
-  const color = getHITLColor(hitlType);
+    // Show answered state
+    if (isAnswered) {
+      return (
+        <AnsweredState hitlType={hitlType} answeredValue={answeredValue} createdAt={createdAt} />
+      );
+    }
 
-  return (
-    <div className="flex items-start gap-3 animate-slide-up">
-      {/* Avatar */}
-      <div className={`w-8 h-8 rounded-full bg-${color}-100 dark:bg-${color}-900/50 flex items-center justify-center flex-shrink-0 text-${color}-600 dark:text-${color}-400`}>
-        {icon}
-      </div>
+    const icon = getHITLIcon(hitlType);
+    const title = getHITLTitle(hitlType);
+    const color = getHITLColor(hitlType);
 
-      {/* Card */}
-      <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-        <div className={`bg-white dark:bg-slate-800 border-l-4 border-${color}-500 rounded-lg shadow-sm overflow-hidden`}>
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                🤖 {title}
-              </span>
-              <LazyTag color={color} className="text-xs">{hitlType}</LazyTag>
+    return (
+      <div className="flex items-start gap-3 animate-slide-up">
+        {/* Avatar */}
+        <div
+          className={`w-8 h-8 rounded-full bg-${color}-100 dark:bg-${color}-900/50 flex items-center justify-center flex-shrink-0 text-${color}-600 dark:text-${color}-400`}
+        >
+          {icon}
+        </div>
+
+        {/* Card */}
+        <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+          <div
+            className={`bg-white dark:bg-slate-800 border-l-4 border-${color}-500 rounded-lg shadow-sm overflow-hidden`}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  🤖 {title}
+                </span>
+                <LazyTag color={color} className="text-xs">
+                  {hitlType}
+                </LazyTag>
+              </div>
+              <CountdownTimer expiresAt={expiresAt} timeoutSeconds={timeoutSeconds} />
             </div>
-            <CountdownTimer expiresAt={expiresAt} timeoutSeconds={timeoutSeconds} />
-          </div>
 
-          {/* Content */}
-          <div className="p-4">
-            {hitlType === 'clarification' && clarificationData && (
-              <ClarificationContent
-                data={clarificationData}
-                onSubmit={handleSubmit}
-                isSubmitting={isCurrentlySubmitting}
-              />
-            )}
-            {hitlType === 'decision' && decisionData && (
-              <DecisionContent
-                data={decisionData}
-                onSubmit={handleSubmit}
-                isSubmitting={isCurrentlySubmitting}
-              />
-            )}
-            {hitlType === 'env_var' && envVarData && (
-              <EnvVarContent
-                data={envVarData}
-                onSubmit={handleSubmit}
-                isSubmitting={isCurrentlySubmitting}
-              />
-            )}
-            {hitlType === 'permission' && permissionData && (
-              <PermissionContent
-                data={permissionData}
-                onSubmit={handleSubmit}
-                isSubmitting={isCurrentlySubmitting}
-              />
-            )}
+            {/* Content */}
+            <div className="p-4">
+              {hitlType === 'clarification' && clarificationData && (
+                <ClarificationContent
+                  data={clarificationData}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isCurrentlySubmitting}
+                />
+              )}
+              {hitlType === 'decision' && decisionData && (
+                <DecisionContent
+                  data={decisionData}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isCurrentlySubmitting}
+                />
+              )}
+              {hitlType === 'env_var' && envVarData && (
+                <EnvVarContent
+                  data={envVarData}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isCurrentlySubmitting}
+                />
+              )}
+              {hitlType === 'permission' && permissionData && (
+                <PermissionContent
+                  data={permissionData}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isCurrentlySubmitting}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 InlineHITLCard.displayName = 'InlineHITLCard';
 
 export default InlineHITLCard;

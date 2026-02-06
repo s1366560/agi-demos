@@ -22,30 +22,26 @@
  *   <AppHeader basePath="/tenant" variant="minimal" />
  */
 
-import * as React from 'react'
+import * as React from 'react';
 
 // Import subcomponents
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore } from '@/stores/theme';
 
-import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
+import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 
-import { LanguageSwitcher } from './LanguageSwitcher'
-import { MobileMenu } from './MobileMenu'
-import { Notifications } from './Notifications'
-import { PrimaryAction } from './PrimaryAction'
-import { Search } from './Search'
-import { SidebarToggle } from './SidebarToggle'
-import { ThemeToggle } from './ThemeToggle'
-import { Tools } from './Tools'
-import { UserMenu } from './UserMenu'
-import { WorkspaceSwitcher } from './WorkspaceSwitcher'
+import { LanguageSwitcher } from './LanguageSwitcher';
+import { MobileMenu } from './MobileMenu';
+import { Notifications } from './Notifications';
+import { PrimaryAction } from './PrimaryAction';
+import { Search } from './Search';
+import { SidebarToggle } from './SidebarToggle';
+import { ThemeToggle } from './ThemeToggle';
+import { Tools } from './Tools';
+import { UserMenu } from './UserMenu';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 // Import types
-import type {
-  AppHeaderRootProps,
-  HeaderVariant,
-  Breadcrumb,
-} from './types'
+import type { AppHeaderRootProps, HeaderVariant, Breadcrumb } from './types';
 
 // Import theme store for simple toggle
 
@@ -55,27 +51,28 @@ import type {
  * Context for compound components
  */
 interface AppHeaderContextValue {
-  basePath: string
-  context?: 'tenant' | 'project' | 'agent'
+  basePath: string;
+  context?: 'tenant' | 'project' | 'agent';
 }
 
-const AppHeaderContext = React.createContext<AppHeaderContextValue | null>(null)
+const AppHeaderContext = React.createContext<AppHeaderContextValue | null>(null);
 
 /**
  * Breadcrumb display component
  */
 function BreadcrumbNav({ breadcrumbs }: { breadcrumbs: Breadcrumb[] }) {
-  if (!breadcrumbs || breadcrumbs.length === 0) return null
+  if (!breadcrumbs || breadcrumbs.length === 0) return null;
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center text-sm text-slate-500 dark:text-slate-400">
+    <nav
+      aria-label="Breadcrumb"
+      className="flex items-center text-sm text-slate-500 dark:text-slate-400"
+    >
       {breadcrumbs.map((crumb, index) => {
-        const isLast = index === breadcrumbs.length - 1
+        const isLast = index === breadcrumbs.length - 1;
         return (
           <React.Fragment key={index}>
-            {index > 0 && (
-              <span className="mx-2 text-slate-300 dark:text-slate-600">/</span>
-            )}
+            {index > 0 && <span className="mx-2 text-slate-300 dark:text-slate-600">/</span>}
             {isLast ? (
               <span className="font-medium text-slate-900 dark:text-white truncate max-w-32 sm:max-w-48">
                 {crumb.label}
@@ -89,18 +86,18 @@ function BreadcrumbNav({ breadcrumbs }: { breadcrumbs: Breadcrumb[] }) {
               </a>
             )}
           </React.Fragment>
-        )
+        );
       })}
     </nav>
-  )
+  );
 }
 
 /**
  * Root AppHeader component
  */
 interface AppHeaderProps extends AppHeaderRootProps {
-  children?: React.ReactNode
-  breadcrumbs?: Breadcrumb[]
+  children?: React.ReactNode;
+  breadcrumbs?: Breadcrumb[];
 }
 
 export const AppHeaderRoot = React.memo(function AppHeader({
@@ -113,17 +110,17 @@ export const AppHeaderRoot = React.memo(function AppHeader({
   const contextValue: AppHeaderContextValue = React.useMemo(
     () => ({ basePath, context }),
     [basePath, context]
-  )
+  );
 
   // If no children provided, use variant preset (default to 'full')
-  const hasChildren = children && React.Children.count(children) > 0
+  const hasChildren = children && React.Children.count(children) > 0;
   if (!hasChildren) {
-    const effectiveVariant = variant === 'custom' ? 'full' : variant
+    const effectiveVariant = variant === 'custom' ? 'full' : variant;
     return (
       <AppHeaderContext.Provider value={contextValue}>
         <HeaderContent variant={effectiveVariant} breadcrumbs={breadcrumbs} context={context} />
       </AppHeaderContext.Provider>
-    )
+    );
   }
 
   return (
@@ -132,8 +129,8 @@ export const AppHeaderRoot = React.memo(function AppHeader({
         {children}
       </HeaderWrapper>
     </AppHeaderContext.Provider>
-  )
-})
+  );
+});
 
 /**
  * Header wrapper for compound components
@@ -144,32 +141,32 @@ function HeaderWrapper({
   breadcrumbs: customBreadcrumbs,
   context = 'tenant',
 }: {
-  children: React.ReactNode
-  breadcrumbs?: Breadcrumb[]
-  context?: 'tenant' | 'project' | 'agent'
+  children: React.ReactNode;
+  breadcrumbs?: Breadcrumb[];
+  context?: 'tenant' | 'project' | 'agent';
 }) {
   // Get breadcrumbs from hook if not provided
-  const breadcrumbs = customBreadcrumbs ?? useBreadcrumbs(context)
+  const breadcrumbs = customBreadcrumbs ?? useBreadcrumbs(context);
 
   // Group children by section using slot prop
-  const leftChildren: React.ReactNode[] = []
-  const centerChildren: React.ReactNode[] = []
-  const rightChildren: React.ReactNode[] = []
+  const leftChildren: React.ReactNode[] = [];
+  const centerChildren: React.ReactNode[] = [];
+  const rightChildren: React.ReactNode[] = [];
 
   React.Children.forEach(children, (child) => {
-    if (!React.isValidElement(child)) return
+    if (!React.isValidElement(child)) return;
 
     // Check the slot prop to determine position
-    const slot = (child.props as any)?.slot ?? 'right'
+    const slot = (child.props as any)?.slot ?? 'right';
 
     if (slot === 'left') {
-      leftChildren.push(child)
+      leftChildren.push(child);
     } else if (slot === 'center') {
-      centerChildren.push(child)
+      centerChildren.push(child);
     } else {
-      rightChildren.push(child)
+      rightChildren.push(child);
     }
-  })
+  });
 
   return (
     <header className="h-16 px-4 sm:px-6 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex items-center flex-none shrink-0">
@@ -178,9 +175,7 @@ function HeaderWrapper({
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {leftChildren}
           {/* Show breadcrumbs in left if no explicit left children */}
-          {leftChildren.length === 0 && breadcrumbs && (
-            <BreadcrumbNav breadcrumbs={breadcrumbs} />
-          )}
+          {leftChildren.length === 0 && breadcrumbs && <BreadcrumbNav breadcrumbs={breadcrumbs} />}
         </div>
 
         {/* Center section: Title/Breadcrumbs (hidden on small screens if empty) */}
@@ -196,7 +191,7 @@ function HeaderWrapper({
         </div>
       </div>
     </header>
-  )
+  );
 }
 
 /**
@@ -208,12 +203,12 @@ function HeaderContent({
   breadcrumbs: customBreadcrumbs,
   context = 'tenant',
 }: {
-  variant: HeaderVariant
-  breadcrumbs?: Breadcrumb[]
-  context?: 'tenant' | 'project' | 'agent'
+  variant: HeaderVariant;
+  breadcrumbs?: Breadcrumb[];
+  context?: 'tenant' | 'project' | 'agent';
 }) {
   // Get breadcrumbs from hook if not provided
-  const breadcrumbs = customBreadcrumbs ?? useBreadcrumbs(context)
+  const breadcrumbs = customBreadcrumbs ?? useBreadcrumbs(context);
 
   const renderContent = () => {
     switch (variant) {
@@ -227,7 +222,7 @@ function HeaderContent({
               <div className="flex items-center gap-2 sm:gap-3" />
             </div>
           </header>
-        )
+        );
 
       case 'compact':
         return (
@@ -252,7 +247,7 @@ function HeaderContent({
               </div>
             </div>
           </header>
-        )
+        );
 
       case 'full':
         return (
@@ -277,7 +272,12 @@ function HeaderContent({
                   aria-label="Search"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
                   </svg>
                 </button>
 
@@ -314,40 +314,77 @@ function HeaderContent({
               </div>
             </div>
           </header>
-        )
+        );
 
       default:
-        return null
+        return null;
     }
-  }
+  };
 
-  return renderContent()
+  return renderContent();
 }
 
 /**
  * Simple theme toggle for mobile - shows only current theme with dropdown
  */
 function SimpleThemeToggle() {
-  const [isOpen, setIsOpen] = React.useState(false)
-  const dropdownRef = React.useRef<HTMLDivElement>(null)
-  const theme = useThemeStore((state) => state.theme)
-  const setTheme = useThemeStore((state) => state.setTheme)
+  const [isOpen, setIsOpen] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const theme = useThemeStore((state) => state.theme);
+  const setTheme = useThemeStore((state) => state.setTheme);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        setIsOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const themeIcons = {
-    light: <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
-    dark: <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 24.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>,
-    system: <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
-  }
+    light: (
+      <svg
+        className="w-5 h-5 text-yellow-500"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+        />
+      </svg>
+    ),
+    dark: (
+      <svg
+        className="w-5 h-5 text-indigo-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M20.354 24.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+        />
+      </svg>
+    ),
+    system: (
+      <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+        />
+      </svg>
+    ),
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -366,8 +403,8 @@ function SimpleThemeToggle() {
             <button
               key={t}
               onClick={() => {
-                setTheme(t)
-                setIsOpen(false)
+                setTheme(t);
+                setIsOpen(false);
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-sm capitalize transition-colors ${
                 theme === t
@@ -383,7 +420,7 @@ function SimpleThemeToggle() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 // Attach subcomponents to AppHeader
@@ -398,7 +435,7 @@ const AppHeader = Object.assign(AppHeaderRoot, {
   WorkspaceSwitcher,
   UserMenu,
   PrimaryAction,
-})
+});
 
-export { AppHeader }
-export default AppHeader
+export { AppHeader };
+export default AppHeader;

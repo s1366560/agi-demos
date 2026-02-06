@@ -28,6 +28,7 @@ from src.application.services.sandbox_profile import (
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
+    get_current_user_from_header_or_query,
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -186,11 +187,45 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     return container.sandbox_adapter()
 
 
-def get_lifecycle_service(db=Depends(get_db)) -> ProjectSandboxLifecycleService:
-    """Get the project sandbox lifecycle service."""
-    from src.configuration.di_container import DIContainer
+def get_lifecycle_service(
+    request: Request, db=Depends(get_db)
+) -> ProjectSandboxLifecycleService:
+    """Get the project sandbox lifecycle service.
 
-    container = DIContainer().with_db(db)
+    Uses the properly initialized container from app.state which has
+    redis_client configured for distributed locking. Falls back to a new
+    container if app.state.container is not available.
+    """
+    try:
+        # Get container from app.state which has redis_client properly configured
+        # This enables Redis distributed locks instead of PostgreSQL advisory locks
+        container = request.app.state.container.with_db(db)
+    except (AttributeError, KeyError):
+        # Fallback for tests or when app.state.container is not set
+        from src.configuration.di_container import DIContainer
+
+        container = DIContainer().with_db(db)
+
+    return container.project_sandbox_lifecycle_service()
+
+
+def get_lifecycle_service_for_websocket(
+    websocket: WebSocket, db=Depends(get_db)
+) -> ProjectSandboxLifecycleService:
+    """Get the project sandbox lifecycle service for WebSocket endpoints.
+
+    WebSocket handlers receive WebSocket instead of Request, so we need
+    a separate dependency that extracts app.state from the WebSocket.
+    """
+    try:
+        # Get container from app.state which has redis_client properly configured
+        container = websocket.app.state.container.with_db(db)
+    except (AttributeError, KeyError):
+        # Fallback for tests or when app.state.container is not set
+        from src.configuration.di_container import DIContainer
+
+        container = DIContainer().with_db(db)
+
     return container.project_sandbox_lifecycle_service()
 
 
@@ -210,18 +245,17 @@ def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
 
 
 def get_orchestrator() -> SandboxOrchestrator:
-    """Get the sandbox orchestrator."""
-    from src.configuration.config import get_settings
-    from src.configuration.di_container import DIContainer
-
-    container = DIContainer()
-    settings = get_settings()
-
-    return SandboxOrchestrator(
-        sandbox_adapter=container.sandbox_adapter(),
-        event_publisher=container.sandbox_event_publisher(),
-        default_timeout=settings.sandbox_timeout_seconds,
+    """Get the sandbox orchestrator singleton.
+    
+    Uses the shared singleton from sandbox/utils.py to ensure
+    the orchestrator uses the same sandbox adapter instance that
+    has been synced with existing Docker containers.
+    """
+    from src.infrastructure.adapters.primary.web.routers.sandbox.utils import (
+        get_sandbox_orchestrator,
     )
+
+    return get_sandbox_orchestrator()
 
 
 # ============================================================================
@@ -797,13 +831,14 @@ async def proxy_project_desktop(
     project_id: str,
     path: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_from_header_or_query),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Proxy requests to the project's sandbox desktop (noVNC) service.
     
     This allows browser access to the desktop without exposing container ports directly.
     Uses httpx to proxy all content (HTML, JS, CSS, WebSocket) through the API server.
+    Supports token via query parameter for iframe access.
     """
     info = await service.get_project_sandbox(project_id)
     
@@ -820,6 +855,7 @@ async def proxy_project_desktop(
         )
     
     # Build target URL from the desktop service URL
+    import re
     import httpx
     from fastapi.responses import StreamingResponse
     
@@ -827,9 +863,14 @@ async def proxy_project_desktop(
     target_path = path if path else "vnc.html"
     target_url = f"{target_base}/{target_path}"
     
-    # Copy query parameters
-    if request.query_params:
-        target_url += f"?{request.query_params}"
+    # Extract token from query params to include in rewritten URLs
+    # This ensures sub-resources (JS, CSS) can also authenticate
+    token_param = request.query_params.get("token", "")
+    
+    # Copy query parameters (excluding token for proxied requests to container)
+    other_params = {k: v for k, v in request.query_params.items() if k != "token"}
+    if other_params:
+        target_url += f"?{'&'.join(f'{k}={v}' for k, v in other_params.items())}"
     
     try:
         # Proxy the request to the desktop service
@@ -845,16 +886,38 @@ async def proxy_project_desktop(
             # Return the response with appropriate content type
             content_type = response.headers.get("content-type", "application/octet-stream")
             
-            # For HTML/JS/CSS, rewrite URLs to use proxy path
+            # For HTML/JS/CSS, rewrite URLs to use proxy path with token
             content = response.content
             if content_type.startswith("text/html") or content_type.startswith("application/javascript"):
                 content_str = content.decode("utf-8", errors="replace")
-                # Rewrite relative URLs to use proxy path
+                
+                # Build proxy prefix with optional token
                 proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
-                content_str = content_str.replace('href="/', f'href="{proxy_prefix}')
-                content_str = content_str.replace('src="/', f'src="{proxy_prefix}')
-                content_str = content_str.replace("href='/", f"href='{proxy_prefix}")
-                content_str = content_str.replace("src='/", f"src='{proxy_prefix}")
+                
+                def rewrite_url(match: re.Match) -> str:
+                    """Rewrite URL with proxy prefix and token."""
+                    attr = match.group(1)  # href or src
+                    quote = match.group(2)  # " or '
+                    path_part = match.group(3)  # the path after /
+                    
+                    # Build the new URL with proxy prefix
+                    new_url = f"{proxy_prefix}{path_part}"
+                    
+                    # Add token if we have one and the path doesn't have query params
+                    if token_param and "?" not in path_part:
+                        new_url = f"{new_url}?token={token_param}"
+                    elif token_param and "?" in path_part:
+                        new_url = f"{new_url}&token={token_param}"
+                    
+                    return f'{attr}={quote}{new_url}'
+                
+                # Rewrite href="/" and src="/" patterns
+                content_str = re.sub(
+                    r'(href|src)=(["\'])/([^"\']*)',
+                    rewrite_url,
+                    content_str
+                )
+                
                 content = content_str.encode("utf-8")
             
             return StreamingResponse(
@@ -875,8 +938,8 @@ async def proxy_project_terminal_websocket(
     websocket: WebSocket,
     project_id: str,
     session_id: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
-    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
+    current_user: User = Depends(get_current_user_from_header_or_query),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ):
     """WebSocket proxy for the project's sandbox terminal service.
     

@@ -84,20 +84,119 @@ class DesktopManager:
         self.xvnc_process: Optional[asyncio.subprocess.Process] = None
         self.novnc_process: Optional[asyncio.subprocess.Process] = None
 
+    def _is_vnc_server_available(self) -> bool:
+        """Check if any VNC server is available to connect to.
+        
+        This checks if there's a VNC server listening on any common port (5900-5910).
+        Used to determine if we can skip starting Xvfb/VNC and just start noVNC.
+        """
+        import socket
+        # Check VNC ports 5900-5910 (display :0 to :10)
+        for port in range(5900, 5911):
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.3)
+                result = sock.connect_ex(('127.0.0.1', port))
+                sock.close()
+                if result == 0:
+                    logger.debug(f"Found VNC server on port {port}")
+                    return True
+            except Exception:
+                pass
+        return False
+    
+    def _find_vnc_port(self) -> Optional[int]:
+        """Find the port of an available VNC server.
+        
+        Returns the first VNC port (5900-5910) that has a server listening.
+        """
+        import socket
+        for port in range(5900, 5911):
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(0.3)
+                result = sock.connect_ex(('127.0.0.1', port))
+                sock.close()
+                if result == 0:
+                    return port
+            except Exception:
+                pass
+        return None
+
+    def _is_xvfb_running_system(self) -> bool:
+        """Check if desktop is fully running system-wide.
+        
+        For the desktop to be considered running, noVNC must be accessible.
+        Just having Xvfb/VNC running is not enough - noVNC is the user-facing service.
+        
+        This handles the case where desktop was started by another process (like entrypoint)
+        before this DesktopManager instance was created.
+        """
+        # Check if noVNC port is listening - this is what users connect to
+        novnc_port_hex = format(self.port, '04X')
+        
+        try:
+            # Method 1: Check /proc/net/tcp for noVNC port
+            with open('/proc/net/tcp', 'r') as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2 and novnc_port_hex in parts[1]:
+                        logger.debug(f"Found noVNC listening on port {self.port} via /proc/net/tcp")
+                        return True
+        except (FileNotFoundError, PermissionError) as e:
+            logger.debug(f"Cannot read /proc/net/tcp: {e}")
+        
+        # Method 2: Try socket connection to noVNC port
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            result = sock.connect_ex(('127.0.0.1', self.port))
+            sock.close()
+            if result == 0:
+                logger.debug(f"noVNC port {self.port} is accepting connections")
+                return True
+        except Exception as e:
+            logger.debug(f"Socket check for noVNC port {self.port} failed: {e}")
+        
+        return False
+
+    def _get_system_xvfb_pid(self) -> Optional[int]:
+        """Get the PID of system-wide Xvfb process."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['pgrep', '-f', f'Xvfb.*{self.display}'],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip().split()[0])
+        except Exception as e:
+            logger.debug(f"Failed to get system Xvfb PID: {e}")
+        return None
+
     def is_running(self) -> bool:
-        """Check if desktop processes are running."""
-        if self.xvfb_process is None:
-            return False
-        return (
-            self.xvfb_process.returncode is None
-            and (self.xvnc_process is None or self.xvnc_process.returncode is None)
-        )
+        """Check if desktop processes are running.
+        
+        Checks both:
+        1. Processes started by this manager instance
+        2. System-wide processes (e.g., started by container entrypoint)
+        """
+        # Check if we started it ourselves
+        if self.xvfb_process is not None:
+            if self.xvfb_process.returncode is None:
+                return True
+        
+        # Check for system-wide Xvfb
+        return self._is_xvfb_running_system()
 
     async def start(self) -> None:
         """
         Start the remote desktop environment.
 
         Starts Xvfb, XFCE, TigerVNC, and noVNC in sequence.
+        If a VNC server is already running (e.g., from container entrypoint),
+        only starts noVNC to provide web access.
 
         Raises:
             RuntimeError: If desktop is already running
@@ -112,17 +211,26 @@ class DesktopManager:
         )
 
         try:
-            # Step 1: Start Xvfb (virtual display)
-            await self._start_xvfb()
+            # Check if VNC server is already available (e.g., started by container entrypoint)
+            existing_vnc_port = self._find_vnc_port()
+            
+            if existing_vnc_port:
+                logger.info(f"Found existing VNC server on port {existing_vnc_port}, skipping Xvfb/VNC start")
+                # Only start noVNC to provide web access to existing VNC
+                await self._start_novnc(vnc_port=existing_vnc_port)
+            else:
+                # Start full desktop stack
+                # Step 1: Start Xvfb (virtual display)
+                await self._start_xvfb()
 
-            # Step 2: Start XFCE desktop environment
-            await self._start_xfce()
+                # Step 2: Start XFCE desktop environment
+                await self._start_xfce()
 
-            # Step 3: Start TigerVNC (VNC server)
-            await self._start_tigervnc()
+                # Step 3: Start TigerVNC (VNC server)
+                await self._start_tigervnc()
 
-            # Step 4: Start noVNC (websockify proxy)
-            await self._start_novnc()
+                # Step 4: Start noVNC (websockify proxy)
+                await self._start_novnc()
 
             logger.info(
                 f"Desktop started: {self.display} -> http://{self.host}:{self.port}/vnc.html"
@@ -221,15 +329,23 @@ class DesktopManager:
         await asyncio.sleep(2)  # Wait for TigerVNC to initialize
         logger.debug(f"TigerVNC started with PID {self.xvnc_process.pid}")
 
-    async def _start_novnc(self) -> None:
-        """Start noVNC websockify proxy."""
-        logger.debug(f"Starting noVNC on port {self.port}")
+    async def _start_novnc(self, vnc_port: Optional[int] = None) -> None:
+        """Start noVNC websockify proxy.
+        
+        Args:
+            vnc_port: VNC server port to connect to. If None, uses self._vnc_port.
+        """
+        target_vnc_port = vnc_port if vnc_port is not None else self._vnc_port
+        logger.debug(f"Starting noVNC on port {self.port}, connecting to VNC port {target_vnc_port}")
+        
+        # Use /usr/bin/websockify directly instead of novnc_proxy
+        # This avoids PATH issues with different Python environments
         self.novnc_process = await asyncio.create_subprocess_exec(
-            "/opt/noVNC/utils/novnc_proxy",
-            "--vnc",
-            f"localhost:{self._vnc_port}",
-            "--listen",
+            "/usr/bin/websockify",
+            "--web=/opt/noVNC",
+            "--heartbeat", "30",
             str(self.port),
+            f"localhost:{target_vnc_port}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -318,13 +434,25 @@ class DesktopManager:
         Returns:
             DesktopStatus with current state
         """
+        xvfb_pid = None
+        xvnc_pid = None
+        
+        if self.xvfb_process:
+            xvfb_pid = self.xvfb_process.pid
+        else:
+            # Try to get system-wide Xvfb PID
+            xvfb_pid = self._get_system_xvfb_pid()
+        
+        if self.xvnc_process:
+            xvnc_pid = self.xvnc_process.pid
+        
         return DesktopStatus(
             running=self.is_running(),
             display=self.display,
             resolution=self.resolution,
             port=self.port,
-            xvfb_pid=self.xvfb_process.pid if self.xvfb_process else None,
-            xvnc_pid=self.xvnc_process.pid if self.xvnc_process else None,
+            xvfb_pid=xvfb_pid,
+            xvnc_pid=xvnc_pid,
         )
 
     def get_novnc_url(self) -> str:

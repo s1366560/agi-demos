@@ -5,53 +5,66 @@
  * Extracts the header section with search mode selection and input.
  */
 
-import React from 'react'
+import React from 'react';
 
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next';
 
-import { Search, Network, ArrowUpDown, Filter, Grid, Mic, ArrowRight, Sliders, PanelRightClose, PanelRightOpen, MessageSquare, Download } from 'lucide-react'
+import {
+  Search,
+  Network,
+  ArrowUpDown,
+  Filter,
+  Grid,
+  Mic,
+  ArrowRight,
+  Sliders,
+  PanelRightClose,
+  PanelRightOpen,
+  MessageSquare,
+  Download,
+} from 'lucide-react';
 
-import type { SearchMode } from '@/hooks/useSearchState'
+import type { SearchMode } from '@/hooks/useSearchState';
 
 export interface SearchHeaderProps {
   // Search mode
-  searchMode: SearchMode
-  setSearchMode: (mode: SearchMode) => void
+  searchMode: SearchMode;
+  setSearchMode: (mode: SearchMode) => void;
 
   // Input values
-  query: string
-  startEntityUuid: string
-  communityUuid: string
+  query: string;
+  startEntityUuid: string;
+  communityUuid: string;
 
   // Input handlers
-  setQuery: (query: string) => void
-  setStartEntityUuid: (uuid: string) => void
-  setCommunityUuid: (uuid: string) => void
-  onSearch: () => void
+  setQuery: (query: string) => void;
+  setStartEntityUuid: (uuid: string) => void;
+  setCommunityUuid: (uuid: string) => void;
+  onSearch: () => void;
 
   // UI state
-  loading: boolean
-  isSearchFocused: boolean
-  isConfigOpen: boolean
-  isListening: boolean
-  showHistory: boolean
+  loading: boolean;
+  isSearchFocused: boolean;
+  isConfigOpen: boolean;
+  isListening: boolean;
+  showHistory: boolean;
 
   // UI handlers
-  setIsSearchFocused: (focused: boolean) => void
-  toggleConfigOpen: () => void
-  setShowHistory: (show: boolean) => void
-  setShowMobileConfig: (show: boolean) => void
-  onVoiceSearch: () => void
+  setIsSearchFocused: (focused: boolean) => void;
+  toggleConfigOpen: () => void;
+  setShowHistory: (show: boolean) => void;
+  setShowMobileConfig: (show: boolean) => void;
+  onVoiceSearch: () => void;
 
   // History
-  searchHistory: Array<{ query: string; mode: string; timestamp: number }>
+  searchHistory: Array<{ query: string; mode: string; timestamp: number }>;
 
   // Results
-  hasResults: boolean
-  onExportResults: () => void
+  hasResults: boolean;
+  onExportResults: () => void;
 
   // Mobile
-  isMobile?: boolean
+  isMobile?: boolean;
 }
 
 /**
@@ -95,38 +108,39 @@ export function SearchHeader({
   onExportResults,
   isMobile = false,
 }: SearchHeaderProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   const getInputValue = () => {
-    if (searchMode === 'graphTraversal') return startEntityUuid
-    if (searchMode === 'community') return communityUuid
-    return query
-  }
+    if (searchMode === 'graphTraversal') return startEntityUuid;
+    if (searchMode === 'community') return communityUuid;
+    return query;
+  };
 
   const handleInputChange = (value: string) => {
     if (searchMode === 'graphTraversal') {
-      setStartEntityUuid(value)
+      setStartEntityUuid(value);
     } else if (searchMode === 'community') {
-      setCommunityUuid(value)
+      setCommunityUuid(value);
     } else {
-      setQuery(value)
+      setQuery(value);
     }
-  }
+  };
 
   const getPlaceholder = () => {
-    if (searchMode === 'graphTraversal') return t('project.search.input.placeholder.graph')
-    if (searchMode === 'community') return t('project.search.input.placeholder.community')
-    if (isSearchFocused) return ''
-    return t('project.search.input.placeholder.default')
-  }
+    if (searchMode === 'graphTraversal') return t('project.search.input.placeholder.graph');
+    if (searchMode === 'community') return t('project.search.input.placeholder.community');
+    if (isSearchFocused) return '';
+    return t('project.search.input.placeholder.default');
+  };
 
   const getInputIcon = () => {
-    if (searchMode === 'graphTraversal') return Network
-    if (searchMode === 'community') return Grid
-    return Search
-  }
+    if (searchMode === 'graphTraversal') return Network;
+    if (searchMode === 'community') return Grid;
+    return Search;
+  };
 
-  const showVoiceButton = searchMode === 'semantic' || searchMode === 'temporal' || searchMode === 'faceted'
+  const showVoiceButton =
+    searchMode === 'semantic' || searchMode === 'temporal' || searchMode === 'faceted';
 
   return (
     <header className="flex flex-col gap-4 px-6 pt-6 pb-2 shrink-0">
@@ -180,10 +194,7 @@ export function SearchHeader({
             />
           )}
           {hasResults && (
-            <ExportButton
-              onClick={onExportResults}
-              label={t('project.search.actions.export')}
-            />
+            <ExportButton onClick={onExportResults} label={t('project.search.actions.export')} />
           )}
         </div>
       </div>
@@ -193,9 +204,9 @@ export function SearchHeader({
         <SearchHistoryDropdown
           history={searchHistory}
           onSelect={(item) => {
-            setQuery(item.query)
-            setSearchMode(item.mode as SearchMode)
-            setShowHistory(false)
+            setQuery(item.query);
+            setSearchMode(item.mode as SearchMode);
+            setShowHistory(false);
           }}
           getModeLabel={(mode) => mode.replace('graphTraversal', t('project.search.modes.graph'))}
           recentLabel={t('project.search.actions.recent')}
@@ -204,9 +215,7 @@ export function SearchHeader({
 
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
         <div className="flex-1 w-full flex gap-3">
-          {isMobile && (
-            <MobileConfigButton onClick={() => setShowMobileConfig(true)} />
-          )}
+          {isMobile && <MobileConfigButton onClick={() => setShowMobileConfig(true)} />}
           <SearchInput
             value={getInputValue()}
             onChange={handleInputChange}
@@ -227,30 +236,31 @@ export function SearchHeader({
             searchingLabel={t('project.search.actions.searching')}
             retrieveLabel={t('project.search.actions.retrieve')}
           />
-          {!isMobile && (
-            <ConfigToggle
-              isOpen={isConfigOpen}
-              onClick={toggleConfigOpen}
-            />
-          )}
+          {!isMobile && <ConfigToggle isOpen={isConfigOpen} onClick={toggleConfigOpen} />}
         </div>
       </div>
     </header>
-  )
+  );
 }
 
 // Sub-components for better organization
 
 interface SearchModeButtonProps {
-  mode: SearchMode
-  currentMode: SearchMode
-  onClick: () => void
-  icon: React.ComponentType<{ className?: string }>
-  label: string
+  mode: SearchMode;
+  currentMode: SearchMode;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
 }
 
-function SearchModeButton({ mode, currentMode, onClick, icon: Icon, label }: SearchModeButtonProps) {
-  const isActive = mode === currentMode
+function SearchModeButton({
+  mode,
+  currentMode,
+  onClick,
+  icon: Icon,
+  label,
+}: SearchModeButtonProps) {
+  const isActive = mode === currentMode;
 
   return (
     <button
@@ -264,14 +274,14 @@ function SearchModeButton({ mode, currentMode, onClick, icon: Icon, label }: Sea
       <Icon className="w-4 h-4" />
       {label}
     </button>
-  )
+  );
 }
 
 interface HistoryButtonProps {
-  count: number
-  show: boolean
-  onClick: () => void
-  label: string
+  count: number;
+  show: boolean;
+  onClick: () => void;
+  label: string;
 }
 
 function HistoryButton({ count, show, onClick, label }: HistoryButtonProps) {
@@ -287,12 +297,12 @@ function HistoryButton({ count, show, onClick, label }: HistoryButtonProps) {
       <MessageSquare className="w-3.5 h-3.5" />
       {label} ({count})
     </button>
-  )
+  );
 }
 
 interface ExportButtonProps {
-  onClick: () => void
-  label: string
+  onClick: () => void;
+  label: string;
 }
 
 function ExportButton({ onClick, label }: ExportButtonProps) {
@@ -304,20 +314,27 @@ function ExportButton({ onClick, label }: ExportButtonProps) {
       <Download className="w-3.5 h-3.5" />
       {label}
     </button>
-  )
+  );
 }
 
 interface SearchHistoryDropdownProps {
-  history: Array<{ query: string; mode: string; timestamp: number }>
-  onSelect: (item: { query: string; mode: string }) => void
-  getModeLabel: (mode: string) => string
-  recentLabel: string
+  history: Array<{ query: string; mode: string; timestamp: number }>;
+  onSelect: (item: { query: string; mode: string }) => void;
+  getModeLabel: (mode: string) => string;
+  recentLabel: string;
 }
 
-function SearchHistoryDropdown({ history, onSelect, getModeLabel, recentLabel }: SearchHistoryDropdownProps) {
+function SearchHistoryDropdown({
+  history,
+  onSelect,
+  getModeLabel,
+  recentLabel,
+}: SearchHistoryDropdownProps) {
   return (
     <div className="bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-3 max-h-64 overflow-y-auto">
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{recentLabel}</div>
+      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+        {recentLabel}
+      </div>
       {history.map((item, idx) => (
         <button
           key={idx}
@@ -325,7 +342,9 @@ function SearchHistoryDropdown({ history, onSelect, getModeLabel, recentLabel }:
           className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group"
         >
           <div className="flex flex-col">
-            <span className="text-sm text-slate-900 dark:text-white truncate max-w-md">{item.query}</span>
+            <span className="text-sm text-slate-900 dark:text-white truncate max-w-md">
+              {item.query}
+            </span>
             <span className="text-xs text-slate-500 capitalize">{getModeLabel(item.mode)}</span>
           </div>
           <span className="text-xs text-slate-400">
@@ -334,11 +353,11 @@ function SearchHistoryDropdown({ history, onSelect, getModeLabel, recentLabel }:
         </button>
       ))}
     </div>
-  )
+  );
 }
 
 interface MobileConfigButtonProps {
-  onClick: () => void
+  onClick: () => void;
 }
 
 function MobileConfigButton({ onClick }: MobileConfigButtonProps) {
@@ -349,22 +368,22 @@ function MobileConfigButton({ onClick }: MobileConfigButtonProps) {
     >
       <Sliders className="w-5 h-5" />
     </button>
-  )
+  );
 }
 
 interface SearchInputProps {
-  value: string
-  onChange: (value: string) => void
-  onFocus: () => void
-  onBlur: () => void
-  onKeyDown: (e: React.KeyboardEvent) => void
-  placeholder: string
-  Icon: React.ComponentType<{ className?: string }>
-  showVoiceButton: boolean
-  isListening: boolean
-  onVoiceSearch: () => void
-  listeningLabel: string
-  voiceSearchLabel: string
+  value: string;
+  onChange: (value: string) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+  placeholder: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  showVoiceButton: boolean;
+  isListening: boolean;
+  onVoiceSearch: () => void;
+  listeningLabel: string;
+  voiceSearchLabel: string;
 }
 
 function SearchInput({
@@ -412,14 +431,14 @@ function SearchInput({
         </div>
       )}
     </label>
-  )
+  );
 }
 
 interface SearchButtonProps {
-  loading: boolean
-  onClick: () => void
-  searchingLabel: string
-  retrieveLabel: string
+  loading: boolean;
+  onClick: () => void;
+  searchingLabel: string;
+  retrieveLabel: string;
 }
 
 function SearchButton({ loading, onClick, searchingLabel, retrieveLabel }: SearchButtonProps) {
@@ -432,12 +451,12 @@ function SearchButton({ loading, onClick, searchingLabel, retrieveLabel }: Searc
       <span>{loading ? searchingLabel : retrieveLabel}</span>
       <ArrowRight className="w-5 h-5" />
     </button>
-  )
+  );
 }
 
 interface ConfigToggleProps {
-  isOpen: boolean
-  onClick: () => void
+  isOpen: boolean;
+  onClick: () => void;
 }
 
 function ConfigToggle({ isOpen, onClick }: ConfigToggleProps) {
@@ -455,7 +474,7 @@ function ConfigToggle({ isOpen, onClick }: ConfigToggleProps) {
         {isOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
       </button>
     </div>
-  )
+  );
 }
 
-export default SearchHeader
+export default SearchHeader;

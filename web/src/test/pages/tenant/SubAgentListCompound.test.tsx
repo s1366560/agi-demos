@@ -243,11 +243,7 @@ describe('SubAgentList Compound Component', () => {
     it('should render title and create button', async () => {
       const { SubAgentList } = await import('../../../pages/tenant/SubAgentList');
       render(
-        <SubAgentList.Header
-          onCreate={vi.fn()}
-          onCreateFromTemplate={vi.fn()}
-          templates={[]}
-        />
+        <SubAgentList.Header onCreate={vi.fn()} onCreateFromTemplate={vi.fn()} templates={[]} />
       );
       expect(screen.getByText('Create SubAgent')).toBeInTheDocument();
     });
@@ -256,11 +252,7 @@ describe('SubAgentList Compound Component', () => {
       const { SubAgentList } = await import('../../../pages/tenant/SubAgentList');
       const onCreate = vi.fn();
       render(
-        <SubAgentList.Header
-          onCreate={onCreate}
-          onCreateFromTemplate={vi.fn()}
-          templates={[]}
-        />
+        <SubAgentList.Header onCreate={onCreate} onCreateFromTemplate={vi.fn()} templates={[]} />
       );
       fireEvent.click(screen.getByText('Create SubAgent'));
       expect(onCreate).toHaveBeenCalledTimes(1);
@@ -275,12 +267,7 @@ describe('SubAgentList Compound Component', () => {
     it('should render all stats', async () => {
       const { SubAgentList } = await import('../../../pages/tenant/SubAgentList');
       render(
-        <SubAgentList.Stats
-          total={2}
-          enabledCount={1}
-          avgSuccessRate={88}
-          totalInvocations={150}
-        />
+        <SubAgentList.Stats total={2} enabledCount={1} avgSuccessRate={88} totalInvocations={150} />
       );
       expect(screen.getByText('2')).toBeInTheDocument();
       expect(screen.getByText('1')).toBeInTheDocument();

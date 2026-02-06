@@ -12,8 +12,8 @@
  * They should initially FAIL and then drive the implementation.
  */
 
-import { renderHook } from "@testing-library/react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { renderHook } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import {
   useExecutionStore,
@@ -23,23 +23,23 @@ import {
   useCurrentWorkPlan,
   useCurrentStepNumber,
   useCurrentStepStatus,
-} from "../../../stores/agent/executionStore";
+} from '../../../stores/agent/executionStore';
 
-import type { WorkPlan } from "../../../types/agent";
+import type { WorkPlan } from '../../../types/agent';
 
-describe("ExecutionStore - Selector Memoization", () => {
+describe('ExecutionStore - Selector Memoization', () => {
   beforeEach(() => {
     useExecutionStore.getState().reset();
     vi.clearAllMocks();
   });
 
-  describe("State Immutability", () => {
-    it("should not mutate existing timeline array when adding steps", () => {
+  describe('State Immutability', () => {
+    it('should not mutate existing timeline array when adding steps', () => {
       const timeline = [
         {
           stepNumber: 1,
-          description: "Step 1",
-          status: "running" as const,
+          description: 'Step 1',
+          status: 'running' as const,
           thoughts: [],
           toolExecutions: [],
         },
@@ -56,8 +56,8 @@ describe("ExecutionStore - Selector Memoization", () => {
         ...timeline,
         {
           stepNumber: 2,
-          description: "Step 2",
-          status: "pending" as const,
+          description: 'Step 2',
+          status: 'pending' as const,
           thoughts: [],
           toolExecutions: [],
         },
@@ -75,12 +75,12 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(secondArray).toHaveLength(2);
     });
 
-    it("should keep same array reference when state not changed", () => {
+    it('should keep same array reference when state not changed', () => {
       const timeline = [
         {
           stepNumber: 1,
-          description: "Step 1",
-          status: "running" as const,
+          description: 'Step 1',
+          status: 'running' as const,
           thoughts: [],
           toolExecutions: [],
         },
@@ -104,14 +104,14 @@ describe("ExecutionStore - Selector Memoization", () => {
     });
   });
 
-  describe("Selector Behavior", () => {
-    it("should return current execution timeline correctly", () => {
+  describe('Selector Behavior', () => {
+    it('should return current execution timeline correctly', () => {
       const timeline = [
         {
           stepNumber: 1,
-          description: "Step 1",
-          status: "running" as const,
-          thoughts: ["Thought 1"],
+          description: 'Step 1',
+          status: 'running' as const,
+          thoughts: ['Thought 1'],
           toolExecutions: [],
         },
       ];
@@ -123,14 +123,14 @@ describe("ExecutionStore - Selector Memoization", () => {
       const { result } = renderHook(() => useExecutionTimeline());
       expect(result.current).toHaveLength(1);
       expect(result.current[0].stepNumber).toBe(1);
-      expect(result.current[0].thoughts).toEqual(["Thought 1"]);
+      expect(result.current[0].thoughts).toEqual(['Thought 1']);
     });
 
-    it("should return current tool execution correctly", () => {
+    it('should return current tool execution correctly', () => {
       const toolExec = {
-        id: "tool-1",
-        toolName: "web_search",
-        input: { query: "test" },
+        id: 'tool-1',
+        toolName: 'web_search',
+        input: { query: 'test' },
         startTime: new Date().toISOString(),
       };
 
@@ -140,18 +140,18 @@ describe("ExecutionStore - Selector Memoization", () => {
 
       const { result } = renderHook(() => useCurrentToolExecution());
       expect(result.current).toEqual(toolExec);
-      expect(result.current?.id).toBe("tool-1");
+      expect(result.current?.id).toBe('tool-1');
     });
 
-    it("should return tool execution history correctly", () => {
+    it('should return tool execution history correctly', () => {
       const history = [
         {
-          id: "tool-1",
-          toolName: "web_search",
-          input: { query: "test" },
-          status: "success" as const,
+          id: 'tool-1',
+          toolName: 'web_search',
+          input: { query: 'test' },
+          status: 'success' as const,
           startTime: new Date().toISOString(),
-          result: "Search results",
+          result: 'Search results',
         },
       ];
 
@@ -161,21 +161,21 @@ describe("ExecutionStore - Selector Memoization", () => {
 
       const { result } = renderHook(() => useToolExecutionHistory());
       expect(result.current).toHaveLength(1);
-      expect(result.current[0].id).toBe("tool-1");
+      expect(result.current[0].id).toBe('tool-1');
     });
 
-    it("should return current work plan correctly", () => {
+    it('should return current work plan correctly', () => {
       const workPlan: WorkPlan = {
-        id: "plan-1",
-        conversation_id: "conv-1",
-        status: "in_progress",
+        id: 'plan-1',
+        conversation_id: 'conv-1',
+        status: 'in_progress',
         steps: [
           {
             step_number: 1,
-            description: "Step 1",
-            thought_prompt: "",
+            description: 'Step 1',
+            thought_prompt: '',
             required_tools: [],
-            expected_output: "",
+            expected_output: '',
             dependencies: [],
           },
         ],
@@ -191,7 +191,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(result.current).toEqual(workPlan);
     });
 
-    it("should return current step number correctly", () => {
+    it('should return current step number correctly', () => {
       useExecutionStore.setState({
         currentStepNumber: 5,
       });
@@ -200,33 +200,33 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(result.current).toBe(5);
     });
 
-    it("should return current step status correctly", () => {
+    it('should return current step status correctly', () => {
       useExecutionStore.setState({
-        currentStepStatus: "running",
+        currentStepStatus: 'running',
       });
 
       const { result } = renderHook(() => useCurrentStepStatus());
-      expect(result.current).toBe("running");
+      expect(result.current).toBe('running');
     });
 
-    it("should return null for current tool execution when none set", () => {
+    it('should return null for current tool execution when none set', () => {
       const { result } = renderHook(() => useCurrentToolExecution());
       expect(result.current).toBeNull();
     });
 
-    it("should return null for current work plan when none set", () => {
+    it('should return null for current work plan when none set', () => {
       const { result } = renderHook(() => useCurrentWorkPlan());
       expect(result.current).toBeNull();
     });
   });
 
-  describe("Update Isolation", () => {
-    it("should only update the slice being changed", () => {
+  describe('Update Isolation', () => {
+    it('should only update the slice being changed', () => {
       const timeline = [
         {
           stepNumber: 1,
-          description: "Step 1",
-          status: "running" as const,
+          description: 'Step 1',
+          status: 'running' as const,
           thoughts: [],
           toolExecutions: [],
         },
@@ -255,21 +255,21 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(stateAfter.currentStepNumber).toBe(2);
     });
 
-    it("should not affect currentToolExecution when updating timeline", () => {
+    it('should not affect currentToolExecution when updating timeline', () => {
       const timeline = [
         {
           stepNumber: 1,
-          description: "Step 1",
-          status: "running" as const,
+          description: 'Step 1',
+          status: 'running' as const,
           thoughts: [],
           toolExecutions: [],
         },
       ];
 
       const toolExec = {
-        id: "tool-1",
-        toolName: "web_search",
-        input: { query: "test" },
+        id: 'tool-1',
+        toolName: 'web_search',
+        input: { query: 'test' },
         startTime: new Date().toISOString(),
       };
 
@@ -282,7 +282,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       const updatedTimeline = [
         {
           ...timeline[0],
-          thoughts: ["New thought"],
+          thoughts: ['New thought'],
         },
       ];
 
@@ -293,12 +293,12 @@ describe("ExecutionStore - Selector Memoization", () => {
       const state = useExecutionStore.getState();
 
       expect(state.currentToolExecution).toEqual(toolExec);
-      expect(state.executionTimeline[0].thoughts).toEqual(["New thought"]);
+      expect(state.executionTimeline[0].thoughts).toEqual(['New thought']);
     });
   });
 
-  describe("Performance", () => {
-    it("should handle multiple rapid state updates efficiently", () => {
+  describe('Performance', () => {
+    it('should handle multiple rapid state updates efficiently', () => {
       const startTime = performance.now();
 
       // Perform many state updates
@@ -315,7 +315,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(duration).toBeLessThan(100);
     });
 
-    it("should handle complex state updates efficiently", () => {
+    it('should handle complex state updates efficiently', () => {
       const startTime = performance.now();
 
       // Perform many complex state updates
@@ -324,7 +324,7 @@ describe("ExecutionStore - Selector Memoization", () => {
           {
             stepNumber: 1,
             description: `Step ${i}`,
-            status: "running" as const,
+            status: 'running' as const,
             thoughts: [`Thought ${i}`],
             toolExecutions: [],
           },
@@ -333,7 +333,7 @@ describe("ExecutionStore - Selector Memoization", () => {
         useExecutionStore.setState({
           executionTimeline: timeline,
           currentStepNumber: i,
-          currentStepStatus: "running" as const,
+          currentStepStatus: 'running' as const,
         });
       }
 
@@ -345,8 +345,8 @@ describe("ExecutionStore - Selector Memoization", () => {
     });
   });
 
-  describe("Edge Cases", () => {
-    it("should handle empty timeline array", () => {
+  describe('Edge Cases', () => {
+    it('should handle empty timeline array', () => {
       useExecutionStore.setState({
         executionTimeline: [],
       });
@@ -356,7 +356,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(result.current).toHaveLength(0);
     });
 
-    it("should handle null currentWorkPlan", () => {
+    it('should handle null currentWorkPlan', () => {
       useExecutionStore.setState({
         currentWorkPlan: null,
       });
@@ -365,7 +365,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(result.current).toBeNull();
     });
 
-    it("should handle null currentStepNumber", () => {
+    it('should handle null currentStepNumber', () => {
       useExecutionStore.setState({
         currentStepNumber: null,
       });
@@ -374,7 +374,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(result.current).toBeNull();
     });
 
-    it("should handle null currentStepStatus", () => {
+    it('should handle null currentStepStatus', () => {
       useExecutionStore.setState({
         currentStepStatus: null,
       });
@@ -383,7 +383,7 @@ describe("ExecutionStore - Selector Memoization", () => {
       expect(result.current).toBeNull();
     });
 
-    it("should handle empty tool execution history", () => {
+    it('should handle empty tool execution history', () => {
       useExecutionStore.setState({
         toolExecutionHistory: [],
       });

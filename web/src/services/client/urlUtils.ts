@@ -73,10 +73,7 @@ function delayWithJitter(ms: number): Promise<void> {
 /**
  * Retry fetch with exponential backoff
  */
-async function fetchWithRetry<T>(
-  fn: () => Promise<T>,
-  config: FetchRetryConfig = {}
-): Promise<T> {
+async function fetchWithRetry<T>(fn: () => Promise<T>, config: FetchRetryConfig = {}): Promise<T> {
   const {
     maxRetries = DEFAULT_FETCH_RETRY.maxRetries,
     initialDelay = DEFAULT_FETCH_RETRY.initialDelay,
@@ -93,10 +90,7 @@ async function fetchWithRetry<T>(
     } catch (error) {
       lastError = error;
       if (attempt < maxRetries && isRetryable(error)) {
-        const delay = Math.min(
-          initialDelay * Math.pow(backoffMultiplier, attempt),
-          maxDelay
-        );
+        const delay = Math.min(initialDelay * Math.pow(backoffMultiplier, attempt), maxDelay);
         await delayWithJitter(delay);
       } else {
         throw error;
@@ -111,7 +105,7 @@ async function fetchWithRetry<T>(
  * Get the base API URL - always use relative path for Vite proxy
  *
  * @returns Empty string for relative URLs (ensures requests go through Vite proxy)
- * 
+ *
  * NOTE: VITE_API_URL is intentionally NOT used here to ensure all HTTP requests
  * go through the Vite dev server proxy. This avoids CORS issues and ensures
  * consistent behavior between development and production.
@@ -193,10 +187,7 @@ export function handleUnauthorized(): void {
  * createWebSocketUrl('/agent/ws') // 'ws://localhost:3000/api/v1/agent/ws'
  * createWebSocketUrl('/agent/ws', { token: 'abc' }) // 'ws://localhost:3000/api/v1/agent/ws?token=abc'
  */
-export function createWebSocketUrl(
-  path: string,
-  params?: Record<string, string>
-): string {
+export function createWebSocketUrl(path: string, params?: Record<string, string>): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
   let host: string;
@@ -266,10 +257,7 @@ async function fetchWithRetryWrapper(
   }
 
   // Build retry config
-  const retryConfig: FetchRetryConfig =
-    typeof retryOption === 'boolean'
-      ? {}
-      : retryOption;
+  const retryConfig: FetchRetryConfig = typeof retryOption === 'boolean' ? {} : retryOption;
 
   // Execute with retry
   return fetchWithRetry(() => fetch(input, init), retryConfig);

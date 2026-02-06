@@ -219,6 +219,64 @@ class TestSqlAgentExecutionEventRepositoryGetEvents:
             assert event.event_type == "user_message"
 
     @pytest.mark.asyncio
+    async def test_get_events_backward_pagination_with_type_filter(
+        self, v2_event_repo: SqlAgentExecutionEventRepository
+    ):
+        """Test backward pagination combined with event_types filter.
+
+        This test ensures that when using before_sequence with event_types,
+        the filter is applied BEFORE the limit, not after. This is critical
+        for loading conversation history where internal events should be
+        skipped but the limit should return the requested number of
+        displayable events.
+
+        Bug scenario this test catches:
+        - Events: [user_msg@0, internal@1, internal@2, user_msg@3, internal@4]
+        - Query: before_sequence=5, limit=2, event_types={user_message}
+        - Wrong (filter after limit): Gets [internal@4, user_msg@3] -> filters -> [user_msg@3]
+        - Correct (filter before limit): Gets [user_msg@3, user_msg@0] (2 user_messages)
+        """
+        # Create mixed events: displayable (user_message) and non-displayable (internal)
+        events_data = [
+            ("user_message", 0),
+            ("internal_event", 1),
+            ("internal_event", 2),
+            ("user_message", 3),
+            ("assistant_message", 4),
+            ("internal_event", 5),
+            ("internal_event", 6),
+            ("user_message", 7),
+            ("assistant_message", 8),
+            ("internal_event", 9),  # Last event is internal
+        ]
+        for event_type, seq in events_data:
+            event = AgentExecutionEvent(
+                id=f"event-combo-{seq}",
+                conversation_id="conv-test-1",
+                message_id=f"msg-combo-{seq}",
+                event_type=event_type,
+                event_data={"seq": seq},
+                sequence_number=seq,
+                created_at=datetime.now(timezone.utc),
+            )
+            await v2_event_repo.save(event)
+
+        # Query with before_sequence=10 (after last event), limit=4, filter displayable types
+        displayable_types = {"user_message", "assistant_message"}
+        events = await v2_event_repo.get_events(
+            "conv-test-1",
+            limit=4,
+            before_sequence=10,
+            event_types=displayable_types,
+        )
+
+        # Should get 4 displayable events: seq 8, 7, 4, 3 (in ascending order after reverse)
+        assert len(events) == 4, f"Expected 4 events, got {len(events)}: {[e.sequence_number for e in events]}"
+        assert [e.sequence_number for e in events] == [3, 4, 7, 8]
+        for event in events:
+            assert event.event_type in displayable_types
+
+    @pytest.mark.asyncio
     async def test_get_events_ordered(self, v2_event_repo: SqlAgentExecutionEventRepository):
         """Test that events are returned in sequence order."""
         # Create events out of order

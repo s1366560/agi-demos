@@ -177,7 +177,9 @@ describe('EdgeTypeList Compound Component', () => {
     it('should render subtitle', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       render(<EdgeTypeList.Header onCreate={vi.fn()} />);
-      expect(screen.getByText('Define the structure of relationships in your knowledge graph')).toBeInTheDocument();
+      expect(
+        screen.getByText('Define the structure of relationships in your knowledge graph')
+      ).toBeInTheDocument();
     });
 
     it('should render system active badge', async () => {
@@ -194,26 +196,14 @@ describe('EdgeTypeList Compound Component', () => {
   describe('Toolbar Sub-Component', () => {
     it('should render search input', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
-      render(
-        <EdgeTypeList.Toolbar
-          search=""
-          onSearchChange={vi.fn()}
-          onCreate={vi.fn()}
-        />
-      );
+      render(<EdgeTypeList.Toolbar search="" onSearchChange={vi.fn()} onCreate={vi.fn()} />);
       expect(screen.getByPlaceholderText('Search edge types...')).toBeInTheDocument();
     });
 
     it('should call onSearchChange when typing', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       const onSearchChange = vi.fn();
-      render(
-        <EdgeTypeList.Toolbar
-          search=""
-          onSearchChange={onSearchChange}
-          onCreate={vi.fn()}
-        />
-      );
+      render(<EdgeTypeList.Toolbar search="" onSearchChange={onSearchChange} onCreate={vi.fn()} />);
       const input = screen.getByPlaceholderText('Search edge types...');
       fireEvent.change(input, { target: { value: 'KNOWS' } });
       expect(onSearchChange).toHaveBeenCalledWith('KNOWS');
@@ -332,7 +322,14 @@ describe('EdgeTypeList Compound Component', () => {
 
     it('should render select prompt when no edge selected', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
-      render(<EdgeTypeList.DetailPane selectedEdgeId={null} edges={mockEdgeTypes} onEdit={vi.fn()} onDelete={vi.fn()} />);
+      render(
+        <EdgeTypeList.DetailPane
+          selectedEdgeId={null}
+          edges={mockEdgeTypes}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      );
       expect(screen.getByText(/select an edge type/i)).toBeInTheDocument();
     });
   });
@@ -369,12 +366,7 @@ describe('EdgeTypeList Compound Component', () => {
     it('should render modal when open', async () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       render(
-        <EdgeTypeList.Modal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-          editingEdge={null}
-        />
+        <EdgeTypeList.Modal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} editingEdge={null} />
       );
       expect(screen.getByText('New Edge Type')).toBeInTheDocument();
     });
@@ -396,12 +388,7 @@ describe('EdgeTypeList Compound Component', () => {
       const { EdgeTypeList } = await import('../../../../pages/project/schema/EdgeTypeList');
       const onSave = vi.fn();
       render(
-        <EdgeTypeList.Modal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSave={onSave}
-          editingEdge={null}
-        />
+        <EdgeTypeList.Modal isOpen={true} onClose={vi.fn()} onSave={onSave} editingEdge={null} />
       );
       const saveButton = screen.getByText('Save');
       fireEvent.click(saveButton);

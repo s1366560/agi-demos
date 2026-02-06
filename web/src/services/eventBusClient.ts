@@ -1,6 +1,6 @@
 /**
  * Event Bus Client
- * 
+ *
  * WebSocket client for subscribing to events from the unified event bus.
  * Supports pattern-based subscriptions, automatic reconnection, and heartbeats.
  */
@@ -26,11 +26,7 @@ export type ErrorHandler = (error: Error) => void;
 /**
  * Connection state
  */
-export type ConnectionState = 
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting';
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
 /**
  * Event bus client options
@@ -38,22 +34,22 @@ export type ConnectionState =
 export interface EventBusClientOptions {
   /** WebSocket URL (default: ws://localhost:8000/api/v1/events/ws) */
   url?: string;
-  
+
   /** Enable automatic reconnection (default: true) */
   autoReconnect?: boolean;
-  
+
   /** Maximum reconnect attempts (default: 5) */
   maxReconnectAttempts?: number;
-  
+
   /** Base reconnect delay in ms (default: 1000) */
   reconnectDelay?: number;
-  
+
   /** Maximum reconnect delay in ms (default: 30000) */
   maxReconnectDelay?: number;
-  
+
   /** Heartbeat interval in ms (default: 30000) */
   heartbeatInterval?: number;
-  
+
   /** Connection timeout in ms (default: 10000) */
   connectionTimeout?: number;
 }
@@ -100,7 +96,7 @@ export class EventBusClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private connectionTimer: ReturnType<typeof setTimeout> | null = null;
   private messageQueue: string[] = [];
-  
+
   // State change listeners
   private stateListeners: Set<(state: ConnectionState) => void> = new Set();
 
@@ -162,7 +158,7 @@ export class EventBusClient {
         this.ws.onclose = (event) => {
           this.clearHeartbeat();
           this.clearConnectionTimer();
-          
+
           if (this.state === 'connecting') {
             this.setState('disconnected');
             reject(new Error(`Connection closed: ${event.code}`));
@@ -170,7 +166,7 @@ export class EventBusClient {
           }
 
           this.setState('disconnected');
-          
+
           if (this.options.autoReconnect && !event.wasClean) {
             this.scheduleReconnect();
           }
@@ -184,7 +180,6 @@ export class EventBusClient {
         this.ws.onmessage = (event) => {
           this.handleMessage(event.data);
         };
-
       } catch (err) {
         this.setState('disconnected');
         reject(err);
@@ -199,12 +194,12 @@ export class EventBusClient {
     this.clearReconnectTimer();
     this.clearHeartbeat();
     this.clearConnectionTimer();
-    
+
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect');
       this.ws = null;
     }
-    
+
     this.setState('disconnected');
   }
 
@@ -228,23 +223,19 @@ export class EventBusClient {
 
   /**
    * Subscribe to events matching a pattern
-   * 
+   *
    * Pattern examples:
    * - "agent.conv-123.*" - All events for conversation conv-123
    * - "hitl.*" - All HITL events
    * - "sandbox.sb-456.*" - All sandbox events for sb-456
    * - "*" - All events
-   * 
+   *
    * @param pattern - Event pattern to subscribe to
    * @param handler - Callback for matching events
    * @param options - Subscription options
    * @returns Unsubscribe function
    */
-  subscribe(
-    pattern: string,
-    handler: EventHandler,
-    options?: SubscriptionOptions
-  ): Unsubscribe {
+  subscribe(pattern: string, handler: EventHandler, options?: SubscriptionOptions): Unsubscribe {
     // Add to local subscriptions
     const handlers = this.subscriptions.get(pattern) || new Set();
     handlers.add(handler);
@@ -297,7 +288,7 @@ export class EventBusClient {
   private setState(state: ConnectionState): void {
     if (this.state !== state) {
       this.state = state;
-      this.stateListeners.forEach(listener => listener(state));
+      this.stateListeners.forEach((listener) => listener(state));
     }
   }
 
@@ -322,7 +313,6 @@ export class EventBusClient {
       if (message.type === 'error') {
         this.notifyError(new Error(message.message || 'Server error'));
       }
-
     } catch (err) {
       console.error('Failed to parse event bus message:', err);
     }
@@ -332,7 +322,7 @@ export class EventBusClient {
     // Check all subscriptions for matching patterns
     for (const [subPattern, handlers] of this.subscriptions) {
       if (this.matchesPattern(pattern, subPattern)) {
-        handlers.forEach(handler => {
+        handlers.forEach((handler) => {
           try {
             handler(envelope);
           } catch (err) {
@@ -346,31 +336,31 @@ export class EventBusClient {
   private matchesPattern(eventPattern: string, subscriptionPattern: string): boolean {
     // Exact match
     if (eventPattern === subscriptionPattern) return true;
-    
+
     // Wildcard match
     if (subscriptionPattern === '*') return true;
-    
+
     // Pattern matching with wildcards
     const eventParts = eventPattern.split('.');
     const subParts = subscriptionPattern.split('.');
-    
+
     for (let i = 0; i < subParts.length; i++) {
       if (subParts[i] === '*') {
         // If this is the last part and it's *, match everything
         if (i === subParts.length - 1) return true;
         continue;
       }
-      
+
       if (i >= eventParts.length) return false;
       if (subParts[i] !== eventParts[i]) return false;
     }
-    
+
     return eventParts.length === subParts.length;
   }
 
   private sendMessage(message: Record<string, unknown>): void {
     const data = JSON.stringify(message);
-    
+
     if (this.isConnected()) {
       this.ws!.send(data);
     } else {
@@ -387,7 +377,7 @@ export class EventBusClient {
   }
 
   private notifyError(error: Error): void {
-    this.errorHandlers.forEach(handler => {
+    this.errorHandlers.forEach((handler) => {
       try {
         handler(error);
       } catch (err) {
@@ -415,7 +405,9 @@ export class EventBusClient {
       this.options.maxReconnectDelay
     );
 
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts})`);
+    console.log(
+      `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts})`
+    );
 
     this.reconnectTimer = setTimeout(async () => {
       try {

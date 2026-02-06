@@ -100,9 +100,7 @@ describe('useLocalStorage', () => {
     });
 
     it('should support functional updates with complex objects', () => {
-      const { result } = renderHook(() =>
-        useLocalStorage(TEST_KEY, { count: 0, name: 'test' })
-      );
+      const { result } = renderHook(() => useLocalStorage(TEST_KEY, { count: 0, name: 'test' }));
 
       act(() => {
         result.current.setValue((prev) => ({ ...prev, count: prev.count + 1 }));
@@ -225,9 +223,7 @@ describe('useLocalStorage', () => {
     });
 
     it('should work with null as initial value', () => {
-      const { result } = renderHook(() =>
-        useLocalStorage<string | null>(TEST_KEY, null)
-      );
+      const { result } = renderHook(() => useLocalStorage<string | null>(TEST_KEY, null));
 
       expect(result.current.value).toBeNull();
 
@@ -239,9 +235,7 @@ describe('useLocalStorage', () => {
     });
 
     it('should work with undefined as initial value', () => {
-      const { result } = renderHook(() =>
-        useLocalStorage<string | undefined>(TEST_KEY, undefined)
-      );
+      const { result } = renderHook(() => useLocalStorage<string | undefined>(TEST_KEY, undefined));
 
       expect(result.current.value).toBeUndefined();
 
@@ -454,12 +448,8 @@ describe('useLocalStorage', () => {
 
   describe('Multiple Instances', () => {
     it('should handle multiple hooks with different keys independently', () => {
-      const { result: result1 } = renderHook(() =>
-        useLocalStorage('key1', 'value1')
-      );
-      const { result: result2 } = renderHook(() =>
-        useLocalStorage('key2', 'value2')
-      );
+      const { result: result1 } = renderHook(() => useLocalStorage('key1', 'value1'));
+      const { result: result2 } = renderHook(() => useLocalStorage('key2', 'value2'));
 
       act(() => {
         result1.current.setValue('updated1');
@@ -471,12 +461,8 @@ describe('useLocalStorage', () => {
     });
 
     it('should handle multiple hooks with same key', () => {
-      const { result: result1 } = renderHook(() =>
-        useLocalStorage('same-key', 'initial')
-      );
-      const { result: result2 } = renderHook(() =>
-        useLocalStorage('same-key', 'initial')
-      );
+      const { result: result1 } = renderHook(() => useLocalStorage('same-key', 'initial'));
+      const { result: result2 } = renderHook(() => useLocalStorage('same-key', 'initial'));
 
       act(() => {
         result1.current.setValue('updated');

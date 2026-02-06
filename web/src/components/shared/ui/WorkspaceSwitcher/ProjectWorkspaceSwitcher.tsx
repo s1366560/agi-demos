@@ -4,24 +4,19 @@
  * Pre-configured WorkspaceSwitcher for project mode.
  */
 
-import { useEffect } from 'react'
+import { useEffect } from 'react';
 
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { useProjectStore } from '@/stores/project'
-import { useTenantStore } from '@/stores/tenant'
+import { useProjectStore } from '@/stores/project';
+import { useTenantStore } from '@/stores/tenant';
 
+import { WorkspaceSwitcherRoot, WorkspaceSwitcherTrigger, WorkspaceSwitcherMenu } from './compound';
+import { ProjectList } from './ProjectList';
 
-import {
-  WorkspaceSwitcherRoot,
-  WorkspaceSwitcherTrigger,
-  WorkspaceSwitcherMenu,
-} from './compound'
-import { ProjectList } from './ProjectList'
+import type { Project } from '@/types/memory';
 
-import type { Project } from '@/types/memory'
-
-import type { ProjectWorkspaceSwitcherProps } from './types'
+import type { ProjectWorkspaceSwitcherProps } from './types';
 
 export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> = ({
   currentProjectId: propProjectId,
@@ -31,54 +26,54 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
   triggerClassName = '',
   menuClassName = '',
 }) => {
-  const navigate = useNavigate()
-  const { projectId: routeProjectId } = useParams()
-  const currentProjectId = propProjectId ?? routeProjectId ?? null
+  const navigate = useNavigate();
+  const { projectId: routeProjectId } = useParams();
+  const currentProjectId = propProjectId ?? routeProjectId ?? null;
 
   // Store hooks - use selective selectors to prevent unnecessary re-renders
-  const projects = useProjectStore((state) => state.projects)
-  const currentProject = useProjectStore((state) => state.currentProject)
-  const listProjects = useProjectStore((state) => state.listProjects)
-  const currentTenant = useTenantStore((state) => state.currentTenant)
+  const projects = useProjectStore((state) => state.projects);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const listProjects = useProjectStore((state) => state.listProjects);
+  const currentTenant = useTenantStore((state) => state.currentTenant);
 
   // Load data if missing
   useEffect(() => {
     if (currentTenant && projects.length === 0) {
-      listProjects(currentTenant.id)
+      listProjects(currentTenant.id);
     }
-  }, [currentTenant, projects.length, listProjects])
+  }, [currentTenant, projects.length, listProjects]);
 
   // Get current project object
   const displayProject =
     currentProject?.id === currentProjectId
       ? currentProject
-      : projects.find((p) => p.id === currentProjectId)
+      : projects.find((p) => p.id === currentProjectId);
 
   const handleProjectSelect = (project: Project) => {
-    onProjectSelect?.(project)
+    onProjectSelect?.(project);
 
     // Check current location to decide where to navigate
-    const currentPath = window.location.pathname
-    const projectPathPrefix = `/project/${currentProjectId}`
+    const currentPath = window.location.pathname;
+    const projectPathPrefix = `/project/${currentProjectId}`;
 
     if (currentProjectId && currentPath.startsWith(projectPathPrefix)) {
       // If we are already in a project context, preserve the sub-path
-      const subPath = currentPath.substring(projectPathPrefix.length)
-      navigate(`/project/${project.id}${subPath}`)
+      const subPath = currentPath.substring(projectPathPrefix.length);
+      navigate(`/project/${project.id}${subPath}`);
     } else {
       // Default to overview
-      navigate(`/project/${project.id}`)
+      navigate(`/project/${project.id}`);
     }
-  }
+  };
 
   const handleBackToTenantClick = () => {
-    onBackToTenant?.()
+    onBackToTenant?.();
     if (currentTenant) {
-      navigate(`/tenant/${currentTenant.id}`)
+      navigate(`/tenant/${currentTenant.id}`);
     } else {
-      navigate('/tenant')
+      navigate('/tenant');
     }
-  }
+  };
 
   return (
     <WorkspaceSwitcherRoot mode="project">
@@ -109,5 +104,5 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
         />
       </WorkspaceSwitcherMenu>
     </WorkspaceSwitcherRoot>
-  )
-}
+  );
+};

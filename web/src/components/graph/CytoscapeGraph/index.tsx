@@ -8,5 +8,5 @@
  * 3. Legacy API (backward compatible): <CytoscapeGraph projectId="p1" />
  */
 
-export { CytoscapeGraph } from './CytoscapeGraph'
-export type { GraphConfig, NodeData, ViewportProps, NodeInfoPanelProps } from './types'
+export { CytoscapeGraph } from './CytoscapeGraph';
+export type { GraphConfig, NodeData, ViewportProps, NodeInfoPanelProps } from './types';

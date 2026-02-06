@@ -10,12 +10,12 @@
  * @deprecated Prefer importing from '@/components/graph/CytoscapeGraph' directly
  */
 
-export { CytoscapeGraph, CytoscapeGraph as default } from './CytoscapeGraph/CytoscapeGraph'
+export { CytoscapeGraph, CytoscapeGraph as default } from './CytoscapeGraph/CytoscapeGraph';
 export type {
-    GraphConfig,
-    NodeData,
-    ViewportProps,
-    NodeInfoPanelProps,
-    CytoscapeGraphProps,
-    LegacyCytoscapeGraphProps
-} from './CytoscapeGraph/types'
+  GraphConfig,
+  NodeData,
+  ViewportProps,
+  NodeInfoPanelProps,
+  CytoscapeGraphProps,
+  LegacyCytoscapeGraphProps,
+} from './CytoscapeGraph/types';

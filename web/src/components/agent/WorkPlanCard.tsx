@@ -7,7 +7,7 @@
  * PERFORMANCE: Wrapped with React.memo to prevent unnecessary re-renders.
  */
 
-import React, { useState, memo } from "react";
+import React, { useState, memo } from 'react';
 
 import {
   CheckCircleOutlined,
@@ -17,19 +17,10 @@ import {
   CaretDownOutlined,
   CaretRightOutlined,
   ThunderboltOutlined,
-} from "@ant-design/icons";
-import {
-  Card,
-  Collapse,
-  Progress,
-  Tag,
-  Space,
-  Typography,
-  Tooltip,
-  Button,
-} from "antd";
+} from '@ant-design/icons';
+import { Card, Collapse, Progress, Tag, Space, Typography, Tooltip, Button } from 'antd';
 
-import type { WorkPlan, PlanStatus } from "../../types/agent";
+import type { WorkPlan, PlanStatus } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -37,48 +28,45 @@ interface WorkPlanCardProps {
   workPlan: WorkPlan;
 }
 
-const statusConfig: Record<
-  PlanStatus,
-  { color: string; icon: React.ReactNode; label: string }
-> = {
+const statusConfig: Record<PlanStatus, { color: string; icon: React.ReactNode; label: string }> = {
   planning: {
-    color: "default",
+    color: 'default',
     icon: <ClockCircleOutlined />,
-    label: "Planning",
+    label: 'Planning',
   },
   in_progress: {
-    color: "processing",
+    color: 'processing',
     icon: <LoadingOutlined />,
-    label: "In Progress",
+    label: 'In Progress',
   },
   completed: {
-    color: "success",
+    color: 'success',
     icon: <CheckCircleOutlined />,
-    label: "Completed",
+    label: 'Completed',
   },
-  failed: { color: "error", icon: <CloseCircleOutlined />, label: "Failed" },
+  failed: { color: 'error', icon: <CloseCircleOutlined />, label: 'Failed' },
 };
 
 const getStepStatus = (
   stepNumber: number,
   currentIndex: number,
   planStatus: PlanStatus
-): "completed" | "running" | "pending" | "failed" => {
-  if (planStatus === "failed") return "failed";
-  if (planStatus === "completed") return "completed";
-  if (stepNumber < currentIndex) return "completed";
-  if (stepNumber === currentIndex) return "running";
-  return "pending";
+): 'completed' | 'running' | 'pending' | 'failed' => {
+  if (planStatus === 'failed') return 'failed';
+  if (planStatus === 'completed') return 'completed';
+  if (stepNumber < currentIndex) return 'completed';
+  if (stepNumber === currentIndex) return 'running';
+  return 'pending';
 };
 
 const stepStatusConfig: Record<
-  "completed" | "running" | "pending" | "failed",
+  'completed' | 'running' | 'pending' | 'failed',
   { icon: React.ReactNode; class: string }
 > = {
-  completed: { icon: <CheckCircleOutlined />, class: "step-completed" },
-  running: { icon: <LoadingOutlined />, class: "step-running" },
-  pending: { icon: <ClockCircleOutlined />, class: "step-pending" },
-  failed: { icon: <CloseCircleOutlined />, class: "step-failed" },
+  completed: { icon: <CheckCircleOutlined />, class: 'step-completed' },
+  running: { icon: <LoadingOutlined />, class: 'step-running' },
+  pending: { icon: <ClockCircleOutlined />, class: 'step-pending' },
+  failed: { icon: <CloseCircleOutlined />, class: 'step-failed' },
 };
 
 export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
@@ -92,7 +80,7 @@ export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
   if (workPlan.steps.length === 0) {
     return (
       <Card size="small" style={{ marginBottom: 16 }}>
-        <Space orientation="vertical" size="small" style={{ width: "100%" }}>
+        <Space orientation="vertical" size="small" style={{ width: '100%' }}>
           <Space>
             <ThunderboltOutlined />
             <Text strong>Work Plan</Text>
@@ -130,7 +118,7 @@ export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
           type="link"
           onClick={() => setCollapsed(!collapsed)}
           style={{ fontSize: 12 }}
-          aria-label={collapsed ? "Expand" : "Collapse"}
+          aria-label={collapsed ? 'Expand' : 'Collapse'}
         >
           {collapsed ? <CaretRightOutlined /> : <CaretDownOutlined />}
         </Button>
@@ -138,36 +126,28 @@ export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
     >
       <Collapse
         ghost
-        activeKey={!collapsed ? "steps" : undefined}
+        activeKey={!collapsed ? 'steps' : undefined}
         items={[
           {
-            key: "steps",
+            key: 'steps',
             children: (
-              <Space
-                orientation="vertical"
-                size="small"
-                style={{ width: "100%" }}
-              >
+              <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                 {/* Progress Bar */}
                 <Progress
                   percent={progressPercentage}
                   status={
-                    workPlan.status === "failed"
-                      ? "exception"
-                      : workPlan.status === "completed"
-                      ? "success"
-                      : "active"
+                    workPlan.status === 'failed'
+                      ? 'exception'
+                      : workPlan.status === 'completed'
+                        ? 'success'
+                        : 'active'
                   }
                   size="small"
                   className="progress-bar"
                 />
 
                 {/* Steps List */}
-                <Space
-                  orientation="vertical"
-                  size="small"
-                  style={{ width: "100%" }}
-                >
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   {workPlan.steps.map((step) => {
                     const stepStatus = getStepStatus(
                       step.step_number,
@@ -185,39 +165,35 @@ export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
                           padding: 8,
                           borderRadius: 4,
                           backgroundColor:
-                            stepStatus === "completed"
-                              ? "#f6ffed"
-                              : stepStatus === "running"
-                              ? "#e6f7ff"
-                              : stepStatus === "failed"
-                              ? "#fff1f0"
-                              : "#f5f5f5",
+                            stepStatus === 'completed'
+                              ? '#f6ffed'
+                              : stepStatus === 'running'
+                                ? '#e6f7ff'
+                                : stepStatus === 'failed'
+                                  ? '#fff1f0'
+                                  : '#f5f5f5',
                           border: `1px solid ${
-                            stepStatus === "completed"
-                              ? "#b7eb8f"
-                              : stepStatus === "running"
-                              ? "#91d5ff"
-                              : stepStatus === "failed"
-                              ? "#ffccc7"
-                              : "#d9d9d9"
+                            stepStatus === 'completed'
+                              ? '#b7eb8f'
+                              : stepStatus === 'running'
+                                ? '#91d5ff'
+                                : stepStatus === 'failed'
+                                  ? '#ffccc7'
+                                  : '#d9d9d9'
                           }`,
                         }}
                       >
-                        <Space
-                          orientation="vertical"
-                          size="small"
-                          style={{ width: "100%" }}
-                        >
+                        <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                           {/* Step Header */}
                           <Space>
                             <span
                               style={{
                                 color:
-                                  stepStatus === "completed"
-                                    ? "#52c41a"
-                                    : stepStatus === "failed"
-                                    ? "#ff4d4f"
-                                    : undefined,
+                                  stepStatus === 'completed'
+                                    ? '#52c41a'
+                                    : stepStatus === 'failed'
+                                      ? '#ff4d4f'
+                                      : undefined,
                               }}
                             >
                               {config.icon}
@@ -230,11 +206,7 @@ export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
                           {/* Step Details */}
                           <Space wrap>
                             {step.required_tools.map((tool) => (
-                              <Tag
-                                key={tool}
-                                color="blue"
-                                style={{ fontSize: 11 }}
-                              >
+                              <Tag key={tool} color="blue" style={{ fontSize: 11 }}>
                                 {tool}
                               </Tag>
                             ))}
@@ -246,8 +218,7 @@ export const WorkPlanCard = memo<WorkPlanCardProps>(({ workPlan }) => {
                           {/* Dependencies */}
                           {step.dependencies.length > 0 ? (
                             <Text type="secondary" style={{ fontSize: 11 }}>
-                              Depends on: Steps{" "}
-                              {step.dependencies.map((d) => d + 1).join(", ")}
+                              Depends on: Steps {step.dependencies.map((d) => d + 1).join(', ')}
                             </Text>
                           ) : (
                             <Text type="secondary" style={{ fontSize: 11 }}>

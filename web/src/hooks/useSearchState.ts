@@ -8,38 +8,38 @@
  * including search modes, filters, results, and UI state.
  */
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react';
 
-export type SearchMode = 'semantic' | 'graphTraversal' | 'temporal' | 'faceted' | 'community'
-export type RetrievalMode = 'hybrid' | 'nodeDistance'
-export type ViewMode = 'grid' | 'list'
-export type ConfigTab = 'params' | 'filters'
-export type TimeRange = 'all' | 'last30' | 'custom'
+export type SearchMode = 'semantic' | 'graphTraversal' | 'temporal' | 'faceted' | 'community';
+export type RetrievalMode = 'hybrid' | 'nodeDistance';
+export type ViewMode = 'grid' | 'list';
+export type ConfigTab = 'params' | 'filters';
+export type TimeRange = 'all' | 'last30' | 'custom';
 
 export interface SearchResult {
-  content: string
-  score: number
+  content: string;
+  score: number;
   metadata: {
-    type: string
-    name?: string
-    uuid?: string
-    depth?: number
-    created_at?: string
-    tags?: string[]
-    [key: string]: unknown
-  }
-  source: string
+    type: string;
+    name?: string;
+    uuid?: string;
+    depth?: number;
+    created_at?: string;
+    tags?: string[];
+    [key: string]: unknown;
+  };
+  source: string;
 }
 
 export interface SearchHistoryItem {
-  query: string
-  mode: string
-  timestamp: number
+  query: string;
+  mode: string;
+  timestamp: number;
 }
 
 export interface CustomTimeRange {
-  since?: string
-  until?: string
+  since?: string;
+  until?: string;
 }
 
 /**
@@ -49,126 +49,122 @@ export interface CustomTimeRange {
  */
 export function useSearchState() {
   // Basic search state
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [searchMode, setSearchMode] = useState<SearchMode>('semantic')
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchMode, setSearchMode] = useState<SearchMode>('semantic');
 
   // UI state
-  const [isConfigOpen, setIsConfigOpen] = useState(true)
-  const [isResultsCollapsed, setIsResultsCollapsedState] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
-  const [configTab, setConfigTab] = useState<ConfigTab>('params')
-  const [showMobileConfig, setShowMobileConfig] = useState(false)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [isConfigOpen, setIsConfigOpen] = useState(true);
+  const [isResultsCollapsed, setIsResultsCollapsedState] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [configTab, setConfigTab] = useState<ConfigTab>('params');
+  const [showMobileConfig, setShowMobileConfig] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Semantic search state
-  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>('hybrid')
-  const [strategy, setStrategy] = useState('COMBINED_HYBRID_SEARCH_RRF')
-  const [focalNode, setFocalNode] = useState('')
-  const [crossEncoder, setCrossEncoder] = useState('bge')
+  const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>('hybrid');
+  const [strategy, setStrategy] = useState('COMBINED_HYBRID_SEARCH_RRF');
+  const [focalNode, setFocalNode] = useState('');
+  const [crossEncoder, setCrossEncoder] = useState('bge');
 
   // Graph traversal state
-  const [startEntityUuid, setStartEntityUuid] = useState('')
-  const [maxDepth, setMaxDepthState] = useState(2)
-  const [relationshipTypes, setRelationshipTypes] = useState<string[]>([])
+  const [startEntityUuid, setStartEntityUuid] = useState('');
+  const [maxDepth, setMaxDepthState] = useState(2);
+  const [relationshipTypes, setRelationshipTypes] = useState<string[]>([]);
 
   // Temporal search state
-  const [timeRange, setTimeRange] = useState<TimeRange>('last30')
-  const [customTimeRange, setCustomTimeRange] = useState<CustomTimeRange>({})
+  const [timeRange, setTimeRange] = useState<TimeRange>('last30');
+  const [customTimeRange, setCustomTimeRange] = useState<CustomTimeRange>({});
 
   // Faceted search state
-  const [selectedEntityTypes, setSelectedEntityTypesState] = useState<string[]>([])
-  const [selectedTags, setSelectedTagsState] = useState<string[]>([])
-  const availableTags = ['architecture', 'meeting', 'decisions', 'Q3']
+  const [selectedEntityTypes, setSelectedEntityTypesState] = useState<string[]>([]);
+  const [selectedTags, setSelectedTagsState] = useState<string[]>([]);
+  const availableTags = ['architecture', 'meeting', 'decisions', 'Q3'];
 
   // Community search state
-  const [communityUuid, setCommunityUuid] = useState('')
-  const [includeEpisodes, setIncludeEpisodes] = useState(true)
+  const [communityUuid, setCommunityUuid] = useState('');
+  const [includeEpisodes, setIncludeEpisodes] = useState(true);
 
   // Graph/subgraph state
-  const [isSubgraphMode, setIsSubgraphModeState] = useState(false)
-  const [selectedSubgraphIds, setSelectedSubgraphIdsState] = useState<string[]>([])
+  const [isSubgraphMode, setIsSubgraphModeState] = useState(false);
+  const [selectedSubgraphIds, setSelectedSubgraphIdsState] = useState<string[]>([]);
 
   // Voice search state
-  const [isListening, setListening] = useState(false)
+  const [isListening, setListening] = useState(false);
 
   // Search history state
-  const [searchHistory, setSearchHistoryState] = useState<SearchHistoryItem[]>([])
+  const [searchHistory, setSearchHistoryState] = useState<SearchHistoryItem[]>([]);
 
   // Memoized highlight node IDs from results
   const highlightNodeIds = useMemo(() => {
-    const ids = new Set<string>()
-    results.forEach(result => {
+    const ids = new Set<string>();
+    results.forEach((result) => {
       if (result.metadata.uuid) {
-        ids.add(result.metadata.uuid)
+        ids.add(result.metadata.uuid);
       }
-    })
-    return Array.from(ids)
-  }, [results])
+    });
+    return Array.from(ids);
+  }, [results]);
 
   // Wrapper functions with additional logic
   const toggleResultsCollapse = useCallback(() => {
-    setIsResultsCollapsedState(prev => !prev)
-  }, [])
+    setIsResultsCollapsedState((prev) => !prev);
+  }, []);
 
   const toggleConfigOpen = useCallback(() => {
-    setIsConfigOpen(prev => !prev)
-  }, [])
+    setIsConfigOpen((prev) => !prev);
+  }, []);
 
   const toggleSubgraphMode = useCallback(() => {
-    setIsSubgraphModeState(prev => !prev)
-  }, [])
+    setIsSubgraphModeState((prev) => !prev);
+  }, []);
 
   const setMaxDepth = useCallback((value: number) => {
     // Clamp between 1 and 5
-    const clamped = Math.max(1, Math.min(5, value))
-    setMaxDepthState(clamped)
-  }, [])
+    const clamped = Math.max(1, Math.min(5, value));
+    setMaxDepthState(clamped);
+  }, []);
 
   const toggleEntityType = useCallback((type: string) => {
-    setSelectedEntityTypesState(prev =>
-      prev.includes(type)
-        ? prev.filter(t => t !== type)
-        : [...prev, type]
-    )
-  }, [])
+    setSelectedEntityTypesState((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  }, []);
 
   const toggleTag = useCallback((tag: string) => {
-    setSelectedTagsState(prev =>
-      prev.includes(tag)
-        ? prev.filter(t => t !== tag)
-        : [...prev, tag]
-    )
-  }, [])
+    setSelectedTagsState((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }, []);
 
   const addToSearchHistory = useCallback((queryStr: string, mode: SearchMode) => {
-    setSearchHistoryState(prev => {
+    setSearchHistoryState((prev) => {
       const newItem: SearchHistoryItem = {
         query: queryStr,
         mode,
         timestamp: Date.now(),
-      }
+      };
       // Keep last 10 items
-      return [newItem, ...prev.slice(0, 9)]
-    })
-  }, [])
+      return [newItem, ...prev.slice(0, 9)];
+    });
+  }, []);
 
   const clearSearchHistory = useCallback(() => {
-    setSearchHistoryState([])
-  }, [])
+    setSearchHistoryState([]);
+  }, []);
 
   const setSelectedSubgraphIds = useCallback((ids: string[] | ((prev: string[]) => string[])) => {
-    setSelectedSubgraphIdsState(prev => {
-      const newIds = typeof ids === 'function' ? ids(prev) : ids
+    setSelectedSubgraphIdsState((prev) => {
+      const newIds = typeof ids === 'function' ? ids(prev) : ids;
       // Auto-enable subgraph mode if IDs are set
       if (newIds.length > 0 && prev.length === 0) {
-        setIsSubgraphModeState(true)
+        setIsSubgraphModeState(true);
       }
-      return newIds
-    })
-  }, [])
+      return newIds;
+    });
+  }, []);
 
   return {
     // Basic search state
@@ -253,7 +249,7 @@ export function useSearchState() {
     searchHistory,
     addToSearchHistory,
     clearSearchHistory,
-  }
+  };
 }
 
-export default useSearchState
+export default useSearchState;

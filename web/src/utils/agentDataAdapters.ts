@@ -9,13 +9,10 @@
 import type {
   TimelineItem,
   ToolExecutionInfo,
-} from "../components/agent/execution/ActivityTimeline";
-import type {
-  TokenData,
-  CostData,
-} from "../components/agent/execution/TokenUsageChart";
-import type { ToolExecutionItem } from "../components/agent/execution/ToolCallVisualization";
-import type { Message, ToolCall, ToolResult } from "../types/agent";
+} from '../components/agent/execution/ActivityTimeline';
+import type { TokenData, CostData } from '../components/agent/execution/TokenUsageChart';
+import type { ToolExecutionItem } from '../components/agent/execution/ToolCallVisualization';
+import type { Message, ToolCall, ToolResult } from '../types/agent';
 
 /**
  * Adapt message data for ActivityTimeline component
@@ -28,11 +25,7 @@ export function adaptTimelineData(message: Message): {
 } {
   return {
     timeline: (message.metadata?.timeline as TimelineItem[]) || [],
-    toolExecutions:
-      (message.metadata?.tool_executions as Record<
-        string,
-        ToolExecutionInfo
-      >) || {},
+    toolExecutions: (message.metadata?.tool_executions as Record<string, ToolExecutionInfo>) || {},
     toolCalls: message.tool_calls || [],
     toolResults: message.tool_results || [],
   };
@@ -41,17 +34,13 @@ export function adaptTimelineData(message: Message): {
 /**
  * Adapt message data for ToolCallVisualization component
  */
-export function adaptToolVisualizationData(
-  message: Message
-): ToolExecutionItem[] {
+export function adaptToolVisualizationData(message: Message): ToolExecutionItem[] {
   const timeline = (message.metadata?.timeline as TimelineItem[]) || [];
-  const executions =
-    (message.metadata?.tool_executions as Record<string, ToolExecutionInfo>) ||
-    {};
+  const executions = (message.metadata?.tool_executions as Record<string, ToolExecutionInfo>) || {};
   const results = message.tool_results || [];
 
   // Filter timeline items to get only tool calls
-  const toolCallItems = timeline.filter((item) => item.type === "tool_call");
+  const toolCallItems = timeline.filter((item) => item.type === 'tool_call');
 
   // If no timeline items, try to build from tool_calls
   if (toolCallItems.length === 0 && message.tool_calls) {
@@ -66,9 +55,9 @@ export function adaptToolVisualizationData(
         output: result?.result,
         status: result
           ? result.error
-            ? ("failed" as const)
-            : ("success" as const)
-          : ("running" as const),
+            ? ('failed' as const)
+            : ('success' as const)
+          : ('running' as const),
         startTime: execution?.startTime || Date.now(),
         endTime: execution?.endTime,
         duration: execution?.duration,
@@ -79,7 +68,7 @@ export function adaptToolVisualizationData(
   }
 
   return toolCallItems.map((item, index) => {
-    const toolName = item.toolName || "unknown";
+    const toolName = item.toolName || 'unknown';
     const execution = executions[toolName];
     const result = results.find((r) => r.tool_name === toolName);
 
@@ -90,9 +79,9 @@ export function adaptToolVisualizationData(
       output: result?.result,
       status: result
         ? result.error
-          ? ("failed" as const)
-          : ("success" as const)
-        : ("running" as const),
+          ? ('failed' as const)
+          : ('success' as const)
+        : ('running' as const),
       startTime: execution?.startTime || item.timestamp,
       endTime: execution?.endTime,
       duration: execution?.duration,
@@ -128,12 +117,10 @@ export function extractTokenData(message: Message): {
 
   // Extract token counts (support both naming conventions)
   const inputTokens = tokenUsage.input_tokens || tokenUsage.prompt_tokens || 0;
-  const outputTokens =
-    tokenUsage.output_tokens || tokenUsage.completion_tokens || 0;
+  const outputTokens = tokenUsage.output_tokens || tokenUsage.completion_tokens || 0;
   const reasoningTokens = tokenUsage.reasoning_tokens;
   const totalTokens =
-    tokenUsage.total_tokens ||
-    inputTokens + outputTokens + (reasoningTokens || 0);
+    tokenUsage.total_tokens || inputTokens + outputTokens + (reasoningTokens || 0);
 
   // Skip if no meaningful data
   if (totalTokens === 0) return {};

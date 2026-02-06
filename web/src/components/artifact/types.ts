@@ -4,7 +4,7 @@
  * Defines the type system for the compound ArtifactRenderer component.
  */
 
-import type { Artifact } from "../../types/agent";
+import type { Artifact } from '../../types/agent';
 
 /**
  * ArtifactRenderer context shared across compound components

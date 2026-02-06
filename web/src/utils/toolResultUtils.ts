@@ -17,11 +17,11 @@ export function isImageUrl(str: string): boolean {
   // Check for common image URL patterns
   const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i;
   const imageHosts = [
-    "mdn.alipayobjects.com",
-    "img.alicdn.com",
-    "cdn.jsdelivr.net",
-    "i.imgur.com",
-    "images.unsplash.com",
+    'mdn.alipayobjects.com',
+    'img.alicdn.com',
+    'cdn.jsdelivr.net',
+    'i.imgur.com',
+    'images.unsplash.com',
   ];
 
   try {
@@ -31,7 +31,7 @@ export function isImageUrl(str: string): boolean {
     // Check by known image hosts
     if (imageHosts.some((host) => url.hostname.includes(host))) return true;
     // Check for /original suffix (common in CDN image URLs)
-    if (url.pathname.endsWith("/original")) return true;
+    if (url.pathname.endsWith('/original')) return true;
   } catch {
     return false;
   }
@@ -44,41 +44,29 @@ export function isImageUrl(str: string): boolean {
  * @param result - Result string potentially containing base64 image data
  * @returns Object with data and format, or null if not a base64 image
  */
-export function parseBase64Image(
-  result: string
-): { data: string; format: string } | null {
+export function parseBase64Image(result: string): { data: string; format: string } | null {
   try {
     // Try to parse as JSON first (e.g., {'data': 'base64...'})
-    const jsonMatch = result.match(
-      /\{[\s\S]*['"]data['"]:\s*['"]([A-Za-z0-9+/=]+)['"][\s\S]*\}/
-    );
+    const jsonMatch = result.match(/\{[\s\S]*['"]data['"]:\s*['"]([A-Za-z0-9+/=]+)['"][\s\S]*\}/);
     if (jsonMatch) {
       const base64Data = jsonMatch[1];
       // Detect image format from base64 header
-      if (base64Data.startsWith("iVBORw0KGgo"))
-        return { data: base64Data, format: "png" };
-      if (base64Data.startsWith("/9j/"))
-        return { data: base64Data, format: "jpeg" };
-      if (base64Data.startsWith("R0lGOD"))
-        return { data: base64Data, format: "gif" };
-      if (base64Data.startsWith("UklGR"))
-        return { data: base64Data, format: "webp" };
+      if (base64Data.startsWith('iVBORw0KGgo')) return { data: base64Data, format: 'png' };
+      if (base64Data.startsWith('/9j/')) return { data: base64Data, format: 'jpeg' };
+      if (base64Data.startsWith('R0lGOD')) return { data: base64Data, format: 'gif' };
+      if (base64Data.startsWith('UklGR')) return { data: base64Data, format: 'webp' };
       // Default to PNG
-      return { data: base64Data, format: "png" };
+      return { data: base64Data, format: 'png' };
     }
 
     // Check if result itself is base64 (no JSON wrapper)
     const base64Only = result.trim();
     if (/^[A-Za-z0-9+/=]+$/.test(base64Only) && base64Only.length > 100) {
-      if (base64Only.startsWith("iVBORw0KGgo"))
-        return { data: base64Only, format: "png" };
-      if (base64Only.startsWith("/9j/"))
-        return { data: base64Only, format: "jpeg" };
-      if (base64Only.startsWith("R0lGOD"))
-        return { data: base64Only, format: "gif" };
-      if (base64Only.startsWith("UklGR"))
-        return { data: base64Only, format: "webp" };
-      return { data: base64Only, format: "png" };
+      if (base64Only.startsWith('iVBORw0KGgo')) return { data: base64Only, format: 'png' };
+      if (base64Only.startsWith('/9j/')) return { data: base64Only, format: 'jpeg' };
+      if (base64Only.startsWith('R0lGOD')) return { data: base64Only, format: 'gif' };
+      if (base64Only.startsWith('UklGR')) return { data: base64Only, format: 'webp' };
+      return { data: base64Only, format: 'png' };
     }
   } catch {
     // Fall through
@@ -117,8 +105,8 @@ export function extractImageUrl(result: string): string | null {
  * @returns Folded text string
  */
 export function foldText(text: string | undefined, keepLines: number = 5): string {
-  if (!text) return "";
-  const lines = text.split("\n");
+  if (!text) return '';
+  const lines = text.split('\n');
   const totalLines = lines.length;
 
   if (totalLines <= keepLines * 2) {
@@ -129,7 +117,7 @@ export function foldText(text: string | undefined, keepLines: number = 5): strin
   const lastLines = lines.slice(-keepLines);
   const foldedCount = totalLines - keepLines * 2;
 
-  return [...firstLines, `\n... (${foldedCount} lines collapsed) ...\n`, ...lastLines].join("\n");
+  return [...firstLines, `\n... (${foldedCount} lines collapsed) ...\n`, ...lastLines].join('\n');
 }
 
 /**
@@ -143,8 +131,8 @@ export function foldTextWithMetadata(
   text: string | undefined,
   keepLines: number = 5
 ): { text: string; folded: boolean } {
-  if (!text) return { text: "", folded: false };
-  const lines = text.split("\n");
+  if (!text) return { text: '', folded: false };
+  const lines = text.split('\n');
   const totalLines = lines.length;
 
   if (totalLines <= keepLines * 2) {
@@ -156,7 +144,7 @@ export function foldTextWithMetadata(
   const foldedCount = totalLines - keepLines * 2;
 
   return {
-    text: [...firstLines, `\n... (${foldedCount} lines collapsed) ...\n`, ...lastLines].join("\n"),
+    text: [...firstLines, `\n... (${foldedCount} lines collapsed) ...\n`, ...lastLines].join('\n'),
     folded: true,
   };
 }

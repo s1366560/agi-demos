@@ -88,7 +88,10 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
           )}
 
           <div className="mb-4">
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.create_modal.name')} <span className="text-red-500">*</span>
             </label>
             <input
@@ -104,7 +107,10 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
           </div>
 
           <div className="mb-6">
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+            <label
+              htmlFor="description"
+              className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2"
+            >
               {t('tenant.create_modal.description')}
             </label>
             <textarea

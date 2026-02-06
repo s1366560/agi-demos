@@ -4,275 +4,279 @@
  * Tests for breadcrumb generation hook.
  */
 
-import { renderHook } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { renderHook } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 
-import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
+import { useBreadcrumbs } from '@/hooks/useBreadcrumbs';
 
 // Mock react-router-dom
-const mockParams = { tenantId: 'tenant-123', projectId: 'proj-456' }
+const mockParams = { tenantId: 'tenant-123', projectId: 'proj-456' };
 const mockLocation = {
   pathname: '/project/proj-456/memories',
   search: '',
   hash: '',
   state: null,
   key: 'test',
-}
+};
 
 vi.mock('react-router-dom', () => ({
   useParams: () => mockParams,
   useLocation: () => mockLocation,
-}))
+}));
 
 // Mock stores
-const mockCurrentTenant = { id: 'tenant-123', name: 'Test Tenant' }
-let mockCurrentProject = { id: 'proj-456', name: 'Test Project' }
+const mockCurrentTenant = { id: 'tenant-123', name: 'Test Tenant' };
+let mockCurrentProject = { id: 'proj-456', name: 'Test Project' };
 
 vi.mock('@/stores/tenant', () => ({
   useTenantStore: (selector?: (state: { currentTenant: typeof mockCurrentTenant }) => unknown) => {
-    const state = { currentTenant: mockCurrentTenant }
-    return selector ? selector(state) : state
+    const state = { currentTenant: mockCurrentTenant };
+    return selector ? selector(state) : state;
   },
-}))
+}));
 
 vi.mock('@/stores/project', () => ({
-  useProjectStore: (selector?: (state: { currentProject: typeof mockCurrentProject }) => unknown) => {
-    const state = { currentProject: mockCurrentProject }
-    return selector ? selector(state) : state
+  useProjectStore: (
+    selector?: (state: { currentProject: typeof mockCurrentProject }) => unknown
+  ) => {
+    const state = { currentProject: mockCurrentProject };
+    return selector ? selector(state) : state;
   },
-}))
+}));
 
 // Mock conversations store
-const mockCurrentConversation = { id: 'conv-123', title: 'Test Conversation' }
+const mockCurrentConversation = { id: 'conv-123', title: 'Test Conversation' };
 
 vi.mock('@/stores/agent/conversationsStore', () => ({
-  useConversationsStore: (selector?: (state: { currentConversation: typeof mockCurrentConversation }) => unknown) => {
-    const state = { currentConversation: mockCurrentConversation }
-    return selector ? selector(state) : state
+  useConversationsStore: (
+    selector?: (state: { currentConversation: typeof mockCurrentConversation }) => unknown
+  ) => {
+    const state = { currentConversation: mockCurrentConversation };
+    return selector ? selector(state) : state;
   },
-}))
+}));
 
 describe('useBreadcrumbs', () => {
   describe('tenant breadcrumbs', () => {
     beforeEach(() => {
-      mockLocation.pathname = '/tenant/tenant-123/projects'
-      mockParams.tenantId = 'tenant-123'
-    })
+      mockLocation.pathname = '/tenant/tenant-123/projects';
+      mockParams.tenantId = 'tenant-123';
+    });
 
     it('should generate breadcrumbs for tenant overview', () => {
-      mockLocation.pathname = '/tenant/tenant-123'
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+      mockLocation.pathname = '/tenant/tenant-123';
+      const { result } = renderHook(() => useBreadcrumbs('tenant'));
 
       // For tenant overview, should have Home breadcrumb
-      expect(result.current.length).toBeGreaterThanOrEqual(1)
-      expect(result.current[0].label).toBe('Home')
-    })
+      expect(result.current.length).toBeGreaterThanOrEqual(1);
+      expect(result.current[0].label).toBe('Home');
+    });
 
     it('should generate breadcrumbs for tenant sub-pages', () => {
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+      const { result } = renderHook(() => useBreadcrumbs('tenant'));
 
       expect(result.current).toEqual([
         { label: 'Home', path: '/tenant' },
         { label: 'Projects', path: '/tenant/tenant-123/projects' },
-      ])
-    })
+      ]);
+    });
 
     it('should handle generic tenant path', () => {
-      mockLocation.pathname = '/tenant'
-      mockParams.tenantId = undefined
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+      mockLocation.pathname = '/tenant';
+      mockParams.tenantId = undefined;
+      const { result } = renderHook(() => useBreadcrumbs('tenant'));
 
       // For generic /tenant path, should return empty breadcrumbs
       // (it's the entry point, no need for breadcrumbs)
-      expect(result.current.length).toBe(0)
-    })
+      expect(result.current.length).toBe(0);
+    });
 
     it('should generate breadcrumbs for agent-workspace with conversation name', () => {
-      mockLocation.pathname = '/tenant/tenant-123/agent-workspace'
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+      mockLocation.pathname = '/tenant/tenant-123/agent-workspace';
+      const { result } = renderHook(() => useBreadcrumbs('tenant'));
 
       // Should show conversation name when available
       expect(result.current).toEqual([
         { label: 'Home', path: '/tenant' },
         { label: 'Test Conversation', path: '/tenant/tenant-123/agent-workspace' },
-      ])
-    })
+      ]);
+    });
 
     it('should generate breadcrumbs for agent-workspace with fallback when no conversation', () => {
       // Temporarily set no conversation
-      const originalConversation = { ...mockCurrentConversation }
-      mockCurrentConversation.id = 'conv-123'
-      mockCurrentConversation.title = ''
+      const originalConversation = { ...mockCurrentConversation };
+      mockCurrentConversation.id = 'conv-123';
+      mockCurrentConversation.title = '';
 
-      mockLocation.pathname = '/tenant/tenant-123/agent-workspace'
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+      mockLocation.pathname = '/tenant/tenant-123/agent-workspace';
+      const { result } = renderHook(() => useBreadcrumbs('tenant'));
 
       // Should show "Agent Workspace" as fallback when no conversation title
       expect(result.current).toEqual([
         { label: 'Home', path: '/tenant' },
         { label: 'Agent Workspace', path: '/tenant/tenant-123/agent-workspace' },
-      ])
+      ]);
 
       // Restore
-      Object.assign(mockCurrentConversation, originalConversation)
-    })
-  })
+      Object.assign(mockCurrentConversation, originalConversation);
+    });
+  });
 
   describe('project breadcrumbs', () => {
     beforeEach(() => {
-      mockParams.projectId = 'proj-456'
-    })
+      mockParams.projectId = 'proj-456';
+    });
 
     it('should generate breadcrumbs for project overview', () => {
-      mockLocation.pathname = '/project/proj-456'
-      const { result } = renderHook(() => useBreadcrumbs('project'))
+      mockLocation.pathname = '/project/proj-456';
+      const { result } = renderHook(() => useBreadcrumbs('project'));
 
       expect(result.current).toEqual([
         { label: 'Home', path: '/tenant' },
         { label: 'Projects', path: '/tenant/projects' },
         { label: 'Test Project', path: '/project/proj-456' },
-      ])
-    })
+      ]);
+    });
 
     it('should generate breadcrumbs for project sub-pages', () => {
-      mockLocation.pathname = '/project/proj-456/memories'
-      const { result } = renderHook(() => useBreadcrumbs('project'))
+      mockLocation.pathname = '/project/proj-456/memories';
+      const { result } = renderHook(() => useBreadcrumbs('project'));
 
       expect(result.current).toEqual([
         { label: 'Home', path: '/tenant' },
         { label: 'Projects', path: '/tenant/projects' },
         { label: 'Test Project', path: '/project/proj-456' },
         { label: 'Memories', path: '/project/proj-456/memories' },
-      ])
-    })
+      ]);
+    });
 
     it('should format kebab-case labels correctly', () => {
-      mockLocation.pathname = '/project/proj-456/advanced-search'
-      const { result } = renderHook(() => useBreadcrumbs('project'))
+      mockLocation.pathname = '/project/proj-456/advanced-search';
+      const { result } = renderHook(() => useBreadcrumbs('project'));
 
-      expect(result.current[result.current.length - 1].label).toBe('Advanced Search')
-    })
+      expect(result.current[result.current.length - 1].label).toBe('Advanced Search');
+    });
 
     it('should handle deeply nested paths', () => {
-      mockLocation.pathname = '/project/proj-456/memories/abc-123'
-      const { result } = renderHook(() => useBreadcrumbs('project'))
+      mockLocation.pathname = '/project/proj-456/memories/abc-123';
+      const { result } = renderHook(() => useBreadcrumbs('project'));
 
       // Should include the nested resource
-      expect(result.current.length).toBeGreaterThanOrEqual(4)
+      expect(result.current.length).toBeGreaterThanOrEqual(4);
       // Last item should be the formatted page name
-      expect(result.current[result.current.length - 1].label).toBe('Memories')
-    })
-  })
+      expect(result.current[result.current.length - 1].label).toBe('Memories');
+    });
+  });
 
   describe('agent breadcrumbs', () => {
     beforeEach(() => {
-      mockParams.projectId = 'proj-456'
-    })
+      mockParams.projectId = 'proj-456';
+    });
 
     it('should generate breadcrumbs for agent workspace', () => {
-      mockLocation.pathname = '/project/proj-456/agent'
-      const { result } = renderHook(() => useBreadcrumbs('agent'))
+      mockLocation.pathname = '/project/proj-456/agent';
+      const { result } = renderHook(() => useBreadcrumbs('agent'));
 
-      expect(result.current.length).toBeGreaterThanOrEqual(3)
-      expect(result.current[result.current.length - 1].label).toBe('Agent')
-    })
+      expect(result.current.length).toBeGreaterThanOrEqual(3);
+      expect(result.current[result.current.length - 1].label).toBe('Agent');
+    });
 
     it('should generate breadcrumbs for agent sub-pages', () => {
-      mockLocation.pathname = '/project/proj-456/agent/logs'
-      const { result } = renderHook(() => useBreadcrumbs('agent'))
+      mockLocation.pathname = '/project/proj-456/agent/logs';
+      const { result } = renderHook(() => useBreadcrumbs('agent'));
 
-      expect(result.current.length).toBeGreaterThanOrEqual(4)
-      expect(result.current[result.current.length - 1].label).toBe('Logs')
-    })
-  })
+      expect(result.current.length).toBeGreaterThanOrEqual(4);
+      expect(result.current[result.current.length - 1].label).toBe('Logs');
+    });
+  });
 
   describe('schema breadcrumbs', () => {
     beforeEach(() => {
-      mockParams.projectId = 'proj-456'
-    })
+      mockParams.projectId = 'proj-456';
+    });
 
     it('should generate breadcrumbs for schema pages', () => {
-      mockLocation.pathname = '/project/proj-456/schema/entities'
-      const { result } = renderHook(() => useBreadcrumbs('schema'))
+      mockLocation.pathname = '/project/proj-456/schema/entities';
+      const { result } = renderHook(() => useBreadcrumbs('schema'));
 
-      expect(result.current.length).toBeGreaterThanOrEqual(4)
-      expect(result.current[result.current.length - 1].label).toBe('Entities')
-    })
-  })
+      expect(result.current.length).toBeGreaterThanOrEqual(4);
+      expect(result.current[result.current.length - 1].label).toBe('Entities');
+    });
+  });
 
   describe('edge cases', () => {
     it('should handle root path', () => {
-      mockLocation.pathname = '/'
-      const { result } = renderHook(() => useBreadcrumbs('tenant'))
+      mockLocation.pathname = '/';
+      const { result } = renderHook(() => useBreadcrumbs('tenant'));
 
-      expect(result.current).toEqual([])
-    })
+      expect(result.current).toEqual([]);
+    });
 
     it('should handle missing project name', () => {
       // Set project to null to test fallback behavior
-      mockCurrentProject = null
-      mockLocation.pathname = '/project/proj-456/memories'
-      const { result } = renderHook(() => useBreadcrumbs('project'))
+      mockCurrentProject = null;
+      mockLocation.pathname = '/project/proj-456/memories';
+      const { result } = renderHook(() => useBreadcrumbs('project'));
 
       // Should still generate breadcrumbs, even if project name is missing
-      expect(result.current.length).toBeGreaterThan(0)
+      expect(result.current.length).toBeGreaterThan(0);
       // Should use "Project" as fallback label
-      const projectBreadcrumb = result.current.find(b => b.path === '/project/proj-456')
-      expect(projectBreadcrumb?.label).toBe('Project')
+      const projectBreadcrumb = result.current.find((b) => b.path === '/project/proj-456');
+      expect(projectBreadcrumb?.label).toBe('Project');
 
       // Reset for other tests
-      mockCurrentProject = { id: 'proj-456', name: 'Test Project' }
-    })
+      mockCurrentProject = { id: 'proj-456', name: 'Test Project' };
+    });
 
     it('should handle path with trailing slash', () => {
-      mockLocation.pathname = '/project/proj-456/memories/'
-      const { result } = renderHook(() => useBreadcrumbs('project'))
+      mockLocation.pathname = '/project/proj-456/memories/';
+      const { result } = renderHook(() => useBreadcrumbs('project'));
 
       // Should work the same as without trailing slash
-      expect(result.current[result.current.length - 1].label).toBe('Memories')
-    })
-  })
+      expect(result.current[result.current.length - 1].label).toBe('Memories');
+    });
+  });
 
   describe('options parameter', () => {
     beforeEach(() => {
-      mockParams.projectId = 'proj-456'
-    })
+      mockParams.projectId = 'proj-456';
+    });
 
     it('should support custom labels via options', () => {
-      mockLocation.pathname = '/project/proj-456/custom-page'
+      mockLocation.pathname = '/project/proj-456/custom-page';
       const { result } = renderHook(() =>
         useBreadcrumbs('project', {
           labels: {
             'custom-page': 'Custom Label',
           },
         })
-      )
+      );
 
-      expect(result.current[result.current.length - 1].label).toBe('Custom Label')
-    })
+      expect(result.current[result.current.length - 1].label).toBe('Custom Label');
+    });
 
     it('should support maxDepth option', () => {
-      mockLocation.pathname = '/project/proj-456/memories/abc-123/def-456'
+      mockLocation.pathname = '/project/proj-456/memories/abc-123/def-456';
       const { result } = renderHook(() =>
         useBreadcrumbs('project', {
           maxDepth: 3,
         })
-      )
+      );
 
       // Should limit to 3 breadcrumbs
-      expect(result.current.length).toBeLessThanOrEqual(3)
-    })
+      expect(result.current.length).toBeLessThanOrEqual(3);
+    });
 
     it('should support hideLast option', () => {
-      mockLocation.pathname = '/project/proj-456/memories'
+      mockLocation.pathname = '/project/proj-456/memories';
       const { result } = renderHook(() =>
         useBreadcrumbs('project', {
           hideLast: true,
         })
-      )
+      );
 
       // Last breadcrumb should have empty path (not clickable)
-      expect(result.current[result.current.length - 1].path).toBe('')
-    })
-  })
-})
+      expect(result.current[result.current.length - 1].path).toBe('');
+    });
+  });
+});

@@ -6,7 +6,12 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-import { createApiUrl, createWebSocketUrl, apiFetch, handleUnauthorized } from '@/services/client/urlUtils';
+import {
+  createApiUrl,
+  createWebSocketUrl,
+  apiFetch,
+  handleUnauthorized,
+} from '@/services/client/urlUtils';
 
 describe('createApiUrl', () => {
   // Reset environment before each test

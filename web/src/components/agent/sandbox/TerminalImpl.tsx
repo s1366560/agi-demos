@@ -5,16 +5,17 @@
  * until the terminal is actually needed.
  */
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback } from 'react';
 
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { Terminal } from "@xterm/xterm";
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Terminal } from '@xterm/xterm';
 
-import { createWebSocketUrl } from "../../../services/client/urlUtils";
+import { createWebSocketUrl } from '../../../services/client/urlUtils';
+import { getAuthToken } from '../../../utils/tokenResolver';
 
 interface TerminalMessage {
-  type: "input" | "output" | "resize" | "error" | "connected" | "pong";
+  type: 'input' | 'output' | 'resize' | 'error' | 'connected' | 'pong';
   data?: string;
   message?: string;
   session_id?: string;
@@ -29,7 +30,7 @@ interface TerminalImplProps {
   onConnect: (sessionId: string) => void;
   onDisconnect: () => void;
   onError: (error: string) => void;
-  status: "disconnected" | "connecting" | "connected" | "error";
+  status: 'disconnected' | 'connecting' | 'connected' | 'error';
   isFullscreen: boolean;
 }
 
@@ -54,17 +55,27 @@ export function TerminalImpl({
   // Get WebSocket URL using centralized utility
   // Use project-scoped WebSocket proxy endpoint if projectId is available
   const getWsUrl = useCallback(() => {
+    // Get token for WebSocket authentication using centralized resolver
+    const token = getAuthToken();
+    const params: Record<string, string> = {};
+    if (sessionId) {
+      params.session_id = sessionId;
+    }
+    if (token) {
+      params.token = token;
+    }
+
     if (projectId) {
       // New project-scoped terminal WebSocket proxy
       return createWebSocketUrl(
         `/projects/${projectId}/sandbox/terminal/proxy/ws`,
-        sessionId ? { session_id: sessionId } : undefined
+        Object.keys(params).length > 0 ? params : undefined
       );
     }
     // Fallback to legacy sandbox endpoint
     return createWebSocketUrl(
       `/terminal/${sandboxId}/ws`,
-      sessionId ? { session_id: sessionId } : undefined
+      Object.keys(params).length > 0 ? params : undefined
     );
   }, [projectId, sandboxId, sessionId]);
 
@@ -77,27 +88,27 @@ export function TerminalImpl({
       fontSize: 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       theme: {
-        background: "#1e1e1e",
-        foreground: "#d4d4d4",
-        cursor: "#d4d4d4",
-        cursorAccent: "#1e1e1e",
-        selectionBackground: "#264f78",
-        black: "#000000",
-        red: "#cd3131",
-        green: "#0dbc79",
-        yellow: "#e5e510",
-        blue: "#2472c8",
-        magenta: "#bc3fbc",
-        cyan: "#11a8cd",
-        white: "#e5e5e5",
-        brightBlack: "#666666",
-        brightRed: "#f14c4c",
-        brightGreen: "#23d18b",
-        brightYellow: "#f5f543",
-        brightBlue: "#3b8eea",
-        brightMagenta: "#d670d6",
-        brightCyan: "#29b8db",
-        brightWhite: "#e5e5e5",
+        background: '#1e1e1e',
+        foreground: '#d4d4d4',
+        cursor: '#d4d4d4',
+        cursorAccent: '#1e1e1e',
+        selectionBackground: '#264f78',
+        black: '#000000',
+        red: '#cd3131',
+        green: '#0dbc79',
+        yellow: '#e5e510',
+        blue: '#2472c8',
+        magenta: '#bc3fbc',
+        cyan: '#11a8cd',
+        white: '#e5e5e5',
+        brightBlack: '#666666',
+        brightRed: '#f14c4c',
+        brightGreen: '#23d18b',
+        brightYellow: '#f5f543',
+        brightBlue: '#3b8eea',
+        brightMagenta: '#d670d6',
+        brightCyan: '#29b8db',
+        brightWhite: '#e5e5e5',
       },
       allowProposedApi: true,
     });
@@ -122,7 +133,7 @@ export function TerminalImpl({
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(
             JSON.stringify({
-              type: "resize",
+              type: 'resize',
               cols: terminal.cols,
               rows: terminal.rows,
             })
@@ -149,7 +160,7 @@ export function TerminalImpl({
     const ws = new WebSocket(getWsUrl());
 
     ws.onopen = () => {
-      console.log("[Terminal] WebSocket connected");
+      console.log('[Terminal] WebSocket connected');
     };
 
     ws.onmessage = (event) => {
@@ -157,49 +168,47 @@ export function TerminalImpl({
         const msg: TerminalMessage = JSON.parse(event.data);
 
         switch (msg.type) {
-          case "connected":
+          case 'connected':
             if (msg.session_id) {
               onConnect(msg.session_id);
             }
             // Write welcome message
-            terminalInstance.current?.writeln(
-              "\x1b[32m✓ Connected to sandbox terminal\x1b[0m"
-            );
-            terminalInstance.current?.writeln("");
+            terminalInstance.current?.writeln('\x1b[32m✓ Connected to sandbox terminal\x1b[0m');
+            terminalInstance.current?.writeln('');
             break;
 
-          case "output":
+          case 'output':
             if (msg.data) {
               terminalInstance.current?.write(msg.data);
             }
             break;
 
-          case "error":
-            onError(msg.message || "Unknown error");
+          case 'error':
+            onError(msg.message || 'Unknown error');
             break;
 
-          case "pong":
+          case 'pong':
             // Heartbeat response
             break;
         }
       } catch (e) {
-        console.error("[Terminal] Failed to parse message:", e);
+        console.error('[Terminal] Failed to parse message:', e);
       }
     };
 
     ws.onerror = (event) => {
-      console.error("[Terminal] WebSocket error:", event);
-      onError("Connection error");
+      console.error('[Terminal] WebSocket error:', event);
+      onError('Connection error');
     };
 
     ws.onclose = (event) => {
-      console.log("[Terminal] WebSocket closed:", event.code, event.reason);
+      console.log('[Terminal] WebSocket closed:', event.code, event.reason);
       onDisconnect();
 
       // Auto-reconnect on abnormal close
       if (event.code !== 1000 && event.code !== 1001) {
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log("[Terminal] Attempting reconnect...");
+          console.log('[Terminal] Attempting reconnect...');
           connectRef.current();
         }, 3000);
       }
@@ -211,7 +220,7 @@ export function TerminalImpl({
     if (terminalInstance.current) {
       terminalInstance.current.onData((data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "input", data }));
+          ws.send(JSON.stringify({ type: 'input', data }));
         }
       });
     }
@@ -230,7 +239,7 @@ export function TerminalImpl({
     }
 
     if (wsRef.current) {
-      wsRef.current.close(1000, "User disconnect");
+      wsRef.current.close(1000, 'User disconnect');
       wsRef.current = null;
     }
   }, []);
@@ -270,20 +279,14 @@ export function TerminalImpl({
   useEffect(() => {
     const interval = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "ping" }));
+        wsRef.current.send(JSON.stringify({ type: 'ping' }));
       }
     }, 30000);
 
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div
-      ref={terminalRef}
-      className="h-full w-full"
-      style={{ padding: "4px" }}
-    />
-  );
+  return <div ref={terminalRef} className="h-full w-full" style={{ padding: '4px' }} />;
 }
 
 export default TerminalImpl;

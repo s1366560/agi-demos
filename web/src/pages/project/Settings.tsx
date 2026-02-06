@@ -21,7 +21,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 
-import { Settings as SettingsIcon, Save, Trash2, Download, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+  Settings as SettingsIcon,
+  Save,
+  Trash2,
+  Download,
+  RefreshCw,
+  AlertCircle,
+} from 'lucide-react';
 
 import api, { projectAPI } from '../../services/api';
 import { useProjectStore } from '../../stores/project';
@@ -148,7 +155,9 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{TEXTS.basic.title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        {TEXTS.basic.title}
+      </h2>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
@@ -219,7 +228,9 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{TEXTS.memory.title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        {TEXTS.memory.title}
+      </h2>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -305,7 +316,9 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{TEXTS.graph.title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        {TEXTS.graph.title}
+      </h2>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -396,7 +409,9 @@ const Advanced: React.FC<ProjectSettingsAdvancedProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{TEXTS.advanced.title}</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        {TEXTS.advanced.title}
+      </h2>
       <div className="space-y-4">
         <div className="flex items-center gap-4">
           <button
@@ -435,12 +450,12 @@ const Danger: React.FC<ProjectSettingsDangerProps> = ({ projectName: _projectNam
 
   return (
     <div className="bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-6">
-      <h2 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-4">{TEXTS.danger.title}</h2>
+      <h2 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-4">
+        {TEXTS.danger.title}
+      </h2>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-red-800 dark:text-red-300 mb-1">
-            {TEXTS.danger.desc}
-          </p>
+          <p className="text-sm text-red-800 dark:text-red-300 mb-1">{TEXTS.danger.desc}</p>
           <p className="text-xs text-red-600 dark:text-red-400">{TEXTS.danger.warning}</p>
         </div>
         <button
@@ -531,11 +546,11 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     setMessage(null);
 
     try {
-      await projectAPI.update(
-        currentProject.tenant_id,
-        currentProject.id,
-        { name, description, is_public: isPublic }
-      );
+      await projectAPI.update(currentProject.tenant_id, currentProject.id, {
+        name,
+        description,
+        is_public: isPublic,
+      });
       setMessage({ type: 'success', text: TEXTS.messages.saved });
       setTimeout(() => {
         window.location.reload();
@@ -543,7 +558,10 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     } catch (error) {
       console.error('Failed to save settings:', error);
       const err = error as { response?: { data?: { detail?: string } }; message?: string };
-      setMessage({ type: 'error', text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}` });
+      setMessage({
+        type: 'error',
+        text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
+      });
     } finally {
       setIsSaving(false);
     }
@@ -556,23 +574,22 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     setMessage(null);
 
     try {
-      await projectAPI.update(
-        currentProject.tenant_id,
-        currentProject.id,
-        {
-          memory_rules: {
-            max_episodes: maxEpisodes,
-            retention_days: retentionDays,
-            auto_refresh: autoRefresh,
-            refresh_interval: refreshInterval,
-          },
-        }
-      );
+      await projectAPI.update(currentProject.tenant_id, currentProject.id, {
+        memory_rules: {
+          max_episodes: maxEpisodes,
+          retention_days: retentionDays,
+          auto_refresh: autoRefresh,
+          refresh_interval: refreshInterval,
+        },
+      });
       setMessage({ type: 'success', text: TEXTS.messages.saved });
     } catch (error) {
       console.error('Failed to save memory rules:', error);
       const err = error as { response?: { data?: { detail?: string } }; message?: string };
-      setMessage({ type: 'error', text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}` });
+      setMessage({
+        type: 'error',
+        text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
+      });
     } finally {
       setIsSaving(false);
     }
@@ -585,23 +602,22 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     setMessage(null);
 
     try {
-      await projectAPI.update(
-        currentProject.tenant_id,
-        currentProject.id,
-        {
-          graph_config: {
-            max_nodes: maxNodes,
-            max_edges: maxEdges,
-            similarity_threshold: similarityThreshold,
-            community_detection: communityDetection,
-          },
-        }
-      );
+      await projectAPI.update(currentProject.tenant_id, currentProject.id, {
+        graph_config: {
+          max_nodes: maxNodes,
+          max_edges: maxEdges,
+          similarity_threshold: similarityThreshold,
+          community_detection: communityDetection,
+        },
+      });
       setMessage({ type: 'success', text: TEXTS.messages.saved });
     } catch (error) {
       console.error('Failed to save graph config:', error);
       const err = error as { response?: { data?: { detail?: string } }; message?: string };
-      setMessage({ type: 'error', text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}` });
+      setMessage({
+        type: 'error',
+        text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
+      });
     } finally {
       setIsSaving(false);
     }
@@ -738,10 +754,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
         onClearCache={handleClearCache}
         onRebuildCommunities={handleRebuildCommunities}
       />
-      <Danger
-        projectName={currentProject.name}
-        onDelete={handleDeleteProject}
-      />
+      <Danger projectName={currentProject.name} onDelete={handleDeleteProject} />
     </div>
   );
 };

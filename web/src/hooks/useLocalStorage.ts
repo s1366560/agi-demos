@@ -29,10 +29,7 @@ export interface UseLocalStorageReturn<T> {
   removeValue: () => void;
 }
 
-export function useLocalStorage<T>(
-  key: string,
-  initialValue: T
-): UseLocalStorageReturn<T> {
+export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorageReturn<T> {
   // Get initial value from cache or localStorage
   const readValue = useCallback((): T => {
     if (typeof window === 'undefined') {
@@ -106,9 +103,7 @@ export function useLocalStorage<T>(
       }
 
       try {
-        const newValue = e.newValue
-          ? (JSON.parse(e.newValue) as T)
-          : initialValue;
+        const newValue = e.newValue ? (JSON.parse(e.newValue) as T) : initialValue;
         setStoredValue(newValue);
       } catch (error) {
         console.warn(`Error parsing storage event for key "${key}":`, error);

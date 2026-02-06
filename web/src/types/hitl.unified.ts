@@ -1,9 +1,9 @@
 /**
  * Unified HITL Types - Generated from Python hitl_types.py
- * 
+ *
  * This file provides type definitions that match the backend Python types.
  * Single source of truth for HITL type definitions across frontend and backend.
- * 
+ *
  * @generated from src/domain/model/agent/hitl_types.py
  */
 
@@ -24,7 +24,7 @@ export type HITLStatus = 'pending' | 'answered' | 'completed' | 'timeout' | 'can
 /**
  * Type of clarification needed
  */
-export type ClarificationType = 
+export type ClarificationType =
   | 'scope'
   | 'approach'
   | 'prerequisite'
@@ -35,7 +35,7 @@ export type ClarificationType =
 /**
  * Type of decision needed
  */
-export type DecisionType = 
+export type DecisionType =
   | 'branch'
   | 'method'
   | 'confirmation'
@@ -169,24 +169,24 @@ export interface UnifiedHITLRequest {
   hitlType: HITLType;
   conversationId: string;
   messageId?: string;
-  
+
   // Type-specific data (only one will be set)
   clarificationData?: ClarificationRequestData;
   decisionData?: DecisionRequestData;
   envVarData?: EnvVarRequestData;
   permissionData?: PermissionRequestData;
-  
+
   // Common fields
   status: HITLStatus;
   timeoutSeconds: number;
-  createdAt: string;  // ISO timestamp
+  createdAt: string; // ISO timestamp
   expiresAt?: string; // ISO timestamp
-  
+
   // Tenant context
   tenantId?: string;
   projectId?: string;
   userId?: string;
-  
+
   // Computed property
   question: string;
 }
@@ -228,7 +228,7 @@ export interface PermissionResponseData {
 /**
  * Union type for all response data
  */
-export type HITLResponseData = 
+export type HITLResponseData =
   | ClarificationResponseData
   | DecisionResponseData
   | EnvVarResponseData
@@ -352,9 +352,10 @@ export function apiToUnifiedRequest(
   apiRequest: HITLRequestFromApi,
   conversationId: string
 ): UnifiedHITLRequest {
-  const hitlType = (apiRequest.metadata?.hitl_type as HITLType) || 
+  const hitlType =
+    (apiRequest.metadata?.hitl_type as HITLType) ||
     mapRequestTypeToHitlType(apiRequest.request_type);
-  
+
   return {
     requestId: apiRequest.id,
     hitlType,
@@ -366,35 +367,47 @@ export function apiToUnifiedRequest(
     expiresAt: apiRequest.expires_at,
     question: apiRequest.question,
     // Type-specific data would be parsed from context/metadata
-    clarificationData: hitlType === 'clarification' ? {
-      question: apiRequest.question,
-      clarificationType: 'custom',
-      options: (apiRequest.options as ClarificationOption[]) || [],
-      allowCustom: true,
-      context: apiRequest.context || {},
-    } : undefined,
-    decisionData: hitlType === 'decision' ? {
-      question: apiRequest.question,
-      decisionType: 'single_choice',
-      options: (apiRequest.options as DecisionOption[]) || [],
-      allowCustom: false,
-      context: apiRequest.context || {},
-    } : undefined,
-    envVarData: hitlType === 'env_var' ? {
-      toolName: (apiRequest.metadata?.tool_name as string) || 'unknown',
-      fields: (apiRequest.options as EnvVarField[]) || [],
-      message: apiRequest.question,
-      allowSave: true,
-      context: apiRequest.context || {},
-    } : undefined,
-    permissionData: hitlType === 'permission' ? {
-      toolName: (apiRequest.metadata?.tool_name as string) || 'unknown',
-      action: apiRequest.question,
-      riskLevel: 'medium',
-      details: apiRequest.context || {},
-      allowRemember: true,
-      context: {},
-    } : undefined,
+    clarificationData:
+      hitlType === 'clarification'
+        ? {
+            question: apiRequest.question,
+            clarificationType: 'custom',
+            options: (apiRequest.options as ClarificationOption[]) || [],
+            allowCustom: true,
+            context: apiRequest.context || {},
+          }
+        : undefined,
+    decisionData:
+      hitlType === 'decision'
+        ? {
+            question: apiRequest.question,
+            decisionType: 'single_choice',
+            options: (apiRequest.options as DecisionOption[]) || [],
+            allowCustom: false,
+            context: apiRequest.context || {},
+          }
+        : undefined,
+    envVarData:
+      hitlType === 'env_var'
+        ? {
+            toolName: (apiRequest.metadata?.tool_name as string) || 'unknown',
+            fields: (apiRequest.options as EnvVarField[]) || [],
+            message: apiRequest.question,
+            allowSave: true,
+            context: apiRequest.context || {},
+          }
+        : undefined,
+    permissionData:
+      hitlType === 'permission'
+        ? {
+            toolName: (apiRequest.metadata?.tool_name as string) || 'unknown',
+            action: apiRequest.question,
+            riskLevel: 'medium',
+            details: apiRequest.context || {},
+            allowRemember: true,
+            context: {},
+          }
+        : undefined,
   };
 }
 
@@ -403,10 +416,10 @@ export function apiToUnifiedRequest(
  */
 function mapRequestTypeToHitlType(requestType: string): HITLType {
   const mapping: Record<string, HITLType> = {
-    'clarification': 'clarification',
-    'decision': 'decision',
-    'env_var': 'env_var',
-    'permission': 'permission',
+    clarification: 'clarification',
+    decision: 'decision',
+    env_var: 'env_var',
+    permission: 'permission',
   };
   return mapping[requestType] || 'clarification';
 }
@@ -446,18 +459,18 @@ export function buildResponseData(
  * Map SSE event types to HITL types
  */
 export const SSE_EVENT_TO_HITL_TYPE: Record<string, HITLType> = {
-  'clarification_asked': 'clarification',
-  'decision_asked': 'decision',
-  'env_var_requested': 'env_var',
-  'permission_asked': 'permission',
+  clarification_asked: 'clarification',
+  decision_asked: 'decision',
+  env_var_requested: 'env_var',
+  permission_asked: 'permission',
 };
 
 /**
  * Map HITL types to answered event types
  */
 export const HITL_TYPE_TO_ANSWERED_EVENT: Record<HITLType, string> = {
-  'clarification': 'clarification_answered',
-  'decision': 'decision_answered',
-  'env_var': 'env_var_provided',
-  'permission': 'permission_replied',
+  clarification: 'clarification_answered',
+  decision: 'decision_answered',
+  env_var: 'env_var_provided',
+  permission: 'permission_replied',
 };

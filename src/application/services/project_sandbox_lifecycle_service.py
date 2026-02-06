@@ -292,6 +292,10 @@ class ProjectSandboxLifecycleService:
                 existing = await self._repository.find_by_project(project_id)
 
                 if existing:
+                    logger.debug(
+                        f"Found existing sandbox for project {project_id}: "
+                        f"status={existing.status}, status_value={existing.status.value}"
+                    )
                     # CRITICAL: Verify container actually exists before returning
                     # This handles cases where container was externally killed/deleted
                     if existing.is_usable():
@@ -351,6 +355,14 @@ class ProjectSandboxLifecycleService:
                             )
                             await self._cleanup_failed_sandbox(existing)
                             # Fall through to create new
+
+                    elif existing.status == ProjectSandboxStatus.TERMINATED:
+                        # Sandbox was explicitly terminated, clean up and create new
+                        logger.info(
+                            f"Project {project_id} sandbox terminated, creating new..."
+                        )
+                        await self._cleanup_failed_sandbox(existing)
+                        # Fall through to create new
 
                 # Create new sandbox (under both locks)
                 # The distributed lock is held until this method returns

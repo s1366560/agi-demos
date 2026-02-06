@@ -104,20 +104,21 @@ export function PatternStats({
         >
           <div className="flex items-start justify-between">
             {/* Icon */}
-            <div className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center text-white`}>
+            <div
+              className={`w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center text-white`}
+            >
               <MaterialIcon name={stat.icon as any} size={20} />
             </div>
 
             {/* Trend Indicator */}
             {stat.trend !== undefined && (
-              <div className={`flex items-center gap-1 text-sm font-medium ${getTrendColor(
-                stat.trend,
-                stat.id !== 'deprecated'
-              )}`}>
-                <MaterialIcon
-                  name={getTrendIcon(stat.trend) as any}
-                  size={16}
-                />
+              <div
+                className={`flex items-center gap-1 text-sm font-medium ${getTrendColor(
+                  stat.trend,
+                  stat.id !== 'deprecated'
+                )}`}
+              >
+                <MaterialIcon name={getTrendIcon(stat.trend) as any} size={16} />
                 <span>{formatTrend(stat.trend)}</span>
               </div>
             )}
@@ -125,9 +126,7 @@ export function PatternStats({
 
           {/* Value */}
           <div className="mt-3">
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">
-              {stat.value}
-            </p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
             <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
           </div>
         </div>

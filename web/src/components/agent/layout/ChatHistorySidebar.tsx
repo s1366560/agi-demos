@@ -5,9 +5,9 @@
  * Matches design from docs/statics/project workbench/agent/chat history/
  */
 
-import { useState } from "react";
+import { useState } from 'react';
 
-export type SidebarConversationStatus = "done" | "running" | "failed";
+export type SidebarConversationStatus = 'done' | 'running' | 'failed';
 
 export interface Conversation {
   id: string;
@@ -50,7 +50,7 @@ export function ChatHistorySidebar({
   selectedConversationId,
   onSelectConversation,
   onNewChat,
-  searchQuery = "",
+  searchQuery = '',
   onSearchChange,
 }: ChatHistorySidebarProps) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -72,27 +72,27 @@ export function ChatHistorySidebar({
 
   const getStatusColor = (status: SidebarConversationStatus): string => {
     switch (status) {
-      case "done":
-        return "text-emerald-500";
-      case "running":
-        return "text-blue-500";
-      case "failed":
-        return "text-red-500";
+      case 'done':
+        return 'text-emerald-500';
+      case 'running':
+        return 'text-blue-500';
+      case 'failed':
+        return 'text-red-500';
       default:
-        return "text-slate-400";
+        return 'text-slate-400';
     }
   };
 
   const getStatusLabel = (status: SidebarConversationStatus): string => {
     switch (status) {
-      case "done":
-        return "Done";
-      case "running":
-        return "Running";
-      case "failed":
-        return "Failed";
+      case 'done':
+        return 'Done';
+      case 'running':
+        return 'Running';
+      case 'failed':
+        return 'Failed';
       default:
-        return "";
+        return '';
     }
   };
 
@@ -144,16 +144,16 @@ export function ChatHistorySidebar({
                   aria-current={selectedConversationId === conversation.id ? 'true' : undefined}
                   className={`w-full text-left p-3 rounded-xl cursor-pointer transition-colors group ${
                     selectedConversationId === conversation.id
-                      ? "bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark ring-1 ring-primary/30"
-                      : "hover:bg-slate-100 dark:hover:bg-white/5"
+                      ? 'bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark ring-1 ring-primary/30'
+                      : 'hover:bg-slate-100 dark:hover:bg-white/5'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <h4
                       className={`text-sm font-medium truncate pr-2 leading-tight ${
                         selectedConversationId === conversation.id
-                          ? "text-slate-900 dark:text-white font-semibold"
-                          : "text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white"
+                          ? 'text-slate-900 dark:text-white font-semibold'
+                          : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
                       }`}
                     >
                       {conversation.title}
@@ -166,15 +166,13 @@ export function ChatHistorySidebar({
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${getStatusColor(
                           conversation.status
-                        ).replace("text-", "bg-")}`}
+                        ).replace('text-', 'bg-')}`}
                       />
                       {getStatusLabel(conversation.status)}
                     </span>
                   </div>
                   {conversation.timestamp && (
-                    <p className="text-[11px] text-text-muted">
-                      {conversation.timestamp}
-                    </p>
+                    <p className="text-[11px] text-text-muted">{conversation.timestamp}</p>
                   )}
                 </button>
               ))}
@@ -207,15 +205,13 @@ export function ChatHistorySidebar({
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${getStatusColor(
                           conversation.status
-                        ).replace("text-", "bg-")}`}
+                        ).replace('text-', 'bg-')}`}
                       />
                       {getStatusLabel(conversation.status)}
                     </span>
                   </div>
                   {conversation.timestamp && (
-                    <p className="text-[11px] text-text-muted">
-                      {conversation.timestamp}
-                    </p>
+                    <p className="text-[11px] text-text-muted">{conversation.timestamp}</p>
                   )}
                 </button>
               ))}

@@ -4,16 +4,16 @@
  * Navigation section with collapsible groups and navigation items.
  */
 
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown } from 'lucide-react';
 
-import { useSidebarContext } from './SidebarContext'
-import { SidebarNavItem } from './SidebarNavItem'
+import { useSidebarContext } from './SidebarContext';
+import { SidebarNavItem } from './SidebarNavItem';
 
-import type { SidebarConfig } from '@/config/navigation'
+import type { SidebarConfig } from '@/config/navigation';
 
 export interface SidebarNavigationProps {
   /** Navigation configuration */
-  config: SidebarConfig
+  config: SidebarConfig;
 }
 
 /**
@@ -24,20 +24,26 @@ function NavGroupSection({
   isOpen,
   onToggle,
 }: {
-  group: { id: string; title: string; items: any[]; collapsible?: boolean; defaultOpen?: boolean }
-  isOpen: boolean
-  onToggle?: () => void
+  group: { id: string; title: string; items: any[]; collapsible?: boolean; defaultOpen?: boolean };
+  isOpen: boolean;
+  onToggle?: () => void;
 }) {
-  const { isCollapsed, basePath, t } = useSidebarContext()
+  const { isCollapsed, basePath, t } = useSidebarContext();
 
   if (isCollapsed) {
     return (
       <div className="space-y-1">
         {group.items.map((item) => (
-          <SidebarNavItem key={item.id} item={item} collapsed={isCollapsed} basePath={basePath} t={t} />
+          <SidebarNavItem
+            key={item.id}
+            item={item}
+            collapsed={isCollapsed}
+            basePath={basePath}
+            t={t}
+          />
         ))}
       </div>
-    )
+    );
   }
 
   // Non-collapsible group
@@ -51,11 +57,17 @@ function NavGroupSection({
         )}
         <div className="space-y-1">
           {group.items.map((item) => (
-            <SidebarNavItem key={item.id} item={item} collapsed={isCollapsed} basePath={basePath} t={t} />
+            <SidebarNavItem
+              key={item.id}
+              item={item}
+              collapsed={isCollapsed}
+              basePath={basePath}
+              t={t}
+            />
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   // Collapsible group
@@ -69,9 +81,7 @@ function NavGroupSection({
           type="button"
         >
           <span>{t(group.title)}</span>
-          <ChevronDown
-            className={`w-3 h-3 transition-transform ${isOpen ? '' : '-rotate-90'}`}
-          />
+          <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
         </button>
       )}
 
@@ -79,22 +89,32 @@ function NavGroupSection({
       {(!isCollapsed || isOpen) && (
         <div className="space-y-1">
           {group.items.map((item) => (
-            <SidebarNavItem key={item.id} item={item} collapsed={isCollapsed} basePath={basePath} t={t} />
+            <SidebarNavItem
+              key={item.id}
+              item={item}
+              collapsed={isCollapsed}
+              basePath={basePath}
+              t={t}
+            />
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }
 
 /**
  * SidebarNavigation component - renders navigation groups
  */
 export function SidebarNavigation({ config }: SidebarNavigationProps) {
-  const { isCollapsed, openGroups, onGroupToggle, basePath, t } = useSidebarContext()
+  const { isCollapsed, openGroups, onGroupToggle, basePath, t } = useSidebarContext();
 
   return (
-    <nav data-testid="sidebar-navigation" data-path={basePath} className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-4 shrink-0">
+    <nav
+      data-testid="sidebar-navigation"
+      data-path={basePath}
+      className="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-4 shrink-0"
+    >
       {config.groups.map((group) => (
         <NavGroupSection
           key={group.id}
@@ -108,10 +128,16 @@ export function SidebarNavigation({ config }: SidebarNavigationProps) {
       {config.bottom && config.bottom.length > 0 && (
         <div className="px-3 py-2 border-t border-slate-100 dark:border-slate-800">
           {config.bottom.map((item) => (
-            <SidebarNavItem key={item.id} item={item} collapsed={isCollapsed} basePath={basePath} t={t} />
+            <SidebarNavItem
+              key={item.id}
+              item={item}
+              collapsed={isCollapsed}
+              basePath={basePath}
+              t={t}
+            />
           ))}
         </div>
       )}
     </nav>
-  )
+  );
 }

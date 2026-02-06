@@ -17,96 +17,99 @@
  * - Workspace switcher
  */
 
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback } from 'react';
 
-import { useTranslation } from "react-i18next"
-import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom"
+import { useTranslation } from 'react-i18next';
+import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
-import { useAuthStore } from "@/stores/auth"
-import { useProjectStore } from "@/stores/project"
-import { useTenantStore } from "@/stores/tenant"
+import { useAuthStore } from '@/stores/auth';
+import { useProjectStore } from '@/stores/project';
+import { useTenantStore } from '@/stores/tenant';
 
-import { TenantCreateModal } from "@/pages/tenant/TenantCreate"
+import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
-import { RouteErrorBoundary } from "@/components/common/RouteErrorBoundary"
-import { AppHeader } from "@/components/layout/AppHeader"
-import { TenantChatSidebar } from "@/components/layout/TenantChatSidebar"
-import { TenantNavMenu } from "@/components/layout/TenantNavMenu"
-
-
+import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
+import { AppHeader } from '@/components/layout/AppHeader';
+import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
+import { TenantNavMenu } from '@/components/layout/TenantNavMenu';
 
 // HTTP status codes for error handling
 const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
-} as const
+} as const;
 
 /**
  * TenantLayout component
  */
 export const TenantLayout: React.FC = () => {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { tenantId, projectId } = useParams()
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { tenantId, projectId } = useParams();
 
   // Optimized: Select only the state we need with typing
-  const currentTenant = useTenantStore((state) => state.currentTenant)
-  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant)
-  const getTenant = useTenantStore((state) => state.getTenant)
-  const listTenants = useTenantStore((state) => state.listTenants)
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
+  const getTenant = useTenantStore((state) => state.getTenant);
+  const listTenants = useTenantStore((state) => state.listTenants);
 
-  const currentProject = useProjectStore((state) => state.currentProject)
+  const currentProject = useProjectStore((state) => state.currentProject);
 
   // Auth store
-  const logout = useAuthStore((state) => state.logout)
-  const user = useAuthStore((state) => state.user)
+  const logout = useAuthStore((state) => state.logout);
+  const user = useAuthStore((state) => state.user);
 
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [noTenants, setNoTenants] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [noTenants, setNoTenants] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleLogout = useCallback(() => {
-    logout()
-    navigate("/login")
-  }, [logout, navigate])
+    logout();
+    navigate('/login');
+  }, [logout, navigate]);
 
   const handleCreateTenant = useCallback(async () => {
-    await listTenants()
-    const tenants = useTenantStore.getState().tenants
+    await listTenants();
+    const tenants = useTenantStore.getState().tenants;
     if (tenants.length > 0) {
-      setCurrentTenant(tenants[tenants.length - 1])
-      setNoTenants(false)
+      setCurrentTenant(tenants[tenants.length - 1]);
+      setNoTenants(false);
     }
-  }, [listTenants, setCurrentTenant])
+  }, [listTenants, setCurrentTenant]);
 
   /**
    * Handle 403/404 errors when accessing unauthorized tenant
    * Falls back to first accessible tenant
    */
-  const handleTenantAccessError = useCallback(async (error: unknown, requestedTenantId: string) => {
-    const status = (error as any)?.response?.status
+  const handleTenantAccessError = useCallback(
+    async (error: unknown, requestedTenantId: string) => {
+      const status = (error as any)?.response?.status;
 
-    if (status === HTTP_STATUS.FORBIDDEN || status === HTTP_STATUS.NOT_FOUND) {
-      console.warn(`Access denied to tenant ${requestedTenantId}, falling back to accessible tenant`)
+      if (status === HTTP_STATUS.FORBIDDEN || status === HTTP_STATUS.NOT_FOUND) {
+        console.warn(
+          `Access denied to tenant ${requestedTenantId}, falling back to accessible tenant`
+        );
 
-      try {
-        await listTenants()
-        const tenants = useTenantStore.getState().tenants
+        try {
+          await listTenants();
+          const tenants = useTenantStore.getState().tenants;
 
-        if (tenants.length > 0) {
-          const firstAccessibleTenant = tenants[0]
-          setCurrentTenant(firstAccessibleTenant)
-          navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true })
-        } else {
-          setNoTenants(true)
+          if (tenants.length > 0) {
+            const firstAccessibleTenant = tenants[0];
+            setCurrentTenant(firstAccessibleTenant);
+            navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
+          } else {
+            setNoTenants(true);
+          }
+        } catch (listError) {
+          console.error('Failed to list accessible tenants:', listError);
+          setNoTenants(true);
         }
-      } catch (listError) {
-        console.error("Failed to list accessible tenants:", listError)
-        setNoTenants(true)
       }
-    }
-  }, [listTenants, setCurrentTenant, navigate])
+    },
+    [listTenants, setCurrentTenant, navigate]
+  );
 
   /**
    * Initialize tenant and project setup
@@ -115,37 +118,37 @@ export const TenantLayout: React.FC = () => {
   const initializeTenantAndProject = useCallback(async () => {
     if (tenantId && (!currentTenant || currentTenant.id !== tenantId)) {
       try {
-        await getTenant(tenantId)
+        await getTenant(tenantId);
       } catch (error) {
-        await handleTenantAccessError(error, tenantId)
+        await handleTenantAccessError(error, tenantId);
       }
     } else if (!tenantId && !currentTenant) {
-      const tenants = useTenantStore.getState().tenants
+      const tenants = useTenantStore.getState().tenants;
       if (tenants.length > 0) {
-        setCurrentTenant(tenants[0])
+        setCurrentTenant(tenants[0]);
       } else {
         try {
-          await listTenants()
-          const updatedTenants = useTenantStore.getState().tenants
+          await listTenants();
+          const updatedTenants = useTenantStore.getState().tenants;
           if (updatedTenants.length > 0) {
-            setCurrentTenant(updatedTenants[0])
+            setCurrentTenant(updatedTenants[0]);
           } else {
             // Auto-create default tenant
-            const defaultName = user?.name ? `${user.name}'s Workspace` : "My Workspace"
+            const defaultName = user?.name ? `${user.name}'s Workspace` : 'My Workspace';
             try {
               await useTenantStore.getState().createTenant({
                 name: defaultName,
-                description: "Automatically created default workspace",
-              })
-              const newTenants = useTenantStore.getState().tenants
+                description: 'Automatically created default workspace',
+              });
+              const newTenants = useTenantStore.getState().tenants;
               if (newTenants.length > 0) {
-                setCurrentTenant(newTenants[newTenants.length - 1])
+                setCurrentTenant(newTenants[newTenants.length - 1]);
               } else {
-                setNoTenants(true)
+                setNoTenants(true);
               }
             } catch (err) {
-              console.error("Failed to auto-create tenant:", err)
-              setNoTenants(true)
+              console.error('Failed to auto-create tenant:', err);
+              setNoTenants(true);
             }
           }
         } catch {
@@ -153,36 +156,39 @@ export const TenantLayout: React.FC = () => {
         }
       }
     }
-  }, [tenantId, currentTenant, getTenant, handleTenantAccessError, listTenants, setCurrentTenant, user])
+  }, [
+    tenantId,
+    currentTenant,
+    getTenant,
+    handleTenantAccessError,
+    listTenants,
+    setCurrentTenant,
+    user,
+  ]);
 
   // Sync tenant ID from URL with store - flattened for better performance
   useEffect(() => {
-    initializeTenantAndProject()
-  }, [initializeTenantAndProject])
+    initializeTenantAndProject();
+  }, [initializeTenantAndProject]);
 
   // Sync project ID from URL with store
   useEffect(() => {
-    if (
-      projectId &&
-      currentTenant &&
-      (!currentProject || currentProject.id !== projectId)
-    ) {
-      const { projects, setCurrentProject, getProject } =
-        useProjectStore.getState()
-      const project = projects.find((p) => p.id === projectId)
+    if (projectId && currentTenant && (!currentProject || currentProject.id !== projectId)) {
+      const { projects, setCurrentProject, getProject } = useProjectStore.getState();
+      const project = projects.find((p) => p.id === projectId);
       if (project) {
-        setCurrentProject(project)
+        setCurrentProject(project);
       } else {
         getProject(currentTenant.id, projectId)
           .then((p) => {
-            setCurrentProject(p)
+            setCurrentProject(p);
           })
-          .catch(console.error)
+          .catch(console.error);
       }
     } else if (!projectId && currentProject) {
-      useProjectStore.getState().setCurrentProject(null)
+      useProjectStore.getState().setCurrentProject(null);
     }
-  }, [projectId, currentTenant, currentProject])
+  }, [projectId, currentTenant, currentProject]);
 
   // No tenants state - welcome screen
   if (noTenants) {
@@ -191,9 +197,7 @@ export const TenantLayout: React.FC = () => {
         <div className="mx-auto flex w-full max-w-md flex-col items-center space-y-6 p-6 text-center">
           <div className="flex items-center gap-3">
             <div className="bg-primary/10 p-3 rounded-xl">
-              <span className="material-symbols-outlined text-primary text-4xl">
-                memory
-              </span>
+              <span className="material-symbols-outlined text-primary text-4xl">memory</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               MemStack<span className="text-primary">.ai</span>
@@ -202,25 +206,17 @@ export const TenantLayout: React.FC = () => {
 
           <div className="space-y-2">
             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-              {t("tenant.welcome")}
+              {t('tenant.welcome')}
             </h2>
-            <p className="text-slate-500 dark:text-slate-400">
-              {t("tenant.noTenantDescription")}
-            </p>
+            <p className="text-slate-500 dark:text-slate-400">{t('tenant.noTenantDescription')}</p>
           </div>
 
           <div className="flex flex-col gap-4 w-full">
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="btn-primary w-full py-3"
-            >
-              {t("tenant.create")}
+            <button onClick={() => setIsCreateModalOpen(true)} className="btn-primary w-full py-3">
+              {t('tenant.create')}
             </button>
-            <button
-              onClick={handleLogout}
-              className="btn-secondary w-full py-3"
-            >
-              {t("common.logout")}
+            <button onClick={handleLogout} className="btn-secondary w-full py-3">
+              {t('common.logout')}
             </button>
           </div>
         </div>
@@ -231,13 +227,12 @@ export const TenantLayout: React.FC = () => {
           onSuccess={handleCreateTenant}
         />
       </div>
-    )
+    );
   }
 
-  const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant'
+  const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
 
   // Sidebar toggle button
-
 
   return (
     <>
@@ -269,14 +264,16 @@ export const TenantLayout: React.FC = () => {
           </AppHeader>
 
           {/* Page Content */}
-          <div 
+          <div
             className={`flex-1 relative ${
-              location.pathname.includes("/agent-workspace")
-                ? "overflow-hidden h-full"
-                : "overflow-y-auto p-4"
+              location.pathname.includes('/agent-workspace')
+                ? 'overflow-hidden h-full'
+                : 'overflow-y-auto p-4'
             }`}
           >
-            <div className={`${location.pathname.includes("/agent-workspace") ? 'h-full' : 'max-w-full'}`}>
+            <div
+              className={`${location.pathname.includes('/agent-workspace') ? 'h-full' : 'max-w-full'}`}
+            >
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                 <Outlet />
               </RouteErrorBoundary>
@@ -292,5 +289,5 @@ export const TenantLayout: React.FC = () => {
         onSuccess={handleCreateTenant}
       />
     </>
-  )
-}
+  );
+};

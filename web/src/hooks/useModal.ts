@@ -47,9 +47,7 @@ export type UseModalReturn<T = unknown> = ModalState<T> & ModalActions<T>;
  * @param initialData - Optional initial data for the modal
  * @returns Modal state and actions
  */
-export function useModal<T = unknown>(
-  initialData: T | null = null
-): UseModalReturn<T> {
+export function useModal<T = unknown>(initialData: T | null = null): UseModalReturn<T> {
   const [isOpen, setIsOpen] = useState(false);
   const [data, setData] = useState<T | null>(initialData);
 

@@ -1,6 +1,6 @@
 /**
  * DLQ Service
- * 
+ *
  * API client for Dead Letter Queue management.
  */
 
@@ -10,12 +10,7 @@ import { httpClient } from './client/httpClient';
 // Types
 // =============================================================================
 
-export type DLQMessageStatus = 
-  | 'pending' 
-  | 'retrying' 
-  | 'discarded' 
-  | 'expired' 
-  | 'resolved';
+export type DLQMessageStatus = 'pending' | 'retrying' | 'discarded' | 'expired' | 'resolved';
 
 export interface DLQMessage {
   id: string;
@@ -101,54 +96,42 @@ export const dlqService = {
    * Get a specific DLQ message by ID
    */
   async getMessage(messageId: string): Promise<DLQMessage> {
-    return await httpClient.get<DLQMessage>(
-      `${BASE_URL}/messages/${messageId}`
-    );
+    return await httpClient.get<DLQMessage>(`${BASE_URL}/messages/${messageId}`);
   },
 
   /**
    * Retry a single message
    */
   async retryMessage(messageId: string): Promise<{ success: boolean }> {
-    return await httpClient.post<{ success: boolean }>(
-      `${BASE_URL}/messages/${messageId}/retry`
-    );
+    return await httpClient.post<{ success: boolean }>(`${BASE_URL}/messages/${messageId}/retry`);
   },
 
   /**
    * Retry multiple messages in batch
    */
   async retryMessages(messageIds: string[]): Promise<RetryResponse> {
-    return await httpClient.post<RetryResponse>(
-      `${BASE_URL}/messages/retry`,
-      { message_ids: messageIds }
-    );
+    return await httpClient.post<RetryResponse>(`${BASE_URL}/messages/retry`, {
+      message_ids: messageIds,
+    });
   },
 
   /**
    * Discard a single message
    */
-  async discardMessage(
-    messageId: string,
-    reason: string
-  ): Promise<{ success: boolean }> {
-    return await httpClient.delete<{ success: boolean }>(
-      `${BASE_URL}/messages/${messageId}`,
-      { params: { reason } }
-    );
+  async discardMessage(messageId: string, reason: string): Promise<{ success: boolean }> {
+    return await httpClient.delete<{ success: boolean }>(`${BASE_URL}/messages/${messageId}`, {
+      params: { reason },
+    });
   },
 
   /**
    * Discard multiple messages in batch
    */
-  async discardMessages(
-    messageIds: string[],
-    reason: string
-  ): Promise<DiscardResponse> {
-    return await httpClient.post<DiscardResponse>(
-      `${BASE_URL}/messages/discard`,
-      { message_ids: messageIds, reason }
-    );
+  async discardMessages(messageIds: string[], reason: string): Promise<DiscardResponse> {
+    return await httpClient.post<DiscardResponse>(`${BASE_URL}/messages/discard`, {
+      message_ids: messageIds,
+      reason,
+    });
   },
 
   /**
@@ -162,22 +145,18 @@ export const dlqService = {
    * Clean up expired messages
    */
   async cleanupExpired(olderThanHours: number = 168): Promise<CleanupResponse> {
-    return await httpClient.post<CleanupResponse>(
-      `${BASE_URL}/cleanup/expired`,
-      null,
-      { params: { older_than_hours: olderThanHours } }
-    );
+    return await httpClient.post<CleanupResponse>(`${BASE_URL}/cleanup/expired`, null, {
+      params: { older_than_hours: olderThanHours },
+    });
   },
 
   /**
    * Clean up resolved messages
    */
   async cleanupResolved(olderThanHours: number = 24): Promise<CleanupResponse> {
-    return await httpClient.post<CleanupResponse>(
-      `${BASE_URL}/cleanup/resolved`,
-      null,
-      { params: { older_than_hours: olderThanHours } }
-    );
+    return await httpClient.post<CleanupResponse>(`${BASE_URL}/cleanup/resolved`, null, {
+      params: { older_than_hours: olderThanHours },
+    });
   },
 };
 

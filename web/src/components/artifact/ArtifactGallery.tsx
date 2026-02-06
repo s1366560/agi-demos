@@ -4,7 +4,7 @@
  * Shows artifacts in a responsive grid with previews and expand capability.
  */
 
-import React, { useState } from "react";
+import React, { useState } from 'react';
 
 import {
   AppstoreOutlined,
@@ -14,12 +14,12 @@ import {
   SoundOutlined,
   FileTextOutlined,
   FileOutlined,
-} from "@ant-design/icons";
-import { Modal, Empty, Typography, Space, Tag, Segmented } from "antd";
+} from '@ant-design/icons';
+import { Modal, Empty, Typography, Space, Tag, Segmented } from 'antd';
 
-import { ArtifactRenderer } from "./ArtifactRenderer";
+import { ArtifactRenderer } from './ArtifactRenderer';
 
-import type { Artifact, ArtifactCategory } from "../../types/agent";
+import type { Artifact, ArtifactCategory } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -29,7 +29,7 @@ export interface ArtifactGalleryProps {
   /** Title for the gallery */
   title?: string;
   /** Initial view mode */
-  viewMode?: "grid" | "list";
+  viewMode?: 'grid' | 'list';
   /** Filter by category */
   categoryFilter?: ArtifactCategory[];
   /** Maximum items to show (with "show more" option) */
@@ -55,7 +55,7 @@ const CATEGORY_ICONS: Record<ArtifactCategory, React.ReactNode> = {
 export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
   artifacts,
   title,
-  viewMode: initialViewMode = "grid",
+  viewMode: initialViewMode = 'grid',
   categoryFilter,
   maxItems,
   columns = 3,
@@ -72,9 +72,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
 
   // Limit displayed items if maxItems is set
   const displayedArtifacts =
-    maxItems && !showAll
-      ? filteredArtifacts.slice(0, maxItems)
-      : filteredArtifacts;
+    maxItems && !showAll ? filteredArtifacts.slice(0, maxItems) : filteredArtifacts;
 
   const hasMore = maxItems && filteredArtifacts.length > maxItems;
 
@@ -98,7 +96,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
   );
 
   return (
-    <div className={`artifact-gallery ${className || ""}`}>
+    <div className={`artifact-gallery ${className || ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <Space>
@@ -116,16 +114,16 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
         <Segmented
           size="small"
           options={[
-            { value: "grid", icon: <AppstoreOutlined /> },
-            { value: "list", icon: <BarsOutlined /> },
+            { value: 'grid', icon: <AppstoreOutlined /> },
+            { value: 'list', icon: <BarsOutlined /> },
           ]}
           value={viewMode}
-          onChange={(value) => setViewMode(value as "grid" | "list")}
+          onChange={(value) => setViewMode(value as 'grid' | 'list')}
         />
       </div>
 
       {/* Artifacts */}
-      {viewMode === "grid" ? (
+      {viewMode === 'grid' ? (
         <div
           className="grid gap-4"
           style={{
@@ -174,11 +172,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
         destroyOnClose
       >
         {expandedArtifact && (
-          <ArtifactRenderer
-            artifact={expandedArtifact}
-            maxHeight="70vh"
-            showMeta
-          />
+          <ArtifactRenderer artifact={expandedArtifact} maxHeight="70vh" showMeta />
         )}
       </Modal>
     </div>

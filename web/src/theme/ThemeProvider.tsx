@@ -1,6 +1,6 @@
 /**
  * Theme Provider
- * 
+ *
  * Provides Ant Design theming that syncs with the existing Zustand theme store.
  * This provider wraps the app to provide consistent theming across all components.
  */
@@ -20,7 +20,7 @@ import { lightTheme, darkTheme } from './antdTheme';
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { i18n } = useTranslation();
   const { computedTheme } = useThemeStore();
-  
+
   const isDark = computedTheme === 'dark';
 
   // Get Ant Design locale based on i18n language
@@ -30,15 +30,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Get Ant Design theme config
-  const antdThemeConfig = isDark 
+  const antdThemeConfig = isDark
     ? { ...darkTheme, algorithm: antdTheme.darkAlgorithm }
     : lightTheme;
 
   return (
-    <ConfigProvider
-      locale={getAntdLocale()}
-      theme={antdThemeConfig}
-    >
+    <ConfigProvider locale={getAntdLocale()} theme={antdThemeConfig}>
       {children}
     </ConfigProvider>
   );

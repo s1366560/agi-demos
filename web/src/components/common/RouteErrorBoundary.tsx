@@ -1,24 +1,23 @@
-import { ReactNode } from 'react'
-import type { ErrorInfo } from 'react'
+import { ReactNode } from 'react';
+import type { ErrorInfo } from 'react';
 
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-import { LazyResult, LazyButton } from '@/components/ui/lazyAntd'
+import { LazyResult, LazyButton } from '@/components/ui/lazyAntd';
 
-import { ErrorBoundary } from './ErrorBoundary'
-
+import { ErrorBoundary } from './ErrorBoundary';
 
 /**
  * Props for RouteErrorBoundary component
  */
 export interface RouteErrorBoundaryProps {
-    /** Child components to be wrapped by the error boundary */
-    children: ReactNode
-    /** Route context name (required) - identifies the source of the error */
-    context: string
-    /** Optional fallback path for navigation recovery */
-    fallbackPath?: string
+  /** Child components to be wrapped by the error boundary */
+  children: ReactNode;
+  /** Route context name (required) - identifies the source of the error */
+  context: string;
+  /** Optional fallback path for navigation recovery */
+  fallbackPath?: string;
 }
 
 /**
@@ -28,74 +27,74 @@ export interface RouteErrorBoundaryProps {
  * Shows error context and stack trace in development mode for debugging.
  */
 function RouteErrorFallback({
-    error,
-    context,
-    fallbackPath,
-    onReset,
+  error,
+  context,
+  fallbackPath,
+  onReset,
 }: {
-    error?: Error
-    context: string
-    fallbackPath?: string
-    onReset: () => void
+  error?: Error;
+  context: string;
+  fallbackPath?: string;
+  onReset: () => void;
 }) {
-    const { t } = useTranslation()
-    const navigate = useNavigate()
+  const { t } = useTranslation();
+  const navigate = useNavigate();
 
-    const handleGoBack = () => {
-        if (fallbackPath) {
-            navigate(fallbackPath)
-        } else {
-            navigate(-1)
-        }
+  const handleGoBack = () => {
+    if (fallbackPath) {
+      navigate(fallbackPath);
+    } else {
+      navigate(-1);
     }
+  };
 
-    const buttons = [
-        <LazyButton key="retry" onClick={onReset}>
-            {t('error.retry', { defaultValue: 'Try Again' })}
-        </LazyButton>,
-        <LazyButton type="primary" key="back" onClick={handleGoBack}>
-            {fallbackPath
-                ? t('error.goToPage', { defaultValue: `Go to ${fallbackPath}` })
-                : t('error.goBack', { defaultValue: 'Go Back' })}
-        </LazyButton>,
-        <LazyButton key="home" onClick={() => navigate('/')}>
-            {t('error.home', { defaultValue: 'Go Home' })}
-        </LazyButton>,
-    ]
+  const buttons = [
+    <LazyButton key="retry" onClick={onReset}>
+      {t('error.retry', { defaultValue: 'Try Again' })}
+    </LazyButton>,
+    <LazyButton type="primary" key="back" onClick={handleGoBack}>
+      {fallbackPath
+        ? t('error.goToPage', { defaultValue: `Go to ${fallbackPath}` })
+        : t('error.goBack', { defaultValue: 'Go Back' })}
+    </LazyButton>,
+    <LazyButton key="home" onClick={() => navigate('/')}>
+      {t('error.home', { defaultValue: 'Go Home' })}
+    </LazyButton>,
+  ];
 
-    return (
-        <div style={{ padding: '50px', textAlign: 'center' }}>
-            <LazyResult
-                status="error"
-                title={t('error.title', { defaultValue: 'Something went wrong' })}
-                subTitle={
-                    error?.message ||
-                    t('error.subtitle', {
-                        defaultValue: `An unexpected error occurred in ${context}. Please try again.`,
-                    })
-                }
-                extra={buttons}
-            />
-            {error && process.env.NODE_ENV === 'development' && (
-                <details style={{ marginTop: '20px', textAlign: 'left' }}>
-                    <summary style={{ cursor: 'pointer', marginBottom: '10px' }}>
-                        {t('error.details', { defaultValue: 'Error Details' })}
-                    </summary>
-                    <pre
-                        style={{
-                            background: '#f5f5f5',
-                            padding: '10px',
-                            borderRadius: '4px',
-                            overflow: 'auto',
-                            maxHeight: '300px',
-                        }}
-                    >
-                        {error.stack}
-                    </pre>
-                </details>
-            )}
-        </div>
-    )
+  return (
+    <div style={{ padding: '50px', textAlign: 'center' }}>
+      <LazyResult
+        status="error"
+        title={t('error.title', { defaultValue: 'Something went wrong' })}
+        subTitle={
+          error?.message ||
+          t('error.subtitle', {
+            defaultValue: `An unexpected error occurred in ${context}. Please try again.`,
+          })
+        }
+        extra={buttons}
+      />
+      {error && process.env.NODE_ENV === 'development' && (
+        <details style={{ marginTop: '20px', textAlign: 'left' }}>
+          <summary style={{ cursor: 'pointer', marginBottom: '10px' }}>
+            {t('error.details', { defaultValue: 'Error Details' })}
+          </summary>
+          <pre
+            style={{
+              background: '#f5f5f5',
+              padding: '10px',
+              borderRadius: '4px',
+              overflow: 'auto',
+              maxHeight: '300px',
+            }}
+          >
+            {error.stack}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -129,22 +128,29 @@ function RouteErrorFallback({
  * ```
  */
 export function RouteErrorBoundary({
-    children,
-    context,
-    fallbackPath = '/',
+  children,
+  context,
+  fallbackPath = '/',
 }: RouteErrorBoundaryProps) {
-    return (
-        <ErrorBoundary
-            context={context}
-            fallback={<RouteErrorFallback error={undefined} context={context} fallbackPath={fallbackPath} onReset={() => {}} />}
-            onError={(error: Error, errorInfo: ErrorInfo) => {
-                console.error(`[${context}] Route error:`, error)
-                console.error('Component stack:', errorInfo.componentStack)
-            }}
-        >
-            {children}
-        </ErrorBoundary>
-    )
+  return (
+    <ErrorBoundary
+      context={context}
+      fallback={
+        <RouteErrorFallback
+          error={undefined}
+          context={context}
+          fallbackPath={fallbackPath}
+          onReset={() => {}}
+        />
+      }
+      onError={(error: Error, errorInfo: ErrorInfo) => {
+        console.error(`[${context}] Route error:`, error);
+        console.error('Component stack:', errorInfo.componentStack);
+      }}
+    >
+      {children}
+    </ErrorBoundary>
+  );
 }
 
-export default RouteErrorBoundary
+export default RouteErrorBoundary;

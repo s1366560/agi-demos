@@ -23,12 +23,12 @@
  * ```
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from 'react';
 
-import { agentService } from "../services/agentService";
-import { logger } from "../utils/logger";
+import { agentService } from '../services/agentService';
+import { logger } from '../utils/logger';
 
-import type { LifecycleStateData, LifecycleStatus } from "../types/agent";
+import type { LifecycleStateData, LifecycleStatus } from '../types/agent';
 
 // Global lock to prevent duplicate subscriptions in React StrictMode
 const globalSubscriptionLock = new Set<string>();
@@ -75,7 +75,7 @@ export function useAgentLifecycleState({
 
     // GLOBAL LOCK: Prevent duplicate subscriptions in React StrictMode
     if (globalSubscriptionLock.has(lockKey)) {
-      logger.debug("[useAgentLifecycleState] Already subscribed globally, skipping");
+      logger.debug('[useAgentLifecycleState] Already subscribed globally, skipping');
       return;
     }
 
@@ -93,11 +93,11 @@ export function useAgentLifecycleState({
           agentService.subscribeLifecycleState(projectId, tenantId, (state) => {
             setLifecycleState(state);
           });
-          logger.info("[useAgentLifecycleState] Subscribed to lifecycle state updates");
+          logger.info('[useAgentLifecycleState] Subscribed to lifecycle state updates');
         }
       } catch (err) {
-        logger.error("[useAgentLifecycleState] Failed to connect:", err);
-        setError("Failed to connect");
+        logger.error('[useAgentLifecycleState] Failed to connect:', err);
+        setError('Failed to connect');
         globalSubscriptionLock.delete(lockKey);
       }
     };
@@ -106,7 +106,7 @@ export function useAgentLifecycleState({
 
     // Listen to agentService connection status changes
     const unsubscribeStatusListener = agentService.onStatusChange((status) => {
-      setIsConnected(status === "connected");
+      setIsConnected(status === 'connected');
     });
 
     // Cleanup on unmount or when dependencies change
@@ -123,68 +123,68 @@ export function useAgentLifecycleState({
   const status = useMemo<LifecycleStatus>(() => {
     if (!lifecycleState) {
       return {
-        label: "未启动",
-        color: "text-slate-500",
-        icon: "Power",
-        description: "Agent 尚未初始化，将在首次请求时自动启动",
+        label: '未启动',
+        color: 'text-slate-500',
+        icon: 'Power',
+        description: 'Agent 尚未初始化，将在首次请求时自动启动',
       };
     }
 
     switch (lifecycleState.lifecycleState) {
-      case "initializing":
+      case 'initializing':
         return {
-          label: "初始化中",
-          color: "text-blue-500",
-          icon: "Loader2",
-          description: "正在加载工具、技能和配置",
+          label: '初始化中',
+          color: 'text-blue-500',
+          icon: 'Loader2',
+          description: '正在加载工具、技能和配置',
         };
 
-      case "ready":
+      case 'ready':
         return {
-          label: "就绪",
-          color: "text-emerald-500",
-          icon: "CheckCircle",
+          label: '就绪',
+          color: 'text-emerald-500',
+          icon: 'CheckCircle',
           description: `Agent 已就绪，${lifecycleState.toolCount || 0} 个工具`,
         };
 
-      case "executing":
+      case 'executing':
         return {
-          label: "执行中",
-          color: "text-amber-500",
-          icon: "Cpu",
-          description: "正在处理聊天请求",
+          label: '执行中',
+          color: 'text-amber-500',
+          icon: 'Cpu',
+          description: '正在处理聊天请求',
         };
 
-      case "paused":
+      case 'paused':
         return {
-          label: "已暂停",
-          color: "text-orange-500",
-          icon: "Pause",
-          description: "Agent 已暂停，不接收新请求",
+          label: '已暂停',
+          color: 'text-orange-500',
+          icon: 'Pause',
+          description: 'Agent 已暂停，不接收新请求',
         };
 
-      case "shutting_down":
+      case 'shutting_down':
         return {
-          label: "关闭中",
-          color: "text-slate-500",
-          icon: "Power",
-          description: "Agent 正在关闭",
+          label: '关闭中',
+          color: 'text-slate-500',
+          icon: 'Power',
+          description: 'Agent 正在关闭',
         };
 
-      case "error":
+      case 'error':
         return {
-          label: "错误",
-          color: "text-red-500",
-          icon: "AlertCircle",
-          description: lifecycleState.errorMessage || "Agent 遇到错误",
+          label: '错误',
+          color: 'text-red-500',
+          icon: 'AlertCircle',
+          description: lifecycleState.errorMessage || 'Agent 遇到错误',
         };
 
       default:
         return {
-          label: "未知",
-          color: "text-gray-500",
-          icon: "HelpCircle",
-          description: "Agent 状态未知",
+          label: '未知',
+          color: 'text-gray-500',
+          icon: 'HelpCircle',
+          description: 'Agent 状态未知',
         };
     }
   }, [lifecycleState]);

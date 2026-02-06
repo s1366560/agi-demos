@@ -82,7 +82,7 @@ describe('requestCache', () => {
       expect(requestCache.get(key)).toEqual(testData);
 
       // Wait for expiration
-      await new Promise(resolve => setTimeout(resolve, 60));
+      await new Promise((resolve) => setTimeout(resolve, 60));
 
       // Should be expired
       expect(requestCache.get(key)).toBeUndefined();
@@ -96,7 +96,7 @@ describe('requestCache', () => {
       requestCache.set(key, testData, ttl);
 
       // Should still be available after 100ms
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       expect(requestCache.get(key)).toEqual(testData);
     });
 

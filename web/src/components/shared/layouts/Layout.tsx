@@ -61,10 +61,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', padding: '0 24px', background: '#001529' }}>
-        <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>
-          VIP Memory
-        </div>
+      <Header
+        style={{ display: 'flex', alignItems: 'center', padding: '0 24px', background: '#001529' }}
+      >
+        <div style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>VIP Memory</div>
       </Header>
       <AntLayout>
         <Sider
@@ -81,9 +81,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             items={menuItems}
           />
         </Sider>
-        <Content style={{ padding: '24px', minHeight: 280 }}>
-          {children}
-        </Content>
+        <Content style={{ padding: '24px', minHeight: 280 }}>{children}</Content>
       </AntLayout>
     </AntLayout>
   );

@@ -19,7 +19,7 @@ describe('calculateDelay', () => {
   it('should return initial delay for first retry (attempt 0)', () => {
     const delay = calculateDelay(0);
     expect(delay).toBeGreaterThanOrEqual(750); // 1000 - 25% jitter
-    expect(delay).toBeLessThanOrEqual(1250);  // 1000 + 25% jitter
+    expect(delay).toBeLessThanOrEqual(1250); // 1000 + 25% jitter
   });
 
   it('should double delay for each attempt with exponential backoff', () => {
@@ -96,42 +96,25 @@ describe('calculateDelay', () => {
 
 describe('isRetryableError', () => {
   it('should return true for NETWORK type errors', () => {
-    const error = new ApiError(
-      ApiErrorType.NETWORK,
-      'NETWORK_ERROR',
-      'Connection failed'
-    );
+    const error = new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed');
 
     expect(isRetryableError(error)).toBe(true);
   });
 
   it('should return true for SERVER type errors (5xx)', () => {
-    const error = new ApiError(
-      ApiErrorType.SERVER,
-      'INTERNAL_ERROR',
-      'Server error',
-      500
-    );
+    const error = new ApiError(ApiErrorType.SERVER, 'INTERNAL_ERROR', 'Server error', 500);
 
     expect(isRetryableError(error)).toBe(true);
   });
 
   it('should return true for TIMEOUT code errors', () => {
-    const error = new ApiError(
-      ApiErrorType.NETWORK,
-      'TIMEOUT',
-      'Request timeout'
-    );
+    const error = new ApiError(ApiErrorType.NETWORK, 'TIMEOUT', 'Request timeout');
 
     expect(isRetryableError(error)).toBe(true);
   });
 
   it('should return true for SERVICE_UNAVAILABLE code errors', () => {
-    const error = new ApiError(
-      ApiErrorType.SERVER,
-      'SERVICE_UNAVAILABLE',
-      'Service unavailable'
-    );
+    const error = new ApiError(ApiErrorType.SERVER, 'SERVICE_UNAVAILABLE', 'Service unavailable');
 
     expect(isRetryableError(error)).toBe(true);
   });
@@ -148,56 +131,31 @@ describe('isRetryableError', () => {
   });
 
   it('should return false for VALIDATION errors (4xx)', () => {
-    const error = new ApiError(
-      ApiErrorType.VALIDATION,
-      'INVALID_INPUT',
-      'Invalid input',
-      400
-    );
+    const error = new ApiError(ApiErrorType.VALIDATION, 'INVALID_INPUT', 'Invalid input', 400);
 
     expect(isRetryableError(error)).toBe(false);
   });
 
   it('should return false for NOT_FOUND errors', () => {
-    const error = new ApiError(
-      ApiErrorType.NOT_FOUND,
-      'NOT_FOUND',
-      'Resource not found',
-      404
-    );
+    const error = new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Resource not found', 404);
 
     expect(isRetryableError(error)).toBe(false);
   });
 
   it('should return true for status code 408 (Request Timeout)', () => {
-    const error = new ApiError(
-      ApiErrorType.UNKNOWN,
-      'REQUEST_TIMEOUT',
-      'Request timeout',
-      408
-    );
+    const error = new ApiError(ApiErrorType.UNKNOWN, 'REQUEST_TIMEOUT', 'Request timeout', 408);
 
     expect(isRetryableError(error)).toBe(true);
   });
 
   it('should return true for status code 429 (Too Many Requests)', () => {
-    const error = new ApiError(
-      ApiErrorType.UNKNOWN,
-      'TOO_MANY_REQUESTS',
-      'Rate limited',
-      429
-    );
+    const error = new ApiError(ApiErrorType.UNKNOWN, 'TOO_MANY_REQUESTS', 'Rate limited', 429);
 
     expect(isRetryableError(error)).toBe(true);
   });
 
   it('should return true for status code 502 (Bad Gateway)', () => {
-    const error = new ApiError(
-      ApiErrorType.SERVER,
-      'BAD_GATEWAY',
-      'Bad gateway',
-      502
-    );
+    const error = new ApiError(ApiErrorType.SERVER, 'BAD_GATEWAY', 'Bad gateway', 502);
 
     expect(isRetryableError(error)).toBe(true);
   });
@@ -214,23 +172,13 @@ describe('isRetryableError', () => {
   });
 
   it('should return true for status code 504 (Gateway Timeout)', () => {
-    const error = new ApiError(
-      ApiErrorType.SERVER,
-      'GATEWAY_TIMEOUT',
-      'Gateway timeout',
-      504
-    );
+    const error = new ApiError(ApiErrorType.SERVER, 'GATEWAY_TIMEOUT', 'Gateway timeout', 504);
 
     expect(isRetryableError(error)).toBe(true);
   });
 
   it('should use custom isRetryable function when provided', () => {
-    const error = new ApiError(
-      ApiErrorType.NOT_FOUND,
-      'NOT_FOUND',
-      'Not found',
-      404
-    );
+    const error = new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Not found', 404);
 
     // Normally NOT_FOUND is not retryable
     expect(isRetryableError(error)).toBe(false);
@@ -298,12 +246,11 @@ describe('retryWithBackoff', () => {
   });
 
   it('should retry on retryable errors', async () => {
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ))
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      )
       .mockResolvedValue('success');
 
     const config: RetryConfig = {
@@ -329,14 +276,11 @@ describe('retryWithBackoff', () => {
   });
 
   it('should not retry on non-retryable errors', async () => {
-    const fn = vi.fn().mockRejectedValue(
-      new ApiError(
-        ApiErrorType.VALIDATION,
-        'INVALID_INPUT',
-        'Invalid input',
-        400
-      )
-    );
+    const fn = vi
+      .fn()
+      .mockRejectedValue(
+        new ApiError(ApiErrorType.VALIDATION, 'INVALID_INPUT', 'Invalid input', 400)
+      );
 
     const config: RetryConfig = {
       maxRetries: 3,
@@ -351,22 +295,17 @@ describe('retryWithBackoff', () => {
     const resolveSpy = vi.fn();
     const rejectSpy = vi.fn();
 
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ))
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ))
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ));
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      )
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      )
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      );
 
     const config: RetryConfig = {
       maxRetries: 2,
@@ -402,17 +341,14 @@ describe('retryWithBackoff', () => {
   });
 
   it('should use exponential backoff between retries', async () => {
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ))
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ))
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      )
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      )
       .mockResolvedValue('success');
 
     const config: RetryConfig = {
@@ -448,17 +384,14 @@ describe('retryWithBackoff', () => {
     const resolveSpy = vi.fn();
     const rejectSpy = vi.fn();
 
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ))
-      .mockRejectedValueOnce(new ApiError(
-        ApiErrorType.NETWORK,
-        'NETWORK_ERROR',
-        'Connection failed'
-      ));
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      )
+      .mockRejectedValueOnce(
+        new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', 'Connection failed')
+      );
 
     const config: RetryConfig = {
       maxRetries: 1,
@@ -490,7 +423,8 @@ describe('retryWithBackoff', () => {
   });
 
   it('should handle non-ApiError errors', async () => {
-    const fn = vi.fn()
+    const fn = vi
+      .fn()
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValue('success');
 

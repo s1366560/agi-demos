@@ -5,7 +5,7 @@
  * Provides a consistent interface for displaying any type of artifact.
  */
 
-import { useState } from "react";
+import { useState } from 'react';
 
 import {
   FileImageOutlined,
@@ -19,16 +19,16 @@ import {
   DownloadOutlined,
   ExpandOutlined,
   LoadingOutlined,
-} from "@ant-design/icons";
-import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from "antd";
+} from '@ant-design/icons';
+import { Card, Spin, Alert, Typography, Space, Tag, Tooltip, Button } from 'antd';
 
-import { AudioPlayer } from "./AudioPlayer";
-import { CodeViewer } from "./CodeViewer";
-import { FileDownloader } from "./FileDownloader";
-import { ImageViewer } from "./ImageViewer";
-import { VideoPlayer } from "./VideoPlayer";
+import { AudioPlayer } from './AudioPlayer';
+import { CodeViewer } from './CodeViewer';
+import { FileDownloader } from './FileDownloader';
+import { ImageViewer } from './ImageViewer';
+import { VideoPlayer } from './VideoPlayer';
 
-import type { Artifact, ArtifactCategory } from "../../types/agent";
+import type { Artifact, ArtifactCategory } from '../../types/agent';
 
 const { Text } = Typography;
 
@@ -63,14 +63,14 @@ const CATEGORY_ICONS: Record<ArtifactCategory, React.ReactNode> = {
 
 // Category colors for tags
 const CATEGORY_COLORS: Record<ArtifactCategory, string> = {
-  image: "blue",
-  video: "purple",
-  audio: "cyan",
-  document: "orange",
-  code: "green",
-  data: "gold",
-  archive: "magenta",
-  other: "default",
+  image: 'blue',
+  video: 'purple',
+  audio: 'cyan',
+  document: 'orange',
+  code: 'green',
+  data: 'gold',
+  archive: 'magenta',
+  other: 'default',
 };
 
 // Format file size
@@ -84,7 +84,7 @@ function formatFileSize(bytes: number): string {
 export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
   artifact,
   compact = false,
-  maxWidth = "100%",
+  maxWidth = '100%',
   maxHeight = 400,
   onExpand,
   showMeta = true,
@@ -106,13 +106,13 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
   // Render content based on category
   const renderContent = () => {
     // Show loading for pending/uploading artifacts
-    if (artifact.status === "pending" || artifact.status === "uploading") {
+    if (artifact.status === 'pending' || artifact.status === 'uploading') {
       return (
         <div className="flex items-center justify-center p-8">
           <Space direction="vertical" align="center">
             <Spin indicator={<LoadingOutlined style={{ fontSize: 24 }} spin />} />
             <Text type="secondary">
-              {artifact.status === "pending" ? "Preparing..." : "Uploading..."}
+              {artifact.status === 'pending' ? 'Preparing...' : 'Uploading...'}
             </Text>
           </Space>
         </div>
@@ -120,7 +120,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
     }
 
     // Show error state
-    if (artifact.status === "error" || error) {
+    if (artifact.status === 'error' || error) {
       return (
         <Alert
           type="error"
@@ -132,7 +132,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
     }
 
     // Show deleted state
-    if (artifact.status === "deleted") {
+    if (artifact.status === 'deleted') {
       return (
         <Alert
           type="warning"
@@ -157,7 +157,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
 
     // Route to appropriate viewer
     switch (artifact.category) {
-      case "image":
+      case 'image':
         return (
           <ImageViewer
             src={artifact.url}
@@ -166,11 +166,11 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
             maxHeight={maxHeight}
             compact={compact}
             onLoad={handleLoad}
-            onError={() => handleError("Failed to load image")}
+            onError={() => handleError('Failed to load image')}
           />
         );
 
-      case "video":
+      case 'video':
         return (
           <VideoPlayer
             src={artifact.url}
@@ -178,23 +178,23 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
             maxHeight={maxHeight}
             compact={compact}
             onLoad={handleLoad}
-            onError={() => handleError("Failed to load video")}
+            onError={() => handleError('Failed to load video')}
           />
         );
 
-      case "audio":
+      case 'audio':
         return (
           <AudioPlayer
             src={artifact.url}
             filename={artifact.filename}
             compact={compact}
             onLoad={handleLoad}
-            onError={() => handleError("Failed to load audio")}
+            onError={() => handleError('Failed to load audio')}
           />
         );
 
-      case "code":
-      case "data":
+      case 'code':
+      case 'data':
         return (
           <CodeViewer
             url={artifact.url}
@@ -207,20 +207,20 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
           />
         );
 
-      case "document":
+      case 'document':
         // For PDFs, try to embed; for others, show download
-        if (artifact.mimeType === "application/pdf") {
+        if (artifact.mimeType === 'application/pdf') {
           return (
             <iframe
               src={artifact.url}
               style={{
-                width: "100%",
-                height: typeof maxHeight === "number" ? maxHeight : 400,
-                border: "none",
+                width: '100%',
+                height: typeof maxHeight === 'number' ? maxHeight : 400,
+                border: 'none',
               }}
               title={artifact.filename}
               onLoad={handleLoad}
-              onError={() => handleError("Failed to load PDF")}
+              onError={() => handleError('Failed to load PDF')}
             />
           );
         }
@@ -236,8 +236,8 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
           />
         );
 
-      case "archive":
-      case "other":
+      case 'archive':
+      case 'other':
       default:
         setLoading(false);
         return (
@@ -256,7 +256,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
   if (compact) {
     return (
       <div
-        className={`artifact-renderer artifact-renderer--compact ${className || ""}`}
+        className={`artifact-renderer artifact-renderer--compact ${className || ''}`}
         style={{ maxWidth }}
       >
         {renderContent()}
@@ -267,7 +267,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
   // Full mode with card wrapper
   return (
     <Card
-      className={`artifact-renderer ${className || ""}`}
+      className={`artifact-renderer ${className || ''}`}
       style={{ maxWidth }}
       size="small"
       title={
@@ -276,9 +276,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
           <Text ellipsis style={{ maxWidth: 200 }}>
             {artifact.filename}
           </Text>
-          <Tag color={CATEGORY_COLORS[artifact.category]}>
-            {artifact.category}
-          </Tag>
+          <Tag color={CATEGORY_COLORS[artifact.category]}>{artifact.category}</Tag>
         </Space>
       }
       extra={
@@ -313,8 +311,8 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
         </Space>
       }
     >
-      <div style={{ maxHeight, overflow: "auto" }}>
-        {loading && artifact.status === "ready" && (
+      <div style={{ maxHeight, overflow: 'auto' }}>
+        {loading && artifact.status === 'ready' && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
             <Spin />
           </div>
@@ -326,7 +324,8 @@ export const ArtifactRenderer: React.FC<ArtifactRendererProps> = ({
           Generated by <code>{artifact.sourceTool}</code>
           {artifact.sourcePath && (
             <>
-              {" "}from <code>{artifact.sourcePath}</code>
+              {' '}
+              from <code>{artifact.sourcePath}</code>
             </>
           )}
         </div>

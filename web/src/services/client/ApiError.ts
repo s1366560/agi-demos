@@ -325,9 +325,7 @@ export function parseAxiosError(error: unknown): ApiError {
       if (err.response.data.error) message = err.response.data.error;
       details = err.response.data;
     } else {
-      message = err.response.status
-        ? `HTTP ${err.response.status}`
-        : 'Request failed';
+      message = err.response.status ? `HTTP ${err.response.status}` : 'Request failed';
     }
   }
   // Handle network/timeout errors
@@ -368,30 +366,18 @@ export function parseError(error: unknown): ApiError {
 
   // Standard Error
   if (error instanceof Error) {
-    return new ApiError(
-      ApiErrorType.UNKNOWN,
-      'STANDARD_ERROR',
-      error.message,
-      undefined,
-      { originalError: error.name }
-    );
+    return new ApiError(ApiErrorType.UNKNOWN, 'STANDARD_ERROR', error.message, undefined, {
+      originalError: error.name,
+    });
   }
 
   // String error
   if (typeof error === 'string') {
-    return new ApiError(
-      ApiErrorType.UNKNOWN,
-      'STRING_ERROR',
-      error
-    );
+    return new ApiError(ApiErrorType.UNKNOWN, 'STRING_ERROR', error);
   }
 
   // Unknown type
-  return new ApiError(
-    ApiErrorType.UNKNOWN,
-    'UNKNOWN_ERROR',
-    'An unknown error occurred'
-  );
+  return new ApiError(ApiErrorType.UNKNOWN, 'UNKNOWN_ERROR', 'An unknown error occurred');
 }
 
 /**

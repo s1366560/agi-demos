@@ -90,15 +90,12 @@ export function TimelineNode({
 }: TimelineNodeProps) {
   const [showAllThoughts, setShowAllThoughts] = useState(false);
   const statusConfig = getStatusConfig(step.status);
-  
+
   const hasContent = step.thoughts.length > 0 || step.toolExecutions.length > 0;
   const displayThoughts = showAllThoughts ? step.thoughts : step.thoughts.slice(-3);
 
   return (
-    <div
-      className="relative pl-14 pb-6"
-      data-step-number={step.stepNumber}
-    >
+    <div className="relative pl-14 pb-6" data-step-number={step.stepNumber}>
       {/* Status Circle */}
       <div
         className={`absolute left-4 w-5 h-5 rounded-full flex items-center justify-center
@@ -136,10 +133,10 @@ export function TimelineNode({
                     step.status === 'completed'
                       ? 'text-emerald-600 dark:text-emerald-400'
                       : step.status === 'running'
-                      ? 'text-blue-600 dark:text-blue-400'
-                      : step.status === 'failed'
-                      ? 'text-red-600 dark:text-red-400'
-                      : 'text-slate-400'
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : step.status === 'failed'
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-slate-400'
                   }`}
                 >
                   {step.status === 'completed' && 'Completed'}
@@ -147,17 +144,15 @@ export function TimelineNode({
                   {step.status === 'failed' && 'Failed'}
                   {step.status === 'pending' && 'Pending'}
                 </span>
-                
+
                 {/* Duration */}
                 {step.duration && (
                   <>
                     <span className="text-slate-300 dark:text-slate-600">•</span>
-                    <span className="text-xs text-slate-500">
-                      {formatDuration(step.duration)}
-                    </span>
+                    <span className="text-xs text-slate-500">{formatDuration(step.duration)}</span>
                   </>
                 )}
-                
+
                 {/* Tool Count */}
                 {step.toolExecutions.length > 0 && (
                   <>
@@ -231,10 +226,7 @@ export function TimelineNode({
                 </h5>
                 <div className="space-y-3">
                   {step.toolExecutions.map((execution) => (
-                    <ToolExecutionDetail
-                      key={execution.id}
-                      execution={execution}
-                    />
+                    <ToolExecutionDetail key={execution.id} execution={execution} />
                   ))}
                 </div>
               </div>

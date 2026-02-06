@@ -25,7 +25,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   isOpen,
   onClose,
   onSave,
-  onDelete
+  onDelete,
 }) => {
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || '');
@@ -75,9 +75,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <Settings className="h-5 w-5 text-gray-600 dark:text-slate-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              项目设置
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">项目设置</h2>
           </div>
           <button
             onClick={onClose}
@@ -140,7 +138,10 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           {/* Project Info */}
           <div className="pt-4 border-t border-gray-200 dark:border-slate-800">
             <p className="text-xs text-gray-500 dark:text-slate-500">
-              项目ID: <code className="px-1 py-0.5 bg-gray-100 dark:bg-slate-800 rounded">{project.id}</code>
+              项目ID:{' '}
+              <code className="px-1 py-0.5 bg-gray-100 dark:bg-slate-800 rounded">
+                {project.id}
+              </code>
             </p>
             <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">
               创建于 {new Date(project.created_at).toLocaleDateString('zh-CN')}

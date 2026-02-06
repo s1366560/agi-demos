@@ -59,10 +59,49 @@ class WebTerminalManager:
         self.process: Optional[asyncio.subprocess.Process] = None
 
     def is_running(self) -> bool:
-        """Check if ttyd process is running."""
-        if self.process is None:
-            return False
-        return self.process.returncode is None
+        """Check if ttyd process is running.
+        
+        Checks both the managed process and system-wide for ttyd processes.
+        This handles cases where ttyd was started by container entrypoint.
+        """
+        # First check our managed process
+        if self.process is not None and self.process.returncode is None:
+            return True
+        
+        # Check for system-wide process on our port using methods that don't require root
+        import subprocess
+        
+        # Method 1: Check if port is in use via /proc/net/tcp (no root needed)
+        try:
+            # Convert port to hex for /proc/net/tcp lookup
+            port_hex = f'{self.port:04X}'
+            with open('/proc/net/tcp', 'r') as f:
+                for line in f:
+                    # Format: sl local_address remote_address st ...
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        local_addr = parts[1]
+                        # local_address format: IP:PORT in hex
+                        if ':' in local_addr:
+                            addr_port = local_addr.split(':')[1]
+                            if addr_port == port_hex:
+                                return True
+        except (FileNotFoundError, PermissionError, Exception):
+            pass
+        
+        # Method 2: Try to connect to the port to see if it's accepting connections
+        try:
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', self.port))
+            sock.close()
+            if result == 0:
+                return True
+        except Exception:
+            pass
+        
+        return False
 
     async def start(self) -> None:
         """
@@ -141,11 +180,41 @@ class WebTerminalManager:
         Returns:
             TerminalStatus with current state
         """
+        running = self.is_running()
+        pid = self.process.pid if self.process else None
+        
+        # If no managed process but ttyd is running, try to get system PID
+        if running and pid is None:
+            pid = self._get_system_ttyd_pid()
+        
         return TerminalStatus(
-            running=self.is_running(),
+            running=running,
             port=self.port,
-            pid=self.process.pid if self.process else None,
+            pid=pid,
         )
+    
+    def _get_system_ttyd_pid(self) -> Optional[int]:
+        """Get PID of system-wide ttyd process on our port."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["netstat", "-tlnp"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            for line in result.stdout.split('\n'):
+                if f":{self.port}" in line and 'ttyd' in line:
+                    # Extract PID from the line (format: ... PID/ttyd)
+                    parts = line.split()
+                    for part in parts:
+                        if '/ttyd' in part:
+                            pid_str = part.split('/')[0]
+                            if pid_str.isdigit():
+                                return int(pid_str)
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            pass
+        return None
 
     def get_websocket_url(self) -> str:
         """

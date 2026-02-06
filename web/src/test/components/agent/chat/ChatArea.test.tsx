@@ -15,10 +15,26 @@ import type { TimelineEvent, WorkPlan, ToolExecution, TimelineStep } from '../..
 
 // Mock the IdleState component
 vi.mock('../../../../components/agent/chat/IdleState', () => ({
-  IdleState: ({ greeting, onTileClick }: { greeting: string; onTileClick: (tile: StarterTile) => void }) => (
+  IdleState: ({
+    greeting,
+    onTileClick,
+  }: {
+    greeting: string;
+    onTileClick: (tile: StarterTile) => void;
+  }) => (
     <div data-testid="idle-state">
       <span>{greeting}</span>
-      <button onClick={() => onTileClick({ id: 'test', title: 'Test', description: 'Test tile', color: 'blue', icon: 'test' })}>
+      <button
+        onClick={() =>
+          onTileClick({
+            id: 'test',
+            title: 'Test',
+            description: 'Test tile',
+            color: 'blue',
+            icon: 'test',
+          })
+        }
+      >
         Click Tile
       </button>
     </div>
@@ -32,7 +48,13 @@ vi.mock('../../../../components/agent/execution/ExecutionTimeline', () => ({
 
 // Mock the FollowUpPills component
 vi.mock('../../../../components/agent/execution/FollowUpPills', () => ({
-  FollowUpPills: ({ suggestions, onSuggestionClick }: { suggestions: string[]; onSuggestionClick: (s: string) => void }) => (
+  FollowUpPills: ({
+    suggestions,
+    onSuggestionClick,
+  }: {
+    suggestions: string[];
+    onSuggestionClick: (s: string) => void;
+  }) => (
     <div data-testid="follow-up-pills">
       {suggestions.map((s) => (
         <button key={s} onClick={() => onSuggestionClick(s)}>

@@ -5,37 +5,37 @@
  */
 
 // Re-export types from sub-components
-export type { SearchMode } from './components/SearchForm'
-export type { SearchResult } from './components/SearchResults'
-export type { ConfigTab, RetrievalMode } from './components/SearchConfig'
+export type { SearchMode } from './components/SearchForm';
+export type { SearchResult } from './components/SearchResults';
+export type { ConfigTab, RetrievalMode } from './components/SearchConfig';
 
-import type { SearchMode, SearchResult, RetrievalMode } from '.'
+import type { SearchMode, SearchResult, RetrievalMode } from '.';
 
 /**
  * Time range options for temporal search
  */
-export type TimeRange = 'last30' | 'custom'
+export type TimeRange = 'last30' | 'custom';
 
 /**
  * View mode for results display
  */
-export type ResultsViewMode = 'grid' | 'list'
+export type ResultsViewMode = 'grid' | 'list';
 
 /**
  * Custom time range definition
  */
 export interface CustomTimeRange {
-  since?: string
-  until?: string
+  since?: string;
+  until?: string;
 }
 
 /**
  * Search history entry
  */
 export interface SearchHistoryEntry {
-  query: string
-  mode: SearchMode
-  timestamp: number
+  query: string;
+  mode: SearchMode;
+  timestamp: number;
 }
 
 /**
@@ -43,37 +43,37 @@ export interface SearchHistoryEntry {
  */
 export interface SearchParams {
   /** Search mode */
-  searchMode: SearchMode
+  searchMode: SearchMode;
   /** Search query string */
-  query: string
+  query: string;
   /** Starting entity UUID for graph traversal */
-  startEntityUuid: string
+  startEntityUuid: string;
   /** Community UUID for community search */
-  communityUuid: string
+  communityUuid: string;
   /** Retrieval mode strategy */
-  retrievalMode: RetrievalMode
+  retrievalMode: RetrievalMode;
   /** Search strategy */
-  strategy: string
+  strategy: string;
   /** Focal node UUID for node-distance retrieval */
-  focalNode: string
+  focalNode: string;
   /** Cross-encoder model */
-  crossEncoder: string
+  crossEncoder: string;
   /** Max depth for graph traversal */
-  maxDepth: number
+  maxDepth: number;
   /** Relationship types to filter */
-  relationshipTypes: string[]
+  relationshipTypes: string[];
   /** Selected entity types */
-  selectedEntityTypes: string[]
+  selectedEntityTypes: string[];
   /** Selected tags */
-  selectedTags: string[]
+  selectedTags: string[];
   /** Include episodes in community search */
-  includeEpisodes: boolean
+  includeEpisodes: boolean;
   /** Time range for temporal search */
-  timeRange: TimeRange
+  timeRange: TimeRange;
   /** Custom time range */
-  customTimeRange: CustomTimeRange
+  customTimeRange: CustomTimeRange;
   /** Project ID */
-  projectId: string | undefined
+  projectId: string | undefined;
 }
 
 /**
@@ -81,43 +81,43 @@ export interface SearchParams {
  */
 export interface EnhancedSearchContextValue {
   /** Current search results */
-  results: SearchResult[]
+  results: SearchResult[];
   /** Whether search is in progress */
-  loading: boolean
+  loading: boolean;
   /** Error message if any */
-  error: string | null
+  error: string | null;
   /** Current search query */
-  query: string
+  query: string;
   /** Current search mode */
-  searchMode: SearchMode
+  searchMode: SearchMode;
   /** Current view mode for results */
-  viewMode: ResultsViewMode
+  viewMode: ResultsViewMode;
   /** Whether config panel is open */
-  isConfigOpen: boolean
+  isConfigOpen: boolean;
   /** Whether results panel is collapsed */
-  isResultsCollapsed: boolean
+  isResultsCollapsed: boolean;
   /** Whether subgraph mode is active */
-  isSubgraphMode: boolean
+  isSubgraphMode: boolean;
   /** Selected subgraph node IDs */
-  selectedSubgraphIds: string[]
+  selectedSubgraphIds: string[];
   /** Highlighted node IDs from results */
-  highlightNodeIds: string[]
+  highlightNodeIds: string[];
   /** Set query */
-  setQuery: (query: string) => void
+  setQuery: (query: string) => void;
   /** Set search mode */
-  setSearchMode: (mode: SearchMode) => void
+  setSearchMode: (mode: SearchMode) => void;
   /** Set view mode */
-  setViewMode: (mode: ResultsViewMode) => void
+  setViewMode: (mode: ResultsViewMode) => void;
   /** Toggle config panel */
-  toggleConfig: () => void
+  toggleConfig: () => void;
   /** Toggle results collapse */
-  toggleResultsCollapse: () => void
+  toggleResultsCollapse: () => void;
   /** Toggle subgraph mode */
-  toggleSubgraphMode: () => void
+  toggleSubgraphMode: () => void;
   /** Perform search */
-  handleSearch: () => Promise<void>
+  handleSearch: () => Promise<void>;
   /** Set error */
-  setError: (error: string | null) => void
+  setError: (error: string | null) => void;
 }
 
 /**
@@ -125,17 +125,17 @@ export interface EnhancedSearchContextValue {
  */
 export interface EnhancedSearchRootProps {
   /** Project ID from route */
-  projectId?: string
+  projectId?: string;
   /** Tenant ID */
-  tenantId?: string
+  tenantId?: string;
   /** Children for compound component pattern */
-  children?: React.ReactNode
+  children?: React.ReactNode;
   /** Initial search mode */
-  defaultSearchMode?: SearchMode
+  defaultSearchMode?: SearchMode;
   /** Initial view mode */
-  defaultViewMode?: ResultsViewMode
+  defaultViewMode?: ResultsViewMode;
   /** Whether config is open by default */
-  defaultConfigOpen?: boolean
+  defaultConfigOpen?: boolean;
 }
 
 /**
@@ -143,7 +143,7 @@ export interface EnhancedSearchRootProps {
  */
 export interface EnhancedSearchFormProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -151,7 +151,7 @@ export interface EnhancedSearchFormProps {
  */
 export interface EnhancedSearchConfigProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -159,7 +159,7 @@ export interface EnhancedSearchConfigProps {
  */
 export interface EnhancedSearchResultsProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -167,7 +167,7 @@ export interface EnhancedSearchResultsProps {
  */
 export interface EnhancedSearchGraphProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -175,7 +175,7 @@ export interface EnhancedSearchGraphProps {
  */
 export interface EnhancedSearchErrorProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -183,7 +183,7 @@ export interface EnhancedSearchErrorProps {
  */
 export interface EnhancedSearchHistoryProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -192,17 +192,17 @@ export interface EnhancedSearchHistoryProps {
  */
 export interface EnhancedSearchCompound extends React.FC<EnhancedSearchRootProps> {
   /** Search form sub-component */
-  Form: React.FC<EnhancedSearchFormProps>
+  Form: React.FC<EnhancedSearchFormProps>;
   /** Configuration panel sub-component */
-  Config: React.FC<EnhancedSearchConfigProps>
+  Config: React.FC<EnhancedSearchConfigProps>;
   /** Results list sub-component */
-  Results: React.FC<EnhancedSearchResultsProps>
+  Results: React.FC<EnhancedSearchResultsProps>;
   /** Graph visualization sub-component */
-  Graph: React.FC<EnhancedSearchGraphProps>
+  Graph: React.FC<EnhancedSearchGraphProps>;
   /** Error message sub-component */
-  Error: React.FC<EnhancedSearchErrorProps>
+  Error: React.FC<EnhancedSearchErrorProps>;
   /** Search history sub-component */
-  History: React.FC<EnhancedSearchHistoryProps>
+  History: React.FC<EnhancedSearchHistoryProps>;
   /** Root component alias */
-  Root: React.FC<EnhancedSearchRootProps>
+  Root: React.FC<EnhancedSearchRootProps>;
 }

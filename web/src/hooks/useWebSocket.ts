@@ -93,7 +93,10 @@ export function useWebSocket({
     cleanup();
 
     if (wsRef.current) {
-      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+      if (
+        wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING
+      ) {
         wsRef.current.close();
       }
       updateWsState(null);
@@ -108,7 +111,11 @@ export function useWebSocket({
 
   const connect = useCallback(() => {
     // Don't connect if already connecting or connected
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.CONNECTING ||
+        wsRef.current.readyState === WebSocket.OPEN)
+    ) {
       return;
     }
 
@@ -168,7 +175,18 @@ export function useWebSocket({
       updateWsState(null);
       setStatus('closed');
     }
-  }, [getUrl, onMessage, onError, onOpen, onClose, reconnect, reconnectInterval, maxReconnectAttempts, cleanup, updateWsState]);
+  }, [
+    getUrl,
+    onMessage,
+    onError,
+    onOpen,
+    onClose,
+    reconnect,
+    reconnectInterval,
+    maxReconnectAttempts,
+    cleanup,
+    updateWsState,
+  ]);
 
   // Store the latest connect function in the ref
   useEffect(() => {

@@ -5,7 +5,15 @@
  * success/failure rates, tool usage, and performance metrics.
  */
 
-import { LazyCard, LazyStatistic, LazyRow, LazyCol, LazyProgress, LazyTable, Tag } from '@/components/ui/lazyAntd';
+import {
+  LazyCard,
+  LazyStatistic,
+  LazyRow,
+  LazyCol,
+  LazyProgress,
+  LazyTable,
+  Tag,
+} from '@/components/ui/lazyAntd';
 
 import { MaterialIcon } from './shared';
 
@@ -16,13 +24,11 @@ interface ExecutionStatsCardProps {
 }
 
 export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
-  const successRate = stats.total_executions > 0
-    ? (stats.completed_count / stats.total_executions) * 100
-    : 0;
+  const successRate =
+    stats.total_executions > 0 ? (stats.completed_count / stats.total_executions) * 100 : 0;
 
-  const failureRate = stats.total_executions > 0
-    ? (stats.failed_count / stats.total_executions) * 100
-    : 0;
+  const failureRate =
+    stats.total_executions > 0 ? (stats.failed_count / stats.total_executions) * 100 : 0;
 
   // Tool usage table data
   const toolUsageData = Object.entries(stats.tool_usage)
@@ -87,11 +93,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
               title="Completed"
               value={stats.completed_count}
               prefix={<MaterialIcon name="check_circle" size={20} className="text-green-600" />}
-              suffix={
-                <span className="text-sm text-slate-500">
-                  ({successRate.toFixed(1)}%)
-                </span>
-              }
+              suffix={<span className="text-sm text-slate-500">({successRate.toFixed(1)}%)</span>}
             />
           </LazyCard>
         </LazyCol>
@@ -102,11 +104,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
               title="Failed"
               value={stats.failed_count}
               prefix={<MaterialIcon name="error" size={20} className="text-red-600" />}
-              suffix={
-                <span className="text-sm text-slate-500">
-                  ({failureRate.toFixed(1)}%)
-                </span>
-              }
+              suffix={<span className="text-sm text-slate-500">({failureRate.toFixed(1)}%)</span>}
             />
           </LazyCard>
         </LazyCol>
@@ -129,9 +127,7 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
           <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Success Rate
           </span>
-          <span className="text-sm text-slate-500">
-            {successRate.toFixed(1)}%
-          </span>
+          <span className="text-sm text-slate-500">{successRate.toFixed(1)}%</span>
         </div>
         <LazyProgress
           percent={successRate}

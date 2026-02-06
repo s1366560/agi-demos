@@ -29,21 +29,15 @@ vi.mock('../../services/agentService', () => ({
         last_sequence: null,
       })
     ),
-    createConversation: vi.fn(() =>
-      Promise.resolve({ id: 'new-conv', project_id: 'proj-123' })
-    ),
+    createConversation: vi.fn(() => Promise.resolve({ id: 'new-conv', project_id: 'proj-123' })),
     deleteConversation: vi.fn(() => Promise.resolve()),
-    getExecutionStatus: vi.fn(() =>
-      Promise.resolve({ is_running: false, last_sequence: 0 })
-    ),
+    getExecutionStatus: vi.fn(() => Promise.resolve({ is_running: false, last_sequence: 0 })),
   },
 }));
 
 vi.mock('../../services/planService', () => ({
   planService: {
-    getPlanModeStatus: vi.fn(() =>
-      Promise.resolve({ is_in_plan_mode: false, current_plan: null })
-    ),
+    getPlanModeStatus: vi.fn(() => Promise.resolve({ is_in_plan_mode: false, current_plan: null })),
   },
 }));
 

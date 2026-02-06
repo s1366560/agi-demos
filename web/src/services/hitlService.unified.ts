@@ -1,9 +1,9 @@
 /**
  * Unified HITL Service - Human-in-the-Loop API Client
- * 
+ *
  * New Temporal-based implementation that uses a single unified endpoint.
  * Replaces the legacy multiple endpoint approach.
- * 
+ *
  * Architecture:
  *   Frontend → POST /hitl/respond → API → Temporal Signal → Workflow
  */
@@ -38,7 +38,7 @@ export const unifiedHitlService = {
   /**
    * Submit a response to any HITL request using the unified endpoint.
    * This sends a Temporal Signal to the running workflow.
-   * 
+   *
    * @param requestId - The HITL request ID
    * @param hitlType - Type of HITL request
    * @param responseData - Type-specific response data
@@ -61,10 +61,7 @@ export const unifiedHitlService = {
       response_data: payload.responseData,
     };
 
-    const response = await httpClient.post<HITLApiResponse>(
-      `${HITL_BASE_URL}/respond`,
-      apiPayload
-    );
+    const response = await httpClient.post<HITLApiResponse>(`${HITL_BASE_URL}/respond`, apiPayload);
 
     return response;
   },
@@ -114,10 +111,7 @@ export const unifiedHitlService = {
   /**
    * Cancel a pending HITL request
    */
-  async cancel(
-    requestId: string,
-    reason?: string
-  ): Promise<HITLApiResponse> {
+  async cancel(requestId: string, reason?: string): Promise<HITLApiResponse> {
     const payload: HITLCancelRequest = {
       requestId,
       reason,
@@ -128,25 +122,18 @@ export const unifiedHitlService = {
       reason: payload.reason,
     };
 
-    return httpClient.post<HITLApiResponse>(
-      `${HITL_BASE_URL}/cancel`,
-      apiPayload
-    );
+    return httpClient.post<HITLApiResponse>(`${HITL_BASE_URL}/cancel`, apiPayload);
   },
 
   /**
    * Get pending HITL requests for a conversation
    */
-  async getPendingRequests(
-    conversationId: string
-  ): Promise<UnifiedHITLRequest[]> {
+  async getPendingRequests(conversationId: string): Promise<UnifiedHITLRequest[]> {
     const response = await httpClient.get<PendingHITLResponse>(
       `/agent/hitl/conversations/${conversationId}/pending`
     );
 
-    return response.requests.map(r => 
-      apiToUnifiedRequest(r, conversationId)
-    );
+    return response.requests.map((r) => apiToUnifiedRequest(r, conversationId));
   },
 
   /**
@@ -161,9 +148,7 @@ export const unifiedHitlService = {
       { params: { limit } }
     );
 
-    return response.requests.map(r => 
-      apiToUnifiedRequest(r, r.conversation_id)
-    );
+    return response.requests.map((r) => apiToUnifiedRequest(r, r.conversation_id));
   },
 };
 
@@ -174,18 +159,14 @@ export const unifiedHitlService = {
 /**
  * Create a clarification response
  */
-export function createClarificationResponse(
-  answer: string | string[]
-): ClarificationResponseData {
+export function createClarificationResponse(answer: string | string[]): ClarificationResponseData {
   return { answer };
 }
 
 /**
  * Create a decision response
  */
-export function createDecisionResponse(
-  decision: string | string[]
-): DecisionResponseData {
+export function createDecisionResponse(decision: string | string[]): DecisionResponseData {
   return { decision };
 }
 

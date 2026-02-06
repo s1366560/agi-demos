@@ -5,10 +5,10 @@
  * tool sync, connection testing, and filtering functionality.
  */
 
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
-import { mcpAPI } from "../services/mcpService";
+import { mcpAPI } from '../services/mcpService';
 
 import type {
   MCPServerResponse,
@@ -17,8 +17,8 @@ import type {
   MCPServerType,
   MCPToolInfo,
   MCPServerTestResponse,
-} from "../types/agent";
-import type { UnknownError } from "../types/common";
+} from '../types/agent';
+import type { UnknownError } from '../types/common';
 
 /**
  * Helper function to extract error message from unknown error
@@ -27,7 +27,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
   const err = error as UnknownError;
   if (err.response?.data?.detail) {
     const detail = err.response.data.detail;
-    return typeof detail === "string" ? detail : JSON.stringify(detail);
+    return typeof detail === 'string' ? detail : JSON.stringify(detail);
   }
   if (err.message) {
     return err.message;
@@ -74,10 +74,7 @@ interface MCPState {
   }) => Promise<void>;
   getServer: (id: string) => Promise<MCPServerResponse>;
   createServer: (data: MCPServerCreate) => Promise<MCPServerResponse>;
-  updateServer: (
-    id: string,
-    data: MCPServerUpdate
-  ) => Promise<MCPServerResponse>;
+  updateServer: (id: string, data: MCPServerUpdate) => Promise<MCPServerResponse>;
   deleteServer: (id: string) => Promise<void>;
   toggleEnabled: (id: string, enabled: boolean) => Promise<void>;
   setCurrentServer: (server: MCPServerResponse | null) => void;
@@ -101,7 +98,7 @@ interface MCPState {
 // ============================================================================
 
 const initialFilters: MCPFilters = {
-  search: "",
+  search: '',
   enabled: null,
   serverType: null,
 };
@@ -124,205 +121,206 @@ const initialState = {
 // ============================================================================
 
 export const useMCPStore = create<MCPState>()(
-  devtools((set, get) => ({
-  ...initialState,
-
-  // ========== Server CRUD ==========
-
-  listServers: async (params = {}) => {
-    set({ isLoading: true, error: null });
-    try {
-      const servers = await mcpAPI.list(params);
-      set({
-        servers: servers || [],
-        total: servers?.length || 0,
-        isLoading: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to list MCP servers");
-      set({ error: errorMessage, isLoading: false });
-      throw error;
-    }
-  },
-
-  getServer: async (id: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await mcpAPI.get(id);
-      set({ currentServer: response, isLoading: false });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to get MCP server");
-      set({ error: errorMessage, isLoading: false });
-      throw error;
-    }
-  },
-
-  createServer: async (data: MCPServerCreate) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const response = await mcpAPI.create(data);
-      const { servers } = get();
-      set({
-        servers: [response, ...servers],
-        total: get().total + 1,
-        isSubmitting: false,
-      });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to create MCP server");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  updateServer: async (id: string, data: MCPServerUpdate) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      const response = await mcpAPI.update(id, data);
-      const { servers } = get();
-      set({
-        servers: servers.map((s) => (s.id === id ? response : s)),
-        currentServer: response,
-        isSubmitting: false,
-      });
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to update MCP server");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  deleteServer: async (id: string) => {
-    set({ isSubmitting: true, error: null });
-    try {
-      await mcpAPI.delete(id);
-      const { servers } = get();
-      set({
-        servers: servers.filter((s) => s.id !== id),
-        total: get().total - 1,
-        isSubmitting: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to delete MCP server");
-      set({ error: errorMessage, isSubmitting: false });
-      throw error;
-    }
-  },
-
-  toggleEnabled: async (id: string, enabled: boolean) => {
-    // Optimistic update
-    const { servers } = get();
-    const originalServers = [...servers];
-    set({
-      servers: servers.map((s) => (s.id === id ? { ...s, enabled } : s)),
-    });
-
-    try {
-      await mcpAPI.toggleEnabled(id, enabled);
-    } catch (error: unknown) {
-      // Revert on error
-      set({ servers: originalServers });
-      const errorMessage = getErrorMessage(error, "Failed to toggle server status");
-      set({ error: errorMessage });
-      throw error;
-    }
-  },
-
-  setCurrentServer: (server: MCPServerResponse | null) => {
-    set({ currentServer: server });
-  },
-
-  // ========== Sync & Test ==========
-
-  syncServer: async (id: string) => {
-    const { syncingServers } = get();
-    const newSyncing = new Set(syncingServers);
-    newSyncing.add(id);
-    set({ syncingServers: newSyncing, error: null });
-
-    try {
-      const updatedServer = await mcpAPI.sync(id);
-      const { servers } = get();
-      set({
-        servers: servers.map((s) => (s.id === id ? updatedServer : s)),
-      });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to sync MCP server tools");
-      set({ error: errorMessage });
-      throw error;
-    } finally {
-      const { syncingServers: currentSyncing } = get();
-      const updated = new Set(currentSyncing);
-      updated.delete(id);
-      set({ syncingServers: updated });
-    }
-  },
-
-  testServer: async (id: string) => {
-    const { testingServers } = get();
-    const newTesting = new Set(testingServers);
-    newTesting.add(id);
-    set({ testingServers: newTesting, error: null });
-
-    try {
-      const response = await mcpAPI.test(id);
-      return response;
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to test MCP server connection");
-      set({ error: errorMessage });
-      throw error;
-    } finally {
-      const { testingServers: currentTesting } = get();
-      const updated = new Set(currentTesting);
-      updated.delete(id);
-      set({ testingServers: updated });
-    }
-  },
-
-  listAllTools: async () => {
-    try {
-      const tools = await mcpAPI.listAllTools();
-      set({ allTools: tools });
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, "Failed to list all tools");
-      set({ error: errorMessage });
-      throw error;
-    }
-  },
-
-  // ========== Filters ==========
-
-  setFilters: (filters: Partial<MCPFilters>) => {
-    set((state) => ({
-      filters: { ...state.filters, ...filters },
-    }));
-  },
-
-  resetFilters: () => {
-    set({ filters: initialFilters });
-  },
-
-  // ========== Utility ==========
-
-  clearError: () => {
-    set({ error: null });
-  },
-
-  reset: () => {
-    set({
+  devtools(
+    (set, get) => ({
       ...initialState,
-      syncingServers: new Set<string>(),
-      testingServers: new Set<string>(),
-    });
-  },
-}),
-{
-  name: "MCPStore",
-  enabled: import.meta.env.DEV,
-}
-)
+
+      // ========== Server CRUD ==========
+
+      listServers: async (params = {}) => {
+        set({ isLoading: true, error: null });
+        try {
+          const servers = await mcpAPI.list(params);
+          set({
+            servers: servers || [],
+            total: servers?.length || 0,
+            isLoading: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to list MCP servers');
+          set({ error: errorMessage, isLoading: false });
+          throw error;
+        }
+      },
+
+      getServer: async (id: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await mcpAPI.get(id);
+          set({ currentServer: response, isLoading: false });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to get MCP server');
+          set({ error: errorMessage, isLoading: false });
+          throw error;
+        }
+      },
+
+      createServer: async (data: MCPServerCreate) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await mcpAPI.create(data);
+          const { servers } = get();
+          set({
+            servers: [response, ...servers],
+            total: get().total + 1,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to create MCP server');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      updateServer: async (id: string, data: MCPServerUpdate) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await mcpAPI.update(id, data);
+          const { servers } = get();
+          set({
+            servers: servers.map((s) => (s.id === id ? response : s)),
+            currentServer: response,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to update MCP server');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      deleteServer: async (id: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          await mcpAPI.delete(id);
+          const { servers } = get();
+          set({
+            servers: servers.filter((s) => s.id !== id),
+            total: get().total - 1,
+            isSubmitting: false,
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to delete MCP server');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
+      toggleEnabled: async (id: string, enabled: boolean) => {
+        // Optimistic update
+        const { servers } = get();
+        const originalServers = [...servers];
+        set({
+          servers: servers.map((s) => (s.id === id ? { ...s, enabled } : s)),
+        });
+
+        try {
+          await mcpAPI.toggleEnabled(id, enabled);
+        } catch (error: unknown) {
+          // Revert on error
+          set({ servers: originalServers });
+          const errorMessage = getErrorMessage(error, 'Failed to toggle server status');
+          set({ error: errorMessage });
+          throw error;
+        }
+      },
+
+      setCurrentServer: (server: MCPServerResponse | null) => {
+        set({ currentServer: server });
+      },
+
+      // ========== Sync & Test ==========
+
+      syncServer: async (id: string) => {
+        const { syncingServers } = get();
+        const newSyncing = new Set(syncingServers);
+        newSyncing.add(id);
+        set({ syncingServers: newSyncing, error: null });
+
+        try {
+          const updatedServer = await mcpAPI.sync(id);
+          const { servers } = get();
+          set({
+            servers: servers.map((s) => (s.id === id ? updatedServer : s)),
+          });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to sync MCP server tools');
+          set({ error: errorMessage });
+          throw error;
+        } finally {
+          const { syncingServers: currentSyncing } = get();
+          const updated = new Set(currentSyncing);
+          updated.delete(id);
+          set({ syncingServers: updated });
+        }
+      },
+
+      testServer: async (id: string) => {
+        const { testingServers } = get();
+        const newTesting = new Set(testingServers);
+        newTesting.add(id);
+        set({ testingServers: newTesting, error: null });
+
+        try {
+          const response = await mcpAPI.test(id);
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to test MCP server connection');
+          set({ error: errorMessage });
+          throw error;
+        } finally {
+          const { testingServers: currentTesting } = get();
+          const updated = new Set(currentTesting);
+          updated.delete(id);
+          set({ testingServers: updated });
+        }
+      },
+
+      listAllTools: async () => {
+        try {
+          const tools = await mcpAPI.listAllTools();
+          set({ allTools: tools });
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to list all tools');
+          set({ error: errorMessage });
+          throw error;
+        }
+      },
+
+      // ========== Filters ==========
+
+      setFilters: (filters: Partial<MCPFilters>) => {
+        set((state) => ({
+          filters: { ...state.filters, ...filters },
+        }));
+      },
+
+      resetFilters: () => {
+        set({ filters: initialFilters });
+      },
+
+      // ========== Utility ==========
+
+      clearError: () => {
+        set({ error: null });
+      },
+
+      reset: () => {
+        set({
+          ...initialState,
+          syncingServers: new Set<string>(),
+          testingServers: new Set<string>(),
+        });
+      },
+    }),
+    {
+      name: 'MCPStore',
+      enabled: import.meta.env.DEV,
+    }
+  )
 );
 
 // ============================================================================
@@ -345,9 +343,7 @@ export const useFilteredMCPServers = () =>
       if (filters.search) {
         const search = filters.search.toLowerCase();
         const matchesName = server.name.toLowerCase().includes(search);
-        const matchesDescription = server.description
-          ?.toLowerCase()
-          .includes(search);
+        const matchesDescription = server.description?.toLowerCase().includes(search);
         if (!matchesName && !matchesDescription) {
           return false;
         }
@@ -370,8 +366,7 @@ export const useFilteredMCPServers = () =>
 /**
  * Get current server
  */
-export const useCurrentMCPServer = () =>
-  useMCPStore((state) => state.currentServer);
+export const useCurrentMCPServer = () => useMCPStore((state) => state.currentServer);
 
 /**
  * Get loading state
@@ -381,8 +376,7 @@ export const useMCPLoading = () => useMCPStore((state) => state.isLoading);
 /**
  * Get submitting state
  */
-export const useMCPSubmitting = () =>
-  useMCPStore((state) => state.isSubmitting);
+export const useMCPSubmitting = () => useMCPStore((state) => state.isSubmitting);
 
 /**
  * Get error state

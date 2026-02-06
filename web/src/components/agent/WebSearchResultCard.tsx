@@ -4,9 +4,9 @@
  * Displays formatted web search results from Tavily API.
  */
 
-import { useState } from "react";
+import { useState } from 'react';
 
-import { MaterialIcon } from "./shared";
+import { MaterialIcon } from './shared';
 
 export interface SearchResult {
   title: string;
@@ -54,17 +54,15 @@ export function WebSearchResultCard({
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
           <MaterialIcon name="language" size={18} className="text-blue-500" />
-          <span className="font-semibold text-slate-900 dark:text-white">
-            Web Search Results
-          </span>
+          <span className="font-semibold text-slate-900 dark:text-white">Web Search Results</span>
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-medium ${
               cached
-                ? "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400"
-                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400'
+                : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
             }`}
           >
-            {cached ? "Cached" : "Live"}
+            {cached ? 'Cached' : 'Live'}
           </span>
         </div>
         {timestamp && (
@@ -113,8 +111,7 @@ export function WebSearchResultCard({
                 {/* Published Date */}
                 {result.published_date && (
                   <div className="text-xs text-slate-500">
-                    Published:{" "}
-                    {new Date(result.published_date).toLocaleDateString()}
+                    Published: {new Date(result.published_date).toLocaleDateString()}
                   </div>
                 )}
 
@@ -130,7 +127,7 @@ export function WebSearchResultCard({
                       onClick={() => toggleExpand(index)}
                       className="ml-2 text-blue-500 hover:underline"
                     >
-                      {expanded.has(index) ? "Show less" : "Show more"}
+                      {expanded.has(index) ? 'Show less' : 'Show more'}
                     </button>
                   )}
                 </div>

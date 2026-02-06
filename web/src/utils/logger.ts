@@ -33,11 +33,11 @@ export interface Logger {
 const isDevelopment = (): boolean => {
   // Vite sets MODE automatically
   if (import.meta.env) {
-    return import.meta.env.MODE === "development" || import.meta.env.MODE === "test";
+    return import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test';
   }
   // Fallback to NODE_ENV for Node.js environments
-  if (typeof process !== "undefined" && process.env?.NODE_ENV) {
-    return ["development", "test"].includes(process.env.NODE_ENV);
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV) {
+    return ['development', 'test'].includes(process.env.NODE_ENV);
   }
   return false;
 };
@@ -58,7 +58,7 @@ export const logger: Logger = {
    */
   debug: dev
     ? (...args: unknown[]): void => {
-        console.log("[DEBUG]", ...args);
+        console.log('[DEBUG]', ...args);
       }
     : noop,
 
@@ -67,7 +67,7 @@ export const logger: Logger = {
    */
   info: dev
     ? (...args: unknown[]): void => {
-        console.info("[INFO]", ...args);
+        console.info('[INFO]', ...args);
       }
     : noop,
 
@@ -75,14 +75,14 @@ export const logger: Logger = {
    * Warn level - always enabled
    */
   warn: (...args: unknown[]): void => {
-    console.warn("[WARN]", ...args);
+    console.warn('[WARN]', ...args);
   },
 
   /**
    * Error level - always enabled
    */
   error: (...args: unknown[]): void => {
-    console.error("[ERROR]", ...args);
+    console.error('[ERROR]', ...args);
   },
 };
 

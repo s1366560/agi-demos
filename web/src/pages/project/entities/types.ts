@@ -8,56 +8,56 @@
  * Entity data structure
  */
 export interface Entity {
-  uuid: string
-  name: string
-  entity_type: string
-  summary: string
-  created_at?: string
+  uuid: string;
+  name: string;
+  entity_type: string;
+  summary: string;
+  created_at?: string;
 }
 
 /**
  * Entity type with count
  */
 export interface EntityType {
-  entity_type: string
-  count: number
+  entity_type: string;
+  count: number;
 }
 
 /**
  * Relationship data structure
  */
 export interface Relationship {
-  edge_id: string
-  relation_type: string
-  direction: string
-  fact: string
-  score: number
-  created_at?: string
+  edge_id: string;
+  relation_type: string;
+  direction: string;
+  fact: string;
+  score: number;
+  created_at?: string;
   related_entity: {
-    uuid: string
-    name: string
-    entity_type: string
-    summary: string
-  }
+    uuid: string;
+    name: string;
+    entity_type: string;
+    summary: string;
+  };
 }
 
 /**
  * Sort options for entities
  */
-export type SortOption = 'name' | 'created_at'
+export type SortOption = 'name' | 'created_at';
 
 /**
  * Props for the root EntitiesList component
  */
 export interface EntitiesListRootProps {
   /** Project ID from route */
-  projectId?: string
+  projectId?: string;
   /** Children for compound component pattern */
-  children?: React.ReactNode
+  children?: React.ReactNode;
   /** Default sort option */
-  defaultSortBy?: SortOption
+  defaultSortBy?: SortOption;
   /** Items per page */
-  limit?: number
+  limit?: number;
 }
 
 /**
@@ -65,7 +65,7 @@ export interface EntitiesListRootProps {
  */
 export interface EntitiesListHeaderProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface EntitiesListHeaderProps {
  */
 export interface EntitiesListFiltersProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -81,7 +81,7 @@ export interface EntitiesListFiltersProps {
  */
 export interface EntitiesListStatsProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -89,7 +89,7 @@ export interface EntitiesListStatsProps {
  */
 export interface EntitiesListListProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface EntitiesListListProps {
  */
 export interface EntitiesListPaginationProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface EntitiesListPaginationProps {
  */
 export interface EntitiesListDetailProps {
   /** Optional custom class name */
-  className?: string
+  className?: string;
 }
 
 /**
@@ -114,17 +114,17 @@ export interface EntitiesListDetailProps {
  */
 export interface EntitiesListCompound extends React.FC<EntitiesListRootProps> {
   /** Page header sub-component */
-  Header: React.FC<EntitiesListHeaderProps>
+  Header: React.FC<EntitiesListHeaderProps>;
   /** Filters panel sub-component */
-  Filters: React.FC<EntitiesListFiltersProps>
+  Filters: React.FC<EntitiesListFiltersProps>;
   /** Stats display sub-component */
-  Stats: React.FC<EntitiesListStatsProps>
+  Stats: React.FC<EntitiesListStatsProps>;
   /** Entity list sub-component */
-  List: React.FC<EntitiesListListProps>
+  List: React.FC<EntitiesListListProps>;
   /** Pagination controls sub-component */
-  Pagination: React.FC<EntitiesListPaginationProps>
+  Pagination: React.FC<EntitiesListPaginationProps>;
   /** Entity detail panel sub-component */
-  Detail: React.FC<EntitiesListDetailProps>
+  Detail: React.FC<EntitiesListDetailProps>;
   /** Root component alias */
-  Root: React.FC<EntitiesListRootProps>
+  Root: React.FC<EntitiesListRootProps>;
 }

@@ -18,19 +18,19 @@
  * @packageDocumentation
  */
 
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 
-import { httpClient } from "./client/httpClient";
+import { httpClient } from './client/httpClient';
 import {
   buildTerminalWebSocketUrl,
   buildDirectDesktopUrl,
   getApiHost,
-} from "./sandboxWebSocketUtils";
+} from './sandboxWebSocketUtils';
 
 /**
  * Sandbox container status
  */
-export type SandboxStatus = "creating" | "running" | "stopped" | "error";
+export type SandboxStatus = 'creating' | 'running' | 'stopped' | 'error';
 
 /**
  * Sandbox container information
@@ -102,8 +102,8 @@ export interface CreateSandboxRequest {
   image?: string;
   /** Optional resource limits */
   resources?: {
-    cpu?: string;      // e.g., "0.5" for 50% of one CPU
-    memory?: string;   // e.g., "512m" for 512MB
+    cpu?: string; // e.g., "0.5" for 50% of one CPU
+    memory?: string; // e.g., "512m" for 512MB
   };
 }
 
@@ -226,11 +226,11 @@ class SandboxServiceImpl implements SandboxService {
   async createSandbox(request: CreateSandboxRequest): Promise<CreateSandboxResponse> {
     logger.debug(`[SandboxService] Creating sandbox for project: ${request.project_id}`);
     // Backend uses POST /sandbox/create
-    const response = await this.api.post<any>("/sandbox/create", {
+    const response = await this.api.post<any>('/sandbox/create', {
       project_path: `/tmp/memstack_${request.project_id}`,
       image: request.image,
-      memory_limit: request.resources?.memory || "2g",
-      cpu_limit: request.resources?.cpu || "2",
+      memory_limit: request.resources?.memory || '2g',
+      cpu_limit: request.resources?.cpu || '2',
     });
 
     // Transform backend response to match frontend types
@@ -241,7 +241,7 @@ class SandboxServiceImpl implements SandboxService {
         status: response.status as SandboxStatus,
         created_at: response.created_at,
         container_id: response.id,
-        image: response.tools?.join(","),
+        image: response.tools?.join(','),
         mcp_port: response.mcp_port,
         desktop_port: response.desktop_port,
         terminal_port: response.terminal_port,
@@ -261,7 +261,7 @@ class SandboxServiceImpl implements SandboxService {
 
     // Extract project_id from project_path (format: /tmp/memstack_{project_id})
     const projectIdMatch = response.project_path?.match(/memstack_([a-zA-Z0-9_-]+)$/);
-    const projectId = projectIdMatch ? projectIdMatch[1] : "";
+    const projectId = projectIdMatch ? projectIdMatch[1] : '';
 
     return {
       id: response.id,
@@ -269,7 +269,7 @@ class SandboxServiceImpl implements SandboxService {
       status: response.status as SandboxStatus,
       created_at: response.created_at,
       container_id: response.id,
-      image: response.tools?.join(",") || response.image,
+      image: response.tools?.join(',') || response.image,
       mcp_port: response.mcp_port,
       desktop_port: response.desktop_port,
       terminal_port: response.terminal_port,
@@ -281,7 +281,7 @@ class SandboxServiceImpl implements SandboxService {
   async listSandboxes(projectId: string): Promise<ListSandboxesResponse> {
     logger.debug(`[SandboxService] Listing sandboxes for project: ${projectId}`);
     // Backend lists all sandboxes, we need to filter by project_id
-    const response = await this.api.get<any>("/sandbox");
+    const response = await this.api.get<any>('/sandbox');
 
     // Filter sandboxes by project_id extracted from project_path
     const allSandboxes = response.sandboxes || [];
@@ -297,7 +297,7 @@ class SandboxServiceImpl implements SandboxService {
         status: sb.status as SandboxStatus,
         created_at: sb.created_at,
         container_id: sb.id,
-        image: sb.tools?.join(",") || sb.image,
+        image: sb.tools?.join(',') || sb.image,
         mcp_port: sb.mcp_port,
         desktop_port: sb.desktop_port,
         terminal_port: sb.terminal_port,
@@ -313,12 +313,12 @@ class SandboxServiceImpl implements SandboxService {
     await this.api.delete(`/sandbox/${sandboxId}`);
   }
 
-  async startDesktop(sandboxId: string, resolution = "1280x720"): Promise<DesktopStatus> {
+  async startDesktop(sandboxId: string, resolution = '1280x720'): Promise<DesktopStatus> {
     logger.debug(`[SandboxService] Starting desktop for sandbox: ${sandboxId}`);
     // Backend uses POST /sandbox/{sandbox_id}/desktop
     const response = await this.api.post<any>(`/sandbox/${sandboxId}/desktop`, {
       resolution,
-      display: ":1",
+      display: ':1',
     });
 
     return {
@@ -340,7 +340,7 @@ class SandboxServiceImpl implements SandboxService {
     logger.debug(`[SandboxService] Starting terminal for sandbox: ${sandboxId}`);
     // Backend uses /terminal/{sandbox_id}/create
     const response = await this.api.post<any>(`/terminal/${sandboxId}/create`, {
-      shell: "/bin/bash",
+      shell: '/bin/bash',
       cols: 80,
       rows: 24,
     });
@@ -383,7 +383,7 @@ class SandboxServiceImpl implements SandboxService {
     // Build direct URL if we have port info
     let desktopUrl = response.url;
     if (response.port && !desktopUrl) {
-      const host = getApiHost().split(":")[0];
+      const host = getApiHost().split(':')[0];
       desktopUrl = buildDirectDesktopUrl(host, response.port);
     }
 

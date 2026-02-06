@@ -1,6 +1,6 @@
 /**
  * CostTracker Component
- * 
+ *
  * Displays real-time cost tracking information for the current conversation.
  * Shows token usage and estimated cost.
  */
@@ -99,9 +99,8 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
     );
   }
 
-  const inputPercent = costTracking.totalTokens > 0
-    ? (costTracking.inputTokens / costTracking.totalTokens) * 100
-    : 0;
+  const inputPercent =
+    costTracking.totalTokens > 0 ? (costTracking.inputTokens / costTracking.totalTokens) * 100 : 0;
 
   return (
     <div style={{ padding: '12px 16px' }}>
@@ -131,10 +130,12 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
             <Space size={16}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                <span style={{ color: '#52c41a' }}>●</span> 输入: {formatTokenCount(costTracking.inputTokens)}
+                <span style={{ color: '#52c41a' }}>●</span> 输入:{' '}
+                {formatTokenCount(costTracking.inputTokens)}
               </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                <span style={{ color: '#1890ff' }}>●</span> 输出: {formatTokenCount(costTracking.outputTokens)}
+                <span style={{ color: '#1890ff' }}>●</span> 输出:{' '}
+                {formatTokenCount(costTracking.outputTokens)}
               </Text>
             </Space>
           </div>

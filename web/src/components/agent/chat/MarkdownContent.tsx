@@ -28,7 +28,8 @@ export interface MarkdownContentProps {
 }
 
 // Hoist prose classes outside component to avoid recreation on each render
-const PROSE_CLASSES = 'prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md';
+const PROSE_CLASSES =
+  'prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md';
 
 /**
  * MarkdownContent component
@@ -42,24 +43,18 @@ const PROSE_CLASSES = 'prose prose-sm dark:prose-invert max-w-none prose-p:my-2 
  * // Minimal styling (for inline or tool results)
  * <MarkdownContent content="**Result:** Done" className="text-xs" />
  */
-export const MarkdownContent = memo<MarkdownContentProps>(({
-  content,
-  className = '',
-  prose = true,
-}) => {
-  // Combine classes once
-  const combinedClassName = prose
-    ? `${PROSE_CLASSES} ${className}`.trim()
-    : className;
+export const MarkdownContent = memo<MarkdownContentProps>(
+  ({ content, className = '', prose = true }) => {
+    // Combine classes once
+    const combinedClassName = prose ? `${PROSE_CLASSES} ${className}`.trim() : className;
 
-  return (
-    <div className={combinedClassName}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {content}
-      </ReactMarkdown>
-    </div>
-  );
-});
+    return (
+      <div className={combinedClassName}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      </div>
+    );
+  }
+);
 
 MarkdownContent.displayName = 'MarkdownContent';
 

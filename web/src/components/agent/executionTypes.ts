@@ -4,12 +4,12 @@
  * Defines the type system for the compound ExecutionDetailsPanel component.
  */
 
-import type { Message } from "../../types/agent";
+import type { Message } from '../../types/agent';
 
 /**
  * Available view types for the execution details panel
  */
-export type ViewType = "thinking" | "activity" | "tools" | "tokens";
+export type ViewType = 'thinking' | 'activity' | 'tools' | 'tokens';
 
 /**
  * ExecutionDetailsPanel context shared across compound components

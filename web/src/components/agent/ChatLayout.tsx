@@ -1,6 +1,6 @@
 /**
  * ChatLayout - Modern 3-Panel Layout
- * 
+ *
  * Features:
  * - Collapsible sidebars with smooth transitions
  * - Responsive design
@@ -10,10 +10,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 
-import {
-  PanelLeft,
-  PanelRight
-} from 'lucide-react';
+import { PanelLeft, PanelRight } from 'lucide-react';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
@@ -41,22 +38,24 @@ const Resizer: React.FC<{
   const startXRef = useRef(0);
   const startWidthRef = useRef(currentWidth);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    startXRef.current = e.clientX;
-    startWidthRef.current = currentWidth;
-    document.body.style.cursor = 'ew-resize';
-    document.body.style.userSelect = 'none';
-  }, [currentWidth]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+      startXRef.current = e.clientX;
+      startWidthRef.current = currentWidth;
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    },
+    [currentWidth]
+  );
 
   useEffect(() => {
     if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const delta = direction === 'left' 
-        ? e.clientX - startXRef.current 
-        : startXRef.current - e.clientX;
+      const delta =
+        direction === 'left' ? e.clientX - startXRef.current : startXRef.current - e.clientX;
       const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidthRef.current + delta));
       onResize(newWidth);
     };
@@ -69,7 +68,7 @@ const Resizer: React.FC<{
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    
+
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -89,14 +88,16 @@ const Resizer: React.FC<{
       `}
     >
       {/* Visual indicator - subtle dots */}
-      <div className={`
+      <div
+        className={`
         absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
         w-0.5 h-6 rounded-full
         bg-slate-400/50 dark:bg-slate-500/50
         opacity-0 group-hover:opacity-100
         ${isDragging ? 'opacity-100 bg-slate-500 dark:bg-slate-400' : ''}
         transition-all duration-150
-      `} />
+      `}
+      />
     </div>
   );
 };
@@ -120,7 +121,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
   const SIDEBAR_MAX = 400;
   const SIDEBAR_COLLAPSED = 60;
 
-  // Panel width constraints  
+  // Panel width constraints
   const PANEL_MIN = 300;
   const PANEL_MAX = 500;
   const PANEL_COLLAPSED = 0;
@@ -157,22 +158,34 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         {/* Floating Toggle Buttons - positioned at top corners to avoid blocking content */}
         <div className="absolute top-3 left-3 z-30 pointer-events-none">
           {/* Sidebar Toggle */}
-          <LazyTooltip title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+          <LazyTooltip title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
             <LazyButton
               type="text"
-              icon={sidebarCollapsed ? <PanelLeft size={16} /> : <PanelLeft size={16} className="rotate-180" />}
+              icon={
+                sidebarCollapsed ? (
+                  <PanelLeft size={16} />
+                ) : (
+                  <PanelLeft size={16} className="rotate-180" />
+                )
+              }
               onClick={onToggleSidebar}
               className="pointer-events-auto bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all rounded-md h-7 w-7 flex items-center justify-center text-slate-500"
             />
           </LazyTooltip>
         </div>
-        
+
         <div className="absolute top-3 right-3 z-30 pointer-events-none">
           {/* Panel Toggle */}
-          <LazyTooltip title={panelCollapsed ? "Show panel" : "Hide panel"}>
+          <LazyTooltip title={panelCollapsed ? 'Show panel' : 'Hide panel'}>
             <LazyButton
               type="text"
-              icon={panelCollapsed ? <PanelRight size={16} /> : <PanelRight size={16} className="rotate-180" />}
+              icon={
+                panelCollapsed ? (
+                  <PanelRight size={16} />
+                ) : (
+                  <PanelRight size={16} className="rotate-180" />
+                )
+              }
               onClick={onTogglePanel}
               className="pointer-events-auto bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all rounded-md h-7 w-7 flex items-center justify-center text-slate-500"
             />
@@ -180,9 +193,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         </div>
 
         {/* Message Area */}
-        <div className="flex-1 overflow-hidden relative">
-          {messageArea}
-        </div>
+        <div className="flex-1 overflow-hidden relative">{messageArea}</div>
 
         {/* Input Bar */}
         <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -190,9 +201,7 @@ export const ChatLayout: React.FC<ChatLayoutProps> = ({
         </div>
 
         {/* Status Bar */}
-        <div className="flex-shrink-0">
-          {statusBar}
-        </div>
+        <div className="flex-shrink-0">{statusBar}</div>
       </main>
 
       {/* Right Panel */}

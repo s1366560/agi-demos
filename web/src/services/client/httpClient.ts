@@ -45,8 +45,8 @@ client.interceptors.request.use(
   (config) => {
     // Check if this is a public endpoint that doesn't require auth
     const url = config.url || '';
-    const isNoAuthEndpoint = NO_AUTH_ENDPOINTS.some(endpoint =>
-      url.endsWith(endpoint) || url.startsWith(endpoint)
+    const isNoAuthEndpoint = NO_AUTH_ENDPOINTS.some(
+      (endpoint) => url.endsWith(endpoint) || url.startsWith(endpoint)
     );
 
     if (isNoAuthEndpoint) {
@@ -88,7 +88,7 @@ client.interceptors.response.use(
         error.response.data?.code || 'UNKNOWN_ERROR',
         error.response.data?.message || error.message
       );
-      
+
       // Handle 401 - redirect to login
       if (apiError.isAuthError()) {
         localStorage.removeItem('memstack-auth-storage');
@@ -98,10 +98,10 @@ client.interceptors.response.use(
           window.location.href = '/login';
         }
       }
-      
+
       return Promise.reject(apiError);
     }
-    
+
     // Network errors
     return Promise.reject(new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', error.message));
   }
@@ -109,7 +109,7 @@ client.interceptors.response.use(
 
 /**
  * Simple HTTP client - direct axios calls without request deduplication
- * 
+ *
  * Note: Request deduplication is intentionally removed from the HTTP client layer.
  * It should be handled at the application/store layer where the context is better
  * understood. HTTP-level deduplication can cause requests to hang indefinitely

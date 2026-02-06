@@ -61,20 +61,13 @@ describe('projectService - Service Tests', () => {
 
       const result = await projectService.listMembers(mockProjectId);
 
-      expect(apiFetch.get).toHaveBeenCalledWith(
-        `/projects/${mockProjectId}/members`
-      );
+      expect(apiFetch.get).toHaveBeenCalledWith(`/projects/${mockProjectId}/members`);
       expect(result).toEqual({ users: mockUsers });
     });
 
     it('should propagate ApiError when API call fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      const mockError = new ApiError(
-        ApiErrorType.NOT_FOUND,
-        'NOT_FOUND',
-        'Project not found',
-        404
-      );
+      const mockError = new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Project not found', 404);
       vi.mocked(apiFetch.get).mockRejectedValueOnce(mockError);
 
       await expect(projectService.listMembers(mockProjectId)).rejects.toThrow(ApiError);
@@ -94,25 +87,20 @@ describe('projectService - Service Tests', () => {
 
       await projectService.addMember(mockProjectId, mockUserId, mockRole);
 
-      expect(apiFetch.post).toHaveBeenCalledWith(
-        `/projects/${mockProjectId}/members`,
-        { user_id: mockUserId, role: mockRole }
-      );
+      expect(apiFetch.post).toHaveBeenCalledWith(`/projects/${mockProjectId}/members`, {
+        user_id: mockUserId,
+        role: mockRole,
+      });
     });
 
     it('should propagate ApiError when add member fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      const mockError = new ApiError(
-        ApiErrorType.VALIDATION,
-        'BAD_REQUEST',
-        'Invalid input',
-        400
-      );
+      const mockError = new ApiError(ApiErrorType.VALIDATION, 'BAD_REQUEST', 'Invalid input', 400);
       vi.mocked(apiFetch.post).mockRejectedValueOnce(mockError);
 
-      await expect(
-        projectService.addMember(mockProjectId, mockUserId, mockRole)
-      ).rejects.toThrow(ApiError);
+      await expect(projectService.addMember(mockProjectId, mockUserId, mockRole)).rejects.toThrow(
+        ApiError
+      );
     });
   });
 
@@ -136,17 +124,12 @@ describe('projectService - Service Tests', () => {
 
     it('should propagate ApiError when remove member fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      const mockError = new ApiError(
-        ApiErrorType.NOT_FOUND,
-        'NOT_FOUND',
-        'Member not found',
-        404
-      );
+      const mockError = new ApiError(ApiErrorType.NOT_FOUND, 'NOT_FOUND', 'Member not found', 404);
       vi.mocked(apiFetch.delete).mockRejectedValueOnce(mockError);
 
-      await expect(
-        projectService.removeMember(mockProjectId, mockUserId)
-      ).rejects.toThrow(ApiError);
+      await expect(projectService.removeMember(mockProjectId, mockUserId)).rejects.toThrow(
+        ApiError
+      );
     });
   });
 
@@ -215,21 +198,13 @@ describe('projectService - Service Tests', () => {
 
       const result = await projectService.updateProject(mockProjectId, updates);
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(
-        `/projects/${mockProjectId}`,
-        updates
-      );
+      expect(apiFetch.patch).toHaveBeenCalledWith(`/projects/${mockProjectId}`, updates);
       expect(result).toEqual(updatedProject);
     });
 
     it('should propagate ApiError when update project fails', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      const mockError = new ApiError(
-        ApiErrorType.VALIDATION,
-        'BAD_REQUEST',
-        'Invalid input',
-        400
-      );
+      const mockError = new ApiError(ApiErrorType.VALIDATION, 'BAD_REQUEST', 'Invalid input', 400);
       vi.mocked(apiFetch.patch).mockRejectedValueOnce(mockError);
 
       await expect(

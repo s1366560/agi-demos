@@ -173,11 +173,9 @@ describe('PlanModeStore', () => {
     it('should enter plan mode successfully', async () => {
       vi.mocked(planService.enterPlanMode).mockResolvedValue(mockPlan);
 
-      await usePlanModeStore.getState().enterPlanMode(
-        mockConversationId,
-        mockTitle,
-        mockDescription
-      );
+      await usePlanModeStore
+        .getState()
+        .enterPlanMode(mockConversationId, mockTitle, mockDescription);
 
       expect(planService.enterPlanMode).toHaveBeenCalledWith({
         conversation_id: mockConversationId,
@@ -185,8 +183,7 @@ describe('PlanModeStore', () => {
         description: mockDescription,
       });
 
-      const { currentPlan, planModeStatus, planLoading, planError } =
-        usePlanModeStore.getState();
+      const { currentPlan, planModeStatus, planLoading, planError } = usePlanModeStore.getState();
       expect(currentPlan).toEqual(mockPlan);
       expect(planModeStatus).toEqual(expectedPlanModeStatus);
       expect(planLoading).toBe(false);
@@ -201,11 +198,9 @@ describe('PlanModeStore', () => {
       vi.mocked(planService.enterPlanMode).mockReturnValue(pendingPromise);
 
       // Start the call (don't await)
-      const callPromise = usePlanModeStore.getState().enterPlanMode(
-        mockConversationId,
-        mockTitle,
-        mockDescription
-      );
+      const callPromise = usePlanModeStore
+        .getState()
+        .enterPlanMode(mockConversationId, mockTitle, mockDescription);
 
       // Check loading state
       expect(usePlanModeStore.getState().planLoading).toBe(true);
@@ -226,15 +221,10 @@ describe('PlanModeStore', () => {
       vi.mocked(planService.enterPlanMode).mockRejectedValue(mockError);
 
       await expect(
-        usePlanModeStore.getState().enterPlanMode(
-          mockConversationId,
-          mockTitle,
-          mockDescription
-        )
+        usePlanModeStore.getState().enterPlanMode(mockConversationId, mockTitle, mockDescription)
       ).rejects.toEqual(mockError);
 
-      const { planLoading, planError, currentPlan, planModeStatus } =
-        usePlanModeStore.getState();
+      const { planLoading, planError, currentPlan, planModeStatus } = usePlanModeStore.getState();
       expect(planLoading).toBe(false);
       expect(planError).toBe('Failed to enter plan mode');
       expect(currentPlan).toBeNull();
@@ -246,11 +236,7 @@ describe('PlanModeStore', () => {
       vi.mocked(planService.enterPlanMode).mockRejectedValue(mockError);
 
       await expect(
-        usePlanModeStore.getState().enterPlanMode(
-          mockConversationId,
-          mockTitle,
-          mockDescription
-        )
+        usePlanModeStore.getState().enterPlanMode(mockConversationId, mockTitle, mockDescription)
       ).rejects.toThrow();
 
       const { planError, planLoading } = usePlanModeStore.getState();
@@ -261,10 +247,7 @@ describe('PlanModeStore', () => {
     it('should work without description parameter', async () => {
       vi.mocked(planService.enterPlanMode).mockResolvedValue(mockPlan);
 
-      await usePlanModeStore.getState().enterPlanMode(
-        mockConversationId,
-        mockTitle
-      );
+      await usePlanModeStore.getState().enterPlanMode(mockConversationId, mockTitle);
 
       expect(planService.enterPlanMode).toHaveBeenCalledWith({
         conversation_id: mockConversationId,
@@ -302,12 +285,9 @@ describe('PlanModeStore', () => {
     it('should exit plan mode successfully', async () => {
       vi.mocked(planService.exitPlanMode).mockResolvedValue(mockPlan);
 
-      const result = await usePlanModeStore.getState().exitPlanMode(
-        mockConversationId,
-        mockPlanId,
-        mockApprove,
-        mockSummary
-      );
+      const result = await usePlanModeStore
+        .getState()
+        .exitPlanMode(mockConversationId, mockPlanId, mockApprove, mockSummary);
 
       expect(planService.exitPlanMode).toHaveBeenCalledWith({
         conversation_id: mockConversationId,
@@ -317,8 +297,7 @@ describe('PlanModeStore', () => {
       });
       expect(result).toEqual(mockPlan);
 
-      const { currentPlan, planModeStatus, planLoading, planError } =
-        usePlanModeStore.getState();
+      const { currentPlan, planModeStatus, planLoading, planError } = usePlanModeStore.getState();
       expect(currentPlan).toEqual(mockPlan);
       expect(planModeStatus).toEqual(expectedPlanModeStatus);
       expect(planLoading).toBe(false);
@@ -336,11 +315,7 @@ describe('PlanModeStore', () => {
       vi.mocked(planService.exitPlanMode).mockRejectedValue(mockError);
 
       await expect(
-        usePlanModeStore.getState().exitPlanMode(
-          mockConversationId,
-          mockPlanId,
-          true
-        )
+        usePlanModeStore.getState().exitPlanMode(mockConversationId, mockPlanId, true)
       ).rejects.toEqual(mockError);
 
       const { planLoading, planError } = usePlanModeStore.getState();
@@ -351,10 +326,7 @@ describe('PlanModeStore', () => {
     it('should use default approve=true when not specified', async () => {
       vi.mocked(planService.exitPlanMode).mockResolvedValue(mockPlan);
 
-      await usePlanModeStore.getState().exitPlanMode(
-        mockConversationId,
-        mockPlanId
-      );
+      await usePlanModeStore.getState().exitPlanMode(mockConversationId, mockPlanId);
 
       expect(planService.exitPlanMode).toHaveBeenCalledWith({
         conversation_id: mockConversationId,
@@ -367,11 +339,7 @@ describe('PlanModeStore', () => {
     it('should work without summary parameter', async () => {
       vi.mocked(planService.exitPlanMode).mockResolvedValue(mockPlan);
 
-      await usePlanModeStore.getState().exitPlanMode(
-        mockConversationId,
-        mockPlanId,
-        true
-      );
+      await usePlanModeStore.getState().exitPlanMode(mockConversationId, mockPlanId, true);
 
       expect(planService.exitPlanMode).toHaveBeenCalledWith({
         conversation_id: mockConversationId,
@@ -421,9 +389,7 @@ describe('PlanModeStore', () => {
       };
       vi.mocked(planService.getPlan).mockRejectedValue(mockError);
 
-      await expect(usePlanModeStore.getState().getPlan(mockPlanId)).rejects.toEqual(
-        mockError
-      );
+      await expect(usePlanModeStore.getState().getPlan(mockPlanId)).rejects.toEqual(mockError);
 
       const { planLoading, planError } = usePlanModeStore.getState();
       expect(planLoading).toBe(false);
@@ -453,15 +419,9 @@ describe('PlanModeStore', () => {
     it('should update plan successfully', async () => {
       vi.mocked(planService.updatePlan).mockResolvedValue(mockUpdatedPlan);
 
-      const result = await usePlanModeStore.getState().updatePlan(
-        mockPlanId,
-        mockUpdateRequest
-      );
+      const result = await usePlanModeStore.getState().updatePlan(mockPlanId, mockUpdateRequest);
 
-      expect(planService.updatePlan).toHaveBeenCalledWith(
-        mockPlanId,
-        mockUpdateRequest
-      );
+      expect(planService.updatePlan).toHaveBeenCalledWith(mockPlanId, mockUpdateRequest);
       expect(result).toEqual(mockUpdatedPlan);
 
       const { currentPlan, planLoading, planError } = usePlanModeStore.getState();
@@ -503,17 +463,12 @@ describe('PlanModeStore', () => {
     it('should fetch plan mode status successfully', async () => {
       vi.mocked(planService.getPlanModeStatus).mockResolvedValue(mockStatus);
 
-      const result = await usePlanModeStore.getState().getPlanModeStatus(
-        mockConversationId
-      );
+      const result = await usePlanModeStore.getState().getPlanModeStatus(mockConversationId);
 
-      expect(planService.getPlanModeStatus).toHaveBeenCalledWith(
-        mockConversationId
-      );
+      expect(planService.getPlanModeStatus).toHaveBeenCalledWith(mockConversationId);
       expect(result).toEqual(mockStatus);
 
-      const { planModeStatus, currentPlan, planLoading, planError } =
-        usePlanModeStore.getState();
+      const { planModeStatus, currentPlan, planLoading, planError } = usePlanModeStore.getState();
       expect(planModeStatus).toEqual(mockStatus);
       expect(currentPlan).toEqual(mockStatus.plan);
       expect(planLoading).toBe(false);
@@ -558,8 +513,7 @@ describe('PlanModeStore', () => {
       // Reset should return to initial state
       reset();
 
-      const { currentPlan, planModeStatus, planLoading, planError } =
-        usePlanModeStore.getState();
+      const { currentPlan, planModeStatus, planLoading, planError } = usePlanModeStore.getState();
       expect(currentPlan).toBeNull();
       expect(planModeStatus).toBeNull();
       expect(planLoading).toBe(false);

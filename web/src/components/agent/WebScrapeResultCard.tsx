@@ -45,9 +45,7 @@ export function WebScrapeResultCard({
       {/* Content */}
       <div className="p-4 space-y-3">
         {/* Title */}
-        <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-          {title}
-        </h3>
+        <h3 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h3>
 
         {/* URL */}
         <div className="flex items-center gap-1 text-sm">
@@ -63,11 +61,7 @@ export function WebScrapeResultCard({
         </div>
 
         {/* Description */}
-        {description && (
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            {description}
-          </p>
-        )}
+        {description && <p className="text-sm text-slate-600 dark:text-slate-400">{description}</p>}
 
         {/* Content */}
         <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-3 max-h-80 overflow-y-auto">

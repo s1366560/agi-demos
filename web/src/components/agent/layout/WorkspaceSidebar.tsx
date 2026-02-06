@@ -131,7 +131,9 @@ export function WorkspaceSidebar({
           ))}
 
           {/* User Profile */}
-          <div className={`flex items-center gap-3 px-3 py-2 mt-2 ${collapsed ? 'justify-center' : ''}`}>
+          <div
+            className={`flex items-center gap-3 px-3 py-2 mt-2 ${collapsed ? 'justify-center' : ''}`}
+          >
             {userAvatar ? (
               <div
                 className="w-8 h-8 rounded-full bg-cover bg-center shrink-0"

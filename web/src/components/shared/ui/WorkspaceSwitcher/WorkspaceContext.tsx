@@ -2,17 +2,17 @@
  * WorkspaceContext - Shared state for WorkspaceSwitcher compound components
  */
 
-import { createContext, useContext, useRef, useState, useCallback } from 'react'
+import { createContext, useContext, useRef, useState, useCallback } from 'react';
 
-import type { WorkspaceContextValue, WorkspaceMode } from './types'
+import type { WorkspaceContextValue, WorkspaceMode } from './types';
 
-const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
+const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export interface WorkspaceProviderProps {
-  mode: WorkspaceMode
-  defaultOpen?: boolean
-  onOpenChange?: (open: boolean) => void
-  children: React.ReactNode
+  mode: WorkspaceMode;
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  children: React.ReactNode;
 }
 
 /**
@@ -24,45 +24,42 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   onOpenChange,
   children,
 }) => {
-  const [isOpen, setIsOpenState] = useState(defaultOpen)
-  const [focusedIndex, setFocusedIndexState] = useState(-1)
-  const [menuItemsCount, setMenuItemsCountState] = useState(0)
+  const [isOpen, setIsOpenState] = useState(defaultOpen);
+  const [focusedIndex, setFocusedIndexState] = useState(-1);
+  const [menuItemsCount, setMenuItemsCountState] = useState(0);
 
-  const triggerButtonRef = useRef<HTMLButtonElement>(null)
-  const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const triggerButtonRef = useRef<HTMLButtonElement>(null);
+  const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const setIsOpen = useCallback(
     (open: boolean) => {
-      setIsOpenState(open)
-      onOpenChange?.(open)
+      setIsOpenState(open);
+      onOpenChange?.(open);
 
       // Reset focused index when closing
       if (!open) {
-        setFocusedIndexState(-1)
-        menuItemRefs.current = []
+        setFocusedIndexState(-1);
+        menuItemRefs.current = [];
       }
     },
     [onOpenChange]
-  )
+  );
 
   const setFocusedIndex = useCallback((index: number) => {
-    setFocusedIndexState(index)
-  }, [])
+    setFocusedIndexState(index);
+  }, []);
 
   const setMenuItemsCount = useCallback((count: number) => {
-    setMenuItemsCountState(count)
-  }, [])
+    setMenuItemsCountState(count);
+  }, []);
 
   const registerMenuItemRef = useCallback((index: number, ref: HTMLButtonElement | null) => {
-    menuItemRefs.current[index] = ref
-  }, [])
+    menuItemRefs.current[index] = ref;
+  }, []);
 
-  const getMenuItemRef = useCallback(
-    (index: number): HTMLButtonElement | null => {
-      return menuItemRefs.current[index] || null
-    },
-    []
-  )
+  const getMenuItemRef = useCallback((index: number): HTMLButtonElement | null => {
+    return menuItemRefs.current[index] || null;
+  }, []);
 
   const value: WorkspaceContextValue = {
     mode,
@@ -75,18 +72,20 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
     registerMenuItemRef,
     getMenuItemRef,
     triggerButtonRef,
-  }
+  };
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
-}
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+};
 
 /**
  * Hook to access WorkspaceSwitcher context
  */
 export const useWorkspaceContext = (): WorkspaceContextValue => {
-  const context = useContext(WorkspaceContext)
+  const context = useContext(WorkspaceContext);
   if (!context) {
-    throw new Error('WorkspaceSwitcher compound components must be used within WorkspaceSwitcherRoot')
+    throw new Error(
+      'WorkspaceSwitcher compound components must be used within WorkspaceSwitcherRoot'
+    );
   }
-  return context
-}
+  return context;
+};

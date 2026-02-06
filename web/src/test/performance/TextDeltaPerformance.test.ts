@@ -12,21 +12,14 @@ describe('Text Delta Performance', () => {
     it('should have flush interval <= 16ms (60fps target)', async () => {
       // Dynamic import to avoid require() statement
       const fs = await import('fs');
-      const agentStoreContent = fs.readFileSync(
-        '../../stores/agent.ts',
-        'utf-8'
-      );
+      const agentStoreContent = fs.readFileSync('../../stores/agent.ts', 'utf-8');
 
       // Extract TEXT_DELTA_FLUSH_INTERVAL value
-      const flushMatch = agentStoreContent.match(
-        /TEXT_DELTA_FLUSH_INTERVAL\s*=\s*(\d+)/
-      );
+      const flushMatch = agentStoreContent.match(/TEXT_DELTA_FLUSH_INTERVAL\s*=\s*(\d+)/);
       const flushInterval = flushMatch ? parseInt(flushMatch[1], 10) : 50;
 
       // Extract TEXT_DELTA_BUFFER_SIZE value
-      const bufferMatch = agentStoreContent.match(
-        /TEXT_DELTA_BUFFER_SIZE\s*=\s*(\d+)/
-      );
+      const bufferMatch = agentStoreContent.match(/TEXT_DELTA_BUFFER_SIZE\s*=\s*(\d+)/);
       const bufferSize = bufferMatch ? parseInt(bufferMatch[1], 10) : 100;
 
       // Performance requirements:
@@ -38,14 +31,9 @@ describe('Text Delta Performance', () => {
 
     it('should provide smooth streaming with minimal batching delay', async () => {
       const fs = await import('fs');
-      const agentStoreContent = fs.readFileSync(
-        '../../stores/agent.ts',
-        'utf-8'
-      );
+      const agentStoreContent = fs.readFileSync('../../stores/agent.ts', 'utf-8');
 
-      const flushMatch = agentStoreContent.match(
-        /TEXT_DELTA_FLUSH_INTERVAL\s*=\s*(\d+)/
-      );
+      const flushMatch = agentStoreContent.match(/TEXT_DELTA_FLUSH_INTERVAL\s*=\s*(\d+)/);
       const flushInterval = flushMatch ? parseInt(flushMatch[1], 10) : 50;
 
       // Maximum acceptable delay for perceived responsiveness

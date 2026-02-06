@@ -25,9 +25,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
 
   // Determine if this project is selected
   const isSelected =
-    propIsSelected !== undefined
-      ? propIsSelected
-      : context.currentProject?.id === project.id;
+    propIsSelected !== undefined ? propIsSelected : context.currentProject?.id === project.id;
 
   // Handle item click
   const handleClick = () => {
@@ -58,8 +56,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
   };
 
   // Base classes
-  const baseClasses =
-    'p-4 rounded-lg border cursor-pointer transition-all';
+  const baseClasses = 'p-4 rounded-lg border cursor-pointer transition-all';
 
   // Selected state classes
   const selectedClasses = isSelected
@@ -80,9 +77,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
             <Folder className="h-4 w-4 text-white" />
           </div>
           <div>
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white">
-              {project.name}
-            </h4>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white">{project.name}</h4>
           </div>
         </div>
         <div className="flex items-center space-x-1">
