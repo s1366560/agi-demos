@@ -12,7 +12,6 @@ class RaySettings(BaseSettings):
     ray_address: str = Field(default="ray://ray-head:10001", alias="RAY_ADDRESS")
     ray_namespace: str = Field(default="memstack", alias="RAY_NAMESPACE")
     ray_log_to_driver: bool = Field(default=False, alias="RAY_LOG_TO_DRIVER")
-    ray_log_to_driver: bool = Field(default=False, alias="RAY_LOG_TO_DRIVER")
 
     model_config = SettingsConfigDict(
         env_file=".env",

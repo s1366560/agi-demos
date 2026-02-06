@@ -3,31 +3,69 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import ray
 
 from src.configuration.ray_config import get_ray_settings
 
+logger = logging.getLogger(__name__)
+
 _ray_init_lock = asyncio.Lock()
+_ray_available = False
 
 
-async def init_ray_if_needed() -> None:
-    """Initialize Ray runtime if not already initialized."""
+async def init_ray_if_needed() -> bool:
+    """Initialize Ray runtime if not already initialized.
+
+    Returns:
+        True if Ray is initialized and available, False otherwise.
+    """
+    global _ray_available
+
     if ray.is_initialized():
-        return
+        _ray_available = True
+        return True
 
     async with _ray_init_lock:
         if ray.is_initialized():
-            return
+            _ray_available = True
+            return True
 
         settings = get_ray_settings()
-        ray.init(
-            address=settings.ray_address,
-            namespace=settings.ray_namespace,
-            log_to_driver=settings.ray_log_to_driver,
-            ignore_reinit_error=True,
-        )
+        try:
+            ray.init(
+                address=settings.ray_address,
+                namespace=settings.ray_namespace,
+                log_to_driver=settings.ray_log_to_driver,
+                ignore_reinit_error=True,
+                allow_multiple=True,
+            )
+            _ray_available = True
+            logger.info("[Ray] Connected to Ray cluster at %s", settings.ray_address)
+            return True
+        except Exception as e:
+            _ray_available = False
+            logger.warning(
+                "[Ray] Failed to connect to Ray cluster at %s: %s. "
+                "Agent chat will use local in-process execution.",
+                settings.ray_address,
+                e,
+            )
+            return False
+
+
+def is_ray_available() -> bool:
+    """Check if Ray has been successfully initialized."""
+    return _ray_available and ray.is_initialized()
+
+
+def mark_ray_unavailable() -> None:
+    """Mark Ray as unavailable after a connection failure at runtime."""
+    global _ray_available
+    _ray_available = False
+    logger.warning("[Ray] Marked as unavailable due to runtime connection failure")
 
 
 async def await_ray(ref: Any) -> Any:

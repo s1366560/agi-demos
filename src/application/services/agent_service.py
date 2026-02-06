@@ -324,14 +324,12 @@ class AgentService(AgentServicePort):
         attachment_ids: Optional[List[str]] = None,
         correlation_id: Optional[str] = None,
     ) -> str:
-        """Start agent execution via Ray Actor."""
+        """Start agent execution via Ray Actor, with local fallback."""
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.ray.client import await_ray
         from src.infrastructure.agent.actor.actor_manager import (
             get_or_create_actor,
             register_project,
         )
-        from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
         from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
 
         settings = get_settings()
@@ -354,14 +352,6 @@ class AgentService(AgentServicePort):
             enable_subagents=True,
         )
 
-        await register_project(conversation.tenant_id, conversation.project_id)
-        actor = await get_or_create_actor(
-            tenant_id=conversation.tenant_id,
-            project_id=conversation.project_id,
-            agent_mode=agent_mode,
-            config=config,
-        )
-
         chat_request = ProjectChatRequest(
             conversation_id=conversation.id,
             message_id=message_id,
@@ -372,24 +362,151 @@ class AgentService(AgentServicePort):
             correlation_id=correlation_id,
         )
 
-        async def _fire_and_forget() -> None:
-            try:
-                await await_ray(actor.chat.remote(chat_request))
-            except Exception as e:
-                logger.error(
-                    "[AgentService] Actor chat failed: conversation=%s error=%s",
-                    conversation.id,
-                    e,
-                    exc_info=True,
-                )
-
-        asyncio.create_task(_fire_and_forget())
-
-        return ProjectAgentActor.actor_id(
-            conversation.tenant_id,
-            conversation.project_id,
-            agent_mode,
+        # Try Ray Actor path
+        await register_project(conversation.tenant_id, conversation.project_id)
+        actor = await get_or_create_actor(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            agent_mode=agent_mode,
+            config=config,
         )
+
+        if actor is not None:
+            from src.infrastructure.adapters.secondary.ray.client import await_ray
+
+            async def _fire_and_forget_ray() -> None:
+                try:
+                    await await_ray(actor.chat.remote(chat_request))
+                except Exception as e:
+                    logger.error(
+                        "[AgentService] Actor chat failed: conversation=%s error=%s",
+                        conversation.id,
+                        e,
+                        exc_info=True,
+                    )
+
+            asyncio.create_task(_fire_and_forget_ray())
+            logger.info("[AgentService] Using Ray Actor for conversation %s", conversation.id)
+        else:
+            # Fallback: local in-process execution
+            asyncio.create_task(
+                self._run_chat_local(config, chat_request)
+            )
+            logger.info(
+                "[AgentService] Using local execution (Ray unavailable) for conversation %s",
+                conversation.id,
+            )
+
+        return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
+
+    async def _run_chat_local(
+        self,
+        config: Any,
+        request: Any,
+    ) -> None:
+        """Run agent chat locally in-process when Ray is unavailable."""
+        from src.infrastructure.agent.actor.execution import execute_project_chat
+        from src.infrastructure.agent.core.project_react_agent import (
+            ProjectAgentConfig,
+            ProjectReActAgent,
+        )
+
+        try:
+            # Bootstrap shared services (graph, LLM providers) if not yet done
+            await self._ensure_local_runtime_bootstrapped()
+
+            agent_config = ProjectAgentConfig(
+                tenant_id=config.tenant_id,
+                project_id=config.project_id,
+                agent_mode=config.agent_mode,
+                model=config.model,
+                api_key=config.api_key,
+                base_url=config.base_url,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                max_steps=config.max_steps,
+                persistent=False,
+                idle_timeout_seconds=config.idle_timeout_seconds,
+                max_concurrent_chats=config.max_concurrent_chats,
+                mcp_tools_ttl_seconds=config.mcp_tools_ttl_seconds,
+                enable_skills=config.enable_skills,
+                enable_subagents=config.enable_subagents,
+            )
+
+            agent = ProjectReActAgent(agent_config)
+            await agent.initialize()
+
+            result = await execute_project_chat(agent, request)
+
+            if result.is_error:
+                logger.warning(
+                    "[AgentService] Local chat failed: message_id=%s error=%s",
+                    request.message_id,
+                    result.error_message,
+                )
+            else:
+                logger.info(
+                    "[AgentService] Local chat completed: message_id=%s events=%d",
+                    request.message_id,
+                    result.event_count,
+                )
+        except Exception as e:
+            logger.error(
+                "[AgentService] Local chat error: conversation=%s error=%s",
+                request.conversation_id,
+                e,
+                exc_info=True,
+            )
+            # Publish error event to Redis so frontend receives it
+            try:
+                from src.infrastructure.agent.actor.execution import _publish_error_event
+
+                await _publish_error_event(
+                    conversation_id=request.conversation_id,
+                    message_id=request.message_id,
+                    error_message=f"Agent execution failed: {e}",
+                    correlation_id=request.correlation_id,
+                )
+            except Exception as pub_err:
+                logger.warning("[AgentService] Failed to publish error event: %s", pub_err)
+
+    _local_bootstrapped = False
+    _local_bootstrap_lock = asyncio.Lock()
+
+    async def _ensure_local_runtime_bootstrapped(self) -> None:
+        """Bootstrap shared services for local (non-Ray) agent execution.
+
+        Mirrors ProjectAgentActor._bootstrap_runtime() but runs in API process.
+        """
+        if AgentService._local_bootstrapped:
+            return
+
+        async with AgentService._local_bootstrap_lock:
+            if AgentService._local_bootstrapped:
+                return
+
+            from src.configuration.factories import create_native_graph_adapter
+            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                get_agent_graph_service,
+                set_agent_graph_service,
+            )
+            from src.infrastructure.llm.initializer import initialize_default_llm_providers
+
+            try:
+                await initialize_default_llm_providers()
+            except Exception as e:
+                logger.warning("[AgentService] LLM provider init failed: %s", e)
+
+            if not get_agent_graph_service():
+                try:
+                    graph_service = await create_native_graph_adapter()
+                    set_agent_graph_service(graph_service)
+                    logger.info("[AgentService] Graph service bootstrapped for local execution")
+                except Exception as e:
+                    logger.error("[AgentService] Graph service init failed: %s", e)
+                    raise
+
+            AgentService._local_bootstrapped = True
 
     def _get_api_key(self, settings):
         provider = settings.llm_provider.strip().lower()
