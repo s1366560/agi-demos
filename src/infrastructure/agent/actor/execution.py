@@ -41,13 +41,16 @@ async def execute_project_chat(
 ) -> ProjectChatResult:
     """Execute a chat request and publish events to Redis/DB."""
     start_time = time_module.time()
-    sequence_number = 0
     events: List[Dict[str, Any]] = []
     final_content = ""
     is_error = False
     error_message = None
 
     await set_agent_running(request.conversation_id, request.message_id)
+
+    # Initialize sequence_number from last DB sequence to avoid collisions
+    # with events already saved (e.g., user_message saved by agent_service)
+    sequence_number = await _get_last_db_sequence(request.conversation_id)
 
     try:
         redis_client = await _get_redis_client()
@@ -62,8 +65,9 @@ async def execute_project_chat(
             message_id=request.message_id,
             hitl_response=hitl_response,
         ):
-            events.append(event)
             sequence_number += 1
+            event["seq"] = sequence_number
+            events.append(event)
 
             await _publish_event_to_stream(
                 conversation_id=request.conversation_id,
@@ -272,7 +276,10 @@ async def continue_project_chat(
         f"last_sequence_number={state.last_sequence_number}"
     )
 
-    sequence_number = max(sequence_number, state.last_sequence_number)
+    # Use the greater of HITL state sequence and actual DB sequence
+    # to avoid collisions with events saved by other paths
+    db_last_seq = await _get_last_db_sequence(state.conversation_id)
+    sequence_number = max(sequence_number, state.last_sequence_number, db_last_seq)
     await set_agent_running(state.conversation_id, state.message_id)
 
     try:
@@ -312,8 +319,9 @@ async def continue_project_chat(
                 message_id=state.message_id,
                 hitl_response=hitl_response_for_agent,
             ):
-                events.append(event)
                 sequence_number += 1
+                event["seq"] = sequence_number
+                events.append(event)
 
                 await _publish_event_to_stream(
                     conversation_id=state.conversation_id,
@@ -395,6 +403,24 @@ async def continue_project_chat(
         )
     finally:
         await clear_agent_running(state.conversation_id)
+
+
+async def _get_last_db_sequence(conversation_id: str) -> int:
+    """Get the last sequence number for a conversation from DB."""
+    from sqlalchemy import func, select
+
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(func.max(AgentExecutionEvent.sequence_number)).where(
+                    AgentExecutionEvent.conversation_id == conversation_id
+                )
+            )
+            last_seq = result.scalar()
+            return last_seq if last_seq is not None else 0
+    except Exception as e:
+        logger.warning(f"[ActorExecution] Failed to get last DB sequence: {e}")
+        return 0
 
 
 async def _persist_events(

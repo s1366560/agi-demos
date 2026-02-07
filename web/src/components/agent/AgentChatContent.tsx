@@ -411,7 +411,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         )}
 
         {/* Message Area - Takes remaining space */}
-        <div className="flex-1 overflow-hidden relative">{messageArea}</div>
+        <div className="flex-1 overflow-hidden relative min-h-0">{messageArea}</div>
 
         {/* Resizable Input Area */}
         <div
