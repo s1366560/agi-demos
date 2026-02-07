@@ -2,7 +2,9 @@
  * Sandbox SSE Service - Subscribe to sandbox events.
  *
  * **Migration Notice**: This service now uses WebSocket internally via
- * unifiedEventService. The SSE endpoint is deprecated.
+ * agentService. The SSE endpoint is deprecated. Previously used
+ * unifiedEventService which created a duplicate WebSocket connection;
+ * now shares the single agentService WebSocket.
  *
  * Provides subscription for sandbox lifecycle and service status events
  * (desktop, terminal).
@@ -12,7 +14,9 @@
 
 import { logger } from '../utils/logger';
 
-import { unifiedEventService, UnifiedEvent } from './unifiedEventService';
+import { agentService } from './agentService';
+
+import type { SandboxStateData } from '../types/agent';
 
 /**
  * Sandbox event types from backend
@@ -59,7 +63,7 @@ export type SSEStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 /**
  * Sandbox SSE Service implementation
  *
- * **Updated**: Now uses WebSocket via unifiedEventService instead of SSE.
+ * **Updated**: Now uses WebSocket via agentService (shared connection).
  * The API remains the same for backward compatibility.
  */
 class SandboxSSEService {
@@ -94,7 +98,7 @@ class SandboxSSEService {
   }
 
   /**
-   * Establish WebSocket connection via unified service
+   * Establish WebSocket connection via agentService (shared connection)
    */
   private connect(): void {
     if (!this.projectId) {
@@ -104,22 +108,29 @@ class SandboxSSEService {
 
     this.status = 'connecting';
 
-    // Ensure unified service is connected
-    unifiedEventService
-      .connect()
+    // Ensure agentService WebSocket is connected
+    const connectPromise = agentService.isConnected()
+      ? Promise.resolve()
+      : agentService.connect();
+
+    connectPromise
       .then(() => {
         if (!this.projectId) return;
 
-        // Subscribe to sandbox events via unified WebSocket
-        this.unsubscribeFn = unifiedEventService.subscribeSandbox(
-          this.projectId,
-          (event: UnifiedEvent) => {
-            this.handleEvent(event);
-          }
-        );
+        // Subscribe to sandbox events via agentService WebSocket
+        // agentService.subscribeSandboxState requires a tenantId but sandbox events
+        // are routed by project_id on the backend, so we pass empty string.
+        agentService.subscribeSandboxState(this.projectId, '', (state: SandboxStateData) => {
+          this.handleSandboxState(state);
+        });
+
+        // Track that we have an active subscription so we can clean up
+        this.unsubscribeFn = () => {
+          agentService.unsubscribeSandboxState();
+        };
 
         this.status = 'connected';
-        logger.debug(`[SandboxWS] Connected to project ${this.projectId}`);
+        logger.debug(`[SandboxWS] Connected to project ${this.projectId} via agentService`);
       })
       .catch((err) => {
         logger.error('[SandboxWS] Failed to connect:', err);
@@ -129,21 +140,16 @@ class SandboxSSEService {
   }
 
   /**
-   * Handle incoming WebSocket event
+   * Handle incoming sandbox state change from agentService
    */
-  private handleEvent(event: UnifiedEvent): void {
-    // Extract the actual sandbox event from the data
-    const eventData = event.data as
-      | { type?: string; data?: unknown; timestamp?: string }
-      | undefined;
-    if (!eventData) return;
-
+  private handleSandboxState(state: SandboxStateData): void {
+    // Map SandboxStateData.eventType to SandboxEventType for routing
+    const eventType = state.eventType as SandboxEventType;
     const sandboxEvent: BaseSandboxSSEEvent = {
-      type: (eventData.type || event.type) as SandboxEventType,
-      data: eventData.data || eventData,
-      timestamp: eventData.timestamp || event.timestamp || new Date().toISOString(),
+      type: eventType,
+      data: state,
+      timestamp: new Date().toISOString(),
     };
-
     this.routeEvent(sandboxEvent);
   }
 

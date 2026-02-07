@@ -218,12 +218,21 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   useEffect(() => {
     if (projectId && conversationId) {
       setActiveConversation(conversationId);
-      loadMessages(conversationId, projectId);
+      // Skip loadMessages if this conversation is already active and streaming
+      // (e.g. after sendMessage created a new conversation and navigated here).
+      // Calling loadMessages would reset the timeline to [] causing a visible flash.
+      if (!(activeConversationId === conversationId && isStreaming)) {
+        loadMessages(conversationId, projectId);
+      }
       // Load any pending HITL requests to restore dialog state after refresh
       loadPendingHITL(conversationId);
     } else if (projectId && !conversationId) {
       setActiveConversation(null);
     }
+    // NOTE: activeConversationId and isStreaming intentionally excluded from deps
+    // to avoid re-triggering on streaming state changes; they are only read as
+    // a guard at the time the effect fires due to conversationId/projectId change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, projectId, setActiveConversation, loadMessages, loadPendingHITL]);
 
   // Handle errors
