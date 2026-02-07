@@ -1255,8 +1255,9 @@ export const useAgentV3Store = create<AgentV3State>()(
                   conversationStates: newStates,
                 };
               });
-            } catch (_error) {
-              set({ error: 'Failed to create conversation' });
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              set({ error: `Failed to create conversation: ${msg}` });
               return null;
             }
           }
@@ -1402,16 +1403,32 @@ export const useAgentV3Store = create<AgentV3State>()(
           if (targetConvId) {
             agentService.stopChat(targetConvId);
 
+            // Clean up delta buffers to prevent stale timers from firing
+            clearDeltaBuffers(targetConvId);
+
             // Update conversation-specific state
             const { updateConversationState, activeConversationId } = get();
             updateConversationState(targetConvId, {
               isStreaming: false,
               streamStatus: 'idle',
+              agentState: 'idle',
+              streamingThought: '',
+              isThinkingStreaming: false,
+              streamingAssistantContent: '',
+              pendingToolsStack: [],
             });
 
             // Also update global state if this is active conversation
             if (targetConvId === activeConversationId) {
-              set({ isStreaming: false, streamStatus: 'idle' });
+              set({
+                isStreaming: false,
+                streamStatus: 'idle',
+                agentState: 'idle',
+                streamingThought: '',
+                isThinkingStreaming: false,
+                streamingAssistantContent: '',
+                pendingToolsStack: [],
+              });
             }
           }
         },

@@ -43,7 +43,7 @@ export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
                 </span>
               )}
             </div>
-            <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed">
+            <div className="mt-3 pl-4 border-l-2 border-slate-200 dark:border-border-dark text-sm text-slate-500 dark:text-text-muted leading-relaxed max-h-[300px] overflow-y-auto">
               <p className="whitespace-pre-wrap">{content}</p>
             </div>
           </div>

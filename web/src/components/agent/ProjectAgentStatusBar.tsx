@@ -791,13 +791,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <div className="space-y-1">
               <div>
                 {isLoading
-                  ? '加载中...'
+                  ? 'Loading...'
                   : status.connection.websocket
-                    ? 'WebSocket 已连接'
-                    : '就绪'}
+                    ? 'WebSocket Connected'
+                    : 'Ready'}
               </div>
               {status.resources.activeCalls > 0 && (
-                <div>活跃工具调用: {status.resources.activeCalls}</div>
+                <div>Active tool calls: {status.resources.activeCalls}</div>
               )}
             </div>
           }
@@ -808,17 +808,17 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             ) : status.resources.activeCalls > 0 ? (
               <>
                 <Activity size={12} className="text-blue-500 animate-pulse" />
-                <span className="text-blue-500">{status.resources.activeCalls} 调用中</span>
+                <span className="text-blue-500">{status.resources.activeCalls} active</span>
               </>
             ) : status.connection.websocket ? (
               <>
                 <Wifi size={12} className="text-emerald-500" />
-                <span className="text-emerald-500">在线</span>
+                <span className="text-emerald-500">Online</span>
               </>
             ) : (
               <>
                 <Wifi size={12} />
-                <span>就绪</span>
+                <span>Ready</span>
               </>
             )}
           </div>

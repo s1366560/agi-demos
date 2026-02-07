@@ -190,7 +190,7 @@ const MetricsPopover: FC<{
       {loading && (
         <div className="flex items-center justify-center py-4">
           <Spin size="small" />
-          <span className="ml-2 text-sm text-slate-500">加载中...</span>
+          <span className="ml-2 text-sm text-slate-500">Loading...</span>
         </div>
       )}
 

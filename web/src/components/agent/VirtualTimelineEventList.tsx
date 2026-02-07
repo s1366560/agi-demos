@@ -416,7 +416,7 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
         <div className="absolute top-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
           <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
             <Spin size="small" />
-            <span className="ml-2 text-xs text-slate-500">加载中...</span>
+            <span className="ml-2 text-xs text-slate-500">Loading...</span>
           </div>
         </div>
       )}

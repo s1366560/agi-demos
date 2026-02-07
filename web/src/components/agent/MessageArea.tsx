@@ -604,7 +604,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               <div className="flex items-center px-3 py-1.5 bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50 opacity-70">
                 <LoadingOutlined className="text-primary mr-2" spin />
                 <span className="text-xs text-slate-500">
-                  {scrollIndicatorChild?.props?.label || '加载中...'}
+                  {scrollIndicatorChild?.props?.label || 'Loading...'}
                 </span>
               </div>
             </div>
