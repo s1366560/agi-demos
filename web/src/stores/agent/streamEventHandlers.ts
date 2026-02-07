@@ -460,14 +460,17 @@ export function createStreamEventHandlers(
       };
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, textEndEvent);
 
+      // Clear streamingAssistantContent so the streaming bubble disappears.
+      // The text_end event in the timeline now renders the full text instead,
+      // preventing duplicate content display.
       updateConversationState(handlerConversationId, {
-        streamingAssistantContent: finalContent,
+        streamingAssistantContent: '',
         timeline: updatedTimeline,
       });
 
       if (handlerConversationId === activeConversationId) {
         setState({
-          streamingAssistantContent: finalContent,
+          streamingAssistantContent: '',
           timeline: updatedTimeline,
         });
       }
