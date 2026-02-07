@@ -403,9 +403,11 @@ export function createStreamEventHandlers(
 
     onTextDelta: (event) => {
       const delta = event.data.delta;
-      console.log(
-        `[AgentV3] onTextDelta: delta="${delta?.substring(0, 30)}...", conv=${handlerConversationId}`
-      );
+      if (import.meta.env.DEV) {
+        console.log(
+          `[AgentV3] onTextDelta: delta="${delta?.substring(0, 30)}...", conv=${handlerConversationId}`
+        );
+      }
       if (!delta) return;
 
       const buffer = getDeltaBuffer(handlerConversationId);
@@ -419,9 +421,6 @@ export function createStreamEventHandlers(
 
           if (bufferedContent) {
             const { activeConversationId, updateConversationState, getConversationState } = get();
-            console.log(
-              `[AgentV3] Flushing buffer: len=${bufferedContent.length}, active=${activeConversationId}, handler=${handlerConversationId}`
-            );
 
             const convState = getConversationState(handlerConversationId);
             updateConversationState(handlerConversationId, {
@@ -430,15 +429,10 @@ export function createStreamEventHandlers(
             });
 
             if (handlerConversationId === activeConversationId) {
-              console.log(`[AgentV3] Updating global streamingAssistantContent`);
               setState((state: any) => ({
                 streamingAssistantContent: state.streamingAssistantContent + bufferedContent,
                 streamStatus: 'streaming',
               }));
-            } else {
-              console.log(
-                `[AgentV3] Skipping global update: handler=${handlerConversationId} != active=${activeConversationId}`
-              );
             }
           }
         }, tokenBatchIntervalMs);

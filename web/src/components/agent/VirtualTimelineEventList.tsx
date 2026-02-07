@@ -15,8 +15,14 @@ import { DownOutlined, MessageOutlined } from '@ant-design/icons';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, Spin } from 'antd';
 
+import { MarkdownContent } from './chat/MarkdownContent';
 import { MessageStream } from './chat/MessageStream';
 import { StreamingThoughtBubble } from './StreamingThoughtBubble';
+import {
+  ASSISTANT_PROSE_CLASSES,
+  ASSISTANT_BUBBLE_CLASSES,
+  ASSISTANT_AVATAR_CLASSES,
+} from './styles';
 import { TimelineEventItem } from './TimelineEventItem';
 
 import type { TimelineEvent } from '../../types/agent';
@@ -326,19 +332,14 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    // Always auto-scroll during streaming unless user has explicitly scrolled up
-    // This ensures real-time content is always visible
+    // During streaming, scroll the container to bottom so streaming content
+    // (rendered outside the virtual list) stays visible
     if (isStreaming && !userScrolledUpRef.current) {
       requestAnimationFrame(() => {
-        // For virtual list, scroll to the last item
-        if (timeline.length > 0) {
-          eventVirtualizer.scrollToIndex(timeline.length - 1, { align: 'end' });
-        }
-        // Also scroll the container to ensure streaming content is visible
         container.scrollTop = container.scrollHeight;
       });
     }
-  }, [streamingContent, streamingThought, isStreaming, timeline.length, eventVirtualizer]);
+  }, [streamingContent, streamingThought, isStreaming]);
 
   // Reset scroll state when conversation changes
   useEffect(() => {
@@ -482,30 +483,16 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                 </div>
               )}
 
-              {/* Streaming text content */}
+              {/* Streaming text content - uses same styling as history assistant messages */}
               {isStreaming && streamingContent && (
                 <div className="mt-4 flex items-start gap-3 animate-slide-up">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0">
-                    <svg
-                      className="w-4 h-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                      />
-                    </svg>
+                  <div className={ASSISTANT_AVATAR_CLASSES}>
+                    <span className="material-symbols-outlined text-primary text-lg">
+                      smart_toy
+                    </span>
                   </div>
-                  <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                      <div className="prose prose-sm dark:prose-invert max-w-none font-sans prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
-                        {streamingContent}
-                      </div>
-                    </div>
+                  <div className={ASSISTANT_BUBBLE_CLASSES}>
+                    <MarkdownContent content={streamingContent} className={ASSISTANT_PROSE_CLASSES} />
                   </div>
                 </div>
               )}

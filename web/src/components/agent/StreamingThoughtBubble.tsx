@@ -14,11 +14,11 @@ interface StreamingThoughtBubbleProps {
 export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
   ({ content, isStreaming }) => {
     return (
-      <div className="flex items-start gap-3 mb-3 animate-slide-up">
-        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-          <span className="material-symbols-outlined text-primary text-lg">psychology</span>
+      <div className="flex items-start gap-4 mb-3 animate-slide-up">
+        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-border-dark flex items-center justify-center flex-shrink-0">
+          <span className="material-symbols-outlined text-lg text-primary">psychology</span>
         </div>
-        <div className="flex-1 max-w-[85%] md:max-w-[75%]">
+        <div className="flex-1">
           <div className="bg-slate-50 dark:bg-surface-dark/50 border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="material-symbols-outlined text-sm text-primary">chevron_right</span>

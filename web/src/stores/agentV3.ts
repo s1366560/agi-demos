@@ -1005,138 +1005,22 @@ export const useAgentV3Store = create<AgentV3State>()(
                 await agentService.connect();
               }
 
-              // Simple handler for streaming events - same as normal chat
-              const streamHandler: AgentStreamHandler = {
-                onTextDelta: (event) => {
-                  set((state) => ({
-                    streamingAssistantContent:
-                      state.streamingAssistantContent + (event.data.delta || ''),
-                  }));
-                },
-                onThought: (event) => {
-                  const thought = event.data.thought;
-                  if (!thought || thought.trim() === '') return;
-                  set((state) => ({
-                    currentThought: state.currentThought + '\n' + thought,
-                  }));
-                },
-                onThoughtDelta: (event) => {
-                  set((state) => ({
-                    streamingThought: state.streamingThought + (event.data.delta || ''),
-                    isThinkingStreaming: true,
-                  }));
-                },
-                onWorkPlan: (event) => {
-                  set({
-                    workPlan: {
-                      id: event.data.plan_id,
-                      conversation_id: event.data.conversation_id,
-                      status: event.data.status,
-                      steps: event.data.steps.map((s: any) => ({
-                        step_number: s.step_number,
-                        description: s.description,
-                        thought_prompt: '',
-                        required_tools: [],
-                        expected_output: s.expected_output,
-                        dependencies: [],
-                      })),
-                      current_step_index: event.data.current_step,
-                      created_at: new Date().toISOString(),
-                    },
-                  });
-                },
-                onStepStart: (event) => {
-                  set((state) => ({
-                    workPlan: state.workPlan
-                      ? {
-                          ...state.workPlan,
-                          current_step_index: event.data.current_step,
-                        }
-                      : null,
-                    agentState: 'acting',
-                  }));
-                },
-                onAct: (event) => {
-                  set((state) => {
-                    const toolName = event.data.tool_name;
-                    const startTime = Date.now();
-                    const newCall: ToolCall & {
-                      status: 'running';
-                      startTime: number;
-                    } = {
-                      name: toolName,
-                      arguments: event.data.tool_input,
-                      status: 'running',
-                      startTime,
-                    };
-                    const newMap = new Map(state.activeToolCalls);
-                    newMap.set(toolName, newCall);
-                    return { activeToolCalls: newMap, agentState: 'acting' };
-                  });
-                },
-                onObserve: () => {
-                  set((state) => {
-                    const stack = [...state.pendingToolsStack];
-                    stack.pop();
-                    return { pendingToolsStack: stack, agentState: 'observing' };
-                  });
-                },
-                onComplete: () => {
-                  console.log(`[AgentV3] Stream complete, resetting state`);
-                  // Simply reset streaming state - messages are already loaded
-                  // or will be loaded on next conversation switch
-                  set({
-                    isStreaming: false,
-                    agentState: 'idle',
-                    activeToolCalls: new Map(),
-                    streamingAssistantContent: '',
-                    streamingThought: '',
-                    isThinkingStreaming: false,
-                  });
-                },
-                onRetry: (event) => {
-                  // LLM is retrying after a transient error (e.g., rate limit)
-                  // Keep streaming state active, just show a warning
-                  console.warn(
-                    `[AgentV3] LLM retrying: attempt=${event.data.attempt}, ` +
-                      `delay=${event.data.delay_ms}ms, reason=${event.data.message}`
-                  );
-                  // Update state to show retry indicator
-                  set({
-                    agentState: 'retrying',
-                    // Keep isStreaming: true so we continue receiving events
-                  });
-                },
-                onError: (event) => {
-                  // Check if this is a recoverable error
-                  const isRateLimitError =
-                    event.data.code === 'RATE_LIMIT' ||
-                    event.data.message?.includes('rate limit') ||
-                    event.data.message?.includes('限流') ||
-                    event.data.message?.includes('并发数过高');
-
-                  if (isRateLimitError) {
-                    // Rate limit error - the backend might retry
-                    // Don't immediately stop streaming
-                    console.warn(
-                      `[AgentV3] Rate limit error, waiting for retry: ${event.data.message}`
-                    );
-                    set({
-                      error: `限流错误，正在重试: ${event.data.message}`,
-                      agentState: 'retrying',
-                      // Keep isStreaming: true
-                    });
-                  } else {
-                    // Fatal error - stop streaming
-                    console.error(`[AgentV3] Fatal error: ${event.data.message}`);
-                    set({
-                      error: event.data.message,
-                      isStreaming: false,
-                      agentState: 'idle',
-                    });
-                  }
-                },
-              };
+              // Reuse the same full handler used by sendMessage so that
+              // recovery events are appended to the timeline via appendSSEEventToTimeline.
+              const streamHandler: AgentStreamHandler = createStreamEventHandlers(
+                conversationId,
+                undefined, // no additionalHandlers during recovery
+                {
+                  get: get as any,
+                  set: set as any,
+                  getDeltaBuffer,
+                  clearDeltaBuffers,
+                  clearAllDeltaBuffers,
+                  timelineToMessages,
+                  tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
+                  thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+                }
+              );
 
               // Subscribe to conversation - WebSocket will forward events from Redis Stream
               agentService.subscribe(conversationId, streamHandler);

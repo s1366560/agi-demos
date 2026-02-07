@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PanelRight, GripHorizontal } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -78,7 +79,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     return `/project/${projectId}/agent`;
   }, [customBasePath, urlProjectId, projectId]);
 
-  // Store state
+  // Store state - single useShallow selector to avoid infinite re-renders
   const {
     activeConversationId,
     timeline,
@@ -108,13 +109,41 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     clearError,
     error,
     streamingAssistantContent,
-  } = useAgentV3Store();
+    streamingThought,
+    isThinkingStreaming,
+  } = useAgentV3Store(
+    useShallow((state) => ({
+      activeConversationId: state.activeConversationId,
+      timeline: state.timeline,
+      isLoadingHistory: state.isLoadingHistory,
+      isLoadingEarlier: state.isLoadingEarlier,
+      isStreaming: state.isStreaming,
+      workPlan: state.workPlan,
+      executionPlan: state.executionPlan,
+      isPlanMode: state.isPlanMode,
+      showPlanPanel: state.showPlanPanel,
+      doomLoopDetected: state.doomLoopDetected,
+      hasEarlier: state.hasEarlier,
+      loadConversations: state.loadConversations,
+      loadMessages: state.loadMessages,
+      loadEarlierMessages: state.loadEarlierMessages,
+      setActiveConversation: state.setActiveConversation,
+      createNewConversation: state.createNewConversation,
+      sendMessage: state.sendMessage,
+      abortStream: state.abortStream,
+      togglePlanMode: state.togglePlanMode,
+      togglePlanPanel: state.togglePlanPanel,
+      loadPendingHITL: state.loadPendingHITL,
+      clearError: state.clearError,
+      error: state.error,
+      streamingAssistantContent: state.streamingAssistantContent,
+      streamingThought: state.streamingThought,
+      isThinkingStreaming: state.isThinkingStreaming,
+    }))
+  );
 
-  // Get streaming content directly from store
+  // Derive streaming content - only show when actively streaming
   const streamingContent = isStreaming ? streamingAssistantContent : '';
-
-  // Get streaming thought from store
-  const { streamingThought, isThinkingStreaming } = useAgentV3Store();
 
   const { planModeStatus, exitPlanMode } = usePlanModeStore();
   const {

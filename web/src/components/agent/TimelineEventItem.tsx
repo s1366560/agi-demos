@@ -24,6 +24,11 @@ import {
   ToolExecutionCardDisplay,
   ReasoningLogCard,
 } from './chat/MessageStream';
+import {
+  ASSISTANT_PROSE_CLASSES,
+  ASSISTANT_BUBBLE_CLASSES,
+  ASSISTANT_AVATAR_CLASSES,
+} from './styles';
 
 import type {
   TimelineEvent,
@@ -278,10 +283,10 @@ function TextDeltaItem({ event }: { event: TimelineEvent }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-4">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+        <div className={ASSISTANT_AVATAR_CLASSES}>
           <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
+        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${ASSISTANT_PROSE_CLASSES}`}>
           <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
             <MarkdownRenderer>{event.content}</MarkdownRenderer>
           </Suspense>
@@ -307,10 +312,10 @@ function TextEndItem({ event }: { event: TimelineEvent }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-4">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+        <div className={ASSISTANT_AVATAR_CLASSES}>
           <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div className="flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed">
+        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${ASSISTANT_PROSE_CLASSES}`}>
           <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
             <MarkdownRenderer>{fullText}</MarkdownRenderer>
           </Suspense>
@@ -899,6 +904,10 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
         return null;
 
       case 'text_delta':
+        // Skip text_delta when a text_end exists (it contains the full text)
+        if (events.some((e) => e.type === 'text_end')) {
+          return null;
+        }
         return (
           <div className="my-4 animate-slide-up">
             <TextDeltaItem event={event} />
