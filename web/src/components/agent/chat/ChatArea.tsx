@@ -197,9 +197,14 @@ export const ChatArea: React.FC<ChatAreaProps> = memo(
     streamingThought,
     isThinkingStreaming,
   }) => {
-    // Memoize sorted timeline events (they should already be sorted by sequence)
+    // Memoize sorted timeline events (they should already be sorted by event time)
     const sortedTimeline = useMemo(
-      () => [...timeline].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+      () =>
+        [...timeline].sort((a, b) => {
+          const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+          if (timeDiff !== 0) return timeDiff;
+          return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+        }),
       [timeline]
     );
 

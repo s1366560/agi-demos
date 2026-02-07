@@ -2,19 +2,17 @@
 MCP (Model Context Protocol) Infrastructure Layer.
 
 This module provides MCP tool integration for the MemStack Agent system.
-MCP servers are managed via Ray Actors (or local fallback) for horizontal scaling.
+MCP servers run inside project sandbox containers for security and isolation.
 
 Architecture:
 - MCPConfig: Configuration models for local/remote MCP servers
-- MCPToolAdapter: Adapts MCP tools to AgentTool interface
-- MCPToolLoader: Loads tools from MCP servers
-- MCPRayAdapter: Ray Actor-based MCP server management
-- MCPLocalFallback: In-process fallback when Ray is unavailable
+- SandboxMCPServerToolAdapter: Adapts sandbox-hosted MCP tools to AgentTool interface
+- SandboxMCPServerManager: Manages MCP server lifecycle in sandbox containers
 - Transport: Protocol implementations (stdio, http, websocket)
 - Tools: Unified tool adapter interfaces
 
 Server configurations are stored in database (tenant-scoped).
-Tools are loaded dynamically from running MCP server actors.
+Tools are loaded dynamically from running MCP servers in sandbox containers.
 
 Domain Models (src.domain.model.mcp):
 - MCPServer, MCPServerConfig, MCPServerStatus
@@ -36,8 +34,6 @@ from src.infrastructure.mcp.config import (
     McpRemoteConfig,
     MCPStatus,
 )
-from src.infrastructure.mcp.tool_adapter import MCPToolAdapter
-from src.infrastructure.mcp.tool_loader import MCPToolLoader
 
 # Tools layer
 from src.infrastructure.mcp.tools import (
@@ -53,23 +49,13 @@ from src.infrastructure.mcp.transport import (
     WebSocketTransport,
 )
 
-# Backward compatibility aliases
-MCPTemporalToolAdapter = MCPToolAdapter
-MCPTemporalToolLoader = MCPToolLoader
-
 __all__ = [
-    # Legacy config (to be migrated to domain models)
+    # Config
     "McpConfig",
     "McpLocalConfig",
     "McpOAuthConfig",
     "McpRemoteConfig",
     "MCPStatus",
-    # MCP integration (Ray / Local Fallback)
-    "MCPToolAdapter",
-    "MCPToolLoader",
-    # Backward compatibility aliases
-    "MCPTemporalToolAdapter",
-    "MCPTemporalToolLoader",
     # Transport layer
     "TransportFactory",
     "StdioTransport",

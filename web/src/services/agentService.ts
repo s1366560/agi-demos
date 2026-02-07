@@ -161,7 +161,8 @@ export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'err
  *   type: 'text_delta',
  *   conversation_id: 'conv-123',
  *   data: { delta: 'Hello' },
- *   seq: 1,
+ *   event_time_us: 1000000,
+ *   event_counter: 0,
  *   timestamp: '2024-01-01T00:00:00Z'
  * };
  * ```
@@ -170,7 +171,8 @@ interface ServerMessage {
   type: string;
   conversation_id?: string;
   data?: unknown;
-  seq?: number;
+  event_time_us?: number;
+  event_counter?: number;
   timestamp?: string;
   action?: string;
 }
@@ -477,7 +479,7 @@ class AgentServiceImpl implements AgentService {
    * @private
    */
   private handleMessage(message: ServerMessage): void {
-    const { type, conversation_id, data, seq } = message;
+    const { type, conversation_id, data } = message;
 
     // Performance tracking: Record event receive timestamp
     const receiveTime = performance.now();
@@ -487,7 +489,7 @@ class AgentServiceImpl implements AgentService {
     if (type === 'text_delta') {
       const delta = (data as { delta?: string } | undefined)?.delta || '';
       logger.debug(
-        `[AgentWS] TEXT_DELTA: seq=${seq}, len=${delta.length}, preview="${delta.substring(0, 30)}..."`
+        `[AgentWS] TEXT_DELTA: timeUs=${message.event_time_us}, len=${delta.length}, preview="${delta.substring(0, 30)}..."`
       );
     } else if (
       type === 'text_start' ||
@@ -495,9 +497,9 @@ class AgentServiceImpl implements AgentService {
       type === 'complete' ||
       type === 'error'
     ) {
-      logger.debug(`[AgentWS] ${type.toUpperCase()}: seq=${seq}, conversation=${conversation_id}`);
+      logger.debug(`[AgentWS] ${type.toUpperCase()}: timeUs=${message.event_time_us}, conversation=${conversation_id}`);
     } else {
-      logger.debug('[AgentWS] handleMessage:', { type, conversation_id, seq, hasData: !!data });
+      logger.debug('[AgentWS] handleMessage:', { type, conversation_id, event_time_us: message.event_time_us, hasData: !!data });
     }
 
     // Handle non-conversation-specific messages
@@ -1372,8 +1374,10 @@ class AgentServiceImpl implements AgentService {
    * @param conversationId - The conversation ID
    * @param projectId - The project ID for scoping
    * @param limit - Maximum number of messages to return (default: 100)
-   * @param fromSequence - Optional starting sequence number (for pagination)
-   * @param beforeSequence - Optional ending sequence number (for pagination)
+   * @param fromTimeUs - Optional starting time in microseconds (for pagination)
+   * @param fromCounter - Optional starting counter (for pagination)
+   * @param beforeTimeUs - Optional ending time in microseconds (for pagination)
+   * @param beforeCounter - Optional ending counter (for pagination)
    * @returns Promise resolving to messages and pagination metadata
    * @throws {ApiError} If conversation doesn't exist or user lacks access
    *
@@ -1384,12 +1388,13 @@ class AgentServiceImpl implements AgentService {
    * console.log('Messages:', result.messages);
    * console.log('Has more:', result.has_more);
    *
-   * // Get messages after a specific sequence
+   * // Get messages after a specific point
    * const more = await agentService.getConversationMessages(
    *   'conv-123',
    *   'proj-123',
    *   100,
-   *   result.last_sequence
+   *   result.last_time_us,
+   *   result.last_counter
    * );
    * ```
    */
@@ -1397,33 +1402,48 @@ class AgentServiceImpl implements AgentService {
     conversationId: string,
     projectId: string,
     limit = 100,
-    fromSequence?: number,
-    beforeSequence?: number
+    fromTimeUs?: number,
+    fromCounter?: number,
+    beforeTimeUs?: number,
+    beforeCounter?: number
   ): Promise<ConversationMessagesResponse> {
     const params: Record<string, string | number> = {
       project_id: projectId,
       limit,
     };
-    if (fromSequence !== undefined) {
-      params.from_sequence = fromSequence;
+    if (fromTimeUs !== undefined) {
+      params.from_time_us = fromTimeUs;
     }
-    if (beforeSequence !== undefined) {
-      params.before_sequence = beforeSequence;
+    if (fromCounter !== undefined) {
+      params.from_counter = fromCounter;
+    }
+    if (beforeTimeUs !== undefined) {
+      params.before_time_us = beforeTimeUs;
+    }
+    if (beforeCounter !== undefined) {
+      params.before_counter = beforeCounter;
     }
 
     const response = await api.get<
       {
         has_more?: boolean;
-        first_sequence?: number | null;
-        last_sequence?: number | null;
-      } & Omit<ConversationMessagesResponse, 'has_more' | 'first_sequence' | 'last_sequence'>
+        first_time_us?: number | null;
+        first_counter?: number | null;
+        last_time_us?: number | null;
+        last_counter?: number | null;
+      } & Omit<
+        ConversationMessagesResponse,
+        'has_more' | 'first_time_us' | 'first_counter' | 'last_time_us' | 'last_counter'
+      >
     >(`/agent/conversations/${conversationId}/messages`, { params });
     // Normalize optional fields to required fields with defaults
     return {
       ...response,
       has_more: response.has_more ?? false,
-      first_sequence: response.first_sequence ?? null,
-      last_sequence: response.last_sequence ?? null,
+      first_time_us: response.first_time_us ?? null,
+      first_counter: response.first_counter ?? null,
+      last_time_us: response.last_time_us ?? null,
+      last_counter: response.last_counter ?? null,
     };
   }
 
@@ -1764,7 +1784,8 @@ class AgentServiceImpl implements AgentService {
    * Useful for reconstructing conversation state or analyzing execution flow.
    *
    * @param conversationId - The conversation ID
-   * @param fromSequence - Starting sequence number (default: 0)
+   * @param fromTimeUs - Starting event_time_us (default: 0)
+   * @param fromCounter - Starting event_counter (default: 0)
    * @param limit - Maximum events to return (default: 1000)
    * @returns Promise resolving to events array and pagination flag
    * @throws {ApiError} If conversation doesn't exist or user lacks access
@@ -1779,7 +1800,8 @@ class AgentServiceImpl implements AgentService {
    */
   async getConversationEvents(
     conversationId: string,
-    fromSequence = 0,
+    fromTimeUs = 0,
+    fromCounter = 0,
     limit = 1000
   ): Promise<{
     events: Array<{ type: string; data: unknown; timestamp: string | null }>;
@@ -1790,7 +1812,8 @@ class AgentServiceImpl implements AgentService {
       has_more: boolean;
     }>(`/agent/conversations/${conversationId}/events`, {
       params: {
-        from_sequence: fromSequence,
+        from_time_us: fromTimeUs,
+        from_counter: fromCounter,
         limit,
       },
     });
@@ -1813,47 +1836,47 @@ class AgentServiceImpl implements AgentService {
    * if (status.is_running) {
    *   console.log('Agent is still running');
    * } else {
-   *   console.log('Last sequence:', status.last_sequence);
+   *   console.log('Last event time:', status.last_event_time_us);
    * }
    *
    * // With recovery info
    * const statusWithRecovery = await agentService.getExecutionStatus('conv-123', true, 100);
    * if (statusWithRecovery.recovery?.can_recover) {
-   *   console.log('Can recover', statusWithRecovery.recovery.missed_events_count, 'events');
+   *   console.log('Can recover events');
    * }
    * ```
    */
   async getExecutionStatus(
     conversationId: string,
     includeRecovery: boolean = false,
-    fromSequence: number = 0
+    fromTimeUs: number = 0
   ): Promise<{
     is_running: boolean;
-    last_sequence: number;
+    last_event_time_us: number;
+    last_event_counter: number;
     current_message_id: string | null;
     conversation_id: string;
     recovery?: {
       can_recover: boolean;
       stream_exists: boolean;
       recovery_source: string;
-      missed_events_count: number;
     };
   }> {
     const response = await api.get<{
       is_running: boolean;
-      last_sequence: number;
+      last_event_time_us: number;
+      last_event_counter: number;
       current_message_id: string | null;
       conversation_id: string;
       recovery?: {
         can_recover: boolean;
         stream_exists: boolean;
         recovery_source: string;
-        missed_events_count: number;
       };
     }>(`/agent/conversations/${conversationId}/execution-status`, {
       params: {
         include_recovery: includeRecovery,
-        from_sequence: fromSequence,
+        from_time_us: fromTimeUs,
       },
     });
     return response;

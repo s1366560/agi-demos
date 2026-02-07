@@ -97,7 +97,8 @@ class SubscriptionOptions:
     Attributes:
         consumer_group: Name of the consumer group for load balancing
         consumer_name: Unique name for this consumer within the group
-        from_sequence: Start reading from this sequence number
+        from_time_us: Start reading from this event_time_us
+        from_counter: Start reading from this event_counter
         batch_size: Maximum events to fetch at once
         block_ms: Milliseconds to block waiting for new events (0 = no block)
         ack_immediately: Whether to acknowledge events immediately
@@ -105,7 +106,8 @@ class SubscriptionOptions:
 
     consumer_group: Optional[str] = None
     consumer_name: Optional[str] = None
-    from_sequence: int = 0
+    from_time_us: int = 0
+    from_counter: int = 0
     batch_size: int = 100
     block_ms: int = 5000
     ack_immediately: bool = True

@@ -8,7 +8,8 @@ Event Format:
     {
         "type": "event_type_string",  # e.g., "thought", "text_delta"
         "data": { ...event_fields },   # Event-specific data (without type/timestamp)
-        "seq": sequence_number,        # For ordering and duplicate detection
+        "event_time_us": timestamp_us, # Microsecond timestamp for ordering
+        "event_counter": counter,      # Counter within the same microsecond
         "timestamp": epoch_time,       # When the event occurred
     }
 """
@@ -32,25 +33,28 @@ class EventSerializer:
     def to_dict(
         event: AgentDomainEvent,
         message_id: Optional[str] = None,
-        seq: Optional[int] = None,
+        event_time_us: Optional[int] = None,
+        event_counter: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Convert domain event to dictionary for WebSocket/Redis transport.
 
         Args:
             event: The domain event to serialize
             message_id: Optional message ID for filtering events by message
-            seq: Optional sequence number for ordering
+            event_time_us: Optional microsecond timestamp for ordering
+            event_counter: Optional counter within the same microsecond
 
         Returns:
-            Dictionary with keys: type, data, seq, timestamp
+            Dictionary with keys: type, data, event_time_us, event_counter, timestamp
 
         Examples:
             >>> event = AgentThoughtEvent(content="Thinking...", thought_level="task")
-            >>> EventSerializer.to_dict(event, message_id="msg-123", seq=1)
+            >>> EventSerializer.to_dict(event, message_id="msg-123", event_time_us=1234567890123456, event_counter=0)
             {
                 "type": "thought",
                 "data": {"content": "Thinking...", "thought_level": "task"},
-                "seq": 1,
+                "event_time_us": 1234567890123456,
+                "event_counter": 0,
                 "timestamp": 1234567890.123
             }
         """
@@ -67,26 +71,31 @@ class EventSerializer:
         # Add optional fields
         if message_id is not None:
             result["data"]["message_id"] = message_id
-        if seq is not None:
-            result["seq"] = seq
+        if event_time_us is not None:
+            result["event_time_us"] = event_time_us
+        if event_counter is not None:
+            result["event_counter"] = event_counter
 
         return result
 
     @staticmethod
     def to_dict_batch(
-        events: List[tuple[AgentDomainEvent, Optional[str], int]],
+        events: List[tuple[AgentDomainEvent, Optional[str], int, int]],
     ) -> List[Dict[str, Any]]:
         """Convert multiple domain events to transport format.
 
         Args:
-            events: List of (event, message_id, seq) tuples
+            events: List of (event, message_id, event_time_us, event_counter) tuples
 
         Returns:
             List of serialized event dictionaries
         """
         return [
-            EventSerializer.to_dict(event, message_id=msg_id, seq=seq)
-            for event, msg_id, seq in events
+            EventSerializer.to_dict(
+                event, message_id=msg_id,
+                event_time_us=time_us, event_counter=counter,
+            )
+            for event, msg_id, time_us, counter in events
         ]
 
     @staticmethod
@@ -135,7 +144,8 @@ class EventSerializer:
 def serialize_event(
     event: AgentDomainEvent,
     message_id: Optional[str] = None,
-    seq: Optional[int] = None,
+    event_time_us: Optional[int] = None,
+    event_counter: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Quick serialization function for domain events.
 
@@ -144,9 +154,13 @@ def serialize_event(
     Args:
         event: The domain event to serialize
         message_id: Optional message ID for filtering
-        seq: Optional sequence number
+        event_time_us: Optional microsecond timestamp
+        event_counter: Optional counter within same microsecond
 
     Returns:
         Serialized event dictionary
     """
-    return EventSerializer.to_dict(event, message_id=message_id, seq=seq)
+    return EventSerializer.to_dict(
+        event, message_id=message_id,
+        event_time_us=event_time_us, event_counter=event_counter,
+    )

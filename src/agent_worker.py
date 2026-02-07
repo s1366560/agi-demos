@@ -313,19 +313,6 @@ async def main():
         logger.error(f"Agent Worker: Failed to connect to Temporal server: {e}")
         sys.exit(1)
 
-    # Initialize MCP Adapter (Ray or Local Fallback) for MCP tool loading
-    try:
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-            set_mcp_adapter,
-        )
-        from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
-
-        mcp_adapter = await create_mcp_adapter()
-        set_mcp_adapter(mcp_adapter)
-        logger.info("Agent Worker: MCP Adapter initialized")
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to initialize MCP adapter (MCP tools disabled): {e}")
-
     # Initialize MCP Sandbox Adapter for Project Sandbox tool loading
     try:
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
@@ -366,11 +353,11 @@ async def main():
         try:
             import redis.asyncio as aioredis
 
-            from src.infrastructure.agent.hitl.response_listener import (
-                HITLResponseListener,
-            )
             from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
                 set_hitl_response_listener,
+            )
+            from src.infrastructure.agent.hitl.response_listener import (
+                HITLResponseListener,
             )
 
             # Get Redis URL from settings

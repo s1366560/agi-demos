@@ -222,50 +222,144 @@ class ProviderService:
             api_key = self.encryption_service.decrypt(provider.api_key_encrypted)
 
             # Make a simple test request (using litellm or direct HTTP)
-            # This is a simplified version - in production, use litellm completion
+            # All providers support custom base_url for proxy/self-hosted scenarios
             async with httpx.AsyncClient(timeout=5.0) as client:
-                if provider.provider_type == "openai":
-                    response = await client.post(
-                        "https://api.openai.com/v1/models",
-                        headers={"Authorization": f"Bearer {api_key}"},
-                        json={},
-                    )
-                    if response.status_code == 200:
-                        status = "healthy"
-                    else:
-                        status = "unhealthy"
-                        error_message = f"HTTP {response.status_code}"
-                elif provider.provider_type == "qwen":
-                    # Test Qwen API
-                    base_url = (
-                        provider.base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-                    )
+                provider_type = provider.provider_type
+                base_url = provider.base_url
+
+                if provider_type == "openai":
+                    # OpenAI supports custom base_url (e.g., for OpenAI-compatible APIs)
+                    api_base = base_url or "https://api.openai.com/v1"
                     response = await client.get(
-                        f"{base_url}/models",
+                        f"{api_base}/models",
                         headers={"Authorization": f"Bearer {api_key}"},
                     )
-                    if response.status_code == 200:
-                        status = "healthy"
-                    else:
-                        status = "unhealthy"
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
                         error_message = f"HTTP {response.status_code}"
-                elif provider.provider_type == "gemini":
+
+                elif provider_type == "qwen":
+                    # Test Qwen API
+                    api_base = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "gemini":
                     # Test Google Gemini API
-                    base_url = provider.base_url or "https://generativelanguage.googleapis.com"
-                    # Try to list models via the API
+                    api_base = base_url or "https://generativelanguage.googleapis.com"
                     model = provider.llm_model or "gemini-pro"
                     response = await client.get(
-                        f"{base_url}/v1beta/models/{model}",
+                        f"{api_base}/v1beta/models/{model}",
                         headers={"x-goog-api-key": api_key},
                     )
-                    if response.status_code == 200:
-                        status = "healthy"
-                    else:
-                        status = "unhealthy"
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
                         error_message = f"HTTP {response.status_code}"
-                else:
-                    # For other providers, mark as degraded for now
+
+                elif provider_type == "anthropic":
+                    # Anthropic Claude API
+                    api_base = base_url or "https://api.anthropic.com"
+                    response = await client.get(
+                        f"{api_base}/v1/models",
+                        headers={
+                            "x-api-key": api_key,
+                            "anthropic-version": "2023-06-01",
+                        },
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "deepseek":
+                    # Deepseek API
+                    api_base = base_url or "https://api.deepseek.com/v1"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "zai":
+                    # ZhipuAI (Z.AI) API
+                    api_base = base_url or "https://open.bigmodel.cn/api/paas/v4"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "groq":
+                    # Groq API
+                    api_base = base_url or "https://api.groq.com/openai/v1"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "azure_openai":
+                    # Azure OpenAI requires custom base_url
+                    if not base_url:
+                        status = "unhealthy"
+                        error_message = "Azure OpenAI requires a custom base URL"
+                    else:
+                        response = await client.get(
+                            f"{base_url}/models",
+                            headers={"api-key": api_key},
+                        )
+                        status = "healthy" if response.status_code == 200 else "unhealthy"
+                        if response.status_code != 200:
+                            error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "cohere":
+                    # Cohere API
+                    api_base = base_url or "https://api.cohere.com"
+                    response = await client.get(
+                        f"{api_base}/v1/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "mistral":
+                    # Mistral API
+                    api_base = base_url or "https://api.mistral.ai/v1"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "bedrock":
+                    # AWS Bedrock is complex to test without boto3
+                    # Mark as degraded (will be validated during actual usage)
                     status = "degraded"
+                    error_message = "Bedrock health check not implemented, will be validated during usage"
+
+                elif provider_type == "vertex":
+                    # Google Vertex AI requires GCP authentication
+                    # Mark as degraded (will be validated during actual usage)
+                    status = "degraded"
+                    error_message = "Vertex AI health check not implemented, will be validated during usage"
+
+                else:
+                    # Unknown provider, mark as degraded
+                    status = "degraded"
+                    error_message = f"Unknown provider type: {provider_type}"
 
             response_time_ms = int((time.time() - start_time) * 1000)
 

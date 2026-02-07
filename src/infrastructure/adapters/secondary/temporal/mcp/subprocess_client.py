@@ -3,8 +3,7 @@
 This module provides a subprocess-based MCP client for local MCP servers
 that communicate via stdin/stdout using the JSON-RPC protocol.
 
-Used by MCPServerActor (Ray) and MCPLocalFallback to manage
-MCP server subprocesses.
+Used by MCP tool adapters to manage MCP server subprocesses.
 
 The local dataclasses (MCPToolSchema, MCPToolResult) are used for
 MCP protocol serialization. Domain model equivalents are in:

@@ -47,7 +47,8 @@ class ChatResult:
     """聊天结果."""
 
     content: str = ""
-    sequence_number: int = 0
+    last_event_time_us: int = 0
+    last_event_counter: int = 0
     is_error: bool = False
     error_message: Optional[str] = None
     execution_time_ms: float = 0.0

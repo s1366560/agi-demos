@@ -78,6 +78,13 @@ vi.mock('../../../stores/mcp', () => ({
   }),
 }));
 
+// Mock project store
+vi.mock('../../../stores/project', () => ({
+  useProjectStore: vi.fn((selector) => {
+    return selector({ currentProject: { id: 'test-project-1', name: 'Test Project' } });
+  }),
+}));
+
 // Mock message from antd
 vi.mock('antd', async () => {
   const actual = await vi.importActual('antd');
@@ -657,7 +664,7 @@ describe('McpServerList Compound Component', () => {
       const syncButton = screen.getAllByLabelText('sync')[0];
       fireEvent.click(syncButton);
       await waitFor(() => {
-        expect(mockStoreState.syncServer).toHaveBeenCalledWith('1');
+        expect(mockStoreState.syncServer).toHaveBeenCalledWith('1', 'test-project-1');
       });
     });
 

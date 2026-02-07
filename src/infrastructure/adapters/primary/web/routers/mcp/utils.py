@@ -5,7 +5,7 @@ Contains dependency functions and helper utilities.
 
 import logging
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
@@ -22,21 +22,14 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
         db=db,
         graph_service=app_container.graph_service,
         redis_client=app_container._redis_client,
-        mcp_adapter=app_container._infra._mcp_adapter,
     )
 
 
-async def get_mcp_adapter(request: Request):
-    """Get MCP Adapter from DI container."""
-    container = request.app.state.container
-    adapter = await container.mcp_adapter()
-    if adapter is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MCP service is not available.",
-        )
-    return adapter
+async def get_sandbox_mcp_server_manager(request: Request, db: AsyncSession):
+    """Get SandboxMCPServerManager from DI container.
 
-
-# Backward compatibility alias
-get_mcp_temporal_adapter = get_mcp_adapter
+    Creates a fresh container with the current DB session to ensure
+    proper transaction scoping.
+    """
+    container = get_container_with_db(request, db)
+    return container.sandbox_mcp_server_manager()

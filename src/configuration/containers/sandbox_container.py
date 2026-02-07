@@ -98,3 +98,13 @@ class SandboxContainer:
             health_check_interval_seconds=60,
             auto_recover=True,
         )
+
+    def sandbox_mcp_server_manager(self):
+        """Get SandboxMCPServerManager for managing user MCP servers in sandbox."""
+        from src.application.services.sandbox_mcp_server_manager import (
+            SandboxMCPServerManager,
+        )
+
+        return SandboxMCPServerManager(
+            sandbox_resource=self.sandbox_resource(),
+        )

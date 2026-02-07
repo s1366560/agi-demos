@@ -6,7 +6,7 @@ used across Agent activities.
 Includes:
 - WAL (Write-Ahead Log) pattern for event persistence
 - TextDeltaSampler for efficient text_delta handling
-- Atomic sequence number generation
+- Atomic event time generation
 """
 
 import json
@@ -114,12 +114,13 @@ async def save_event_to_db(
     message_id: str,
     event_type: str,
     event_data: Dict[str, Any],
-    sequence_number: int,
+    event_time_us: int,
+    event_counter: int,
 ) -> None:
     """Helper to save event to DB with idempotency guarantee.
 
     Uses INSERT ON CONFLICT DO NOTHING to handle Temporal retry scenarios
-    where the same (conversation_id, sequence_number) may be saved twice.
+    where the same (conversation_id, event_time_us, event_counter) may be saved twice.
 
     Delta events are skipped - frontend renders complete events (thought,
     act, observe, assistant_message) for historical message display.
@@ -129,7 +130,8 @@ async def save_event_to_db(
         message_id: Message ID
         event_type: Type of event
         event_data: Event payload data
-        sequence_number: Unique sequence number for ordering
+        event_time_us: Microsecond timestamp for ordering
+        event_counter: Counter within the same microsecond
     """
     from src.configuration.config import get_settings
 
@@ -178,17 +180,21 @@ async def save_event_to_db(
                         message_id=message_id,
                         event_type=event_type,
                         event_data=event_data,
-                        sequence_number=sequence_number,
+                        event_time_us=event_time_us,
+                        event_counter=event_counter,
                         created_at=datetime.now(timezone.utc),
                     )
-                    .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+                    .on_conflict_do_nothing(
+                        index_elements=["conversation_id", "event_time_us", "event_counter"]
+                    )
                 )
                 await session.execute(stmt)
     except IntegrityError as e:
         # Unique constraint violation - event already exists (likely Temporal retry)
-        if "uq_agent_events_conv_seq" in str(e):
+        if "uq_agent_events_conv_time" in str(e):
             logger.warning(
-                f"Event already exists (conv={conversation_id}, seq={sequence_number}). "
+                f"Event already exists (conv={conversation_id}, "
+                f"event_time_us={event_time_us}, event_counter={event_counter}). "
                 "Skipping duplicate save due to Temporal retry."
             )
             return  # Don't raise - treat as idempotent success
@@ -206,7 +212,8 @@ async def save_assistant_message_event(
     content: str,
     assistant_message_id: Optional[str] = None,
     artifacts: Optional[List[Dict[str, Any]]] = None,
-    sequence_number: int = 0,
+    event_time_us: int = 0,
+    event_counter: int = 0,
 ) -> str:
     """Helper to save assistant_message event to unified event timeline.
 
@@ -219,7 +226,8 @@ async def save_assistant_message_event(
         content: Assistant response content
         assistant_message_id: Optional ID for the assistant message
         artifacts: Optional list of artifact references
-        sequence_number: Event sequence number
+        event_time_us: Microsecond timestamp for ordering
+        event_counter: Counter within the same microsecond
 
     Returns:
         The ID of the assistant message (for reference in other events).
@@ -250,10 +258,13 @@ async def save_assistant_message_event(
                         message_id=message_id,
                         event_type="assistant_message",
                         event_data=event_data,
-                        sequence_number=sequence_number,
+                        event_time_us=event_time_us,
+                        event_counter=event_counter,
                         created_at=datetime.now(timezone.utc),
                     )
-                    .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+                    .on_conflict_do_nothing(
+                        index_elements=["conversation_id", "event_time_us", "event_counter"]
+                    )
                 )
                 await session.execute(stmt)
         logger.info(
@@ -261,10 +272,11 @@ async def save_assistant_message_event(
         )
         return assistant_msg_id
     except IntegrityError as e:
-        if "uq_agent_events_conv_seq" in str(e):
+        if "uq_agent_events_conv_time" in str(e):
             logger.warning(
                 f"assistant_message event already exists (conv={conversation_id}, "
-                f"seq={sequence_number}). Skipping duplicate."
+                f"event_time_us={event_time_us}, event_counter={event_counter}). "
+                "Skipping duplicate."
             )
             return assistant_msg_id
         logger.error(f"Database integrity error: {e}")
@@ -339,24 +351,26 @@ async def save_tool_execution_record(
         return None
 
 
-async def sync_sequence_number_from_db(
+async def sync_event_time_from_db(
     conversation_id: str,
-    state_sequence_number: int,
-) -> int:
-    """Sync sequence_number from database to handle Temporal retry scenarios.
+    state_event_time_us: int,
+    state_event_counter: int,
+) -> tuple[int, int]:
+    """Sync event_time_us/event_counter from database to handle Temporal retry scenarios.
 
-    When an Activity is retried by Temporal, the state.sequence_number passed in
+    When an Activity is retried by Temporal, the state values passed in
     may be stale (from before the retry). This function queries the database
-    for the actual last sequence number and returns the correct starting point.
+    for the actual last event time and returns the correct starting point.
 
     Args:
         conversation_id: The conversation ID to query
-        state_sequence_number: The sequence number from Activity state
+        state_event_time_us: The event_time_us from Activity state
+        state_event_counter: The event_counter from Activity state
 
     Returns:
-        The correct sequence number to start from (max of state and DB)
+        Tuple of (event_time_us, event_counter) to start from
     """
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
     from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
@@ -364,25 +378,38 @@ async def sync_sequence_number_from_db(
     try:
         async with async_session_factory() as session:
             result = await session.execute(
-                select(func.max(AgentExecutionEvent.sequence_number)).where(
-                    AgentExecutionEvent.conversation_id == conversation_id
+                select(
+                    AgentExecutionEvent.event_time_us,
+                    AgentExecutionEvent.event_counter,
                 )
+                .where(AgentExecutionEvent.conversation_id == conversation_id)
+                .order_by(
+                    AgentExecutionEvent.event_time_us.desc(),
+                    AgentExecutionEvent.event_counter.desc(),
+                )
+                .limit(1)
             )
-            db_last_seq = result.scalar() or 0
+            row = result.first()
+            db_last_time_us = row[0] if row else 0
+            db_last_counter = row[1] if row else 0
 
-            if db_last_seq > state_sequence_number:
+            if db_last_time_us > state_event_time_us or (
+                db_last_time_us == state_event_time_us
+                and db_last_counter > state_event_counter
+            ):
                 logger.warning(
                     f"Temporal retry detected for conversation={conversation_id}. "
-                    f"Syncing sequence_number from {state_sequence_number} to {db_last_seq} "
+                    f"Syncing event_time from ({state_event_time_us}, {state_event_counter}) "
+                    f"to ({db_last_time_us}, {db_last_counter}) "
                     "(DB has more recent events)."
                 )
-                return db_last_seq
+                return (db_last_time_us, db_last_counter)
 
-            return state_sequence_number
+            return (state_event_time_us, state_event_counter)
     except Exception as e:
-        logger.error(f"Failed to sync sequence_number from DB: {e}")
+        logger.error(f"Failed to sync event_time from DB: {e}")
         # Fall back to state value if DB query fails
-        return state_sequence_number
+        return (state_event_time_us, state_event_counter)
 
 
 async def persist_and_publish_event(
@@ -390,11 +417,11 @@ async def persist_and_publish_event(
     message_id: str,
     event: Dict[str, Any],
     correlation_id: Optional[str] = None,
-) -> int:
+) -> tuple[int, int]:
     """
     Write-Ahead Log pattern: DB first, then Redis.
 
-    1. Get sequence number atomically
+    1. Get event time atomically
     2. Write to DB (source of truth)
     3. Publish to Redis (notification layer)
 
@@ -407,15 +434,13 @@ async def persist_and_publish_event(
         correlation_id: Optional request correlation ID
 
     Returns:
-        The sequence number assigned to this event
+        Tuple of (event_time_us, event_counter) assigned to this event
     """
     import redis.asyncio as aioredis
     from sqlalchemy.dialects.postgresql import insert
 
     from src.configuration.config import get_settings
-    from src.infrastructure.adapters.secondary.messaging.redis_sequence_service import (
-        RedisSequenceService,
-    )
+    from src.domain.model.agent.execution.event_time import EventTimeGenerator
     from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
     from src.infrastructure.adapters.secondary.persistence.models import (
         AgentExecutionEvent as AgentExecutionEventModel,
@@ -425,10 +450,9 @@ async def persist_and_publish_event(
     redis_client = None
 
     try:
-        # 1. Get atomic sequence
-        redis_client = aioredis.from_url(settings.redis_url)
-        sequence_service = RedisSequenceService(redis_client)
-        seq = await sequence_service.get_next_sequence(conversation_id)
+        # 1. Get atomic event time
+        time_gen = EventTimeGenerator()
+        evt_time_us, evt_counter = time_gen.next()
 
         event_type = event.get("type", "unknown")
         event_data = event.get("data", {})
@@ -444,20 +468,25 @@ async def persist_and_publish_event(
                         message_id=message_id,
                         event_type=event_type,
                         event_data=event_data,
-                        sequence_number=seq,
+                        event_time_us=evt_time_us,
+                        event_counter=evt_counter,
                         correlation_id=correlation_id,
                         created_at=datetime.now(timezone.utc),
                     )
-                    .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+                    .on_conflict_do_nothing(
+                        index_elements=["conversation_id", "event_time_us", "event_counter"]
+                    )
                 )
                 await session.execute(stmt)
 
         # 3. Publish to Redis (async, can fail)
         try:
+            redis_client = aioredis.from_url(settings.redis_url)
             stream_key = f"agent:events:{conversation_id}"
             redis_event = {
                 "type": event_type,
-                "seq": str(seq),
+                "event_time_us": str(evt_time_us),
+                "event_counter": str(evt_counter),
                 "data": json.dumps(event_data, default=str),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "conversation_id": conversation_id,
@@ -472,7 +501,7 @@ async def persist_and_publish_event(
             # Log but don't fail - Redis is notification layer only
             logger.warning(f"Failed to publish event to Redis: {e}")
 
-        return seq
+        return (evt_time_us, evt_counter)
 
     finally:
         if redis_client:
@@ -483,7 +512,8 @@ async def save_sampled_text_delta(
     conversation_id: str,
     message_id: str,
     accumulated_content: str,
-    sequence_number: int,
+    event_time_us: int,
+    event_counter: int,
     correlation_id: Optional[str] = None,
 ) -> None:
     """
@@ -496,7 +526,8 @@ async def save_sampled_text_delta(
         conversation_id: Conversation ID
         message_id: Message ID
         accumulated_content: Accumulated text content so far
-        sequence_number: Current sequence number
+        event_time_us: Current event_time_us
+        event_counter: Current event_counter
         correlation_id: Optional request correlation ID
     """
     from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -514,7 +545,7 @@ async def save_sampled_text_delta(
                     event_type="text_delta_sample",
                     delta_content=accumulated_content,
                     event_data={"accumulated": True, "correlation_id": correlation_id},
-                    sequence_number=sequence_number,
+                    sequence_number=0,  # Legacy field, kept for compat
                     expires_at=expires_at,
                 )
                 session.add(buffer)
@@ -527,7 +558,8 @@ async def publish_event_to_redis(
     conversation_id: str,
     message_id: str,
     event: Dict[str, Any],
-    sequence_number: int,
+    event_time_us: int,
+    event_counter: int,
     correlation_id: Optional[str] = None,
 ) -> None:
     """
@@ -539,7 +571,8 @@ async def publish_event_to_redis(
         conversation_id: Conversation ID
         message_id: Message ID
         event: Event to publish
-        sequence_number: Sequence number
+        event_time_us: Microsecond timestamp for ordering
+        event_counter: Counter within the same microsecond
         correlation_id: Optional correlation ID
     """
     import redis.asyncio as aioredis
@@ -558,7 +591,8 @@ async def publish_event_to_redis(
 
         redis_event = {
             "type": event_type,
-            "seq": str(sequence_number),
+            "event_time_us": str(event_time_us),
+            "event_counter": str(event_counter),
             "data": json.dumps(event_data, default=str),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "conversation_id": conversation_id,

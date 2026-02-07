@@ -16,7 +16,6 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
 )
 from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
     set_agent_graph_service,
-    set_mcp_adapter,
     set_mcp_sandbox_adapter,
     sync_mcp_sandbox_adapter_from_docker,
 )
@@ -34,7 +33,6 @@ from src.infrastructure.agent.core.project_react_agent import (
     ProjectReActAgent,
 )
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
-from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +56,9 @@ class ProjectAgentActor:
     def actor_id(tenant_id: str, project_id: str, agent_mode: str) -> str:
         return f"agent:{tenant_id}:{project_id}:{agent_mode}"
 
-    async def initialize(self, config: ProjectAgentActorConfig, force_refresh: bool = False) -> Dict[str, Any]:
+    async def initialize(
+        self, config: ProjectAgentActorConfig, force_refresh: bool = False
+    ) -> Dict[str, Any]:
         """Initialize the ProjectReActAgent instance."""
         async with self._init_lock:
             await self._bootstrap_runtime()
@@ -228,12 +228,6 @@ class ProjectAgentActor:
             except Exception as e:
                 logger.error(f"[ProjectAgentActor] Graph service init failed: {e}")
                 raise
-
-            try:
-                mcp_adapter = await create_mcp_adapter()
-                set_mcp_adapter(mcp_adapter)
-            except Exception as e:
-                logger.warning(f"[ProjectAgentActor] MCP adapter disabled: {e}")
 
             try:
                 mcp_sandbox_adapter = MCPSandboxAdapter(

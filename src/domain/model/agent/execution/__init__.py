@@ -2,6 +2,7 @@
 
 from src.domain.model.agent.execution.agent_execution import AgentExecution, ExecutionStatus
 from src.domain.model.agent.execution.agent_execution_event import AgentExecutionEvent
+from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.domain.model.agent.execution.execution_checkpoint import (
     CheckpointType,
     ExecutionCheckpoint,
@@ -26,6 +27,7 @@ __all__ = [
     "AgentExecution",
     "AgentExecutionEvent",
     "CheckpointType",
+    "EventTimeGenerator",
     "ExecutionCheckpoint",
     "ExecutionPlan",
     "ExecutionPlanStatus",

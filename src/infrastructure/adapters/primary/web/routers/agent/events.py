@@ -36,7 +36,8 @@ router = APIRouter()
 @router.get("/conversations/{conversation_id}/events", response_model=EventReplayResponse)
 async def get_conversation_events(
     conversation_id: str,
-    from_sequence: int = Query(0, ge=0, description="Starting sequence number"),
+    from_time_us: int = Query(0, ge=0, description="Starting event_time_us"),
+    from_counter: int = Query(0, ge=0, description="Starting event_counter"),
     limit: int = Query(1000, ge=1, le=10000, description="Maximum events to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -59,7 +60,8 @@ async def get_conversation_events(
 
         events = await event_repo.get_events(
             conversation_id=conversation_id,
-            from_sequence=from_sequence,
+            from_time_us=from_time_us,
+            from_counter=from_counter,
             limit=limit,
         )
 
@@ -84,8 +86,8 @@ async def get_execution_status(
     include_recovery: bool = Query(
         False, description="Include recovery information for stream resumption"
     ),
-    from_sequence: int = Query(
-        0, description="Client's last known sequence (for recovery calculation)"
+    from_time_us: int = Query(
+        0, description="Client's last known event_time_us (for recovery calculation)"
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -99,7 +101,7 @@ async def get_execution_status(
     - can_recover: Whether recovery is possible
     - stream_exists: Whether Redis Stream exists
     - recovery_source: "stream", "database", or "none"
-    - missed_events_count: Events missed since from_sequence
+    - missed_events_count: Events missed since from_time_us
     """
     try:
         container = get_container_with_db(request, db)
@@ -110,13 +112,16 @@ async def get_execution_status(
             # Event replay not configured
             return ExecutionStatusResponse(
                 is_running=False,
-                last_sequence=0,
+                last_event_time_us=0,
+                last_event_counter=0,
                 current_message_id=None,
                 conversation_id=conversation_id,
             )
 
-        # Get last sequence number
-        last_sequence = await event_repo.get_last_sequence(conversation_id)
+        # Get last event time
+        last_event_time_us, last_event_counter = await event_repo.get_last_event_time(
+            conversation_id
+        )
 
         # Check Redis for active execution
         is_running = False
@@ -138,10 +143,9 @@ async def get_execution_status(
                 )
 
         # If not running from Redis check, get current message ID from last event
-        if not current_message_id and last_sequence > 0:
+        if not current_message_id and last_event_time_us > 0:
             events = await event_repo.get_events(
                 conversation_id=conversation_id,
-                from_sequence=max(0, last_sequence - 1),
                 limit=1,
             )
             if events:
@@ -150,7 +154,8 @@ async def get_execution_status(
         # Build response
         response = ExecutionStatusResponse(
             is_running=is_running,
-            last_sequence=last_sequence,
+            last_event_time_us=last_event_time_us,
+            last_event_counter=last_event_counter,
             current_message_id=current_message_id,
             conversation_id=conversation_id,
         )
@@ -158,9 +163,9 @@ async def get_execution_status(
         # Include recovery info if requested
         if include_recovery:
             recovery_info = RecoveryInfo(
-                can_recover=last_sequence > from_sequence,
-                recovery_source="database" if last_sequence > 0 else "none",
-                missed_events_count=max(0, last_sequence - from_sequence),
+                can_recover=last_event_time_us > from_time_us,
+                recovery_source="database" if last_event_time_us > 0 else "none",
+                missed_events_count=0,  # Cannot compute count from time comparison
             )
 
             # Check Redis Stream for live events
@@ -175,17 +180,17 @@ async def get_execution_status(
                         if stream_info:
                             recovery_info.stream_exists = True
                             recovery_info.recovery_source = "stream"
-                            # Get last entry to find last sequence
+                            # Get last entry to find last event time
                             last_entry = await redis_client.xrevrange(stream_key, count=1)
                             if last_entry:
                                 _, fields = last_entry[0]
-                                seq_raw = fields.get(b"seq") or fields.get("seq")
-                                if seq_raw:
-                                    stream_seq = int(seq_raw)
-                                    if stream_seq > last_sequence:
-                                        recovery_info.missed_events_count = max(
-                                            0, stream_seq - from_sequence
-                                        )
+                                time_us_raw = (
+                                    fields.get(b"event_time_us")
+                                    or fields.get("event_time_us")
+                                )
+                                if time_us_raw:
+                                    stream_time_us = int(time_us_raw)
+                                    if stream_time_us > last_event_time_us:
                                         recovery_info.can_recover = True
                     except redis.ResponseError:
                         # Stream doesn't exist

@@ -29,11 +29,17 @@ async def get_conversation_messages(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
-    from_sequence: int = Query(
-        0, description="Starting sequence number (inclusive) for forward pagination"
+    from_time_us: Optional[int] = Query(
+        None, description="Starting event_time_us (inclusive) for forward pagination"
     ),
-    before_sequence: Optional[int] = Query(
-        None, description="For backward pagination, get events before this sequence"
+    from_counter: Optional[int] = Query(
+        None, description="Starting event_counter (inclusive) for forward pagination"
+    ),
+    before_time_us: Optional[int] = Query(
+        None, description="For backward pagination, get events before this event_time_us"
+    ),
+    before_counter: Optional[int] = Query(
+        None, description="For backward pagination, event_counter for the cursor"
     ),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -87,21 +93,27 @@ async def get_conversation_messages(
             "permission_granted",
         }
 
-        calculated_from_sequence = from_sequence
-        calculated_before_sequence = before_sequence
+        calc_from_time_us = from_time_us or 0
+        calc_from_counter = from_counter or 0
+        calc_before_time_us = before_time_us
+        calc_before_counter = before_counter
 
-        if from_sequence == 0 and before_sequence is None:
-            last_seq = await event_repo.get_last_sequence(conversation_id)
-            if last_seq > 0:
-                calculated_before_sequence = last_seq + 1
-                calculated_from_sequence = 0
+        if calc_from_time_us == 0 and calc_before_time_us is None:
+            last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
+            if last_time_us > 0:
+                # Load latest events by backward pagination from end
+                calc_before_time_us = last_time_us + 1
+                calc_before_counter = 0
+                calc_from_time_us = 0
 
         events = await event_repo.get_events(
             conversation_id=conversation_id,
-            from_sequence=calculated_from_sequence,
+            from_time_us=calc_from_time_us,
+            from_counter=calc_from_counter,
             limit=limit,
             event_types=DISPLAYABLE_EVENTS,
-            before_sequence=calculated_before_sequence,
+            before_time_us=calc_before_time_us,
+            before_counter=calc_before_counter,
         )
 
         tool_executions = await tool_exec_repo.list_by_conversation(conversation_id)
@@ -147,10 +159,13 @@ async def get_conversation_messages(
             event_type = event.event_type
             data = event.event_data or {}
             item = {
-                "id": f"{event_type}-{event.sequence_number}",
+                "id": f"{event_type}-{event.event_time_us}-{event.event_counter}",
                 "type": event_type,
-                "sequenceNumber": event.sequence_number,
-                "timestamp": int(event.created_at.timestamp() * 1000) if event.created_at else None,
+                "eventTimeUs": event.event_time_us,
+                "eventCounter": event.event_counter,
+                "timestamp": event.event_time_us // 1000 if event.event_time_us else (
+                    int(event.created_at.timestamp() * 1000) if event.created_at else None
+                ),
             }
 
             if event_type == "user_message":
@@ -316,20 +331,25 @@ async def get_conversation_messages(
 
             timeline.append(item)
 
-        first_sequence = None
-        last_sequence = None
+        first_time_us = None
+        first_counter = None
+        last_time_us = None
+        last_counter = None
         if timeline:
-            first_sequence = timeline[0]["sequenceNumber"]
-            last_sequence = timeline[-1]["sequenceNumber"]
+            first_time_us = timeline[0]["eventTimeUs"]
+            first_counter = timeline[0]["eventCounter"]
+            last_time_us = timeline[-1]["eventTimeUs"]
+            last_counter = timeline[-1]["eventCounter"]
 
         has_more = False
-        if first_sequence is not None:
+        if first_time_us is not None:
             check_events = await event_repo.get_events(
                 conversation_id=conversation_id,
-                from_sequence=0,
+                from_time_us=0,
                 limit=1,
                 event_types=DISPLAYABLE_EVENTS,
-                before_sequence=first_sequence,
+                before_time_us=first_time_us,
+                before_counter=first_counter,
             )
             has_more = len(check_events) > 0
 
@@ -338,8 +358,10 @@ async def get_conversation_messages(
             "timeline": timeline,
             "total": len(timeline),
             "has_more": has_more,
-            "first_sequence": first_sequence,
-            "last_sequence": last_sequence,
+            "first_time_us": first_time_us,
+            "first_counter": first_counter,
+            "last_time_us": last_time_us,
+            "last_counter": last_counter,
         }
 
     except HTTPException:
@@ -447,8 +469,8 @@ async def get_conversation_execution_status(
     include_recovery_info: bool = Query(
         False, description="Include event recovery information for stream resumption"
     ),
-    from_sequence: int = Query(
-        0, description="Client's last known sequence (for recovery calculation)"
+    from_time_us: int = Query(
+        0, description="Client's last known event_time_us (for recovery calculation)"
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -500,7 +522,7 @@ async def get_conversation_execution_status(
                 redis_client=redis_client,
                 conversation_id=conversation_id,
                 message_id=current_message_id,
-                from_sequence=from_sequence,
+                from_time_us=from_time_us,
             )
             result["recovery"] = recovery_info
 
@@ -518,13 +540,13 @@ async def _get_recovery_info(
     redis_client,
     conversation_id: str,
     message_id: Optional[str],
-    from_sequence: int,
+    from_time_us: int,
 ) -> dict:
     """Get event stream recovery information."""
     recovery_info = {
         "can_recover": False,
-        "last_sequence": -1,
-        "missed_events_count": 0,
+        "last_event_time_us": 0,
+        "last_event_counter": 0,
         "stream_exists": False,
         "recovery_source": "none",
     }
@@ -542,25 +564,29 @@ async def _get_recovery_info(
                         last_entry = await redis_client.xrevrange(stream_key, count=1)
                         if last_entry:
                             _, fields = last_entry[0]
-                            seq_raw = fields.get(b"seq") or fields.get("seq")
-                            if seq_raw:
-                                recovery_info["last_sequence"] = int(seq_raw)
-                                recovery_info["can_recover"] = True
-                                recovery_info["recovery_source"] = "stream"
-                                recovery_info["missed_events_count"] = max(
-                                    0, recovery_info["last_sequence"] - from_sequence
-                                )
+                            data_raw = fields.get(b"data") or fields.get("data")
+                            if data_raw:
+                                import json
+
+                                data_obj = json.loads(data_raw)
+                                evt_time = data_obj.get("event_time_us", 0)
+                                evt_counter = data_obj.get("event_counter", 0)
+                                if evt_time:
+                                    recovery_info["last_event_time_us"] = evt_time
+                                    recovery_info["last_event_counter"] = evt_counter
+                                    recovery_info["can_recover"] = True
+                                    recovery_info["recovery_source"] = "stream"
                 except redis.ResponseError:
                     pass
 
         if not recovery_info["stream_exists"]:
             event_repo = container.agent_execution_event_repository()
-            last_db_seq = await event_repo.get_last_sequence(conversation_id)
-            if last_db_seq >= 0:
-                recovery_info["last_sequence"] = last_db_seq
+            last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
+            if last_time_us > 0:
+                recovery_info["last_event_time_us"] = last_time_us
+                recovery_info["last_event_counter"] = last_counter
                 recovery_info["can_recover"] = True
                 recovery_info["recovery_source"] = "database"
-                recovery_info["missed_events_count"] = max(0, last_db_seq - from_sequence)
 
     except Exception as e:
         logger.warning(f"Error getting recovery info: {e}")

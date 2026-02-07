@@ -36,7 +36,8 @@ class AgentExecutionEvent(Entity):
         message_id: The message this event is associated with
         event_type: Type of SSE event (thought, act, observe, etc.)
         event_data: JSON payload of the event
-        sequence_number: Monotonically increasing number for ordering
+        event_time_us: Microsecond-precision UTC timestamp for ordering
+        event_counter: Monotonic counter within the same microsecond
         created_at: When this event was created
     """
 
@@ -44,7 +45,8 @@ class AgentExecutionEvent(Entity):
     message_id: str
     event_type: AgentEventType | str
     event_data: Dict[str, Any] = field(default_factory=dict)
-    sequence_number: int = 0
+    event_time_us: int = 0
+    event_counter: int = 0
     created_at: datetime = field(default_factory=datetime.utcnow)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -55,7 +57,8 @@ class AgentExecutionEvent(Entity):
             "message_id": self.message_id,
             "event_type": self.event_type,
             "event_data": self.event_data,
-            "sequence_number": self.sequence_number,
+            "event_time_us": self.event_time_us,
+            "event_counter": self.event_counter,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -64,6 +67,8 @@ class AgentExecutionEvent(Entity):
         return {
             "type": self.event_type,
             "data": self.event_data,
+            "event_time_us": self.event_time_us,
+            "event_counter": self.event_counter,
             "timestamp": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -73,7 +78,8 @@ class AgentExecutionEvent(Entity):
         event: AgentDomainEvent,
         conversation_id: str,
         message_id: str,
-        sequence_number: int = 0,
+        event_time_us: int = 0,
+        event_counter: int = 0,
     ) -> "AgentExecutionEvent":
         """Create from domain event."""
         return cls(
@@ -81,7 +87,8 @@ class AgentExecutionEvent(Entity):
             message_id=message_id,
             event_type=event.event_type.value,
             event_data=event.model_dump(exclude={"event_type", "timestamp"}),
-            sequence_number=sequence_number,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
             created_at=datetime.fromtimestamp(event.timestamp),
         )
 

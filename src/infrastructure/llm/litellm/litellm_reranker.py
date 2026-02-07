@@ -197,14 +197,19 @@ class LiteLLMReranker(BaseReranker):
         import litellm
 
         try:
+            # Build kwargs for rerank call
+            rerank_kwargs: dict[str, Any] = {
+                "model": f"cohere/{self._model}",
+                "query": query,
+                "documents": passages,
+                "top_n": top_n,
+            }
+            # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
+            if self._base_url:
+                rerank_kwargs["api_base"] = self._base_url
+
             # Use LiteLLM's rerank function (wraps Cohere API)
-            response = await asyncio.to_thread(
-                litellm.rerank,
-                model=f"cohere/{self._model}",
-                query=query,
-                documents=passages,
-                top_n=top_n,
-            )
+            response = await asyncio.to_thread(litellm.rerank, **rerank_kwargs)
 
             results = []
             for item in response.results:
@@ -259,9 +264,9 @@ class LiteLLMReranker(BaseReranker):
         model = self._get_litellm_model_name()
 
         try:
-            response = await litellm.acompletion(
-                model=model,
-                messages=[
+            completion_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": [
                     {
                         "role": "system",
                         "content": "You are a relevance scoring assistant. "
@@ -269,9 +274,14 @@ class LiteLLMReranker(BaseReranker):
                     },
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0,
-                response_format={"type": "json_object"},
-            )
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+            }
+            # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
+            if self._base_url:
+                completion_kwargs["api_base"] = self._base_url
+
+            response = await litellm.acompletion(**completion_kwargs)
 
             # Extract and parse response
             message = response.choices[0].message

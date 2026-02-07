@@ -68,12 +68,6 @@ __all__ = [
     "get_mcp_tools_from_cache",
     "update_mcp_tools_cache",
     "invalidate_mcp_tools_cache",
-    # MCP Adapter (Ray or Local Fallback)
-    "set_mcp_adapter",
-    "get_mcp_adapter",
-    # Backward compatibility aliases
-    "set_mcp_temporal_adapter",
-    "get_mcp_temporal_adapter",
     # MCP Sandbox Adapter
     "set_mcp_sandbox_adapter",
     "get_mcp_sandbox_adapter",
@@ -110,7 +104,6 @@ __all__ = [
 # Global state for agent worker
 _agent_graph_service: Optional[Any] = None
 _redis_pool: Optional[redis.ConnectionPool] = None
-_mcp_adapter: Optional[Any] = None  # MCPRayAdapter or MCPLocalFallback
 _mcp_sandbox_adapter: Optional[Any] = None
 _pool_adapter: Optional[Any] = None  # PooledAgentSessionAdapter (when enabled)
 _hitl_response_listener: Optional[Any] = None  # HITLResponseListener (real-time)
@@ -159,39 +152,6 @@ def get_agent_graph_service() -> Optional[Any]:
         The graph service instance or None if not initialized
     """
     return _agent_graph_service
-
-
-# ============================================================================
-# MCP Adapter State (Ray or Local Fallback)
-# ============================================================================
-
-
-def set_mcp_adapter(adapter: Any) -> None:
-    """Set the global MCP Adapter instance for agent worker.
-
-    Called during Agent Worker initialization to make the MCP adapter
-    (MCPRayAdapter or MCPLocalFallback) available to all Activities.
-
-    Args:
-        adapter: The MCP adapter instance
-    """
-    global _mcp_adapter
-    _mcp_adapter = adapter
-    logger.info("Agent Worker: MCP Adapter registered for Activities")
-
-
-def get_mcp_adapter() -> Optional[Any]:
-    """Get the global MCP Adapter instance for agent worker.
-
-    Returns:
-        The MCP adapter instance or None if not initialized
-    """
-    return _mcp_adapter
-
-
-# Backward compatibility aliases
-set_mcp_temporal_adapter = set_mcp_adapter
-get_mcp_temporal_adapter = get_mcp_adapter
 
 
 def set_mcp_sandbox_adapter(adapter: Any) -> None:
@@ -331,13 +291,11 @@ def clear_state() -> None:
         _agent_graph_service, \
         _llm_client_cache, \
         _tools_cache, \
-        _mcp_adapter, \
         _skills_cache, \
         _skill_loader_cache, \
         _provider_config_cache, \
         _provider_config_cached_at
     _agent_graph_service = None
-    _mcp_adapter = None
     _llm_client_cache.clear()
     _tools_cache.clear()
     _skills_cache.clear()
@@ -402,29 +360,25 @@ async def get_or_create_tools(
     redis_client: Any,
     llm: Any = None,
     agent_mode: str = "default",
-    mcp_tools_ttl_seconds: int = 300,  # New: MCP tools TTL (5 minutes)
-    force_mcp_refresh: bool = False,  # New: Force MCP tools refresh
-    mcp_retry_on_empty: bool = True,  # New: Retry when MCP tools are empty
+    **kwargs: Any,
 ) -> Dict[str, Any]:
-    """Get or create a cached tool set for a project, including MCP tools and skill_loader.
+    """Get or create a cached tool set for a project, including sandbox tools and skills.
 
     This function caches built-in tool instances by project_id to avoid
-    repeated tool initialization overhead. MCP tools are now cached with TTL
-    to avoid frequent Temporal Workflow calls (200-500ms each).
+    repeated tool initialization overhead. Sandbox MCP tools are loaded
+    dynamically from the project sandbox container.
 
     Args:
         project_id: Project ID for cache key
-        tenant_id: Tenant ID for MCP tool loading and skill scoping
+        tenant_id: Tenant ID for sandbox tool loading and skill scoping
         graph_service: Graph service instance (NativeGraphAdapter)
         redis_client: Redis client instance
         llm: LangChain chat model for tools that require LLM (e.g., SummaryTool)
         agent_mode: Agent mode for skill filtering (e.g., "default", "plan")
-        mcp_tools_ttl_seconds: TTL for MCP tools cache (default 5 minutes)
-        force_mcp_refresh: Force refresh MCP tools (bypass cache)
-        mcp_retry_on_empty: Retry loading when MCP tools are empty (default True)
+        **kwargs: Accepted for backward compatibility (mcp_tools_ttl_seconds, etc.)
 
     Returns:
-        Dictionary of tool name -> tool instance (built-in + MCP + skill_loader)
+        Dictionary of tool name -> tool instance (built-in + sandbox + skill_loader)
     """
     from src.infrastructure.agent.tools import WebScrapeTool, WebSearchTool
     from src.infrastructure.agent.tools.clarification import ClarificationTool
@@ -449,72 +403,7 @@ async def get_or_create_tools(
     # 2. Copy built-in tools (avoid mutating cache)
     tools = dict(_tools_cache[project_id])
 
-    # 3. Load MCP tools with TTL cache and retry logic
-    if _mcp_adapter is not None:
-        try:
-            # Try to get from cache first (unless force refresh)
-            mcp_tools = None
-            if not force_mcp_refresh:
-                mcp_tools = await get_mcp_tools_from_cache(
-                    tenant_id=tenant_id,
-                    ttl_seconds=mcp_tools_ttl_seconds,
-                )
-
-            if mcp_tools is None:
-                # Cache miss or forced refresh - load from MCP adapter with retry logic
-                from src.infrastructure.mcp.tool_loader import MCPToolLoader
-
-                loader = MCPToolLoader(
-                    mcp_adapter=_mcp_adapter,
-                    tenant_id=tenant_id,
-                )
-
-                # Retry logic: if no MCP tools loaded and retry is enabled, retry with backoff
-                # This handles the startup race condition where Agent Worker starts
-                # before MCP servers are fully initialized
-                max_retries = 3 if mcp_retry_on_empty else 1
-                base_delay = 2.0  # Start with 2 second delay
-                mcp_tools = {}
-
-                for attempt in range(max_retries):
-                    start_time = time.time()
-                    mcp_tools = await loader.load_all_tools(refresh=True)
-                    elapsed_ms = (time.time() - start_time) * 1000
-
-                    # If we got tools or this is the last attempt, we're done
-                    if len(mcp_tools) > 0 or attempt == max_retries - 1:
-                        logger.info(
-                            f"Agent Worker: Loaded {len(mcp_tools)} MCP tools for tenant {tenant_id} "
-                            f"in {elapsed_ms:.1f}ms (cache updated)"
-                        )
-                        break
-
-                    # No tools loaded - MCP servers might not be ready yet
-                    # Wait with exponential backoff before retry
-                    delay = base_delay * (2**attempt)
-                    logger.warning(
-                        f"Agent Worker: No MCP tools loaded for tenant {tenant_id} "
-                        f"(attempt {attempt + 1}/{max_retries}). "
-                        f"MCP servers may not be ready yet. Retrying in {delay:.1f}s..."
-                    )
-                    await asyncio.sleep(delay)
-
-                # Update cache with whatever tools we got (may be empty)
-                await update_mcp_tools_cache(
-                    tenant_id=tenant_id,
-                    tools=mcp_tools,
-                )
-            else:
-                logger.debug(
-                    f"Agent Worker: MCP tools cache hit for tenant {tenant_id} "
-                    f"({len(mcp_tools)} tools)"
-                )
-
-            tools.update(mcp_tools)
-        except Exception as e:
-            logger.warning(f"Agent Worker: Failed to load MCP tools for tenant {tenant_id}: {e}")
-
-    # 4. Load Project Sandbox MCP tools (if sandbox exists for project)
+    # 3. Load Project Sandbox MCP tools (if sandbox exists for project)
     if _mcp_sandbox_adapter is not None:
         try:
             sandbox_tools = await _load_project_sandbox_tools(
@@ -532,7 +421,7 @@ async def get_or_create_tools(
                 f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
             )
 
-    # 5. Add SkillLoaderTool (initialized with skill list in description)
+    # 4. Add SkillLoaderTool (initialized with skill list in description)
     # This enables LLM to see available skills and make autonomous decisions
     try:
         skill_loader = await get_or_create_skill_loader_tool(
@@ -547,7 +436,7 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillLoaderTool: {e}")
 
-    # 6. Add SkillInstallerTool for installing skills from skills.sh
+    # 5. Add SkillInstallerTool for installing skills from skills.sh
     try:
         from pathlib import Path
 
@@ -763,10 +652,24 @@ async def _load_project_sandbox_tools(
         # List tools from the sandbox
         tool_list = await _mcp_sandbox_adapter.list_tools(project_sandbox_id)
 
+        # MCP management tools are internal, not exposed to agents
+        _MCP_MANAGEMENT_TOOLS = {
+            "mcp_server_install",
+            "mcp_server_start",
+            "mcp_server_stop",
+            "mcp_server_list",
+            "mcp_server_discover_tools",
+            "mcp_server_call_tool",
+        }
+
         # Wrap each tool with SandboxMCPToolWrapper
         for tool_info in tool_list:
             tool_name = tool_info.get("name", "")
             if not tool_name:
+                continue
+
+            # Skip internal MCP management tools
+            if tool_name in _MCP_MANAGEMENT_TOOLS:
                 continue
 
             wrapper = SandboxMCPToolWrapper(
@@ -784,6 +687,19 @@ async def _load_project_sandbox_tools(
             f"for project {project_id}"
         )
 
+        # STEP 6: Load user MCP server tools running inside the sandbox
+        user_mcp_tools = await _load_user_mcp_server_tools(
+            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_id=project_sandbox_id,
+            project_id=project_id,
+        )
+        if user_mcp_tools:
+            tools.update(user_mcp_tools)
+            logger.info(
+                f"[AgentWorker] Loaded {len(user_mcp_tools)} user MCP server tools "
+                f"from sandbox {project_sandbox_id} for project {project_id}"
+            )
+
     except Exception as e:
         logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
         import traceback
@@ -791,6 +707,125 @@ async def _load_project_sandbox_tools(
         logger.debug(f"[AgentWorker] Traceback: {traceback.format_exc()}")
 
     return tools
+
+
+async def _load_user_mcp_server_tools(
+    sandbox_adapter: Any,
+    sandbox_id: str,
+    project_id: str,
+) -> Dict[str, Any]:
+    """Load user-configured MCP server tools running inside the sandbox.
+
+    Calls mcp_server_list to discover running servers, then mcp_server_discover_tools
+    for each to get their tools, wrapping them with SandboxMCPServerToolAdapter.
+
+    Args:
+        sandbox_adapter: MCPSandboxAdapter instance.
+        sandbox_id: Sandbox container ID.
+        project_id: Project ID.
+
+    Returns:
+        Dictionary of tool name -> SandboxMCPServerToolAdapter instances.
+    """
+
+    from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
+
+    tools: Dict[str, Any] = {}
+
+    try:
+        # List running user MCP servers
+        list_result = await sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_list",
+            arguments={},
+            timeout=10.0,
+        )
+
+        content = list_result.get("content", [])
+        if list_result.get("is_error"):
+            logger.warning("[AgentWorker] mcp_server_list returned error")
+            return tools
+
+        # Parse server list from response
+        servers = _parse_mcp_server_list(content)
+
+        # For each running server, discover its tools
+        for server_info in servers:
+            server_name = server_info.get("name", "")
+            status = server_info.get("status", "")
+            if not server_name or status != "running":
+                continue
+
+            try:
+                discover_result = await sandbox_adapter.call_tool(
+                    sandbox_id=sandbox_id,
+                    tool_name="mcp_server_discover_tools",
+                    arguments={"name": server_name},
+                    timeout=15.0,
+                )
+
+                if discover_result.get("is_error"):
+                    logger.warning(
+                        f"[AgentWorker] Failed to discover tools for server {server_name}"
+                    )
+                    continue
+
+                discovered_tools = _parse_discovered_tools(discover_result.get("content", []))
+
+                for tool_info in discovered_tools:
+                    adapter = SandboxMCPServerToolAdapter(
+                        sandbox_adapter=sandbox_adapter,
+                        sandbox_id=sandbox_id,
+                        server_name=server_name,
+                        tool_info=tool_info,
+                    )
+                    tools[adapter.name] = adapter
+
+            except Exception as e:
+                logger.warning(
+                    f"[AgentWorker] Error discovering tools for server {server_name}: {e}"
+                )
+
+    except Exception as e:
+        logger.warning(f"[AgentWorker] Error loading user MCP server tools: {e}")
+
+    return tools
+
+
+def _parse_mcp_server_list(content: list) -> list:
+    """Parse server list from mcp_server_list tool response."""
+    import json
+
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            text = item.get("text", "")
+            try:
+                data = json.loads(text)
+                if isinstance(data, dict) and "servers" in data:
+                    return data["servers"]
+                if isinstance(data, list):
+                    return data
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return []
+
+
+def _parse_discovered_tools(content: list) -> list:
+    """Parse tool list from mcp_server_discover_tools response."""
+    import json
+
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            text = item.get("text", "")
+            try:
+                data = json.loads(text)
+                if isinstance(data, dict) and "tools" in data:
+                    return data["tools"]
+                if isinstance(data, list):
+                    return data
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return []
 
 
 def get_cached_tools() -> Dict[str, Dict[str, Any]]:

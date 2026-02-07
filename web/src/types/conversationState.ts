@@ -89,8 +89,10 @@ export interface ConversationState {
   timeline: TimelineEvent[];
   /** Whether there are earlier messages to load */
   hasEarlier: boolean;
-  /** Earliest loaded sequence number for pagination */
-  earliestLoadedSequence: number | null;
+  /** Earliest loaded event time (microseconds) for pagination */
+  earliestTimeUs: number | null;
+  /** Earliest loaded event counter for pagination */
+  earliestCounter: number | null;
 
   // ===== Streaming State =====
   /** Whether this conversation is actively streaming */
@@ -157,7 +159,8 @@ export function createDefaultConversationState(): ConversationState {
     // Timeline
     timeline: [],
     hasEarlier: false,
-    earliestLoadedSequence: null,
+    earliestTimeUs: null,
+    earliestCounter: null,
 
     // Streaming
     isStreaming: false,

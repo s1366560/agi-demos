@@ -17,7 +17,7 @@ Migration Benefits:
 import logging
 from typing import List, Optional, Set
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,10 +66,13 @@ class SqlAgentExecutionEventRepository(
                 message_id=event.message_id,
                 event_type=str(event.event_type),
                 event_data=event.event_data,
-                sequence_number=event.sequence_number,
+                event_time_us=event.event_time_us,
+                event_counter=event.event_counter,
                 created_at=event.created_at,
             )
-            .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+            .on_conflict_do_nothing(
+                index_elements=["conversation_id", "event_time_us", "event_counter"]
+            )
         )
         await self._session.execute(stmt)
         await self._session.flush()
@@ -91,7 +94,8 @@ class SqlAgentExecutionEventRepository(
                 "message_id": event.message_id,
                 "event_type": str(event.event_type),
                 "event_data": event.event_data,
-                "sequence_number": event.sequence_number,
+                "event_time_us": event.event_time_us,
+                "event_counter": event.event_counter,
                 "created_at": event.created_at,
             }
             for event in events
@@ -99,7 +103,9 @@ class SqlAgentExecutionEventRepository(
         stmt = (
             insert(DBAgentExecutionEvent)
             .values(values_list)
-            .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+            .on_conflict_do_nothing(
+                index_elements=["conversation_id", "event_time_us", "event_counter"]
+            )
         )
         await self._session.execute(stmt)
         await self._session.flush()
@@ -107,52 +113,73 @@ class SqlAgentExecutionEventRepository(
     async def get_events(
         self,
         conversation_id: str,
-        from_sequence: int = 0,
+        from_time_us: int = 0,
+        from_counter: int = 0,
         limit: int = 1000,
         event_types: Optional[Set[str]] = None,
-        before_sequence: Optional[int] = None,
+        before_time_us: Optional[int] = None,
+        before_counter: Optional[int] = None,
     ) -> List[AgentExecutionEvent]:
         """Get events for a conversation with bidirectional pagination support."""
+        from sqlalchemy import tuple_
+
         # Base query - always filter by conversation_id
         query = select(DBAgentExecutionEvent).where(
             DBAgentExecutionEvent.conversation_id == conversation_id,
         )
 
-        if before_sequence is not None:
-            # Backward pagination
-            query = query.where(DBAgentExecutionEvent.sequence_number < before_sequence)
+        time_col = DBAgentExecutionEvent.event_time_us
+        counter_col = DBAgentExecutionEvent.event_counter
 
-            # Apply event_types filter BEFORE limit to ensure correct pagination
+        if before_time_us is not None:
+            # Backward pagination
+            before_counter_val = before_counter if before_counter is not None else 0
+            query = query.where(
+                tuple_(time_col, counter_col) < tuple_(before_time_us, before_counter_val)
+            )
+
             if event_types:
                 query = query.where(DBAgentExecutionEvent.event_type.in_(event_types))
 
-            query = query.order_by(DBAgentExecutionEvent.sequence_number.desc()).limit(limit)
+            query = query.order_by(time_col.desc(), counter_col.desc()).limit(limit)
 
             result = await self._session.execute(query)
             db_events = list(reversed(result.scalars().all()))
         else:
             # Forward pagination
-            query = query.where(DBAgentExecutionEvent.sequence_number >= from_sequence)
+            if from_time_us > 0 or from_counter > 0:
+                query = query.where(
+                    tuple_(time_col, counter_col) >= tuple_(from_time_us, from_counter)
+                )
 
             if event_types:
                 query = query.where(DBAgentExecutionEvent.event_type.in_(event_types))
 
-            query = query.order_by(DBAgentExecutionEvent.sequence_number.asc()).limit(limit)
+            query = query.order_by(time_col.asc(), counter_col.asc()).limit(limit)
 
             result = await self._session.execute(query)
             db_events = result.scalars().all()
 
         return [self._to_domain(e) for e in db_events]
 
-    async def get_last_sequence(self, conversation_id: str) -> int:
-        """Get the last sequence number for a conversation."""
+    async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]:
+        """Get the last (event_time_us, event_counter) for a conversation."""
         result = await self._session.execute(
-            select(func.max(DBAgentExecutionEvent.sequence_number)).where(
-                DBAgentExecutionEvent.conversation_id == conversation_id
+            select(
+                DBAgentExecutionEvent.event_time_us,
+                DBAgentExecutionEvent.event_counter,
             )
+            .where(DBAgentExecutionEvent.conversation_id == conversation_id)
+            .order_by(
+                DBAgentExecutionEvent.event_time_us.desc(),
+                DBAgentExecutionEvent.event_counter.desc(),
+            )
+            .limit(1)
         )
-        last_seq = result.scalar()
-        return last_seq if last_seq is not None else 0
+        row = result.one_or_none()
+        if row is None:
+            return (0, 0)
+        return (row[0], row[1])
 
     async def get_events_by_message(
         self,
@@ -162,7 +189,10 @@ class SqlAgentExecutionEventRepository(
         result = await self._session.execute(
             select(DBAgentExecutionEvent)
             .where(DBAgentExecutionEvent.message_id == message_id)
-            .order_by(DBAgentExecutionEvent.sequence_number.asc())
+            .order_by(
+                DBAgentExecutionEvent.event_time_us.asc(),
+                DBAgentExecutionEvent.event_counter.asc(),
+            )
         )
         db_events = result.scalars().all()
         return [self._to_domain(e) for e in db_events]
@@ -181,10 +211,10 @@ class SqlAgentExecutionEventRepository(
         conversation_id: str,
         limit: int = 1000,
     ) -> List[AgentExecutionEvent]:
-        """List all events for a conversation in sequence order."""
+        """List all events for a conversation in chronological order."""
         return await self.get_events(
             conversation_id=conversation_id,
-            from_sequence=0,
+            from_time_us=0,
             limit=limit,
         )
 
@@ -194,14 +224,16 @@ class SqlAgentExecutionEventRepository(
         limit: int = 50,
     ) -> List[AgentExecutionEvent]:
         """Get message events (user_message + assistant_message) for LLM context."""
-        # Query with DESC to get most recent messages, then reverse for chronological order
         result = await self._session.execute(
             select(DBAgentExecutionEvent)
             .where(
                 DBAgentExecutionEvent.conversation_id == conversation_id,
                 DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
             )
-            .order_by(DBAgentExecutionEvent.sequence_number.desc())
+            .order_by(
+                DBAgentExecutionEvent.event_time_us.desc(),
+                DBAgentExecutionEvent.event_counter.desc(),
+            )
             .limit(limit)
         )
         db_events = list(reversed(result.scalars().all()))
@@ -224,15 +256,7 @@ class SqlAgentExecutionEventRepository(
     def _to_domain(
         self, db_event: Optional[DBAgentExecutionEvent]
     ) -> Optional[AgentExecutionEvent]:
-        """
-        Convert database model to domain model.
-
-        Args:
-            db_event: Database model instance or None
-
-        Returns:
-            Domain model instance or None
-        """
+        """Convert database model to domain model."""
         if db_event is None:
             return None
 
@@ -242,27 +266,21 @@ class SqlAgentExecutionEventRepository(
             message_id=db_event.message_id,
             event_type=db_event.event_type,
             event_data=db_event.event_data or {},
-            sequence_number=db_event.sequence_number,
+            event_time_us=db_event.event_time_us,
+            event_counter=db_event.event_counter,
             created_at=db_event.created_at,
         )
 
     def _to_db(self, domain_entity: AgentExecutionEvent) -> DBAgentExecutionEvent:
-        """
-        Convert domain entity to database model.
-
-        Args:
-            domain_entity: Domain model instance
-
-        Returns:
-            Database model instance
-        """
+        """Convert domain entity to database model."""
         return DBAgentExecutionEvent(
             id=domain_entity.id,
             conversation_id=domain_entity.conversation_id,
             message_id=domain_entity.message_id,
             event_type=str(domain_entity.event_type),
             event_data=domain_entity.event_data,
-            sequence_number=domain_entity.sequence_number,
+            event_time_us=domain_entity.event_time_us,
+            event_counter=domain_entity.event_counter,
             created_at=domain_entity.created_at,
         )
 

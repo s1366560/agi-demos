@@ -78,12 +78,14 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         event_type: AgentEventType,
         data: Dict[str, Any],
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> EventEnvelope:
         """Create event envelope from legacy parameters."""
         payload = {
             **data,
-            "sequence": sequence,
+            "event_time_us": event_time_us,
+            "event_counter": event_counter,
             "conversation_id": conversation_id,
             "message_id": message_id,
         }
@@ -95,7 +97,8 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
             metadata={
                 "conversation_id": conversation_id,
                 "message_id": message_id,
-                "sequence": sequence,
+                "event_time_us": event_time_us,
+                "event_counter": event_counter,
             },
         )
 
@@ -115,7 +118,8 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
 
         return AgentEvent(
             event_id=event_id,
-            sequence=payload.get("sequence", 0),
+            event_time_us=payload.get("event_time_us", 0),
+            event_counter=payload.get("event_counter", 0),
             event_type=event_type,
             data=payload,
             timestamp=datetime.fromisoformat(envelope.timestamp.replace("Z", "+00:00"))
@@ -131,11 +135,12 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         event_type: AgentEventType,
         data: Dict[str, Any],
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """Publish an event to the stream (legacy interface)."""
         envelope = self._create_envelope(
-            conversation_id, message_id, event_type, data, sequence
+            conversation_id, message_id, event_type, data, event_time_us, event_counter
         )
         routing_key = self._create_routing_key(conversation_id, message_id)
 
@@ -143,7 +148,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
 
         logger.debug(
             f"[LegacyAdapter] Published {event_type.value} to {routing_key}: "
-            f"seq={sequence}, id={result.sequence_id}"
+            f"event_time_us={event_time_us}, id={result.sequence_id}"
         )
 
         return result.sequence_id
@@ -152,7 +157,8 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         self,
         conversation_id: str,
         message_id: str,
-        from_sequence: int = 0,
+        from_time_us: int = 0,
+        from_counter: int = 0,
         timeout_ms: Optional[int] = None,
     ) -> AsyncIterator[AgentEvent]:
         """Subscribe to events for a message (legacy interface)."""
@@ -160,7 +166,8 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         routing_key_str = str(routing_key)
 
         options = SubscriptionOptions(
-            from_sequence=from_sequence,
+            from_time_us=from_time_us,
+            from_counter=from_counter,
             block_ms=timeout_ms or 5000,
         )
 
@@ -173,8 +180,11 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
                 event_with_meta.sequence_id,
             )
 
-            # Filter by sequence
-            if agent_event.sequence >= from_sequence:
+            # Filter by event time
+            if agent_event.event_time_us > from_time_us or (
+                agent_event.event_time_us == from_time_us
+                and agent_event.event_counter >= from_counter
+            ):
                 yield agent_event
 
                 # Check for terminal events
@@ -185,8 +195,10 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         self,
         conversation_id: str,
         message_id: str,
-        from_sequence: int = 0,
-        to_sequence: Optional[int] = None,
+        from_time_us: int = 0,
+        from_counter: int = 0,
+        to_time_us: Optional[int] = None,
+        to_counter: Optional[int] = None,
         limit: int = 100,
     ) -> List[AgentEvent]:
         """Get events in a range (legacy interface)."""
@@ -194,7 +206,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
 
         events_with_meta = await self._unified.get_events(
             routing_key,
-            from_sequence=str(from_sequence) if from_sequence > 0 else "0",
+            from_sequence=str(from_time_us) if from_time_us > 0 else "0",
             max_count=limit,
         )
 
@@ -205,9 +217,15 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
                 ewm.sequence_id,
             )
 
-            # Filter by sequence range
-            if agent_event.sequence >= from_sequence:
-                if to_sequence is None or agent_event.sequence <= to_sequence:
+            # Filter by event time range
+            if agent_event.event_time_us > from_time_us or (
+                agent_event.event_time_us == from_time_us
+                and agent_event.event_counter >= from_counter
+            ):
+                if to_time_us is None or agent_event.event_time_us < to_time_us or (
+                    agent_event.event_time_us == to_time_us
+                    and (to_counter is None or agent_event.event_counter <= to_counter)
+                ):
                     events.append(agent_event)
 
         return events
@@ -227,6 +245,17 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
                 latest.sequence_id,
             )
         return None
+
+    async def get_last_event_time(
+        self,
+        conversation_id: str,
+        message_id: str,
+    ) -> tuple[int, int]:
+        """Get the last (event_time_us, event_counter) for a message (legacy interface)."""
+        latest = await self.get_latest_event(conversation_id, message_id)
+        if latest:
+            return (latest.event_time_us, latest.event_counter)
+        return (0, 0)
 
     async def mark_complete(
         self,

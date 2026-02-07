@@ -16,7 +16,7 @@ from .event_persistence import (
     save_assistant_message_event,
     save_event_to_db,
     save_tool_execution_record,
-    sync_sequence_number_from_db,
+    sync_event_time_from_db,
 )
 
 __all__ = [
@@ -29,7 +29,7 @@ __all__ = [
     "save_event_to_db",
     "save_assistant_message_event",
     "save_tool_execution_record",
-    "sync_sequence_number_from_db",
+    "sync_event_time_from_db",
     "SKIP_PERSIST_EVENT_TYPES",
     "NOISY_EVENT_TYPES",
 ]

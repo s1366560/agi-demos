@@ -24,7 +24,7 @@ class EventStorePort(ABC):
         event_data: dict[str, Any],
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> int:
+    ) -> tuple[int, int]:
         """Append an event to a stream.
 
         Args:
@@ -34,7 +34,7 @@ class EventStorePort(ABC):
             metadata: Optional metadata (user_id, tenant_id, etc.)
 
         Returns:
-            Sequence number of the appended event
+            Tuple of (event_time_us, event_counter) for the appended event
         """
         ...
 
@@ -43,8 +43,10 @@ class EventStorePort(ABC):
         self,
         stream_id: str,
         *,
-        from_sequence: int = 0,
-        to_sequence: Optional[int] = None,
+        from_time_us: int = 0,
+        from_counter: int = 0,
+        to_time_us: Optional[int] = None,
+        to_counter: Optional[int] = None,
         event_types: Optional[list[str]] = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
@@ -52,14 +54,16 @@ class EventStorePort(ABC):
 
         Args:
             stream_id: Identifier for the event stream
-            from_sequence: Start sequence (inclusive)
-            to_sequence: End sequence (inclusive), None for latest
+            from_time_us: Start event_time_us (inclusive)
+            from_counter: Start event_counter (inclusive)
+            to_time_us: End event_time_us (inclusive), None for latest
+            to_counter: End event_counter (inclusive)
             event_types: Filter by event types
             limit: Maximum events to return
 
         Returns:
-            List of event dictionaries with sequence_number, event_type,
-            event_data, metadata, and created_at
+            List of event dictionaries with event_time_us, event_counter,
+            event_type, event_data, metadata, and created_at
         """
         ...
 
@@ -88,14 +92,14 @@ class EventStorePort(ABC):
         ...
 
     @abstractmethod
-    async def get_latest_sequence(self, stream_id: str) -> int:
-        """Get the latest sequence number for a stream.
+    async def get_latest_event_time(self, stream_id: str) -> tuple[int, int]:
+        """Get the latest (event_time_us, event_counter) for a stream.
 
         Args:
             stream_id: Identifier for the event stream
 
         Returns:
-            Latest sequence number, or 0 if stream is empty
+            Tuple of (event_time_us, event_counter), or (0, 0) if stream is empty
         """
         ...
 

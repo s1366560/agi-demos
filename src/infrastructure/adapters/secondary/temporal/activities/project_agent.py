@@ -28,6 +28,7 @@ import redis.asyncio as aioredis
 from temporalio import activity
 
 from src.configuration.config import get_settings
+from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
@@ -369,7 +370,8 @@ async def execute_project_chat_activity(
             if not success:
                 return {
                     "content": "",
-                    "sequence_number": 0,
+                    "last_event_time_us": 0,
+                    "last_event_counter": 0,
                     "is_error": True,
                     "error_message": "Failed to initialize project agent",
                     "execution_time_ms": (time_module.time() - start_time) * 1000,
@@ -383,7 +385,7 @@ async def execute_project_chat_activity(
         final_content = ""
         is_error = False
         error_message = None
-        sequence_number = 0
+        time_gen = EventTimeGenerator()
 
         # Get Redis client for connection reuse during streaming
         pool = await _get_redis_pool()
@@ -401,14 +403,15 @@ async def execute_project_chat_activity(
                 hitl_response=hitl_response,  # Pass HITL response for resume
             ):
                 events.append(event)
-                sequence_number += 1
+                evt_time_us, evt_counter = time_gen.next()
 
                 # Publish event to Redis Stream in real-time
                 await _publish_event_to_stream(
                     conversation_id=conversation_id,
                     event=event,
                     message_id=message_id,
-                    sequence_number=sequence_number,
+                    event_time_us=evt_time_us,
+                    event_counter=evt_counter,
                     correlation_id=correlation_id,
                     redis_client=redis_client,
                 )
@@ -459,7 +462,8 @@ async def execute_project_chat_activity(
 
             return {
                 "content": final_content,
-                "sequence_number": sequence_number,
+                "last_event_time_us": time_gen.last_time_us,
+                "last_event_counter": time_gen.last_counter,
                 "is_error": is_error,
                 "error_message": error_message,
                 "execution_time_ms": execution_time_ms,
@@ -577,13 +581,14 @@ async def execute_project_chat_activity(
                         hitl_response=hitl_response_for_agent,
                     ):
                         events.append(event)
-                        sequence_number += 1
+                        evt_time_us, evt_counter = time_gen.next()
 
                         await _publish_event_to_stream(
                             conversation_id=conversation_id,
                             event=event,
                             message_id=message_id,
-                            sequence_number=sequence_number,
+                            event_time_us=evt_time_us,
+                            event_counter=evt_counter,
                             correlation_id=correlation_id,
                             redis_client=redis_client,
                         )
@@ -619,7 +624,8 @@ async def execute_project_chat_activity(
 
                     return {
                         "content": final_content,
-                        "sequence_number": sequence_number,
+                        "last_event_time_us": time_gen.last_time_us,
+                        "last_event_counter": time_gen.last_counter,
                         "is_error": is_error,
                         "error_message": error_message,
                         "execution_time_ms": execution_time_ms,
@@ -677,7 +683,8 @@ async def execute_project_chat_activity(
                         "hitl_state_key": nested_state_key,
                         "timeout_seconds": nested_hitl_ex.timeout_seconds,
                         "content": "",
-                        "sequence_number": sequence_number,
+                        "last_event_time_us": time_gen.last_time_us,
+                        "last_event_counter": time_gen.last_counter,
                         "is_error": False,
                         "error_message": None,
                         "execution_time_ms": execution_time_ms,
@@ -695,7 +702,8 @@ async def execute_project_chat_activity(
                 "hitl_state_key": state_key,
                 "timeout_seconds": hitl_ex.timeout_seconds,
                 "content": "",
-                "sequence_number": sequence_number,
+                "last_event_time_us": time_gen.last_time_us,
+                "last_event_counter": time_gen.last_counter,
                 "is_error": False,
                 "error_message": None,
                 "execution_time_ms": execution_time_ms,
@@ -723,7 +731,8 @@ async def execute_project_chat_activity(
 
         return {
             "content": "",
-            "sequence_number": 0,
+            "last_event_time_us": 0,
+            "last_event_counter": 0,
             "is_error": True,
             "error_message": str(e),
             "execution_time_ms": execution_time_ms,
@@ -798,7 +807,8 @@ async def continue_project_chat_activity(
                 )
                 return {
                     "content": "",
-                    "sequence_number": 0,
+                    "last_event_time_us": 0,
+                    "last_event_counter": 0,
                     "is_error": True,
                     "error_message": "HITL state not found or expired",
                     "execution_time_ms": (time_module.time() - start_time) * 1000,
@@ -832,7 +842,8 @@ async def continue_project_chat_activity(
                 if not success:
                     return {
                         "content": "",
-                        "sequence_number": 0,
+                        "last_event_time_us": 0,
+                        "last_event_counter": 0,
                         "is_error": True,
                         "error_message": "Failed to reinitialize project agent",
                         "execution_time_ms": (time_module.time() - start_time) * 1000,
@@ -879,7 +890,7 @@ async def continue_project_chat_activity(
             final_content = ""
             is_error = False
             error_message = None
-            sequence_number = 0
+            time_gen = EventTimeGenerator()
 
             # Continue execution with HITL response
             async for event in agent.execute_chat(
@@ -892,14 +903,15 @@ async def continue_project_chat_activity(
                 hitl_response=hitl_response_for_agent,
             ):
                 events.append(event)
-                sequence_number += 1
+                evt_time_us, evt_counter = time_gen.next()
 
                 # Publish event to Redis Stream
                 await _publish_event_to_stream(
                     conversation_id=conversation_id,
                     event=event,
                     message_id=message_id,
-                    sequence_number=sequence_number,
+                    event_time_us=evt_time_us,
+                    event_counter=evt_counter,
                     correlation_id=correlation_id,
                     redis_client=redis_client,
                 )
@@ -944,7 +956,8 @@ async def continue_project_chat_activity(
 
             return {
                 "content": final_content,
-                "sequence_number": sequence_number,
+                "last_event_time_us": time_gen.last_time_us,
+                "last_event_counter": time_gen.last_counter,
                 "is_error": is_error,
                 "error_message": error_message,
                 "execution_time_ms": execution_time_ms,
@@ -1013,7 +1026,8 @@ async def continue_project_chat_activity(
                 "hitl_state_key": new_state_key,
                 "timeout_seconds": hitl_ex.timeout_seconds,
                 "content": "",
-                "sequence_number": sequence_number,
+                "last_event_time_us": time_gen.last_time_us,
+                "last_event_counter": time_gen.last_counter,
                 "is_error": False,
                 "error_message": None,
                 "execution_time_ms": execution_time_ms,
@@ -1042,7 +1056,8 @@ async def continue_project_chat_activity(
 
         return {
             "content": "",
-            "sequence_number": 0,
+            "last_event_time_us": 0,
+            "last_event_counter": 0,
             "is_error": True,
             "error_message": str(e),
             "execution_time_ms": execution_time_ms,
@@ -1123,7 +1138,7 @@ async def _persist_events(
         correlation_id: Optional request correlation ID
 
     Returns:
-        Last sequence number
+        Last event_time_us
     """
     from sqlalchemy.dialects.postgresql import insert
     from sqlalchemy.exc import IntegrityError
@@ -1139,7 +1154,8 @@ async def _persist_events(
         "text_end",
     }
 
-    sequence_number = 0
+    last_event_time_us = 0
+    last_event_counter = 0
 
     try:
         async with async_session_factory() as session:
@@ -1147,7 +1163,8 @@ async def _persist_events(
                 for idx, event in enumerate(events):
                     event_type = event.get("type", "unknown")
                     event_data = event.get("data", {})
-                    sequence_number = event.get("seq", idx + 1)
+                    evt_time_us = event.get("event_time_us", 0)
+                    evt_counter = event.get("event_counter", idx)
 
                     # Skip streaming fragments
                     if event_type in SKIP_EVENT_TYPES:
@@ -1178,31 +1195,34 @@ async def _persist_events(
                             message_id=message_id,
                             event_type=event_type,
                             event_data=event_data,
-                            sequence_number=sequence_number,
+                            event_time_us=evt_time_us,
+                            event_counter=evt_counter,
                             correlation_id=correlation_id,
                             created_at=datetime.now(timezone.utc),
                         )
                         .on_conflict_do_nothing(
-                            index_elements=["conversation_id", "sequence_number"]
+                            index_elements=["conversation_id", "event_time_us", "event_counter"]
                         )
                     )
                     await session.execute(stmt)
+                    last_event_time_us = evt_time_us
+                    last_event_counter = evt_counter
 
-        return sequence_number
+        return last_event_time_us
 
     except IntegrityError as e:
-        if "uq_agent_events_conv_seq" in str(e):
+        if "uq_agent_events_conv_time" in str(e):
             logger.warning(
                 f"Duplicate events detected for conversation={conversation_id}, "
                 "skipping persistence"
             )
-            return sequence_number
+            return last_event_time_us
         raise
 
     except Exception as e:
         logger.error(f"Failed to persist events: {e}")
         # Don't raise - event persistence is not critical
-        return sequence_number
+        return last_event_time_us
 
 
 async def _publish_error_event(
@@ -1238,9 +1258,11 @@ async def _publish_error_event(
             stream_key = f"agent:events:{conversation_id}"
 
             # Build error event matching frontend expected format
+            # Use max int64 for event_time_us to ensure it's processed last
             error_event = {
                 "type": "error",
-                "seq": "999999",  # High sequence to ensure it's processed
+                "event_time_us": "9999999999999999",
+                "event_counter": "0",
                 "data": json.dumps(
                     {
                         "message": error_message,
@@ -1289,7 +1311,8 @@ async def _publish_event_to_stream(
     conversation_id: str,
     event: Dict[str, Any],
     message_id: str,
-    sequence_number: int,
+    event_time_us: int,
+    event_counter: int,
     correlation_id: Optional[str] = None,
     redis_client: Optional[aioredis.Redis] = None,
 ) -> None:
@@ -1303,7 +1326,8 @@ async def _publish_event_to_stream(
         conversation_id: Conversation ID (used in stream key)
         event: Event data with 'type' and 'data' fields
         message_id: Associated message ID
-        sequence_number: Event sequence number for ordering
+        event_time_us: Microsecond timestamp for ordering
+        event_counter: Counter within the same microsecond
         correlation_id: Optional request correlation ID
         redis_client: Optional existing Redis client (for connection reuse)
     """
@@ -1320,7 +1344,7 @@ async def _publish_event_to_stream(
 
         # Build event matching the format expected by stream_read()
         # stream_read expects: {"data": JSON_string} where JSON contains:
-        # {type, seq, data (nested), timestamp, conversation_id, message_id}
+        # {type, event_time_us, event_counter, data (nested), timestamp, conversation_id, message_id}
         event_type = event.get("type", "unknown")
         event_data = event.get("data", {})
 
@@ -1332,7 +1356,8 @@ async def _publish_event_to_stream(
 
         stream_event_payload = {
             "type": event_type,
-            "seq": sequence_number,
+            "event_time_us": event_time_us,
+            "event_counter": event_counter,
             "data": event_data_with_meta,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "conversation_id": conversation_id,
@@ -1350,7 +1375,8 @@ async def _publish_event_to_stream(
         # Debug log for important events only
         if event_type in ("complete", "error", "tool_start", "tool_end"):
             logger.debug(
-                f"[ProjectAgentActivity] Published {event_type} event to {stream_key} (seq={sequence_number})"
+                f"[ProjectAgentActivity] Published {event_type} event to {stream_key} "
+                f"(event_time_us={event_time_us})"
             )
 
     except Exception as e:

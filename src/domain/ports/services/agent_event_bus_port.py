@@ -34,7 +34,8 @@ class AgentEvent:
 
     Attributes:
         event_id: Unique event ID (assigned by the bus, e.g., Redis Stream ID)
-        sequence: Sequence number within the message
+        event_time_us: Microsecond-precision UTC timestamp for ordering
+        event_counter: Monotonic counter within the same microsecond
         event_type: Type of event
         data: Event payload data
         timestamp: When the event was created
@@ -43,7 +44,8 @@ class AgentEvent:
     """
 
     event_id: str
-    sequence: int
+    event_time_us: int
+    event_counter: int
     event_type: AgentEventType
     data: Dict[str, Any]
     timestamp: datetime = field(default_factory=datetime.utcnow)
@@ -54,7 +56,8 @@ class AgentEvent:
         """Convert to dictionary for serialization."""
         return {
             "event_id": self.event_id,
-            "sequence": self.sequence,
+            "event_time_us": self.event_time_us,
+            "event_counter": self.event_counter,
             "event_type": self.event_type.value,
             "data": self.data,
             "timestamp": self.timestamp.isoformat(),
@@ -67,7 +70,8 @@ class AgentEvent:
         """Create from dictionary."""
         return cls(
             event_id=data.get("event_id", ""),
-            sequence=data.get("sequence", 0),
+            event_time_us=data.get("event_time_us", 0),
+            event_counter=data.get("event_counter", 0),
             event_type=AgentEventType(data.get("event_type", "thought")),
             data=data.get("data", {}),
             timestamp=(
@@ -91,7 +95,7 @@ class AgentEventBusPort(ABC):
 
     Stream Structure:
     - One stream per (conversation_id, message_id) pair
-    - Events are ordered by sequence number
+    - Events are ordered by (event_time_us, event_counter)
     - Stream is cleaned up after completion (with TTL for recovery window)
     """
 
@@ -102,7 +106,8 @@ class AgentEventBusPort(ABC):
         message_id: str,
         event_type: AgentEventType,
         data: Dict[str, Any],
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """
         Publish an event to the stream.
@@ -112,7 +117,8 @@ class AgentEventBusPort(ABC):
             message_id: Message ID (the assistant response being generated)
             event_type: Type of event
             data: Event payload
-            sequence: Sequence number within this message
+            event_time_us: Microsecond-precision timestamp for ordering
+            event_counter: Counter within the same microsecond
 
         Returns:
             Event ID assigned by the bus
@@ -124,7 +130,8 @@ class AgentEventBusPort(ABC):
         self,
         conversation_id: str,
         message_id: str,
-        from_sequence: int = 0,
+        from_time_us: int = 0,
+        from_counter: int = 0,
         timeout_ms: Optional[int] = None,
     ) -> AsyncIterator[AgentEvent]:
         """
@@ -132,12 +139,13 @@ class AgentEventBusPort(ABC):
 
         Used for:
         - Real-time streaming to WebSocket
-        - Recovery after page refresh (with from_sequence)
+        - Recovery after page refresh (with from_time_us/from_counter)
 
         Args:
             conversation_id: Conversation ID
             message_id: Message ID
-            from_sequence: Start from this sequence (0 = from beginning)
+            from_time_us: Start from this event_time_us (0 = from beginning)
+            from_counter: Start from this event_counter
             timeout_ms: Timeout for blocking reads
 
         Yields:
@@ -150,8 +158,10 @@ class AgentEventBusPort(ABC):
         self,
         conversation_id: str,
         message_id: str,
-        from_sequence: int = 0,
-        to_sequence: Optional[int] = None,
+        from_time_us: int = 0,
+        from_counter: int = 0,
+        to_time_us: Optional[int] = None,
+        to_counter: Optional[int] = None,
         limit: int = 100,
     ) -> List[AgentEvent]:
         """
@@ -162,8 +172,10 @@ class AgentEventBusPort(ABC):
         Args:
             conversation_id: Conversation ID
             message_id: Message ID
-            from_sequence: Start sequence (inclusive)
-            to_sequence: End sequence (inclusive), None = latest
+            from_time_us: Start event_time_us (inclusive)
+            from_counter: Start event_counter (inclusive)
+            to_time_us: End event_time_us (inclusive), None = latest
+            to_counter: End event_counter (inclusive)
             limit: Maximum events to return
 
         Returns:
@@ -172,13 +184,13 @@ class AgentEventBusPort(ABC):
         pass
 
     @abstractmethod
-    async def get_last_sequence(
+    async def get_last_event_time(
         self,
         conversation_id: str,
         message_id: str,
-    ) -> int:
+    ) -> tuple[int, int]:
         """
-        Get the last sequence number for a message.
+        Get the last (event_time_us, event_counter) for a message.
 
         Used to check if there are new events to recover.
 
@@ -187,7 +199,7 @@ class AgentEventBusPort(ABC):
             message_id: Message ID
 
         Returns:
-            Last sequence number, or -1 if no events
+            Tuple of (event_time_us, event_counter), or (0, 0) if no events
         """
         pass
 
@@ -252,7 +264,8 @@ class AgentEventBusPort(ABC):
         conversation_id: str,
         message_id: str,
         thought: str,
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """Convenience method for publishing thought events."""
         return await self.publish_event(
@@ -260,7 +273,8 @@ class AgentEventBusPort(ABC):
             message_id=message_id,
             event_type=AgentEventType.THOUGHT,
             data={"thought": thought},
-            sequence=sequence,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
         )
 
     async def publish_thought_delta(
@@ -268,7 +282,8 @@ class AgentEventBusPort(ABC):
         conversation_id: str,
         message_id: str,
         delta: str,
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """Convenience method for publishing thought delta events."""
         return await self.publish_event(
@@ -276,7 +291,8 @@ class AgentEventBusPort(ABC):
             message_id=message_id,
             event_type=AgentEventType.THOUGHT_DELTA,
             data={"delta": delta},
-            sequence=sequence,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
         )
 
     async def publish_text_delta(
@@ -284,7 +300,8 @@ class AgentEventBusPort(ABC):
         conversation_id: str,
         message_id: str,
         delta: str,
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """Convenience method for publishing text delta events."""
         return await self.publish_event(
@@ -292,14 +309,16 @@ class AgentEventBusPort(ABC):
             message_id=message_id,
             event_type=AgentEventType.TEXT_DELTA,
             data={"delta": delta},
-            sequence=sequence,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
         )
 
     async def publish_complete(
         self,
         conversation_id: str,
         message_id: str,
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
         final_content: Optional[str] = None,
     ) -> str:
         """Convenience method for publishing complete events."""
@@ -311,7 +330,8 @@ class AgentEventBusPort(ABC):
             message_id=message_id,
             event_type=AgentEventType.COMPLETE,
             data=data,
-            sequence=sequence,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
         )
 
     async def publish_error(
@@ -319,7 +339,8 @@ class AgentEventBusPort(ABC):
         conversation_id: str,
         message_id: str,
         error: str,
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """Convenience method for publishing error events."""
         return await self.publish_event(
@@ -327,5 +348,6 @@ class AgentEventBusPort(ABC):
             message_id=message_id,
             event_type=AgentEventType.ERROR,
             data={"error": error},
-            sequence=sequence,
+            event_time_us=event_time_us,
+            event_counter=event_counter,
         )

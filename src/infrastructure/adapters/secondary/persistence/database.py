@@ -118,40 +118,40 @@ async def update_agent_events_schema():
     logger.info("Updating agent_execution_events schema...")
 
     async with engine.begin() as conn:
-        # Create unique constraint on (conversation_id, sequence_number)
+        # Create unique constraint on (conversation_id, event_time_us, event_counter)
         try:
             await conn.execute(
                 text(
                     "ALTER TABLE agent_execution_events "
-                    "ADD CONSTRAINT IF NOT EXISTS uq_agent_events_conv_seq "
-                    "UNIQUE (conversation_id, sequence_number)"
+                    "ADD CONSTRAINT IF NOT EXISTS uq_agent_events_conv_time "
+                    "UNIQUE (conversation_id, event_time_us, event_counter)"
                 )
             )
-            logger.info("✅ Added unique constraint uq_agent_events_conv_seq")
+            logger.info("Added unique constraint uq_agent_events_conv_time")
         except Exception as e:
             logger.info(f"Unique constraint may already exist: {e}")
 
-        # Create index on (conversation_id, sequence_number)
+        # Create index on (conversation_id, event_time_us, event_counter)
         try:
             await conn.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_seq "
-                    "ON agent_execution_events (conversation_id, sequence_number)"
+                    "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_time "
+                    "ON agent_execution_events (conversation_id, event_time_us, event_counter)"
                 )
             )
-            logger.info("✅ Created index ix_agent_events_conv_seq")
+            logger.info("Created index ix_agent_events_conv_time")
         except Exception as e:
             logger.info(f"Index may already exist: {e}")
 
-        # Create index on (message_id, sequence_number)
+        # Create index on (message_id, event_time_us, event_counter)
         try:
             await conn.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_msg_seq "
-                    "ON agent_execution_events (message_id, sequence_number)"
+                    "CREATE INDEX IF NOT EXISTS ix_agent_events_msg_time "
+                    "ON agent_execution_events (message_id, event_time_us, event_counter)"
                 )
             )
-            logger.info("✅ Created index ix_agent_events_msg_seq")
+            logger.info("Created index ix_agent_events_msg_time")
         except Exception as e:
             logger.info(f"Index may already exist: {e}")
 
@@ -195,7 +195,7 @@ async def migrate_messages_to_events():
                 """
                 INSERT INTO agent_execution_events (
                     id, conversation_id, message_id, event_type, event_data, 
-                    sequence_number, created_at
+                    event_time_us, event_counter, created_at
                 )
                 SELECT 
                     gen_random_uuid()::text as id,
@@ -210,15 +210,17 @@ async def migrate_messages_to_events():
                         'message_id', id,
                         'role', role
                     ) as event_data,
-                    -- Use ROW_NUMBER * 100 to leave room for existing events
+                    -- Convert created_at to microsecond timestamp
+                    EXTRACT(EPOCH FROM created_at)::bigint * 1000000 as event_time_us,
+                    -- Use ROW_NUMBER within same timestamp as counter
                     ROW_NUMBER() OVER (
                         PARTITION BY conversation_id 
                         ORDER BY created_at ASC
-                    ) * 100 as sequence_number,
+                    ) as event_counter,
                     created_at
                 FROM messages 
                 WHERE role IN ('user', 'assistant')
-                ON CONFLICT (conversation_id, sequence_number) DO NOTHING
+                ON CONFLICT (conversation_id, event_time_us, event_counter) DO NOTHING
                 """
             )
         )
@@ -258,11 +260,11 @@ async def migrate_messages_to_events():
         try:
             await conn.execute(
                 text(
-                    "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_type_seq "
-                    "ON agent_execution_events (conversation_id, event_type, sequence_number)"
+                    "CREATE INDEX IF NOT EXISTS ix_agent_events_conv_type_time "
+                    "ON agent_execution_events (conversation_id, event_type, event_time_us)"
                 )
             )
-            logger.info("✅ Created index ix_agent_events_conv_type_seq")
+            logger.info("Created index ix_agent_events_conv_type_time")
         except Exception as e:
             logger.warning(f"⚠️  Index may already exist: {e}")
 

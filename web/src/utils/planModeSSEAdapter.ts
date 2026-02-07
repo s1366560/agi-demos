@@ -258,20 +258,19 @@ export function planModeSSEAdapter(event: AgentEvent): PlanModeAction | null {
  * @returns Updated timeline with new event appended
  */
 export function appendPlanModeEventToTimeline<
-  T extends { type: string; timestamp?: number | string; sequenceNumber?: number },
+  T extends { type: string; timestamp?: number | string; eventTimeUs?: number; eventCounter?: number },
 >(timeline: T[], event: AgentEvent): T[] {
   // Use current timestamp since AgentEvent doesn't include timestamp
   const timestamp = Date.now();
-
-  // Generate sequence number
-  const sequenceNumber =
-    timeline.length > 0 ? (timeline[timeline.length - 1]?.sequenceNumber ?? 0) + 1 : 1;
+  const eventTimeUs = timestamp * 1000;
+  const eventCounter = 0;
 
   // Create timeline event
   const timelineEvent = {
     id: `plan-${event.type}-${Date.now()}`,
     type: event.type as T extends { type: string } ? never : string,
-    sequenceNumber,
+    eventTimeUs,
+    eventCounter,
     timestamp,
     ...event.data,
   };

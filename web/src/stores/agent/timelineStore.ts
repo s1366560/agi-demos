@@ -10,8 +10,8 @@
  * - timelineLoading: Loading state for initial timeline fetch
  * - isLoadingEarlier: Loading state for backward pagination (separate from timelineLoading)
  * - timelineError: Error message if timeline fetch fails
- * - earliestLoadedSequence: Pagination pointer for backward loading
- * - latestLoadedSequence: Pagination pointer for forward loading
+ * - earliestTimeUs/earliestCounter: Pagination pointer for backward loading
+ * - latestTimeUs/latestCounter: Pagination pointer for forward loading
  *
  * This store was split from agent.ts to improve maintainability
  * and follow single-responsibility principle.
@@ -37,8 +37,10 @@ interface TimelineState {
   timelineLoading: boolean;
   isLoadingEarlier: boolean; // Separate loading state for pagination
   timelineError: string | null;
-  earliestLoadedSequence: number | null;
-  latestLoadedSequence: number | null;
+  earliestTimeUs: number | null;
+  earliestCounter: number | null;
+  latestTimeUs: number | null;
+  latestCounter: number | null;
   hasEarlier: boolean; // Whether there are earlier messages to load
 
   // Actions
@@ -58,8 +60,10 @@ export const initialState = {
   timelineLoading: false,
   isLoadingEarlier: false,
   timelineError: null,
-  earliestLoadedSequence: null,
-  latestLoadedSequence: null,
+  earliestTimeUs: null,
+  earliestCounter: null,
+  latestTimeUs: null,
+  latestCounter: null,
   hasEarlier: false,
 };
 
@@ -95,15 +99,18 @@ export const useTimelineStore = create<TimelineState>()(
           console.log('[TimelineStore] getTimeline response:', response.timeline.length, 'events');
 
           // Extract pagination metadata from response
-          const firstSequence = response.timeline[0]?.sequenceNumber ?? null;
-          const lastSequence =
-            response.timeline[response.timeline.length - 1]?.sequenceNumber ?? null;
+          const firstTimeUs = response.first_time_us ?? null;
+          const firstCounter = response.first_counter ?? null;
+          const lastTimeUs = response.last_time_us ?? null;
+          const lastCounter = response.last_counter ?? null;
 
           set({
             timeline: response.timeline,
             timelineLoading: false,
-            earliestLoadedSequence: firstSequence,
-            latestLoadedSequence: lastSequence,
+            earliestTimeUs: firstTimeUs,
+            earliestCounter: firstCounter,
+            latestTimeUs: lastTimeUs,
+            latestCounter: lastCounter,
             hasEarlier: response.has_more ?? false,
           });
         } catch (error: unknown) {
@@ -127,22 +134,15 @@ export const useTimelineStore = create<TimelineState>()(
       addTimelineEvent: (event: TimelineEvent) => {
         const { timeline } = get();
 
-        // Auto-assign sequence number if not provided
-        const maxSeq = Math.max(0, ...timeline.map((e) => e.sequenceNumber));
-        const sequenceNumber = event.sequenceNumber || maxSeq + 1;
-
-        const newEvent: TimelineEvent = {
-          ...event,
-          sequenceNumber,
-        };
-
         console.log(
           '[TimelineStore] Adding timeline event:',
-          newEvent.type,
-          'seq:',
-          sequenceNumber
+          event.type,
+          'timeUs:',
+          event.eventTimeUs,
+          'counter:',
+          event.eventCounter
         );
-        set({ timeline: [...timeline, newEvent] });
+        set({ timeline: [...timeline, event] });
       },
 
       /**
@@ -177,10 +177,10 @@ export const useTimelineStore = create<TimelineState>()(
        * @returns Promise<boolean> - True if load was initiated, false if skipped
        */
       loadEarlierMessages: async (conversationId: string, projectId: string) => {
-        const { earliestLoadedSequence, isLoadingEarlier } = get();
+        const { earliestTimeUs, earliestCounter, isLoadingEarlier } = get();
 
         // Guard: Don't load if already loading or no pagination point exists
-        if (!earliestLoadedSequence || isLoadingEarlier) {
+        if (!earliestTimeUs || isLoadingEarlier) {
           console.log(
             '[TimelineStore] Cannot load earlier messages: no pagination point or already loading'
           );
@@ -188,19 +188,22 @@ export const useTimelineStore = create<TimelineState>()(
         }
 
         console.log(
-          '[TimelineStore] Loading earlier messages before sequence:',
-          earliestLoadedSequence
+          '[TimelineStore] Loading earlier messages before timeUs:',
+          earliestTimeUs,
+          'counter:',
+          earliestCounter
         );
-        // 使用独立的 isLoadingEarlier 状态，不影响 timelineLoading
         set({ isLoadingEarlier: true, timelineError: null });
 
         try {
           const response = (await agentService.getConversationMessages(
             conversationId,
             projectId,
-            50, // Changed from 100 to 50
-            undefined, // from_sequence
-            earliestLoadedSequence // before_sequence
+            50,
+            undefined, // fromTimeUs
+            undefined, // fromCounter
+            earliestTimeUs, // beforeTimeUs
+            earliestCounter ?? undefined // beforeCounter
           )) as any;
 
           // Prepend new events to existing timeline
@@ -210,7 +213,8 @@ export const useTimelineStore = create<TimelineState>()(
           set({
             timeline: newTimeline,
             isLoadingEarlier: false,
-            earliestLoadedSequence: response.timeline[0]?.sequenceNumber ?? null,
+            earliestTimeUs: response.first_time_us ?? null,
+            earliestCounter: response.first_counter ?? null,
             hasEarlier: response.has_more ?? false,
           });
 
@@ -271,20 +275,32 @@ export const useIsLoadingEarlier = () => useTimelineStore((state) => state.isLoa
 export const useTimelineError = () => useTimelineStore((state) => state.timelineError);
 
 /**
- * Derived selector: Get earliest loaded sequence
+ * Derived selector: Get earliest loaded time (microseconds)
  *
- * @returns Earliest sequence number or null
+ * @returns Earliest time in microseconds or null
  */
-export const useEarliestLoadedSequence = () =>
-  useTimelineStore((state) => state.earliestLoadedSequence);
+export const useEarliestTimeUs = () => useTimelineStore((state) => state.earliestTimeUs);
 
 /**
- * Derived selector: Get latest loaded sequence
+ * Derived selector: Get earliest loaded counter
  *
- * @returns Latest sequence number or null
+ * @returns Earliest counter or null
  */
-export const useLatestLoadedSequence = () =>
-  useTimelineStore((state) => state.latestLoadedSequence);
+export const useEarliestCounter = () => useTimelineStore((state) => state.earliestCounter);
+
+/**
+ * Derived selector: Get latest loaded time (microseconds)
+ *
+ * @returns Latest time in microseconds or null
+ */
+export const useLatestTimeUs = () => useTimelineStore((state) => state.latestTimeUs);
+
+/**
+ * Derived selector: Get latest loaded counter
+ *
+ * @returns Latest counter or null
+ */
+export const useLatestCounter = () => useTimelineStore((state) => state.latestCounter);
 
 /**
  * Derived selector: Get hasEarlier state

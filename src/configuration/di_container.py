@@ -4,7 +4,7 @@ The DIContainer delegates to domain-specific sub-containers while preserving
 the exact same public interface for all callers.
 """
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -139,7 +139,6 @@ class DIContainer:
         session_factory: Optional[async_sessionmaker[AsyncSession]] = None,
         workflow_engine: Optional[WorkflowEnginePort] = None,
         temporal_client: Optional["TemporalClient"] = None,
-        mcp_adapter: Optional[Any] = None,
     ):
         # Store raw deps for with_db() and properties
         self._db = db
@@ -161,7 +160,6 @@ class DIContainer:
             redis_client=redis_client,
             workflow_engine=workflow_engine,
             temporal_client=temporal_client,
-            mcp_adapter=mcp_adapter,
             settings=self._settings,
         )
         self._sandbox = SandboxContainer(
@@ -181,7 +179,6 @@ class DIContainer:
             storage_service_factory=self._infra.storage_service,
             sandbox_orchestrator_factory=self._sandbox.sandbox_orchestrator,
             sandbox_event_publisher_factory=self._infra.sandbox_event_publisher,
-            mcp_adapter_sync_factory=self._infra.get_mcp_adapter_sync,
             sequence_service_factory=self._infra.sequence_service,
         )
 
@@ -194,7 +191,6 @@ class DIContainer:
             session_factory=self._session_factory,
             workflow_engine=self._infra.workflow_engine_port(),
             temporal_client=self._infra._temporal_client,
-            mcp_adapter=self._infra._mcp_adapter,
         )
 
     # === Properties that stay on the main class ===
@@ -302,19 +298,6 @@ class DIContainer:
     async def temporal_client(self) -> Optional["TemporalClient"]:
         return await self._infra.temporal_client()
 
-    async def mcp_adapter(self) -> Optional[Any]:
-        return await self._infra.mcp_adapter()
-
-    def get_mcp_adapter_sync(self) -> Optional[Any]:
-        return self._infra.get_mcp_adapter_sync()
-
-    # Backward compatibility aliases
-    async def mcp_temporal_adapter(self) -> Optional[Any]:
-        return await self._infra.mcp_adapter()
-
-    def get_mcp_temporal_adapter_sync(self) -> Optional[Any]:
-        return self._infra.get_mcp_adapter_sync()
-
     def sandbox_adapter(self):
         return self._infra.sandbox_adapter()
 
@@ -337,6 +320,9 @@ class DIContainer:
 
     def project_sandbox_lifecycle_service(self):
         return self._sandbox.project_sandbox_lifecycle_service()
+
+    def sandbox_mcp_server_manager(self):
+        return self._sandbox.sandbox_mcp_server_manager()
 
     # === Agent Container delegates ===
 

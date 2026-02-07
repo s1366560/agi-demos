@@ -1,0 +1,133 @@
+"""Sandbox-hosted MCP Tool Adapter.
+
+Adapts user MCP tools running inside sandbox containers to the AgentTool
+interface. Tool calls are proxied through the sandbox's mcp_server_call_tool.
+"""
+
+import json
+import logging
+from typing import Any, Dict
+
+from src.infrastructure.agent.tools.base import AgentTool
+
+logger = logging.getLogger(__name__)
+
+
+class SandboxMCPServerToolAdapter(AgentTool):
+    """Adapter for MCP tools running inside a sandbox container.
+
+    User-configured MCP servers run as subprocesses inside the sandbox.
+    Tool calls are proxied through the sandbox's mcp_server_call_tool
+    management tool via the existing MCPSandboxAdapter.
+
+    Tool naming convention: mcp__{server_name}__{tool_name}
+    """
+
+    MCP_PREFIX = "mcp"
+    MCP_NAME_SEPARATOR = "__"
+
+    def __init__(
+        self,
+        sandbox_adapter: Any,
+        sandbox_id: str,
+        server_name: str,
+        tool_info: Dict[str, Any],
+    ):
+        """Initialize the adapter.
+
+        Args:
+            sandbox_adapter: MCPSandboxAdapter instance.
+            sandbox_id: Sandbox container ID.
+            server_name: User MCP server name.
+            tool_info: Tool definition dict (name, description, input_schema).
+        """
+        self._sandbox_adapter = sandbox_adapter
+        self._sandbox_id = sandbox_id
+        self._server_name = server_name
+
+        self._original_tool_name = tool_info.get("name", "")
+        self._description = tool_info.get("description", "")
+        self._input_schema = tool_info.get("input_schema", tool_info.get("inputSchema", {}))
+        self._name = self._generate_tool_name()
+
+    def _generate_tool_name(self) -> str:
+        clean_server = self._server_name.replace("-", "_")
+        return (
+            f"{self.MCP_PREFIX}{self.MCP_NAME_SEPARATOR}"
+            f"{clean_server}{self.MCP_NAME_SEPARATOR}"
+            f"{self._original_tool_name}"
+        )
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return self._description or (
+            f"MCP tool {self._original_tool_name} from {self._server_name}"
+        )
+
+    @property
+    def parameters(self) -> Dict[str, Any]:
+        return self._input_schema
+
+    def get_parameters_schema(self) -> Dict[str, Any]:
+        if not self._input_schema:
+            return {"type": "object", "properties": {}, "required": []}
+
+        schema = dict(self._input_schema)
+        if "type" not in schema:
+            schema["type"] = "object"
+        if "properties" not in schema:
+            schema["properties"] = {}
+        if "required" not in schema:
+            schema["required"] = []
+        return schema
+
+    async def execute(self, **kwargs: Any) -> str:
+        """Execute the tool by proxying through sandbox's mcp_server_call_tool."""
+        logger.info("Executing sandbox MCP tool: %s", self._name)
+
+        try:
+            # Call the sandbox management tool to proxy the tool call
+            result = await self._sandbox_adapter.call_tool(
+                sandbox_id=self._sandbox_id,
+                tool_name="mcp_server_call_tool",
+                arguments={
+                    "server_name": self._server_name,
+                    "tool_name": self._original_tool_name,
+                    "arguments": json.dumps(kwargs),
+                },
+            )
+
+            # Parse result
+            is_error = result.get("is_error", result.get("isError", False))
+            content = result.get("content", [])
+
+            if is_error:
+                texts = self._extract_text(content)
+                error_msg = texts or "Tool execution failed"
+                logger.error("Sandbox MCP tool error: %s", error_msg)
+                return f"Error: {error_msg}"
+
+            texts = self._extract_text(content)
+            return texts or "Tool executed successfully (no output)"
+
+        except Exception as e:
+            logger.exception("Error executing sandbox MCP tool %s: %s", self._name, e)
+            return f"Error executing tool: {e}"
+
+    @staticmethod
+    def _extract_text(content: list) -> str:
+        """Extract text from MCP content items."""
+        texts = []
+        for item in content:
+            if isinstance(item, dict):
+                if item.get("type") == "text":
+                    texts.append(item.get("text", ""))
+                else:
+                    texts.append(str(item))
+            else:
+                texts.append(str(item))
+        return "\n".join(texts)

@@ -126,6 +126,29 @@ class LiteLLMClient(LLMClient):
 
         logger.debug(f"Configured LiteLLM for provider: {provider_type}")
 
+    @staticmethod
+    def _convert_message(m: Any) -> dict[str, Any]:
+        """Convert a message to LiteLLM dict format, preserving tool-related fields.
+
+        Handles both dict messages and Message objects. Preserves:
+        - tool_calls (on assistant messages, required by Anthropic)
+        - tool_call_id (on tool result messages, required by Anthropic)
+        - name (on tool result messages)
+        """
+        if isinstance(m, dict):
+            msg: dict[str, Any] = {
+                "role": m.get("role", "user"),
+                "content": m.get("content", ""),
+            }
+            if "tool_calls" in m:
+                msg["tool_calls"] = m["tool_calls"]
+            if "tool_call_id" in m:
+                msg["tool_call_id"] = m["tool_call_id"]
+            if "name" in m:
+                msg["name"] = m["name"]
+            return msg
+        return {"role": m.role, "content": m.content}
+
     async def generate(
         self,
         messages: list[Message] | list[dict[str, Any]],
@@ -155,14 +178,7 @@ class LiteLLMClient(LLMClient):
             return getattr(obj, key, default)
 
         # Convert messages to LiteLLM format
-        litellm_messages: list[dict[str, Any]] = []
-        for m in messages:
-            if isinstance(m, dict):
-                litellm_messages.append(
-                    {"role": m.get("role", "user"), "content": m.get("content", "")}
-                )
-            else:
-                litellm_messages.append({"role": m.role, "content": m.content})
+        litellm_messages = [self._convert_message(m) for m in messages]
 
         completion_kwargs: dict[str, Any] = {
             "model": self.config.model,
@@ -176,10 +192,14 @@ class LiteLLMClient(LLMClient):
         if tools:
             completion_kwargs["tools"] = tools
 
+        # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
         if hasattr(self, "_zai_base_url") and self._zai_base_url:
             completion_kwargs["api_base"] = self._zai_base_url
         elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
             completion_kwargs["api_base"] = self._kimi_base_url
+        elif self.provider_config.base_url:
+            # For all other providers with custom base_url
+            completion_kwargs["api_base"] = self.provider_config.base_url
 
         # Add max retries from settings
         settings = get_settings()
@@ -252,15 +272,7 @@ class LiteLLMClient(LLMClient):
         model = self._get_model_for_size(model_size)
 
         # Convert Graphiti messages to LiteLLM format
-        # Handle both Message objects and dicts
-        litellm_messages = []
-        for m in messages:
-            if isinstance(m, dict):
-                litellm_messages.append(
-                    {"role": m.get("role", "user"), "content": m.get("content", "")}
-                )
-            else:
-                litellm_messages.append({"role": m.role, "content": m.content})
+        litellm_messages = [self._convert_message(m) for m in messages]
 
         # Prepare completion kwargs
         completion_kwargs = {
@@ -283,11 +295,14 @@ class LiteLLMClient(LLMClient):
                 langfuse_metadata.update(langfuse_context["extra"])
             completion_kwargs["metadata"] = langfuse_metadata
 
-        # Add api_base for ZAI (ZhipuAI) which uses OpenAI-compatible API
+        # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
         if hasattr(self, "_zai_base_url") and self._zai_base_url:
             completion_kwargs["api_base"] = self._zai_base_url
         elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
             completion_kwargs["api_base"] = self._kimi_base_url
+        elif self.provider_config.base_url:
+            # For all other providers with custom base_url
+            completion_kwargs["api_base"] = self.provider_config.base_url
 
         # Add max retries from settings
         settings = get_settings()
@@ -378,15 +393,7 @@ class LiteLLMClient(LLMClient):
         model = self._get_model_for_size(model_size)
 
         # Convert Graphiti messages to LiteLLM format
-        # Handle both Message objects and dicts
-        litellm_messages = []
-        for m in messages:
-            if isinstance(m, dict):
-                litellm_messages.append(
-                    {"role": m.get("role", "user"), "content": m.get("content", "")}
-                )
-            else:
-                litellm_messages.append({"role": m.role, "content": m.content})
+        litellm_messages = [self._convert_message(m) for m in messages]
 
         # Prepare completion kwargs
         kwargs = {
@@ -407,11 +414,14 @@ class LiteLLMClient(LLMClient):
                 langfuse_metadata.update(langfuse_context["extra"])
             kwargs["metadata"] = langfuse_metadata
 
-        # Add api_base for ZAI/KIMI (ZhipuAI/Moonshot) which uses OpenAI-compatible API
+        # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
         if hasattr(self, "_zai_base_url") and self._zai_base_url:
             kwargs["api_base"] = self._zai_base_url
         elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
             kwargs["api_base"] = self._kimi_base_url
+        elif self.provider_config.base_url:
+            # For all other providers with custom base_url
+            kwargs["api_base"] = self.provider_config.base_url
 
         # Add structured output if requested
         if response_model:

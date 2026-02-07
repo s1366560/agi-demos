@@ -31,7 +31,8 @@ async def save_event_activity(
     message_id: str,
     event_type: str,
     event_data: Dict[str, Any],
-    sequence_number: int,
+    event_time_us: int,
+    event_counter: int,
 ) -> None:
     """Activity for saving SSE events to database.
 
@@ -40,9 +41,12 @@ async def save_event_activity(
         message_id: Message ID
         event_type: Type of event
         event_data: Event payload data
-        sequence_number: Unique sequence number for ordering
+        event_time_us: Microsecond timestamp for ordering
+        event_counter: Counter within the same microsecond
     """
-    await save_event_to_db(conversation_id, message_id, event_type, event_data, sequence_number)
+    await save_event_to_db(
+        conversation_id, message_id, event_type, event_data, event_time_us, event_counter
+    )
 
 
 @activity.defn

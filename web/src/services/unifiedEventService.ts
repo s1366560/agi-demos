@@ -46,7 +46,8 @@ export interface UnifiedEvent<T = unknown> {
   project_id?: string;
   data?: T;
   event_id?: string;
-  seq?: number;
+  event_time_us?: number;
+  event_counter?: number;
   timestamp?: string;
 }
 
@@ -65,7 +66,8 @@ interface ServerMessage {
   project_id?: string;
   data?: unknown;
   event_id?: string;
-  seq?: number;
+  event_time_us?: number;
+  event_counter?: number;
   timestamp?: string;
   action?: string;
 }
@@ -453,7 +455,8 @@ class UnifiedEventServiceImpl {
           project_id,
           data,
           event_id: message.event_id,
-          seq: message.seq,
+          event_time_us: message.event_time_us,
+          event_counter: message.event_counter,
           timestamp: message.timestamp,
         };
 

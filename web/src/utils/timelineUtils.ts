@@ -2,52 +2,58 @@
  * Timeline utility functions
  *
  * Provides helper functions for timeline operations including
- * safe sorting by sequence number with null/undefined handling.
+ * safe sorting by eventTimeUs + eventCounter with null/undefined handling.
  */
 
 import type { TimelineEvent } from '../types/agent';
 
 /**
- * Compare two timeline events by sequence number for sorting.
+ * Compare two timeline events by eventTimeUs and eventCounter for sorting.
  *
  * Handles edge cases:
- * - null/undefined sequence numbers are treated as Infinity (placed at end)
- * - Falls back to timestamp comparison if both sequence numbers are invalid
- * - Stable sort: maintains original order for equal sequence numbers
+ * - null/undefined eventTimeUs are treated as Infinity (placed at end)
+ * - Falls back to timestamp comparison if both eventTimeUs are missing
+ * - Stable sort: maintains original order for equal keys
  *
  * @param a - First timeline event
  * @param b - Second timeline event
  * @returns Negative if a < b, positive if a > b, 0 if equal
  */
 export function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): number {
-  const seqA = a.sequenceNumber;
-  const seqB = b.sequenceNumber;
+  const timeA = a.eventTimeUs;
+  const timeB = b.eventTimeUs;
 
-  // Handle null/undefined sequence numbers
-  const hasSeqA = seqA !== null && seqA !== undefined && !isNaN(seqA);
-  const hasSeqB = seqB !== null && seqB !== undefined && !isNaN(seqB);
+  // Handle null/undefined eventTimeUs
+  const hasTimeA = timeA !== null && timeA !== undefined && !isNaN(timeA);
+  const hasTimeB = timeB !== null && timeB !== undefined && !isNaN(timeB);
 
-  // Both have valid sequence numbers - compare normally
-  if (hasSeqA && hasSeqB) {
-    return seqA - seqB;
+  // Both have valid eventTimeUs - compare by time first, then counter
+  if (hasTimeA && hasTimeB) {
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+    // Same time - compare by counter
+    const counterA = a.eventCounter ?? 0;
+    const counterB = b.eventCounter ?? 0;
+    return counterA - counterB;
   }
 
-  // Only a has valid sequence number - a comes first
-  if (hasSeqA && !hasSeqB) {
+  // Only a has valid eventTimeUs - a comes first
+  if (hasTimeA && !hasTimeB) {
     return -1;
   }
 
-  // Only b has valid sequence number - b comes first
-  if (!hasSeqA && hasSeqB) {
+  // Only b has valid eventTimeUs - b comes first
+  if (!hasTimeA && hasTimeB) {
     return 1;
   }
 
-  // Neither has valid sequence number - fall back to timestamp
-  const timeA = a.timestamp ?? 0;
-  const timeB = b.timestamp ?? 0;
+  // Neither has valid eventTimeUs - fall back to timestamp
+  const tsA = a.timestamp ?? 0;
+  const tsB = b.timestamp ?? 0;
 
-  if (timeA !== timeB) {
-    return timeA - timeB;
+  if (tsA !== tsB) {
+    return tsA - tsB;
   }
 
   // Final fallback: stable sort using event id
@@ -55,27 +61,25 @@ export function compareTimelineEvents(a: TimelineEvent, b: TimelineEvent): numbe
 }
 
 /**
- * Sort timeline events by sequence number in ascending order.
+ * Sort timeline events by eventTimeUs + eventCounter in ascending order.
  *
  * Creates a new sorted array without mutating the original.
- * Events with null/undefined sequence numbers are placed at the end.
+ * Events with null/undefined eventTimeUs are placed at the end.
  *
  * @param timeline - Array of timeline events to sort
  * @returns New sorted array
- *
- * @example
- * ```typescript
- * const sorted = sortTimelineBySequence(unsortedTimeline);
- * // sorted[0] has lowest sequenceNumber
- * // sorted[sorted.length - 1] has highest sequenceNumber
- * ```
  */
-export function sortTimelineBySequence(timeline: TimelineEvent[]): TimelineEvent[] {
+export function sortTimeline(timeline: TimelineEvent[]): TimelineEvent[] {
   return [...timeline].sort(compareTimelineEvents);
 }
 
 /**
- * Check if timeline is properly sorted by sequence number.
+ * Alias for backward compatibility
+ */
+export const sortTimelineBySequence = sortTimeline;
+
+/**
+ * Check if timeline is properly sorted by eventTimeUs + eventCounter.
  *
  * Useful for debugging and validation.
  *
@@ -87,23 +91,30 @@ export function isTimelineSorted(timeline: TimelineEvent[]): boolean {
     const prev = timeline[i - 1];
     const curr = timeline[i];
 
-    const prevSeq = prev.sequenceNumber;
-    const currSeq = curr.sequenceNumber;
+    const prevTime = prev.eventTimeUs;
+    const currTime = curr.eventTimeUs;
 
-    // Skip comparison if either sequence number is invalid
+    // Skip comparison if either eventTimeUs is invalid
     if (
-      prevSeq === null ||
-      prevSeq === undefined ||
-      isNaN(prevSeq) ||
-      currSeq === null ||
-      currSeq === undefined ||
-      isNaN(currSeq)
+      prevTime === null ||
+      prevTime === undefined ||
+      isNaN(prevTime) ||
+      currTime === null ||
+      currTime === undefined ||
+      isNaN(currTime)
     ) {
       continue;
     }
 
-    if (prevSeq > currSeq) {
+    if (prevTime > currTime) {
       return false;
+    }
+    if (prevTime === currTime) {
+      const prevCounter = prev.eventCounter ?? 0;
+      const currCounter = curr.eventCounter ?? 0;
+      if (prevCounter > currCounter) {
+        return false;
+      }
     }
   }
 
@@ -111,30 +122,7 @@ export function isTimelineSorted(timeline: TimelineEvent[]): boolean {
 }
 
 /**
- * Find the next expected sequence number for a timeline.
- *
- * @param timeline - Array of timeline events
- * @returns Next sequence number (highest + 1), or 1 if empty
- */
-export function getNextSequenceNumber(timeline: TimelineEvent[]): number {
-  if (timeline.length === 0) {
-    return 1;
-  }
-
-  const sorted = sortTimelineBySequence(timeline);
-  const lastEvent = sorted[sorted.length - 1];
-
-  const lastSeq = lastEvent?.sequenceNumber;
-  if (lastSeq === null || lastSeq === undefined || isNaN(lastSeq)) {
-    // If last event has no sequence number, count events and return next
-    return timeline.length + 1;
-  }
-
-  return lastSeq + 1;
-}
-
-/**
- * Merge two timelines and sort by sequence number.
+ * Merge two timelines and sort by eventTimeUs + eventCounter.
  *
  * Handles duplicate events (same id) by keeping the event from the primary timeline.
  *
@@ -153,5 +141,5 @@ export function mergeTimelines(
   const uniqueSecondary = secondary.filter((e) => !existingIds.has(e.id));
 
   // Combine and sort
-  return sortTimelineBySequence([...primary, ...uniqueSecondary]);
+  return sortTimeline([...primary, ...uniqueSecondary]);
 }

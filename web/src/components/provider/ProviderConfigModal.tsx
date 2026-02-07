@@ -371,6 +371,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     reranker_model: '',
     is_active: true,
     is_default: false,
+    use_custom_base_url: false,
   });
 
   const selectedProvider = PROVIDERS.find((p) => p.value === formData.provider_type);
@@ -389,6 +390,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         reranker_model: provider.reranker_model || '',
         is_active: provider.is_active,
         is_default: provider.is_default,
+        use_custom_base_url: !!provider.base_url,
       });
       setCurrentStep('credentials');
     } else {
@@ -403,6 +405,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         reranker_model: '',
         is_active: true,
         is_default: false,
+        use_custom_base_url: false,
       });
       setCurrentStep('provider');
     }
@@ -715,18 +718,63 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 )}
               </div>
 
-              {selectedProvider.baseUrlRequired && (
+              {/* Custom Base URL Toggle */}
+              {!selectedProvider.baseUrlRequired && (
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.use_custom_base_url}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          use_custom_base_url: e.target.checked,
+                          base_url: e.target.checked ? prev.base_url : '',
+                        }))
+                      }
+                      className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
+                      Use custom base URL
+                    </span>
+                  </label>
+                  <span
+                    className="material-symbols-outlined text-slate-400 text-sm cursor-help"
+                    title="Override the default API endpoint URL for this provider (e.g., for proxy services or self-hosted instances)"
+                  >
+                    help_outline
+                  </span>
+                </div>
+              )}
+
+              {/* Base URL Input - shown when required by provider or when custom URL is enabled */}
+              {(selectedProvider.baseUrlRequired || formData.use_custom_base_url) && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                    Base URL *
+                    Base URL {selectedProvider.baseUrlRequired && '*'}
                   </label>
                   <input
                     type="url"
                     value={formData.base_url}
                     onChange={(e) => setFormData((prev) => ({ ...prev, base_url: e.target.value }))}
-                    placeholder="https://your-resource.openai.azure.com"
+                    placeholder={
+                      selectedProvider.value === 'azure_openai'
+                        ? 'https://your-resource.openai.azure.com'
+                        : selectedProvider.value === 'openai'
+                          ? 'https://api.openai.com/v1'
+                          : selectedProvider.value === 'anthropic'
+                            ? 'https://api.anthropic.com'
+                            : selectedProvider.value === 'deepseek'
+                              ? 'https://api.deepseek.com/v1'
+                              : 'https://api.example.com/v1'
+                    }
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    {selectedProvider.baseUrlRequired
+                      ? 'Required for this provider type'
+                      : 'Optional: Override the default API endpoint'}
+                  </p>
                 </div>
               )}
 

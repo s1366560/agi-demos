@@ -264,7 +264,8 @@ interface AgentV3State {
   isLoadingHistory: boolean; // For initial message load (shows loading in sidebar)
   isLoadingEarlier: boolean; // For pagination (does NOT show loading in sidebar)
   hasEarlier: boolean; // Whether there are earlier messages to load
-  earliestLoadedSequence: number | null; // For pagination
+  earliestTimeUs: number | null; // For pagination
+  earliestCounter: number | null; // For pagination
 
   // Stream State (for active conversation - backward compatibility)
   isStreaming: boolean;
@@ -354,7 +355,8 @@ export const useAgentV3Store = create<AgentV3State>()(
         isLoadingHistory: false,
         isLoadingEarlier: false,
         hasEarlier: false,
-        earliestLoadedSequence: null,
+        earliestTimeUs: null,
+        earliestCounter: null,
 
         isStreaming: false,
         streamStatus: 'idle',
@@ -481,8 +483,11 @@ export const useAgentV3Store = create<AgentV3State>()(
                 }),
                 ...(updates.costTracking !== undefined && { costTracking: updates.costTracking }),
                 ...(updates.hasEarlier !== undefined && { hasEarlier: updates.hasEarlier }),
-                ...(updates.earliestLoadedSequence !== undefined && {
-                  earliestLoadedSequence: updates.earliestLoadedSequence,
+                ...(updates.earliestTimeUs !== undefined && {
+                  earliestTimeUs: updates.earliestTimeUs,
+                }),
+                ...(updates.earliestCounter !== undefined && {
+                  earliestCounter: updates.earliestCounter,
                 }),
               };
             }
@@ -539,7 +544,8 @@ export const useAgentV3Store = create<AgentV3State>()(
             timeline: convState.timeline,
             messages: timelineToMessages(convState.timeline),
             hasEarlier: convState.hasEarlier,
-            earliestLoadedSequence: convState.earliestLoadedSequence,
+            earliestTimeUs: convState.earliestTimeUs,
+            earliestCounter: convState.earliestCounter,
             isStreaming: convState.isStreaming,
             streamStatus: convState.streamStatus,
             streamingAssistantContent: convState.streamingAssistantContent,
@@ -583,7 +589,8 @@ export const useAgentV3Store = create<AgentV3State>()(
             pendingEnvVarRequest,
             doomLoopDetected,
             hasEarlier,
-            earliestLoadedSequence,
+            earliestTimeUs,
+            earliestCounter,
           } = get();
 
           // CRITICAL: Clear delta buffers when switching conversations
@@ -599,7 +606,8 @@ export const useAgentV3Store = create<AgentV3State>()(
               ...currentState,
               timeline,
               hasEarlier,
-              earliestLoadedSequence,
+              earliestTimeUs,
+              earliestCounter,
               isStreaming,
               streamStatus,
               streamingAssistantContent,
@@ -636,18 +644,19 @@ export const useAgentV3Store = create<AgentV3State>()(
           if (id) {
             const newState = conversationStates.get(id);
             if (newState) {
-              // Sort timeline by sequence number to ensure correct order
-              // This is necessary because events may have been appended in arrival order
-              // during streaming, which may differ from their actual sequence order
-              const sortedTimeline = [...newState.timeline].sort(
-                (a, b) => a.sequenceNumber - b.sequenceNumber
-              );
+              // Sort timeline by eventTimeUs + eventCounter to ensure correct order
+              const sortedTimeline = [...newState.timeline].sort((a, b) => {
+                const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+                if (timeDiff !== 0) return timeDiff;
+                return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+              });
               set({
                 activeConversationId: id,
                 timeline: sortedTimeline,
                 messages: timelineToMessages(sortedTimeline),
                 hasEarlier: newState.hasEarlier,
-                earliestLoadedSequence: newState.earliestLoadedSequence,
+                earliestTimeUs: newState.earliestTimeUs,
+                earliestCounter: newState.earliestCounter,
                 isStreaming: newState.isStreaming,
                 streamStatus: newState.streamStatus,
                 streamingAssistantContent: newState.streamingAssistantContent,
@@ -677,7 +686,8 @@ export const useAgentV3Store = create<AgentV3State>()(
             timeline: [],
             messages: [],
             hasEarlier: false,
-            earliestLoadedSequence: null,
+            earliestTimeUs: null,
+            earliestCounter: null,
             isStreaming: false,
             streamStatus: 'idle',
             streamingAssistantContent: '',
@@ -832,15 +842,15 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
 
         loadMessages: async (conversationId, projectId) => {
-          // Get last known sequence from localStorage for recovery
-          const lastKnownSeq = parseInt(
-            localStorage.getItem(`agent_seq_${conversationId}`) || '0',
+          // Get last known time from localStorage for recovery
+          const lastKnownTimeUs = parseInt(
+            localStorage.getItem(`agent_time_us_${conversationId}`) || '0',
             10
           );
 
           // DEBUG: Log recovery attempt parameters
           console.log(
-            `[AgentV3] loadMessages starting for ${conversationId}, lastKnownSeq=${lastKnownSeq}`
+            `[AgentV3] loadMessages starting for ${conversationId}, lastKnownTimeUs=${lastKnownTimeUs}`
           );
 
           // Try to load from IndexedDB first
@@ -857,7 +867,8 @@ export const useAgentV3Store = create<AgentV3State>()(
             executionPlan: cachedState?.executionPlan || null,
             agentState: cachedState?.agentState || 'idle',
             hasEarlier: cachedState?.hasEarlier || false,
-            earliestLoadedSequence: cachedState?.earliestLoadedSequence || null,
+            earliestTimeUs: cachedState?.earliestTimeUs || null,
+            earliestCounter: cachedState?.earliestCounter || null,
             // Restore HITL state if any
             pendingClarification: cachedState?.pendingClarification || null,
             pendingDecision: cachedState?.pendingDecision || null,
@@ -878,7 +889,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 console.warn(`[AgentV3] getPlanModeStatus failed:`, e);
                 return null;
               }),
-              agentService.getExecutionStatus(conversationId, true, lastKnownSeq).catch((e) => {
+              agentService.getExecutionStatus(conversationId, true, lastKnownTimeUs).catch((e) => {
                 console.warn(`[AgentV3] getExecutionStatus failed:`, e);
                 return null;
               }),
@@ -892,17 +903,22 @@ export const useAgentV3Store = create<AgentV3State>()(
             // DEBUG: Log full timeline analysis for diagnosing missing/disordered messages
             const eventTypeCounts: Record<string, number> = {};
             let isOrdered = true;
-            let prevSeq = -1;
+            let prevTimeUs = -1;
+            let prevCounter = -1;
             for (const event of response.timeline) {
               eventTypeCounts[event.type] = (eventTypeCounts[event.type] || 0) + 1;
-              if (event.sequenceNumber <= prevSeq) {
+              if (
+                event.eventTimeUs < prevTimeUs ||
+                (event.eventTimeUs === prevTimeUs && event.eventCounter <= prevCounter)
+              ) {
                 isOrdered = false;
                 console.error(
-                  `[AgentV3] Timeline out of order! seq=${event.sequenceNumber} <= prevSeq=${prevSeq}`,
+                  `[AgentV3] Timeline out of order! timeUs=${event.eventTimeUs},counter=${event.eventCounter} <= prev timeUs=${prevTimeUs},counter=${prevCounter}`,
                   event
                 );
               }
-              prevSeq = event.sequenceNumber;
+              prevTimeUs = event.eventTimeUs;
+              prevCounter = event.eventCounter;
             }
             console.log(`[AgentV3] loadMessages API response:`, {
               conversationId,
@@ -910,19 +926,24 @@ export const useAgentV3Store = create<AgentV3State>()(
               eventTypeCounts,
               isOrdered,
               has_more: response.has_more,
-              first_sequence: response.first_sequence,
-              last_sequence: response.last_sequence,
+              first_time_us: response.first_time_us,
+              first_counter: response.first_counter,
+              last_time_us: response.last_time_us,
+              last_counter: response.last_counter,
             });
 
-            // Ensure timeline is sorted by sequence number (defensive fix)
-            const sortedTimeline = [...response.timeline].sort(
-              (a, b) => a.sequenceNumber - b.sequenceNumber
-            );
+            // Ensure timeline is sorted by eventTimeUs + eventCounter (defensive fix)
+            const sortedTimeline = [...response.timeline].sort((a, b) => {
+              const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+              if (timeDiff !== 0) return timeDiff;
+              return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+            });
 
             // Store the raw timeline and derive messages (no merging)
             const messages = timelineToMessages(sortedTimeline);
-            const firstSequence = sortedTimeline[0]?.sequenceNumber ?? null;
-            const lastSequence = sortedTimeline[sortedTimeline.length - 1]?.sequenceNumber ?? 0;
+            const firstTimeUs = response.first_time_us ?? null;
+            const firstCounter = response.first_counter ?? null;
+            const lastTimeUs = response.last_time_us ?? null;
 
             // DEBUG: Log assistant_message events
             const assistantMsgs = sortedTimeline.filter((e: any) => e.type === 'assistant_message');
@@ -938,16 +959,17 @@ export const useAgentV3Store = create<AgentV3State>()(
               artifactEvents
             );
 
-            // Update localStorage with latest sequence
-            if (lastSequence > 0) {
-              localStorage.setItem(`agent_seq_${conversationId}`, String(lastSequence));
+            // Update localStorage with latest time
+            if (lastTimeUs && lastTimeUs > 0) {
+              localStorage.setItem(`agent_time_us_${conversationId}`, String(lastTimeUs));
             }
 
             // Update both global state and conversation-specific state
             const newConvState: Partial<ConversationState> = {
               timeline: sortedTimeline, // Use sorted timeline
               hasEarlier: response.has_more ?? false,
-              earliestLoadedSequence: firstSequence,
+              earliestTimeUs: firstTimeUs,
+              earliestCounter: firstCounter,
               isPlanMode: planStatus?.is_in_plan_mode ?? false,
             };
 
@@ -966,7 +988,8 @@ export const useAgentV3Store = create<AgentV3State>()(
                 messages: messages,
                 isLoadingHistory: false,
                 hasEarlier: response.has_more ?? false,
-                earliestLoadedSequence: firstSequence,
+                earliestTimeUs: firstTimeUs,
+                earliestCounter: firstCounter,
                 // Set plan mode if successfully fetched
                 ...(planStatus ? { isPlanMode: planStatus.is_in_plan_mode } : {}),
               };
@@ -979,8 +1002,8 @@ export const useAgentV3Store = create<AgentV3State>()(
             console.log(`[AgentV3] execStatus for ${conversationId}:`, {
               execStatus,
               is_running: execStatus?.is_running,
-              lastKnownSeq,
-              lastSequence,
+              lastKnownTimeUs,
+              lastTimeUs,
             });
 
             // If agent is running, set up streaming state and subscribe to WebSocket
@@ -1036,12 +1059,12 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
 
         loadEarlierMessages: async (conversationId, projectId) => {
-          const { earliestLoadedSequence, timeline, isLoadingEarlier, activeConversationId } =
+          const { earliestTimeUs, earliestCounter, timeline, isLoadingEarlier, activeConversationId } =
             get();
 
           // Guard: Don't load if already loading or no pagination point exists
           if (activeConversationId !== conversationId) return false;
-          if (!earliestLoadedSequence || isLoadingEarlier) {
+          if (!earliestTimeUs || isLoadingEarlier) {
             console.log(
               '[AgentV3] Cannot load earlier messages: no pagination point or already loading'
             );
@@ -1049,8 +1072,10 @@ export const useAgentV3Store = create<AgentV3State>()(
           }
 
           console.log(
-            '[AgentV3] Loading earlier messages before sequence:',
-            earliestLoadedSequence
+            '[AgentV3] Loading earlier messages before timeUs:',
+            earliestTimeUs,
+            'counter:',
+            earliestCounter
           );
           set({ isLoadingEarlier: true });
 
@@ -1059,8 +1084,10 @@ export const useAgentV3Store = create<AgentV3State>()(
               conversationId,
               projectId,
               200, // Load 200 more messages (increased from 50)
-              undefined, // from_sequence
-              earliestLoadedSequence // before_sequence
+              undefined, // fromTimeUs
+              undefined, // fromCounter
+              earliestTimeUs, // beforeTimeUs
+              earliestCounter ?? undefined // beforeCounter
             )) as any;
 
             // Check if conversation is still active
@@ -1071,20 +1098,24 @@ export const useAgentV3Store = create<AgentV3State>()(
               return false;
             }
 
-            // Prepend new events to existing timeline and sort by sequence number
+            // Prepend new events to existing timeline and sort by eventTimeUs + eventCounter
             const combinedTimeline = [...response.timeline, ...timeline];
-            const sortedTimeline = combinedTimeline.sort(
-              (a, b) => a.sequenceNumber - b.sequenceNumber
-            );
+            const sortedTimeline = combinedTimeline.sort((a: any, b: any) => {
+              const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+              if (timeDiff !== 0) return timeDiff;
+              return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+            });
             const newMessages = timelineToMessages(sortedTimeline);
-            const newFirstSequence = sortedTimeline[0]?.sequenceNumber ?? null;
+            const newFirstTimeUs = response.first_time_us ?? null;
+            const newFirstCounter = response.first_counter ?? null;
 
             set({
               timeline: sortedTimeline,
               messages: newMessages,
               isLoadingEarlier: false,
               hasEarlier: response.has_more ?? false,
-              earliestLoadedSequence: newFirstSequence,
+              earliestTimeUs: newFirstTimeUs,
+              earliestCounter: newFirstCounter,
             });
 
             console.log(
@@ -1160,8 +1191,8 @@ export const useAgentV3Store = create<AgentV3State>()(
           const userMessageEvent: UserMessageEvent = {
             id: userMsgId,
             type: 'user_message',
-            sequenceNumber:
-              timeline.length > 0 ? timeline[timeline.length - 1].sequenceNumber + 1 : 1,
+            eventTimeUs: Date.now() * 1000,
+            eventCounter: 0,
             timestamp: Date.now(),
             content,
             role: 'user',

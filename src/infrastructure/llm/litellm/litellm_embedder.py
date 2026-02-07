@@ -270,10 +270,15 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         # Call LiteLLM embedding
         try:
-            response = await litellm.aembedding(
-                model=model,
-                input=texts,
-            )
+            embedding_kwargs: dict[str, Any] = {
+                "model": model,
+                "input": texts,
+            }
+            # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
+            if self._base_url:
+                embedding_kwargs["api_base"] = self._base_url
+
+            response = await litellm.aembedding(**embedding_kwargs)
 
             # Extract embedding
             if not response.data or not response.data[0].embedding:

@@ -83,7 +83,6 @@ class AgentService(AgentServicePort):
         agent_execution_event_repository: "AgentExecutionEventRepository | None" = None,
         execution_checkpoint_repository: "ExecutionCheckpointRepository | None" = None,
         storage_service=None,
-        mcp_adapter: "Optional[Any]" = None,
         db_session=None,
         sequence_service=None,
     ):
@@ -109,7 +108,6 @@ class AgentService(AgentServicePort):
             agent_execution_event_repository: Optional repository for SSE event persistence
             execution_checkpoint_repository: Optional repository for execution checkpoints
             storage_service: Optional StorageServicePort for file storage (used by CodeExecutorTool)
-            mcp_adapter: Optional MCP adapter for MCP server integration
             db_session: Optional database session (reserved for future use)
             sequence_service: Optional RedisSequenceService for atomic sequence generation
         """
@@ -131,7 +129,6 @@ class AgentService(AgentServicePort):
         self._agent_execution_event_repo = agent_execution_event_repository
         self._execution_checkpoint_repo = execution_checkpoint_repository
         self._storage_service = storage_service
-        self._mcp_adapter = mcp_adapter
         self._db_session = db_session
         self._sequence_service = sequence_service
 
@@ -230,21 +227,27 @@ class AgentService(AgentServicePort):
                 attachment_ids=attachment_ids if attachment_ids else None,
             )
 
-            # Get next sequence number atomically
-            # Use Redis sequence service if available (atomic), fall back to DB query
-            if self._sequence_service:
-                next_seq = await self._sequence_service.get_next_sequence(conversation_id)
+            # Get next event time
+            # Use EventTimeGenerator for monotonic ordering
+            from src.domain.model.agent.execution.event_time import EventTimeGenerator
+
+            if self._agent_execution_event_repo:
+                (
+                    last_time_us,
+                    last_counter,
+                ) = await self._agent_execution_event_repo.get_last_event_time(conversation_id)
+                time_gen = EventTimeGenerator(last_time_us=last_time_us, last_counter=last_counter)
             else:
-                next_seq = (
-                    await self._agent_execution_event_repo.get_last_sequence(conversation_id) + 1
-                )
+                time_gen = EventTimeGenerator()
+            next_time_us, next_counter = time_gen.next()
 
             # Convert to persistent entity
             user_msg_event = AgentExecutionEvent.from_domain_event(
                 event=user_domain_event,
                 conversation_id=conversation_id,
                 message_id=user_msg_id,
-                sequence_number=next_seq,
+                event_time_us=next_time_us,
+                event_counter=next_counter,
             )
 
             # Set correlation_id on the event
@@ -345,7 +348,7 @@ class AgentService(AgentServicePort):
         )
 
     async def _get_stream_events(
-        self, conversation_id: str, message_id: str, last_seq: int
+        self, conversation_id: str, message_id: str, last_event_time_us: int
     ) -> list[Dict[str, Any]]:
         """
         Retrieve events from Redis Stream (for reliable replay).
@@ -355,12 +358,12 @@ class AgentService(AgentServicePort):
         Args:
             conversation_id: Conversation ID
             message_id: Message ID for filtering
-            last_seq: Last sequence number received
+            last_event_time_us: Last event_time_us received
 
         Returns:
             List of events from stream
         """
-        _ = last_seq
+        _ = last_event_time_us
         if not self._event_bus:
             return []
 
@@ -408,7 +411,7 @@ class AgentService(AgentServicePort):
             message_id: Optional message ID to filter events for a specific message
 
         Yields:
-            SSE event dictionaries with keys: type, data, seq, timestamp
+            SSE event dictionaries with keys: type, data, event_time_us, event_counter, timestamp
         """
 
         if not self._agent_execution_event_repo or not self._event_bus:
@@ -434,7 +437,8 @@ class AgentService(AgentServicePort):
                     conversation_id=conversation_id, limit=1000
                 )
 
-            last_sequence_id = 0
+            last_event_time_us = 0
+            last_event_counter = 0
             saw_complete = False
             for event in events:
                 # Reconstruct SSE event format
@@ -442,18 +446,25 @@ class AgentService(AgentServicePort):
                     "type": event.event_type,
                     "data": event.event_data,
                     "timestamp": event.created_at.isoformat(),
-                    "id": event.sequence_number,
+                    "event_time_us": event.event_time_us,
+                    "event_counter": event.event_counter,
                 }
-                last_sequence_id = max(last_sequence_id, event.sequence_number)
+                if event.event_time_us > last_event_time_us or (
+                    event.event_time_us == last_event_time_us
+                    and event.event_counter > last_event_counter
+                ):
+                    last_event_time_us = event.event_time_us
+                    last_event_counter = event.event_counter
                 if event.event_type in ("complete", "error"):
                     saw_complete = True
 
             logger.info(
                 f"[AgentService] Replayed {len(events)} DB events for conversation {conversation_id}, "
-                f"last_seq={last_sequence_id}"
+                f"last_event_time_us={last_event_time_us}"
             )
             logger.warning(
-                f"[AgentService] DB replay done: events={len(events)}, last_seq={last_sequence_id}"
+                f"[AgentService] DB replay done: events={len(events)}, "
+                f"last_event_time_us={last_event_time_us}"
             )
 
         except Exception as e:
@@ -462,16 +473,17 @@ class AgentService(AgentServicePort):
         # If completion already happened, replay text_delta from Redis Stream once
         if message_id and saw_complete:
             stream_events = await self._get_stream_events(
-                conversation_id, message_id, last_sequence_id
+                conversation_id, message_id, last_event_time_us
             )
             stream_only = [e for e in stream_events]
-            stream_only.sort(key=lambda e: e.get("seq", 0))
+            stream_only.sort(key=lambda e: (e.get("event_time_us", 0), e.get("event_counter", 0)))
             for event in stream_only:
                 yield {
                     "type": event.get("type"),
                     "data": event.get("data"),
                     "timestamp": datetime.utcnow().isoformat(),
-                    "id": event.get("seq", 0),
+                    "event_time_us": event.get("event_time_us", 0),
+                    "event_counter": event.get("event_counter", 0),
                 }
             return
 
@@ -479,32 +491,35 @@ class AgentService(AgentServicePort):
         # IMPORTANT: Use last_id="0" to read ALL messages from Redis Stream
         # This is necessary because events are published to Redis Stream BEFORE
         # being saved to DB. If we used "$", we might miss events published during DB replay.
-        # We use last_sequence_id filtering to skip duplicates from DB replay.
+        # We use last_event_time_us/counter filtering to skip duplicates from DB replay.
         #
         # When message_id is None: Read ALL new events for the conversation (HITL recovery mode)
         # When message_id is set: Filter events for that specific message
         stream_key = f"agent:events:{conversation_id}"
         logger.warning(
             f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
-            f"message_id={message_id or 'ALL'}, last_seq={last_sequence_id}"
+            f"message_id={message_id or 'ALL'}, "
+            f"last_event_time_us={last_event_time_us}"
         )
         live_event_count = 0
         try:
             # Use "0" to read all messages (catch any missed during DB replay)
-            # Filter by last_sequence_id to avoid duplicates
+            # Filter by last_event_time_us/counter to avoid duplicates
             async for message in self._event_bus.stream_read(
                 stream_key, last_id="0", count=1000, block_ms=1000
             ):
                 event = message.get("data", {})
                 event_type = event.get("type", "unknown")
-                seq = event.get("seq", 0)
+                evt_time_us = event.get("event_time_us", 0)
+                evt_counter = event.get("event_counter", 0)
                 event_data = event.get("data", {})
 
                 live_event_count += 1
                 if live_event_count <= 10:
                     logger.warning(
                         f"[AgentService] Live stream event #{live_event_count}: "
-                        f"type={event_type}, seq={seq}, message_id={event_data.get('message_id')}"
+                        f"type={event_type}, event_time_us={evt_time_us}, "
+                        f"message_id={event_data.get('message_id')}"
                     )
 
                 # Filter by message_id (only when message_id is specified)
@@ -512,18 +527,25 @@ class AgentService(AgentServicePort):
                 if message_id and event_data.get("message_id") != message_id:
                     continue
 
-                # CRITICAL: Use last_sequence_id (from DB replay) for filtering
+                # CRITICAL: Use last_event_time_us/counter (from DB replay) for filtering
                 # This prevents re-yielding events that were already replayed from DB
-                if seq <= last_sequence_id:
+                if evt_time_us < last_event_time_us or (
+                    evt_time_us == last_event_time_us and evt_counter <= last_event_counter
+                ):
                     continue
 
                 yield {
                     "type": event_type,
                     "data": event_data,
                     "timestamp": datetime.utcnow().isoformat(),
-                    "id": seq,
+                    "event_time_us": evt_time_us,
+                    "event_counter": evt_counter,
                 }
-                last_sequence_id = max(last_sequence_id, seq)
+                if evt_time_us > last_event_time_us or (
+                    evt_time_us == last_event_time_us and evt_counter > last_event_counter
+                ):
+                    last_event_time_us = evt_time_us
+                    last_event_counter = evt_counter
 
                 # Stop when completion is seen, but continue briefly for delayed events
                 # (e.g., title_generated which is published after complete)
@@ -542,11 +564,15 @@ class AgentService(AgentServicePort):
                         ):
                             delayed_event = delayed_message.get("data", {})
                             delayed_type = delayed_event.get("type", "unknown")
-                            delayed_seq = delayed_event.get("seq", 0)
+                            delayed_time_us = delayed_event.get("event_time_us", 0)
+                            delayed_counter = delayed_event.get("event_counter", 0)
                             delayed_data = delayed_event.get("data", {})
 
                             # Skip already seen events
-                            if delayed_seq <= last_sequence_id:
+                            if delayed_time_us < last_event_time_us or (
+                                delayed_time_us == last_event_time_us
+                                and delayed_counter <= last_event_counter
+                            ):
                                 continue
 
                             # For conversation-level events (like title_generated), check conversation_id
@@ -573,9 +599,15 @@ class AgentService(AgentServicePort):
                                     "type": delayed_type,
                                     "data": delayed_data,
                                     "timestamp": datetime.utcnow().isoformat(),
-                                    "id": delayed_seq,
+                                    "event_time_us": delayed_time_us,
+                                    "event_counter": delayed_counter,
                                 }
-                                last_sequence_id = max(last_sequence_id, delayed_seq)
+                                if delayed_time_us > last_event_time_us or (
+                                    delayed_time_us == last_event_time_us
+                                    and delayed_counter > last_event_counter
+                                ):
+                                    last_event_time_us = delayed_time_us
+                                    last_event_counter = delayed_counter
 
                             # Timeout check
                             if time_module.time() - delayed_start > max_delay:

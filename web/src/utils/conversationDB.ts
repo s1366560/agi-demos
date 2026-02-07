@@ -23,7 +23,8 @@ const STORE_NAME = 'conversation-states';
 interface SerializedConversationState {
   timeline: TimelineEvent[];
   hasEarlier: boolean;
-  earliestLoadedSequence: number | null;
+  earliestTimeUs: number | null;
+  earliestCounter: number | null;
   isStreaming: boolean;
   streamStatus: 'idle' | 'connecting' | 'streaming' | 'error';
   streamingAssistantContent: string;
@@ -94,7 +95,8 @@ function serializeState(
     conversationId,
     timeline: state.timeline || [],
     hasEarlier: state.hasEarlier || false,
-    earliestLoadedSequence: state.earliestLoadedSequence || null,
+    earliestTimeUs: state.earliestTimeUs || null,
+    earliestCounter: state.earliestCounter || null,
     isStreaming: false, // Don't persist streaming state
     streamStatus: 'idle',
     streamingAssistantContent: '',
@@ -126,7 +128,8 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
   return {
     timeline: stored.timeline,
     hasEarlier: stored.hasEarlier,
-    earliestLoadedSequence: stored.earliestLoadedSequence,
+    earliestTimeUs: stored.earliestTimeUs,
+    earliestCounter: stored.earliestCounter,
     isStreaming: stored.isStreaming,
     streamStatus: stored.streamStatus,
     streamingAssistantContent: stored.streamingAssistantContent,

@@ -360,7 +360,8 @@ class ExecutionStatusResponse(BaseModel):
     """Response with execution status and optional recovery information."""
 
     is_running: bool
-    last_sequence: int
+    last_event_time_us: int
+    last_event_counter: int
     current_message_id: Optional[str] = None
     conversation_id: str
     recovery: Optional[RecoveryInfo] = None

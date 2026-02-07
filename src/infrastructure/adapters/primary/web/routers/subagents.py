@@ -28,7 +28,6 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
         db=db,
         graph_service=app_container.graph_service,
         redis_client=app_container._redis_client,
-        mcp_adapter=app_container._infra._mcp_adapter,
     )
 
 

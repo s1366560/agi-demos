@@ -66,7 +66,8 @@ class HITLAgentState:
     current_plan_step: int = 0
     work_plan_id: Optional[str] = None
     work_plan_steps: List[Dict[str, Any]] = field(default_factory=list)
-    last_sequence_number: int = 0
+    last_event_time_us: int = 0
+    last_event_counter: int = 0
 
     # Pending tool calls (serialized)
     pending_tool_calls: Dict[str, Dict[str, Any]] = field(default_factory=dict)

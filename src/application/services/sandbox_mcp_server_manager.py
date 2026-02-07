@@ -1,0 +1,291 @@
+"""Sandbox MCP Server Manager service.
+
+Orchestrates user-configured MCP servers running inside project sandbox
+containers. Handles sandbox auto-creation, server installation, lifecycle
+management, tool discovery, and tool call proxying.
+"""
+
+import json
+import logging
+from typing import Any, Dict, List
+
+from src.domain.ports.services.sandbox_mcp_server_port import (
+    SandboxMCPServerPort,
+    SandboxMCPServerStatus,
+    SandboxMCPToolCallResult,
+)
+from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
+
+logger = logging.getLogger(__name__)
+
+# Names of sandbox-side management tools
+TOOL_INSTALL = "mcp_server_install"
+TOOL_START = "mcp_server_start"
+TOOL_STOP = "mcp_server_stop"
+TOOL_LIST = "mcp_server_list"
+TOOL_DISCOVER = "mcp_server_discover_tools"
+TOOL_CALL = "mcp_server_call_tool"
+
+
+class SandboxMCPServerManager(SandboxMCPServerPort):
+    """Manages user MCP servers in project sandbox containers.
+
+    Uses the existing SandboxResourcePort to communicate with sandbox
+    containers via MCP management tools registered in the sandbox.
+    """
+
+    def __init__(
+        self,
+        sandbox_resource: SandboxResourcePort,
+    ) -> None:
+        """Initialize the manager.
+
+        Args:
+            sandbox_resource: Port for sandbox access (ensure/execute tools).
+        """
+        self._sandbox_resource = sandbox_resource
+
+    async def install_and_start(
+        self,
+        project_id: str,
+        tenant_id: str,
+        server_name: str,
+        server_type: str,
+        transport_config: Dict[str, Any],
+    ) -> SandboxMCPServerStatus:
+        """Install and start an MCP server in the project's sandbox."""
+        # Ensure sandbox exists
+        sandbox_id = await self._sandbox_resource.ensure_sandbox_ready(
+            project_id=project_id,
+            tenant_id=tenant_id,
+        )
+        logger.info(f"Sandbox ready (id={sandbox_id}) for MCP server '{server_name}'")
+
+        config_json = json.dumps(transport_config)
+
+        # Install the MCP server package
+        install_result = await self._sandbox_resource.execute_tool(
+            project_id=project_id,
+            tool_name=TOOL_INSTALL,
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=120.0,
+        )
+        install_data = self._parse_tool_result(install_result)
+        if not install_data.get("success", False):
+            error = install_data.get("error", "Installation failed")
+            logger.error(f"Failed to install MCP server '{server_name}': {error}")
+            return SandboxMCPServerStatus(
+                name=server_name,
+                server_type=server_type,
+                status="failed",
+                error=error,
+            )
+
+        # Start the MCP server
+        start_result = await self._sandbox_resource.execute_tool(
+            project_id=project_id,
+            tool_name=TOOL_START,
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=60.0,
+        )
+        start_data = self._parse_tool_result(start_result)
+        if not start_data.get("success", False):
+            error = start_data.get("error", "Start failed")
+            logger.error(f"Failed to start MCP server '{server_name}': {error}")
+            return SandboxMCPServerStatus(
+                name=server_name,
+                server_type=server_type,
+                status="failed",
+                error=error,
+            )
+
+        logger.info(f"MCP server '{server_name}' started in sandbox {sandbox_id}")
+        return SandboxMCPServerStatus(
+            name=server_name,
+            server_type=server_type,
+            status=start_data.get("status", "running"),
+            pid=start_data.get("pid"),
+            port=start_data.get("port"),
+        )
+
+    async def stop_server(
+        self,
+        project_id: str,
+        server_name: str,
+    ) -> bool:
+        """Stop an MCP server in the project's sandbox."""
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_STOP,
+                arguments={"name": server_name},
+                timeout=30.0,
+            )
+            data = self._parse_tool_result(result)
+            return data.get("success", False)
+        except Exception as e:
+            logger.warning(f"Failed to stop MCP server '{server_name}': {e}")
+            return False
+
+    async def discover_tools(
+        self,
+        project_id: str,
+        tenant_id: str,
+        server_name: str,
+        server_type: str,
+        transport_config: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Discover tools from an MCP server in the sandbox."""
+        # Ensure server is running
+        await self.install_and_start(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            server_name=server_name,
+            server_type=server_type,
+            transport_config=transport_config,
+        )
+
+        # Discover tools
+        result = await self._sandbox_resource.execute_tool(
+            project_id=project_id,
+            tool_name=TOOL_DISCOVER,
+            arguments={"name": server_name},
+            timeout=30.0,
+        )
+        tools = self._parse_tool_result(result)
+        if isinstance(tools, list):
+            return tools
+        return []
+
+    async def call_tool(
+        self,
+        project_id: str,
+        server_name: str,
+        tool_name: str,
+        arguments: Dict[str, Any],
+    ) -> SandboxMCPToolCallResult:
+        """Call a tool on an MCP server in the sandbox."""
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_CALL,
+                arguments={
+                    "server_name": server_name,
+                    "tool_name": tool_name,
+                    "arguments": json.dumps(arguments),
+                },
+                timeout=60.0,
+            )
+
+            content = result.get("content", [])
+            is_error = result.get("isError", result.get("is_error", False))
+            return SandboxMCPToolCallResult(
+                content=content,
+                is_error=is_error,
+            )
+
+        except Exception as e:
+            logger.error(f"Error calling tool '{tool_name}' on '{server_name}': {e}")
+            return SandboxMCPToolCallResult(
+                content=[{"type": "text", "text": f"Error: {e!s}"}],
+                is_error=True,
+                error_message=str(e),
+            )
+
+    async def test_connection(
+        self,
+        project_id: str,
+        tenant_id: str,
+        server_name: str,
+        server_type: str,
+        transport_config: Dict[str, Any],
+    ) -> SandboxMCPServerStatus:
+        """Test MCP server connection by running it in sandbox."""
+        # Install and start
+        status = await self.install_and_start(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            server_name=server_name,
+            server_type=server_type,
+            transport_config=transport_config,
+        )
+
+        if status.status == "failed":
+            return status
+
+        # Try to discover tools as a connectivity test
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_DISCOVER,
+                arguments={"name": server_name},
+                timeout=30.0,
+            )
+            tools = self._parse_tool_result(result)
+            tool_count = len(tools) if isinstance(tools, list) else 0
+            status.tool_count = tool_count
+        except Exception as e:
+            status.status = "failed"
+            status.error = f"Tool discovery failed: {e!s}"
+
+        return status
+
+    async def list_servers(
+        self,
+        project_id: str,
+    ) -> List[SandboxMCPServerStatus]:
+        """List MCP servers running in a project's sandbox."""
+        try:
+            result = await self._sandbox_resource.execute_tool(
+                project_id=project_id,
+                tool_name=TOOL_LIST,
+                arguments={},
+                timeout=15.0,
+            )
+            servers_data = self._parse_tool_result(result)
+            if not isinstance(servers_data, list):
+                return []
+
+            return [
+                SandboxMCPServerStatus(
+                    name=s.get("name", ""),
+                    server_type=s.get("server_type", ""),
+                    status=s.get("status", "unknown"),
+                    pid=s.get("pid"),
+                    port=s.get("port"),
+                )
+                for s in servers_data
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to list MCP servers: {e}")
+            return []
+
+    def _parse_tool_result(self, result: Dict[str, Any]) -> Any:
+        """Parse tool result content, extracting JSON if present."""
+        content = result.get("content", [])
+        if not content:
+            return result
+
+        # Extract text from content items
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text_parts.append(item.get("text", ""))
+
+        text = "\n".join(text_parts)
+        if not text:
+            return result
+
+        # Try to parse as JSON
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return text

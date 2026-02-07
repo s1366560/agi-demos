@@ -1,7 +1,7 @@
 """MCP Transport Clients.
 
 This module provides MCP protocol client implementations used by
-Ray MCPServerActor and MCPLocalFallback.
+sandbox adapters and MCP tool factories.
 
 Components:
 - MCPSubprocessClient: LOCAL (stdio) transport client

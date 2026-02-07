@@ -55,6 +55,14 @@ from src.tools.index_tools import (
     create_find_definition_tool,
     create_find_references_tool,
 )
+from src.tools.mcp_management import (
+    create_mcp_server_call_tool_tool,
+    create_mcp_server_discover_tools_tool,
+    create_mcp_server_install_tool,
+    create_mcp_server_list_tool,
+    create_mcp_server_start_tool,
+    create_mcp_server_stop_tool,
+)
 from src.tools.terminal_tools import (
     create_restart_terminal_tool,
     create_start_terminal_tool,
@@ -177,6 +185,14 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     # Register import tools (for importing files from MemStack storage)
     registry.register(create_import_file_tool())
     registry.register(create_import_files_batch_tool())
+
+    # Register MCP server management tools (used by backend, not exposed to agents)
+    registry.register(create_mcp_server_install_tool())
+    registry.register(create_mcp_server_start_tool())
+    registry.register(create_mcp_server_stop_tool())
+    registry.register(create_mcp_server_list_tool())
+    registry.register(create_mcp_server_discover_tools_tool())
+    registry.register(create_mcp_server_call_tool_tool())
 
     logger.info(f"Tool registry initialized with {len(registry.list_names())} tools")
     return registry

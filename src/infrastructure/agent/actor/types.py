@@ -44,38 +44,14 @@ class ProjectChatResult:
     conversation_id: str
     message_id: str
     content: str = ""
-    sequence_number: int = 0
+    last_event_time_us: int = 0
+    last_event_counter: int = 0
     is_error: bool = False
     error_message: Optional[str] = None
     execution_time_ms: float = 0.0
     event_count: int = 0
     hitl_pending: bool = False
     hitl_request_id: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class MCPServerActorConfig:
-    """Configuration for MCPServerActor. Replaces MCPServerConfig (Temporal)."""
-
-    server_name: str
-    tenant_id: str
-    transport_type: str = "local"  # "local"/"stdio", "http", "sse", "websocket"
-
-    # Local transport
-    command: Optional[List[str]] = None
-    environment: Optional[Dict[str, str]] = None
-
-    # Remote transport
-    url: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
-
-    # WebSocket specific
-    heartbeat_interval: int = 30
-    reconnect_attempts: int = 3
-
-    # Common
-    timeout: int = 30000  # milliseconds
-    enabled: bool = True
 
 
 @dataclass(frozen=True)

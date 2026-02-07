@@ -444,40 +444,44 @@ class AgentExecutionEventRepository(ABC):
     async def get_events(
         self,
         conversation_id: str,
-        from_sequence: int = 0,
+        from_time_us: int = 0,
+        from_counter: int = 0,
         limit: int = 1000,
         event_types: Optional[set[str]] = None,
-        before_sequence: Optional[int] = None,
+        before_time_us: Optional[int] = None,
+        before_counter: Optional[int] = None,
     ) -> List[AgentExecutionEvent]:
         """
         Get events for a conversation with bidirectional pagination support.
 
         Args:
             conversation_id: The conversation ID
-            from_sequence: Starting sequence number (inclusive), used for forward pagination
+            from_time_us: Starting event_time_us (inclusive), used for forward pagination
+            from_counter: Starting event_counter (inclusive), used with from_time_us
             limit: Maximum number of events to return
             event_types: Optional set of event types to filter by
-            before_sequence: For backward pagination, get events before this sequence number (exclusive)
+            before_time_us: For backward pagination, get events before this time (exclusive)
+            before_counter: For backward pagination, used with before_time_us
 
         Returns:
-            List of events in sequence order (oldest first)
+            List of events in chronological order (oldest first)
 
         Pagination behavior:
-            - If before_sequence is None: returns events from from_sequence onwards (forward)
-            - If before_sequence is set: returns events before before_sequence, up to limit (backward)
+            - If before_time_us is None: returns events from (from_time_us, from_counter) onwards
+            - If before_time_us is set: returns events before (before_time_us, before_counter)
         """
         pass
 
     @abstractmethod
-    async def get_last_sequence(self, conversation_id: str) -> int:
+    async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]:
         """
-        Get the last sequence number for a conversation.
+        Get the last (event_time_us, event_counter) for a conversation.
 
         Args:
             conversation_id: The conversation ID
 
         Returns:
-            The last sequence number, or 0 if no events exist
+            Tuple of (event_time_us, event_counter), or (0, 0) if no events exist
         """
         pass
 
@@ -493,7 +497,7 @@ class AgentExecutionEventRepository(ABC):
             message_id: The message ID
 
         Returns:
-            List of events in sequence order
+            List of events in chronological order
         """
         pass
 
@@ -514,16 +518,16 @@ class AgentExecutionEventRepository(ABC):
         limit: int = 1000,
     ) -> List[AgentExecutionEvent]:
         """
-        List all events for a conversation in sequence order.
+        List all events for a conversation in chronological order.
 
-        This is an alias for get_events() with from_sequence=0 for convenience.
+        This is an alias for get_events() with from_time_us=0 for convenience.
 
         Args:
             conversation_id: The conversation ID
             limit: Maximum number of events to return
 
         Returns:
-            List of events in sequence order
+            List of events in chronological order
         """
         pass
 
@@ -537,7 +541,7 @@ class AgentExecutionEventRepository(ABC):
         Get message events (user_message + assistant_message) for LLM context.
 
         This method filters events to only return user and assistant messages,
-        ordered by sequence number for building conversation context.
+        ordered by event time for building conversation context.
 
         Args:
             conversation_id: The conversation ID

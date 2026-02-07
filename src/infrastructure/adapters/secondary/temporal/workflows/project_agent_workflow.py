@@ -138,7 +138,8 @@ class ProjectChatResult:
     conversation_id: str
     message_id: str
     content: str = ""
-    sequence_number: int = 0
+    last_event_time_us: int = 0
+    last_event_counter: int = 0
     is_error: bool = False
     error_message: Optional[str] = None
     execution_time_ms: float = 0.0
@@ -626,7 +627,8 @@ class ProjectAgentWorkflow:
                 conversation_id=request.conversation_id,
                 message_id=request.message_id,
                 content=result.get("content", ""),
-                sequence_number=result.get("sequence_number", 0),
+                last_event_time_us=result.get("last_event_time_us", 0),
+                last_event_counter=result.get("last_event_counter", 0),
                 is_error=result.get("is_error", False),
                 error_message=result.get("error_message"),
                 execution_time_ms=execution_time_ms,

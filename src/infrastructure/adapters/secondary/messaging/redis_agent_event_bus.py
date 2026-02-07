@@ -79,14 +79,16 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         event_type: AgentEventType,
         data: Dict[str, Any],
-        sequence: int,
+        event_time_us: int,
+        event_counter: int,
     ) -> str:
         """Publish an event to the stream."""
         stream_key = self._get_stream_key(conversation_id, message_id)
 
         # Build event data
         event_data = {
-            "sequence": sequence,
+            "event_time_us": event_time_us,
+            "event_counter": event_counter,
             "event_type": event_type.value,
             "data": json.dumps(data, default=str),
             "timestamp": datetime.utcnow().isoformat(),
@@ -109,7 +111,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 
             logger.debug(
                 f"[AgentEventBus] Published event to {stream_key}: "
-                f"seq={sequence}, type={event_type.value}, id={event_id}"
+                f"event_time_us={event_time_us}, type={event_type.value}, id={event_id}"
             )
 
             return event_id
@@ -122,19 +124,21 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         self,
         conversation_id: str,
         message_id: str,
-        from_sequence: int = 0,
+        from_time_us: int = 0,
+        from_counter: int = 0,
         timeout_ms: Optional[int] = None,
     ) -> AsyncIterator[AgentEvent]:
         """Subscribe to events for a message."""
         stream_key = self._get_stream_key(conversation_id, message_id)
         block_ms = timeout_ms or self.DEFAULT_BLOCK_MS
 
-        # First, read existing events from the sequence
-        if from_sequence > 0:
+        # First, read existing events from the time
+        if from_time_us > 0:
             existing = await self.get_events(
                 conversation_id=conversation_id,
                 message_id=message_id,
-                from_sequence=from_sequence,
+                from_time_us=from_time_us,
+                from_counter=from_counter,
             )
             for event in existing:
                 yield event
@@ -158,7 +162,13 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 for stream_name, messages in streams:
                     for msg_id, fields in messages:
                         event = self._parse_stream_message(msg_id, fields)
-                        if event and event.sequence >= from_sequence:
+                        if event and (
+                            event.event_time_us > from_time_us
+                            or (
+                                event.event_time_us == from_time_us
+                                and event.event_counter >= from_counter
+                            )
+                        ):
                             yield event
                             # Check if this is a terminal event
                             if event.event_type in (
@@ -185,8 +195,10 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         self,
         conversation_id: str,
         message_id: str,
-        from_sequence: int = 0,
-        to_sequence: Optional[int] = None,
+        from_time_us: int = 0,
+        from_counter: int = 0,
+        to_time_us: Optional[int] = None,
+        to_counter: Optional[int] = None,
         limit: int = 100,
     ) -> List[AgentEvent]:
         """Get events in a range (non-blocking)."""
@@ -205,9 +217,15 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             for msg_id, fields in result:
                 event = self._parse_stream_message(msg_id, fields)
                 if event:
-                    # Filter by sequence
-                    if event.sequence >= from_sequence:
-                        if to_sequence is None or event.sequence <= to_sequence:
+                    # Filter by event time range
+                    if event.event_time_us > from_time_us or (
+                        event.event_time_us == from_time_us
+                        and event.event_counter >= from_counter
+                    ):
+                        if to_time_us is None or event.event_time_us < to_time_us or (
+                            event.event_time_us == to_time_us
+                            and (to_counter is None or event.event_counter <= to_counter)
+                        ):
                             events.append(event)
                             if len(events) >= limit:
                                 break
@@ -218,12 +236,12 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             logger.error(f"[AgentEventBus] Failed to get events from {stream_key}: {e}")
             return events
 
-    async def get_last_sequence(
+    async def get_last_event_time(
         self,
         conversation_id: str,
         message_id: str,
-    ) -> int:
-        """Get the last sequence number for a message."""
+    ) -> tuple[int, int]:
+        """Get the last (event_time_us, event_counter) for a message."""
         stream_key = self._get_stream_key(conversation_id, message_id)
 
         try:
@@ -231,17 +249,16 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             result = await self._redis.xrevrange(stream_key, count=1)
 
             if not result:
-                return -1
+                return (0, 0)
 
             msg_id, fields = result[0]
-            seq = fields.get(b"sequence") or fields.get("sequence")
-            if seq:
-                return int(seq)
-            return -1
+            time_us = fields.get(b"event_time_us") or fields.get("event_time_us")
+            counter = fields.get(b"event_counter") or fields.get("event_counter")
+            return (int(time_us) if time_us else 0, int(counter) if counter else 0)
 
         except Exception as e:
-            logger.warning(f"[AgentEventBus] Failed to get last sequence: {e}")
-            return -1
+            logger.warning(f"[AgentEventBus] Failed to get last event time: {e}")
+            return (0, 0)
 
     async def mark_complete(
         self,
@@ -318,7 +335,8 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             def get_field(key: str) -> Any:
                 return fields.get(key.encode()) if key.encode() in fields else fields.get(key)
 
-            sequence = get_field("sequence")
+            sequence = get_field("event_time_us")
+            counter = get_field("event_counter")
             event_type = get_field("event_type")
             data = get_field("data")
             timestamp = get_field("timestamp")
@@ -330,6 +348,11 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 sequence = int(sequence.decode())
             else:
                 sequence = int(sequence) if sequence else 0
+
+            if isinstance(counter, bytes):
+                counter = int(counter.decode())
+            else:
+                counter = int(counter) if counter else 0
 
             if isinstance(event_type, bytes):
                 event_type = event_type.decode()
@@ -357,7 +380,8 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 
             return AgentEvent(
                 event_id=msg_id,
-                sequence=sequence,
+                event_time_us=sequence,
+                event_counter=counter,
                 event_type=AgentEventType(event_type) if event_type else AgentEventType.THOUGHT,
                 data=data,
                 timestamp=(datetime.fromisoformat(timestamp) if timestamp else datetime.utcnow()),

@@ -55,38 +55,30 @@ import type {
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
 /**
- * Sequence number counter for timeline events
- * Starts at 1 and increments for each event
+ * Sequence counter stubs - kept for backward compatibility but no longer used.
+ * Event ordering now uses eventTimeUs + eventCounter from the backend.
  */
-let sequenceCounter = 0;
 
 /**
- * Reset the sequence number counter to 0
- * Call this when starting a new conversation or in tests
+ * Reset the sequence number counter (no-op, kept for backward compatibility)
  */
 export function resetSequenceCounter(): void {
-  sequenceCounter = 0;
+  // No-op: event ordering now uses eventTimeUs + eventCounter
 }
 
 /**
- * Get the current sequence counter value (for testing)
+ * Get the current sequence counter value (stub, kept for backward compatibility)
  * @internal
  */
 export function getSequenceCounter(): number {
-  return sequenceCounter;
+  return 0;
 }
 
 /**
- * Get the next sequence number for a timeline event
- *
- * @param reset - If true, reset counter before getting next number
- * @returns The next sequence number
+ * Get the next sequence number (stub, kept for backward compatibility)
  */
-export function getNextSequenceNumber(reset = false): number {
-  if (reset) {
-    sequenceCounter = 0;
-  }
-  return ++sequenceCounter;
+export function getNextSequenceNumber(_reset = false): number {
+  return 0;
 }
 
 /**
@@ -106,20 +98,34 @@ export function generateTimelineEventId(type: string, prefix?: string): string {
 }
 
 /**
+ * Extract eventTimeUs and eventCounter from event data
+ */
+function extractEventOrdering(data: unknown): {
+  eventTimeUs: number;
+  eventCounter: number;
+  timestamp: number;
+} {
+  const d = data as Record<string, unknown>;
+  const eventTimeUs =
+    typeof d?.event_time_us === 'number' ? d.event_time_us : Date.now() * 1000;
+  const eventCounter = typeof d?.event_counter === 'number' ? d.event_counter : 0;
+  const timestamp = eventTimeUs ? Math.floor(eventTimeUs / 1000) : Date.now();
+  return { eventTimeUs, eventCounter, timestamp };
+}
+
+/**
  * Convert an SSE AgentEvent to a TimelineEvent
  *
  * Maps SSE event types to unified TimelineEvent types.
  * Returns null for unsupported event types.
  *
  * @param event - The SSE event to convert
- * @param sequenceNumber - The sequence number for this event
  * @returns A TimelineEvent or null if event type is not supported
  */
 export function sseEventToTimeline(
-  event: AgentEvent<unknown>,
-  sequenceNumber: number
+  event: AgentEvent<unknown>
 ): TimelineEvent | null {
-  const timestamp = Date.now();
+  const { eventTimeUs, eventCounter, timestamp } = extractEventOrdering(event.data);
 
   switch (event.type) {
     case 'message': {
@@ -127,7 +133,8 @@ export function sseEventToTimeline(
       const baseEvent: BaseTimelineEvent = {
         id: data.id || generateTimelineEventId('message'),
         type: data.role === 'user' ? ('user_message' as const) : ('assistant_message' as const),
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
       };
 
@@ -155,7 +162,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('thought'),
         type: 'thought',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         content: data.thought,
       };
@@ -166,7 +174,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('act'),
         type: 'act',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         toolName: data.tool_name,
         toolInput: data.tool_input,
@@ -212,7 +221,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('observe'),
         type: 'observe',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         toolName: data.tool_name ?? 'unknown', // Use tool_name from event
         execution_id: data.execution_id, // Unique ID for act/observe matching
@@ -226,7 +236,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('work_plan'),
         type: 'work_plan',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         steps: data.steps.map((s) => ({
           step_number: s.step_number,
@@ -242,7 +253,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('step_start'),
         type: 'step_start',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         stepIndex: data.step_number,
         stepDescription: data.description,
@@ -255,7 +267,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('step_end'),
         type: 'step_end',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         stepIndex: data.step_number,
         status: data.success ? 'completed' : 'failed',
@@ -267,7 +280,8 @@ export function sseEventToTimeline(
       return {
         id: data.id || data.message_id || generateTimelineEventId('assistant'),
         type: 'assistant_message',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         content: data.content,
         role: 'assistant',
@@ -282,7 +296,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('text_start'),
         type: 'text_start',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
       };
     }
@@ -292,7 +307,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('text_delta'),
         type: 'text_delta',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         content: data.delta,
       };
@@ -303,7 +319,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('text_end'),
         type: 'text_end',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         fullText: data.full_text,
       };
@@ -315,7 +332,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('desktop_started'),
         type: 'desktop_started',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         url: data.url,
@@ -330,7 +348,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('desktop_stopped'),
         type: 'desktop_stopped',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
       };
@@ -341,7 +360,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('desktop_status'),
         type: 'desktop_status',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         running: data.running,
@@ -357,7 +377,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('terminal_started'),
         type: 'terminal_started',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         url: data.url,
@@ -371,7 +392,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('terminal_stopped'),
         type: 'terminal_stopped',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         sessionId: data.sessionId ?? undefined,
@@ -383,7 +405,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('terminal_status'),
         type: 'terminal_status',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         running: data.running,
@@ -399,7 +422,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('sandbox_created'),
         type: 'sandbox_created',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         projectId: data.project_id,
@@ -414,7 +438,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('sandbox_terminated'),
         type: 'sandbox_terminated',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
       };
@@ -425,7 +450,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('sandbox_status'),
         type: 'sandbox_status',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         status: data.status,
@@ -437,7 +463,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('screenshot_update'),
         type: 'screenshot_update',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         sandboxId: data.sandbox_id,
         imageUrl: data.imageUrl,
@@ -450,7 +477,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('clarification_asked'),
         type: 'clarification_asked',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         requestId: data.request_id,
         question: data.question,
@@ -467,7 +495,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('clarification_answered'),
         type: 'clarification_answered',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         requestId: data.request_id,
         answer: data.answer,
@@ -479,7 +508,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('decision_asked'),
         type: 'decision_asked',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         requestId: data.request_id,
         question: data.question,
@@ -497,7 +527,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('decision_answered'),
         type: 'decision_answered',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         requestId: data.request_id,
         decision: data.decision,
@@ -509,7 +540,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('env_var_requested'),
         type: 'env_var_requested',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         requestId: data.request_id,
         toolName: data.tool_name,
@@ -525,7 +557,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('env_var_provided'),
         type: 'env_var_provided',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         requestId: data.request_id,
         toolName: data.tool_name,
@@ -538,7 +571,8 @@ export function sseEventToTimeline(
       return {
         id: generateTimelineEventId('artifact_created'),
         type: 'artifact_created',
-        sequenceNumber,
+        eventTimeUs,
+        eventCounter,
         timestamp,
         artifactId: data.artifact_id,
         filename: data.filename,
@@ -589,26 +623,16 @@ export function sseEventToTimeline(
 /**
  * Convert a batch of SSE events to TimelineEvents
  *
- * Automatically assigns sequence numbers.
- * Filters out null events (unsupported event types).
- *
- * Note: Does NOT reset sequence counter to ensure continuity
- * across multiple HITL scenarios. Call resetSequenceCounter()
- * explicitly if you need to start from 1.
+ * Automatically filters out null events (unsupported event types).
  *
  * @param events - Array of SSE events to convert
  * @returns Array of TimelineEvents (filtered to exclude nulls)
  */
 export function batchConvertSSEEvents(events: AgentEvent<unknown>[]): TimelineEvent[] {
-  // 注意：不在批量转换时重置计数器，以确保多次 HITL 场景下的事件序列连续性
-  // 如果需要重置，请显式调用 resetSequenceCounter()
-  // resetSequenceCounter();
-
   const timelineEvents: TimelineEvent[] = [];
 
   for (const event of events) {
-    const sequenceNumber = getNextSequenceNumber();
-    const timelineEvent = sseEventToTimeline(event, sequenceNumber);
+    const timelineEvent = sseEventToTimeline(event);
 
     if (timelineEvent) {
       timelineEvents.push(timelineEvent);
@@ -621,14 +645,13 @@ export function batchConvertSSEEvents(events: AgentEvent<unknown>[]): TimelineEv
 /**
  * Convert a batch of SSE events to TimelineEvents with sequence reset
  *
- * Use this when you explicitly need to start sequence numbers from 1,
+ * Use this when you explicitly need to convert events from a fresh start,
  * such as when loading a new conversation history.
  *
  * @param events - Array of SSE events to convert
  * @returns Array of TimelineEvents (filtered to exclude nulls)
  */
 export function batchConvertSSEEventsWithReset(events: AgentEvent<unknown>[]): TimelineEvent[] {
-  resetSequenceCounter();
   return batchConvertSSEEvents(events);
 }
 
@@ -645,11 +668,7 @@ export function appendSSEEventToTimeline(
   existingTimeline: TimelineEvent[],
   event: AgentEvent<unknown>
 ): TimelineEvent[] {
-  const lastSequence =
-    existingTimeline.length > 0 ? existingTimeline[existingTimeline.length - 1].sequenceNumber : 0;
-  const nextSequence = lastSequence + 1;
-
-  const timelineEvent = sseEventToTimeline(event, nextSequence);
+  const timelineEvent = sseEventToTimeline(event);
 
   if (!timelineEvent) {
     return existingTimeline; // Unsupported event type, no change
@@ -726,12 +745,10 @@ export type TimelineEventWithCorrelation = TimelineEvent & CorrelationMetadata;
  * preserving correlation information.
  *
  * @param envelope - The EventEnvelope to convert
- * @param sequenceNumber - The sequence number for this event
  * @returns A TimelineEvent with correlation info, or null if unsupported
  */
 export function envelopeToTimeline(
-  envelope: EventEnvelope<unknown>,
-  sequenceNumber: number
+  envelope: EventEnvelope<unknown>
 ): TimelineEventWithCorrelation | null {
   // Convert envelope to legacy AgentEvent format for processing
   const legacyEvent: AgentEvent<unknown> = {
@@ -740,7 +757,7 @@ export function envelopeToTimeline(
   };
 
   // Use existing conversion logic
-  const baseEvent = sseEventToTimeline(legacyEvent, sequenceNumber);
+  const baseEvent = sseEventToTimeline(legacyEvent);
 
   if (!baseEvent) {
     return null;
@@ -764,12 +781,10 @@ export function envelopeToTimeline(
  * - Legacy AgentEvent format (with type and data)
  *
  * @param rawData - Raw JSON data (string or parsed object)
- * @param sequenceNumber - The sequence number for this event
  * @returns TimelineEvent with optional correlation info, or null if unsupported
  */
 export function parseAndConvertEvent(
-  rawData: unknown,
-  sequenceNumber: number
+  rawData: unknown
 ): TimelineEventWithCorrelation | null {
   // Handle string input
   let data: unknown;
@@ -786,7 +801,7 @@ export function parseAndConvertEvent(
 
   // Check if it's an envelope format
   if (isEventEnvelope(data)) {
-    return envelopeToTimeline(data as EventEnvelope<unknown>, sequenceNumber);
+    return envelopeToTimeline(data as EventEnvelope<unknown>);
   }
 
   // Check if it's legacy format
@@ -796,7 +811,7 @@ export function parseAndConvertEvent(
       type: legacy.type as AgentEventType,
       data: legacy.data,
     };
-    const baseEvent = sseEventToTimeline(event, sequenceNumber);
+    const baseEvent = sseEventToTimeline(event);
     return baseEvent as TimelineEventWithCorrelation;
   }
 
@@ -811,13 +826,10 @@ export function parseAndConvertEvent(
  * @returns Array of TimelineEvents with correlation info
  */
 export function batchConvertMixedEvents(events: unknown[]): TimelineEventWithCorrelation[] {
-  resetSequenceCounter();
-
   const timelineEvents: TimelineEventWithCorrelation[] = [];
 
   for (const event of events) {
-    const sequenceNumber = getNextSequenceNumber();
-    const timelineEvent = parseAndConvertEvent(event, sequenceNumber);
+    const timelineEvent = parseAndConvertEvent(event);
 
     if (timelineEvent) {
       timelineEvents.push(timelineEvent);

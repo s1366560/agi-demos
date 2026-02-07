@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import redis.asyncio as aioredis
 
 from src.configuration.config import get_settings
+from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.domain.model.agent.hitl_types import HITLPendingException
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -48,9 +49,9 @@ async def execute_project_chat(
 
     await set_agent_running(request.conversation_id, request.message_id)
 
-    # Initialize sequence_number from last DB sequence to avoid collisions
-    # with events already saved (e.g., user_message saved by agent_service)
-    sequence_number = await _get_last_db_sequence(request.conversation_id)
+    # Initialize EventTimeGenerator from last DB event time to avoid collisions
+    last_time_us, last_counter = await _get_last_db_event_time(request.conversation_id)
+    time_gen = EventTimeGenerator(last_time_us, last_counter)
 
     try:
         redis_client = await _get_redis_client()
@@ -65,15 +66,17 @@ async def execute_project_chat(
             message_id=request.message_id,
             hitl_response=hitl_response,
         ):
-            sequence_number += 1
-            event["seq"] = sequence_number
+            evt_time_us, evt_counter = time_gen.next()
+            event["event_time_us"] = evt_time_us
+            event["event_counter"] = evt_counter
             events.append(event)
 
             await _publish_event_to_stream(
                 conversation_id=request.conversation_id,
                 event=event,
                 message_id=request.message_id,
-                sequence_number=sequence_number,
+                event_time_us=evt_time_us,
+                event_counter=evt_counter,
                 correlation_id=request.correlation_id,
                 redis_client=redis_client,
             )
@@ -119,7 +122,8 @@ async def execute_project_chat(
             conversation_id=request.conversation_id,
             message_id=request.message_id,
             content=final_content,
-            sequence_number=sequence_number,
+            last_event_time_us=time_gen.last_time_us,
+            last_event_counter=time_gen.last_counter,
             is_error=is_error,
             error_message=error_message,
             execution_time_ms=execution_time_ms,
@@ -134,7 +138,10 @@ async def execute_project_chat(
                 events=events,
                 correlation_id=request.correlation_id,
             )
-        return await handle_hitl_pending(agent, request, hitl_ex, sequence_number)
+        return await handle_hitl_pending(
+            agent, request, hitl_ex,
+            time_gen.last_time_us, time_gen.last_counter,
+        )
 
     except Exception as e:
         execution_time_ms = (time_module.time() - start_time) * 1000
@@ -155,7 +162,8 @@ async def execute_project_chat(
             conversation_id=request.conversation_id,
             message_id=request.message_id,
             content="",
-            sequence_number=0,
+            last_event_time_us=0,
+            last_event_counter=0,
             is_error=True,
             error_message=str(e),
             execution_time_ms=execution_time_ms,
@@ -169,7 +177,8 @@ async def handle_hitl_pending(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
     hitl_exception: HITLPendingException,
-    last_sequence_number: int = 0,
+    last_event_time_us: int = 0,
+    last_event_counter: int = 0,
 ) -> ProjectChatResult:
     """Persist HITL state to Redis and Postgres and return pending result."""
     redis_client = await _get_redis_client()
@@ -181,7 +190,7 @@ async def handle_hitl_pending(
         f"[ActorExecution] Handling HITL pending: request_id={hitl_exception.request_id}, "
         f"type={hitl_exception.hitl_type.value}, "
         f"messages_count={len(saved_messages)}, "
-        f"last_sequence_number={last_sequence_number}"
+        f"last_event_time_us={last_event_time_us}, last_event_counter={last_event_counter}"
     )
 
     state = HITLAgentState(
@@ -199,7 +208,8 @@ async def handle_hitl_pending(
         step_count=getattr(agent, "_step_count", 0),
         timeout_seconds=hitl_exception.timeout_seconds,
         pending_tool_call_id=hitl_exception.tool_call_id,
-        last_sequence_number=last_sequence_number,
+        last_event_time_us=last_event_time_us,
+        last_event_counter=last_event_counter,
     )
 
     await state_store.save_state(state)
@@ -214,7 +224,8 @@ async def handle_hitl_pending(
         conversation_id=request.conversation_id,
         message_id=request.message_id,
         content="",
-        sequence_number=last_sequence_number,  # Preserve sequence number for continuity
+        last_event_time_us=last_event_time_us,
+        last_event_counter=last_event_counter,
         is_error=False,
         error_message=None,
         execution_time_ms=0.0,
@@ -231,7 +242,6 @@ async def continue_project_chat(
 ) -> ProjectChatResult:
     """Resume an HITL-paused chat using stored state."""
     start_time = time_module.time()
-    sequence_number = 0
     events: List[Dict[str, Any]] = []
     final_content = ""
     is_error = False
@@ -263,7 +273,8 @@ async def continue_project_chat(
             conversation_id="",
             message_id="",
             content="",
-            sequence_number=0,
+            last_event_time_us=0,
+            last_event_counter=0,
             is_error=True,
             error_message="HITL state not found or expired",
             execution_time_ms=(time_module.time() - start_time) * 1000,
@@ -273,13 +284,21 @@ async def continue_project_chat(
     logger.info(
         f"[ActorExecution] Loaded HITL state: conversation_id={state.conversation_id}, "
         f"hitl_type={state.hitl_type}, messages_count={len(state.messages)}, "
-        f"last_sequence_number={state.last_sequence_number}"
+        f"last_event_time_us={state.last_event_time_us}, "
+        f"last_event_counter={state.last_event_counter}"
     )
 
-    # Use the greater of HITL state sequence and actual DB sequence
+    # Use the greater of HITL state event time and actual DB event time
     # to avoid collisions with events saved by other paths
-    db_last_seq = await _get_last_db_sequence(state.conversation_id)
-    sequence_number = max(sequence_number, state.last_sequence_number, db_last_seq)
+    db_last_time_us, db_last_counter = await _get_last_db_event_time(state.conversation_id)
+    if db_last_time_us > state.last_event_time_us or (
+        db_last_time_us == state.last_event_time_us
+        and db_last_counter > state.last_event_counter
+    ):
+        init_time_us, init_counter = db_last_time_us, db_last_counter
+    else:
+        init_time_us, init_counter = state.last_event_time_us, state.last_event_counter
+    time_gen = EventTimeGenerator(init_time_us, init_counter)
     await set_agent_running(state.conversation_id, state.message_id)
 
     try:
@@ -319,15 +338,17 @@ async def continue_project_chat(
                 message_id=state.message_id,
                 hitl_response=hitl_response_for_agent,
             ):
-                sequence_number += 1
-                event["seq"] = sequence_number
+                evt_time_us, evt_counter = time_gen.next()
+                event["event_time_us"] = evt_time_us
+                event["event_counter"] = evt_counter
                 events.append(event)
 
                 await _publish_event_to_stream(
                     conversation_id=state.conversation_id,
                     event=event,
                     message_id=state.message_id,
-                    sequence_number=sequence_number,
+                    event_time_us=evt_time_us,
+                    event_counter=evt_counter,
                     correlation_id=state.correlation_id,
                     redis_client=redis_client,
                 )
@@ -349,7 +370,7 @@ async def continue_project_chat(
                 f"first_request_id={request_id}, "
                 f"second_request_id={hitl_ex.request_id}, "
                 f"events_emitted={len(events)}, "
-                f"sequence_number={sequence_number}"
+                f"last_event_time_us={time_gen.last_time_us}"
             )
             if events:
                 await _persist_events(
@@ -366,7 +387,10 @@ async def continue_project_chat(
                 conversation_context=conversation_context,
                 correlation_id=state.correlation_id,
             )
-            return await handle_hitl_pending(agent, resume_request, hitl_ex, sequence_number)
+            return await handle_hitl_pending(
+                agent, resume_request, hitl_ex,
+                time_gen.last_time_us, time_gen.last_counter,
+            )
 
         await _persist_events(
             conversation_id=state.conversation_id,
@@ -381,7 +405,8 @@ async def continue_project_chat(
             conversation_id=state.conversation_id,
             message_id=state.message_id,
             content=final_content,
-            sequence_number=sequence_number,
+            last_event_time_us=time_gen.last_time_us,
+            last_event_counter=time_gen.last_counter,
             is_error=is_error,
             error_message=error_message,
             execution_time_ms=execution_time_ms,
@@ -395,7 +420,8 @@ async def continue_project_chat(
             conversation_id=state.conversation_id,
             message_id=state.message_id,
             content="",
-            sequence_number=0,
+            last_event_time_us=0,
+            last_event_counter=0,
             is_error=True,
             error_message=str(e),
             execution_time_ms=execution_time_ms,
@@ -405,22 +431,31 @@ async def continue_project_chat(
         await clear_agent_running(state.conversation_id)
 
 
-async def _get_last_db_sequence(conversation_id: str) -> int:
-    """Get the last sequence number for a conversation from DB."""
-    from sqlalchemy import func, select
+async def _get_last_db_event_time(conversation_id: str) -> tuple[int, int]:
+    """Get the last (event_time_us, event_counter) for a conversation from DB."""
+    from sqlalchemy import select
 
     try:
         async with async_session_factory() as session:
             result = await session.execute(
-                select(func.max(AgentExecutionEvent.sequence_number)).where(
-                    AgentExecutionEvent.conversation_id == conversation_id
+                select(
+                    AgentExecutionEvent.event_time_us,
+                    AgentExecutionEvent.event_counter,
                 )
+                .where(AgentExecutionEvent.conversation_id == conversation_id)
+                .order_by(
+                    AgentExecutionEvent.event_time_us.desc(),
+                    AgentExecutionEvent.event_counter.desc(),
+                )
+                .limit(1)
             )
-            last_seq = result.scalar()
-            return last_seq if last_seq is not None else 0
+            row = result.one_or_none()
+            if row is None:
+                return (0, 0)
+            return (row[0], row[1])
     except Exception as e:
-        logger.warning(f"[ActorExecution] Failed to get last DB sequence: {e}")
-        return 0
+        logger.warning(f"[ActorExecution] Failed to get last DB event time: {e}")
+        return (0, 0)
 
 
 async def _persist_events(
@@ -428,7 +463,7 @@ async def _persist_events(
     message_id: str,
     events: List[Dict[str, Any]],
     correlation_id: Optional[str] = None,
-) -> int:
+) -> None:
     """Persist agent events to database."""
     from sqlalchemy.dialects.postgresql import insert
 
@@ -439,14 +474,13 @@ async def _persist_events(
         "text_end",
     }
 
-    sequence_number = 0
-
     async with async_session_factory() as session:
         async with session.begin():
-            for idx, event in enumerate(events):
+            for event in events:
                 event_type = event.get("type", "unknown")
                 event_data = event.get("data", {})
-                sequence_number = event.get("seq", idx + 1)
+                evt_time_us = event.get("event_time_us", 0)
+                evt_counter = event.get("event_counter", 0)
 
                 if event_type in SKIP_EVENT_TYPES:
                     continue
@@ -473,15 +507,16 @@ async def _persist_events(
                         message_id=message_id,
                         event_type=event_type,
                         event_data=event_data,
-                        sequence_number=sequence_number,
+                        event_time_us=evt_time_us,
+                        event_counter=evt_counter,
                         correlation_id=correlation_id,
                         created_at=datetime.now(timezone.utc),
                     )
-                    .on_conflict_do_nothing(index_elements=["conversation_id", "sequence_number"])
+                    .on_conflict_do_nothing(
+                        index_elements=["conversation_id", "event_time_us", "event_counter"]
+                    )
                 )
                 await session.execute(stmt)
-
-    return sequence_number
 
 
 async def _publish_error_event(
@@ -494,14 +529,18 @@ async def _publish_error_event(
     redis_client = aioredis.from_url(settings.redis_url)
     stream_key = f"agent:events:{conversation_id}"
 
+    now = datetime.now(timezone.utc)
+    now_us = int(now.timestamp() * 1_000_000)
+
     error_event = {
         "type": "error",
-        "seq": 0,
+        "event_time_us": now_us,
+        "event_counter": 0,
         "data": {
             "message": error_message,
             "message_id": message_id,
         },
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": now.isoformat(),
         "conversation_id": conversation_id,
         "message_id": message_id,
     }
@@ -516,7 +555,8 @@ async def _publish_event_to_stream(
     conversation_id: str,
     event: Dict[str, Any],
     message_id: str,
-    sequence_number: int,
+    event_time_us: int,
+    event_counter: int,
     correlation_id: Optional[str] = None,
     redis_client: Optional[aioredis.Redis] = None,
 ) -> None:
@@ -530,7 +570,8 @@ async def _publish_event_to_stream(
 
     stream_event_payload = {
         "type": event_type,
-        "seq": sequence_number,
+        "event_time_us": event_time_us,
+        "event_counter": event_counter,
         "data": event_data_with_meta,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "conversation_id": conversation_id,
