@@ -158,6 +158,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         server_id: str,
         tools: List[dict],
         last_sync_at: datetime,
+        sync_error: Optional[str] = None,
     ) -> bool:
         """Update the discovered tools for an MCP server."""
         result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
@@ -168,6 +169,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
             return False
 
         db_server.discovered_tools = tools
+        db_server.sync_error = sync_error
         db_server.last_sync_at = last_sync_at
         db_server.updated_at = datetime.utcnow()
 
@@ -214,6 +216,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
             "transport_config": db_server.transport_config,
             "enabled": db_server.enabled,
             "discovered_tools": db_server.discovered_tools,
+            "sync_error": db_server.sync_error,
             "last_sync_at": db_server.last_sync_at,
             "created_at": db_server.created_at,
             "updated_at": db_server.updated_at,

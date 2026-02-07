@@ -1,7 +1,6 @@
 #!/bin/bash
 # Sandbox MCP Server Entrypoint
 # Starts all services: MCP server, VNC (remote desktop), ttyd (web terminal)
-# This script runs as root and uses sudo to run services as appropriate users
 
 set -e
 
@@ -35,7 +34,6 @@ DESKTOP_ENABLED="${DESKTOP_ENABLED:-true}"
 DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1920x1080}"
 DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
-SANDBOX_USER="${SANDBOX_USER:-sandbox}"
 VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
 SKIP_MCP_SERVER="${SKIP_MCP_SERVER:-false}"  # Set to true to skip MCP server (for desktop testing)
 CONTAINER_HOSTNAME="${HOSTNAME:-mcp-sandbox}"
@@ -66,7 +64,7 @@ MCP_PID=""
 cleanup() {
     log_info "Shutting down services..."
 
-    # Stop MCP server (running as sandbox user)
+    # Stop MCP server
     if [ -n "$MCP_PID" ] && kill -0 "$MCP_PID" 2>/dev/null; then
         kill "$MCP_PID" 2>/dev/null || true
     fi
@@ -120,14 +118,14 @@ start_xvfb() {
         return 1
     fi
 
-    # Make X socket accessible to sandbox user
+    # Make X socket accessible
     mkdir -p /tmp/.X11-unix
     chmod 777 /tmp/.X11-unix
 
     log_success "Xvfb started (PID: $XVFB_PID, DISPLAY: $DISPLAY)"
 }
 
-# Start Desktop Environment (XFCE) as sandbox user
+# Start Desktop Environment (XFCE)
 start_desktop() {
     log_info "Starting XFCE desktop environment..."
 
@@ -135,59 +133,38 @@ start_desktop() {
     mkdir -p /tmp/.ICE-unix
     chmod 777 /tmp/.ICE-unix
 
-    # Set up runtime directory for sandbox user
-    mkdir -p /run/user/1001
-    chown sandbox:sandbox /run/user/1001
-    chmod 700 /run/user/1001
+    # Set up runtime directory
+    mkdir -p /run/user/0
+    chmod 700 /run/user/0
 
     # Create VNC directory for session persistence
-    mkdir -p /home/sandbox/.vnc
-    chown sandbox:sandbox /home/sandbox/.vnc
+    mkdir -p /root/.vnc
 
     # Create xstartup from template if it doesn't exist
-    if [ ! -f /home/sandbox/.vnc/xstartup ]; then
-        cp /etc/vnc/xstartup.template /home/sandbox/.vnc/xstartup
-        chmod +x /home/sandbox/.vnc/xstartup
-        chown sandbox:sandbox /home/sandbox/.vnc/xstartup
+    if [ ! -f /root/.vnc/xstartup ]; then
+        cp /etc/vnc/xstartup.template /root/.vnc/xstartup
+        chmod +x /root/.vnc/xstartup
     fi
 
-    # Run XFCE components as sandbox user with proper environment
-    sudo -u "$SANDBOX_USER" sh -c "
+    # Run XFCE components with proper environment
+    sh -c "
         export DISPLAY=:99
-        export XDG_RUNTIME_DIR=/run/user/1001
-        export XDG_DATA_HOME=/home/sandbox/.local/share
-        export XDG_CONFIG_HOME=/home/sandbox/.config
-        export XDG_CACHE_HOME=/home/sandbox/.cache
-        export XDG_STATE_HOME=/home/sandbox/.local/state
-
-        # Create necessary directories
-        mkdir -p \$XDG_DATA_HOME
-        mkdir -p \$XDG_CONFIG_HOME
-        mkdir -p \$XDG_CONFIG_HOME/xfce4
-        mkdir -p \$XDG_CACHE_HOME
-        mkdir -p /home/sandbox/.vnc
+        export XDG_RUNTIME_DIR=/run/user/0
 
         # Start D-Bus session
-        dbus-daemon --session --address=unix:path=/run/user/1001/bus --nofork --syslog &
+        dbus-daemon --session --address=unix:path=/run/user/0/bus --nofork --syslog &
         sleep 1
 
         # Set DBUS_SESSION_BUS_ADDRESS for all child processes
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus
 
         # Start XFCE desktop environment with explicit components
-        # Start window manager first
         xfwm4 --display=:99 &
         sleep 1
-
-        # Start panel
         xfce4-panel --display=:99 &
         sleep 1
-
-        # Start desktop
         xfdesktop --display=:99 &
         sleep 1
-
-        # Start session (coordinates components)
         xfce4-session &
     " &
 
@@ -215,11 +192,10 @@ _wait_for_vnc_port() {
     return 1
 }
 
-# Helper: Prepare VNC directory for sandbox user
-# Ensures .vnc directory exists with correct permissions
+# Helper: Prepare VNC directory
 _prepare_vnc_dir() {
-    sudo -u "$SANDBOX_USER" mkdir -p /home/sandbox/.vnc
-    sudo -u "$SANDBOX_USER" chmod 700 /home/sandbox/.vnc
+    mkdir -p /root/.vnc
+    chmod 700 /root/.vnc
 }
 
 # Start x11vnc (fallback VNC server)
@@ -275,72 +251,44 @@ _start_tigervnc() {
         sleep 2
     fi
 
-    # Set up runtime directory for TigerVNC
-    mkdir -p /run/user/1001
-    chown sandbox:sandbox /run/user/1001
-    chmod 700 /run/user/1001
+    # Set up runtime directory
+    mkdir -p /run/user/0
+    chmod 700 /run/user/0
 
     # Clean up any old .vnc directory that might cause migration issues on Ubuntu 25.04
-    # New TigerVNC uses ~/.config/tigervnc instead of ~/.vnc
-    sudo -u "$SANDBOX_USER" sh -c "
-        export HOME=/home/sandbox
-        # Remove old .vnc directory to avoid migration errors
-        rm -rf /home/sandbox/.vnc
-        # Create new config directory for TigerVNC
-        mkdir -p /home/sandbox/.config/tigervnc
-    "
+    rm -rf /root/.vnc
+    mkdir -p /root/.config/tigervnc
 
-    # Create xstartup in the new TigerVNC location
-    sudo -u "$SANDBOX_USER" sh -c "
-        export HOME=/home/sandbox
-        export DISPLAY=:99
-        export XDG_RUNTIME_DIR=/run/user/1001
+    # Create xstartup and XFCE configs
+    export DISPLAY=:99
+    export XDG_RUNTIME_DIR=/run/user/0
 
-        # Create config directory
-        mkdir -p /home/sandbox/.config/tigervnc
+    mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml
+    mkdir -p /root/.config/xfce4/panel
 
-        # Initialize XFCE configuration from system defaults
-        mkdir -p /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml
-        mkdir -p /home/sandbox/.config/xfce4/panel
+    [ -f /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml ] || \
+        cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
+           /root/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
+    [ -f /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml ] || \
+        cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml \
+           /root/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
+    [ -f /root/.config/xfce4/panel/whiskermenu-1.rc ] || \
+        cp /etc/xdg/xfce4/panel/whiskermenu-1.rc \
+           /root/.config/xfce4/panel/ 2>/dev/null || true
 
-        # Copy default XFCE configs (only if not exists)
-        [ -f /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml ] || \
-            cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
-               /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
-        [ -f /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml ] || \
-            cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml \
-               /home/sandbox/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
-        [ -f /home/sandbox/.config/xfce4/panel/whiskermenu-1.rc ] || \
-            cp /etc/xdg/xfce4/panel/whiskermenu-1.rc \
-               /home/sandbox/.config/xfce4/panel/ 2>/dev/null || true
-
-        chown -R sandbox:sandbox /home/sandbox/.config
-
-        # Create xstartup file for XFCE 4.20 session
-        # Copy from template for consistency
-        cp /etc/vnc/xstartup.template /home/sandbox/.config/tigervnc/xstartup
-        chmod +x /home/sandbox/.config/tigervnc/xstartup
-
-        chmod +x /home/sandbox/.config/tigervnc/xstartup
-    "
+    cp /etc/vnc/xstartup.template /root/.config/tigervnc/xstartup
+    chmod +x /root/.config/tigervnc/xstartup
 
     # Start TigerVNC with NO authentication
-    # Ubuntu 25.04 TigerVNC uses new config structure
-    sudo -u "$SANDBOX_USER" sh -c "
-        export DISPLAY=:99
-        export XDG_RUNTIME_DIR=/run/user/1001
-        export HOME=/home/sandbox
-
-        vncserver :99 \\
-            -geometry ${DESKTOP_RESOLUTION} \\
-            -depth 24 \\
-            -rfbport 5901 \\
-            -localhost no \\
-            -securitytypes none \\
-            --I-KNOW-THIS-IS-INSECURE \\
-            -AlwaysShared \\
-            2>&1 | tee /tmp/tigervnc.log
-    " &
+    vncserver :99 \
+        -geometry ${DESKTOP_RESOLUTION} \
+        -depth 24 \
+        -rfbport 5901 \
+        -localhost no \
+        -securitytypes none \
+        --I-KNOW-THIS-IS-INSECURE \
+        -AlwaysShared \
+        2>&1 | tee /tmp/tigervnc.log &
 
     VNC_PID=$!
 
@@ -350,10 +298,8 @@ _start_tigervnc() {
         return 0
     else
         log_warn "TigerVNC failed to start (check logs: docker exec <container> cat /tmp/tigervnc.log)"
-        # Kill failed TigerVNC process
         kill $VNC_PID 2>/dev/null || true
-        # Clean up vncserver processes
-        sudo -u "$SANDBOX_USER" vncserver -kill :99 2>/dev/null || true
+        vncserver -kill :99 2>/dev/null || true
         sleep 1
         return 1
     fi
@@ -433,7 +379,7 @@ start_ttyd() {
     fi
 }
 
-# Start MCP Server as sandbox user
+# Start MCP Server
 start_mcp_server() {
     if [ "$SKIP_MCP_SERVER" = "true" ]; then
         log_warn "Skipping MCP Server (SKIP_MCP_SERVER=true)"
@@ -443,8 +389,7 @@ start_mcp_server() {
     log_info "Starting MCP Server on $MCP_HOST:$MCP_PORT..."
 
     cd /app
-    # Start MCP server in background, continue even if it fails
-    sudo -u "$SANDBOX_USER" sh -c "export MCP_HOST=$MCP_HOST MCP_PORT=$MCP_PORT && cd /app && python -m src.server.main" &
+    python -m src.server.main &
     MCP_PID=$!
 
     sleep 2

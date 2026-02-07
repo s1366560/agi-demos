@@ -31,6 +31,7 @@ router = APIRouter()
 @router.post("/create", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
 async def create_mcp_server(
     server_data: MCPServerCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
 ):
@@ -38,6 +39,7 @@ async def create_mcp_server(
     Create a new MCP server configuration.
 
     The server is bound to the project specified by project_id.
+    Auto-discovers tools after creation so they are immediately available.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -57,6 +59,52 @@ async def create_mcp_server(
         )
 
         await db.commit()
+
+        # Auto-discover tools (best-effort, does not block creation)
+        if server_data.project_id:
+            try:
+                manager = await get_sandbox_mcp_server_manager(request, db)
+                tools = await manager.discover_tools(
+                    project_id=server_data.project_id,
+                    tenant_id=tenant_id,
+                    server_name=server_data.name,
+                    server_type=server_data.server_type,
+                    transport_config=server_data.transport_config,
+                )
+                await repository.update_discovered_tools(
+                    server_id=server_id,
+                    tools=tools,
+                    last_sync_at=datetime.utcnow(),
+                )
+                await db.commit()
+
+                if server_data.enabled:
+                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                        invalidate_mcp_tools_cache,
+                    )
+
+                    invalidate_mcp_tools_cache(tenant_id)
+
+                logger.info(
+                    f"Auto-discovered {len(tools)} tools from MCP server "
+                    f"'{server_data.name}' (project={server_data.project_id})"
+                )
+            except Exception as e:
+                sync_err = str(e)
+                logger.warning(
+                    f"Auto-discovery failed for MCP server '{server_data.name}', "
+                    f"manual sync required: {sync_err}"
+                )
+                try:
+                    await repository.update_discovered_tools(
+                        server_id=server_id,
+                        tools=[],
+                        last_sync_at=datetime.utcnow(),
+                        sync_error=sync_err,
+                    )
+                    await db.commit()
+                except Exception:
+                    pass
 
         server = await repository.get_by_id(server_id)
         return MCPServerResponse(**server)
@@ -195,9 +243,43 @@ async def update_mcp_server(
                         server_type=updated_server["server_type"],
                         transport_config=updated_server["transport_config"],
                     )
-                    logger.info(
-                        f"Started MCP server {server_id} in sandbox (project={project_id})"
-                    )
+                    logger.info(f"Started MCP server {server_id} in sandbox (project={project_id})")
+
+                    # Auto-discover tools on enable (best-effort)
+                    try:
+                        tools = await manager.discover_tools(
+                            project_id=project_id,
+                            tenant_id=tenant_id,
+                            server_name=updated_server["name"],
+                            server_type=updated_server["server_type"],
+                            transport_config=updated_server["transport_config"],
+                        )
+                        await repository.update_discovered_tools(
+                            server_id=server_id,
+                            tools=tools,
+                            last_sync_at=datetime.utcnow(),
+                        )
+                        await db.commit()
+                        logger.info(
+                            f"Auto-discovered {len(tools)} tools on enable "
+                            f"for MCP server '{updated_server['name']}'"
+                        )
+                    except Exception as disc_err:
+                        sync_err = str(disc_err)
+                        logger.warning(
+                            f"Auto-discovery failed on enable for MCP server "
+                            f"{server_id}, manual sync required: {sync_err}"
+                        )
+                        try:
+                            await repository.update_discovered_tools(
+                                server_id=server_id,
+                                tools=[],
+                                last_sync_at=datetime.utcnow(),
+                                sync_error=sync_err,
+                            )
+                            await db.commit()
+                        except Exception:
+                            pass
                 else:
                     await manager.stop_server(project_id, updated_server["name"])
                     logger.info(f"Stopped MCP server {server_id}")
@@ -333,6 +415,7 @@ async def sync_mcp_server_tools(
             server_id=server_id,
             tools=tools,
             last_sync_at=datetime.utcnow(),
+            sync_error=None,
         )
         await db.commit()
 
@@ -344,8 +427,7 @@ async def sync_mcp_server_tools(
             invalidate_mcp_tools_cache(tenant_id)
 
         logger.info(
-            f"Synced {len(tools)} tools from MCP server '{server['name']}' "
-            f"(project={project_id})"
+            f"Synced {len(tools)} tools from MCP server '{server['name']}' (project={project_id})"
         )
 
         server = await repository.get_by_id(server_id)

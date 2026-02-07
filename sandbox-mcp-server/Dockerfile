@@ -202,6 +202,33 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN playwright install chromium --with-deps
 
 # ====================
+# Install Google Chrome / Chromium (chrome-devtools-mcp and puppeteer)
+# ====================
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    mkdir -p /opt/google/chrome; \
+    if [ "$ARCH" = "amd64" ]; then \
+        curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+            -o /tmp/chrome.deb; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends /tmp/chrome.deb; \
+        rm -f /tmp/chrome.deb; \
+        rm -rf /var/lib/apt/lists/*; \
+    else \
+        PW_CHROME=$(find /root/.cache/ms-playwright -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1); \
+        if [ -n "$PW_CHROME" ]; then \
+            ln -sf "$PW_CHROME" /opt/google/chrome/chrome; \
+        else \
+            echo "WARNING: No Chromium binary found for $ARCH"; \
+        fi; \
+    fi
+ENV CHROME_BIN=/opt/google/chrome/chrome
+ENV CHROME_PATH=/opt/google/chrome/chrome
+ENV PUPPETEER_EXECUTABLE_PATH=/opt/google/chrome/chrome
+ENV CHROME_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
+ENV PUPPETEER_ARGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
+
+# ====================
 # Setup Python Virtual Environment for Skills
 # ====================
 # Create a pre-configured virtual environment for sandbox operations
@@ -306,16 +333,9 @@ RUN set -eux; \
     chmod +x /opt/noVNC/utils/novnc_proxy
 
 # ====================
-# User Setup
+# Workspace Setup (runs as root)
 # ====================
-RUN set -eux; \
-    groupadd --gid 1001 sandbox; \
-    useradd --uid 1001 --gid sandbox --shell /bin/bash --create-home sandbox; \
-    usermod -aG sudo sandbox; \
-    echo "sandbox ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/sandbox; \
-    chmod 440 /etc/sudoers.d/sandbox; \
-    mkdir -p /workspace /home/sandbox/.vnc; \
-    chown -R sandbox:sandbox /workspace /home/sandbox/.vnc
+RUN mkdir -p /workspace
 
 # ====================
 # Java Environment Setup
@@ -335,7 +355,7 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Application Setup
 # ====================
 WORKDIR /app
-COPY --chown=sandbox:sandbox . /app/
+COPY . /app/
 
 # Install MCP server (with cache mount)
 RUN --mount=type=cache,target=/root/.cache/pip \

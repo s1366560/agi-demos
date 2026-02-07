@@ -154,8 +154,17 @@ class MCPServerManager:
             await self.stop_server(name)
 
         command = transport_config.get("command", "")
-        args = transport_config.get("args", [])
+        args = list(transport_config.get("args", []))
         env = transport_config.get("env", {})
+
+        # Inject required flags for chrome-devtools-mcp running as root in container
+        if any("chrome-devtools-mcp" in str(a) for a in [command] + args):
+            joined = " ".join(args)
+            if "--no-sandbox" not in joined:
+                args.extend(["--chrome-arg=--no-sandbox",
+                             "--chrome-arg=--disable-dev-shm-usage"])
+            if "--headless" not in joined:
+                args.append("--headless")
 
         try:
             if server_type == "stdio":

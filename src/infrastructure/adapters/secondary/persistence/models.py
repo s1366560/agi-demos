@@ -1009,6 +1009,7 @@ class MCPServer(Base):
     transport_config: Mapped[dict] = mapped_column(JSON, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     discovered_tools: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
+    sync_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(

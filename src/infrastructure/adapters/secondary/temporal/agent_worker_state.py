@@ -719,6 +719,9 @@ async def _load_user_mcp_server_tools(
     Calls mcp_server_list to discover running servers, then mcp_server_discover_tools
     for each to get their tools, wrapping them with SandboxMCPServerToolAdapter.
 
+    If no servers are running but the DB has enabled servers configured,
+    automatically installs and starts them (e.g. after sandbox restart).
+
     Args:
         sandbox_adapter: MCPSandboxAdapter instance.
         sandbox_id: Sandbox container ID.
@@ -748,6 +751,28 @@ async def _load_user_mcp_server_tools(
 
         # Parse server list from response
         servers = _parse_mcp_server_list(content)
+        running_names = {
+            s.get("name") for s in servers if s.get("status") == "running"
+        }
+
+        # Auto-restore: if DB has enabled servers not running, install & start them
+        await _auto_restore_mcp_servers(
+            sandbox_adapter=sandbox_adapter,
+            sandbox_id=sandbox_id,
+            project_id=project_id,
+            running_names=running_names,
+        )
+
+        # Re-list if we restored any servers
+        if not running_names:
+            list_result = await sandbox_adapter.call_tool(
+                sandbox_id=sandbox_id,
+                tool_name="mcp_server_list",
+                arguments={},
+                timeout=10.0,
+            )
+            content = list_result.get("content", [])
+            servers = _parse_mcp_server_list(content)
 
         # For each running server, discover its tools
         for server_info in servers:
@@ -790,6 +815,105 @@ async def _load_user_mcp_server_tools(
         logger.warning(f"[AgentWorker] Error loading user MCP server tools: {e}")
 
     return tools
+
+
+async def _auto_restore_mcp_servers(
+    sandbox_adapter: Any,
+    sandbox_id: str,
+    project_id: str,
+    running_names: set,
+) -> None:
+    """Auto-restore enabled MCP servers from DB that aren't running in sandbox.
+
+    Called during tool loading to ensure MCP servers survive sandbox restarts.
+    Each server is installed and started via the sandbox's management tools.
+    Failures are logged but don't block other servers or tool loading.
+    """
+    import json
+
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+            SqlMCPServerRepository,
+        )
+
+        async with async_session_factory() as session:
+            repo = SqlMCPServerRepository(session)
+            db_servers = await repo.list_by_project(project_id, enabled_only=True)
+
+        # Find servers that need restoring
+        servers_to_restore = [
+            s for s in db_servers
+            if s.get("name") and s["name"] not in running_names
+        ]
+
+        if not servers_to_restore:
+            return
+
+        logger.info(
+            f"[AgentWorker] Auto-restoring {len(servers_to_restore)} MCP servers "
+            f"for project {project_id}: "
+            f"{[s['name'] for s in servers_to_restore]}"
+        )
+
+        for server in servers_to_restore:
+            server_name = server["name"]
+            server_type = server.get("server_type", "stdio")
+            transport_config = server.get("transport_config", {})
+
+            try:
+                config_json = json.dumps(transport_config)
+
+                # Install
+                install_result = await sandbox_adapter.call_tool(
+                    sandbox_id=sandbox_id,
+                    tool_name="mcp_server_install",
+                    arguments={
+                        "name": server_name,
+                        "server_type": server_type,
+                        "transport_config": config_json,
+                    },
+                    timeout=120.0,
+                )
+                if install_result.get("is_error"):
+                    logger.warning(
+                        f"[AgentWorker] Failed to install MCP server '{server_name}': "
+                        f"{install_result}"
+                    )
+                    continue
+
+                # Start
+                start_result = await sandbox_adapter.call_tool(
+                    sandbox_id=sandbox_id,
+                    tool_name="mcp_server_start",
+                    arguments={
+                        "name": server_name,
+                        "server_type": server_type,
+                        "transport_config": config_json,
+                    },
+                    timeout=60.0,
+                )
+                if start_result.get("is_error"):
+                    logger.warning(
+                        f"[AgentWorker] Failed to start MCP server '{server_name}': "
+                        f"{start_result}"
+                    )
+                    continue
+
+                logger.info(
+                    f"[AgentWorker] Auto-restored MCP server '{server_name}' "
+                    f"in sandbox {sandbox_id}"
+                )
+
+            except Exception as e:
+                logger.warning(
+                    f"[AgentWorker] Error restoring MCP server '{server_name}': {e}"
+                )
+
+    except Exception as e:
+        logger.warning(f"[AgentWorker] Error in auto-restore MCP servers: {e}")
 
 
 def _parse_mcp_server_list(content: list) -> list:

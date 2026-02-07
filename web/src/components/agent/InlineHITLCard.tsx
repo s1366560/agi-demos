@@ -536,39 +536,45 @@ const EnvVarContent: React.FC<{
       </div>
 
       <Form form={form} layout="vertical" size="middle">
-        {data.fields.map((field) => (
-          <Form.Item
-            key={field.name}
-            name={field.name}
-            label={
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                {field.label}
-                {field.required && <span className="text-rose-500 ml-1">*</span>}
-              </span>
-            }
-            rules={field.required ? [{ required: true, message: `请输入 ${field.label}` }] : []}
-            tooltip={field.description}
-            initialValue={field.default_value}
-          >
-            {field.input_type === 'password' ? (
-              <Input.Password
-                placeholder={field.placeholder || `请输入 ${field.label}`}
-                className="rounded-lg"
-              />
-            ) : field.input_type === 'textarea' ? (
-              <Input.TextArea
-                placeholder={field.placeholder || `请输入 ${field.label}`}
-                rows={3}
-                className="rounded-lg"
-              />
-            ) : (
-              <Input
-                placeholder={field.placeholder || `请输入 ${field.label}`}
-                className="rounded-lg"
-              />
-            )}
-          </Form.Item>
-        ))}
+        {data.fields && data.fields.length > 0 ? (
+          data.fields.map((field) => (
+            <Form.Item
+              key={field.name}
+              name={field.name}
+              label={
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {field.label}
+                  {field.required && <span className="text-rose-500 ml-1">*</span>}
+                </span>
+              }
+              rules={field.required ? [{ required: true, message: `请输入 ${field.label}` }] : []}
+              tooltip={field.description}
+              initialValue={field.default_value}
+            >
+              {field.input_type === 'password' ? (
+                <Input.Password
+                  placeholder={field.placeholder || `请输入 ${field.label}`}
+                  className="rounded-lg"
+                />
+              ) : field.input_type === 'textarea' ? (
+                <Input.TextArea
+                  placeholder={field.placeholder || `请输入 ${field.label}`}
+                  rows={3}
+                  className="rounded-lg"
+                />
+              ) : (
+                <Input
+                  placeholder={field.placeholder || `请输入 ${field.label}`}
+                  className="rounded-lg"
+                />
+              )}
+            </Form.Item>
+          ))
+        ) : (
+          <div className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
+            暂无需配置的环境变量
+          </div>
+        )}
       </Form>
 
       <div className="flex items-center justify-between pt-2">

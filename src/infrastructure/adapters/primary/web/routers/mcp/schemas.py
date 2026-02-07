@@ -44,6 +44,7 @@ class MCPServerResponse(BaseModel):
     transport_config: Dict[str, Any]
     enabled: bool
     discovered_tools: List[Dict[str, Any]]
+    sync_error: Optional[str] = None
     last_sync_at: Optional[datetime]
     created_at: datetime
     updated_at: Optional[datetime]

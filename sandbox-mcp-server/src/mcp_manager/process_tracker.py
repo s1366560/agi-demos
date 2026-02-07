@@ -128,6 +128,7 @@ class ProcessTracker:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=working_dir,
                 env=merged_env,
+                limit=10 * 1024 * 1024,  # 10MB for large MCP tool lists
             )
 
             server.process = process
@@ -232,14 +233,15 @@ class ProcessTracker:
                 pass
 
         # Terminate process
-        if server.process and server.process.returncode is None:
+        proc = server.process
+        if proc and proc.returncode is None:
             try:
-                server.process.terminate()
+                proc.terminate()
                 try:
-                    await asyncio.wait_for(server.process.wait(), timeout=5)
+                    await asyncio.wait_for(proc.wait(), timeout=5)
                 except asyncio.TimeoutError:
-                    server.process.kill()
-                    await server.process.wait()
+                    proc.kill()
+                    await proc.wait()
                 logger.info(f"Stopped MCP server '{name}' (PID={server.pid})")
             except ProcessLookupError:
                 pass

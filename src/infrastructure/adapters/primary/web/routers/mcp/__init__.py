@@ -6,7 +6,7 @@ MCP servers provide external tools and capabilities via the Model Context Protoc
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
@@ -36,12 +36,13 @@ router.include_router(tools.router)  # Tool listing and calling
 @router.post("", response_model=MCPServerResponse, include_in_schema=False)
 async def create_mcp_server_root(
     server_data: MCPServerCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
 ):
     """Create MCP server (root path alias)."""
     return await servers.create_mcp_server(
-        server_data=server_data, db=db, tenant_id=tenant_id
+        server_data=server_data, request=request, db=db, tenant_id=tenant_id
     )
 
 

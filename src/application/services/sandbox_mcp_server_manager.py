@@ -145,13 +145,17 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
     ) -> List[Dict[str, Any]]:
         """Discover tools from an MCP server in the sandbox."""
         # Ensure server is running
-        await self.install_and_start(
+        status = await self.install_and_start(
             project_id=project_id,
             tenant_id=tenant_id,
             server_name=server_name,
             server_type=server_type,
             transport_config=transport_config,
         )
+        if status.status == "failed":
+            raise RuntimeError(
+                f"Cannot discover tools: server '{server_name}' failed to start: {status.error}"
+            )
 
         # Discover tools
         result = await self._sandbox_resource.execute_tool(

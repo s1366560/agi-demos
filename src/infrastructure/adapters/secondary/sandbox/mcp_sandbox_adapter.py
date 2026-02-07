@@ -307,8 +307,6 @@ class MCPSandboxAdapter(SandboxPort):
                 },
                 "mem_limit": config.memory_limit or self._default_memory_limit,
                 "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
-                # Security options
-                "security_opt": ["no-new-privileges:true"],
                 # Labels for identification
                 "labels": {
                     "memstack.sandbox": "true",
@@ -1981,7 +1979,6 @@ class MCPSandboxAdapter(SandboxPort):
                 },
                 "mem_limit": config.memory_limit or self._default_memory_limit,
                 "cpu_quota": int(float(config.cpu_limit or self._default_cpu_limit) * 100000),
-                "security_opt": ["no-new-privileges:true"],
                 "labels": original_labels,
             }
 
