@@ -373,6 +373,22 @@ class SessionProcessor:
                         result = ProcessorResult.COMPACT
                         break
 
+                # After the first LLM step on HITL resume, clear any unconsumed
+                # preinjected response.  When the tool result is already in
+                # conversation_context the LLM won't re-call the original HITL
+                # tool, so the preinjected response stays set.  If we don't
+                # clear it, the *next* HITL tool of the same type would
+                # incorrectly consume it instead of pausing for user input.
+                if (
+                    self._hitl_handler is not None
+                    and self._hitl_handler._preinjected_response is not None
+                ):
+                    logger.debug(
+                        "[Processor] Clearing unconsumed preinjected HITL response "
+                        f"(request_id={self._hitl_handler._preinjected_response.get('request_id')})"
+                    )
+                    self._hitl_handler._preinjected_response = None
+
                 # If we have pending tool results, add them to messages
                 if result == ProcessorResult.CONTINUE and self._current_message:
                     # Add assistant message with tool calls
