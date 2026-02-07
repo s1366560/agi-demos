@@ -19,7 +19,7 @@ from .schemas import (
     MCPServerTestResult,
     MCPServerUpdate,
 )
-from .utils import get_mcp_temporal_adapter
+from .utils import get_mcp_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ async def update_mcp_server(
         # Handle enabled state change - start/stop Temporal Workflow
         if old_enabled != new_enabled:
             try:
-                adapter = await get_mcp_temporal_adapter(request)
+                adapter = await get_mcp_adapter(request)
                 updated_server = await repository.get_by_id(server_id)
 
                 if new_enabled:
@@ -204,10 +204,22 @@ async def update_mcp_server(
                         headers=transport_config.get("headers"),
                         timeout=transport_config.get("timeout", 30000),
                     )
+                    # Invalidate MCP tools cache so agent picks up new tools
+                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                        invalidate_mcp_tools_cache,
+                    )
+
+                    invalidate_mcp_tools_cache(tenant_id)
                     logger.info(f"Started Temporal Workflow for MCP server {server_id}")
                 else:
                     # Stop Temporal Workflow
                     await adapter.stop_mcp_server(tenant_id, updated_server["name"])
+                    # Invalidate MCP tools cache so agent removes old tools
+                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                        invalidate_mcp_tools_cache,
+                    )
+
+                    invalidate_mcp_tools_cache(tenant_id)
                     logger.info(f"Stopped Temporal Workflow for MCP server {server_id}")
             except HTTPException:
                 # Temporal not available, log and continue
@@ -269,8 +281,14 @@ async def delete_mcp_server(
         # Stop Temporal Workflow if server is enabled
         if server["enabled"]:
             try:
-                adapter = await get_mcp_temporal_adapter(request)
+                adapter = await get_mcp_adapter(request)
                 await adapter.stop_mcp_server(tenant_id, server["name"])
+                # Invalidate MCP tools cache
+                from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                    invalidate_mcp_tools_cache,
+                )
+
+                invalidate_mcp_tools_cache(tenant_id)
                 logger.info(f"Stopped Temporal Workflow for deleted MCP server {server_id}")
             except HTTPException:
                 # Temporal not available, log and continue
@@ -345,7 +363,7 @@ async def sync_mcp_server_tools(
             # Start Temporal Workflow if server is enabled
             if server["enabled"]:
                 try:
-                    adapter = await get_mcp_temporal_adapter(request)
+                    adapter = await get_mcp_adapter(request)
                     transport_config = server["transport_config"]
 
                     # Build full command from command + args
@@ -364,6 +382,12 @@ async def sync_mcp_server_tools(
                         headers=transport_config.get("headers"),
                         timeout=transport_config.get("timeout", 30000),
                     )
+                    # Invalidate MCP tools cache so agent picks up new tools
+                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                        invalidate_mcp_tools_cache,
+                    )
+
+                    invalidate_mcp_tools_cache(tenant_id)
                     logger.info(
                         f"Started Temporal Workflow for MCP server {server_id} "
                         f"(name={server['name']}, tenant={tenant_id})"

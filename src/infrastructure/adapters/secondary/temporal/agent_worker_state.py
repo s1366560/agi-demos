@@ -68,7 +68,10 @@ __all__ = [
     "get_mcp_tools_from_cache",
     "update_mcp_tools_cache",
     "invalidate_mcp_tools_cache",
-    # MCP Temporal Adapter
+    # MCP Adapter (Ray or Local Fallback)
+    "set_mcp_adapter",
+    "get_mcp_adapter",
+    # Backward compatibility aliases
     "set_mcp_temporal_adapter",
     "get_mcp_temporal_adapter",
     # MCP Sandbox Adapter
@@ -107,7 +110,7 @@ __all__ = [
 # Global state for agent worker
 _agent_graph_service: Optional[Any] = None
 _redis_pool: Optional[redis.ConnectionPool] = None
-_mcp_temporal_adapter: Optional[Any] = None
+_mcp_adapter: Optional[Any] = None  # MCPRayAdapter or MCPLocalFallback
 _mcp_sandbox_adapter: Optional[Any] = None
 _pool_adapter: Optional[Any] = None  # PooledAgentSessionAdapter (when enabled)
 _hitl_response_listener: Optional[Any] = None  # HITLResponseListener (real-time)
@@ -159,31 +162,36 @@ def get_agent_graph_service() -> Optional[Any]:
 
 
 # ============================================================================
-# MCP Temporal Adapter State
+# MCP Adapter State (Ray or Local Fallback)
 # ============================================================================
 
 
-def set_mcp_temporal_adapter(adapter: Any) -> None:
-    """Set the global MCP Temporal Adapter instance for agent worker.
+def set_mcp_adapter(adapter: Any) -> None:
+    """Set the global MCP Adapter instance for agent worker.
 
-    Called during Agent Worker initialization to make MCPTemporalAdapter
-    available to all Agent Activities for loading MCP tools.
+    Called during Agent Worker initialization to make the MCP adapter
+    (MCPRayAdapter or MCPLocalFallback) available to all Activities.
 
     Args:
-        adapter: The MCPTemporalAdapter instance
+        adapter: The MCP adapter instance
     """
-    global _mcp_temporal_adapter
-    _mcp_temporal_adapter = adapter
-    logger.info("Agent Worker: MCP Temporal Adapter registered for Activities")
+    global _mcp_adapter
+    _mcp_adapter = adapter
+    logger.info("Agent Worker: MCP Adapter registered for Activities")
 
 
-def get_mcp_temporal_adapter() -> Optional[Any]:
-    """Get the global MCP Temporal Adapter instance for agent worker.
+def get_mcp_adapter() -> Optional[Any]:
+    """Get the global MCP Adapter instance for agent worker.
 
     Returns:
-        The MCPTemporalAdapter instance or None if not initialized
+        The MCP adapter instance or None if not initialized
     """
-    return _mcp_temporal_adapter
+    return _mcp_adapter
+
+
+# Backward compatibility aliases
+set_mcp_temporal_adapter = set_mcp_adapter
+get_mcp_temporal_adapter = get_mcp_adapter
 
 
 def set_mcp_sandbox_adapter(adapter: Any) -> None:
@@ -323,13 +331,13 @@ def clear_state() -> None:
         _agent_graph_service, \
         _llm_client_cache, \
         _tools_cache, \
-        _mcp_temporal_adapter, \
+        _mcp_adapter, \
         _skills_cache, \
         _skill_loader_cache, \
         _provider_config_cache, \
         _provider_config_cached_at
     _agent_graph_service = None
-    _mcp_temporal_adapter = None
+    _mcp_adapter = None
     _llm_client_cache.clear()
     _tools_cache.clear()
     _skills_cache.clear()
@@ -442,7 +450,7 @@ async def get_or_create_tools(
     tools = dict(_tools_cache[project_id])
 
     # 3. Load MCP tools with TTL cache and retry logic
-    if _mcp_temporal_adapter is not None:
+    if _mcp_adapter is not None:
         try:
             # Try to get from cache first (unless force refresh)
             mcp_tools = None
@@ -453,12 +461,11 @@ async def get_or_create_tools(
                 )
 
             if mcp_tools is None:
-                # Cache miss or forced refresh - load from Temporal with retry logic
-                # This handles the case where MCP servers haven't started yet
-                from src.infrastructure.mcp.temporal_tool_loader import MCPTemporalToolLoader
+                # Cache miss or forced refresh - load from MCP adapter with retry logic
+                from src.infrastructure.mcp.tool_loader import MCPToolLoader
 
-                loader = MCPTemporalToolLoader(
-                    mcp_temporal_adapter=_mcp_temporal_adapter,
+                loader = MCPToolLoader(
+                    mcp_adapter=_mcp_adapter,
                     tenant_id=tenant_id,
                 )
 

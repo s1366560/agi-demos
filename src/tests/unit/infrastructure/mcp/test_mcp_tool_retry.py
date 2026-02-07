@@ -48,11 +48,11 @@ class TestMCPToolRetry:
 
         # Patch at the import location (inside the function)
         with patch(
-            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_temporal_adapter",
+            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_adapter",
             MagicMock(),
         ):
             with patch(
-                "src.infrastructure.mcp.temporal_tool_loader.MCPTemporalToolLoader",
+                "src.infrastructure.mcp.tool_loader.MCPToolLoader",
                 return_value=mock_loader,
             ):
                 with patch(
@@ -92,11 +92,11 @@ class TestMCPToolRetry:
         mock_loader.load_all_tools = AsyncMock(return_value={})
 
         with patch(
-            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_temporal_adapter",
+            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_adapter",
             MagicMock(),
         ):
             with patch(
-                "src.infrastructure.mcp.temporal_tool_loader.MCPTemporalToolLoader",
+                "src.infrastructure.mcp.tool_loader.MCPToolLoader",
                 return_value=mock_loader,
             ):
                 with patch(
@@ -135,11 +135,11 @@ class TestMCPToolRetry:
         )
 
         with patch(
-            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_temporal_adapter",
+            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_adapter",
             MagicMock(),
         ):
             with patch(
-                "src.infrastructure.mcp.temporal_tool_loader.MCPTemporalToolLoader",
+                "src.infrastructure.mcp.tool_loader.MCPToolLoader",
                 return_value=mock_loader,
             ):
                 with patch(
@@ -178,11 +178,11 @@ class TestMCPToolRetry:
         mock_loader.load_all_tools = AsyncMock(return_value={})
 
         with patch(
-            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_temporal_adapter",
+            "src.infrastructure.adapters.secondary.temporal.agent_worker_state._mcp_adapter",
             MagicMock(),
         ):
             with patch(
-                "src.infrastructure.mcp.temporal_tool_loader.MCPTemporalToolLoader",
+                "src.infrastructure.mcp.tool_loader.MCPToolLoader",
                 return_value=mock_loader,
             ):
                 with patch(

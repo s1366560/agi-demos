@@ -2,17 +2,19 @@
 MCP (Model Context Protocol) Infrastructure Layer.
 
 This module provides MCP tool integration for the MemStack Agent system.
-All MCP servers are managed via Temporal Workflows for horizontal scaling.
+MCP servers are managed via Ray Actors (or local fallback) for horizontal scaling.
 
 Architecture:
 - MCPConfig: Configuration models for local/remote MCP servers
-- MCPTemporalToolAdapter: Adapts Temporal MCP tools to AgentTool interface
-- MCPTemporalToolLoader: Loads tools from Temporal MCP servers
+- MCPToolAdapter: Adapts MCP tools to AgentTool interface
+- MCPToolLoader: Loads tools from MCP servers
+- MCPRayAdapter: Ray Actor-based MCP server management
+- MCPLocalFallback: In-process fallback when Ray is unavailable
 - Transport: Protocol implementations (stdio, http, websocket)
 - Tools: Unified tool adapter interfaces
 
 Server configurations are stored in database (tenant-scoped).
-Tools are loaded dynamically from running Temporal Workflows.
+Tools are loaded dynamically from running MCP server actors.
 
 Domain Models (src.domain.model.mcp):
 - MCPServer, MCPServerConfig, MCPServerStatus
@@ -34,8 +36,8 @@ from src.infrastructure.mcp.config import (
     McpRemoteConfig,
     MCPStatus,
 )
-from src.infrastructure.mcp.temporal_tool_adapter import MCPTemporalToolAdapter
-from src.infrastructure.mcp.temporal_tool_loader import MCPTemporalToolLoader
+from src.infrastructure.mcp.tool_adapter import MCPToolAdapter
+from src.infrastructure.mcp.tool_loader import MCPToolLoader
 
 # Tools layer
 from src.infrastructure.mcp.tools import (
@@ -51,6 +53,10 @@ from src.infrastructure.mcp.transport import (
     WebSocketTransport,
 )
 
+# Backward compatibility aliases
+MCPTemporalToolAdapter = MCPToolAdapter
+MCPTemporalToolLoader = MCPToolLoader
+
 __all__ = [
     # Legacy config (to be migrated to domain models)
     "McpConfig",
@@ -58,7 +64,10 @@ __all__ = [
     "McpOAuthConfig",
     "McpRemoteConfig",
     "MCPStatus",
-    # Temporal integration
+    # MCP integration (Ray / Local Fallback)
+    "MCPToolAdapter",
+    "MCPToolLoader",
+    # Backward compatibility aliases
     "MCPTemporalToolAdapter",
     "MCPTemporalToolLoader",
     # Transport layer

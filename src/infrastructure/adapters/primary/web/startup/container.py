@@ -14,7 +14,7 @@ def initialize_container(
     redis_client: Optional[object],
     workflow_engine: Optional[Any],
     temporal_client: Optional[Any],
-    mcp_temporal_adapter: Optional[Any],
+    mcp_adapter: Optional[Any],
 ) -> DIContainer:
     """
     Initialize the DI container with all services.
@@ -24,7 +24,7 @@ def initialize_container(
         redis_client: The Redis client instance.
         workflow_engine: The Temporal workflow engine.
         temporal_client: The Temporal client.
-        mcp_temporal_adapter: The MCP Temporal adapter.
+        mcp_adapter: The MCP adapter (Ray or Local Fallback).
 
     Returns:
         Configured DIContainer instance.
@@ -36,7 +36,7 @@ def initialize_container(
         redis_client=redis_client,
         workflow_engine=workflow_engine,
         temporal_client=temporal_client if workflow_engine else None,
-        mcp_temporal_adapter=mcp_temporal_adapter,
+        mcp_adapter=mcp_adapter,
     )
     logger.info("DI container initialized")
     return container

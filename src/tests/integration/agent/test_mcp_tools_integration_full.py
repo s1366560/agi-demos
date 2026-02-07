@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-    _mcp_temporal_adapter,
+    _mcp_adapter,
     get_or_create_tools,
-    set_mcp_temporal_adapter,
+    set_mcp_adapter,
 )
 
 
@@ -25,9 +25,9 @@ class TestMCPAdapterInitialization:
     async def test_get_or_create_tools_without_mcp_adapter(self):
         """Test that get_or_create_tools works when MCP adapter is not initialized."""
         # Ensure MCP adapter is None
-        global _mcp_temporal_adapter
-        original_adapter = _mcp_temporal_adapter
-        _mcp_temporal_adapter = None
+        global _mcp_adapter
+        original_adapter = _mcp_adapter
+        _mcp_adapter = None
 
         try:
             # Create mock dependencies
@@ -55,12 +55,12 @@ class TestMCPAdapterInitialization:
 
         finally:
             # Restore original adapter
-            _mcp_temporal_adapter = original_adapter
+            _mcp_adapter = original_adapter
 
     @pytest.mark.asyncio
     async def test_get_or_create_tools_with_mock_mcp_adapter(self):
         """Test that get_or_create_tools loads MCP tools when adapter is available."""
-        from src.infrastructure.adapters.secondary.temporal.mcp.adapter import MCPToolInfo
+        from src.infrastructure.adapters.secondary.ray.mcp_adapter import MCPToolInfo
 
         # Create mock MCP adapter
         mock_mcp_adapter = AsyncMock()
@@ -76,7 +76,7 @@ class TestMCPAdapterInitialization:
         )
 
         # Set the adapter
-        set_mcp_temporal_adapter(mock_mcp_adapter)
+        set_mcp_adapter(mock_mcp_adapter)
 
         try:
             # Create mock dependencies
@@ -105,7 +105,7 @@ class TestMCPAdapterInitialization:
 
         finally:
             # Clear adapter
-            set_mcp_temporal_adapter(None)
+            set_mcp_adapter(None)
 
     @pytest.mark.asyncio
     async def test_get_or_create_tools_handles_mcp_adapter_error(self):
@@ -117,7 +117,7 @@ class TestMCPAdapterInitialization:
         )
 
         # Set the adapter
-        set_mcp_temporal_adapter(mock_mcp_adapter)
+        set_mcp_adapter(mock_mcp_adapter)
 
         try:
             # Create mock dependencies
@@ -146,7 +146,7 @@ class TestMCPAdapterInitialization:
 
         finally:
             # Clear adapter
-            set_mcp_temporal_adapter(None)
+            set_mcp_adapter(None)
 
 
 class TestMCPToolsInAgentSession:
@@ -158,7 +158,7 @@ class TestMCPToolsInAgentSession:
         from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
             get_or_create_agent_session,
         )
-        from src.infrastructure.adapters.secondary.temporal.mcp.adapter import MCPToolInfo
+        from src.infrastructure.adapters.secondary.ray.mcp_adapter import MCPToolInfo
         from src.infrastructure.agent.core.processor import ProcessorConfig
 
         # Create mock MCP adapter
@@ -186,7 +186,7 @@ class TestMCPToolsInAgentSession:
         )
 
         # Set the adapter
-        set_mcp_temporal_adapter(mock_mcp_adapter)
+        set_mcp_adapter(mock_mcp_adapter)
 
         try:
             # Create mock dependencies
@@ -233,7 +233,7 @@ class TestMCPToolsInAgentSession:
 
         finally:
             # Clear adapter
-            set_mcp_temporal_adapter(None)
+            set_mcp_adapter(None)
 
 
 class TestMCPToolExecution:
@@ -261,7 +261,7 @@ class TestMCPToolExecution:
         # Create MCP tool adapter
         from dataclasses import dataclass
 
-        from src.infrastructure.mcp.temporal_tool_adapter import MCPTemporalToolAdapter
+        from src.infrastructure.mcp.tool_adapter import MCPToolAdapter
 
         @dataclass
         class MockToolInfo:
@@ -270,8 +270,8 @@ class TestMCPToolExecution:
             input_schema: dict
             server_name: str
 
-        mcp_tool = MCPTemporalToolAdapter(
-            mcp_temporal_adapter=mock_mcp_adapter,
+        mcp_tool = MCPToolAdapter(
+            mcp_adapter=mock_mcp_adapter,
             server_name="filesystem",
             tool_info=MockToolInfo(
                 name="read_file",

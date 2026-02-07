@@ -27,7 +27,7 @@ from .schemas import (
     TemporalMCPToolCallResponse,
     TemporalMCPToolInfo,
 )
-from .utils import get_container_with_db, get_mcp_temporal_adapter
+from .utils import get_container_with_db, get_mcp_adapter
 
 # Create main router with prefix
 router = APIRouter(prefix="/api/v1/mcp", tags=["MCP Servers"])
@@ -63,7 +63,7 @@ __all__ = [
     "router",
     # Utilities
     "get_container_with_db",
-    "get_mcp_temporal_adapter",
+    "get_mcp_adapter",
     # Database server schemas
     "MCPServerCreate",
     "MCPServerResponse",

@@ -83,7 +83,7 @@ class AgentService(AgentServicePort):
         agent_execution_event_repository: "AgentExecutionEventRepository | None" = None,
         execution_checkpoint_repository: "ExecutionCheckpointRepository | None" = None,
         storage_service=None,
-        mcp_temporal_adapter: "Optional[Any]" = None,
+        mcp_adapter: "Optional[Any]" = None,
         db_session=None,
         sequence_service=None,
     ):
@@ -109,7 +109,7 @@ class AgentService(AgentServicePort):
             agent_execution_event_repository: Optional repository for SSE event persistence
             execution_checkpoint_repository: Optional repository for execution checkpoints
             storage_service: Optional StorageServicePort for file storage (used by CodeExecutorTool)
-            mcp_temporal_adapter: Optional MCPTemporalAdapter for Temporal MCP integration
+            mcp_adapter: Optional MCP adapter for MCP server integration
             db_session: Optional database session (reserved for future use)
             sequence_service: Optional RedisSequenceService for atomic sequence generation
         """
@@ -131,7 +131,7 @@ class AgentService(AgentServicePort):
         self._agent_execution_event_repo = agent_execution_event_repository
         self._execution_checkpoint_repo = execution_checkpoint_repository
         self._storage_service = storage_service
-        self._mcp_temporal_adapter = mcp_temporal_adapter
+        self._mcp_adapter = mcp_adapter
         self._db_session = db_session
         self._sequence_service = sequence_service
 

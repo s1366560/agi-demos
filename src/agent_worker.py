@@ -313,16 +313,16 @@ async def main():
         logger.error(f"Agent Worker: Failed to connect to Temporal server: {e}")
         sys.exit(1)
 
-    # Initialize MCP Temporal Adapter for MCP tool loading
+    # Initialize MCP Adapter (Ray or Local Fallback) for MCP tool loading
     try:
         from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-            set_mcp_temporal_adapter,
+            set_mcp_adapter,
         )
-        from src.infrastructure.adapters.secondary.temporal.mcp.adapter import MCPTemporalAdapter
+        from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
 
-        mcp_temporal_adapter = MCPTemporalAdapter(temporal_client)
-        set_mcp_temporal_adapter(mcp_temporal_adapter)
-        logger.info("Agent Worker: MCP Temporal Adapter initialized")
+        mcp_adapter = await create_mcp_adapter()
+        set_mcp_adapter(mcp_adapter)
+        logger.info("Agent Worker: MCP Adapter initialized")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to initialize MCP adapter (MCP tools disabled): {e}")
 

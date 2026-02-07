@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import asyncio
 
-from src.infrastructure.mcp.temporal_tool_loader import MCPTemporalToolLoader
+from src.infrastructure.mcp.tool_loader import MCPToolLoader as MCPTemporalToolLoader
 
 
 class TestMCPHealthCheck:
@@ -29,7 +29,7 @@ class TestMCPHealthCheck:
     def loader(self, mock_adapter):
         """Create MCPTemporalToolLoader for testing."""
         return MCPTemporalToolLoader(
-            mcp_temporal_adapter=mock_adapter,
+            mcp_adapter=mock_adapter,
             tenant_id="tenant-1",
         )
 
@@ -101,7 +101,7 @@ class TestMCPBackgroundPreload:
     def loader(self, mock_adapter):
         """Create MCPTemporalToolLoader for testing."""
         return MCPTemporalToolLoader(
-            mcp_temporal_adapter=mock_adapter,
+            mcp_adapter=mock_adapter,
             tenant_id="tenant-1",
         )
 
@@ -166,7 +166,7 @@ class TestMCPGracefulDegradation:
     def loader(self, mock_adapter):
         """Create MCPTemporalToolLoader for testing."""
         return MCPTemporalToolLoader(
-            mcp_temporal_adapter=mock_adapter,
+            mcp_adapter=mock_adapter,
             tenant_id="tenant-1",
         )
 
@@ -193,7 +193,7 @@ class TestMCPGracefulDegradation:
         )
 
         # Should log error but not crash
-        with patch("src.infrastructure.mcp.temporal_tool_loader.logger") as mock_logger:
+        with patch("src.infrastructure.mcp.tool_loader.logger") as mock_logger:
             await loader.load_all_tools(refresh=True)
 
             # Error should be logged
@@ -230,7 +230,7 @@ class TestMCPTimeoutConfiguration:
     def test_loader_has_configurable_timeout(self, mock_adapter):
         """Test that timeout can be configured."""
         loader = MCPTemporalToolLoader(
-            mcp_temporal_adapter=mock_adapter,
+            mcp_adapter=mock_adapter,
             tenant_id="tenant-1",
         )
 
@@ -243,7 +243,7 @@ class TestMCPTimeoutConfiguration:
         """Test that short timeout causes quick failure."""
         # Create loader
         loader = MCPTemporalToolLoader(
-            mcp_temporal_adapter=mock_adapter,
+            mcp_adapter=mock_adapter,
             tenant_id="tenant-1",
         )
 
@@ -274,7 +274,7 @@ class TestMCPCacheBehavior:
     def loader(self, mock_adapter):
         """Create MCPTemporalToolLoader for testing."""
         return MCPTemporalToolLoader(
-            mcp_temporal_adapter=mock_adapter,
+            mcp_adapter=mock_adapter,
             tenant_id="tenant-1",
         )
 

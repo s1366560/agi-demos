@@ -85,8 +85,8 @@ async def lifespan(app: FastAPI):
     # Initialize NativeGraphAdapter (self-developed knowledge graph engine)
     graph_service = await initialize_graph_service()
 
-    # Initialize Temporal Workflow Engine and MCP Temporal Adapter
-    temporal_client, workflow_engine, mcp_temporal_adapter = await initialize_temporal_services()
+    # Initialize Temporal Workflow Engine and MCP Adapter
+    temporal_client, workflow_engine, mcp_adapter = await initialize_temporal_services()
 
     # Initialize Background Task Manager
     from src.infrastructure.adapters.secondary.background_tasks import task_manager
@@ -103,7 +103,7 @@ async def lifespan(app: FastAPI):
         redis_client=redis_client,
         workflow_engine=workflow_engine,
         temporal_client=temporal_client,
-        mcp_temporal_adapter=mcp_temporal_adapter,
+        mcp_adapter=mcp_adapter,
     )
 
     app.state.container = container

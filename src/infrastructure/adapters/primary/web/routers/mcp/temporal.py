@@ -18,7 +18,7 @@ from .schemas import (
     TemporalMCPToolCallResponse,
     TemporalMCPToolInfo,
 )
-from .utils import get_mcp_temporal_adapter
+from .utils import get_mcp_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ async def start_temporal_mcp_server(
     - Tenant isolation via workflow ID
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
 
         server_status = await adapter.start_mcp_server(
             tenant_id=tenant_id,
@@ -84,7 +84,7 @@ async def stop_temporal_mcp_server(
     Stop a Temporal MCP server workflow.
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
         await adapter.stop_mcp_server(tenant_id, server_name)
 
     except Exception as e:
@@ -104,7 +104,7 @@ async def list_temporal_mcp_servers(
     List all Temporal MCP servers for the current tenant.
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
         servers = await adapter.list_servers(tenant_id)
 
         return [
@@ -137,7 +137,7 @@ async def get_temporal_mcp_server_status(
     Get status of a specific Temporal MCP server.
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
         server_status = await adapter.get_server_status(tenant_id, server_name)
 
         return TemporalMCPStatusResponse(
@@ -167,7 +167,7 @@ async def list_temporal_mcp_tools(
     List tools available from a Temporal MCP server.
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
         tools = await adapter.list_tools(tenant_id, server_name)
 
         return [
@@ -197,7 +197,7 @@ async def list_all_temporal_mcp_tools(
     List all tools from all Temporal MCP servers for the current tenant.
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
         tools = await adapter.list_all_tools(tenant_id)
 
         return [
@@ -235,7 +235,7 @@ async def call_temporal_mcp_tool(
     ensuring reliable execution with automatic retries.
     """
     try:
-        adapter = await get_mcp_temporal_adapter(request)
+        adapter = await get_mcp_adapter(request)
 
         start_time = time.time()
 

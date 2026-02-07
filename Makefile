@@ -47,7 +47,6 @@ help: ## Show this help message
 	@echo " Development:"
 	@echo "  dev-backend    - Start API server (foreground)"
 	@echo "  dev-agent-worker - Start agent worker (foreground)"
-	@echo "  dev-mcp-worker   - Start MCP worker (foreground)"
 	@echo "  dev-web        - Start web frontend (foreground)"
 	@echo "  infra          - Start infrastructure only"
 	@echo "  logs           - View all service logs"
@@ -99,7 +98,6 @@ help-full: ## Show all available commands
 	@echo " Development:"
 	@echo "  dev-backend      - Start API server (foreground)"
 	@echo "  dev-agent-worker - Start agent worker (foreground)"
-	@echo "  dev-mcp-worker   - Start MCP worker (foreground)"
 	@echo "  dev-web          - Start web frontend (foreground)"
 	@echo "  infra            - Start infrastructure (alias: dev-infra)"
 	@echo "  logs             - View all logs (alias: dev-logs)"
@@ -276,16 +274,14 @@ dev: dev-all ## Start all services (API + worker + infra + web)
 	@echo " Starting full development environment..."
 
 dev-all: dev-infra db-init
-	@echo " Starting API server, Ray actor worker, Agent worker, MCP worker and Web in background..."
+	@echo " Starting API server, Ray actor worker, Agent worker and Web in background..."
 	@echo "   API: http://localhost:8000 (logs: logs/api.log)"
 	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"
 	@echo "   Ray Actor Worker: running in Docker (logs: docker compose logs -f agent-actor-worker)"
 	@echo "   Agent Worker: running in background (logs: logs/agent-worker.log)"
-	@echo "   MCP Worker: running in background (logs: logs/mcp-worker.log)"
 	@mkdir -p logs
 	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 > logs/api.log 2>&1 & echo $$! > logs/api.pid
 	@nohup uv run python src/agent_worker.py > logs/agent-worker.log 2>&1 & echo $$! > logs/agent-worker.pid
-	@nohup uv run python src/worker_mcp.py > logs/mcp-worker.log 2>&1 & echo $$! > logs/mcp-worker.pid
 	@(cd web && nohup pnpm run dev > ../logs/web.log 2>&1) & echo $$! > logs/web.pid
 	@sleep 3
 	@echo " Services started!"
@@ -295,7 +291,6 @@ dev-all: dev-infra db-init
 	@echo "  tail -f logs/web.log            # Web frontend logs"
 	@echo "  docker compose -f docker-compose.yml -f docker-compose.ray.yml -f docker-compose.agent-actor.yml logs -f agent-actor-worker"
 	@echo "  tail -f logs/agent-worker.log   # Agent Worker logs"
-	@echo "  tail -f logs/mcp-worker.log     # MCP Worker logs"
 	@echo ""
 	@echo "Stop services with:"
 	@echo "  make dev-stop"
@@ -304,7 +299,7 @@ dev-stop: ## Stop all background services
 	@echo " Stopping background services..."
 	@$(COMPOSE_ALL) stop ray-head ray-worker agent-actor-worker 2>/dev/null || true
 	@# Stop services by PID file and port
-	@for svc in api web agent-worker mcp-worker; do \
+	@for svc in api web agent-worker; do \
 		if [ -f logs/$$svc.pid ]; then \
 			PID=$$(cat logs/$$svc.pid); \
 			kill -TERM $$PID 2>/dev/null || true; \
@@ -318,14 +313,13 @@ dev-stop: ## Stop all background services
 	done
 	@# Fallback: kill remaining processes by pattern
 	@pkill -9 -f "src/agent_worker.py" 2>/dev/null || true
-	@pkill -9 -f "src/worker_mcp.py" 2>/dev/null || true
 	@pkill -9 -f "uvicorn src.infrastructure" 2>/dev/null || true
 	@pkill -9 -f "vite" 2>/dev/null || true
 	@echo " All services stopped"
 
 dev-logs: ## Show all service logs (follow mode)
 	@echo " Showing logs (Ctrl+C to exit)..."
-	@tail -f logs/api.log logs/web.log logs/agent-worker.log logs/mcp-worker.log
+	@tail -f logs/api.log logs/web.log logs/agent-worker.log
 
 dev-backend: ## Start backend development server  (API only, foreground)
 	@echo " Starting backend API server..."
@@ -334,10 +328,6 @@ dev-backend: ## Start backend development server  (API only, foreground)
 dev-agent-worker: ## Start agent worker service only (foreground)
 	@echo " Starting agent worker service..."
 	uv run python src/agent_worker.py
-
-dev-mcp-worker: ## Start MCP worker service only (foreground)
-	@echo " Starting MCP worker service..."
-	uv run python src/worker_mcp.py
 
 dev-web: ## Start web development server
 	@echo " Starting web development server..."
@@ -390,11 +380,6 @@ status: ## Show status of all services
 		echo "  Agent Worker:  Running (PID: $$(cat logs/agent-worker.pid))"; \
 	else \
 		echo "  Agent Worker:  Not running"; \
-	fi
-	@if [ -f logs/mcp-worker.pid ] && kill -0 $$(cat logs/mcp-worker.pid) 2>/dev/null; then \
-		echo "  MCP Worker:  Running (PID: $$(cat logs/mcp-worker.pid))"; \
-	else \
-		echo "  MCP Worker:  Not running"; \
 	fi
 	@echo ""
 	@echo "Ports:"

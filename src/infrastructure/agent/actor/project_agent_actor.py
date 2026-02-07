@@ -11,17 +11,14 @@ import ray
 
 from src.configuration.config import get_settings
 from src.configuration.factories import create_native_graph_adapter
-from src.configuration.temporal_config import get_temporal_settings
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
-    set_agent_graph_service,
-    set_mcp_sandbox_adapter,
-    set_mcp_temporal_adapter,
-    sync_mcp_sandbox_adapter_from_docker,
-)
-from src.infrastructure.adapters.secondary.temporal.client import get_temporal_client
-from src.infrastructure.adapters.secondary.temporal.mcp.adapter import MCPTemporalAdapter
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
+)
+from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+    set_agent_graph_service,
+    set_mcp_adapter,
+    set_mcp_sandbox_adapter,
+    sync_mcp_sandbox_adapter_from_docker,
 )
 from src.infrastructure.agent.actor.execution import (
     continue_project_chat,
@@ -37,6 +34,7 @@ from src.infrastructure.agent.core.project_react_agent import (
     ProjectReActAgent,
 )
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
+from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -232,12 +230,10 @@ class ProjectAgentActor:
                 raise
 
             try:
-                temporal_settings = get_temporal_settings()
-                temporal_client = await get_temporal_client(temporal_settings)
-                mcp_temporal_adapter = MCPTemporalAdapter(temporal_client)
-                set_mcp_temporal_adapter(mcp_temporal_adapter)
+                mcp_adapter = await create_mcp_adapter()
+                set_mcp_adapter(mcp_adapter)
             except Exception as e:
-                logger.warning(f"[ProjectAgentActor] MCP Temporal adapter disabled: {e}")
+                logger.warning(f"[ProjectAgentActor] MCP adapter disabled: {e}")
 
             try:
                 mcp_sandbox_adapter = MCPSandboxAdapter(

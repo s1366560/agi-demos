@@ -54,6 +54,31 @@ class ProjectChatResult:
 
 
 @dataclass(frozen=True)
+class MCPServerActorConfig:
+    """Configuration for MCPServerActor. Replaces MCPServerConfig (Temporal)."""
+
+    server_name: str
+    tenant_id: str
+    transport_type: str = "local"  # "local"/"stdio", "http", "sse", "websocket"
+
+    # Local transport
+    command: Optional[List[str]] = None
+    environment: Optional[Dict[str, str]] = None
+
+    # Remote transport
+    url: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
+
+    # WebSocket specific
+    heartbeat_interval: int = 30
+    reconnect_attempts: int = 3
+
+    # Common
+    timeout: int = 30000  # milliseconds
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
 class ProjectAgentStatus:
     tenant_id: str
     project_id: str

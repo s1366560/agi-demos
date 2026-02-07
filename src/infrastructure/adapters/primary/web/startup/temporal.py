@@ -11,16 +11,16 @@ logger = logging.getLogger(__name__)
 
 async def initialize_temporal_services() -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
     """
-    Initialize Temporal Workflow Engine and MCP Temporal Adapter.
+    Initialize Temporal Workflow Engine and MCP Adapter.
 
     Returns:
-        Tuple of (temporal_client, workflow_engine, mcp_temporal_adapter).
-        Any or all may be None if Temporal is unavailable.
+        Tuple of (temporal_client, workflow_engine, mcp_adapter).
+        Any or all may be None if services are unavailable.
     """
     logger.info("Initializing Temporal Workflow Engine...")
     temporal_client = None
     workflow_engine = None
-    mcp_temporal_adapter = None
+    mcp_adapter = None
 
     try:
         temporal_client = await TemporalClientFactory.get_client()
@@ -30,19 +30,14 @@ async def initialize_temporal_services() -> Tuple[Optional[Any], Optional[Any], 
         logger.warning(
             f"Failed to connect to Temporal server: {e}. Workflow engine will be unavailable."
         )
-        return None, None, None
 
-    # Initialize MCP Temporal Adapter (if Temporal is available)
-    logger.info(f"Checking Temporal client availability: {temporal_client is not None}")
-    if temporal_client:
-        try:
-            from src.infrastructure.adapters.secondary.temporal.mcp.adapter import (
-                MCPTemporalAdapter,
-            )
+    # Initialize MCP Adapter (Ray or Local Fallback, independent of Temporal)
+    try:
+        from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
 
-            mcp_temporal_adapter = MCPTemporalAdapter(temporal_client)
-            logger.info("MCP Temporal Adapter initialized successfully")
-        except Exception as e:
-            logger.warning(f"Failed to initialize MCP Temporal Adapter: {e}")
+        mcp_adapter = await create_mcp_adapter()
+        logger.info("MCP Adapter initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize MCP Adapter: {e}")
 
-    return temporal_client, workflow_engine, mcp_temporal_adapter
+    return temporal_client, workflow_engine, mcp_adapter

@@ -22,17 +22,21 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
         db=db,
         graph_service=app_container.graph_service,
         redis_client=app_container._redis_client,
-        mcp_temporal_adapter=app_container._mcp_temporal_adapter,
+        mcp_adapter=app_container._infra._mcp_adapter,
     )
 
 
-async def get_mcp_temporal_adapter(request: Request):
-    """Get MCPTemporalAdapter from DI container."""
+async def get_mcp_adapter(request: Request):
+    """Get MCP Adapter from DI container."""
     container = request.app.state.container
-    adapter = await container.mcp_temporal_adapter()
+    adapter = await container.mcp_adapter()
     if adapter is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Temporal service is not available. MCP Temporal features require Temporal server.",
+            detail="MCP service is not available.",
         )
     return adapter
+
+
+# Backward compatibility alias
+get_mcp_temporal_adapter = get_mcp_adapter

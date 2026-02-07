@@ -1,12 +1,11 @@
 """DI sub-container for infrastructure services."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import redis.asyncio as redis
 
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
-from src.infrastructure.adapters.secondary.temporal.mcp.adapter import MCPTemporalAdapter
 
 if TYPE_CHECKING:
     from temporalio.client import Client as TemporalClient
@@ -24,13 +23,13 @@ class InfraContainer:
         redis_client: Optional[redis.Redis] = None,
         workflow_engine: Optional[WorkflowEnginePort] = None,
         temporal_client: Optional["TemporalClient"] = None,
-        mcp_temporal_adapter: Optional[MCPTemporalAdapter] = None,
+        mcp_adapter: Optional[Any] = None,
         settings=None,
     ) -> None:
         self._redis_client = redis_client
         self._workflow_engine = workflow_engine
         self._temporal_client = temporal_client
-        self._mcp_temporal_adapter = mcp_temporal_adapter
+        self._mcp_adapter = mcp_adapter
         self._settings = settings
 
     def redis(self) -> Optional[redis.Redis]:
@@ -115,23 +114,32 @@ class InfraContainer:
         except Exception:
             return None
 
-    async def mcp_temporal_adapter(self) -> Optional[MCPTemporalAdapter]:
-        """Get MCPTemporalAdapter for Temporal-based MCP server management."""
-        if self._mcp_temporal_adapter is not None:
-            return self._mcp_temporal_adapter
+    async def mcp_adapter(self) -> Optional[Any]:
+        """Get MCP Adapter (Ray or Local Fallback) for MCP server management."""
+        if self._mcp_adapter is not None:
+            return self._mcp_adapter
 
-        client = await self.temporal_client()
-        if client is None:
+        from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
+
+        try:
+            self._mcp_adapter = await create_mcp_adapter()
+        except Exception:
             return None
-        self._mcp_temporal_adapter = MCPTemporalAdapter(client)
-        return self._mcp_temporal_adapter
+        return self._mcp_adapter
 
-    def get_mcp_temporal_adapter_sync(self) -> Optional[MCPTemporalAdapter]:
-        """Get cached MCPTemporalAdapter synchronously.
+    def get_mcp_adapter_sync(self) -> Optional[Any]:
+        """Get cached MCP Adapter synchronously.
 
         Returns the cached adapter instance without async initialization.
         """
-        return self._mcp_temporal_adapter
+        return self._mcp_adapter
+
+    # Backward compatibility aliases
+    async def mcp_temporal_adapter(self) -> Optional[Any]:
+        return await self.mcp_adapter()
+
+    def get_mcp_temporal_adapter_sync(self) -> Optional[Any]:
+        return self.get_mcp_adapter_sync()
 
     def sandbox_adapter(self):
         """Get the MCP Sandbox adapter for desktop and terminal management."""

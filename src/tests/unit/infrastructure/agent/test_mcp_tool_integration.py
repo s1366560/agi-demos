@@ -17,7 +17,7 @@ from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
     compute_tools_hash,
 )
 from src.infrastructure.agent.tools.base import AgentTool
-from src.infrastructure.mcp.temporal_tool_adapter import MCPTemporalToolAdapter
+from src.infrastructure.mcp.tool_adapter import MCPToolAdapter as MCPTemporalToolAdapter
 
 
 @dataclass
@@ -53,7 +53,7 @@ class TestMCPToolIntegration:
 
         # Create a mock MCP tool with proper dataclass structure
         mcp_tool = MCPTemporalToolAdapter(
-            mcp_temporal_adapter=mcp_adapter_mock,
+            mcp_adapter=mcp_adapter_mock,
             server_name="test_server",
             tool_info=MockMCPToolInfo(
                 name="mcp__test_server__test_tool",
@@ -87,7 +87,7 @@ class TestMCPToolIntegration:
         )
 
         mcp_tool = MCPTemporalToolAdapter(
-            mcp_temporal_adapter=mcp_adapter_mock,
+            mcp_adapter=mcp_adapter_mock,
             server_name="test_server",
             tool_info=MockMCPToolInfo(
                 name="mcp__test_server__read_file",
@@ -132,7 +132,7 @@ class TestMCPToolIntegration:
         )
 
         mcp_tool = MCPTemporalToolAdapter(
-            mcp_temporal_adapter=mcp_adapter_mock,
+            mcp_adapter=mcp_adapter_mock,
             server_name="test_server",
             tool_info=MockMCPToolInfo(
                 name="read_file",
@@ -201,7 +201,7 @@ class TestMCPToolIntegration:
         mcp_adapter_mock = AsyncMock()
 
         mcp_tool = MCPTemporalToolAdapter(
-            mcp_temporal_adapter=mcp_adapter_mock,
+            mcp_adapter=mcp_adapter_mock,
             server_name="test_server",
             tool_info=MockMCPToolInfo(
                 name="complex_tool",
@@ -257,7 +257,7 @@ class TestAgentSessionPoolMCPIntegration:
         # Create mock tools including MCP tools
         mcp_adapter_mock = AsyncMock()
         mcp_tool = MCPTemporalToolAdapter(
-            mcp_temporal_adapter=mcp_adapter_mock,
+            mcp_adapter=mcp_adapter_mock,
             server_name="test_server",
             tool_info=MockMCPToolInfo(
                 name="test_tool",

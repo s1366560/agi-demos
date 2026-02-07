@@ -92,7 +92,7 @@ class AgentContainer:
         storage_service_factory: Optional[Callable] = None,
         sandbox_orchestrator_factory: Optional[Callable] = None,
         sandbox_event_publisher_factory: Optional[Callable] = None,
-        mcp_temporal_adapter_sync_factory: Optional[Callable] = None,
+        mcp_adapter_sync_factory: Optional[Callable] = None,
         sequence_service_factory: Optional[Callable] = None,
     ) -> None:
         self._db = db
@@ -103,7 +103,7 @@ class AgentContainer:
         self._storage_service_factory = storage_service_factory
         self._sandbox_orchestrator_factory = sandbox_orchestrator_factory
         self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
-        self._mcp_temporal_adapter_sync_factory = mcp_temporal_adapter_sync_factory
+        self._mcp_adapter_sync_factory = mcp_adapter_sync_factory
         self._sequence_service_factory = sequence_service_factory
 
     # === Agent Repositories ===
@@ -258,9 +258,9 @@ class AgentContainer:
 
         neo4j_client = self._neo4j_client_factory() if self._neo4j_client_factory else None
         storage_service = self._storage_service_factory() if self._storage_service_factory else None
-        mcp_temporal_adapter = (
-            self._mcp_temporal_adapter_sync_factory()
-            if self._mcp_temporal_adapter_sync_factory
+        mcp_adapter = (
+            self._mcp_adapter_sync_factory()
+            if self._mcp_adapter_sync_factory
             else None
         )
         sequence_service = (
@@ -286,7 +286,7 @@ class AgentContainer:
             agent_execution_event_repository=self.agent_execution_event_repository(),
             execution_checkpoint_repository=self.execution_checkpoint_repository(),
             storage_service=storage_service,
-            mcp_temporal_adapter=mcp_temporal_adapter,
+            mcp_adapter=mcp_adapter,
             db_session=self._db,
             sequence_service=sequence_service,
         )

@@ -3,20 +3,11 @@
 This module provides a subprocess-based MCP client for local MCP servers
 that communicate via stdin/stdout using the JSON-RPC protocol.
 
-This client is used by MCP Activities in the Temporal Worker to manage
-MCP server subprocesses independently from the API service.
+Used by MCPServerActor (Ray) and MCPLocalFallback to manage
+MCP server subprocesses.
 
-MIGRATION NOTE:
-===============
-The local dataclasses (MCPToolSchema, MCPToolResult) are duplicates of
-domain models. Use the domain adapter for conversions:
-
-    from src.infrastructure.adapters.secondary.temporal.mcp.domain_adapter import (
-        to_domain_tool_result,
-        to_domain_tool_schema,
-    )
-
-Domain models are in:
+The local dataclasses (MCPToolSchema, MCPToolResult) are used for
+MCP protocol serialization. Domain model equivalents are in:
 - src.domain.model.mcp.tool.MCPToolSchema
 - src.domain.model.mcp.tool.MCPToolResult
 """
