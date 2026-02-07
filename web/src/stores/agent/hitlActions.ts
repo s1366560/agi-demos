@@ -127,7 +127,7 @@ function createSimpleHITLHandler(
         };
       });
     },
-    // HITL event handlers for nested requests
+    // HITL event handlers for nested requests (agent paused again)
     onClarificationAsked: (event) => {
       const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
         type: 'clarification_asked',
@@ -139,6 +139,8 @@ function createSimpleHITLHandler(
           timeline: updatedTimeline,
           pendingClarification: event.data,
           agentState: 'awaiting_input',
+          isStreaming: false,
+          streamStatus: 'idle',
         };
       });
     },
@@ -153,6 +155,8 @@ function createSimpleHITLHandler(
           timeline: updatedTimeline,
           pendingDecision: event.data,
           agentState: 'awaiting_input',
+          isStreaming: false,
+          streamStatus: 'idle',
         };
       });
     },
@@ -167,6 +171,8 @@ function createSimpleHITLHandler(
           timeline: updatedTimeline,
           pendingEnvVarRequest: event.data,
           agentState: 'awaiting_input',
+          isStreaming: false,
+          streamStatus: 'idle',
         };
       });
     },
@@ -181,6 +187,8 @@ function createSimpleHITLHandler(
           timeline: updatedTimeline,
           pendingPermission: event.data,
           agentState: 'awaiting_input',
+          isStreaming: false,
+          streamStatus: 'idle',
         };
       });
     },

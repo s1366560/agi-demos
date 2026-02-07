@@ -322,9 +322,22 @@ async def stream_hitl_response_to_websocket(
             # Broadcast to ALL sessions subscribed to this conversation
             await manager.broadcast_to_conversation(conversation_id, ws_event)
 
-            # Stop after completion
+            # Stop after completion or when agent pauses for another HITL request.
+            # HITL-asked events mean the agent has paused again waiting for user input,
+            # so the bridge should stop and let _start_hitl_stream_bridge create a new
+            # one when the user responds to the next HITL request.
+            HITL_ASKED_EVENTS = {
+                "clarification_asked", "decision_asked",
+                "env_var_requested", "permission_asked",
+            }
             if event_type in ("complete", "error"):
                 logger.info(f"[WS HITL Bridge] Stream completed: type={event_type}")
+                break
+            if event_type in HITL_ASKED_EVENTS:
+                logger.info(
+                    f"[WS HITL Bridge] Agent paused for another HITL: type={event_type}, "
+                    f"stopping bridge for conversation {conversation_id}"
+                )
                 break
 
     except asyncio.CancelledError:

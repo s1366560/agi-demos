@@ -356,20 +356,22 @@ async def _start_hitl_stream_bridge(
             logger.warning(f"[WS HITL] Request {request_id} missing conversation_id")
             return
 
-        # Check if there's already an active bridge task for this conversation
+        # Check if there's already an active bridge task for this conversation.
+        # Cancel stale bridges instead of skipping — the old bridge may be stuck
+        # waiting for events from a previous HITL cycle that will never complete.
         existing_tasks = manager.bridge_tasks.get(context.session_id, {})
         existing_task = existing_tasks.get(conversation_id)
         if existing_task and not existing_task.done():
             logger.info(
-                f"[WS HITL] Bridge task already running for conversation {conversation_id}, "
-                f"skipping (normal HITL flow)"
+                f"[WS HITL] Cancelling stale bridge task for conversation {conversation_id} "
+                f"before starting new one (consecutive HITL)"
             )
-            return
+            existing_task.cancel()
 
-        # No existing bridge - this is likely a page refresh scenario
+        # Start new bridge for this HITL response
         logger.info(
             f"[WS HITL] Starting stream bridge for request {request_id}, "
-            f"conversation={conversation_id} (page refresh recovery)"
+            f"conversation={conversation_id}"
         )
 
         # Auto-subscribe session to conversation
