@@ -548,8 +548,12 @@ class ProjectReActAgent:
                 return False
 
             # Check if we already have sandbox tools loaded
-            sandbox_prefix = f"sandbox_{project_sandbox_id}_"
-            has_sandbox_tools = any(name.startswith(sandbox_prefix) for name in self._tools.keys())
+            # SandboxMCPToolWrapper registers tools with original names (no prefix),
+            # so check for the sandbox_id attribute instead
+            has_sandbox_tools = any(
+                getattr(tool, "sandbox_id", None) == project_sandbox_id
+                for tool in self._tools.values()
+            )
 
             if has_sandbox_tools:
                 # Sandbox tools already loaded

@@ -215,6 +215,43 @@ class AgentRuntimeBootstrapper:
                         "[AgentService] MCP adapter init failed (MCP tools disabled): %s", e
                     )
 
+            # Initialize MCP Sandbox Adapter for Project Sandbox tool loading
+            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                get_mcp_sandbox_adapter,
+                set_mcp_sandbox_adapter,
+                sync_mcp_sandbox_adapter_from_docker,
+            )
+
+            if not get_mcp_sandbox_adapter():
+                try:
+                    from src.configuration.config import get_settings
+                    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+                        MCPSandboxAdapter,
+                    )
+
+                    settings = get_settings()
+                    mcp_sandbox_adapter = MCPSandboxAdapter(
+                        mcp_image=settings.sandbox_default_image,
+                        default_timeout=settings.sandbox_timeout_seconds,
+                        default_memory_limit=settings.sandbox_memory_limit,
+                        default_cpu_limit=settings.sandbox_cpu_limit,
+                    )
+                    set_mcp_sandbox_adapter(mcp_sandbox_adapter)
+                    count = await sync_mcp_sandbox_adapter_from_docker()
+                    if count > 0:
+                        logger.info(
+                            "[AgentService] Synced %d existing sandboxes from Docker", count
+                        )
+                    logger.info(
+                        "[AgentService] MCP Sandbox adapter bootstrapped for local execution"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "[AgentService] MCP Sandbox adapter init failed "
+                        "(Sandbox tools disabled): %s",
+                        e,
+                    )
+
             AgentRuntimeBootstrapper._local_bootstrapped = True
 
     def _get_api_key(self, settings):
