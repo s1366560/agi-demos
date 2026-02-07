@@ -7,7 +7,9 @@ import logging
 import time
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
@@ -22,11 +24,12 @@ router = APIRouter()
 
 @router.get("/tools/all", response_model=List[MCPToolResponse])
 async def list_all_mcp_tools(
+    project_id: Optional[str] = Query(None, description="Filter by project ID"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
 ):
     """
-    List all MCP tools from all enabled servers.
+    List all MCP tools from all enabled servers, optionally filtered by project.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -34,7 +37,7 @@ async def list_all_mcp_tools(
 
     repository = SqlMCPServerRepository(db)
 
-    servers = await repository.get_enabled_servers(tenant_id)
+    servers = await repository.get_enabled_servers(tenant_id, project_id=project_id)
 
     all_tools = []
     for server in servers:

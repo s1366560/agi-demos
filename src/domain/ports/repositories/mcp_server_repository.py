@@ -14,15 +14,16 @@ class MCPServerRepositoryPort(ABC):
     """
     Repository port for MCP server persistence.
 
-    Provides CRUD operations for MCP servers with tenant-level
-    scoping. MCP servers are shared across projects within a tenant
-    but isolated between tenants.
+    Provides CRUD operations for MCP servers with project-level
+    scoping. Each MCP server belongs to a specific project and
+    runs inside that project's sandbox container.
     """
 
     @abstractmethod
     async def create(
         self,
         tenant_id: str,
+        project_id: str,
         name: str,
         description: Optional[str],
         server_type: str,
@@ -34,6 +35,7 @@ class MCPServerRepositoryPort(ABC):
 
         Args:
             tenant_id: Tenant ID
+            project_id: Project ID the server belongs to
             name: Server name
             description: Optional server description
             server_type: Transport protocol type (stdio, http, sse, websocket)
@@ -42,9 +44,6 @@ class MCPServerRepositoryPort(ABC):
 
         Returns:
             Created server ID
-
-        Raises:
-            ValueError: If server data is invalid
         """
         pass
 
@@ -62,16 +61,34 @@ class MCPServerRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_name(self, tenant_id: str, name: str) -> Optional[dict]:
+    async def get_by_name(self, project_id: str, name: str) -> Optional[dict]:
         """
-        Get an MCP server by name within a tenant.
+        Get an MCP server by name within a project.
 
         Args:
-            tenant_id: Tenant ID
+            project_id: Project ID
             name: Server name
 
         Returns:
             Server data dictionary if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def list_by_project(
+        self,
+        project_id: str,
+        enabled_only: bool = False,
+    ) -> List[dict]:
+        """
+        List all MCP servers for a project.
+
+        Args:
+            project_id: Project ID
+            enabled_only: If True, only return enabled servers
+
+        Returns:
+            List of server data dictionaries
         """
         pass
 
@@ -82,7 +99,7 @@ class MCPServerRepositoryPort(ABC):
         enabled_only: bool = False,
     ) -> List[dict]:
         """
-        List all MCP servers for a tenant.
+        List all MCP servers for a tenant (across all projects).
 
         Args:
             tenant_id: Tenant ID
@@ -116,9 +133,6 @@ class MCPServerRepositoryPort(ABC):
 
         Returns:
             True if updated successfully, False if server not found
-
-        Raises:
-            ValueError: If update data is invalid
         """
         pass
 
@@ -156,12 +170,17 @@ class MCPServerRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_enabled_servers(self, tenant_id: str) -> List[dict]:
+    async def get_enabled_servers(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+    ) -> List[dict]:
         """
-        Get all enabled MCP servers for a tenant.
+        Get all enabled MCP servers.
 
         Args:
             tenant_id: Tenant ID
+            project_id: Optional project ID to filter by
 
         Returns:
             List of enabled server data dictionaries

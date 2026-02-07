@@ -19,6 +19,7 @@ class MCPServerCreate(BaseModel):
     server_type: str = Field(..., description="Transport type: stdio, sse, http, websocket")
     transport_config: Dict[str, Any] = Field(..., description="Transport configuration")
     enabled: bool = Field(True, description="Whether server is enabled")
+    project_id: str = Field(..., description="Project ID this server belongs to")
 
 
 class MCPServerUpdate(BaseModel):
@@ -36,6 +37,7 @@ class MCPServerResponse(BaseModel):
 
     id: str
     tenant_id: str
+    project_id: Optional[str] = None
     name: str
     description: Optional[str]
     server_type: str
@@ -82,64 +84,6 @@ class MCPToolCallResponse(BaseModel):
     """Schema for MCP tool call response."""
 
     result: Any
-    is_error: bool = False
-    error_message: Optional[str] = None
-    execution_time_ms: float
-
-
-# === Temporal MCP Schemas ===
-
-
-class TemporalMCPConnectRequest(BaseModel):
-    """Request schema for starting a Temporal MCP server workflow."""
-
-    server_name: str = Field(..., description="Unique name for this MCP server")
-    transport_type: str = Field("local", description="Transport type: 'local', 'http', or 'sse'")
-
-    # Local transport config
-    command: Optional[List[str]] = Field(None, description="Command for local MCP server")
-    environment: Optional[Dict[str, str]] = Field(None, description="Environment variables")
-
-    # Remote transport config
-    url: Optional[str] = Field(None, description="URL for remote MCP server")
-    headers: Optional[Dict[str, str]] = Field(None, description="HTTP headers")
-
-    # Common settings
-    timeout: int = Field(30000, description="Timeout in milliseconds")
-
-
-class TemporalMCPStatusResponse(BaseModel):
-    """Response schema for Temporal MCP server status."""
-
-    server_name: str
-    tenant_id: str
-    connected: bool = False
-    tool_count: int = 0
-    error: Optional[str] = None
-    workflow_id: Optional[str] = None
-
-
-class TemporalMCPToolInfo(BaseModel):
-    """Information about an MCP tool from Temporal."""
-
-    name: str
-    server_name: str
-    description: Optional[str] = None
-    input_schema: Dict[str, Any] = Field(default_factory=dict)
-
-
-class TemporalMCPToolCallRequest(BaseModel):
-    """Request schema for calling a Temporal MCP tool."""
-
-    tool_name: str = Field(..., description="Name of the tool to call")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
-    timeout: Optional[int] = Field(None, description="Timeout in milliseconds")
-
-
-class TemporalMCPToolCallResponse(BaseModel):
-    """Response schema for Temporal MCP tool call."""
-
-    content: List[Dict[str, Any]]
     is_error: bool = False
     error_message: Optional[str] = None
     execution_time_ms: float

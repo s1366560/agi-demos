@@ -21,6 +21,7 @@ import type {
 const api = httpClient;
 
 export interface MCPServerListParams {
+  project_id?: string;
   enabled_only?: boolean;
   skip?: number;
   limit?: number;
@@ -28,14 +29,14 @@ export interface MCPServerListParams {
 
 export const mcpAPI = {
   /**
-   * List all MCP servers
+   * List MCP servers, optionally filtered by project
    */
   list: async (params: MCPServerListParams = {}): Promise<MCPServerResponse[]> => {
     return await api.get<MCPServerResponse[]>('/mcp', { params });
   },
 
   /**
-   * Create a new MCP server
+   * Create a new MCP server (project_id is in request body)
    */
   create: async (data: MCPServerCreate): Promise<MCPServerResponse> => {
     return await api.post<MCPServerResponse>('/mcp', data);
@@ -64,7 +65,7 @@ export const mcpAPI = {
 
   /**
    * Sync tools from an MCP server
-   * Discovers and updates the list of available tools
+   * Uses stored project_id from DB for sandbox context
    */
   sync: async (serverId: string): Promise<MCPServerResponse> => {
     return await api.post<MCPServerResponse>(`/mcp/${serverId}/sync`);
@@ -72,6 +73,7 @@ export const mcpAPI = {
 
   /**
    * Test connection to an MCP server
+   * Uses stored project_id from DB for sandbox context
    */
   test: async (serverId: string): Promise<MCPServerTestResponse> => {
     return await api.post<MCPServerTestResponse>(`/mcp/${serverId}/test`);
@@ -85,10 +87,11 @@ export const mcpAPI = {
   },
 
   /**
-   * Get all tools from all enabled MCP servers
+   * Get all tools from all enabled MCP servers, optionally filtered by project
    */
-  listAllTools: async (): Promise<MCPToolInfo[]> => {
-    return await api.get<MCPToolInfo[]>('/mcp/tools/all');
+  listAllTools: async (projectId?: string): Promise<MCPToolInfo[]> => {
+    const params = projectId ? { project_id: projectId } : {};
+    return await api.get<MCPToolInfo[]>('/mcp/tools/all', { params });
   },
 
   /**

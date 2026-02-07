@@ -629,18 +629,21 @@ class AgentExecutionEvent(Base):
     This table stores all Server-Sent Events (SSE) emitted during agent execution,
     enabling event replay for reconnection and conversation switching scenarios.
 
-    The combination of (conversation_id, sequence_number) provides an ordered
-    timeline of all events that can be replayed to reconstruct the execution state.
+    The combination of (conversation_id, event_time_us, event_counter) provides an
+    ordered timeline of all events that can be replayed to reconstruct the execution state.
     """
 
     __tablename__ = "agent_execution_events"
     __table_args__ = (
-        # Unique constraint to prevent duplicate sequence numbers within a conversation
-        UniqueConstraint("conversation_id", "sequence_number", name="uq_agent_events_conv_seq"),
+        # Unique constraint to prevent duplicate events within a conversation
+        UniqueConstraint(
+            "conversation_id", "event_time_us", "event_counter",
+            name="uq_agent_events_conv_time",
+        ),
         # Index for ordered replay within a conversation
-        Index("ix_agent_events_conv_seq", "conversation_id", "sequence_number"),
+        Index("ix_agent_events_conv_time", "conversation_id", "event_time_us", "event_counter"),
         # Index for message-scoped replay
-        Index("ix_agent_events_msg_seq", "message_id", "sequence_number"),
+        Index("ix_agent_events_msg_time", "message_id", "event_time_us", "event_counter"),
         # Index for correlation_id queries
         Index("ix_agent_events_corr_id", "correlation_id"),
     )
@@ -653,7 +656,8 @@ class AgentExecutionEvent(Base):
     message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     event_data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_time_us: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # correlation_id links all events from a single user request
     correlation_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -984,8 +988,8 @@ class MCPServer(Base):
     Represents an external MCP server that provides tools and capabilities
     to the agent system via the Model Context Protocol.
 
-    Tenant-level scoping: MCP servers are shared across all projects within
-    a tenant but isolated between tenants.
+    Project-level scoping: each MCP server belongs to a specific project
+    and runs inside that project's sandbox container.
     """
 
     __tablename__ = "mcp_servers"
@@ -993,6 +997,9 @@ class MCPServer(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
         String, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1010,6 +1017,7 @@ class MCPServer(Base):
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
 
 
 class PlanDocument(Base):

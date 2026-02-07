@@ -68,6 +68,7 @@ interface MCPState {
 
   // Actions - Server CRUD
   listServers: (params?: {
+    project_id?: string;
     enabled_only?: boolean;
     skip?: number;
     limit?: number;
@@ -79,10 +80,10 @@ interface MCPState {
   toggleEnabled: (id: string, enabled: boolean) => Promise<void>;
   setCurrentServer: (server: MCPServerResponse | null) => void;
 
-  // Actions - Sync & Test
+  // Actions - Sync & Test (project_id now stored in DB)
   syncServer: (id: string) => Promise<void>;
   testServer: (id: string) => Promise<MCPServerTestResponse>;
-  listAllTools: () => Promise<void>;
+  listAllTools: (projectId?: string) => Promise<void>;
 
   // Actions - Filters
   setFilters: (filters: Partial<MCPFilters>) => void;
@@ -279,9 +280,9 @@ export const useMCPStore = create<MCPState>()(
         }
       },
 
-      listAllTools: async () => {
+      listAllTools: async (projectId?: string) => {
         try {
-          const tools = await mcpAPI.listAllTools();
+          const tools = await mcpAPI.listAllTools(projectId);
           set({ allTools: tools });
         } catch (error: unknown) {
           const errorMessage = getErrorMessage(error, 'Failed to list all tools');

@@ -36,6 +36,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
     async def create(
         self,
         tenant_id: str,
+        project_id: str,
         name: str,
         description: Optional[str],
         server_type: str,
@@ -48,6 +49,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         db_server = DBMCPServer(
             id=server_id,
             tenant_id=tenant_id,
+            project_id=project_id,
             name=name,
             description=description,
             server_type=server_type,
@@ -60,7 +62,10 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         self._session.add(db_server)
         await self._session.flush()
 
-        logger.info(f"Created MCP server: {server_id} (name={name}, tenant={tenant_id})")
+        logger.info(
+            f"Created MCP server: {server_id} "
+            f"(name={name}, project={project_id}, tenant={tenant_id})"
+        )
         return server_id
 
     async def get_by_id(self, server_id: str) -> Optional[dict]:
@@ -71,10 +76,10 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
 
         return self._to_domain(db_server) if db_server else None
 
-    async def get_by_name(self, tenant_id: str, name: str) -> Optional[dict]:
-        """Get an MCP server by name within a tenant."""
+    async def get_by_name(self, project_id: str, name: str) -> Optional[dict]:
+        """Get an MCP server by name within a project."""
         query = select(DBMCPServer).where(
-            DBMCPServer.tenant_id == tenant_id,
+            DBMCPServer.project_id == project_id,
             DBMCPServer.name == name,
         )
 
@@ -82,12 +87,28 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         db_server = result.scalar_one_or_none()
         return self._to_domain(db_server) if db_server else None
 
+    async def list_by_project(
+        self,
+        project_id: str,
+        enabled_only: bool = False,
+    ) -> List[dict]:
+        """List all MCP servers for a project."""
+        query = select(DBMCPServer).where(DBMCPServer.project_id == project_id)
+
+        if enabled_only:
+            query = query.where(DBMCPServer.enabled.is_(True))
+
+        result = await self._session.execute(query.order_by(DBMCPServer.created_at.desc()))
+        db_servers = result.scalars().all()
+
+        return [self._to_domain(server) for server in db_servers]
+
     async def list_by_tenant(
         self,
         tenant_id: str,
         enabled_only: bool = False,
     ) -> List[dict]:
-        """List all MCP servers for a tenant."""
+        """List all MCP servers for a tenant (across all projects)."""
         query = select(DBMCPServer).where(DBMCPServer.tenant_id == tenant_id)
 
         if enabled_only:
@@ -115,7 +136,6 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
             logger.warning(f"MCP server not found: {server_id}")
             return False
 
-        # Update fields if provided
         if name is not None:
             db_server.name = name
         if description is not None:
@@ -167,8 +187,14 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         logger.info(f"Deleted MCP server: {server_id}")
         return True
 
-    async def get_enabled_servers(self, tenant_id: str) -> List[dict]:
-        """Get all enabled MCP servers for a tenant."""
+    async def get_enabled_servers(
+        self,
+        tenant_id: str,
+        project_id: Optional[str] = None,
+    ) -> List[dict]:
+        """Get all enabled MCP servers, optionally filtered by project."""
+        if project_id:
+            return await self.list_by_project(project_id, enabled_only=True)
         return await self.list_by_tenant(tenant_id, enabled_only=True)
 
     # === Conversion methods ===
@@ -181,6 +207,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         return {
             "id": db_server.id,
             "tenant_id": db_server.tenant_id,
+            "project_id": db_server.project_id,
             "name": db_server.name,
             "description": db_server.description,
             "server_type": db_server.server_type,
@@ -197,6 +224,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         return DBMCPServer(
             id=domain_entity.get("id"),
             tenant_id=domain_entity.get("tenant_id"),
+            project_id=domain_entity.get("project_id"),
             name=domain_entity.get("name"),
             description=domain_entity.get("description"),
             server_type=domain_entity.get("server_type"),

@@ -475,8 +475,8 @@ class ProjectReActAgent:
 
             async with async_session_factory() as session:
                 repo = SqlMCPServerRepository(session)
-                servers = await repo.list_by_tenant(
-                    self.config.tenant_id, enabled_only=True
+                servers = await repo.list_by_project(
+                    self.config.project_id, enabled_only=True
                 )
 
             # Count expected MCP tools from DB

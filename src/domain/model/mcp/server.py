@@ -172,6 +172,7 @@ class MCPServer:
     id: str
     tenant_id: str
     name: str
+    project_id: Optional[str] = None
     description: Optional[str] = None
     config: Optional[MCPServerConfig] = None
     status: MCPServerStatus = field(default_factory=MCPServerStatus.disconnected_status)
@@ -209,6 +210,7 @@ class MCPServer:
         return {
             "id": self.id,
             "tenant_id": self.tenant_id,
+            "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
             "status": self.status.status.value,

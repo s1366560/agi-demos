@@ -1,11 +1,13 @@
 """MCP Server management endpoints (database-backed).
 
 CRUD operations for MCP server configurations stored in database.
+MCP servers are project-scoped and run inside project sandbox containers.
 """
 
 import logging
+import time
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +21,7 @@ from .schemas import (
     MCPServerTestResult,
     MCPServerUpdate,
 )
-from .utils import get_mcp_adapter
+from .utils import get_sandbox_mcp_server_manager
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ async def create_mcp_server(
     """
     Create a new MCP server configuration.
 
-    Requires tenant admin role.
+    The server is bound to the project specified by project_id.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -44,9 +46,9 @@ async def create_mcp_server(
     repository = SqlMCPServerRepository(db)
 
     try:
-        # Create server
         server_id = await repository.create(
             tenant_id=tenant_id,
+            project_id=server_data.project_id,
             name=server_data.name,
             description=server_data.description,
             server_type=server_data.server_type,
@@ -56,7 +58,6 @@ async def create_mcp_server(
 
         await db.commit()
 
-        # Fetch created server
         server = await repository.get_by_id(server_id)
         return MCPServerResponse(**server)
 
@@ -65,18 +66,20 @@ async def create_mcp_server(
         logger.error(f"Failed to create MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to create MCP server: {str(e)}",
+            detail=f"Failed to create MCP server: {e!s}",
         )
 
 
 @router.get("/list", response_model=List[MCPServerResponse])
 async def list_mcp_servers(
+    project_id: Optional[str] = Query(None, description="Filter by project ID"),
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
 ):
     """
-    List all MCP servers for the current tenant.
+    List MCP servers. If project_id is provided, returns servers for that project only.
+    Otherwise returns all servers for the current tenant.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -84,10 +87,16 @@ async def list_mcp_servers(
 
     repository = SqlMCPServerRepository(db)
 
-    servers = await repository.list_by_tenant(
-        tenant_id=tenant_id,
-        enabled_only=enabled_only,
-    )
+    if project_id:
+        servers = await repository.list_by_project(
+            project_id=project_id,
+            enabled_only=enabled_only,
+        )
+    else:
+        servers = await repository.list_by_tenant(
+            tenant_id=tenant_id,
+            enabled_only=enabled_only,
+        )
 
     return [MCPServerResponse(**server) for server in servers]
 
@@ -115,7 +124,6 @@ async def get_mcp_server(
             detail=f"MCP server not found: {server_id}",
         )
 
-    # Verify tenant ownership
     if server["tenant_id"] != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -136,11 +144,7 @@ async def update_mcp_server(
     """
     Update an MCP server configuration.
 
-    When enabled status changes:
-    - false → true: Starts Temporal Workflow
-    - true → false: Stops Temporal Workflow
-
-    Requires tenant admin role.
+    When enabled status changes, starts/stops the server in its project sandbox.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -148,7 +152,6 @@ async def update_mcp_server(
 
     repository = SqlMCPServerRepository(db)
 
-    # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
     if not server:
         raise HTTPException(
@@ -162,12 +165,11 @@ async def update_mcp_server(
             detail="Access denied",
         )
 
-    # Detect enabled state change
     old_enabled = server["enabled"]
     new_enabled = server_data.enabled if server_data.enabled is not None else old_enabled
+    project_id = server["project_id"]
 
     try:
-        # Update server
         await repository.update(
             server_id=server_id,
             name=server_data.name,
@@ -179,59 +181,35 @@ async def update_mcp_server(
 
         await db.commit()
 
-        # Handle enabled state change - start/stop Temporal Workflow
-        if old_enabled != new_enabled:
+        # Handle enabled state change - start/stop in project sandbox
+        if old_enabled != new_enabled and project_id:
             try:
-                adapter = await get_mcp_adapter(request)
                 updated_server = await repository.get_by_id(server_id)
+                manager = await get_sandbox_mcp_server_manager(request, db)
 
                 if new_enabled:
-                    # Start Temporal Workflow
-                    transport_config = updated_server["transport_config"]
-                    # Build full command from command + args
-                    command_str = transport_config.get("command")
-                    args = transport_config.get("args", [])
-                    full_command = [command_str] + args if command_str else None
-
-                    await adapter.start_mcp_server(
+                    await manager.install_and_start(
+                        project_id=project_id,
                         tenant_id=tenant_id,
                         server_name=updated_server["name"],
-                        transport_type=updated_server["server_type"],
-                        command=full_command,
-                        environment=transport_config.get("environment")
-                        or transport_config.get("env"),
-                        url=transport_config.get("url"),
-                        headers=transport_config.get("headers"),
-                        timeout=transport_config.get("timeout", 30000),
+                        server_type=updated_server["server_type"],
+                        transport_config=updated_server["transport_config"],
                     )
-                    # Invalidate MCP tools cache so agent picks up new tools
-                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
-                        invalidate_mcp_tools_cache,
+                    logger.info(
+                        f"Started MCP server {server_id} in sandbox (project={project_id})"
                     )
-
-                    invalidate_mcp_tools_cache(tenant_id)
-                    logger.info(f"Started Temporal Workflow for MCP server {server_id}")
                 else:
-                    # Stop Temporal Workflow
-                    await adapter.stop_mcp_server(tenant_id, updated_server["name"])
-                    # Invalidate MCP tools cache so agent removes old tools
-                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
-                        invalidate_mcp_tools_cache,
-                    )
+                    await manager.stop_server(project_id, updated_server["name"])
+                    logger.info(f"Stopped MCP server {server_id}")
 
-                    invalidate_mcp_tools_cache(tenant_id)
-                    logger.info(f"Stopped Temporal Workflow for MCP server {server_id}")
-            except HTTPException:
-                # Temporal not available, log and continue
-                logger.warning(
-                    f"Temporal not available, skipping Workflow management for {server_id}"
+                from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                    invalidate_mcp_tools_cache,
                 )
+
+                invalidate_mcp_tools_cache(tenant_id)
             except Exception as e:
-                logger.warning(
-                    f"Failed to update Temporal Workflow for MCP server {server_id}: {e}"
-                )
+                logger.warning(f"Failed to update MCP server lifecycle for {server_id}: {e}")
 
-        # Fetch updated server
         server = await repository.get_by_id(server_id)
         return MCPServerResponse(**server)
 
@@ -240,7 +218,7 @@ async def update_mcp_server(
         logger.error(f"Failed to update MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to update MCP server: {str(e)}",
+            detail=f"Failed to update MCP server: {e!s}",
         )
 
 
@@ -254,8 +232,7 @@ async def delete_mcp_server(
     """
     Delete an MCP server.
 
-    Stops Temporal Workflow if server is enabled before deletion.
-    Requires tenant admin role.
+    Stops the server in its project sandbox if enabled before deletion.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -263,7 +240,6 @@ async def delete_mcp_server(
 
     repository = SqlMCPServerRepository(db)
 
-    # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
     if not server:
         raise HTTPException(
@@ -278,23 +254,20 @@ async def delete_mcp_server(
         )
 
     try:
-        # Stop Temporal Workflow if server is enabled
-        if server["enabled"]:
+        # Stop in project sandbox if enabled
+        if server["enabled"] and server.get("project_id"):
             try:
-                adapter = await get_mcp_adapter(request)
-                await adapter.stop_mcp_server(tenant_id, server["name"])
-                # Invalidate MCP tools cache
+                manager = await get_sandbox_mcp_server_manager(request, db)
+                await manager.stop_server(server["project_id"], server["name"])
+
                 from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
                     invalidate_mcp_tools_cache,
                 )
 
                 invalidate_mcp_tools_cache(tenant_id)
-                logger.info(f"Stopped Temporal Workflow for deleted MCP server {server_id}")
-            except HTTPException:
-                # Temporal not available, log and continue
-                logger.warning(f"Temporal not available, skipping Workflow stop for {server_id}")
+                logger.info(f"Stopped MCP server for deleted config {server_id}")
             except Exception as e:
-                logger.warning(f"Failed to stop Temporal Workflow for MCP server {server_id}: {e}")
+                logger.warning(f"Failed to stop MCP server {server_id}: {e}")
 
         await repository.delete(server_id)
         await db.commit()
@@ -304,7 +277,7 @@ async def delete_mcp_server(
         logger.error(f"Failed to delete MCP server: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to delete MCP server: {str(e)}",
+            detail=f"Failed to delete MCP server: {e!s}",
         )
 
 
@@ -318,17 +291,14 @@ async def sync_mcp_server_tools(
     """
     Sync tools from an MCP server.
 
-    Connects to the server, discovers tools, and updates the database.
-    If server.enabled=true, automatically starts or refreshes Temporal Workflow.
+    Uses the server's stored project_id to determine sandbox context.
     """
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
     )
-    from src.infrastructure.agent.mcp.client import MCPClient
 
     repository = SqlMCPServerRepository(db)
 
-    # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
     if not server:
         raise HTTPException(
@@ -342,76 +312,51 @@ async def sync_mcp_server_tools(
             detail="Access denied",
         )
 
+    project_id = server.get("project_id")
+    if not project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MCP server has no associated project",
+        )
+
     try:
-        # Connect to MCP server
-        async with MCPClient(
+        manager = await get_sandbox_mcp_server_manager(request, db)
+        tools = await manager.discover_tools(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            server_name=server["name"],
             server_type=server["server_type"],
             transport_config=server["transport_config"],
-        ) as client:
-            # Discover tools
-            tools = await client.list_tools()
+        )
 
-            # Update database
-            await repository.update_discovered_tools(
-                server_id=server_id,
-                tools=tools,
-                last_sync_at=datetime.utcnow(),
+        await repository.update_discovered_tools(
+            server_id=server_id,
+            tools=tools,
+            last_sync_at=datetime.utcnow(),
+        )
+        await db.commit()
+
+        if server["enabled"]:
+            from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                invalidate_mcp_tools_cache,
             )
 
-            await db.commit()
+            invalidate_mcp_tools_cache(tenant_id)
 
-            # Start Temporal Workflow if server is enabled
-            if server["enabled"]:
-                try:
-                    adapter = await get_mcp_adapter(request)
-                    transport_config = server["transport_config"]
+        logger.info(
+            f"Synced {len(tools)} tools from MCP server '{server['name']}' "
+            f"(project={project_id})"
+        )
 
-                    # Build full command from command + args
-                    command_str = transport_config.get("command")
-                    args = transport_config.get("args", [])
-                    full_command = [command_str] + args if command_str else None
-
-                    await adapter.start_mcp_server(
-                        tenant_id=tenant_id,
-                        server_name=server["name"],
-                        transport_type=server["server_type"],
-                        command=full_command,
-                        environment=transport_config.get("environment")
-                        or transport_config.get("env"),
-                        url=transport_config.get("url"),
-                        headers=transport_config.get("headers"),
-                        timeout=transport_config.get("timeout", 30000),
-                    )
-                    # Invalidate MCP tools cache so agent picks up new tools
-                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
-                        invalidate_mcp_tools_cache,
-                    )
-
-                    invalidate_mcp_tools_cache(tenant_id)
-                    logger.info(
-                        f"Started Temporal Workflow for MCP server {server_id} "
-                        f"(name={server['name']}, tenant={tenant_id})"
-                    )
-                except HTTPException:
-                    # Temporal not available, log and continue
-                    logger.warning(
-                        f"Temporal not available, tools synced but Workflow not started for {server_id}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to start Temporal Workflow for MCP server {server_id}: {e}"
-                    )
-
-            # Fetch updated server
-            server = await repository.get_by_id(server_id)
-            return MCPServerResponse(**server)
+        server = await repository.get_by_id(server_id)
+        return MCPServerResponse(**server)
 
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to sync MCP server tools: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to sync MCP server tools: {str(e)}",
+            detail=f"Failed to sync MCP server tools: {e!s}",
         )
 
 
@@ -425,18 +370,14 @@ async def test_mcp_server_connection(
     """
     Test connection to an MCP server.
 
-    Attempts to connect to the server and returns connection status.
+    Uses the server's stored project_id to determine sandbox context.
     """
-    import time
-
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
     )
-    from src.infrastructure.agent.mcp.client import MCPClient
 
     repository = SqlMCPServerRepository(db)
 
-    # Verify server exists and tenant ownership
     server = await repository.get_by_id(server_id)
     if not server:
         raise HTTPException(
@@ -450,23 +391,38 @@ async def test_mcp_server_connection(
             detail="Access denied",
         )
 
+    project_id = server.get("project_id")
+    if not project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MCP server has no associated project",
+        )
+
     try:
         start_time = time.time()
 
-        # Try to connect to MCP server
-        async with MCPClient(
+        manager = await get_sandbox_mcp_server_manager(request, db)
+        result = await manager.test_connection(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            server_name=server["name"],
             server_type=server["server_type"],
             transport_config=server["transport_config"],
-        ) as client:
-            # Try to list tools as a connection test
-            tools = await client.list_tools()
+        )
 
         latency_ms = (time.time() - start_time) * 1000
+
+        if result.status == "failed":
+            return MCPServerTestResult(
+                success=False,
+                message=f"Connection failed: {result.error}",
+                errors=[result.error] if result.error else [],
+            )
 
         return MCPServerTestResult(
             success=True,
             message="Connection successful",
-            tools_discovered=len(tools) if tools else 0,
+            tools_discovered=result.tool_count,
             connection_time_ms=latency_ms,
         )
 
@@ -474,6 +430,6 @@ async def test_mcp_server_connection(
         logger.error(f"Failed to test MCP server connection: {e}")
         return MCPServerTestResult(
             success=False,
-            message=f"Connection failed: {str(e)}",
+            message=f"Connection failed: {e!s}",
             errors=[str(e)],
         )

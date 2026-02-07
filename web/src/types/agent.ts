@@ -747,8 +747,10 @@ export interface ConversationMessagesResponse {
   total: number;
   // Pagination metadata
   has_more: boolean;
-  first_sequence: number | null;
-  last_sequence: number | null;
+  first_time_us: number | null;
+  first_counter: number | null;
+  last_time_us: number | null;
+  last_counter: number | null;
 }
 
 /**
@@ -1585,6 +1587,7 @@ export interface MCPToolInfo {
 export interface MCPServerResponse {
   id: string;
   tenant_id: string;
+  project_id?: string;
   name: string;
   description?: string;
   server_type: MCPServerType;
@@ -1605,6 +1608,7 @@ export interface MCPServerCreate {
   server_type: MCPServerType;
   transport_config: Record<string, unknown>;
   enabled?: boolean;
+  project_id: string;
 }
 
 /**
@@ -1840,8 +1844,9 @@ export type TimelineEventType =
 export interface BaseTimelineEvent {
   id: string;
   type: TimelineEventType;
-  sequenceNumber: number;
-  timestamp: number; // Unix timestamp in milliseconds
+  eventTimeUs: number;
+  eventCounter: number;
+  timestamp: number; // Unix timestamp in milliseconds (derived from eventTimeUs / 1000)
   metadata?: Record<string, unknown>;
 }
 

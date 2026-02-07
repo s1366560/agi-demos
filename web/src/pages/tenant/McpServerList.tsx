@@ -23,6 +23,7 @@ import { message, Popconfirm, Select, Empty, Spin, Input, Switch, Tooltip } from
 
 import { McpServerModal } from '../../components/mcp/McpServerModal';
 import { useMCPStore } from '../../stores/mcp';
+import { useProjectStore } from '../../stores/project';
 
 import type {
   McpServerListHeaderProps,
@@ -559,6 +560,9 @@ export const McpServerList: React.FC<McpServerListProps> & {
   const testServer = useMCPStore((state) => state.testServer);
   const clearError = useMCPStore((state) => state.clearError);
 
+  // Project state for sandbox context
+  const currentProject = useProjectStore((state) => state.currentProject);
+
   // Track if initial load has been done
   const hasLoadedRef = useRef(false);
 
@@ -602,13 +606,15 @@ export const McpServerList: React.FC<McpServerListProps> & {
     });
   }, [servers, search, enabledFilter, typeFilter]);
 
-  // Load data on mount
+  // Load data on mount and when project changes
   useEffect(() => {
-    if (!hasLoadedRef.current) {
+    if (currentProject?.id) {
+      listServers({ project_id: currentProject.id });
+    } else if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
       listServers();
     }
-  }, [listServers]);
+  }, [listServers, currentProject?.id]);
 
   // Clear error on unmount
   useEffect(() => {
@@ -693,12 +699,12 @@ export const McpServerList: React.FC<McpServerListProps> & {
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingServer(null);
-    listServers();
-  }, [listServers]);
+    listServers(currentProject?.id ? { project_id: currentProject.id } : {});
+  }, [listServers, currentProject?.id]);
 
   const handleRefresh = useCallback(() => {
-    listServers();
-  }, [listServers]);
+    listServers(currentProject?.id ? { project_id: currentProject.id } : {});
+  }, [listServers, currentProject?.id]);
 
   const handleShowTools = useCallback((server: MCPServerResponse) => {
     setToolsModalServer(server);

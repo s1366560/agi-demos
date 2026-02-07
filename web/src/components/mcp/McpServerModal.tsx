@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal, Form, Input, Select, Switch, message, Alert } from 'antd';
 
 import { useMCPStore } from '../../stores/mcp';
+import { useProjectStore } from '../../stores/project';
 
 import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '../../types/agent';
 
@@ -57,6 +58,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   const prevServerIdRef = useRef<string | undefined>(server?.id);
 
   const { createServer, updateServer, isSubmitting } = useMCPStore();
+  const currentProject = useProjectStore((state) => state.currentProject);
 
   const isEdit = !!server;
 
@@ -136,6 +138,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         server_type: values.server_type,
         transport_config: transportConfig,
         enabled: values.enabled ?? true,
+        project_id: server?.project_id || currentProject?.id || '',
       };
 
       if (isEdit && server) {

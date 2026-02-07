@@ -7,16 +7,13 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.secondary.persistence.models import Tenant as DBTenant
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project as DBProject,
+    Tenant as DBTenant,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
     SqlMCPServerRepository,
 )
-
-
-@pytest.fixture
-async def v2_mcp_repo(db_session: AsyncSession, test_tenant_db: DBTenant) -> SqlMCPServerRepository:
-    """Create a V2 MCP server repository for testing."""
-    return SqlMCPServerRepository(db_session)
 
 
 @pytest.fixture
@@ -41,6 +38,35 @@ async def test_tenant_db(db_session: AsyncSession) -> DBTenant:
     return tenant
 
 
+@pytest.fixture
+async def test_project_db(
+    db_session: AsyncSession, test_tenant_db: DBTenant
+) -> DBProject:
+    """Create a test project in the database."""
+    project = DBProject(
+        id="project-test-1",
+        tenant_id=test_tenant_db.id,
+        name="Test Project",
+        description="A test project",
+        owner_id="user-owner-1",
+    )
+    db_session.add(project)
+    await db_session.flush()
+    return project
+
+
+@pytest.fixture
+async def v2_mcp_repo(
+    db_session: AsyncSession, test_project_db: DBProject
+) -> SqlMCPServerRepository:
+    """Create a V2 MCP server repository for testing."""
+    return SqlMCPServerRepository(db_session)
+
+
+TENANT_ID = "tenant-test-1"
+PROJECT_ID = "project-test-1"
+
+
 class TestSqlMCPServerRepositoryCreate:
     """Tests for creating MCP servers."""
 
@@ -48,7 +74,8 @@ class TestSqlMCPServerRepositoryCreate:
     async def test_create_server(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test creating a new MCP server."""
         server_id = await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Test Server",
             description="A test MCP server",
             server_type="stdio",
@@ -59,11 +86,11 @@ class TestSqlMCPServerRepositoryCreate:
         assert server_id is not None
         assert len(server_id) > 0
 
-        # Verify server was created
         server = await v2_mcp_repo.get_by_id(server_id)
         assert server is not None
         assert server["name"] == "Test Server"
         assert server["server_type"] == "stdio"
+        assert server["project_id"] == PROJECT_ID
 
 
 class TestSqlMCPServerRepositoryGet:
@@ -73,7 +100,8 @@ class TestSqlMCPServerRepositoryGet:
     async def test_get_by_id_existing(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test getting an MCP server by ID."""
         server_id = await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Get By ID Test",
             description="Test",
             server_type="stdio",
@@ -93,23 +121,24 @@ class TestSqlMCPServerRepositoryGet:
 
     @pytest.mark.asyncio
     async def test_get_by_name_existing(self, v2_mcp_repo: SqlMCPServerRepository):
-        """Test getting an MCP server by name within a tenant."""
+        """Test getting an MCP server by name within a project."""
         await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Unique Server Name",
             description="Test",
             server_type="stdio",
             transport_config={},
         )
 
-        server = await v2_mcp_repo.get_by_name("tenant-test-1", "Unique Server Name")
+        server = await v2_mcp_repo.get_by_name(PROJECT_ID, "Unique Server Name")
         assert server is not None
         assert server["name"] == "Unique Server Name"
 
     @pytest.mark.asyncio
     async def test_get_by_name_not_found(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test getting by non-existent name returns None."""
-        server = await v2_mcp_repo.get_by_name("tenant-test-1", "non-existent-name")
+        server = await v2_mcp_repo.get_by_name(PROJECT_ID, "non-existent-name")
         assert server is None
 
 
@@ -119,26 +148,25 @@ class TestSqlMCPServerRepositoryList:
     @pytest.mark.asyncio
     async def test_list_by_tenant(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test listing all MCP servers for a tenant."""
-        # Create multiple servers
         for i in range(3):
             await v2_mcp_repo.create(
-                tenant_id="tenant-test-1",
+                tenant_id=TENANT_ID,
+                project_id=PROJECT_ID,
                 name=f"Server {i}",
                 description=f"Description {i}",
                 server_type="stdio",
                 transport_config={},
             )
 
-        # List by tenant
-        servers = await v2_mcp_repo.list_by_tenant("tenant-test-1")
+        servers = await v2_mcp_repo.list_by_tenant(TENANT_ID)
         assert len(servers) == 3
 
     @pytest.mark.asyncio
     async def test_list_by_tenant_enabled_only(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test listing only enabled servers."""
-        # Create enabled and disabled servers
         await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Enabled Server",
             description="An enabled server",
             server_type="stdio",
@@ -146,7 +174,8 @@ class TestSqlMCPServerRepositoryList:
             enabled=True,
         )
         await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Disabled Server",
             description="A disabled server",
             server_type="stdio",
@@ -154,10 +183,25 @@ class TestSqlMCPServerRepositoryList:
             enabled=False,
         )
 
-        # List only enabled
-        servers = await v2_mcp_repo.list_by_tenant("tenant-test-1", enabled_only=True)
+        servers = await v2_mcp_repo.list_by_tenant(TENANT_ID, enabled_only=True)
         assert len(servers) == 1
         assert servers[0]["name"] == "Enabled Server"
+
+    @pytest.mark.asyncio
+    async def test_list_by_project(self, v2_mcp_repo: SqlMCPServerRepository):
+        """Test listing all MCP servers for a project."""
+        for i in range(2):
+            await v2_mcp_repo.create(
+                tenant_id=TENANT_ID,
+                project_id=PROJECT_ID,
+                name=f"Project Server {i}",
+                description=f"Description {i}",
+                server_type="stdio",
+                transport_config={},
+            )
+
+        servers = await v2_mcp_repo.list_by_project(PROJECT_ID)
+        assert len(servers) == 2
 
 
 class TestSqlMCPServerRepositoryUpdate:
@@ -167,14 +211,14 @@ class TestSqlMCPServerRepositoryUpdate:
     async def test_update_server(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test updating an MCP server."""
         server_id = await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Original Name",
             description="Original description",
             server_type="stdio",
             transport_config={},
         )
 
-        # Update
         result = await v2_mcp_repo.update(
             server_id=server_id,
             name="Updated Name",
@@ -183,7 +227,6 @@ class TestSqlMCPServerRepositoryUpdate:
 
         assert result is True
 
-        # Verify updated
         server = await v2_mcp_repo.get_by_id(server_id)
         assert server["name"] == "Updated Name"
         assert server["description"] == "Updated description"
@@ -198,14 +241,14 @@ class TestSqlMCPServerRepositoryUpdate:
     async def test_update_discovered_tools(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test updating discovered tools."""
         server_id = await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Tools Test",
             description="Test server for tools",
             server_type="stdio",
             transport_config={},
         )
 
-        # Update tools
         tools = [
             {"name": "tool1", "description": "First tool"},
             {"name": "tool2", "description": "Second tool"},
@@ -215,7 +258,6 @@ class TestSqlMCPServerRepositoryUpdate:
 
         assert result is True
 
-        # Verify updated
         server = await v2_mcp_repo.get_by_id(server_id)
         assert len(server["discovered_tools"]) == 2
         assert server["discovered_tools"][0]["name"] == "tool1"
@@ -228,18 +270,17 @@ class TestSqlMCPServerRepositoryDelete:
     async def test_delete_server(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test deleting an MCP server."""
         server_id = await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Delete Me",
             description="Server to delete",
             server_type="stdio",
             transport_config={},
         )
 
-        # Delete
         result = await v2_mcp_repo.delete(server_id)
         assert result is True
 
-        # Verify deleted
         server = await v2_mcp_repo.get_by_id(server_id)
         assert server is None
 
@@ -256,9 +297,9 @@ class TestSqlMCPServerRepositoryGetEnabledServers:
     @pytest.mark.asyncio
     async def test_get_enabled_servers(self, v2_mcp_repo: SqlMCPServerRepository):
         """Test getting all enabled MCP servers for a tenant."""
-        # Create mixed servers
         await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Enabled 1",
             description="First enabled",
             server_type="stdio",
@@ -266,7 +307,8 @@ class TestSqlMCPServerRepositoryGetEnabledServers:
             enabled=True,
         )
         await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Disabled 1",
             description="A disabled server",
             server_type="stdio",
@@ -274,7 +316,8 @@ class TestSqlMCPServerRepositoryGetEnabledServers:
             enabled=False,
         )
         await v2_mcp_repo.create(
-            tenant_id="tenant-test-1",
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
             name="Enabled 2",
             description="Second enabled",
             server_type="stdio",
@@ -282,6 +325,22 @@ class TestSqlMCPServerRepositoryGetEnabledServers:
             enabled=True,
         )
 
-        # Get enabled
-        servers = await v2_mcp_repo.get_enabled_servers("tenant-test-1")
+        servers = await v2_mcp_repo.get_enabled_servers(TENANT_ID)
         assert len(servers) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_enabled_servers_by_project(self, v2_mcp_repo: SqlMCPServerRepository):
+        """Test getting enabled servers filtered by project."""
+        await v2_mcp_repo.create(
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
+            name="Project Enabled",
+            description="Enabled in project",
+            server_type="stdio",
+            transport_config={},
+            enabled=True,
+        )
+
+        servers = await v2_mcp_repo.get_enabled_servers(TENANT_ID, project_id=PROJECT_ID)
+        assert len(servers) == 1
+        assert servers[0]["name"] == "Project Enabled"
