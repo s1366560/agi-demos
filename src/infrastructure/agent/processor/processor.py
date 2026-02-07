@@ -30,17 +30,11 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Opti
 from src.domain.events.agent_events import (
     AgentActEvent,
     AgentArtifactCreatedEvent,
-    AgentClarificationAnsweredEvent,
-    AgentClarificationAskedEvent,
     AgentCompactNeededEvent,
     AgentCompleteEvent,
     AgentCostUpdateEvent,
-    AgentDecisionAnsweredEvent,
-    AgentDecisionAskedEvent,
     AgentDomainEvent,
     AgentDoomLoopDetectedEvent,
-    AgentEnvVarProvidedEvent,
-    AgentEnvVarRequestedEvent,
     AgentErrorEvent,
     AgentEventType,
     AgentObserveEvent,
@@ -65,14 +59,12 @@ from src.infrastructure.adapters.secondary.sandbox.artifact_integration import (
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
 
-# Import HITLPendingException from domain layer
-from src.domain.model.agent.hitl_types import HITLPendingException, HITLType
 
 from ..core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from ..core.message import Message, MessageRole, ToolPart, ToolState
 from ..cost import CostTracker, TokenUsage
 from ..doom_loop import DoomLoopDetector
-from ..hitl.ray_hitl_handler import RayHITLHandler
+from ..hitl.coordinator import HITLCoordinator
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
 from .hitl_tool_handler import (
@@ -233,53 +225,36 @@ class SessionProcessor:
         self._langfuse_context: Optional[Dict[str, Any]] = None
 
         # HITL handler (created lazily when context is available)
-        self._hitl_handler: Optional[RayHITLHandler] = None
+        self._hitl_coordinator: Optional[HITLCoordinator] = None
 
     @property
     def state(self) -> ProcessorState:
         """Get current processor state."""
         return self._state
 
-    def _get_hitl_handler(self) -> RayHITLHandler:
-        """Get or create the HITL handler for current context."""
+    def _get_hitl_coordinator(self) -> HITLCoordinator:
+        """Get or create the HITL coordinator for current context."""
         ctx = self._langfuse_context or {}
         conversation_id = ctx.get("conversation_id", "unknown")
         tenant_id = ctx.get("tenant_id", "unknown")
         project_id = ctx.get("project_id", "unknown")
         message_id = ctx.get("message_id")
-        
-        # Get pre-injected HITL response for resume case (used once only)
-        # Use get() instead of pop() to avoid removing it from context
-        # This allows multiple HITL handlers to be created if needed
-        hitl_response = ctx.get("hitl_response") if isinstance(ctx, dict) else None
 
-        # Create new handler if needed or context changed
-        if self._hitl_handler is None or self._hitl_handler.conversation_id != conversation_id:
+        if (
+            self._hitl_coordinator is None
+            or self._hitl_coordinator.conversation_id != conversation_id
+        ):
             logger.debug(
-                f"[Processor] Creating new HITL handler for conversation={conversation_id}, "
-                f"has_preinjected={hitl_response is not None}"
+                f"[Processor] Creating HITL coordinator for conversation={conversation_id}"
             )
-            self._hitl_handler = RayHITLHandler(
+            self._hitl_coordinator = HITLCoordinator(
                 conversation_id=conversation_id,
                 tenant_id=tenant_id,
                 project_id=project_id,
                 message_id=message_id,
-                preinjected_response=hitl_response,
             )
-            # Mark that we've consumed this hitl_response for this processor instance
-            if hitl_response and isinstance(ctx, dict):
-                ctx["_hitl_response_consumed"] = True
-        elif hitl_response and not ctx.get("_hitl_response_consumed"):
-            # Update existing handler with new response if one was provided
-            # This happens only once per resume cycle
-            logger.debug(
-                f"[Processor] Updating existing HITL handler with preinjected response, "
-                f"request_id={hitl_response.get('request_id')}"
-            )
-            self._hitl_handler._preinjected_response = hitl_response
-            ctx["_hitl_response_consumed"] = True
 
-        return self._hitl_handler
+        return self._hitl_coordinator
 
     async def process(
         self,
@@ -373,22 +348,6 @@ class SessionProcessor:
                         result = ProcessorResult.COMPACT
                         break
 
-                # After the first LLM step on HITL resume, clear any unconsumed
-                # preinjected response.  When the tool result is already in
-                # conversation_context the LLM won't re-call the original HITL
-                # tool, so the preinjected response stays set.  If we don't
-                # clear it, the *next* HITL tool of the same type would
-                # incorrectly consume it instead of pausing for user input.
-                if (
-                    self._hitl_handler is not None
-                    and self._hitl_handler._preinjected_response is not None
-                ):
-                    logger.debug(
-                        "[Processor] Clearing unconsumed preinjected HITL response "
-                        f"(request_id={self._hitl_handler._preinjected_response.get('request_id')})"
-                    )
-                    self._hitl_handler._preinjected_response = None
-
                 # If we have pending tool results, add them to messages
                 if result == ProcessorResult.CONTINUE and self._current_message:
                     # Add assistant message with tool calls
@@ -428,40 +387,6 @@ class SessionProcessor:
                 self._state = ProcessorState.COMPLETED
             elif result == ProcessorResult.COMPACT:
                 yield AgentStatusEvent(status="compact_needed")
-
-        except HITLPendingException as hitl_ex:
-            # Add current messages to the exception for proper state saving
-            # This includes the assistant's tool call message that triggered HITL
-            current_messages = list(messages)  # Copy current messages
-            
-            # Also add current message if it has tool calls (assistant's pending response)
-            # and extract the tool_call_id that triggered the HITL
-            tool_call_id = None
-            if self._current_message:
-                current_messages.append(self._current_message.to_llm_format())
-                # Find the HITL tool call that triggered this exception
-                for part in self._current_message.get_tool_parts():
-                    # Note: ToolPart uses 'tool' attribute, not 'name'
-                    if part.tool in (
-                        "ask_clarification",
-                        "request_decision",
-                        "request_env_var",
-                        "request_permission",
-                    ):
-                        tool_call_id = part.call_id
-                        break
-            
-            # Set current_messages and tool_call_id on the exception for Activity to use
-            hitl_ex.current_messages = current_messages
-            hitl_ex.tool_call_id = tool_call_id
-            
-            logger.info(
-                f"[Processor] HITL pending with {len(current_messages)} messages, "
-                f"request_id={hitl_ex.request_id}, tool_call_id={tool_call_id}"
-            )
-            
-            # Re-raise with updated messages
-            raise
 
         except Exception as e:
             logger.error(f"Processor error: {e}", exc_info=True)
@@ -1577,9 +1502,9 @@ class SessionProcessor:
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle clarification tool — delegates to hitl_tool_handler."""
         self._state = ProcessorState.WAITING_CLARIFICATION
-        handler = self._get_hitl_handler()
+        coordinator = self._get_hitl_coordinator()
         async for event in handle_clarification_tool(
-            handler=handler,
+            coordinator=coordinator,
             call_id=call_id,
             tool_name=tool_name,
             arguments=arguments,
@@ -1598,9 +1523,9 @@ class SessionProcessor:
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle decision tool — delegates to hitl_tool_handler."""
         self._state = ProcessorState.WAITING_DECISION
-        handler = self._get_hitl_handler()
+        coordinator = self._get_hitl_coordinator()
         async for event in handle_decision_tool(
-            handler=handler,
+            coordinator=coordinator,
             call_id=call_id,
             tool_name=tool_name,
             arguments=arguments,
@@ -1619,9 +1544,9 @@ class SessionProcessor:
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle env var request tool — delegates to hitl_tool_handler."""
         self._state = ProcessorState.WAITING_ENV_VAR
-        handler = self._get_hitl_handler()
+        coordinator = self._get_hitl_coordinator()
         async for event in handle_env_var_tool(
-            handler=handler,
+            coordinator=coordinator,
             call_id=call_id,
             tool_name=tool_name,
             arguments=arguments,

@@ -29,7 +29,6 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 from src.domain.events.agent_events import (
     AgentDomainEvent,
 )
-from src.domain.model.agent.hitl_types import HITLPendingException
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
@@ -172,7 +171,9 @@ class ReActAgent:
         """
         # Validate mutually exclusive tools parameters
         if tools is None and tool_provider is None and _cached_tool_definitions is None:
-            raise ValueError("Either 'tools', 'tool_provider', or '_cached_tool_definitions' must be provided")
+            raise ValueError(
+                "Either 'tools', 'tool_provider', or '_cached_tool_definitions' must be provided"
+            )
 
         # Default sandbox workspace path - Agent should only see sandbox, not host filesystem
         DEFAULT_SANDBOX_WORKSPACE = Path("/workspace")
@@ -435,7 +436,9 @@ class ReActAgent:
 
         # Convert tool definitions to dict format - use current tools (hot-plug support)
         _, current_tool_definitions = self._get_current_tools()
-        tool_defs = [{"name": t.name, "description": t.description} for t in current_tool_definitions]
+        tool_defs = [
+            {"name": t.name, "description": t.description} for t in current_tool_definitions
+        ]
 
         # Build prompt context
         context = PromptContext(
@@ -470,7 +473,6 @@ class ReActAgent:
         message_id: Optional[str] = None,
         attachment_content: Optional[List[Dict[str, Any]]] = None,
         attachment_metadata: Optional[List[Dict[str, Any]]] = None,
-        hitl_response: Optional[Dict[str, Any]] = None,
         abort_signal: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
@@ -492,7 +494,6 @@ class ReActAgent:
             tenant_id: Tenant ID
             conversation_context: Optional conversation history
             message_id: Optional message ID for HITL request persistence
-            hitl_response: Optional HITL response for resuming from HITL pause
 
         Yields:
             Event dictionaries compatible with existing SSE format:
@@ -737,24 +738,16 @@ class ReActAgent:
 
         # Build context using ContextFacade - replaces inline message building
         # and attachment injection (was ~115 lines, now ~10 lines)
-        # For HITL resume: conversation_context already contains tool result, skip adding user_message
-        is_hitl_resume = hitl_response is not None
         context_request = ContextBuildRequest(
             system_prompt=system_prompt,
             conversation_context=conversation_context,
             user_message=user_message,
             attachment_metadata=attachment_metadata,
             attachment_content=attachment_content,
-            is_hitl_resume=is_hitl_resume,
+            is_hitl_resume=False,
         )
         context_result = await self.context_facade.build_context(context_request)
         messages = context_result.messages
-
-        if is_hitl_resume:
-            logger.info(
-                f"[ReActAgent] HITL resume: built context with {len(messages)} messages "
-                f"(skipped user_message append)"
-            )
 
         # Log attachment info if present
         if attachment_metadata:
@@ -831,7 +824,6 @@ class ReActAgent:
             "tenant_id": tenant_id,
             "project_id": project_id,
             "message_id": message_id,
-            "hitl_response": hitl_response,  # Pass HITL response for resume
         }
 
         try:
@@ -868,11 +860,6 @@ class ReActAgent:
                 },
                 "timestamp": datetime.utcnow().isoformat(),
             }
-
-        except HITLPendingException:
-            # Let HITLPendingException bubble up to Activity layer
-            # The Workflow will wait for user response and resume execution
-            raise
 
         except Exception as e:
             logger.error(f"[ReActAgent] Error in stream: {e}", exc_info=True)

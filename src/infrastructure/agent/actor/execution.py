@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time as time_module
@@ -13,20 +14,19 @@ import redis.asyncio as aioredis
 
 from src.configuration.config import get_settings
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
-from src.domain.model.agent.hitl_types import HITLPendingException
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
 from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_redis_client
-from src.infrastructure.agent.actor.state.snapshot_repo import (
-    delete_hitl_snapshot,
-    load_hitl_snapshot,
-    save_hitl_snapshot,
-)
 from src.infrastructure.agent.actor.state.running_state import (
     clear_agent_running,
     refresh_agent_running_ttl,
     set_agent_running,
+)
+from src.infrastructure.agent.actor.state.snapshot_repo import (
+    delete_hitl_snapshot,
+    load_hitl_snapshot,
+    save_hitl_snapshot,
 )
 from src.infrastructure.agent.actor.types import ProjectChatRequest, ProjectChatResult
 from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 async def execute_project_chat(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
-    hitl_response: Optional[Dict[str, Any]] = None,
 ) -> ProjectChatResult:
     """Execute a chat request and publish events to Redis/DB."""
     start_time = time_module.time()
@@ -64,7 +63,6 @@ async def execute_project_chat(
             conversation_context=request.conversation_context,
             tenant_id=agent.config.tenant_id,
             message_id=request.message_id,
-            hitl_response=hitl_response,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -130,19 +128,6 @@ async def execute_project_chat(
             event_count=len(events),
         )
 
-    except HITLPendingException as hitl_ex:
-        if events:
-            await _persist_events(
-                conversation_id=request.conversation_id,
-                message_id=request.message_id,
-                events=events,
-                correlation_id=request.correlation_id,
-            )
-        return await handle_hitl_pending(
-            agent, request, hitl_ex,
-            time_gen.last_time_us, time_gen.last_counter,
-        )
-
     except Exception as e:
         execution_time_ms = (time_module.time() - start_time) * 1000
         agent_metrics.increment("project_agent.chat_errors")
@@ -176,11 +161,16 @@ async def execute_project_chat(
 async def handle_hitl_pending(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
-    hitl_exception: HITLPendingException,
+    hitl_exception: Any,
     last_event_time_us: int = 0,
     last_event_counter: int = 0,
 ) -> ProjectChatResult:
-    """Persist HITL state to Redis and Postgres and return pending result."""
+    """Persist HITL state to Redis and Postgres and return pending result.
+
+    NOTE: This is kept for backward compatibility with Temporal activities.
+    The primary HITL flow now uses HITLCoordinator with Future-based pausing.
+    hitl_exception is expected to be a HITLPendingException instance.
+    """
     redis_client = await _get_redis_client()
     state_store = HITLStateStore(redis_client)
 
@@ -266,9 +256,7 @@ async def continue_project_chat(
             await asyncio.sleep(0.2)
 
     if not state:
-        logger.error(
-            f"[ActorExecution] HITL state not found for request_id={request_id}"
-        )
+        logger.error(f"[ActorExecution] HITL state not found for request_id={request_id}")
         return ProjectChatResult(
             conversation_id="",
             message_id="",
@@ -292,8 +280,7 @@ async def continue_project_chat(
     # to avoid collisions with events saved by other paths
     db_last_time_us, db_last_counter = await _get_last_db_event_time(state.conversation_id)
     if db_last_time_us > state.last_event_time_us or (
-        db_last_time_us == state.last_event_time_us
-        and db_last_counter > state.last_event_counter
+        db_last_time_us == state.last_event_time_us and db_last_counter > state.last_event_counter
     ):
         init_time_us, init_counter = db_last_time_us, db_last_counter
     else:
@@ -302,12 +289,6 @@ async def continue_project_chat(
     await set_agent_running(state.conversation_id, state.message_id)
 
     try:
-        hitl_response_for_agent = {
-            "request_id": request_id,
-            "hitl_type": state.hitl_type,
-            "response_data": response_data,
-        }
-
         conversation_context = list(state.messages)
         if state.pending_tool_call_id:
             tool_result_content = _format_hitl_response_as_tool_result(
@@ -328,69 +309,40 @@ async def continue_project_chat(
 
         last_refresh = time_module.time()
 
-        try:
-            async for event in agent.execute_chat(
+        async for event in agent.execute_chat(
+            conversation_id=state.conversation_id,
+            user_message=state.user_message,
+            user_id=state.user_id,
+            conversation_context=conversation_context,
+            tenant_id=state.tenant_id,
+            message_id=state.message_id,
+        ):
+            evt_time_us, evt_counter = time_gen.next()
+            event["event_time_us"] = evt_time_us
+            event["event_counter"] = evt_counter
+            events.append(event)
+
+            await _publish_event_to_stream(
                 conversation_id=state.conversation_id,
-                user_message=state.user_message,
-                user_id=state.user_id,
-                conversation_context=conversation_context,
-                tenant_id=state.tenant_id,
+                event=event,
                 message_id=state.message_id,
-                hitl_response=hitl_response_for_agent,
-            ):
-                evt_time_us, evt_counter = time_gen.next()
-                event["event_time_us"] = evt_time_us
-                event["event_counter"] = evt_counter
-                events.append(event)
-
-                await _publish_event_to_stream(
-                    conversation_id=state.conversation_id,
-                    event=event,
-                    message_id=state.message_id,
-                    event_time_us=evt_time_us,
-                    event_counter=evt_counter,
-                    correlation_id=state.correlation_id,
-                    redis_client=redis_client,
-                )
-
-                event_type = event.get("type")
-                if event_type == "complete":
-                    final_content = event.get("data", {}).get("content", "")
-                elif event_type == "error":
-                    is_error = True
-                    error_message = event.get("data", {}).get("message", "Unknown error")
-
-                now = time_module.time()
-                if now - last_refresh > 60:
-                    await refresh_agent_running_ttl(state.conversation_id)
-                    last_refresh = now
-        except HITLPendingException as hitl_ex:
-            logger.info(
-                f"[ActorExecution] Second HITL detected during continue: "
-                f"first_request_id={request_id}, "
-                f"second_request_id={hitl_ex.request_id}, "
-                f"events_emitted={len(events)}, "
-                f"last_event_time_us={time_gen.last_time_us}"
-            )
-            if events:
-                await _persist_events(
-                    conversation_id=state.conversation_id,
-                    message_id=state.message_id,
-                    events=events,
-                    correlation_id=state.correlation_id,
-                )
-            resume_request = ProjectChatRequest(
-                conversation_id=state.conversation_id,
-                message_id=state.message_id,
-                user_message=state.user_message,
-                user_id=state.user_id,
-                conversation_context=conversation_context,
+                event_time_us=evt_time_us,
+                event_counter=evt_counter,
                 correlation_id=state.correlation_id,
+                redis_client=redis_client,
             )
-            return await handle_hitl_pending(
-                agent, resume_request, hitl_ex,
-                time_gen.last_time_us, time_gen.last_counter,
-            )
+
+            event_type = event.get("type")
+            if event_type == "complete":
+                final_content = event.get("data", {}).get("content", "")
+            elif event_type == "error":
+                is_error = True
+                error_message = event.get("data", {}).get("message", "Unknown error")
+
+            now = time_module.time()
+            if now - last_refresh > 60:
+                await refresh_agent_running_ttl(state.conversation_id)
+                last_refresh = now
 
         await _persist_events(
             conversation_id=state.conversation_id,

@@ -40,7 +40,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from src.domain.model.agent.hitl_types import HITLPendingException
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 
@@ -475,9 +474,7 @@ class ProjectReActAgent:
 
             async with async_session_factory() as session:
                 repo = SqlMCPServerRepository(session)
-                servers = await repo.list_by_project(
-                    self.config.project_id, enabled_only=True
-                )
+                servers = await repo.list_by_project(self.config.project_id, enabled_only=True)
 
             # Count expected MCP tools from DB
             db_tool_count = 0
@@ -486,9 +483,7 @@ class ProjectReActAgent:
                 db_tool_count += len(discovered)
 
             # Count current MCP tools in agent
-            current_mcp_count = sum(
-                1 for name in self._tools.keys() if name.startswith("mcp__")
-            )
+            current_mcp_count = sum(1 for name in self._tools.keys() if name.startswith("mcp__"))
 
             if db_tool_count == current_mcp_count:
                 return False
@@ -503,9 +498,7 @@ class ProjectReActAgent:
             return success
 
         except Exception as e:
-            logger.warning(
-                f"ProjectReActAgent[{self.project_key}]: Error checking MCP tools: {e}"
-            )
+            logger.warning(f"ProjectReActAgent[{self.project_key}]: Error checking MCP tools: {e}")
             return False
 
     async def _check_and_refresh_sandbox_tools(self) -> bool:
@@ -583,7 +576,6 @@ class ProjectReActAgent:
         conversation_context: Optional[List[Dict[str, str]]] = None,
         tenant_id: Optional[str] = None,
         message_id: Optional[str] = None,
-        hitl_response: Optional[Dict[str, Any]] = None,
         abort_signal: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
@@ -671,7 +663,6 @@ class ProjectReActAgent:
                 conversation_id=conversation_id,
             )
 
-        final_content = ""
         is_error = False
         error_message = None
         event_count = 0
@@ -680,7 +671,6 @@ class ProjectReActAgent:
             logger.info(
                 f"ProjectReActAgent[{self.project_key}]: Executing chat "
                 f"conversation={conversation_id}, user={user_id}"
-                + (f", hitl_response={hitl_response.get('request_id')}" if hitl_response else "")
             )
 
             # Execute ReActAgent stream
@@ -692,7 +682,6 @@ class ProjectReActAgent:
                 tenant_id=effective_tenant_id,
                 conversation_context=conversation_context or [],
                 message_id=message_id,
-                hitl_response=hitl_response,
                 abort_signal=abort_signal,
             ):
                 event_count += 1
@@ -700,7 +689,7 @@ class ProjectReActAgent:
                 # Track content from complete events
                 event_type = event.get("type")
                 if event_type == "complete":
-                    final_content = event.get("data", {}).get("content", "")
+                    pass  # Content is in the event itself
                 elif event_type == "error":
                     is_error = True
                     error_message = event.get("data", {}).get("message", "Unknown error")
@@ -726,11 +715,6 @@ class ProjectReActAgent:
                     f"ProjectReActAgent[{self.project_key}]: Chat completed in {execution_time_ms:.1f}ms, "
                     f"events={event_count}"
                 )
-
-        except HITLPendingException:
-            # Let HITLPendingException bubble up to Activity layer
-            # The Workflow will wait for user response and resume execution
-            raise
 
         except Exception as e:
             is_error = True

@@ -56,16 +56,12 @@ class LocalHITLResumeConsumer:
     async def add_project(self, tenant_id: str, project_id: str) -> None:
         stream_key = self._stream_key(tenant_id, project_id)
         try:
-            await self._redis.xgroup_create(
-                stream_key, self.CONSUMER_GROUP, id="0", mkstream=True
-            )
+            await self._redis.xgroup_create(stream_key, self.CONSUMER_GROUP, id="0", mkstream=True)
         except aioredis.ResponseError as e:
             if "BUSYGROUP" not in str(e):
                 raise
         self._projects.add((tenant_id, project_id))
-        logger.info(
-            f"[LocalHITL] Registered project {tenant_id}:{project_id} for HITL resume"
-        )
+        logger.info(f"[LocalHITL] Registered project {tenant_id}:{project_id} for HITL resume")
 
     async def _listen_loop(self) -> None:
         while self._running:
@@ -74,10 +70,7 @@ class LocalHITLResumeConsumer:
                     await asyncio.sleep(1)
                     continue
 
-                stream_keys = {
-                    self._stream_key(tid, pid): ">"
-                    for tid, pid in self._projects
-                }
+                stream_keys = {self._stream_key(tid, pid): ">" for tid, pid in self._projects}
                 streams = await self._redis.xreadgroup(
                     groupname=self.CONSUMER_GROUP,
                     consumername=self._worker_id,
@@ -102,9 +95,7 @@ class LocalHITLResumeConsumer:
                 logger.error(f"[LocalHITL] Error in listen loop: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def _handle_message(
-        self, stream_key: str, msg_id: str, fields: Dict[str, Any]
-    ) -> None:
+    async def _handle_message(self, stream_key: str, msg_id: str, fields: Dict[str, Any]) -> None:
         try:
             raw = fields.get("data") or fields.get(b"data")
             if not raw:
@@ -139,9 +130,7 @@ class LocalHITLResumeConsumer:
             await self._ack(stream_key, msg_id)
 
         except Exception as e:
-            logger.error(
-                f"[LocalHITL] Failed to handle message {msg_id}: {e}", exc_info=True
-            )
+            logger.error(f"[LocalHITL] Failed to handle message {msg_id}: {e}", exc_info=True)
 
     async def _resume_agent(
         self,
@@ -150,7 +139,33 @@ class LocalHITLResumeConsumer:
         request_id: str,
         response_data: Dict[str, Any],
     ) -> None:
-        """Create a fresh agent and call continue_project_chat."""
+        """Resolve the pending HITL Future via the coordinator registry."""
+        from src.infrastructure.agent.hitl.coordinator import resolve_by_request_id
+
+        try:
+            resolved = resolve_by_request_id(request_id, response_data)
+            if resolved:
+                logger.info(f"[LocalHITL] Resolved HITL future: request_id={request_id}")
+            else:
+                logger.warning(
+                    f"[LocalHITL] No active coordinator for request_id={request_id}, "
+                    f"falling back to continue_project_chat"
+                )
+                await self._resume_via_continue(tenant_id, project_id, request_id, response_data)
+        except Exception as e:
+            logger.error(
+                f"[LocalHITL] Resume error: request_id={request_id} error={e}",
+                exc_info=True,
+            )
+
+    async def _resume_via_continue(
+        self,
+        tenant_id: str,
+        project_id: str,
+        request_id: str,
+        response_data: Dict[str, Any],
+    ) -> None:
+        """Crash recovery fallback: create a fresh agent and replay."""
         from src.configuration.config import get_settings
         from src.infrastructure.agent.actor.execution import continue_project_chat
         from src.infrastructure.agent.core.project_react_agent import (
@@ -185,17 +200,17 @@ class LocalHITLResumeConsumer:
 
             if result.is_error:
                 logger.warning(
-                    f"[LocalHITL] Resume failed: request_id={request_id} "
+                    f"[LocalHITL] Fallback resume failed: request_id={request_id} "
                     f"error={result.error_message}"
                 )
             else:
                 logger.info(
-                    f"[LocalHITL] Resume completed: request_id={request_id} "
+                    f"[LocalHITL] Fallback resume completed: request_id={request_id} "
                     f"events={result.event_count}"
                 )
         except Exception as e:
             logger.error(
-                f"[LocalHITL] Resume error: request_id={request_id} error={e}",
+                f"[LocalHITL] Fallback resume error: request_id={request_id} error={e}",
                 exc_info=True,
             )
 
@@ -210,9 +225,7 @@ class LocalHITLResumeConsumer:
             logger.warning(f"[LocalHITL] Failed to ack {msg_id}: {e}")
 
     def _stream_key(self, tenant_id: str, project_id: str) -> str:
-        return self.STREAM_KEY_PATTERN.format(
-            tenant_id=tenant_id, project_id=project_id
-        )
+        return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)
 
     @staticmethod
     def _parse_stream_key(stream_key: str) -> Tuple[str, str]:

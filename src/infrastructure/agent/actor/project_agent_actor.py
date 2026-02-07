@@ -194,6 +194,18 @@ class ProjectAgentActor:
     async def _run_continue(self, request_id: str, response_data: Dict[str, Any]) -> None:
         if not self._agent:
             return
+
+        from src.infrastructure.agent.hitl.coordinator import resolve_by_request_id
+
+        resolved = resolve_by_request_id(request_id, response_data)
+        if resolved:
+            logger.info(
+                "[ProjectAgentActor] Resolved HITL future: request_id=%s",
+                request_id,
+            )
+            return
+
+        # Fallback: crash recovery via continue_project_chat
         result = await continue_project_chat(self._agent, request_id, response_data)
         if result.hitl_pending:
             logger.info(
