@@ -13,6 +13,7 @@ import { Modal, Form, Input, Select, Switch, message, Alert } from 'antd';
 
 import { useMCPStore } from '../../stores/mcp';
 import { useProjectStore } from '../../stores/project';
+import { useShallow } from 'zustand/react/shallow';
 
 import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '../../types/agent';
 
@@ -58,7 +59,9 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   const prevServerIdRef = useRef<string | undefined>(server?.id);
 
   const { createServer, updateServer, isSubmitting } = useMCPStore();
-  const currentProject = useProjectStore((state) => state.currentProject);
+  const { projects, currentProject } = useProjectStore(
+    useShallow((state) => ({ projects: state.projects, currentProject: state.currentProject }))
+  );
 
   const isEdit = !!server;
 
@@ -78,6 +81,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         description: server.description,
         server_type: server.server_type,
         enabled: server.enabled,
+        project_id: server.project_id,
       });
       setJsonConfig(JSON.stringify(server.transport_config, null, 2));
       setJsonError(null);
@@ -86,11 +90,12 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
       form.setFieldsValue({
         server_type: 'stdio',
         enabled: true,
+        project_id: currentProject?.id,
       });
       setJsonConfig(JSON.stringify(DEFAULT_TRANSPORT_CONFIGS.stdio, null, 2));
       setJsonError(null);
     }
-  }, [server, form]);
+  }, [server, form, currentProject]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Handle server type change
@@ -122,7 +127,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   // Handle submit
   const handleSubmit = useCallback(async () => {
     try {
-      await form.validateFields(['name', 'server_type']);
+      await form.validateFields(['project_id', 'name', 'server_type']);
 
       const values = form.getFieldsValue();
       const transportConfig = buildTransportConfig();
@@ -132,7 +137,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         return;
       }
 
-      const projectId = server?.project_id || currentProject?.id;
+      const projectId = values.project_id;
       if (!projectId) {
         message.error(t('tenant.mcpServers.selectProjectFirst', 'Please select a project first'));
         return;
@@ -163,7 +168,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         console.error('Submit error:', error);
       }
     }
-  }, [form, buildTransportConfig, isEdit, server, currentProject, updateServer, createServer, onSuccess, t]);
+  }, [form, buildTransportConfig, isEdit, server, updateServer, createServer, onSuccess, t]);
 
   return (
     <Modal
@@ -178,6 +183,28 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
       destroyOnHidden
     >
       <Form form={form} layout="vertical" className="mt-4">
+        {/* Project */}
+        <Form.Item
+          label={t('tenant.mcpServers.fields.project', 'Project')}
+          name="project_id"
+          rules={[
+            {
+              required: true,
+              message: t('tenant.mcpServers.validation.projectRequired', 'Please select a project'),
+            },
+          ]}
+        >
+          <Select
+            placeholder={t('tenant.mcpServers.placeholders.project', 'Select a project')}
+            disabled={isEdit}
+            options={projects.map((p) => ({ label: p.name, value: p.id }))}
+            showSearch
+            filterOption={(input, option) =>
+              (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+            }
+          />
+        </Form.Item>
+
         {/* Name */}
         <Form.Item
           label={t('tenant.mcpServers.fields.name')}
