@@ -1,0 +1,9 @@
+{
+  "source": "vercel-labs/agent-skills",
+  "skill_name": "react-best-practices",
+  "branch": "main",
+  "source_path": "skills/react-best-practices/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

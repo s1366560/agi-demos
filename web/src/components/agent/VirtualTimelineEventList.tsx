@@ -9,7 +9,7 @@
  * - No scroll jumping or flickering during pagination
  */
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 
 import { DownOutlined, MessageOutlined } from '@ant-design/icons';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -44,6 +44,28 @@ interface VirtualTimelineEventListProps {
   streamingContent?: string;
   streamingThought?: string;
   isThinkingStreaming?: boolean;
+}
+
+/**
+ * Synthetic items appended to the display list during streaming.
+ * These are rendered inside the virtual list alongside real timeline events,
+ * eliminating layout jumps when streaming ends.
+ */
+type SyntheticStreamingItem =
+  | { _synthetic: 'streaming_thought'; content: string; isStreaming: boolean }
+  | { _synthetic: 'streaming_text'; content: string };
+
+type DisplayItem = TimelineEvent | SyntheticStreamingItem;
+
+function isSynthetic(item: DisplayItem): item is SyntheticStreamingItem {
+  return '_synthetic' in item;
+}
+
+function estimateDisplayItemHeight(item: DisplayItem): number {
+  if (isSynthetic(item)) {
+    return item._synthetic === 'streaming_thought' ? 120 : 100;
+  }
+  return estimateEventHeight(item);
 }
 
 function estimateEventHeight(event: TimelineEvent): number {
@@ -140,17 +162,39 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   const userScrolledUpRef = useRef(false);
   const lastLoadTimeRef = useRef(0);
 
-  // Virtual list setup - 增加 overscan 预渲染更多项目
-  const estimateEventHeightCallback = useCallback(
-    (index: number) => estimateEventHeight(timeline[index]),
-    [timeline]
+  // Build display list: real timeline + synthetic streaming items at the end
+  const displayTimeline: DisplayItem[] = useMemo(() => {
+    const items: DisplayItem[] = [...timeline];
+
+    if (isThinkingStreaming || streamingThought) {
+      items.push({
+        _synthetic: 'streaming_thought',
+        content: streamingThought || '',
+        isStreaming: !!isThinkingStreaming,
+      });
+    }
+
+    if (isStreaming && streamingContent) {
+      items.push({
+        _synthetic: 'streaming_text',
+        content: streamingContent,
+      });
+    }
+
+    return items;
+  }, [timeline, isStreaming, streamingContent, streamingThought, isThinkingStreaming]);
+
+  // Virtual list setup
+  const estimateItemHeightCallback = useCallback(
+    (index: number) => estimateDisplayItemHeight(displayTimeline[index]),
+    [displayTimeline]
   );
 
   const eventVirtualizer = useVirtualizer({
-    count: timeline.length,
+    count: displayTimeline.length,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: estimateEventHeightCallback,
-    overscan: 10, // 增加预渲染数量，让滚动更平滑
+    estimateSize: estimateItemHeightCallback,
+    overscan: 10,
     scrollPaddingEnd: 0,
   });
 
@@ -328,18 +372,15 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   }, [timeline.length, isStreaming, eventVirtualizer]);
 
   // Auto-scroll when streaming content or thought updates (for real-time streaming)
+  // Since streaming items are now inside the virtual list, use scrollToIndex
   useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!isStreaming || userScrolledUpRef.current) return;
+    if (displayTimeline.length === 0) return;
 
-    // During streaming, scroll the container to bottom so streaming content
-    // (rendered outside the virtual list) stays visible
-    if (isStreaming && !userScrolledUpRef.current) {
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
-    }
-  }, [streamingContent, streamingThought, isStreaming]);
+    requestAnimationFrame(() => {
+      eventVirtualizer.scrollToIndex(displayTimeline.length - 1, { align: 'end' });
+    });
+  }, [streamingContent, streamingThought, isStreaming, displayTimeline.length, eventVirtualizer]);
 
   // Reset scroll state when conversation changes
   useEffect(() => {
@@ -386,12 +427,12 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    eventVirtualizer.scrollToIndex(timeline.length - 1, {
+    eventVirtualizer.scrollToIndex(displayTimeline.length - 1, {
       align: 'end',
       behavior: 'smooth',
     });
     setShowScrollButton(false);
-  }, [timeline.length, eventVirtualizer]);
+  }, [displayTimeline.length, eventVirtualizer]);
 
   // Empty state
   if (timeline.length === 0) {
@@ -441,8 +482,8 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                 }}
               >
                 {virtualItems.map((virtualItem) => {
-                  const event = timeline[virtualItem.index];
-                  if (!event) return null;
+                  const item = displayTimeline[virtualItem.index];
+                  if (!item) return null;
 
                   return (
                     <div
@@ -455,7 +496,6 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                         left: 0,
                         width: '100%',
                         transform: `translateY(${virtualItem.start}px)`,
-                        // Use content-visibility for off-screen items (rendering-content-visibility)
                         contentVisibility:
                           virtualItem.index >= virtualItems[0].index &&
                           virtualItem.index <= virtualItems[virtualItems.length - 1].index
@@ -463,39 +503,40 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                             : 'auto',
                       }}
                     >
-                      <TimelineEventItem
-                        event={event}
-                        isStreaming={isStreaming}
-                        allEvents={timeline}
-                      />
+                      {isSynthetic(item) ? (
+                        item._synthetic === 'streaming_thought' ? (
+                          <div className="my-3">
+                            <StreamingThoughtBubble
+                              content={item.content}
+                              isStreaming={item.isStreaming}
+                            />
+                          </div>
+                        ) : (
+                          <div className="my-4 flex items-start gap-3 animate-slide-up">
+                            <div className={ASSISTANT_AVATAR_CLASSES}>
+                              <span className="material-symbols-outlined text-primary text-lg">
+                                smart_toy
+                              </span>
+                            </div>
+                            <div className={ASSISTANT_BUBBLE_CLASSES}>
+                              <MarkdownContent
+                                content={item.content}
+                                className={ASSISTANT_PROSE_CLASSES}
+                              />
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <TimelineEventItem
+                          event={item}
+                          isStreaming={isStreaming}
+                          allEvents={timeline}
+                        />
+                      )}
                     </div>
                   );
                 })}
               </div>
-
-              {/* Streaming Content - Rendered after the virtual list */}
-              {(isThinkingStreaming || streamingThought) && (
-                <div className="mt-4">
-                  <StreamingThoughtBubble
-                    content={streamingThought || ''}
-                    isStreaming={!!isThinkingStreaming}
-                  />
-                </div>
-              )}
-
-              {/* Streaming text content - uses same styling as history assistant messages */}
-              {isStreaming && streamingContent && (
-                <div className="mt-4 flex items-start gap-3 animate-slide-up">
-                  <div className={ASSISTANT_AVATAR_CLASSES}>
-                    <span className="material-symbols-outlined text-primary text-lg">
-                      smart_toy
-                    </span>
-                  </div>
-                  <div className={ASSISTANT_BUBBLE_CLASSES}>
-                    <MarkdownContent content={streamingContent} className={ASSISTANT_PROSE_CLASSES} />
-                  </div>
-                </div>
-              )}
             </MessageStream>
           </div>
         </div>

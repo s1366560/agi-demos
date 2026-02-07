@@ -79,7 +79,11 @@ async def get_conversation_messages(
             "decision_answered",
             "env_var_requested",
             "env_var_provided",
+            # Agent emits both permission_asked and permission_requested
+            "permission_asked",
             "permission_requested",
+            # Agent emits both permission_replied and permission_granted
+            "permission_replied",
             "permission_granted",
         }
 
@@ -319,10 +323,7 @@ async def get_conversation_messages(
             last_sequence = timeline[-1]["sequenceNumber"]
 
         has_more = False
-        if first_sequence is not None and before_sequence is None:
-            if first_sequence > 0:
-                has_more = True
-        elif first_sequence is not None and before_sequence is not None:
+        if first_sequence is not None:
             check_events = await event_repo.get_events(
                 conversation_id=conversation_id,
                 from_sequence=0,

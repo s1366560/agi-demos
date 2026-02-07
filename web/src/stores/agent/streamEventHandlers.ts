@@ -691,16 +691,21 @@ export function createStreamEventHandlers(
 
       const convState = getConversationState(handlerConversationId);
 
-      const hasTextEndWithContent = convState.timeline.some(
-        (e) => e.type === 'text_end' && 'fullText' in e && e.fullText?.trim()
+      // Remove transient streaming events (text_start, text_end, text_delta) from timeline.
+      // These are never persisted to DB, so keeping them causes a mismatch between
+      // in-memory state and what history API returns after refresh.
+      const cleanedTimeline = convState.timeline.filter(
+        (e) => e.type !== 'text_start' && e.type !== 'text_end' && e.type !== 'text_delta'
       );
 
-      let updatedTimeline = convState.timeline;
-      if (!hasTextEndWithContent) {
-        const completeEvent: AgentEvent<CompleteEventData> =
-          event as AgentEvent<CompleteEventData>;
-        updatedTimeline = appendSSEEventToTimeline(convState.timeline, completeEvent);
-      }
+      // Always add assistant_message from the complete event (if it has content).
+      // This matches what the backend persists (complete -> assistant_message conversion).
+      const completeEvent: AgentEvent<CompleteEventData> =
+        event as AgentEvent<CompleteEventData>;
+      const hasContent = !!(completeEvent.data as any)?.content?.trim();
+      const updatedTimeline = hasContent
+        ? appendSSEEventToTimeline(cleanedTimeline, completeEvent)
+        : cleanedTimeline;
 
       const newMessages = timelineToMessages(updatedTimeline);
 

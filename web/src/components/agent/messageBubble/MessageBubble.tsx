@@ -872,6 +872,10 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} />;
 
       case 'text_delta':
+        // Skip text_delta when a text_end exists (it contains the full text)
+        if (allEvents?.some((e) => e.type === 'text_end')) {
+          return null;
+        }
         return <TextDelta content={getContent(event)} />;
 
       case 'thought':
