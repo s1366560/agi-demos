@@ -121,6 +121,7 @@ def get_message_router() -> MessageRouter:
             ClarificationRespondHandler,
             DecisionRespondHandler,
             EnvVarRespondHandler,
+            PermissionRespondHandler,
             RestartAgentHandler,
             SendMessageHandler,
             StartAgentHandler,
@@ -161,6 +162,7 @@ def get_message_router() -> MessageRouter:
                 ClarificationRespondHandler(),
                 DecisionRespondHandler(),
                 EnvVarRespondHandler(),
+                PermissionRespondHandler(),
             ]
         )
         logger.info(

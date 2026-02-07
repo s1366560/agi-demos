@@ -1,8 +1,8 @@
 """
 HITL (Human-in-the-Loop) Handlers for WebSocket
 
-Handles clarification_respond, decision_respond, and env_var_respond message types.
-Uses Redis Streams to communicate with the running Ray Actor.
+Handles clarification_respond, decision_respond, env_var_respond, and permission_respond
+message types. Uses Redis Streams to communicate with the running Ray Actor.
 """
 
 import asyncio
@@ -164,6 +164,7 @@ async def _handle_hitl_response(
                 response_data.get("answer")
                 or response_data.get("decision")
                 or str(response_data.get("values", {}))
+                or response_data.get("action")
             )
             
             await session.execute(
@@ -284,6 +285,36 @@ class EnvVarRespondHandler(WebSocketMessageHandler):
         except Exception as e:
             logger.error(f"[WS HITL] Error handling env var response: {e}", exc_info=True)
             await context.send_error(f"Failed to process env var response: {str(e)}")
+
+
+class PermissionRespondHandler(WebSocketMessageHandler):
+    """Handle permission response via WebSocket using Redis Streams."""
+
+    @property
+    def message_type(self) -> str:
+        return "permission_respond"
+
+    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+        """Handle permission response."""
+        request_id = message.get("request_id")
+        granted = message.get("granted")
+
+        if not request_id or granted is None:
+            await context.send_error("Missing required fields: request_id, granted")
+            return
+
+        try:
+            action = "allow" if granted else "deny"
+            await _handle_hitl_response(
+                context=context,
+                request_id=request_id,
+                hitl_type="permission",
+                response_data={"granted": granted, "action": action},
+                ack_type="permission_response_ack",
+            )
+        except Exception as e:
+            logger.error(f"[WS HITL] Error handling permission response: {e}", exc_info=True)
+            await context.send_error(f"Failed to process permission response: {str(e)}")
 
 
 # =============================================================================

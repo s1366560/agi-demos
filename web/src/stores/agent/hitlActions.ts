@@ -328,16 +328,7 @@ export function createHITLActions(deps: HITLActionDeps) {
 
       try {
         const simpleHandler = createSimpleHITLHandler(deps, '[agentV3]');
-
-        if (!agentService.isConnected()) {
-          console.log('[agentV3] Connecting WebSocket before permission response...');
-          await agentService.connect();
-        }
-
-        if (activeConversationId) {
-          agentService.subscribe(activeConversationId, simpleHandler);
-          console.log('[agentV3] Subscribed to conversation:', activeConversationId);
-        }
+        await ensureConnectedAndSubscribe(activeConversationId, simpleHandler);
 
         await agentService.respondToPermission(requestId, granted);
         clearAllDeltaBuffers();

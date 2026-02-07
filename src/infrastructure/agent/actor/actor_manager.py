@@ -115,10 +115,18 @@ async def get_actor_if_exists(
 
 
 async def register_project(tenant_id: str, project_id: str) -> None:
-    """Register a project stream with the HITL router actor."""
+    """Register a project stream with the HITL router actor.
+
+    Falls back to a local HITL resume consumer when Ray is unavailable.
+    """
     try:
         router = await ensure_router_actor()
         if router is None:
+            from src.infrastructure.agent.hitl.local_resume_consumer import (
+                register_project_local,
+            )
+
+            await register_project_local(tenant_id, project_id)
             return
         await await_ray(router.add_project.remote(tenant_id, project_id))
     except Exception as e:

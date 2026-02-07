@@ -1500,10 +1500,11 @@ class AgentServiceImpl implements AgentService {
         return;
       }
     }
-    // Fallback to HTTP
-    await api.post<{ status: string }>('/agent/env-var/respond', {
+    // Fallback to HTTP (unified HITL respond endpoint)
+    await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,
-      values,
+      hitl_type: 'env_var',
+      response_data: { values },
     });
   }
 
@@ -1536,10 +1537,11 @@ class AgentServiceImpl implements AgentService {
         return;
       }
     }
-    // Fallback to HTTP
-    await api.post<{ status: string }>('/agent/clarification/respond', {
+    // Fallback to HTTP (unified HITL respond endpoint)
+    await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,
-      response: answer,
+      hitl_type: 'clarification',
+      response_data: { answer },
     });
   }
 
@@ -1572,10 +1574,11 @@ class AgentServiceImpl implements AgentService {
         return;
       }
     }
-    // Fallback to HTTP
-    await api.post<{ status: string }>('/agent/decision/respond', {
+    // Fallback to HTTP (unified HITL respond endpoint)
+    await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,
-      decision,
+      hitl_type: 'decision',
+      response_data: { decision },
     });
   }
 
@@ -1608,10 +1611,11 @@ class AgentServiceImpl implements AgentService {
         return;
       }
     }
-    // Fallback to HTTP
-    await api.post<{ status: string }>('/agent/permission/respond', {
+    // Fallback to HTTP (unified HITL respond endpoint)
+    await api.post<{ status: string }>('/agent/hitl/respond', {
       request_id: requestId,
-      granted,
+      hitl_type: 'permission',
+      response_data: { granted, action: granted ? 'allow' : 'deny' },
     });
   }
 
