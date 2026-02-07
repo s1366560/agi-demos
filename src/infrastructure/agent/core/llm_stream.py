@@ -379,6 +379,10 @@ class LLMStream:
         self._in_text: bool = False
         self._in_reasoning: bool = False
 
+        # Think-tag parser state for models that embed <think>...</think> in content
+        self._in_think_tag: bool = False
+        self._tag_buffer: str = ""
+
         # Usage tracking
         self._usage: Optional[Dict[str, int]] = None
         self._finish_reason: Optional[str] = None
@@ -595,6 +599,8 @@ class LLMStream:
         self._tool_calls = {}
         self._in_text = False
         self._in_reasoning = False
+        self._in_think_tag = False
+        self._tag_buffer = ""
         self._usage = None
         self._finish_reason = None
         # P0-2: Reset sampler for new stream
@@ -639,17 +645,12 @@ class LLMStream:
             f"[LLMStream] delta: content={getattr(delta, 'content', None)}, tool_calls={getattr(delta, 'tool_calls', None)}"
         )
 
-        # Check for content (text)
+        # Check for content (text) - route through think-tag parser
         content = getattr(delta, "content", None)
         if content:
             logger.info(f"[LLMStream] TEXT_DELTA: {content[:50]}...")
-            # Start text stream if not started
-            if not self._in_text:
-                self._in_text = True
-                yield StreamEvent.text_start()
-
-            self._text_buffer += content
-            yield StreamEvent.text_delta(content)
+            async for event in self._process_content_with_think_tags(content):
+                yield event
 
         # Check for reasoning content (o1, Claude extended thinking)
         # Different providers may use different field names
@@ -681,6 +682,112 @@ class LLMStream:
         usage = getattr(chunk, "usage", None)
         if usage:
             self._usage = self._extract_usage(usage)
+
+    async def _process_content_with_think_tags(
+        self, content: str
+    ) -> AsyncIterator[StreamEvent]:
+        """
+        Parse content for inline <think>...</think> tags and route to correct events.
+
+        Some reasoning models (DeepSeek-R1, QwQ) embed thinking in the content field
+        using <think>...</think> tags instead of using a separate reasoning_content field.
+        This parser detects these tags in the stream and routes:
+        - Content inside <think>...</think> → REASONING events
+        - Content outside → TEXT events
+        - Handles tags split across chunk boundaries via _tag_buffer
+        """
+        # Prepend any buffered partial tag from previous chunk
+        if self._tag_buffer:
+            content = self._tag_buffer + content
+            self._tag_buffer = ""
+
+        pos = 0
+        while pos < len(content):
+            if self._in_think_tag:
+                # Inside <think> block - look for closing </think>
+                close_idx = content.find("</think>", pos)
+                if close_idx != -1:
+                    # Found closing tag - emit reasoning up to it
+                    reasoning_chunk = content[pos:close_idx]
+                    if reasoning_chunk:
+                        self._reasoning_buffer += reasoning_chunk
+                        yield StreamEvent.reasoning_delta(reasoning_chunk)
+                    # End reasoning, emit reasoning_end
+                    self._in_think_tag = False
+                    yield StreamEvent.reasoning_end(self._reasoning_buffer)
+                    self._in_reasoning = False
+                    pos = close_idx + len("</think>")
+                else:
+                    # No closing tag yet - check for partial </think> at end
+                    partial_tag = self._find_partial_tag(content, pos, "</think>")
+                    if partial_tag is not None:
+                        # Emit everything before the partial tag as reasoning
+                        reasoning_chunk = content[pos:partial_tag]
+                        if reasoning_chunk:
+                            self._reasoning_buffer += reasoning_chunk
+                            yield StreamEvent.reasoning_delta(reasoning_chunk)
+                        self._tag_buffer = content[partial_tag:]
+                    else:
+                        # All remaining content is reasoning
+                        reasoning_chunk = content[pos:]
+                        if reasoning_chunk:
+                            self._reasoning_buffer += reasoning_chunk
+                            yield StreamEvent.reasoning_delta(reasoning_chunk)
+                    break
+            else:
+                # Outside <think> block - look for opening <think>
+                open_idx = content.find("<think>", pos)
+                if open_idx != -1:
+                    # Found opening tag - emit text before it
+                    text_chunk = content[pos:open_idx]
+                    if text_chunk:
+                        async for ev in self._emit_text(text_chunk):
+                            yield ev
+                    # Start reasoning mode
+                    self._in_think_tag = True
+                    if not self._in_reasoning:
+                        self._in_reasoning = True
+                        yield StreamEvent.reasoning_start()
+                    pos = open_idx + len("<think>")
+                else:
+                    # No opening tag - check for partial <think> at end
+                    partial_tag = self._find_partial_tag(content, pos, "<think>")
+                    if partial_tag is not None:
+                        text_chunk = content[pos:partial_tag]
+                        if text_chunk:
+                            async for ev in self._emit_text(text_chunk):
+                                yield ev
+                        self._tag_buffer = content[partial_tag:]
+                    else:
+                        # All remaining content is normal text
+                        text_chunk = content[pos:]
+                        if text_chunk:
+                            async for ev in self._emit_text(text_chunk):
+                                yield ev
+                    break
+
+    def _find_partial_tag(self, content: str, pos: int, tag: str) -> Optional[int]:
+        """
+        Check if content ends with a partial match of the given tag.
+
+        Returns the index where the partial match starts, or None if no partial match.
+        For example, if tag is "</think>" and content ends with "</thi",
+        returns the index of "<".
+        """
+        # Check suffixes of decreasing length
+        for length in range(min(len(tag) - 1, len(content) - pos), 0, -1):
+            suffix = content[len(content) - length:]
+            if tag.startswith(suffix):
+                return len(content) - length
+        return None
+
+    async def _emit_text(self, text: str) -> AsyncIterator[StreamEvent]:
+        """Emit text content as TEXT events."""
+        if not self._in_text:
+            self._in_text = True
+            yield StreamEvent.text_start()
+        self._text_buffer += text
+        yield StreamEvent.text_delta(text)
 
     async def _process_tool_calls(
         self,
@@ -752,6 +859,25 @@ class LLMStream:
         Yields:
             Final StreamEvent objects
         """
+        # Flush any buffered partial tag that never completed
+        if self._tag_buffer:
+            if self._in_think_tag:
+                # Partial close tag inside think block - treat as reasoning
+                self._reasoning_buffer += self._tag_buffer
+                yield StreamEvent.reasoning_delta(self._tag_buffer)
+            else:
+                # Partial open tag outside think block - treat as text
+                if not self._in_text:
+                    self._in_text = True
+                    yield StreamEvent.text_start()
+                self._text_buffer += self._tag_buffer
+                yield StreamEvent.text_delta(self._tag_buffer)
+            self._tag_buffer = ""
+
+        # Close think-tag reasoning if stream ended inside <think> block
+        if self._in_think_tag:
+            self._in_think_tag = False
+
         # IMPORTANT: End reasoning stream BEFORE text stream
         # Reasoning (thought) should logically complete before the final response (text)
         # This ensures correct timeline ordering in the frontend:
