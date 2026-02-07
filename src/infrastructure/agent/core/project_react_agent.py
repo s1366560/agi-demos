@@ -452,6 +452,62 @@ class ProjectReActAgent:
 
             return False
 
+    async def _check_and_refresh_mcp_tools(self) -> bool:
+        """Check if MCP tools need to be refreshed and refresh if needed.
+
+        Compares the count of MCP tools currently loaded in the agent against
+        the count of discovered tools in the database for enabled servers.
+        If they differ, triggers a full tool refresh.
+
+        Returns:
+            True if tools were refreshed, False otherwise
+        """
+        if not self._initialized or not self._tools:
+            return False
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+                SqlMCPServerRepository,
+            )
+
+            async with async_session_factory() as session:
+                repo = SqlMCPServerRepository(session)
+                servers = await repo.list_by_tenant(
+                    self.config.tenant_id, enabled_only=True
+                )
+
+            # Count expected MCP tools from DB
+            db_tool_count = 0
+            for server in servers:
+                discovered = server.get("discovered_tools") or []
+                db_tool_count += len(discovered)
+
+            # Count current MCP tools in agent
+            current_mcp_count = sum(
+                1 for name in self._tools.keys() if name.startswith("mcp__")
+            )
+
+            if db_tool_count == current_mcp_count:
+                return False
+
+            logger.info(
+                f"ProjectReActAgent[{self.project_key}]: "
+                f"MCP tools changed (loaded={current_mcp_count}, db={db_tool_count}), "
+                f"refreshing tools..."
+            )
+
+            success = await self.initialize(force_refresh=True)
+            return success
+
+        except Exception as e:
+            logger.warning(
+                f"ProjectReActAgent[{self.project_key}]: Error checking MCP tools: {e}"
+            )
+            return False
+
     async def _check_and_refresh_sandbox_tools(self) -> bool:
         """Check if sandbox tools need to be refreshed and refresh if needed.
 
@@ -567,6 +623,9 @@ class ProjectReActAgent:
 
         # Check if sandbox tools need to be refreshed (for sandboxes created after initialization)
         await self._check_and_refresh_sandbox_tools()
+
+        # Check if MCP tools need to be refreshed (for MCP servers added after initialization)
+        await self._check_and_refresh_mcp_tools()
 
         if self._is_shutting_down:
             yield {

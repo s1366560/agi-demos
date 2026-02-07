@@ -197,6 +197,24 @@ class AgentRuntimeBootstrapper:
                     logger.error("[AgentService] Graph service init failed: %s", e)
                     raise
 
+            # Initialize MCP adapter for MCP tool loading
+            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                get_mcp_adapter,
+                set_mcp_adapter,
+            )
+
+            if not get_mcp_adapter():
+                try:
+                    from src.infrastructure.mcp.adapter_factory import create_mcp_adapter
+
+                    mcp_adapter = await create_mcp_adapter()
+                    set_mcp_adapter(mcp_adapter)
+                    logger.info("[AgentService] MCP adapter bootstrapped for local execution")
+                except Exception as e:
+                    logger.warning(
+                        "[AgentService] MCP adapter init failed (MCP tools disabled): %s", e
+                    )
+
             AgentRuntimeBootstrapper._local_bootstrapped = True
 
     def _get_api_key(self, settings):
