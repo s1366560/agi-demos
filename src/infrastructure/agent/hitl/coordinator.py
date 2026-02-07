@@ -26,7 +26,6 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_redis_client
 from src.infrastructure.agent.hitl.temporal_hitl_handler import (
     ClarificationStrategy,
     DecisionStrategy,
@@ -75,20 +74,17 @@ class HITLCoordinator:
             raise ValueError(f"No strategy registered for HITL type: {hitl_type}")
         return strategy
 
-    async def request(
+    async def prepare_request(
         self,
         hitl_type: HITLType,
         request_data: Dict[str, Any],
         timeout_seconds: Optional[float] = None,
-    ) -> Any:
-        """Create a pending HITL request and return an awaitable Future.
+    ) -> str:
+        """Create a pending HITL Future and persist to DB. Returns the request_id.
 
-        Persists the request to the database and publishes an SSE event, then
-        returns a Future that will be resolved when ``resolve()`` is called with
-        the matching ``request_id``.
-
-        Returns the response value extracted by the type strategy.
-        Raises ``asyncio.TimeoutError`` if the user doesn't respond in time.
+        Call this BEFORE yielding the HITL-asked event so the event carries the
+        real request_id. Then call ``wait_for_response()`` to block until the
+        user responds.
         """
         timeout = timeout_seconds or self.default_timeout
         strategy = self._get_strategy(hitl_type)
@@ -120,20 +116,34 @@ class HITLCoordinator:
                 type_data=hitl_request.type_specific_data,
                 created_at=datetime.utcnow(),
             )
-
-            await _emit_hitl_sse_event(
-                request_id=request_id,
-                hitl_type=hitl_type,
-                conversation_id=self.conversation_id,
-                tenant_id=self.tenant_id,
-                project_id=self.project_id,
-                type_data=hitl_request.type_specific_data,
-                timeout_seconds=timeout,
-            )
         except Exception:
             self._pending.pop(request_id, None)
             unregister_coordinator(request_id)
             raise
+
+        logger.info(
+            f"[HITLCoordinator] Prepared request: "
+            f"type={hitl_type.value}, request_id={request_id}, "
+            f"timeout={timeout}s"
+        )
+        return request_id
+
+    async def wait_for_response(
+        self,
+        request_id: str,
+        hitl_type: HITLType,
+        timeout_seconds: Optional[float] = None,
+    ) -> Any:
+        """Await the Future for a previously prepared request.
+
+        Returns the response value extracted by the type strategy.
+        Raises ``asyncio.TimeoutError`` if the user doesn't respond in time.
+        """
+        timeout = timeout_seconds or self.default_timeout
+        strategy = self._get_strategy(hitl_type)
+        fut = self._pending.get(request_id)
+        if fut is None:
+            raise ValueError(f"No pending future for request_id={request_id}")
 
         logger.info(
             f"[HITLCoordinator] Waiting for response: "
@@ -147,7 +157,7 @@ class HITLCoordinator:
             logger.warning(
                 f"[HITLCoordinator] Timeout waiting for {hitl_type.value} request_id={request_id}"
             )
-            return strategy.get_default_response(hitl_request)
+            return _type_default(hitl_type)
         finally:
             self._pending.pop(request_id, None)
             unregister_coordinator(request_id)
@@ -157,9 +167,23 @@ class HITLCoordinator:
         )
 
         if response_data.get("cancelled") or response_data.get("timeout"):
-            return strategy.get_default_response(hitl_request)
+            return _type_default(hitl_type)
 
         return strategy.extract_response_value(response_data)
+
+    async def request(
+        self,
+        hitl_type: HITLType,
+        request_data: Dict[str, Any],
+        timeout_seconds: Optional[float] = None,
+    ) -> Any:
+        """Convenience wrapper: prepare + wait in one call.
+
+        Prefer ``prepare_request()`` + ``wait_for_response()`` when you need
+        to yield events between preparation and waiting (e.g. in generators).
+        """
+        request_id = await self.prepare_request(hitl_type, request_data, timeout_seconds)
+        return await self.wait_for_response(request_id, hitl_type, timeout_seconds)
 
     def resolve(self, request_id: str, response_data: Dict[str, Any]) -> bool:
         """Resolve a pending HITL Future with user response data.
@@ -236,6 +260,17 @@ def resolve_by_request_id(request_id: str, response_data: Dict[str, Any]) -> boo
 # ---------------------------------------------------------------------------
 
 
+def _type_default(hitl_type: HITLType) -> Any:
+    """Return a safe fallback value for timeout/cancellation without needing the request object."""
+    defaults: Dict[HITLType, Any] = {
+        HITLType.CLARIFICATION: "",
+        HITLType.DECISION: "",
+        HITLType.ENV_VAR: {},
+        HITLType.PERMISSION: False,
+    }
+    return defaults.get(hitl_type, "")
+
+
 async def _persist_hitl_request(
     request_id: str,
     hitl_type: HITLType,
@@ -280,64 +315,3 @@ async def _persist_hitl_request(
         repo = SqlHITLRequestRepository(session)
         await repo.create(entity)
         await session.commit()
-
-
-async def _emit_hitl_sse_event(
-    request_id: str,
-    hitl_type: HITLType,
-    conversation_id: str,
-    tenant_id: str,
-    project_id: str,
-    type_data: Dict[str, Any],
-    timeout_seconds: float,
-) -> None:
-    event_type_mapping = {
-        "clarification": "clarification_asked",
-        "decision": "decision_asked",
-        "env_var": "env_var_requested",
-        "permission": "permission_asked",
-    }
-    event_type = event_type_mapping.get(hitl_type.value, "clarification_asked")
-
-    event_data = {
-        "request_id": request_id,
-        "timeout_seconds": timeout_seconds,
-        **type_data,
-    }
-
-    await _publish_to_unified_event_bus(
-        event_type=event_type,
-        conversation_id=conversation_id,
-        data=event_data,
-    )
-
-
-async def _publish_to_unified_event_bus(
-    event_type: str,
-    conversation_id: str,
-    data: Dict[str, Any],
-) -> None:
-    try:
-        from src.domain.events.envelope import EventEnvelope
-        from src.domain.ports.services.unified_event_bus_port import RoutingKey
-        from src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus import (
-            RedisUnifiedEventBusAdapter,
-        )
-
-        redis_client = await get_redis_client()
-        if redis_client:
-            event_bus = RedisUnifiedEventBusAdapter(redis_client)
-            envelope = EventEnvelope(
-                event_type=event_type,
-                payload=data,
-                metadata={"conversation_id": conversation_id},
-            )
-            routing_key = RoutingKey(
-                namespace="agent",
-                entity_id=conversation_id,
-            )
-            await event_bus.publish(event=envelope, routing_key=routing_key)
-        else:
-            logger.warning("[HITLCoordinator] Redis client not available for SSE event")
-    except Exception as e:
-        logger.error(f"[HITLCoordinator] Failed to publish SSE event: {e}")

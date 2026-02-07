@@ -71,15 +71,6 @@ async def handle_clarification_tool(
             for opt in options_raw
         ]
 
-        yield AgentClarificationAskedEvent(
-            request_id="pending",
-            question=question,
-            clarification_type=clarification_type,
-            options=clarification_options,
-            allow_custom=allow_custom,
-            context=context,
-        )
-
         request_data = {
             "question": question,
             "options": clarification_options,
@@ -89,10 +80,25 @@ async def handle_clarification_tool(
             "default_value": default_value,
         }
 
-        start_time = time.time()
-        answer = await coordinator.request(
+        request_id = await coordinator.prepare_request(
             HITLType.CLARIFICATION,
             request_data,
+            timeout,
+        )
+
+        yield AgentClarificationAskedEvent(
+            request_id=request_id,
+            question=question,
+            clarification_type=clarification_type,
+            options=clarification_options,
+            allow_custom=allow_custom,
+            context=context,
+        )
+
+        start_time = time.time()
+        answer = await coordinator.wait_for_response(
+            request_id,
+            HITLType.CLARIFICATION,
             timeout,
         )
         end_time = time.time()
@@ -170,16 +176,6 @@ async def handle_decision_tool(
             for opt in options_raw
         ]
 
-        yield AgentDecisionAskedEvent(
-            request_id="pending",
-            question=question,
-            decision_type=decision_type,
-            options=decision_options,
-            allow_custom=allow_custom,
-            default_option=default_option,
-            context=context,
-        )
-
         request_data = {
             "question": question,
             "options": decision_options,
@@ -189,10 +185,26 @@ async def handle_decision_tool(
             "default_option": default_option,
         }
 
-        start_time = time.time()
-        decision = await coordinator.request(
+        request_id = await coordinator.prepare_request(
             HITLType.DECISION,
             request_data,
+            timeout,
+        )
+
+        yield AgentDecisionAskedEvent(
+            request_id=request_id,
+            question=question,
+            decision_type=decision_type,
+            options=decision_options,
+            allow_custom=allow_custom,
+            default_option=default_option,
+            context=context,
+        )
+
+        start_time = time.time()
+        decision = await coordinator.wait_for_response(
+            request_id,
+            HITLType.DECISION,
             timeout,
         )
         end_time = time.time()
@@ -277,13 +289,6 @@ async def handle_env_var_tool(
             }
             fields_for_sse.append(field_dict)
 
-        yield AgentEnvVarRequestedEvent(
-            request_id="pending",
-            tool_name=target_tool_name,
-            fields=fields_for_sse,
-            context=context if context else {},
-        )
-
         request_data = {
             "tool_name": target_tool_name,
             "fields": fields_for_sse,
@@ -291,10 +296,23 @@ async def handle_env_var_tool(
             "allow_save": True,
         }
 
-        start_time = time.time()
-        values = await coordinator.request(
+        request_id = await coordinator.prepare_request(
             HITLType.ENV_VAR,
             request_data,
+            timeout,
+        )
+
+        yield AgentEnvVarRequestedEvent(
+            request_id=request_id,
+            tool_name=target_tool_name,
+            fields=fields_for_sse,
+            context=context if context else {},
+        )
+
+        start_time = time.time()
+        values = await coordinator.wait_for_response(
+            request_id,
+            HITLType.ENV_VAR,
             timeout,
         )
         end_time = time.time()

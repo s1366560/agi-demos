@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -80,37 +80,42 @@ async def _handle_hitl_response(
 ) -> None:
     """
     Common handler for all HITL response types.
-    
+
     Uses Redis Streams to communicate with the running Ray Actor.
     """
+    from sqlalchemy import text
+
+    from src.domain.model.agent.hitl_request import HITLRequestStatus
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
-    from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-        SqlHITLRequestRepository,
-    )
-    from src.domain.model.agent.hitl_request import HITLRequestStatus
-    from sqlalchemy import text
 
     hitl_request = None
     session = None
-    
+
     # ALWAYS use a fresh session for HITL queries to avoid transaction isolation issues
     # WebSocket connections hold long-lived sessions that may not see other transactions
     try:
         async with async_session_factory() as fresh_session:
             # First, execute a raw SQL to ensure we get fresh data
             result = await fresh_session.execute(
-                text("SELECT id, request_type, status, tenant_id, project_id, conversation_id, request_metadata FROM hitl_requests WHERE id = :id"),
-                {"id": request_id}
+                text(
+                    "SELECT id, request_type, status, tenant_id, project_id, conversation_id, request_metadata FROM hitl_requests WHERE id = :id"
+                ),
+                {"id": request_id},
             )
             row = result.fetchone()
-            
+
             if row:
                 # Convert row to domain object manually
-                from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestType, HITLRequestStatus
                 from datetime import datetime
-                
+
+                from src.domain.model.agent.hitl_request import (
+                    HITLRequest,
+                    HITLRequestStatus,
+                    HITLRequestType,
+                )
+
                 hitl_request = HITLRequest(
                     id=row.id,
                     request_type=HITLRequestType(row.request_type.lower()),
@@ -123,7 +128,9 @@ async def _handle_hitl_response(
                     context={},
                     metadata=row.request_metadata or {},
                     created_at=datetime.utcnow(),
-                    status=HITLRequestStatus(row.status.lower()) if row.status else HITLRequestStatus.PENDING,
+                    status=HITLRequestStatus(row.status.lower())
+                    if row.status
+                    else HITLRequestStatus.PENDING,
                 )
                 session = fresh_session
                 logger.debug(f"[WS HITL] Found HITL request {request_id} using raw SQL query")
@@ -166,13 +173,15 @@ async def _handle_hitl_response(
                 or str(response_data.get("values", {}))
                 or response_data.get("action")
             )
-            
+
             await session.execute(
-                text("UPDATE hitl_requests SET status = 'completed', response = :response WHERE id = :id"),
-                {"id": request_id, "response": response_str}
+                text(
+                    "UPDATE hitl_requests SET status = 'completed', response = :response WHERE id = :id"
+                ),
+                {"id": request_id, "response": response_str},
             )
             await session.commit()
-                
+
             logger.info(
                 f"[WS HITL] User {context.user_id} responded to {hitl_type} {request_id} "
                 "via Redis Stream"
@@ -193,11 +202,9 @@ async def _handle_hitl_response(
             )
         except Exception as e:
             logger.error(f"[WS HITL] Failed to update HITL request: {e}", exc_info=True)
-            await context.send_error(f"Failed to update HITL request: {str(e)}")
+            await context.send_error(f"Failed to update HITL request: {e!s}")
     else:
-        await context.send_error(
-            f"Failed to send HITL response for {request_id}."
-        )
+        await context.send_error(f"Failed to send HITL response for {request_id}.")
 
 
 class ClarificationRespondHandler(WebSocketMessageHandler):
@@ -226,7 +233,7 @@ class ClarificationRespondHandler(WebSocketMessageHandler):
             )
         except Exception as e:
             logger.error(f"[WS HITL] Error handling clarification response: {e}", exc_info=True)
-            await context.send_error(f"Failed to process clarification response: {str(e)}")
+            await context.send_error(f"Failed to process clarification response: {e!s}")
 
 
 class DecisionRespondHandler(WebSocketMessageHandler):
@@ -255,7 +262,7 @@ class DecisionRespondHandler(WebSocketMessageHandler):
             )
         except Exception as e:
             logger.error(f"[WS HITL] Error handling decision response: {e}", exc_info=True)
-            await context.send_error(f"Failed to process decision response: {str(e)}")
+            await context.send_error(f"Failed to process decision response: {e!s}")
 
 
 class EnvVarRespondHandler(WebSocketMessageHandler):
@@ -284,7 +291,7 @@ class EnvVarRespondHandler(WebSocketMessageHandler):
             )
         except Exception as e:
             logger.error(f"[WS HITL] Error handling env var response: {e}", exc_info=True)
-            await context.send_error(f"Failed to process env var response: {str(e)}")
+            await context.send_error(f"Failed to process env var response: {e!s}")
 
 
 class PermissionRespondHandler(WebSocketMessageHandler):
@@ -314,7 +321,7 @@ class PermissionRespondHandler(WebSocketMessageHandler):
             )
         except Exception as e:
             logger.error(f"[WS HITL] Error handling permission response: {e}", exc_info=True)
-            await context.send_error(f"Failed to process permission response: {str(e)}")
+            await context.send_error(f"Failed to process permission response: {e!s}")
 
 
 # =============================================================================
@@ -327,15 +334,15 @@ async def _start_hitl_stream_bridge(
     request_id: str,
 ) -> None:
     """
-    Start streaming agent events after HITL response.
+    Start streaming agent events after HITL response (crash recovery only).
 
-    Handles page refresh scenarios:
-    1. Queries the HITL request from database to get conversation_id
-    2. Checks if there's already an active bridge task for this conversation
-    3. Only starts a new bridge if needed (page refresh scenario)
+    In the Future-based HITL architecture, the original bridge task (from
+    stream_agent_to_websocket) stays alive during HITL pauses and naturally
+    picks up events after the Future resolves. A new bridge is only needed
+    for crash recovery (page refresh, reconnect) when the original bridge
+    is dead.
     """
     try:
-        from src.configuration.factories import create_llm_client
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
             SqlHITLRequestRepository,
         )
@@ -356,21 +363,22 @@ async def _start_hitl_stream_bridge(
             logger.warning(f"[WS HITL] Request {request_id} missing conversation_id")
             return
 
-        # Check if there's already an active bridge task for this conversation.
-        # Cancel stale bridges instead of skipping — the old bridge may be stuck
-        # waiting for events from a previous HITL cycle that will never complete.
+        # If there's already an active bridge for this conversation, the
+        # original stream_agent_to_websocket task is still running and will
+        # deliver post-HITL events. No need for a second bridge.
         existing_tasks = manager.bridge_tasks.get(context.session_id, {})
         existing_task = existing_tasks.get(conversation_id)
         if existing_task and not existing_task.done():
             logger.info(
-                f"[WS HITL] Cancelling stale bridge task for conversation {conversation_id} "
-                f"before starting new one (consecutive HITL)"
+                f"[WS HITL] Original bridge still alive for conversation {conversation_id}, "
+                f"skipping HITL bridge (Future-based architecture)"
             )
-            existing_task.cancel()
+            return
 
-        # Start new bridge for this HITL response
+        # Original bridge is dead (crash recovery / page refresh).
+        # Start a new bridge to stream post-HITL events.
         logger.info(
-            f"[WS HITL] Starting stream bridge for request {request_id}, "
+            f"[WS HITL] Starting recovery bridge for request {request_id}, "
             f"conversation={conversation_id}"
         )
 
@@ -378,6 +386,8 @@ async def _start_hitl_stream_bridge(
         await manager.subscribe(context.session_id, conversation_id)
 
         # Create agent service
+        from src.configuration.factories import create_llm_client
+
         container = context.get_scoped_container()
         llm = create_llm_client(context.tenant_id)
         agent_service = container.agent_service(llm)
