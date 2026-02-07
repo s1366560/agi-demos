@@ -132,13 +132,19 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         return;
       }
 
+      const projectId = server?.project_id || currentProject?.id;
+      if (!projectId) {
+        message.error(t('tenant.mcpServers.selectProjectFirst', 'Please select a project first'));
+        return;
+      }
+
       const data: MCPServerCreate = {
         name: values.name,
         description: values.description,
         server_type: values.server_type,
         transport_config: transportConfig,
         enabled: values.enabled ?? true,
-        project_id: server?.project_id || currentProject?.id || '',
+        project_id: projectId,
       };
 
       if (isEdit && server) {
@@ -157,7 +163,7 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
         console.error('Submit error:', error);
       }
     }
-  }, [form, buildTransportConfig, isEdit, server, updateServer, createServer, onSuccess, t]);
+  }, [form, buildTransportConfig, isEdit, server, currentProject, updateServer, createServer, onSuccess, t]);
 
   return (
     <Modal
