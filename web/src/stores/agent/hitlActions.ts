@@ -2,26 +2,17 @@
  * HITL (Human-In-The-Loop) response actions extracted from agentV3.ts.
  *
  * Contains respondToClarification, respondToDecision, respondToEnvVar,
- * and respondToPermission actions that share an identical simple handler pattern.
+ * and respondToPermission actions that use the full stream event handler
+ * to properly process all agent events after HITL response.
  */
 
 import { agentService } from '../../services/agentService';
-import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
 
-import type {
-  AgentStreamHandler,
-  AgentEvent,
-  ThoughtEventData,
-  CompleteEventData,
-  ClarificationAskedEventData,
-  DecisionAskedEventData,
-  EnvVarRequestedEventData,
-  PermissionAskedEventData,
-  CostUpdateEventData,
-  TimelineEvent,
-} from '../../types/agent';
-import type { CostTrackingState } from '../../types/conversationState';
+import { createStreamEventHandlers } from './streamEventHandlers';
+
+import type { DeltaBufferState } from './streamEventHandlers';
+import type { AgentStreamHandler, TimelineEvent } from '../../types/agent';
 
 /**
  * Store setter/getter interface needed by HITL actions
@@ -33,6 +24,8 @@ export interface HITLActionDeps {
   set: (updater: any) => void;
   timelineToMessages: (timeline: TimelineEvent[]) => any[];
   clearAllDeltaBuffers: () => void;
+  getDeltaBuffer: (conversationId: string) => DeltaBufferState;
+  clearDeltaBuffers: (conversationId: string) => void;
   updateHITLEventInTimeline: (
     timeline: TimelineEvent[],
     requestId: string,
@@ -47,182 +40,40 @@ export interface HITLActionDeps {
   ) => TimelineEvent[];
 }
 
-/**
- * Create the simple handler used by all HITL response actions.
- * All four HITL response functions share this identical handler pattern.
- */
-function createSimpleHITLHandler(
-  deps: HITLActionDeps,
-  errorLogPrefix: string
-): AgentStreamHandler {
-  const { set, timelineToMessages } = deps;
-  const setState = set as any;
-
-  return {
-    onTextDelta: (event) => {
-      const delta = event.data.delta;
-      if (delta) {
-        setState((state: any) => ({
-          streamingAssistantContent: state.streamingAssistantContent + delta,
-          streamStatus: 'streaming',
-        }));
-      }
-    },
-    onTextEnd: (event) => {
-      const fullText = event.data.full_text;
-      if (fullText) {
-        setState({ streamingAssistantContent: fullText });
-      }
-    },
-    onComplete: (event) => {
-      setState((state: any) => {
-        const completeEvent: AgentEvent<CompleteEventData> =
-          event as AgentEvent<CompleteEventData>;
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, completeEvent);
-        return {
-          timeline: updatedTimeline,
-          messages: timelineToMessages(updatedTimeline),
-          isStreaming: false,
-          streamStatus: 'idle',
-          agentState: 'idle',
-        };
-      });
-    },
-    onError: (event) => {
-      console.error(`${errorLogPrefix} HITL response error:`, event.data);
-      setState({
-        error: event.data.message || 'Agent error',
-        isStreaming: false,
-        streamStatus: 'error',
-        agentState: 'idle',
-      });
-    },
-    onThought: (event) => {
-      setState((state: any) => {
-        const thoughtEvent: AgentEvent<ThoughtEventData> =
-          event as AgentEvent<ThoughtEventData>;
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, thoughtEvent);
-        return {
-          currentThought: event.data.thought || '',
-          timeline: updatedTimeline,
-          agentState: 'thinking',
-        };
-      });
-    },
-    onAct: (event) => {
-      setState((state: any) => {
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
-        return {
-          timeline: updatedTimeline,
-          agentState: 'acting',
-        };
-      });
-    },
-    onObserve: (event) => {
-      setState((state: any) => {
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, event);
-        return {
-          timeline: updatedTimeline,
-          agentState: 'observing',
-        };
-      });
-    },
-    // HITL event handlers for nested requests (agent paused again)
-    onClarificationAsked: (event) => {
-      const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
-        type: 'clarification_asked',
-        data: event.data,
-      };
-      setState((state: any) => {
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, clarificationEvent);
-        return {
-          timeline: updatedTimeline,
-          pendingClarification: event.data,
-          agentState: 'awaiting_input',
-          isStreaming: false,
-          streamStatus: 'idle',
-        };
-      });
-    },
-    onDecisionAsked: (event) => {
-      const decisionEvent: AgentEvent<DecisionAskedEventData> = {
-        type: 'decision_asked',
-        data: event.data,
-      };
-      setState((state: any) => {
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, decisionEvent);
-        return {
-          timeline: updatedTimeline,
-          pendingDecision: event.data,
-          agentState: 'awaiting_input',
-          isStreaming: false,
-          streamStatus: 'idle',
-        };
-      });
-    },
-    onEnvVarRequested: (event) => {
-      const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
-        type: 'env_var_requested',
-        data: event.data,
-      };
-      setState((state: any) => {
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, envVarEvent);
-        return {
-          timeline: updatedTimeline,
-          pendingEnvVarRequest: event.data,
-          agentState: 'awaiting_input',
-          isStreaming: false,
-          streamStatus: 'idle',
-        };
-      });
-    },
-    onPermissionAsked: (event) => {
-      const permissionEvent: AgentEvent<PermissionAskedEventData> = {
-        type: 'permission_asked',
-        data: event.data,
-      };
-      setState((state: any) => {
-        const updatedTimeline = appendSSEEventToTimeline(state.timeline, permissionEvent);
-        return {
-          timeline: updatedTimeline,
-          pendingPermission: event.data,
-          agentState: 'awaiting_input',
-          isStreaming: false,
-          streamStatus: 'idle',
-        };
-      });
-    },
-    onCostUpdate: (event) => {
-      const costData = event.data as CostUpdateEventData;
-      const costTracking: CostTrackingState = {
-        inputTokens: costData.input_tokens,
-        outputTokens: costData.output_tokens,
-        totalTokens: costData.total_tokens,
-        costUsd: costData.cost_usd,
-        model: costData.model,
-        lastUpdated: new Date().toISOString(),
-      };
-      setState({ costTracking });
-    },
-  };
-}
+const TOKEN_BATCH_INTERVAL_MS = 50;
+const THOUGHT_BATCH_INTERVAL_MS = 80;
 
 /**
- * Ensure WebSocket is connected and subscribe to conversation
+ * Ensure WebSocket is connected and subscribe with the full stream handler.
+ * Uses createStreamEventHandlers for complete event coverage (tool calls,
+ * work plans, artifacts, etc.) instead of the minimal simple handler.
  */
 async function ensureConnectedAndSubscribe(
-  activeConversationId: string | null,
-  handler: AgentStreamHandler
+  conversationId: string,
+  deps: HITLActionDeps
 ): Promise<void> {
   if (!agentService.isConnected()) {
     console.log('[agentV3] Connecting WebSocket before HITL response...');
     await agentService.connect();
   }
 
-  if (activeConversationId) {
-    agentService.subscribe(activeConversationId, handler);
-    console.log('[agentV3] Subscribed to conversation:', activeConversationId);
-  }
+  const handler: AgentStreamHandler = createStreamEventHandlers(
+    conversationId,
+    undefined,
+    {
+      get: deps.get as any,
+      set: deps.set as any,
+      getDeltaBuffer: deps.getDeltaBuffer,
+      clearDeltaBuffers: deps.clearDeltaBuffers,
+      clearAllDeltaBuffers: deps.clearAllDeltaBuffers,
+      timelineToMessages: deps.timelineToMessages,
+      tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
+      thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+    }
+  );
+
+  agentService.subscribe(conversationId, handler);
+  console.log('[agentV3] Subscribed to conversation with full handler:', conversationId);
 }
 
 /**
@@ -236,10 +87,10 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToClarification: async (requestId: string, answer: string): Promise<void> => {
       console.log('Responding to clarification', requestId, answer);
       const { activeConversationId } = get();
+      if (!activeConversationId) return;
 
       try {
-        const simpleHandler = createSimpleHITLHandler(deps, '[agentV3]');
-        await ensureConnectedAndSubscribe(activeConversationId, simpleHandler);
+        await ensureConnectedAndSubscribe(activeConversationId, deps);
 
         await agentService.respondToClarification(requestId, answer);
         clearAllDeltaBuffers();
@@ -269,10 +120,10 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToDecision: async (requestId: string, decision: string): Promise<void> => {
       console.log('Responding to decision', requestId, decision);
       const { activeConversationId } = get();
+      if (!activeConversationId) return;
 
       try {
-        const simpleHandler = createSimpleHITLHandler(deps, '[agentV3]');
-        await ensureConnectedAndSubscribe(activeConversationId, simpleHandler);
+        await ensureConnectedAndSubscribe(activeConversationId, deps);
 
         await agentService.respondToDecision(requestId, decision);
         clearAllDeltaBuffers();
@@ -300,10 +151,10 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToEnvVar: async (requestId: string, values: Record<string, string>): Promise<void> => {
       console.log('Responding to env var request', requestId, values);
       const { activeConversationId } = get();
+      if (!activeConversationId) return;
 
       try {
-        const simpleHandler = createSimpleHITLHandler(deps, '[agentV3]');
-        await ensureConnectedAndSubscribe(activeConversationId, simpleHandler);
+        await ensureConnectedAndSubscribe(activeConversationId, deps);
 
         await agentService.respondToEnvVar(requestId, values);
         clearAllDeltaBuffers();
@@ -333,10 +184,10 @@ export function createHITLActions(deps: HITLActionDeps) {
     respondToPermission: async (requestId: string, granted: boolean): Promise<void> => {
       console.log('Responding to permission request', requestId, granted);
       const { activeConversationId } = get();
+      if (!activeConversationId) return;
 
       try {
-        const simpleHandler = createSimpleHITLHandler(deps, '[agentV3]');
-        await ensureConnectedAndSubscribe(activeConversationId, simpleHandler);
+        await ensureConnectedAndSubscribe(activeConversationId, deps);
 
         await agentService.respondToPermission(requestId, granted);
         clearAllDeltaBuffers();

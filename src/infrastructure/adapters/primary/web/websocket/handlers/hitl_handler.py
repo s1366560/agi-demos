@@ -91,7 +91,6 @@ async def _handle_hitl_response(
     )
 
     hitl_request = None
-    session = None
 
     # ALWAYS use a fresh session for HITL queries to avoid transaction isolation issues
     # WebSocket connections hold long-lived sessions that may not see other transactions
@@ -100,7 +99,9 @@ async def _handle_hitl_response(
             # First, execute a raw SQL to ensure we get fresh data
             result = await fresh_session.execute(
                 text(
-                    "SELECT id, request_type, status, tenant_id, project_id, conversation_id, request_metadata FROM hitl_requests WHERE id = :id"
+                    "SELECT id, request_type, status, tenant_id, project_id, "
+                    "conversation_id, question, request_metadata "
+                    "FROM hitl_requests WHERE id = :id"
                 ),
                 {"id": request_id},
             )
@@ -123,7 +124,7 @@ async def _handle_hitl_response(
                     message_id=None,
                     tenant_id=row.tenant_id,
                     project_id=row.project_id,
-                    question="",
+                    question=row.question or "HITL request",
                     options=[],
                     context={},
                     metadata=row.request_metadata or {},
@@ -132,7 +133,6 @@ async def _handle_hitl_response(
                     if row.status
                     else HITLRequestStatus.PENDING,
                 )
-                session = fresh_session
                 logger.debug(f"[WS HITL] Found HITL request {request_id} using raw SQL query")
             else:
                 logger.warning(f"[WS HITL] HITL request {request_id} not found via raw SQL")
@@ -144,10 +144,13 @@ async def _handle_hitl_response(
         await context.send_error(f"HITL request {request_id} not found")
         return
 
+    conversation_id = hitl_request.conversation_id
+
     # Check if already answered
     if hitl_request.status != HITLRequestStatus.PENDING:
         await context.send_error(
-            f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})"
+            f"HITL request {request_id} is no longer pending (status: {hitl_request.status.value})",
+            conversation_id=conversation_id,
         )
         return
 
@@ -156,7 +159,7 @@ async def _handle_hitl_response(
     redis_sent = await _publish_hitl_response_to_redis(
         tenant_id=hitl_request.tenant_id,
         project_id=hitl_request.project_id,
-        conversation_id=hitl_request.conversation_id,
+        conversation_id=conversation_id,
         request_id=request_id,
         hitl_type=hitl_type,
         response_data=response_data,
@@ -165,7 +168,7 @@ async def _handle_hitl_response(
     )
 
     if redis_sent:
-        # Update database record using raw SQL to avoid ORM session issues
+        # Update database record using a fresh session (the query session is already closed)
         try:
             response_str = (
                 response_data.get("answer")
@@ -174,13 +177,14 @@ async def _handle_hitl_response(
                 or response_data.get("action")
             )
 
-            await session.execute(
-                text(
-                    "UPDATE hitl_requests SET status = 'completed', response = :response WHERE id = :id"
-                ),
-                {"id": request_id, "response": response_str},
-            )
-            await session.commit()
+            async with async_session_factory() as update_session:
+                await update_session.execute(
+                    text(
+                        "UPDATE hitl_requests SET status = 'completed', response = :response WHERE id = :id"
+                    ),
+                    {"id": request_id, "response": response_str},
+                )
+                await update_session.commit()
 
             logger.info(
                 f"[WS HITL] User {context.user_id} responded to {hitl_type} {request_id} "
@@ -192,6 +196,7 @@ async def _handle_hitl_response(
                     "type": ack_type,
                     "request_id": request_id,
                     "success": True,
+                    "conversation_id": conversation_id,
                 }
             )
 
@@ -202,9 +207,15 @@ async def _handle_hitl_response(
             )
         except Exception as e:
             logger.error(f"[WS HITL] Failed to update HITL request: {e}", exc_info=True)
-            await context.send_error(f"Failed to update HITL request: {e!s}")
+            await context.send_error(
+                f"Failed to update HITL request: {e!s}",
+                conversation_id=conversation_id,
+            )
     else:
-        await context.send_error(f"Failed to send HITL response for {request_id}.")
+        await context.send_error(
+            f"Failed to send HITL response for {request_id}.",
+            conversation_id=conversation_id,
+        )
 
 
 class ClarificationRespondHandler(WebSocketMessageHandler):

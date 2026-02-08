@@ -31,6 +31,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { LazyButton, LazyProgress, LazyTag } from '@/components/ui/lazyAntd';
 
+import { useAgentV3Store } from '../../stores/agentV3';
 import { useUnifiedHITLStore } from '../../stores/hitlStore.unified';
 
 import type {
@@ -39,7 +40,7 @@ import type {
   EnvVarRequestedEventData,
   PermissionAskedEventData,
 } from '../../types/agent';
-import type { HITLType, HITLResponseData } from '../../types/hitl.unified';
+import type { HITLType, HITLResponseData, ClarificationResponseData, DecisionResponseData, EnvVarResponseData, PermissionResponseData } from '../../types/hitl.unified';
 
 // =============================================================================
 // Types
@@ -801,36 +802,101 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
     expiresAt,
     timeoutSeconds = 300,
   }) => {
-    // Use useShallow to avoid infinite re-renders from object selector
-    const { submitResponse, isSubmitting, submittingRequestId, requestStatuses } =
+    // Unified HITL store for status tracking UI
+    const { isSubmitting, submittingRequestId, requestStatuses } =
       useUnifiedHITLStore(
         useShallow((state) => ({
-          submitResponse: state.submitResponse,
           isSubmitting: state.isSubmitting,
           submittingRequestId: state.submittingRequestId,
           requestStatuses: state.requestStatuses,
         }))
       );
 
+    // AgentV3 store respond methods set up WebSocket handler + streaming state
+    const {
+      respondToClarification,
+      respondToDecision,
+      respondToEnvVar,
+      respondToPermission,
+    } = useAgentV3Store(
+      useShallow((state) => ({
+        respondToClarification: state.respondToClarification,
+        respondToDecision: state.respondToDecision,
+        respondToEnvVar: state.respondToEnvVar,
+        respondToPermission: state.respondToPermission,
+      }))
+    );
+
+    const [localSubmitting, setLocalSubmitting] = useState(false);
+    const [localAnsweredValue, setLocalAnsweredValue] = useState<string | undefined>(undefined);
+
     // Check if answered from either props (history) or store (real-time)
     const storeStatus = requestId ? requestStatuses.get(requestId) : undefined;
     const isAnsweredFromStore = storeStatus === 'answered' || storeStatus === 'completed';
     const isAnswered = isAnsweredProp || isAnsweredFromStore;
 
-    // For real-time answered, we don't have the value yet, use prop or placeholder
-    const answeredValue = answeredValueProp || (isAnsweredFromStore ? '已提交' : undefined);
+    // Priority: prop from timeline event > local state from submission > fallback
+    const answeredValue = answeredValueProp || localAnsweredValue || (isAnsweredFromStore ? '已提交' : undefined);
 
-    const isCurrentlySubmitting = isSubmitting && submittingRequestId === requestId;
+    const isCurrentlySubmitting =
+      localSubmitting || (isSubmitting && submittingRequestId === requestId);
 
     const handleSubmit = useCallback(
       async (responseData: HITLResponseData) => {
+        setLocalSubmitting(true);
         try {
-          await submitResponse(requestId, hitlType, responseData);
+          // Extract the display value before submitting so the card shows it immediately
+          let displayValue: string | undefined;
+
+          // Use agentV3 store respond methods which set up WebSocket handler,
+          // streaming state, and make the HTTP call in one step.
+          switch (hitlType) {
+            case 'clarification': {
+              const data = responseData as ClarificationResponseData;
+              const answer = Array.isArray(data.answer) ? data.answer.join(', ') : data.answer;
+              displayValue = answer;
+              await respondToClarification(requestId, answer);
+              break;
+            }
+            case 'decision': {
+              const data = responseData as DecisionResponseData;
+              const decision = Array.isArray(data.decision)
+                ? data.decision.join(', ')
+                : data.decision;
+              displayValue = decision;
+              await respondToDecision(requestId, decision);
+              break;
+            }
+            case 'env_var': {
+              const data = responseData as EnvVarResponseData;
+              displayValue = Object.keys(data.values).join(', ');
+              await respondToEnvVar(requestId, data.values);
+              break;
+            }
+            case 'permission': {
+              const data = responseData as PermissionResponseData;
+              displayValue = data.action === 'allow' ? 'allow' : 'deny';
+              await respondToPermission(requestId, data.action === 'allow');
+              break;
+            }
+          }
+          setLocalAnsweredValue(displayValue);
+          // Also update unified HITL store status for UI tracking
+          useUnifiedHITLStore.getState().updateRequestStatus(requestId, 'answered');
         } catch (error) {
           console.error('Failed to submit HITL response:', error);
+        } finally {
+          setLocalSubmitting(false);
         }
       },
-      [requestId, hitlType, submitResponse]
+      [
+        requestId,
+        hitlType,
+        respondToClarification,
+        respondToDecision,
+        respondToEnvVar,
+        respondToPermission,
+      ]
     );
 
     const icon = getHITLIcon(hitlType);

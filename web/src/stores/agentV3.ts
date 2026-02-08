@@ -209,6 +209,78 @@ function updateHITLEventInTimeline(
 }
 
 /**
+ * Merge HITL response events (_answered/_provided/_replied/_granted) into their
+ * corresponding request events (_asked/_requested) so only one card renders.
+ *
+ * For each response event, find the matching request event by requestId,
+ * mark it as answered with the response value, then remove the response event.
+ */
+function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEvent[] {
+  // Map from response type to { requestType, field to copy }
+  const responseTypeMap: Record<
+    string,
+    { requestType: string; mapFn: (resp: any) => Record<string, unknown> }
+  > = {
+    clarification_answered: {
+      requestType: 'clarification_asked',
+      mapFn: (r) => ({ answered: true, answer: r.answer }),
+    },
+    decision_answered: {
+      requestType: 'decision_asked',
+      mapFn: (r) => ({ answered: true, decision: r.decision }),
+    },
+    env_var_provided: {
+      requestType: 'env_var_requested',
+      mapFn: (r) => ({ answered: true, variableNames: r.variableNames, values: r.values }),
+    },
+    permission_replied: {
+      requestType: 'permission_asked',
+      mapFn: (r) => ({ answered: true, granted: r.granted }),
+    },
+    permission_granted: {
+      requestType: 'permission_asked',
+      mapFn: (r) => ({ answered: true, granted: r.granted !== undefined ? r.granted : true }),
+    },
+  };
+
+  // Collect response events keyed by requestId
+  const responsesByRequestId = new Map<string, Record<string, unknown>>();
+  const responseEventIds = new Set<string>();
+
+  for (const event of timeline) {
+    const mapping = responseTypeMap[event.type];
+    if (mapping) {
+      const requestId = (event as any).requestId;
+      if (requestId) {
+        responsesByRequestId.set(requestId, mapping.mapFn(event));
+        responseEventIds.add(event.id);
+      }
+    }
+  }
+
+  if (responsesByRequestId.size === 0) return timeline;
+
+  // Merge into request events and filter out response events
+  return timeline
+    .map((event) => {
+      const requestId = (event as any).requestId;
+      if (requestId && responsesByRequestId.has(requestId)) {
+        const requestTypes = [
+          'clarification_asked',
+          'decision_asked',
+          'env_var_requested',
+          'permission_asked',
+        ];
+        if (requestTypes.includes(event.type)) {
+          return { ...event, ...responsesByRequestId.get(requestId) };
+        }
+      }
+      return event;
+    })
+    .filter((event) => !responseEventIds.has(event.id));
+}
+
+/**
  * Convert TimelineEvent[] to Message[] - Simple 1:1 conversion without merging
  * Each timeline event maps directly to a message for natural ordering
  */
@@ -939,21 +1011,24 @@ export const useAgentV3Store = create<AgentV3State>()(
               return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
             });
 
+            // Merge HITL response events into request events for single-card rendering
+            const mergedTimeline = mergeHITLResponseEvents(sortedTimeline);
+
             // Store the raw timeline and derive messages (no merging)
-            const messages = timelineToMessages(sortedTimeline);
+            const messages = timelineToMessages(mergedTimeline);
             const firstTimeUs = response.first_time_us ?? null;
             const firstCounter = response.first_counter ?? null;
             const lastTimeUs = response.last_time_us ?? null;
 
             // DEBUG: Log assistant_message events
-            const assistantMsgs = sortedTimeline.filter((e: any) => e.type === 'assistant_message');
+            const assistantMsgs = mergedTimeline.filter((e: any) => e.type === 'assistant_message');
             console.log(
               `[AgentV3] loadMessages: Found ${assistantMsgs.length} assistant_message events`,
               assistantMsgs
             );
 
             // DEBUG: Log artifact events in timeline
-            const artifactEvents = sortedTimeline.filter((e: any) => e.type === 'artifact_created');
+            const artifactEvents = mergedTimeline.filter((e: any) => e.type === 'artifact_created');
             console.log(
               `[AgentV3] loadMessages: Found ${artifactEvents.length} artifact_created events in timeline`,
               artifactEvents
@@ -966,7 +1041,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             // Update both global state and conversation-specific state
             const newConvState: Partial<ConversationState> = {
-              timeline: sortedTimeline, // Use sorted timeline
+              timeline: mergedTimeline,
               hasEarlier: response.has_more ?? false,
               earliestTimeUs: firstTimeUs,
               earliestCounter: firstCounter,
@@ -984,7 +1059,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
               return {
                 conversationStates: newStates,
-                timeline: sortedTimeline, // Use sorted timeline
+                timeline: mergedTimeline,
                 messages: messages,
                 isLoadingHistory: false,
                 hasEarlier: response.has_more ?? false,
@@ -1105,12 +1180,14 @@ export const useAgentV3Store = create<AgentV3State>()(
               if (timeDiff !== 0) return timeDiff;
               return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
             });
-            const newMessages = timelineToMessages(sortedTimeline);
+            // Merge HITL response events into request events for single-card rendering
+            const mergedTimeline = mergeHITLResponseEvents(sortedTimeline);
+            const newMessages = timelineToMessages(mergedTimeline);
             const newFirstTimeUs = response.first_time_us ?? null;
             const newFirstCounter = response.first_counter ?? null;
 
             set({
-              timeline: sortedTimeline,
+              timeline: mergedTimeline,
               messages: newMessages,
               isLoadingEarlier: false,
               hasEarlier: response.has_more ?? false,
@@ -1120,7 +1197,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             console.log(
               '[AgentV3] Loaded earlier messages, total timeline length:',
-              sortedTimeline.length
+              mergedTimeline.length
             );
             return true;
           } catch (error) {
@@ -1353,6 +1430,8 @@ export const useAgentV3Store = create<AgentV3State>()(
           set: set as any,
           timelineToMessages,
           clearAllDeltaBuffers,
+          getDeltaBuffer,
+          clearDeltaBuffers,
           updateHITLEventInTimeline,
         }),
 

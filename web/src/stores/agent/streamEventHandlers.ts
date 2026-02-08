@@ -33,7 +33,7 @@ import type { AdditionalAgentHandlers } from '../agentV3';
 /**
  * Delta buffer management interface for token batching
  */
-interface DeltaBufferState {
+export interface DeltaBufferState {
   textDeltaBuffer: string;
   textDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
   thoughtDeltaBuffer: string;
