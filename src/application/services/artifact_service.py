@@ -175,6 +175,9 @@ class ArtifactService:
             artifact.mark_uploading()
 
             # Upload to storage
+            logger.warning(
+                f"[ArtifactUpload] Starting S3 upload: key={object_key}"
+            )
             result = await self._storage.upload_file(
                 file_content=file_content,
                 object_key=object_key,
@@ -187,12 +190,17 @@ class ArtifactService:
                     "source_tool": source_tool or "",
                 },
             )
+            logger.warning(
+                f"[ArtifactUpload] S3 upload done: key={object_key}, etag={result.etag}"
+            )
 
             # Generate presigned URL
+            logger.warning("[ArtifactUpload] Generating presigned URL...")
             url = await self._storage.generate_presigned_url(
                 object_key=object_key,
                 expiration_seconds=self._url_expiration,
             )
+            logger.warning(f"[ArtifactUpload] Presigned URL generated")
 
             logger.warning(
                 f"[ArtifactUpload] Uploaded {artifact_id}: "

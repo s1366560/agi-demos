@@ -1408,6 +1408,7 @@ class SessionProcessor:
         project_id = ctx.get("project_id")
         tenant_id = ctx.get("tenant_id")
         conversation_id = ctx.get("conversation_id")
+        message_id = ctx.get("message_id")
 
         if not project_id or not tenant_id:
             logger.warning(
@@ -1499,68 +1500,115 @@ class SessionProcessor:
                     source_path=artifact_info.get("path"),
                 )
 
-                # Upload artifact (with timeout)
+                # Upload artifact in a background task so the agent loop
+                # is not blocked by S3/MinIO I/O contention.
                 logger.warning(
-                    f"[ArtifactUpload] Uploading: filename={filename}, "
+                    f"[ArtifactUpload] Scheduling background upload: filename={filename}, "
                     f"size={len(file_content)}, project_id={project_id}"
                 )
-                try:
-                    async with asyncio.timeout(60):
-                        artifact = await self._artifact_service.create_artifact(
-                            file_content=file_content,
-                            filename=filename,
-                            project_id=project_id,
-                            tenant_id=tenant_id,
-                            sandbox_id=None,
-                            tool_execution_id=tool_execution_id,
-                            conversation_id=conversation_id,
-                            source_tool=tool_name,
-                            source_path=artifact_info.get("path"),
-                            metadata={
-                                "extracted_from": "export_artifact",
-                                "original_mime": artifact_info.get("mime_type"),
-                                "category": artifact_info.get("category"),
-                                "is_binary": artifact_info.get("is_binary"),
-                            },
-                        )
-                    logger.warning(
-                        f"[ArtifactUpload] SUCCESS: id={artifact.id}, "
-                        f"filename={artifact.filename}, "
-                        f"category={artifact.category.value}, size={artifact.size_bytes}"
+
+                async def _background_upload(
+                    svc: "ArtifactService",
+                    content: bytes,
+                    fname: str,
+                    pid: str,
+                    tid: str,
+                    texec_id: str,
+                    conv_id: str,
+                    msg_id: str,
+                    tname: str,
+                    art_info: dict,
+                    art_id: str,
+                ):
+                    """Run artifact upload in background, publish result to Redis."""
+                    from src.infrastructure.agent.actor.execution import (
+                        _publish_event_to_stream,
                     )
 
-                    # Yield artifact_ready with the download URL
-                    yield AgentArtifactReadyEvent(
-                        artifact_id=artifact.id,
-                        filename=artifact.filename,
-                        mime_type=artifact.mime_type,
-                        category=artifact.category.value,
-                        size_bytes=artifact.size_bytes,
-                        url=artifact.url or "",
-                        preview_url=artifact.preview_url,
-                        tool_execution_id=tool_execution_id,
-                        source_tool=tool_name,
+                    try:
+                        artifact = await svc.create_artifact(
+                            file_content=content,
+                            filename=fname,
+                            project_id=pid,
+                            tenant_id=tid,
+                            sandbox_id=None,
+                            tool_execution_id=texec_id,
+                            conversation_id=conv_id,
+                            source_tool=tname,
+                            source_path=art_info.get("path"),
+                            metadata={
+                                "extracted_from": "export_artifact",
+                                "original_mime": art_info.get("mime_type"),
+                                "category": art_info.get("category"),
+                                "is_binary": art_info.get("is_binary"),
+                            },
+                        )
+                        logger.warning(
+                            f"[ArtifactUpload] Background upload SUCCESS: "
+                            f"id={artifact.id}, filename={artifact.filename}"
+                        )
+
+                        # Publish artifact_ready event to Redis stream
+                        ready_event = AgentArtifactReadyEvent(
+                            artifact_id=artifact.id,
+                            filename=artifact.filename,
+                            mime_type=artifact.mime_type,
+                            category=artifact.category.value,
+                            size_bytes=artifact.size_bytes,
+                            url=artifact.url or "",
+                            preview_url=artifact.preview_url,
+                            tool_execution_id=texec_id,
+                            source_tool=tname,
+                        )
+                        import time as _time
+
+                        await _publish_event_to_stream(
+                            conversation_id=conv_id,
+                            event=ready_event.to_event_dict(),
+                            message_id=msg_id,
+                            event_time_us=int(_time.time() * 1_000_000),
+                            event_counter=0,
+                        )
+                    except Exception as upload_err:
+                        logger.error(
+                            f"[ArtifactUpload] Background upload failed: {fname}: {upload_err}"
+                        )
+                        error_event = AgentArtifactErrorEvent(
+                            artifact_id=art_id,
+                            filename=fname,
+                            tool_execution_id=texec_id,
+                            error=f"Upload failed: {upload_err}",
+                        )
+                        import time as _time
+
+                        try:
+                            await _publish_event_to_stream(
+                                conversation_id=conv_id,
+                                event=error_event.to_event_dict(),
+                                message_id=msg_id,
+                                event_time_us=int(_time.time() * 1_000_000),
+                                event_counter=0,
+                            )
+                        except Exception:
+                            logger.error(
+                                "[ArtifactUpload] Failed to publish error event"
+                            )
+
+                asyncio.create_task(
+                    _background_upload(
+                        svc=self._artifact_service,
+                        content=file_content,
+                        fname=filename,
+                        pid=project_id,
+                        tid=tenant_id,
+                        texec_id=tool_execution_id,
+                        conv_id=conversation_id or "",
+                        msg_id=message_id or "",
+                        tname=tool_name,
+                        art_info=artifact_info,
+                        art_id=artifact_id,
                     )
-                except TimeoutError:
-                    logger.error(
-                        f"[ArtifactUpload] Upload timed out for {filename}"
-                    )
-                    yield AgentArtifactErrorEvent(
-                        artifact_id=artifact_id,
-                        filename=filename,
-                        tool_execution_id=tool_execution_id,
-                        error=f"Upload timed out for {filename}",
-                    )
-                except Exception as upload_err:
-                    logger.error(
-                        f"[ArtifactUpload] Upload failed for {filename}: {upload_err}"
-                    )
-                    yield AgentArtifactErrorEvent(
-                        artifact_id=artifact_id,
-                        filename=filename,
-                        tool_execution_id=tool_execution_id,
-                        error=f"Upload failed: {upload_err}",
-                    )
+                )
                 return
 
             except Exception as e:

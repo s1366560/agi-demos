@@ -552,12 +552,12 @@ class AgentService(AgentServicePort):
                 if event_type in ("complete", "error"):
                     logger.info(
                         f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
-                        f"reading delayed events for 2 seconds"
+                        f"reading delayed events for 5 seconds"
                     )
                     # Continue reading for a short time to catch delayed events like title_generated
-                    # These events are published AFTER the complete event by the backend
+                    # and artifact_ready (uploaded in background after agent completes)
                     delayed_start = time_module.time()
-                    max_delay = 2.0  # Read for up to 2 more seconds
+                    max_delay = 5.0  # Read for up to 5 more seconds
                     try:
                         async for delayed_message in self._event_bus.stream_read(
                             stream_key, last_id="0", count=100, block_ms=200
