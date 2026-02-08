@@ -1,0 +1,61 @@
+#!/bin/bash
+# KasmVNC session startup script for KDE Plasma 6 on Ubuntu 25.04
+# This script is executed when a KasmVNC session is started
+# IMPORTANT: This script MUST keep running or the VNC session will terminate
+
+# Detect running user and set paths dynamically
+_UID=$(id -u)
+_HOME=$(eval echo "~$(whoami)")
+export HOME="${HOME:-$_HOME}"
+
+# Get the VNC display number
+DISPLAY=${DISPLAY:-:1}
+export DISPLAY
+
+# Set up XDG directories based on actual running user
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$_UID}
+export XDG_DATA_HOME="${HOME}/.local/share"
+export XDG_CONFIG_HOME="${HOME}/.config"
+export XDG_CACHE_HOME="${HOME}/.cache"
+export XDG_STATE_HOME="${HOME}/.local/state"
+
+# Create required directories
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null
+chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+mkdir -p "$XDG_CONFIG_HOME"
+mkdir -p "$XDG_DATA_HOME"
+mkdir -p "$XDG_CACHE_HOME"
+mkdir -p /tmp/.ICE-unix
+chmod 1777 /tmp/.ICE-unix 2>/dev/null || true
+
+# Copy default KDE configs on first run
+if [ -f /etc/xdg/kdeglobals ] && [ ! -f "$XDG_CONFIG_HOME/kdeglobals" ]; then
+    cp /etc/xdg/kdeglobals "$XDG_CONFIG_HOME/kdeglobals" 2>/dev/null || true
+fi
+if [ -f /etc/xdg/kwinrc ] && [ ! -f "$XDG_CONFIG_HOME/kwinrc" ]; then
+    cp /etc/xdg/kwinrc "$XDG_CONFIG_HOME/kwinrc" 2>/dev/null || true
+fi
+
+# Unset session management variables for VNC
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export DESKTOP_SESSION=plasma
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=KDE
+
+# Start D-Bus session bus
+mkdir -p "$XDG_RUNTIME_DIR"
+if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+else
+    dbus-daemon --session --address="unix:path=$XDG_RUNTIME_DIR/bus" --nofork --syslog &
+    sleep 1
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+
+# Start PulseAudio for audio streaming
+pulseaudio --start --log-target=syslog 2>/dev/null || true
+
+# Launch KDE Plasma X11 session
+# startplasma-x11 handles launching kwin, plasmashell, and all Plasma components
+exec dbus-launch --exit-with-session startplasma-x11

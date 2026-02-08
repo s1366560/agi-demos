@@ -1,0 +1,60 @@
+# KasmVNC Server Configuration
+# All-in-one VNC server with built-in web client
+# Replaces TigerVNC + noVNC + websockify
+
+desktop:
+  resolution:
+    width: 1920
+    height: 1080
+  allow_resize: true
+  pixel_depth: 24
+
+network:
+  protocol: http
+  websocket_port: auto
+  interface: 0.0.0.0
+  use_ipv4: true
+  use_ipv6: false
+  udp:
+    public_ip: auto
+
+user_session:
+  idle_timeout: 0
+  session_type: shared
+
+data_loss_prevention:
+  clipboard:
+    delay_between_operations: none
+    allow_mimetypes:
+      - text/plain
+      - text/html
+      - image/png
+      - image/jpeg
+    server_to_client:
+      enabled: true
+      primary_clipboard_enabled: true
+      size: unlimited
+    client_to_server:
+      enabled: true
+      size: unlimited
+  logging:
+    level: off
+
+encoding:
+  max_frame_rate: 60
+  video_encoding_mode:
+    jpeg_quality: 8
+    webp_quality: 8
+
+runtime_configuration:
+  allow_client_to_override_kasm_server_settings: true
+  allow_override_list:
+    - pointer.enabled
+    - data_loss_prevention.clipboard.server_to_client.enabled
+    - data_loss_prevention.clipboard.client_to_server.enabled
+    - encoding.max_frame_rate
+
+logging:
+  log_writer_name: all
+  log_dest: logfile
+  level: 30

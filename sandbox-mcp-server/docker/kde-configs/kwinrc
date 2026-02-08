@@ -1,0 +1,8 @@
+[Compositing]
+Backend=XRender
+Enabled=true
+GLCore=false
+OpenGLIsUnsafe=false
+
+[Windows]
+FocusPolicy=ClickToFocus
