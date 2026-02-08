@@ -112,6 +112,26 @@ export function buildDesktopUrl(sandboxId: string, path?: string): string {
 }
 
 /**
+ * Build WebSocket URL for desktop VNC connection via @novnc/novnc
+ *
+ * @param projectId - Project identifier
+ * @param token - Auth token for query parameter authentication
+ * @returns Complete WebSocket URL for VNC connection
+ */
+export function buildDesktopWebSocketUrl(projectId: string, token?: string): string {
+  const protocol = getWebSocketProtocol();
+  const host = getApiHost();
+  const basePath = getApiBasePath();
+
+  const path = `${basePath}/projects/${projectId}/sandbox/desktop/proxy/websockify`;
+  const url = new URL(path, `${protocol}//${host}`);
+  if (token) {
+    url.searchParams.set('token', token);
+  }
+  return url.toString();
+}
+
+/**
  * Build direct desktop URL (when direct port access is available)
  *
  * @param host - Hostname or IP

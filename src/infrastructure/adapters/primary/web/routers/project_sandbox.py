@@ -933,6 +933,121 @@ async def proxy_project_desktop(
         )
 
 
+@router.websocket("/{project_id}/sandbox/desktop/proxy/websockify")
+async def proxy_project_desktop_websocket(
+    websocket: WebSocket,
+    project_id: str,
+    current_user: User = Depends(get_current_user_from_header_or_query),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
+):
+    """WebSocket proxy for the project's sandbox desktop (noVNC/websockify).
+
+    Bridges browser WebSocket connections to the container's websockify service,
+    relaying binary VNC (RFB) frames bidirectionally. This enables the @novnc/novnc
+    client to connect to the remote desktop through the API server.
+    """
+    import websockets
+
+    info = await service.get_project_sandbox(project_id)
+
+    if not info:
+        await websocket.close(
+            code=1008, reason=f"No sandbox found for project {project_id}"
+        )
+        return
+
+    if not info.desktop_url:
+        await websocket.close(
+            code=1008,
+            reason=f"Desktop service is not running for project {project_id}",
+        )
+        return
+
+    # Build websockify URL from desktop_url (http://host:port/vnc.html -> ws://host:port/)
+    desktop_base = info.desktop_url.rstrip("/")
+    # Remove path (e.g. /vnc.html, /vnc.html?token=xxx)
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse(desktop_base)
+    desktop_base = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
+    ws_target = desktop_base.replace("http://", "ws://").replace("https://", "wss://")
+
+    logger.info(
+        f"Desktop WS proxy: project={project_id} "
+        f"desktop_url={info.desktop_url} -> ws_target={ws_target}"
+    )
+
+    await websocket.accept(subprotocol="binary")
+
+    upstream_ws = None
+    try:
+        upstream_ws = await websockets.connect(
+            ws_target,
+            subprotocols=["binary"],
+            max_size=2**22,  # 4MB max frame
+            open_timeout=10,
+            ping_interval=30,
+            ping_timeout=10,
+            proxy=None,  # bypass http_proxy env var for local container connections
+        )
+
+        async def relay_browser_to_upstream():
+            """Forward frames from browser to container websockify."""
+            try:
+                while True:
+                    data = await websocket.receive()
+                    if "bytes" in data and data["bytes"]:
+                        await upstream_ws.send(data["bytes"])
+                    elif "text" in data and data["text"]:
+                        await upstream_ws.send(data["text"])
+            except WebSocketDisconnect:
+                pass
+            except Exception as e:
+                logger.debug(f"Browser->upstream relay ended: {e}")
+
+        async def relay_upstream_to_browser():
+            """Forward frames from container websockify to browser."""
+            try:
+                async for message in upstream_ws:
+                    if isinstance(message, bytes):
+                        await websocket.send_bytes(message)
+                    else:
+                        await websocket.send_text(message)
+            except Exception as e:
+                logger.debug(f"Upstream->browser relay ended: {e}")
+
+        browser_task = asyncio.create_task(relay_browser_to_upstream())
+        upstream_task = asyncio.create_task(relay_upstream_to_browser())
+
+        # Wait for either direction to finish
+        done, pending = await asyncio.wait(
+            [browser_task, upstream_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    except Exception as e:
+        logger.error(f"Desktop WebSocket proxy error for project {project_id}: {e}")
+        try:
+            await websocket.send_text(f'{{"error": "{str(e)}"}}')
+        except Exception:
+            pass
+    finally:
+        if upstream_ws:
+            try:
+                await upstream_ws.close()
+            except Exception:
+                pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
 @router.websocket("/{project_id}/sandbox/terminal/proxy/ws")
 async def proxy_project_terminal_websocket(
     websocket: WebSocket,

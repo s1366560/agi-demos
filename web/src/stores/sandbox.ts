@@ -11,6 +11,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
 import { projectSandboxService } from '../services/projectSandboxService';
+import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
 import { sandboxSSEService } from '../services/sandboxSSEService';
 import { logger } from '../utils/logger';
 import { getAuthToken } from '../utils/tokenResolver';
@@ -239,6 +240,9 @@ export const useSandboxStore = create<SandboxState>()(
           const proxyDesktopUrl = sandbox.desktop_url
             ? `/api/v1/projects/${targetProjectId}/sandbox/desktop/proxy/vnc.html${tokenParam}`
             : null;
+          const desktopWsUrl = sandbox.desktop_url
+            ? buildDesktopWebSocketUrl(targetProjectId, token || undefined)
+            : null;
           // Terminal uses the existing WebSocket endpoint
           // The TerminalImpl component will build the correct WebSocket URL
           const terminalWsUrl = sandbox.terminal_url
@@ -252,6 +256,7 @@ export const useSandboxStore = create<SandboxState>()(
               ? {
                   running: true,
                   url: proxyDesktopUrl,
+                  wsUrl: desktopWsUrl,
                   display: ':1',
                   resolution: '1280x720',
                   port: sandbox.desktop_port || 6080,
@@ -471,12 +476,21 @@ export const useSandboxStore = create<SandboxState>()(
       // SSE event handler for desktop/terminal events
       handleSSEEvent: (event) => {
         const { type, data } = event;
+        const { activeProjectId } = get();
+
+        // Build desktop WebSocket URL from project context
+        const buildWsUrl = () => {
+          if (!activeProjectId) return null;
+          const token = getAuthToken();
+          return buildDesktopWebSocketUrl(activeProjectId, token || undefined);
+        };
 
         switch (type) {
           case 'desktop_started': {
             const status: DesktopStatus = {
               running: true,
               url: data.url || null,
+              wsUrl: buildWsUrl(),
               display: data.display || ':0',
               resolution: data.resolution || '1280x720',
               port: data.port || 6080,
@@ -490,6 +504,7 @@ export const useSandboxStore = create<SandboxState>()(
               desktopStatus: {
                 running: false,
                 url: null,
+                wsUrl: null,
                 display: '',
                 resolution: '',
                 port: 0,
@@ -502,6 +517,7 @@ export const useSandboxStore = create<SandboxState>()(
             const status: DesktopStatus = {
               running: data.running || false,
               url: data.url || null,
+              wsUrl: data.running ? buildWsUrl() : null,
               display: data.display || '',
               resolution: data.resolution || '',
               port: data.port || 0,

@@ -15,7 +15,7 @@ import { logger } from '../utils/logger';
 import { getAuthToken } from '../utils/tokenResolver';
 
 import { httpClient } from './client/httpClient';
-import { buildTerminalWebSocketUrl } from './sandboxWebSocketUtils';
+import { buildDesktopWebSocketUrl, buildTerminalWebSocketUrl } from './sandboxWebSocketUtils';
 
 /**
  * Project sandbox status
@@ -149,6 +149,8 @@ export interface SandboxStats {
 export interface DesktopStatus {
   running: boolean;
   url: string | null;
+  /** WebSocket URL for direct VNC connection via @novnc/novnc */
+  wsUrl?: string | null;
   display: string;
   resolution: string;
   port: number;
@@ -395,14 +397,16 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     // Build proxy URL with token for authentication
     // The proxy endpoint requires authentication, and iframe doesn't send cookies
     const token = getAuthToken();
-    const proxyUrl =
-      response.success || response.running
-        ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/vnc.html${token ? `?token=${encodeURIComponent(token)}` : ''}`
-        : null;
+    const isRunning = response.success || response.running;
+    const proxyUrl = isRunning
+      ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/vnc.html${token ? `?token=${encodeURIComponent(token)}` : ''}`
+      : null;
+    const wsUrl = isRunning ? buildDesktopWebSocketUrl(projectId, token || undefined) : null;
 
     return {
       running: response.success ?? response.running,
       url: proxyUrl,
+      wsUrl,
       display: response.display || ':1',
       resolution: response.resolution || resolution,
       port: response.port || 0,

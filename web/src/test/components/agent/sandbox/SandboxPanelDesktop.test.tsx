@@ -60,9 +60,45 @@ vi.mock('../../../../services/client/urlUtils', () => ({
   },
 }));
 
+// Mock the vendored noVNC RFB class
+vi.mock('../../../../vendor/novnc/core/rfb.js', () => {
+  class MockRFB extends EventTarget {
+    viewOnly = false;
+    focusOnClick = true;
+    clipViewport = false;
+    dragViewport = false;
+    scaleViewport = true;
+    resizeSession = false;
+    showDotCursor = true;
+    background = '#000000';
+    qualityLevel = 6;
+    compressionLevel = 2;
+    capabilities = { power: false };
+
+    constructor(_target: HTMLElement, _url: string, _options?: unknown) {
+      super();
+      // Simulate async connection
+      setTimeout(() => {
+        this.dispatchEvent(new CustomEvent('connect'));
+      }, 0);
+    }
+
+    disconnect = vi.fn();
+    sendCredentials = vi.fn();
+    sendKey = vi.fn();
+    sendCtrlAltDel = vi.fn();
+    focus = vi.fn();
+    blur = vi.fn();
+    clipboardPasteFrom = vi.fn();
+  }
+
+  return { default: MockRFB };
+});
+
 const mockDesktopStatusRunning: DesktopStatus = {
   running: true,
   url: 'http://localhost:6080/vnc.html',
+  wsUrl: 'ws://localhost:8000/api/v1/projects/proj-1/sandbox/desktop/proxy/websockify',
   display: ':0',
   resolution: '1280x720',
   port: 6080,
@@ -145,9 +181,9 @@ describe('SandboxPanel with Desktop Integration', () => {
       const desktopTab = screen.getByText('Desktop');
       fireEvent.click(desktopTab);
 
-      // After clicking, desktop content should be visible
+      // After clicking, desktop viewer content should be visible
       await waitFor(() => {
-        expect(screen.getByText('Remote Desktop')).toBeInTheDocument();
+        expect(screen.getByText('Connecting...')).toBeInTheDocument();
       });
     });
   });
@@ -215,14 +251,13 @@ describe('RemoteDesktopViewer', () => {
   });
 
   describe('Rendering', () => {
-    it('should render iframe when desktop URL is provided', () => {
-      const { container } = render(
+    it('should render NoVNCViewer when desktop is running with wsUrl', () => {
+      render(
         <RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={mockDesktopStatusRunning} />
       );
 
-      const iframe = container.querySelector('iframe');
-      expect(iframe).toBeInTheDocument();
-      expect(iframe).toHaveAttribute('src', 'http://localhost:6080/vnc.html');
+      // NoVNCViewer renders a connecting state initially
+      expect(screen.getByText('Connecting to desktop...')).toBeInTheDocument();
     });
 
     it('should render empty state when no desktop URL', () => {
@@ -234,16 +269,23 @@ describe('RemoteDesktopViewer', () => {
       expect(screen.getByText('Start the desktop to connect')).toBeInTheDocument();
     });
 
-    it('should render loading state initially when URL is provided', () => {
+    it('should render empty state when desktop is not running', () => {
+      const stoppedStatus: DesktopStatus = {
+        running: false,
+        url: null,
+        wsUrl: null,
+        display: '',
+        resolution: '',
+        port: 0,
+      };
       render(
-        <RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={mockDesktopStatusRunning} />
+        <RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={stoppedStatus} />
       );
 
-      // Loading indicator should be present (more specific selector for the spinner text)
-      expect(screen.getByText('Connecting to desktop...')).toBeInTheDocument();
+      expect(screen.getByText('Desktop is not running')).toBeInTheDocument();
     });
 
-    it('should render toolbar when showToolbar is true', () => {
+    it('should render toolbar by default', () => {
       render(
         <RemoteDesktopViewer
           sandboxId="test-sandbox"
@@ -252,19 +294,8 @@ describe('RemoteDesktopViewer', () => {
         />
       );
 
-      expect(screen.getByText('Remote Desktop')).toBeInTheDocument();
-    });
-
-    it('should not render toolbar when showToolbar is false', () => {
-      render(
-        <RemoteDesktopViewer
-          sandboxId="test-sandbox"
-          desktopStatus={mockDesktopStatusRunning}
-          showToolbar={false}
-        />
-      );
-
-      expect(screen.queryByText('Remote Desktop')).not.toBeInTheDocument();
+      // NoVNCViewer toolbar shows connection status
+      expect(screen.getByText('Connecting...')).toBeInTheDocument();
     });
   });
 
@@ -278,74 +309,13 @@ describe('RemoteDesktopViewer', () => {
       expect(fullscreenButton).toBeInTheDocument();
     });
 
-    it('should have refresh button when desktop is running', () => {
+    it('should have reconnect button', () => {
       render(
         <RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={mockDesktopStatusRunning} />
       );
 
-      const refreshButton = screen.getByRole('button', { name: /refresh/i });
-      expect(refreshButton).toBeInTheDocument();
-    });
-
-    it('should have close button when onClose is provided', () => {
-      const mockOnClose = vi.fn();
-      render(
-        <RemoteDesktopViewer
-          sandboxId="test-sandbox"
-          desktopStatus={mockDesktopStatusRunning}
-          onClose={mockOnClose}
-        />
-      );
-
-      const closeButton = screen.getByRole('button', { name: /close/i });
-      expect(closeButton).toBeInTheDocument();
-    });
-  });
-
-  describe('User interactions', () => {
-    it('should toggle fullscreen on fullscreen button click', () => {
-      render(
-        <RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={mockDesktopStatusRunning} />
-      );
-
-      const fullscreenButton = screen.getByRole('button', { name: /fullscreen/i });
-
-      // Initial state - should show "Fullscreen" tooltip
-      expect(fullscreenButton).toBeInTheDocument();
-
-      fireEvent.click(fullscreenButton);
-
-      // After clicking, icon should change (though we can't easily test the actual fullscreen)
-      const fullscreenButtonAfter = screen.getByRole('button', { name: /exit fullscreen/i });
-      expect(fullscreenButtonAfter).toBeInTheDocument();
-    });
-
-    it('should call onClose when close button is clicked', () => {
-      const mockOnClose = vi.fn();
-      render(
-        <RemoteDesktopViewer
-          sandboxId="test-sandbox"
-          desktopStatus={mockDesktopStatusRunning}
-          onClose={mockOnClose}
-        />
-      );
-
-      const closeButton = screen.getByRole('button', { name: /close/i });
-      fireEvent.click(closeButton);
-
-      expect(mockOnClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('should display sandbox ID in toolbar', () => {
-      const { container } = render(
-        <RemoteDesktopViewer
-          sandboxId="test-sandbox-12345678"
-          desktopStatus={mockDesktopStatusRunning}
-        />
-      );
-
-      // The sandbox ID is displayed as (test-san) - first 8 chars
-      expect(container.textContent).toContain('test-san');
+      const reconnectButton = screen.getByRole('button', { name: /reconnect/i });
+      expect(reconnectButton).toBeInTheDocument();
     });
   });
 });

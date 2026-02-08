@@ -2144,6 +2144,8 @@ export interface TimelineResponse {
 export interface DesktopStatus {
   running: boolean;
   url: string | null;
+  /** WebSocket URL for direct VNC connection via @novnc/novnc */
+  wsUrl?: string | null;
   display: string;
   resolution: string;
   port: number;

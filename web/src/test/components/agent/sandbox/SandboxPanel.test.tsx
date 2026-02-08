@@ -57,10 +57,36 @@ vi.mock('../../../../services/client/urlUtils', () => ({
   },
 }));
 
+// Mock the vendored noVNC RFB class
+vi.mock('../../../../vendor/novnc/core/rfb.js', () => {
+  class MockRFB extends EventTarget {
+    connect = vi.fn();
+    disconnect = vi.fn();
+    sendCredentials = vi.fn();
+    clipboardPasteFrom = vi.fn();
+    get capabilities() {
+      return { power: false };
+    }
+    scaleViewport = false;
+    resizeSession = false;
+    showDotCursor = false;
+    clipViewport = false;
+    dragViewport = false;
+    qualityLevel = 6;
+    compressionLevel = 2;
+    constructor() {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('connect')), 0);
+    }
+  }
+  return { default: MockRFB };
+});
+
 // Mock data
 const mockDesktopStatusRunning: DesktopStatus = {
   running: true,
   url: 'http://localhost:6080/vnc.html',
+  wsUrl: 'ws://localhost:8000/api/v1/projects/proj-1/sandbox/desktop/proxy/websockify',
   display: ':0',
   resolution: '1280x720',
   port: 6080,
@@ -160,9 +186,9 @@ describe('SandboxPanel Compound Component', () => {
         </SandboxPanel>
       );
 
-      // Desktop tab should be active by default
+      // Desktop tab should be active by default, showing desktop viewer placeholder
       await waitFor(() => {
-        expect(screen.getByText('Remote Desktop')).toBeInTheDocument();
+        expect(screen.getByText('Desktop is not running')).toBeInTheDocument();
       });
     });
   });
@@ -261,8 +287,9 @@ describe('SandboxPanel Compound Component', () => {
         </SandboxPanel>
       );
 
+      // NoVNCViewer renders connecting state, then connected after mock RFB fires connect
       await waitFor(() => {
-        expect(screen.getByText('Remote Desktop')).toBeInTheDocument();
+        expect(screen.getByText('Connected')).toBeInTheDocument();
       });
     });
   });
@@ -552,8 +579,8 @@ describe('SandboxPanel Compound Component', () => {
       fireEvent.click(desktopTab);
 
       await waitFor(() => {
-        // Remote Desktop appears in both Desktop and Control tabs
-        expect(screen.getAllByText('Remote Desktop').length).toBeGreaterThan(0);
+        // Desktop tab shows "Desktop is not running" placeholder (no desktopStatus provided)
+        expect(screen.getByText('Desktop is not running')).toBeInTheDocument();
       });
 
       // Click control tab
