@@ -1500,15 +1500,85 @@ class SessionProcessor:
                     source_path=artifact_info.get("path"),
                 )
 
-                # Upload artifact in a background task so the agent loop
-                # is not blocked by S3/MinIO I/O contention.
+                # Upload artifact in a background thread to avoid event loop
+                # contention. aioboto3 upload hangs when the event loop is busy
+                # with LLM streaming, so we use synchronous boto3 in a thread.
                 logger.warning(
-                    f"[ArtifactUpload] Scheduling background upload: filename={filename}, "
+                    f"[ArtifactUpload] Scheduling threaded upload: filename={filename}, "
                     f"size={len(file_content)}, project_id={project_id}"
                 )
 
-                async def _background_upload(
-                    svc: "ArtifactService",
+                def _sync_upload(
+                    content: bytes,
+                    fname: str,
+                    pid: str,
+                    tid: str,
+                    texec_id: str,
+                    tname: str,
+                    art_id: str,
+                    bucket: str,
+                    endpoint: str,
+                    access_key: str,
+                    secret_key: str,
+                    region: str,
+                    mime: str,
+                ) -> dict:
+                    """Synchronous S3 upload in a thread pool."""
+                    import boto3
+                    from botocore.config import Config as BotoConfig
+                    from datetime import date
+                    from urllib.parse import quote
+
+                    s3 = boto3.client(
+                        "s3",
+                        endpoint_url=endpoint,
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=region,
+                        config=BotoConfig(
+                            connect_timeout=10,
+                            read_timeout=30,
+                            retries={"max_attempts": 2},
+                        ),
+                    )
+
+                    date_part = date.today().strftime("%Y/%m/%d")
+                    unique_id = art_id[:8]
+                    safe_fname = fname.replace("/", "_")
+                    object_key = (
+                        f"artifacts/{tid}/{pid}/{date_part}"
+                        f"/{texec_id or 'direct'}/{unique_id}_{safe_fname}"
+                    )
+
+                    metadata = {
+                        "artifact_id": art_id,
+                        "project_id": pid,
+                        "tenant_id": tid,
+                        "filename": quote(fname, safe=""),
+                        "source_tool": tname or "",
+                    }
+
+                    s3.put_object(
+                        Bucket=bucket,
+                        Key=object_key,
+                        Body=content,
+                        ContentType=mime,
+                        Metadata=metadata,
+                    )
+
+                    url = s3.generate_presigned_url(
+                        "get_object",
+                        Params={"Bucket": bucket, "Key": object_key},
+                        ExpiresIn=7 * 24 * 3600,
+                    )
+
+                    return {
+                        "url": url,
+                        "object_key": object_key,
+                        "size_bytes": len(content),
+                    }
+
+                async def _threaded_upload(
                     content: bytes,
                     fname: str,
                     pid: str,
@@ -1517,51 +1587,51 @@ class SessionProcessor:
                     conv_id: str,
                     msg_id: str,
                     tname: str,
-                    art_info: dict,
                     art_id: str,
+                    mime: str,
+                    cat: str,
                 ):
-                    """Run artifact upload in background, publish result to Redis."""
+                    """Run sync upload in thread, then publish result to Redis."""
                     from src.infrastructure.agent.actor.execution import (
                         _publish_event_to_stream,
                     )
+                    from src.configuration.config import get_settings
+                    import time as _time
+
+                    settings = get_settings()
 
                     try:
-                        artifact = await svc.create_artifact(
-                            file_content=content,
-                            filename=fname,
-                            project_id=pid,
-                            tenant_id=tid,
-                            sandbox_id=None,
-                            tool_execution_id=texec_id,
-                            conversation_id=conv_id,
-                            source_tool=tname,
-                            source_path=art_info.get("path"),
-                            metadata={
-                                "extracted_from": "export_artifact",
-                                "original_mime": art_info.get("mime_type"),
-                                "category": art_info.get("category"),
-                                "is_binary": art_info.get("is_binary"),
-                            },
+                        result = await asyncio.to_thread(
+                            _sync_upload,
+                            content=content,
+                            fname=fname,
+                            pid=pid,
+                            tid=tid,
+                            texec_id=texec_id,
+                            tname=tname,
+                            art_id=art_id,
+                            bucket=settings.s3_bucket_name,
+                            endpoint=settings.s3_endpoint_url,
+                            access_key=settings.aws_access_key_id,
+                            secret_key=settings.aws_secret_access_key,
+                            region=settings.aws_region,
+                            mime=mime,
                         )
                         logger.warning(
-                            f"[ArtifactUpload] Background upload SUCCESS: "
-                            f"id={artifact.id}, filename={artifact.filename}"
+                            f"[ArtifactUpload] Threaded upload SUCCESS: "
+                            f"filename={fname}, url={result['url'][:80]}"
                         )
 
-                        # Publish artifact_ready event to Redis stream
                         ready_event = AgentArtifactReadyEvent(
-                            artifact_id=artifact.id,
-                            filename=artifact.filename,
-                            mime_type=artifact.mime_type,
-                            category=artifact.category.value,
-                            size_bytes=artifact.size_bytes,
-                            url=artifact.url or "",
-                            preview_url=artifact.preview_url,
+                            artifact_id=art_id,
+                            filename=fname,
+                            mime_type=mime,
+                            category=cat,
+                            size_bytes=result["size_bytes"],
+                            url=result["url"],
                             tool_execution_id=texec_id,
                             source_tool=tname,
                         )
-                        import time as _time
-
                         await _publish_event_to_stream(
                             conversation_id=conv_id,
                             event=ready_event.to_event_dict(),
@@ -1571,7 +1641,8 @@ class SessionProcessor:
                         )
                     except Exception as upload_err:
                         logger.error(
-                            f"[ArtifactUpload] Background upload failed: {fname}: {upload_err}"
+                            f"[ArtifactUpload] Threaded upload failed: "
+                            f"{fname}: {upload_err}"
                         )
                         error_event = AgentArtifactErrorEvent(
                             artifact_id=art_id,
@@ -1579,8 +1650,6 @@ class SessionProcessor:
                             tool_execution_id=texec_id,
                             error=f"Upload failed: {upload_err}",
                         )
-                        import time as _time
-
                         try:
                             await _publish_event_to_stream(
                                 conversation_id=conv_id,
@@ -1595,8 +1664,7 @@ class SessionProcessor:
                             )
 
                 asyncio.create_task(
-                    _background_upload(
-                        svc=self._artifact_service,
+                    _threaded_upload(
                         content=file_content,
                         fname=filename,
                         pid=project_id,
@@ -1605,8 +1673,9 @@ class SessionProcessor:
                         conv_id=conversation_id or "",
                         msg_id=message_id or "",
                         tname=tool_name,
-                        art_info=artifact_info,
                         art_id=artifact_id,
+                        mime=mime_type,
+                        cat=category.value,
                     )
                 )
                 return
