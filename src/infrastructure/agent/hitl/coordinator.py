@@ -291,7 +291,7 @@ async def _persist_hitl_request(
 
     question = type_data.get("question", "")
     if not question and hitl_type.value == "env_var":
-        question = type_data.get("message", "Please provide environment variables")
+        question = type_data.get("message") or "Please provide environment variables"
 
     entity = HITLRequestEntity(
         id=request_id,
