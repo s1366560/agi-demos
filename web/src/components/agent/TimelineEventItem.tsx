@@ -694,7 +694,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
  * Render artifact created event
  * 显示工具生成的文件（图片、视频、文档等）
  */
-function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
+function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?: string } }) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -729,6 +729,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
 
   const isImage = event.category === 'image';
   const url = event.url || event.previewUrl;
+  const hasError = !!event.error;
 
   return (
     <div className="flex flex-col gap-1">
@@ -775,6 +776,18 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent }) {
                   onLoad={() => setImageLoaded(true)}
                   onError={() => setImageError(true)}
                 />
+              </div>
+            )}
+
+            {/* Error State */}
+            {hasError && (
+              <div className="mb-3 flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200/50 dark:border-red-700/50">
+                <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-base">
+                  error
+                </span>
+                <span className="text-xs text-red-600 dark:text-red-400">
+                  {event.error}
+                </span>
               </div>
             )}
 
@@ -961,14 +974,14 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       case 'artifact_created':
         return (
           <div className="my-3 animate-slide-up">
-            <ArtifactCreatedItem event={event as ArtifactCreatedEvent} />
+            <ArtifactCreatedItem event={event as ArtifactCreatedEvent & { error?: string }} />
           </div>
         );
 
       case 'artifact_ready':
       case 'artifact_error':
       case 'artifacts_batch':
-        // These can be handled similarly or ignored for now
+        // artifact_ready/artifact_error update existing artifact_created entries via store
         return null;
 
       default:

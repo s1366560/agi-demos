@@ -190,9 +190,19 @@ class SandboxMCPToolWrapper(AgentTool):
                 content_list = result.get("content", [])
 
                 if artifact:
+                    # Build a text summary for LLM context (avoid base64 in context)
+                    filename = artifact.get("filename", "unknown")
+                    mime_type = artifact.get("mime_type", "unknown")
+                    size = artifact.get("size", 0)
+                    category = artifact.get("category", "file")
+                    output_summary = (
+                        f"Exported artifact: {filename} "
+                        f"({mime_type}, {size} bytes, category: {category})"
+                    )
                     # Return full result dict for artifact processing in processor
-                    # This allows _process_tool_artifacts to extract and upload the artifact
+                    # "output" key ensures processor uses the summary, not json.dumps()
                     return {
+                        "output": output_summary,
                         "content": content_list,
                         "artifact": artifact,
                     }

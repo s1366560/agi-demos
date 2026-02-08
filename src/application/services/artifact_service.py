@@ -132,6 +132,11 @@ class ArtifactService:
         Returns:
             Created Artifact entity
         """
+        logger.warning(
+            f"[ArtifactUpload] create_artifact: filename={filename}, "
+            f"size={len(file_content)}, project_id={project_id}"
+        )
+
         # Detect MIME type
         mime_type = detect_mime_type(filename)
         category = get_category_from_mime(mime_type)
@@ -187,6 +192,11 @@ class ArtifactService:
             url = await self._storage.generate_presigned_url(
                 object_key=object_key,
                 expiration_seconds=self._url_expiration,
+            )
+
+            logger.warning(
+                f"[ArtifactUpload] Uploaded {artifact_id}: "
+                f"{filename} ({len(file_content)} bytes, etag={result.etag})"
             )
 
             # Generate preview URL for images (if supported)

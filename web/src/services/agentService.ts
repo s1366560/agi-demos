@@ -108,6 +108,8 @@ import type {
   SandboxStateData,
   PendingHITLResponse,
   ArtifactCreatedEventData,
+  ArtifactReadyEventData,
+  ArtifactErrorEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -747,6 +749,12 @@ class AgentServiceImpl implements AgentService {
       // Artifact events
       case 'artifact_created':
         handler.onArtifactCreated?.(event as AgentEvent<ArtifactCreatedEventData>);
+        break;
+      case 'artifact_ready':
+        handler.onArtifactReady?.(event as AgentEvent<ArtifactReadyEventData>);
+        break;
+      case 'artifact_error':
+        handler.onArtifactError?.(event as AgentEvent<ArtifactErrorEventData>);
         break;
       // Context management events
       case 'context_compressed':

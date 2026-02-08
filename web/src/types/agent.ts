@@ -869,6 +869,8 @@ export interface AgentStreamHandler {
   onSkillFallback?: (event: AgentEvent<SkillFallbackEventData>) => void;
   // Artifact handlers
   onArtifactCreated?: (event: AgentEvent<ArtifactCreatedEventData>) => void;
+  onArtifactReady?: (event: AgentEvent<ArtifactReadyEventData>) => void;
+  onArtifactError?: (event: AgentEvent<ArtifactErrorEventData>) => void;
   // Context management handlers
   onContextCompressed?: (event: AgentEvent<ContextCompressedEventData>) => void;
   // Title generation handlers

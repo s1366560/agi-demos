@@ -53,6 +53,15 @@ class S3StorageAdapter(StorageServicePort):
 
         self._session = aioboto3.Session(**session_kwargs)
 
+        # Configure timeouts to prevent indefinite hangs
+        from botocore.config import Config
+
+        self._client_config = Config(
+            connect_timeout=10,
+            read_timeout=30,
+            retries={"max_attempts": 2},
+        )
+
         logger.info(
             f"S3StorageAdapter initialized: bucket={bucket_name}, "
             f"region={region}, endpoint={endpoint_url or 'AWS S3'}"
@@ -60,7 +69,11 @@ class S3StorageAdapter(StorageServicePort):
 
     async def _get_client(self):
         """Get an S3 client context manager."""
-        return self._session.client("s3", endpoint_url=self._endpoint_url)
+        return self._session.client(
+            "s3",
+            endpoint_url=self._endpoint_url,
+            config=self._client_config,
+        )
 
     async def upload_file(
         self,

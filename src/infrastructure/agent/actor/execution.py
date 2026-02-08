@@ -426,49 +426,56 @@ async def _persist_events(
         "text_end",
     }
 
-    async with async_session_factory() as session:
-        async with session.begin():
-            for event in events:
-                event_type = event.get("type", "unknown")
-                event_data = event.get("data", {})
-                evt_time_us = event.get("event_time_us", 0)
-                evt_counter = event.get("event_counter", 0)
+    try:
+        async with async_session_factory() as session:
+            async with session.begin():
+                for event in events:
+                    event_type = event.get("type", "unknown")
+                    event_data = event.get("data", {})
+                    evt_time_us = event.get("event_time_us", 0)
+                    evt_counter = event.get("event_counter", 0)
 
-                if event_type in SKIP_EVENT_TYPES:
-                    continue
-
-                if event_type == "complete":
-                    content = event_data.get("content", "")
-                    if content:
-                        event_type = "assistant_message"
-                        event_data = {
-                            "content": content,
-                            "message_id": str(uuid.uuid4()),
-                            "role": "assistant",
-                        }
-                        if event.get("data", {}).get("artifacts"):
-                            event_data["artifacts"] = event["data"]["artifacts"]
-                    else:
+                    if event_type in SKIP_EVENT_TYPES:
                         continue
 
-                stmt = (
-                    insert(AgentExecutionEvent)
-                    .values(
-                        id=str(uuid.uuid4()),
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                        event_type=event_type,
-                        event_data=event_data,
-                        event_time_us=evt_time_us,
-                        event_counter=evt_counter,
-                        correlation_id=correlation_id,
-                        created_at=datetime.now(timezone.utc),
+                    if event_type == "complete":
+                        content = event_data.get("content", "")
+                        if content:
+                            event_type = "assistant_message"
+                            event_data = {
+                                "content": content,
+                                "message_id": str(uuid.uuid4()),
+                                "role": "assistant",
+                            }
+                            if event.get("data", {}).get("artifacts"):
+                                event_data["artifacts"] = event["data"]["artifacts"]
+                        else:
+                            continue
+
+                    stmt = (
+                        insert(AgentExecutionEvent)
+                        .values(
+                            id=str(uuid.uuid4()),
+                            conversation_id=conversation_id,
+                            message_id=message_id,
+                            event_type=event_type,
+                            event_data=event_data,
+                            event_time_us=evt_time_us,
+                            event_counter=evt_counter,
+                            correlation_id=correlation_id,
+                            created_at=datetime.now(timezone.utc),
+                        )
+                        .on_conflict_do_nothing(
+                            index_elements=["conversation_id", "event_time_us", "event_counter"]
+                        )
                     )
-                    .on_conflict_do_nothing(
-                        index_elements=["conversation_id", "event_time_us", "event_counter"]
-                    )
-                )
-                await session.execute(stmt)
+                    await session.execute(stmt)
+    except Exception as e:
+        logger.error(
+            f"[ActorExecution] Failed to persist {len(events)} events "
+            f"for conversation {conversation_id}: {e}",
+            exc_info=True,
+        )
 
 
 async def _publish_error_event(

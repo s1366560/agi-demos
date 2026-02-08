@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Opti
 from src.domain.events.agent_events import (
     AgentActEvent,
     AgentArtifactCreatedEvent,
+    AgentArtifactErrorEvent,
+    AgentArtifactReadyEvent,
     AgentCompactNeededEvent,
     AgentCompleteEvent,
     AgentCostUpdateEvent,
@@ -76,6 +78,32 @@ from .hitl_tool_handler import (
 from .message_utils import classify_tool_by_description, extract_user_query
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_artifact_binary_data(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a shallow copy of an artifact result with binary/base64 data removed.
+
+    The artifact binary content is handled separately by ``_process_tool_artifacts``
+    and must not leak into the ``AgentObserveEvent.result`` field.  Keeping it
+    there causes the JSON payload persisted to Redis and PostgreSQL to be
+    extremely large, which can fail the entire event-persistence transaction
+    and lose all conversation history.
+    """
+    cleaned = {**result}
+    if "artifact" in cleaned and isinstance(cleaned["artifact"], dict):
+        artifact = {**cleaned["artifact"]}
+        artifact.pop("data", None)
+        cleaned["artifact"] = artifact
+    # Also strip base64 from embedded MCP content items
+    if "content" in cleaned and isinstance(cleaned["content"], list):
+        stripped_content = []
+        for item in cleaned["content"]:
+            if isinstance(item, dict) and item.get("type") in ("image", "resource"):
+                item = {**item}
+                item.pop("data", None)
+            stripped_content.append(item)
+        cleaned["content"] = stripped_content
+    return cleaned
 
 
 class ProcessorState(str, Enum):
@@ -1236,7 +1264,10 @@ class SessionProcessor:
                     f"({artifact.get('mime_type', 'unknown')}, "
                     f"{artifact.get('size', 0)} bytes)",
                 )
-                sse_result = result
+                # Strip binary data from SSE result to prevent huge JSON in
+                # Redis/DB persistence.  The artifact binary is handled
+                # separately by _process_tool_artifacts().
+                sse_result = _strip_artifact_binary_data(result)
             elif isinstance(result, dict) and "output" in result:
                 # Extract output for tool_part (used for LLM context)
                 output_str = result.get("output", "")
@@ -1270,12 +1301,19 @@ class SessionProcessor:
             )
 
             # Extract and upload artifacts from tool result (images, files, etc.)
-            async for artifact_event in self._process_tool_artifacts(
-                tool_name=tool_name,
-                result=result,
-                tool_execution_id=tool_part.tool_execution_id,
-            ):
-                yield artifact_event
+            # Timeouts are handled inside _process_tool_artifacts itself.
+            try:
+                async for artifact_event in self._process_tool_artifacts(
+                    tool_name=tool_name,
+                    result=result,
+                    tool_execution_id=tool_part.tool_execution_id,
+                ):
+                    yield artifact_event
+            except Exception as artifact_err:
+                logger.error(
+                    f"Artifact processing failed for tool {tool_name}: {artifact_err}",
+                    exc_info=True,
+                )
 
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)
@@ -1354,16 +1392,15 @@ class SessionProcessor:
         Yields:
             AgentArtifactCreatedEvent for each artifact created
         """
-        # Log entry for debugging
-        logger.info(
-            f"_process_tool_artifacts: ENTER tool_name={tool_name}, "
-            f"has_artifact_service={self._artifact_service is not None}, "
+        # Use WARNING level for artifact processing diagnostics (INFO not visible under uvicorn)
+        logger.warning(
+            f"[ArtifactUpload] Processing tool={tool_name}, "
+            f"has_service={self._artifact_service is not None}, "
             f"result_type={type(result).__name__}"
         )
 
         if not self._artifact_service:
-            # No artifact service configured, skip processing
-            logger.warning("_process_tool_artifacts: No artifact_service configured, skipping")
+            logger.warning("[ArtifactUpload] No artifact_service configured, skipping")
             return
 
         # Get context from langfuse context
@@ -1374,21 +1411,22 @@ class SessionProcessor:
 
         if not project_id or not tenant_id:
             logger.warning(
-                f"Missing project_id={project_id} or tenant_id={tenant_id} for artifact processing"
+                f"[ArtifactUpload] Missing context: "
+                f"project_id={project_id}, tenant_id={tenant_id}"
             )
             return
 
         # Check if result contains MCP-style content
         if not isinstance(result, dict):
-            logger.info(
-                f"_process_tool_artifacts: result is not dict, type={type(result)}, skipping"
-            )
             return
 
-        # Log for debugging
-        logger.info(
-            f"_process_tool_artifacts: tool_name={tool_name}, has_artifact={result.get('artifact') is not None}"
-        )
+        has_artifact = result.get("artifact") is not None
+        if has_artifact:
+            has_data = result["artifact"].get("data") is not None
+            logger.warning(
+                f"[ArtifactUpload] tool={tool_name}, has_data={has_data}, "
+                f"encoding={result['artifact'].get('encoding')}"
+            )
 
         # Check for export_artifact tool result which has special 'artifact' field
         if result.get("artifact"):
@@ -1409,8 +1447,13 @@ class SessionProcessor:
                                 break
                     if data:
                         file_content = base64.b64decode(data)
+                        logger.warning(
+                            f"[ArtifactUpload] Decoded {len(file_content)} bytes from base64"
+                        )
                     else:
-                        logger.warning("export_artifact has base64 encoding but no data")
+                        logger.warning(
+                            "[ArtifactUpload] base64 encoding but no data found"
+                        )
                         return
                 else:
                     # Text file - get from content
@@ -1430,41 +1473,94 @@ class SessionProcessor:
                         logger.warning("export_artifact returned no content")
                         return
 
-                # Create artifact
-                artifact = await self._artifact_service.create_artifact(
-                    file_content=file_content,
-                    filename=artifact_info.get("filename", "exported_file"),
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    sandbox_id=None,
+                # Detect MIME type for the artifact_created event
+                from src.application.services.artifact_service import (
+                    detect_mime_type,
+                    get_category_from_mime,
+                )
+
+                filename = artifact_info.get("filename", "exported_file")
+                mime_type = detect_mime_type(filename)
+                category = get_category_from_mime(mime_type)
+                artifact_id = str(uuid.uuid4())
+
+                # Yield artifact_created event IMMEDIATELY so the frontend
+                # knows about the artifact even if the upload is slow.
+                yield AgentArtifactCreatedEvent(
+                    artifact_id=artifact_id,
+                    filename=filename,
+                    mime_type=mime_type,
+                    category=category.value,
+                    size_bytes=len(file_content),
+                    url=None,
+                    preview_url=None,
                     tool_execution_id=tool_execution_id,
-                    conversation_id=conversation_id,
                     source_tool=tool_name,
                     source_path=artifact_info.get("path"),
-                    metadata={
-                        "extracted_from": "export_artifact",
-                        "original_mime": artifact_info.get("mime_type"),
-                        "category": artifact_info.get("category"),
-                        "is_binary": artifact_info.get("is_binary"),
-                    },
                 )
 
-                logger.info(
-                    f"Created artifact {artifact.id} from export_artifact: "
-                    f"{artifact.filename} ({artifact.category.value}, {artifact.size_bytes} bytes)"
+                # Upload artifact (with timeout)
+                logger.warning(
+                    f"[ArtifactUpload] Uploading: filename={filename}, "
+                    f"size={len(file_content)}, project_id={project_id}"
                 )
+                try:
+                    async with asyncio.timeout(60):
+                        artifact = await self._artifact_service.create_artifact(
+                            file_content=file_content,
+                            filename=filename,
+                            project_id=project_id,
+                            tenant_id=tenant_id,
+                            sandbox_id=None,
+                            tool_execution_id=tool_execution_id,
+                            conversation_id=conversation_id,
+                            source_tool=tool_name,
+                            source_path=artifact_info.get("path"),
+                            metadata={
+                                "extracted_from": "export_artifact",
+                                "original_mime": artifact_info.get("mime_type"),
+                                "category": artifact_info.get("category"),
+                                "is_binary": artifact_info.get("is_binary"),
+                            },
+                        )
+                    logger.warning(
+                        f"[ArtifactUpload] SUCCESS: id={artifact.id}, "
+                        f"filename={artifact.filename}, "
+                        f"category={artifact.category.value}, size={artifact.size_bytes}"
+                    )
 
-                yield AgentArtifactCreatedEvent(
-                    artifact_id=artifact.id,
-                    filename=artifact.filename,
-                    mime_type=artifact.mime_type,
-                    category=artifact.category.value,
-                    size_bytes=artifact.size_bytes,
-                    url=artifact.url,
-                    preview_url=artifact.preview_url,
-                    tool_execution_id=tool_execution_id,
-                    source_tool=tool_name,
-                )
+                    # Yield artifact_ready with the download URL
+                    yield AgentArtifactReadyEvent(
+                        artifact_id=artifact.id,
+                        filename=artifact.filename,
+                        mime_type=artifact.mime_type,
+                        category=artifact.category.value,
+                        size_bytes=artifact.size_bytes,
+                        url=artifact.url or "",
+                        preview_url=artifact.preview_url,
+                        tool_execution_id=tool_execution_id,
+                        source_tool=tool_name,
+                    )
+                except TimeoutError:
+                    logger.error(
+                        f"[ArtifactUpload] Upload timed out for {filename}"
+                    )
+                    yield AgentArtifactErrorEvent(
+                        artifact_id=artifact_id,
+                        filename=filename,
+                        tool_execution_id=tool_execution_id,
+                        error=f"Upload timed out for {filename}",
+                    )
+                except Exception as upload_err:
+                    logger.error(
+                        f"[ArtifactUpload] Upload failed for {filename}: {upload_err}"
+                    )
+                    yield AgentArtifactErrorEvent(
+                        artifact_id=artifact_id,
+                        filename=filename,
+                        tool_execution_id=tool_execution_id,
+                        error=f"Upload failed: {upload_err}",
+                    )
                 return
 
             except Exception as e:

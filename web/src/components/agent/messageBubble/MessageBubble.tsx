@@ -1109,6 +1109,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       case 'artifact_ready':
       case 'artifact_error':
       case 'artifacts_batch':
+        // artifact_ready/artifact_error update existing artifact_created entries via store
         return null;
 
       default:

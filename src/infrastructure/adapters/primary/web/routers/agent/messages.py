@@ -78,6 +78,8 @@ async def get_conversation_messages(
             "step_start",
             "step_end",
             "artifact_created",
+            "artifact_ready",
+            "artifact_error",
             # HITL (Human-in-the-Loop) events
             "clarification_asked",
             "clarification_answered",

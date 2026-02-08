@@ -14,6 +14,7 @@ Extracted from processor.py to reduce complexity and improve testability.
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -30,6 +31,24 @@ from src.domain.events.agent_events import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_artifact_binary(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a copy of an artifact result with binary/base64 data removed."""
+    cleaned = {**result}
+    if "artifact" in cleaned and isinstance(cleaned["artifact"], dict):
+        artifact = {**cleaned["artifact"]}
+        artifact.pop("data", None)
+        cleaned["artifact"] = artifact
+    if "content" in cleaned and isinstance(cleaned["content"], list):
+        stripped = []
+        for item in cleaned["content"]:
+            if isinstance(item, dict) and item.get("type") in ("image", "resource"):
+                item = {**item}
+                item.pop("data", None)
+            stripped.append(item)
+        cleaned["content"] = stripped
+    return cleaned
 
 
 # ============================================================================
@@ -567,6 +586,12 @@ class ToolExecutor:
                 tool_execution_id=tool_part.tool_execution_id,
             )
 
+    # Max bytes for tool output stored in LLM context
+    _MAX_TOOL_OUTPUT_BYTES = 30_000
+
+    # Regex matching long base64-like sequences (256+ chars)
+    _BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/=]{256,}')
+
     def _process_result(self, result: Any) -> tuple[str, Any]:
         """
         Process tool result into output string and SSE result.
@@ -574,13 +599,39 @@ class ToolExecutor:
         Returns:
             Tuple of (output_string, sse_result)
         """
-        if isinstance(result, dict) and "output" in result:
+        if isinstance(result, dict) and "artifact" in result:
+            # Artifact result - use summary, never serialize base64 to LLM context
+            artifact = result["artifact"]
+            output_str = result.get(
+                "output",
+                f"Exported artifact: {artifact.get('filename', 'unknown')} "
+                f"({artifact.get('mime_type', 'unknown')}, "
+                f"{artifact.get('size', 0)} bytes)",
+            )
+            return self._sanitize_tool_output(output_str), _strip_artifact_binary(result)
+        elif isinstance(result, dict) and "output" in result:
             output_str = result.get("output", "")
-            return output_str, result
+            return self._sanitize_tool_output(output_str), result
         elif isinstance(result, str):
-            return result, result
+            return self._sanitize_tool_output(result), result
         else:
-            return json.dumps(result), result
+            return self._sanitize_tool_output(json.dumps(result)), result
+
+    def _sanitize_tool_output(self, output: str) -> str:
+        """Sanitize tool output to prevent binary/base64 data from entering LLM context."""
+        if not output:
+            return output
+
+        sanitized = self._BASE64_PATTERN.sub("[binary data omitted]", output)
+
+        encoded = sanitized.encode("utf-8", errors="replace")
+        if len(encoded) > self._MAX_TOOL_OUTPUT_BYTES:
+            sanitized = encoded[: self._MAX_TOOL_OUTPUT_BYTES].decode(
+                "utf-8", errors="ignore"
+            )
+            sanitized += "\n... [output truncated]"
+
+        return sanitized
 
     def _mark_tool_error(self, tool_part: ToolPartProtocol, error: str) -> None:
         """Mark tool part as error."""
@@ -607,15 +658,24 @@ class ToolExecutor:
             return
 
         # Import artifact extractor
-        from src.infrastructure.agent.artifact.extractor import get_artifact_extractor
+        from src.infrastructure.agent.artifact.extractor import (
+            ExtractionContext,
+            get_artifact_extractor,
+        )
 
         extractor = get_artifact_extractor()
-        extraction_context = {
-            "tool_name": tool_name,
-            "tool_execution_id": tool_execution_id,
-        }
+        extraction_context = ExtractionContext(
+            project_id=context.project_id,
+            tenant_id=context.tenant_id,
+            conversation_id=context.conversation_id,
+        )
 
-        async for artifact in extractor.process(result, extraction_context):
+        async for artifact in extractor.process(
+            tool_name=tool_name,
+            result=result,
+            context=extraction_context,
+            tool_execution_id=tool_execution_id,
+        ):
             try:
                 # Upload artifact
                 upload_result = await self._artifact_service.upload_artifact(
