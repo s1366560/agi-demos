@@ -106,10 +106,13 @@ class DesktopStatusResponse(BaseModel):
     """Desktop service status response."""
 
     running: bool = Field(..., description="Whether desktop service is running")
-    url: Optional[str] = Field(None, description="noVNC WebSocket URL (if running)")
+    url: Optional[str] = Field(None, description="KasmVNC web client URL (if running)")
     display: str = Field(default="", description="X11 display number (e.g., ':1')")
-    resolution: str = Field(default="", description="Screen resolution (e.g., '1280x720')")
-    port: int = Field(default=0, description="noVNC port number")
+    resolution: str = Field(default="", description="Screen resolution (e.g., '1920x1080')")
+    port: int = Field(default=0, description="KasmVNC web server port number")
+    audio_enabled: bool = Field(default=False, description="Whether audio streaming is enabled")
+    dynamic_resize: bool = Field(default=True, description="Whether dynamic resize is supported")
+    encoding: str = Field(default="webp", description="Image encoding format (webp/jpeg/qoi)")
 
 
 class DesktopStopResponse(BaseModel):

@@ -10,7 +10,7 @@ import logging
 from typing import Optional, Tuple
 from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, Request, status
 from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -138,6 +138,44 @@ async def get_api_key_from_header_or_query(
     )
 
 
+async def get_api_key_from_header_query_or_cookie(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None, description="API key for authentication"),
+) -> str:
+    """Extract API key from Authorization header, query parameter, or cookie.
+
+    Used by desktop proxy endpoints where sub-resources (CSS/JS/SVG) are loaded
+    by the browser without query parameters. The initial request sets a cookie
+    that subsequent asset requests use for authentication.
+    """
+    # Try header first
+    if authorization:
+        if authorization.startswith("Bearer "):
+            api_key = authorization[7:]
+        elif authorization.startswith("Token "):
+            api_key = authorization[6:]
+        else:
+            api_key = authorization
+        if api_key.startswith("ms_sk_"):
+            return api_key
+
+    # Try query parameter
+    if token and token.startswith("ms_sk_"):
+        return token
+
+    # Fall back to cookie (for desktop proxy sub-resources)
+    cookie_token = request.cookies.get("desktop_token")
+    if cookie_token and cookie_token.startswith("ms_sk_"):
+        return cookie_token
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Missing API key.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def verify_api_key_from_header_or_query(
     api_key: str = Depends(get_api_key_from_header_or_query), db: AsyncSession = Depends(get_db)
 ) -> DBAPIKey:
@@ -167,6 +205,48 @@ async def verify_api_key_from_header_or_query(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
         )
+
+
+async def verify_api_key_from_header_query_or_cookie(
+    api_key: str = Depends(get_api_key_from_header_query_or_cookie),
+    db: AsyncSession = Depends(get_db),
+) -> DBAPIKey:
+    """Verify API key from header, query parameter, or cookie."""
+    auth_service = AuthService(
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
+    )
+    try:
+        domain_api_key = await auth_service.verify_api_key(api_key)
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        return result.scalar_one_or_none()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+
+
+async def get_current_user_from_desktop_proxy(
+    api_key: DBAPIKey = Depends(verify_api_key_from_header_query_or_cookie),
+    db: AsyncSession = Depends(get_db),
+) -> DBUser:
+    """Get current user for desktop proxy (supports header, query, and cookie auth)."""
+    auth_service = AuthService(
+        user_repository=SqlUserRepository(db),
+        api_key_repository=SqlAPIKeyRepository(db),
+    )
+    try:
+        domain_user = await auth_service.get_user_by_id(api_key.user_id)
+        if not domain_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        result = await db.execute(select(DBUser).where(DBUser.id == domain_user.id))
+        db_user = result.scalar_one_or_none()
+        if not db_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return db_user
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
 
 async def get_current_user_from_header_or_query(

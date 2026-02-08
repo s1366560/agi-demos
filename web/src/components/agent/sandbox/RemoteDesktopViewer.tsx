@@ -1,19 +1,22 @@
 /**
- * RemoteDesktopViewer - noVNC client viewer for sandbox desktop access
+ * RemoteDesktopViewer - KasmVNC client viewer for sandbox desktop access
  *
- * Uses @novnc/novnc RFB class for direct WebSocket VNC connection
- * with clipboard sync and keyboard handling.
+ * Embeds KasmVNC web client with dynamic resolution, clipboard sync,
+ * file transfer, and audio streaming support.
  */
 
 import { DesktopOutlined } from '@ant-design/icons';
 
 import type { DesktopStatus } from '../../../types/agent';
+import { getAuthToken } from '../../../utils/tokenResolver';
 
-import { NoVNCViewer } from './NoVNCViewer';
+import { KasmVNCViewer } from './KasmVNCViewer';
 
 export interface RemoteDesktopViewerProps {
   /** Sandbox container ID */
   sandboxId: string;
+  /** Project ID for proxy URL construction */
+  projectId?: string;
   /** Desktop status information */
   desktopStatus: DesktopStatus | null;
   /** Called when viewer is ready */
@@ -22,6 +25,8 @@ export interface RemoteDesktopViewerProps {
   onError?: (error: string) => void;
   /** Called when close button is clicked */
   onClose?: () => void;
+  /** Called to change resolution */
+  onResolutionChange?: (resolution: string) => void;
   /** Height of the viewer (default: "100%") */
   height?: string | number;
   /** Show toolbar (default: true) */
@@ -29,15 +34,16 @@ export interface RemoteDesktopViewerProps {
 }
 
 export function RemoteDesktopViewer({
+  projectId,
   desktopStatus,
   onReady,
   onError,
+  onResolutionChange,
   showToolbar = true,
 }: RemoteDesktopViewerProps) {
-  const wsUrl = desktopStatus?.wsUrl ?? null;
   const isRunning = desktopStatus?.running ?? false;
 
-  if (!isRunning || !wsUrl) {
+  if (!isRunning || !projectId) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-900">
         <div className="text-center text-gray-500">
@@ -49,14 +55,20 @@ export function RemoteDesktopViewer({
     );
   }
 
+  // Build proxy URL for KasmVNC web client with auth token
+  const token = getAuthToken();
+  const proxyUrl = `/api/v1/projects/${projectId}/sandbox/desktop/proxy/${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
   return (
-    <NoVNCViewer
-      wsUrl={wsUrl}
+    <KasmVNCViewer
+      proxyUrl={proxyUrl}
+      resolution={desktopStatus?.resolution}
+      audioEnabled={desktopStatus?.audioEnabled}
+      dynamicResize={desktopStatus?.dynamicResize}
       onConnect={onReady}
       onError={onError}
+      onResolutionChange={onResolutionChange}
       showToolbar={showToolbar}
-      showClipboard={false}
-      scaleViewport={true}
     />
   );
 }

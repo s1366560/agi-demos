@@ -32,6 +32,8 @@ export interface SandboxPanelContextValue {
   desktopStatus: DesktopStatus | null;
   /** Terminal status information */
   terminalStatus: TerminalStatus | null;
+  /** Project ID for constructing proxy URLs */
+  projectId?: string | null;
   /** Callbacks for desktop/terminal control */
   onDesktopStart?: () => void;
   onDesktopStop?: () => void;

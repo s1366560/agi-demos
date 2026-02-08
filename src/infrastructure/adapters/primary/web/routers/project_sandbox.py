@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
 from fastapi import WebSocketDisconnect
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -30,6 +30,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_from_header_or_query,
     get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+    get_current_user_from_desktop_proxy,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
@@ -707,13 +710,13 @@ async def cleanup_stale_sandboxes(
 @router.post("/{project_id}/sandbox/desktop")
 async def start_project_desktop(
     project_id: str,
-    resolution: str = Query("1280x720", description="Screen resolution"),
+    resolution: str = Query("1920x1080", description="Screen resolution"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ):
-    """Start desktop service for the project's sandbox."""
+    """Start desktop service (KasmVNC) for the project's sandbox."""
     # Ensure sandbox exists and is running
     info = await service.ensure_sandbox_running(
         project_id=project_id,
@@ -732,6 +735,9 @@ async def start_project_desktop(
             "display": status.display,
             "resolution": status.resolution,
             "port": status.port,
+            "audio_enabled": status.audio_enabled,
+            "dynamic_resize": status.dynamic_resize,
+            "encoding": status.encoding,
         }
 
     except Exception as e:
@@ -831,10 +837,10 @@ async def proxy_project_desktop(
     project_id: str,
     path: str,
     request: Request,
-    current_user: User = Depends(get_current_user_from_header_or_query),
+    current_user: User = Depends(get_current_user_from_desktop_proxy),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
-    """Proxy requests to the project's sandbox desktop (noVNC) service.
+    """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
     
     This allows browser access to the desktop without exposing container ports directly.
     Uses httpx to proxy all content (HTML, JS, CSS, WebSocket) through the API server.
@@ -857,14 +863,12 @@ async def proxy_project_desktop(
     # Build target URL from the desktop service URL
     import re
     import httpx
-    from fastapi.responses import StreamingResponse
     
-    target_base = info.desktop_url.rstrip("/").replace("/vnc.html", "")
-    target_path = path if path else "vnc.html"
+    target_base = info.desktop_url.rstrip("/")
+    target_path = path if path else ""
     target_url = f"{target_base}/{target_path}"
     
     # Extract token from query params to include in rewritten URLs
-    # This ensures sub-resources (JS, CSS) can also authenticate
     token_param = request.query_params.get("token", "")
     
     # Copy query parameters (excluding token for proxied requests to container)
@@ -873,9 +877,7 @@ async def proxy_project_desktop(
         target_url += f"?{'&'.join(f'{k}={v}' for k, v in other_params.items())}"
     
     try:
-        # Proxy the request to the desktop service
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Forward the request with appropriate headers
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             headers = {}
             for header in ["accept", "accept-encoding", "accept-language", "cache-control"]:
                 if header in request.headers:
@@ -883,7 +885,6 @@ async def proxy_project_desktop(
             
             response = await client.get(target_url, headers=headers)
             
-            # Return the response with appropriate content type
             content_type = response.headers.get("content-type", "application/octet-stream")
             
             # For HTML/JS/CSS, rewrite URLs to use proxy path with token
@@ -891,7 +892,6 @@ async def proxy_project_desktop(
             if content_type.startswith("text/html") or content_type.startswith("application/javascript"):
                 content_str = content.decode("utf-8", errors="replace")
                 
-                # Build proxy prefix with optional token
                 proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
                 
                 def rewrite_url(match: re.Match) -> str:
@@ -900,10 +900,8 @@ async def proxy_project_desktop(
                     quote = match.group(2)  # " or '
                     path_part = match.group(3)  # the path after /
                     
-                    # Build the new URL with proxy prefix
                     new_url = f"{proxy_prefix}{path_part}"
                     
-                    # Add token if we have one and the path doesn't have query params
                     if token_param and "?" not in path_part:
                         new_url = f"{new_url}?token={token_param}"
                     elif token_param and "?" in path_part:
@@ -918,18 +916,48 @@ async def proxy_project_desktop(
                     content_str
                 )
                 
+                # Rewrite WebSocket URLs for KasmVNC
+                ws_proxy_url = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/websockify"
+                if token_param:
+                    ws_proxy_url += f"?token={token_param}"
+                content_str = content_str.replace(
+                    'ws://" + location.host + "/',
+                    f'ws://" + location.host + "{ws_proxy_url}'
+                )
+                content_str = content_str.replace(
+                    'wss://" + location.host + "/',
+                    f'wss://" + location.host + "{ws_proxy_url}'
+                )
+                
                 content = content_str.encode("utf-8")
             
-            return StreamingResponse(
-                iter([content]),
+            resp_headers = {"content-type": content_type}
+            
+            response_obj = Response(
+                content=content,
                 status_code=response.status_code,
-                headers={"content-type": content_type},
+                headers=resp_headers,
             )
+            
+            # Set auth cookie on initial request (when token in query param)
+            # so subsequent asset requests (CSS/JS/SVG) are authenticated
+            if token_param:
+                response_obj.set_cookie(
+                    key="desktop_token",
+                    value=token_param,
+                    httponly=True,
+                    samesite="strict",
+                    max_age=86400,
+                    path=f"/api/v1/projects/{project_id}/sandbox/desktop/proxy",
+                )
+            
+            return response_obj
     except httpx.RequestError as e:
-        logger.error(f"Failed to proxy desktop request to {target_url}: {e}")
+        error_detail = str(e) or type(e).__name__
+        logger.error(f"Failed to proxy desktop request to {target_url}: {error_detail}")
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to connect to desktop service: {str(e)}"
+            detail=f"Failed to connect to desktop service at {target_url}: {error_detail}",
         )
 
 
@@ -940,11 +968,11 @@ async def proxy_project_desktop_websocket(
     current_user: User = Depends(get_current_user_from_header_or_query),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ):
-    """WebSocket proxy for the project's sandbox desktop (noVNC/websockify).
+    """WebSocket proxy for the project's sandbox desktop (KasmVNC).
 
-    Bridges browser WebSocket connections to the container's websockify service,
-    relaying binary VNC (RFB) frames bidirectionally. This enables the @novnc/novnc
-    client to connect to the remote desktop through the API server.
+    Bridges browser WebSocket connections to the container's KasmVNC WebSocket,
+    relaying binary VNC frames bidirectionally. This enables the KasmVNC
+    web client to connect to the remote desktop through the API server.
     """
     import websockets
 
@@ -963,13 +991,9 @@ async def proxy_project_desktop_websocket(
         )
         return
 
-    # Build websockify URL from desktop_url (http://host:port/vnc.html -> ws://host:port/)
+    # Build WebSocket URL from desktop_url (http://host:port -> ws://host:port/)
     desktop_base = info.desktop_url.rstrip("/")
-    # Remove path (e.g. /vnc.html, /vnc.html?token=xxx)
-    from urllib.parse import urlparse, urlunparse
-    parsed = urlparse(desktop_base)
-    desktop_base = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
-    ws_target = desktop_base.replace("http://", "ws://").replace("https://", "wss://")
+    ws_target = desktop_base.replace("http://", "ws://").replace("https://", "wss://") + "/"
 
     logger.info(
         f"Desktop WS proxy: project={project_id} "
@@ -980,6 +1004,11 @@ async def proxy_project_desktop_websocket(
 
     upstream_ws = None
     try:
+        import ssl as ssl_module
+        ssl_context = ssl_module.SSLContext(ssl_module.PROTOCOL_TLS_CLIENT)
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl_module.CERT_NONE
+
         upstream_ws = await websockets.connect(
             ws_target,
             subprotocols=["binary"],
@@ -988,10 +1017,11 @@ async def proxy_project_desktop_websocket(
             ping_interval=30,
             ping_timeout=10,
             proxy=None,  # bypass http_proxy env var for local container connections
+            ssl=ssl_context,
         )
 
         async def relay_browser_to_upstream():
-            """Forward frames from browser to container websockify."""
+            """Forward frames from browser to KasmVNC."""
             try:
                 while True:
                     data = await websocket.receive()
@@ -1005,7 +1035,7 @@ async def proxy_project_desktop_websocket(
                 logger.debug(f"Browser->upstream relay ended: {e}")
 
         async def relay_upstream_to_browser():
-            """Forward frames from container websockify to browser."""
+            """Forward frames from KasmVNC to browser."""
             try:
                 async for message in upstream_ws:
                     if isinstance(message, bytes):

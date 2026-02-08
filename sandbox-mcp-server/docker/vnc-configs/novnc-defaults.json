@@ -1,9 +1,0 @@
-{
-  "resize": "scale",
-  "quality": 6,
-  "compression": 2,
-  "shared": true,
-  "view_only": false,
-  "local_cursor": true,
-  "true_color": true
-}

@@ -8,7 +8,7 @@
 FROM ubuntu:25.04
 
 LABEL maintainer="MemStack Team"
-LABEL description="Sandbox MCP Server with XFCE 4.20, Python, Java, Node.js"
+LABEL description="Sandbox MCP Server with KDE Plasma 6, Python, Java, Node.js"
 
 # ====================
 # Environment Variables
@@ -267,46 +267,32 @@ RUN set -eux; \
     chmod +x /usr/local/bin/ttyd
 
 # ====================
-# Install XFCE 4.20 Desktop Environment
+# Install KDE Plasma 6 Desktop Environment
 # ====================
-# Ubuntu 25.04 includes XFCE 4.20 natively
-# Note: Some packages from 24.04 are not available in 25.04 yet
+# Ubuntu 25.04 includes KDE Plasma 6 natively.
+# KDE Plasma provides a modern, feature-rich desktop closest to
+# real desktop experience with Dolphin file manager, Konsole terminal,
+# and extensive customization options.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     # X11 and display
-    xorg xvfb \
-    # XFCE 4.20 desktop core
-    xfce4 xfce4-goodies xfce4-terminal xfce4-taskmanager thunar \
-    # Panel plugins (available in Ubuntu 25.04)
-    xfce4-whiskermenu-plugin \
-    xfce4-pulseaudio-plugin \
-    xfce4-power-manager \
-    xfce4-clipman-plugin \
-    xfce4-xkb-plugin \
-    xfce4-time-out-plugin \
-    xfce4-diskperf-plugin \
-    xfce4-netload-plugin \
-    xfce4-cpugraph-plugin \
-    xfce4-genmon-plugin \
-    # File manager enhancements
-    thunar-archive-plugin thunar-media-tags-plugin \
-    # Desktop and window manager
-    xfdesktop4 xfwm4 \
-    # Settings and appearance
-    xfce4-settings \
-    gtk2-engines-murrine gtk2-engines-pixbuf \
-    xfce4-indicator-plugin xfce4-places-plugin \
-    # Themes and icons (Ubuntu 25.04 available packages)
-    arc-theme \
-    # Sound
-    pulseaudio pulseaudio-utils pavucontrol \
-    # Network
-    network-manager-gnome \
+    xorg \
+    # KDE Plasma 6 desktop core (minimal install)
+    kde-plasma-desktop \
+    # KDE core applications
+    dolphin konsole \
+    # KDE system utilities
+    kde-spectacle ksystemlog \
+    # KDE themes and visual polish
+    breeze breeze-icon-theme breeze-cursor-theme \
+    plasma-workspace-wallpapers \
+    # Sound (PulseAudio for KasmVNC audio streaming)
+    pulseaudio pulseaudio-utils pavucontrol-qt \
     # Utilities
-    dbus-x11 dconf-cli dconf-gsettings-backend gsettings-desktop-schemas \
-    # VNC servers
-    x11vnc tigervnc-standalone-server tigervnc-tools \
+    dbus-x11 \
+    # SSL certificates (required by KasmVNC)
+    ssl-cert \
     # Fonts (including CJK support for Asian languages)
     fonts-freefont-ttf fonts-noto-color-emoji \
     fonts-liberation fonts-dejavu-core \
@@ -317,20 +303,47 @@ RUN set -eux; \
     ; \
     # Refresh font cache for desktop
     fc-cache -fv; \
+    # Disable SDDM (not needed for VNC sessions)
+    systemctl disable sddm 2>/dev/null || true; \
     rm -rf /var/lib/apt/lists/*
 
 # ====================
-# Install noVNC
+# Install KasmVNC (replaces TigerVNC + noVNC + websockify)
 # ====================
-ENV NOVNC_VERSION=1.6.0
+# KasmVNC is an all-in-one VNC server with built-in web client,
+# WebP/QOI encoding, dynamic resize, clipboard, file transfer, and audio.
+# Note: KasmVNC v1.4.0 doesn't publish Ubuntu 25.04 (plucky) packages.
+# The noble (24.04) package is ABI-compatible and works on plucky.
+ENV KASMVNC_VERSION=1.4.0
 RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    if [ "$ARCH" = "amd64" ]; then \
+        KASM_PKG="kasmvncserver_noble_${KASMVNC_VERSION}_amd64.deb"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        KASM_PKG="kasmvncserver_noble_${KASMVNC_VERSION}_arm64.deb"; \
+    else \
+        echo "Unsupported architecture: $ARCH"; exit 1; \
+    fi; \
+    curl -fsSL "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/${KASM_PKG}" \
+        -o /tmp/kasmvnc.deb; \
     apt-get update; \
-    apt-get install -y --no-install-recommends python3-websockify; \
+    apt-get install -y --no-install-recommends /tmp/kasmvnc.deb; \
+    rm -f /tmp/kasmvnc.deb; \
     rm -rf /var/lib/apt/lists/*; \
-    curl -fsSL "https://github.com/novnc/noVNC/archive/refs/tags/v${NOVNC_VERSION}.tar.gz" \
-    | tar -xz -C /opt; \
-    mv /opt/noVNC-${NOVNC_VERSION} /opt/noVNC; \
-    chmod +x /opt/noVNC/utils/novnc_proxy
+    # Add root to ssl-cert group (required by KasmVNC)
+    adduser root ssl-cert 2>/dev/null || true; \
+    # Pre-create KasmVNC user with write permissions (non-interactive)
+    # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd)
+    # Format: username:password:permissions (r=read, w=write, o=owner)
+    # Password is irrelevant since -disableBasicAuth is used
+    mkdir -p /root/.vnc; \
+    echo "root:kasmvnc:ow" > /root/.kasmpasswd; \
+    chmod 600 /root/.kasmpasswd; \
+    # Mark DE as already selected to skip interactive select-de.sh prompt
+    # (KasmVNC's select-de.sh detects KDE via 'startkde' which is KDE 5;
+    #  KDE Plasma 6 uses 'startplasma-x11', so we bypass detection entirely
+    #  and rely on our own xstartup)
+    touch /root/.vnc/.de-was-selected
 
 # ====================
 # Workspace Setup (runs as root)
@@ -364,19 +377,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ====================
 # Configuration Files
 # ====================
-# XFCE configs
-COPY docker/xfce-configs/ /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
-COPY docker/xfce-configs/whiskermenu-1.rc /etc/xdg/xfce4/panel/
-COPY docker/xfce-configs/autostart/ /etc/xdg/autostart/
+# KDE Plasma configs (Breeze theme defaults)
+COPY docker/kde-configs/ /etc/xdg/
 
-# VNC configs
-COPY docker/vnc-configs/vncserver-config /etc/vnc/config
-COPY docker/vnc-configs/xstartup /etc/vnc/xstartup.template
-COPY docker/vnc-configs/test-vnc-config.sh /etc/vnc/test-vnc-config.sh
-COPY docker/vnc-configs/test-novnc-config.sh /etc/vnc/test-novnc-config.sh
-COPY docker/vnc-configs/test-complete-setup.sh /etc/vnc/test-complete-setup.sh
-COPY docker/vnc-configs/novnc-defaults.json /opt/noVNC/defaults.json
-RUN chmod +x /etc/vnc/xstartup.template /etc/vnc/test-vnc-config.sh /etc/vnc/test-novnc-config.sh /etc/vnc/test-complete-setup.sh
+# KasmVNC configs
+COPY docker/kasmvnc-configs/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
+COPY docker/kasmvnc-configs/xstartup /etc/kasmvnc/xstartup.template
+RUN chmod +x /etc/kasmvnc/xstartup.template
 
 # Entrypoint
 COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh

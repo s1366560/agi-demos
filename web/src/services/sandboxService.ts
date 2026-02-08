@@ -50,11 +50,11 @@ export interface Sandbox {
   image?: string;
   /** MCP WebSocket port on host */
   mcp_port?: number;
-  /** Desktop (noVNC) port on host */
+  /** Desktop (KasmVNC) port on host */
   desktop_port?: number;
   /** Terminal (ttyd) port on host */
   terminal_port?: number;
-  /** Desktop (noVNC) URL */
+  /** Desktop (KasmVNC) URL */
   desktop_url?: string;
   /** Terminal (ttyd) URL */
   terminal_url?: string;
@@ -66,14 +66,20 @@ export interface Sandbox {
 export interface DesktopStatus {
   /** Whether desktop service is running */
   running: boolean;
-  /** noVNC WebSocket URL (if running) */
+  /** KasmVNC web client URL (if running) */
   url: string | null;
-  /** X11 display number (e.g., ":0") */
+  /** X11 display number (e.g., ":1") */
   display: string;
-  /** Screen resolution (e.g., "1280x720") */
+  /** Screen resolution (e.g., "1920x1080") */
   resolution: string;
-  /** noVNC port number */
+  /** KasmVNC port number */
   port: number;
+  /** Whether audio streaming is enabled */
+  audioEnabled?: boolean;
+  /** Whether dynamic resize is supported */
+  dynamicResize?: boolean;
+  /** Image encoding format */
+  encoding?: string;
 }
 
 /**

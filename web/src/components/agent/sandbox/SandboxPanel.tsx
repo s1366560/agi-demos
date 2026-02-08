@@ -32,6 +32,8 @@ import { useState, useCallback, Children } from 'react';
 import { CodeOutlined, FileTextOutlined, DesktopOutlined, CloseOutlined } from '@ant-design/icons';
 import { Tabs, Empty, Button, Tooltip, Badge, Space } from 'antd';
 
+import { useSandboxStore } from '../../../stores/sandbox';
+
 import { RemoteDesktopViewer } from './RemoteDesktopViewer';
 import { SandboxControlPanel } from './SandboxControlPanel';
 import { SandboxOutputViewer } from './SandboxOutputViewer';
@@ -170,10 +172,12 @@ function TerminalTabContent({ sandboxId }: TabContentProps) {
 }
 
 function DesktopTabContent({ sandboxId, desktopStatus }: TabContentProps) {
+  const activeProjectId = useSandboxStore((state) => state.activeProjectId);
   return sandboxId ? (
     <div className="h-full">
       <RemoteDesktopViewer
         sandboxId={sandboxId}
+        projectId={activeProjectId || undefined}
         desktopStatus={desktopStatus}
         height="100%"
         showToolbar={true}

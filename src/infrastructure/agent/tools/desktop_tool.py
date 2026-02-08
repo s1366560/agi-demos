@@ -24,7 +24,7 @@ class DesktopTool(AgentTool):
     Tool for managing remote desktop sessions.
 
     Provides the ability to start, stop, and check the status of
-    desktop environments accessible via noVNC in a web browser.
+    desktop environments accessible via KasmVNC in a web browser.
 
     Uses SandboxOrchestrator for unified sandbox service management.
 
@@ -54,8 +54,8 @@ class DesktopTool(AgentTool):
         """
         super().__init__(
             name="desktop",
-            description="Manage remote desktop sessions (noVNC) for browser-based GUI access. "
-            "Actions: start, stop, status. Example: action='start', resolution='1280x720'",
+            description="Manage remote desktop sessions (KasmVNC) for browser-based GUI access. "
+            "Actions: start, stop, status. Example: action='start', resolution='1920x1080'",
         )
         self._orchestrator = orchestrator
         self._sandbox_adapter = sandbox_adapter
@@ -78,8 +78,8 @@ class DesktopTool(AgentTool):
                 },
                 "resolution": {
                     "type": "string",
-                    "description": "Screen resolution (e.g., '1280x720', '1920x1080')",
-                    "default": "1280x720",
+                    "description": "Screen resolution (e.g., '1920x1080', '2560x1440')",
+                    "default": "1920x1080",
                 },
                 "display": {
                     "type": "string",
@@ -88,7 +88,7 @@ class DesktopTool(AgentTool):
                 },
                 "port": {
                     "type": "integer",
-                    "description": "Port for noVNC web server",
+                    "description": "Port for KasmVNC web server",
                     "default": 6080,
                 },
             },
@@ -289,6 +289,10 @@ class DesktopTool(AgentTool):
             parts.append(f"Resolution: {status.resolution}")
         if status.pid:
             parts.append(f"PID: {status.pid}")
+        if status.running:
+            parts.append(f"Encoding: {status.encoding}")
+            parts.append(f"Audio: {'on' if status.audio_enabled else 'off'}")
+            parts.append(f"Dynamic resize: {'yes' if status.dynamic_resize else 'no'}")
 
         return " | ".join(parts) if parts else success_message
 

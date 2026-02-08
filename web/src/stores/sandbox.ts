@@ -369,7 +369,7 @@ export const useSandboxStore = create<SandboxState>()(
       },
 
       // Desktop control actions (project-scoped v2 API)
-      startDesktop: async (resolution = '1280x720') => {
+      startDesktop: async (resolution = '1920x1080') => {
         const { activeProjectId } = get();
 
         if (!activeProjectId) {

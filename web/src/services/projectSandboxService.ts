@@ -149,11 +149,17 @@ export interface SandboxStats {
 export interface DesktopStatus {
   running: boolean;
   url: string | null;
-  /** WebSocket URL for direct VNC connection via @novnc/novnc */
+  /** WebSocket URL for KasmVNC connection */
   wsUrl?: string | null;
   display: string;
   resolution: string;
   port: number;
+  /** Whether audio streaming is enabled */
+  audioEnabled?: boolean;
+  /** Whether dynamic resize is supported */
+  dynamicResize?: boolean;
+  /** Image encoding format (webp/jpeg/qoi) */
+  encoding?: string;
 }
 
 /**
@@ -386,7 +392,7 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     return response;
   }
 
-  async startDesktop(projectId: string, resolution = '1280x720'): Promise<DesktopStatus> {
+  async startDesktop(projectId: string, resolution = '1920x1080'): Promise<DesktopStatus> {
     logger.debug(`[ProjectSandboxService] Starting desktop for project: ${projectId}`);
     const response = await this.api.post<any>(
       `/projects/${projectId}/sandbox/desktop?resolution=${encodeURIComponent(resolution)}`,
@@ -395,11 +401,11 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     );
 
     // Build proxy URL with token for authentication
-    // The proxy endpoint requires authentication, and iframe doesn't send cookies
+    // KasmVNC serves its own web client; proxy through API server
     const token = getAuthToken();
     const isRunning = response.success || response.running;
     const proxyUrl = isRunning
-      ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/vnc.html${token ? `?token=${encodeURIComponent(token)}` : ''}`
+      ? `/api/v1/projects/${projectId}/sandbox/desktop/proxy/${token ? `?token=${encodeURIComponent(token)}` : ''}`
       : null;
     const wsUrl = isRunning ? buildDesktopWebSocketUrl(projectId, token || undefined) : null;
 
@@ -410,6 +416,9 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
       display: response.display || ':1',
       resolution: response.resolution || resolution,
       port: response.port || 0,
+      audioEnabled: response.audio_enabled ?? false,
+      dynamicResize: response.dynamic_resize ?? true,
+      encoding: response.encoding ?? 'webp',
     };
   }
 

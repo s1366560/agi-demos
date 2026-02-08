@@ -1,13 +1,14 @@
 """Desktop management MCP tools.
 
-Provides tools for managing remote desktop sessions.
+Provides tools for managing remote desktop sessions with KasmVNC.
+Supports dynamic resolution, audio control, and enhanced status.
 """
 
 import logging
 from typing import Optional
 
-from src.server.websocket_server import MCPTool
 from src.server.desktop_manager import DesktopManager
+from src.server.websocket_server import MCPTool
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +27,21 @@ def get_desktop_manager(workspace_dir: str = "/workspace") -> DesktopManager:
 async def start_desktop(
     _workspace_dir: str = "/workspace",
     display: str = ":1",
-    resolution: str = "1280x720",
+    resolution: str = "1920x1080",
     port: int = 6080,
 ) -> dict:
     """
     Start the remote desktop server.
 
-    Starts a remote desktop environment with LXDE, accessible via
-    noVNC in a web browser at the returned URL.
+    Starts a remote desktop environment with KDE Plasma + KasmVNC, accessible
+    via web browser at the returned URL. Features: dynamic resize,
+    clipboard sync, file transfer, and audio streaming.
 
     Args:
         _workspace_dir: Working directory for desktop sessions
         display: X11 display number (default: ":1")
-        resolution: Screen resolution (default: "1280x720")
-        port: Port for noVNC web server (default: 6080)
+        resolution: Screen resolution (default: "1920x1080")
+        port: Port for KasmVNC web server (default: 6080)
 
     Returns:
         Dictionary with status and connection URL
@@ -54,22 +56,36 @@ async def start_desktop(
             return {
                 "success": True,
                 "message": "Desktop already running",
-                "url": manager.get_novnc_url(),
+                "url": manager.get_web_url(),
                 "display": display,
                 "resolution": resolution,
                 "port": port,
+                "features": {
+                    "dynamic_resize": True,
+                    "clipboard": True,
+                    "file_transfer": True,
+                    "audio": True,
+                    "encoding": "webp",
+                },
             }
 
         await manager.start()
+        status = manager.get_status()
         return {
             "success": True,
-            "message": "Desktop started successfully",
-            "url": manager.get_novnc_url(),
+            "message": "Desktop started successfully (KasmVNC)",
+            "url": manager.get_web_url(),
             "display": display,
             "resolution": resolution,
             "port": port,
-            "xvfb_pid": manager.xvfb_process.pid if manager.xvfb_process else None,
-            "xvnc_pid": manager.xvnc_process.pid if manager.xvnc_process else None,
+            "kasmvnc_pid": status.kasmvnc_pid,
+            "features": {
+                "dynamic_resize": True,
+                "clipboard": True,
+                "file_transfer": True,
+                "audio": True,
+                "encoding": "webp",
+            },
         }
     except Exception as e:
         logger.error(f"Failed to start desktop: {e}")
@@ -84,8 +100,6 @@ async def stop_desktop(
 ) -> dict:
     """
     Stop the remote desktop server.
-
-    Stops the running desktop environment if it is active.
 
     Args:
         _workspace_dir: Workspace directory (for manager identification)
@@ -121,14 +135,8 @@ async def get_desktop_status(
     """
     Get the current status of the remote desktop.
 
-    Returns information about whether the desktop is running,
-    display, resolution, port, and process IDs.
-
-    Args:
-        _workspace_dir: Workspace directory (for manager identification)
-
     Returns:
-        Dictionary with desktop status
+        Dictionary with desktop status including KasmVNC features
     """
     manager = get_desktop_manager(_workspace_dir)
     status = manager.get_status()
@@ -138,29 +146,67 @@ async def get_desktop_status(
         "display": status.display,
         "resolution": status.resolution,
         "port": status.port,
-        "xvfb_pid": status.xvfb_pid,
-        "xvnc_pid": status.xvnc_pid,
-        "url": manager.get_novnc_url() if status.running else None,
+        "kasmvnc_pid": status.kasmvnc_pid,
+        "url": manager.get_web_url() if status.running else None,
+        "audio_enabled": status.audio_enabled,
+        "dynamic_resize": status.dynamic_resize,
+        "encoding": status.encoding,
     }
+
+
+async def change_resolution(
+    _workspace_dir: str = "/workspace",
+    resolution: str = "1920x1080",
+) -> dict:
+    """
+    Change the desktop resolution dynamically without restarting.
+
+    KasmVNC supports live resolution changes via xrandr.
+
+    Args:
+        _workspace_dir: Workspace directory
+        resolution: New resolution (e.g., "1920x1080", "2560x1440")
+
+    Returns:
+        Dictionary with operation status
+    """
+    manager = get_desktop_manager(_workspace_dir)
+
+    try:
+        success = await manager.change_resolution(resolution)
+        if success:
+            return {
+                "success": True,
+                "message": f"Resolution changed to {resolution}",
+                "resolution": resolution,
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Failed to change resolution to {resolution}",
+            }
+    except Exception as e:
+        logger.error(f"Failed to change resolution: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+        }
 
 
 async def restart_desktop(
     _workspace_dir: str = "/workspace",
     display: str = ":1",
-    resolution: str = "1280x720",
+    resolution: str = "1920x1080",
     port: int = 6080,
 ) -> dict:
     """
     Restart the remote desktop server.
 
-    Stops and starts the desktop server. Useful for applying
-    configuration changes.
-
     Args:
         _workspace_dir: Working directory for desktop sessions
         display: X11 display number (default: ":1")
-        resolution: Screen resolution (default: "1280x720")
-        port: Port for noVNC web server (default: 6080)
+        resolution: Screen resolution (default: "1920x1080")
+        port: Port for KasmVNC web server (default: 6080)
 
     Returns:
         Dictionary with operation status
@@ -172,15 +218,15 @@ async def restart_desktop(
 
     try:
         await manager.restart()
+        status = manager.get_status()
         return {
             "success": True,
             "message": "Desktop restarted successfully",
-            "url": manager.get_novnc_url(),
+            "url": manager.get_web_url(),
             "display": display,
             "resolution": resolution,
             "port": port,
-            "xvfb_pid": manager.xvfb_process.pid if manager.xvfb_process else None,
-            "xvnc_pid": manager.xvnc_process.pid if manager.xvnc_process else None,
+            "kasmvnc_pid": status.kasmvnc_pid,
         }
     except Exception as e:
         logger.error(f"Failed to restart desktop: {e}")
@@ -194,7 +240,10 @@ def create_start_desktop_tool() -> MCPTool:
     """Create MCP tool for starting the remote desktop."""
     return MCPTool(
         name="start_desktop",
-        description="Start the remote desktop server (LXDE + noVNC) for browser-based GUI access",
+        description=(
+            "Start the remote desktop server (KDE Plasma + KasmVNC) for browser-based "
+            "GUI access with dynamic resize, clipboard, file transfer, and audio"
+        ),
         input_schema={
             "type": "object",
             "properties": {
@@ -205,12 +254,12 @@ def create_start_desktop_tool() -> MCPTool:
                 },
                 "resolution": {
                     "type": "string",
-                    "description": "Screen resolution (default: '1280x720')",
-                    "default": "1280x720",
+                    "description": "Screen resolution (default: '1920x1080')",
+                    "default": "1920x1080",
                 },
                 "port": {
                     "type": "number",
-                    "description": "Port for noVNC web server (default: 6080)",
+                    "description": "Port for KasmVNC web server (default: 6080)",
                     "default": 6080,
                 },
             },
@@ -238,13 +287,39 @@ def create_desktop_status_tool() -> MCPTool:
     """Create MCP tool for getting desktop status."""
     return MCPTool(
         name="get_desktop_status",
-        description="Get the current status of the remote desktop (running, display, resolution, port, PID, URL)",
+        description=(
+            "Get the current status of the remote desktop "
+            "(running, resolution, encoding, audio, features)"
+        ),
         input_schema={
             "type": "object",
             "properties": {},
             "additionalProperties": False,
         },
         handler=get_desktop_status,
+    )
+
+
+def create_change_resolution_tool() -> MCPTool:
+    """Create MCP tool for changing resolution dynamically."""
+    return MCPTool(
+        name="change_resolution",
+        description=(
+            "Change the desktop resolution dynamically without restarting. "
+            "Supported: 1280x720, 1920x1080, 1600x900, 2560x1440"
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "resolution": {
+                    "type": "string",
+                    "description": "New resolution (e.g., '1920x1080')",
+                },
+            },
+            "required": ["resolution"],
+            "additionalProperties": False,
+        },
+        handler=change_resolution,
     )
 
 
@@ -263,12 +338,12 @@ def create_restart_desktop_tool() -> MCPTool:
                 },
                 "resolution": {
                     "type": "string",
-                    "description": "Screen resolution (default: '1280x720')",
-                    "default": "1280x720",
+                    "description": "Screen resolution (default: '1920x1080')",
+                    "default": "1920x1080",
                 },
                 "port": {
                     "type": "number",
-                    "description": "Port for noVNC web server (default: 6080)",
+                    "description": "Port for KasmVNC web server (default: 6080)",
                     "default": 6080,
                 },
             },

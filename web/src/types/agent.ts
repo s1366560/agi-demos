@@ -2144,13 +2144,19 @@ export interface TimelineResponse {
 export interface DesktopStatus {
   running: boolean;
   url: string | null;
-  /** WebSocket URL for direct VNC connection via @novnc/novnc */
+  /** WebSocket URL for KasmVNC connection */
   wsUrl?: string | null;
   display: string;
   resolution: string;
   port: number;
-  xvfbPid?: number | null;
-  xvncPid?: number | null;
+  /** KasmVNC process ID */
+  kasmvncPid?: number | null;
+  /** Whether audio streaming is enabled */
+  audioEnabled?: boolean;
+  /** Whether dynamic resize is supported */
+  dynamicResize?: boolean;
+  /** Image encoding format (webp/jpeg/qoi) */
+  encoding?: string;
 }
 
 /**

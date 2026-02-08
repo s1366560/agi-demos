@@ -94,6 +94,9 @@ async def start_desktop(
             display=status.display,
             resolution=status.resolution,
             port=status.port,
+            audio_enabled=status.audio_enabled,
+            dynamic_resize=status.dynamic_resize,
+            encoding=status.encoding,
         )
 
     except HTTPException:
@@ -172,6 +175,9 @@ async def get_desktop_status(
             display=status.display,
             resolution=status.resolution,
             port=status.port,
+            audio_enabled=status.audio_enabled,
+            dynamic_resize=status.dynamic_resize,
+            encoding=status.encoding,
         )
 
     except HTTPException:

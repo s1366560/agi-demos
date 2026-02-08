@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class DesktopConfig:
     """Desktop service configuration."""
 
-    resolution: str = "1280x720"
+    resolution: str = "1920x1080"
     display: str = ":1"
     port: int = 6080
 
@@ -53,9 +53,12 @@ class DesktopStatus:
     running: bool
     url: Optional[str] = None
     display: str = ":1"
-    resolution: str = "1280x720"
+    resolution: str = "1920x1080"
     port: int = 6080
     pid: Optional[int] = None
+    audio_enabled: bool = False
+    dynamic_resize: bool = True
+    encoding: str = "webp"
 
 
 @dataclass
@@ -395,7 +398,10 @@ class SandboxOrchestrator:
                 display=data.get("display", ""),
                 resolution=data.get("resolution", ""),
                 port=data.get("port", 0),
-                pid=data.get("xvfb_pid") or data.get("xvnc_pid"),
+                pid=data.get("kasmvnc_pid"),
+                audio_enabled=data.get("audio_enabled", False),
+                dynamic_resize=data.get("dynamic_resize", True),
+                encoding=data.get("encoding", "webp"),
             )
         except (json.JSONDecodeError, ValueError, KeyError) as e:
             logger.error(f"Failed to parse desktop result: {e}, content: {content_list}")

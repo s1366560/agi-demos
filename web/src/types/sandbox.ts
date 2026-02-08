@@ -87,6 +87,9 @@ export interface DesktopStartedEventData {
   display: string;
   resolution: string;
   port: number;
+  audio_enabled?: boolean;
+  dynamic_resize?: boolean;
+  encoding?: string;
 }
 
 /**
@@ -122,6 +125,9 @@ export interface DesktopStatusEventData {
   display: string;
   resolution: string;
   port: number;
+  audio_enabled?: boolean;
+  dynamic_resize?: boolean;
+  encoding?: string;
 }
 
 /**
@@ -266,7 +272,7 @@ export interface ProjectSandbox {
   websocket_url?: string;
   /** MCP server port */
   mcp_port?: number;
-  /** Desktop (noVNC) port */
+  /** Desktop (KasmVNC) port */
   desktop_port?: number;
   /** Terminal (ttyd) port */
   terminal_port?: number;

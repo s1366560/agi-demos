@@ -146,11 +146,12 @@ const TerminalTab: React.FC<{
 // Desktop Tab Content
 const DesktopTab: React.FC<{
   sandboxId: string;
+  projectId?: string;
   desktopStatus: any;
   onStartDesktop: () => Promise<void>;
   onStopDesktop: () => Promise<void>;
   isDesktopLoading: boolean;
-}> = ({ sandboxId, desktopStatus, onStartDesktop, onStopDesktop, isDesktopLoading }) => {
+}> = ({ sandboxId, projectId, desktopStatus, onStartDesktop, onStopDesktop, isDesktopLoading }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Use ref to track auto-start attempt (avoids setState in effect)
   const autoStartAttemptedRef = useRef(false);
@@ -228,6 +229,7 @@ const DesktopTab: React.FC<{
       <div className={`flex-1 min-h-0 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
         <RemoteDesktopViewer
           sandboxId={sandboxId}
+          projectId={projectId}
           desktopStatus={desktopStatus}
           height="100%"
           showToolbar={false}
@@ -339,6 +341,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
       children: sandboxId ? (
         <DesktopTab
           sandboxId={sandboxId}
+          projectId={activeProjectId || undefined}
           desktopStatus={desktopStatus}
           onStartDesktop={startDesktop}
           onStopDesktop={stopDesktop}

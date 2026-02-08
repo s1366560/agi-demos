@@ -61,20 +61,20 @@ class SandboxUrlService:
     def build_desktop_url(
         self, instance: SandboxInstanceInfo, token: Optional[str] = None
     ) -> Optional[str]:
-        """构建 Desktop (noVNC) URL.
+        """Build Desktop (KasmVNC) URL.
 
         Args:
-            instance: Sandbox 实例信息
-            token: 可选的认证 token
+            instance: Sandbox instance info
+            token: Optional auth token
 
         Returns:
-            Desktop URL 或 None
+            Desktop URL or None
         """
         if instance.desktop_port is None:
             return None
 
         host = instance.host or self._default_host
-        base_url = f"http://{host}:{instance.desktop_port}/vnc.html"
+        base_url = f"https://{host}:{instance.desktop_port}"
 
         if token:
             return f"{base_url}?token={token}"

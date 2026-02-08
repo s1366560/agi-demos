@@ -20,6 +20,7 @@ from src.tools.ast_tools import (
 )
 from src.tools.bash_tool import create_bash_tool
 from src.tools.desktop_tools import (
+    create_change_resolution_tool,
     create_desktop_status_tool,
     create_restart_desktop_tool,
     create_start_desktop_tool,
@@ -180,6 +181,7 @@ def get_tool_registry(workspace_dir: str = "/workspace") -> ToolRegistry:
     registry.register(create_start_desktop_tool())
     registry.register(create_stop_desktop_tool())
     registry.register(create_desktop_status_tool())
+    registry.register(create_change_resolution_tool())
     registry.register(create_restart_desktop_tool())
 
     # Register import tools (for importing files from MemStack storage)

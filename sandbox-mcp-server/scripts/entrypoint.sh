@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sandbox MCP Server Entrypoint
-# Starts all services: MCP server, VNC (remote desktop), ttyd (web terminal)
+# Starts all services: MCP server, KasmVNC (remote desktop), ttyd (web terminal)
 
 set -e
 
@@ -34,21 +34,19 @@ DESKTOP_ENABLED="${DESKTOP_ENABLED:-true}"
 DESKTOP_RESOLUTION="${DESKTOP_RESOLUTION:-1920x1080}"
 DESKTOP_PORT="${DESKTOP_PORT:-6080}"
 TERMINAL_PORT="${TERMINAL_PORT:-7681}"
-VNC_SERVER_TYPE="${VNC_SERVER_TYPE:-tigervnc}"  # Options: tigervnc (default, high-performance), x11vnc (fallback, stable)
-SKIP_MCP_SERVER="${SKIP_MCP_SERVER:-false}"  # Set to true to skip MCP server (for desktop testing)
+SKIP_MCP_SERVER="${SKIP_MCP_SERVER:-false}"
 CONTAINER_HOSTNAME="${HOSTNAME:-mcp-sandbox}"
+VNC_DISPLAY=":1"
 
 # Configure hostname in /etc/hosts at runtime
 configure_hostname() {
     log_info "Configuring hostname: $CONTAINER_HOSTNAME"
     
-    # Add hostname to /etc/hosts if not already present
     if ! grep -q "$CONTAINER_HOSTNAME" /etc/hosts 2>/dev/null; then
         echo "127.0.0.1 $CONTAINER_HOSTNAME" >> /etc/hosts
         echo "::1 $CONTAINER_HOSTNAME" >> /etc/hosts
     fi
     
-    # Set hostname (may fail if not privileged, that's OK)
     hostname "$CONTAINER_HOSTNAME" 2>/dev/null || true
     
     log_success "Hostname configured: $CONTAINER_HOSTNAME"
@@ -56,8 +54,6 @@ configure_hostname() {
 
 # PID tracking
 PIDS=()
-XVFB_PID=""
-VNC_PID=""
 MCP_PID=""
 
 # Cleanup function
@@ -69,21 +65,8 @@ cleanup() {
         kill "$MCP_PID" 2>/dev/null || true
     fi
 
-    # Stop Xvfb
-    if [ -n "$XVFB_PID" ] && kill -0 "$XVFB_PID" 2>/dev/null; then
-        kill "$XVFB_PID" 2>/dev/null || true
-    fi
-
-    # Stop VNC server (TigerVNC or x11vnc)
-    if [ -n "$VNC_PID" ] && kill -0 "$VNC_PID" 2>/dev/null; then
-        kill "$VNC_PID" 2>/dev/null || true
-    fi
-
-    # Kill any remaining VNC processes (both TigerVNC and x11vnc)
-    killall vncserver Xvnc x11vnc 2>/dev/null || true
-
-    # Stop noVNC/websockify
-    killall websockify 2>/dev/null || true
+    # Stop KasmVNC
+    vncserver -kill "$VNC_DISPLAY" 2>/dev/null || true
 
     # Stop ttyd
     killall ttyd 2>/dev/null || true
@@ -94,279 +77,76 @@ cleanup() {
 # Trap signals
 trap cleanup EXIT TERM INT
 
-# Start Xvfb (Virtual X Server) as root
-# Note: Skipped if using TigerVNC (which provides its own X server)
-start_xvfb() {
-    # Skip Xvfb if using TigerVNC (it has built-in X server)
-    if [ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null; then
-        log_info "Skipping Xvfb (TigerVNC provides X server)"
-        export DISPLAY=:99
-        return 0
-    fi
-
-    log_info "Starting Xvfb (Virtual X Server)..."
-
-    export DISPLAY=:99
-    Xvfb "$DISPLAY" -screen 0 "${DESKTOP_RESOLUTION}x24" -ac +extension GLX +render -noreset &
-    XVFB_PID=$!
-
-    # Wait for Xvfb to be ready
-    sleep 3
-
-    if ! kill -0 "$XVFB_PID" 2>/dev/null; then
-        log_error "Xvfb failed to start"
-        return 1
-    fi
-
-    # Make X socket accessible
-    mkdir -p /tmp/.X11-unix
-    chmod 777 /tmp/.X11-unix
-
-    log_success "Xvfb started (PID: $XVFB_PID, DISPLAY: $DISPLAY)"
-}
-
-# Start Desktop Environment (XFCE)
-start_desktop() {
-    log_info "Starting XFCE desktop environment..."
-
-    # Fix ICE directory permission (required for XFCE session)
-    mkdir -p /tmp/.ICE-unix
-    chmod 777 /tmp/.ICE-unix
+# Start KasmVNC (Remote Desktop with built-in web client)
+start_kasmvnc() {
+    log_info "Starting KasmVNC on display $VNC_DISPLAY..."
 
     # Set up runtime directory
     mkdir -p /run/user/0
     chmod 700 /run/user/0
 
-    # Create VNC directory for session persistence
+    # Set up KasmVNC user config
     mkdir -p /root/.vnc
+    chmod 700 /root/.vnc
 
-    # Create xstartup from template if it doesn't exist
-    if [ ! -f /root/.vnc/xstartup ]; then
-        cp /etc/vnc/xstartup.template /root/.vnc/xstartup
-        chmod +x /root/.vnc/xstartup
+    # Ensure KasmVNC user exists with write permissions (non-interactive)
+    # KasmVNC reads $HOME/.kasmpasswd (NOT .vnc/kasmpasswd)
+    if [ ! -f /root/.kasmpasswd ]; then
+        echo "root:kasmvnc:ow" > /root/.kasmpasswd
+        chmod 600 /root/.kasmpasswd
     fi
 
-    # Run XFCE components with proper environment
-    sh -c "
-        export DISPLAY=:99
-        export XDG_RUNTIME_DIR=/run/user/0
+    # Copy xstartup from template (BEFORE KasmVNC starts)
+    cp /etc/kasmvnc/xstartup.template /root/.vnc/xstartup
+    chmod +x /root/.vnc/xstartup
 
-        # Start D-Bus session
-        dbus-daemon --session --address=unix:path=/run/user/0/bus --nofork --syslog &
-        sleep 1
+    # Mark DE as selected to skip interactive select-de.sh
+    touch /root/.vnc/.de-was-selected
 
-        # Set DBUS_SESSION_BUS_ADDRESS for all child processes
-        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/0/bus
+    # Copy KasmVNC config to user dir (vncserver reads ~/.vnc/kasmvnc.yaml)
+    cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml
 
-        # Start XFCE desktop environment with explicit components
-        xfwm4 --display=:99 &
-        sleep 1
-        xfce4-panel --display=:99 &
-        sleep 1
-        xfdesktop --display=:99 &
-        sleep 1
-        xfce4-session &
-    " &
+    # Set up KDE Plasma configs
+    export DISPLAY="$VNC_DISPLAY"
+    export XDG_RUNTIME_DIR=/run/user/0
 
-    sleep 5
+    mkdir -p /root/.config
 
-    log_success "Desktop environment started (may take additional 20-30s to fully load)"
-}
+    [ -f /root/.config/kdeglobals ] || \
+        cp /etc/xdg/kdeglobals /root/.config/ 2>/dev/null || true
+    [ -f /root/.config/kwinrc ] || \
+        cp /etc/xdg/kwinrc /root/.config/ 2>/dev/null || true
 
-# Helper: Wait for VNC port to be ready
-# Args: $1 = server_name (for logging), $2 = timeout (default 10s)
-_wait_for_vnc_port() {
-    local server_name="$1"
-    local timeout="${2:-10}"
+    # Start KasmVNC server
+    # KasmVNC provides: X server + VNC + WebSocket + Web client (all-in-one)
+    vncserver "$VNC_DISPLAY" \
+        -geometry "${DESKTOP_RESOLUTION}" \
+        -depth 24 \
+        -websocketPort "$DESKTOP_PORT" \
+        -interface 0.0.0.0 \
+        -disableBasicAuth \
+        2>&1 | tee /tmp/kasmvnc.log &
+
+    # Wait for KasmVNC to start
+    local timeout=15
     local elapsed=0
-
     while [ $elapsed -lt $timeout ]; do
-        if netstat -tln 2>/dev/null | grep -q ":5901 "; then
+        if netstat -tln 2>/dev/null | grep -q ":$DESKTOP_PORT "; then
+            log_success "KasmVNC started on port $DESKTOP_PORT (display $VNC_DISPLAY)"
             return 0
         fi
         sleep 1
         elapsed=$((elapsed + 1))
     done
 
-    log_error "$server_name: Port 5901 not ready after ${timeout}s"
+    log_warn "KasmVNC may not be running properly (check: cat /tmp/kasmvnc.log)"
     return 1
-}
-
-# Helper: Prepare VNC directory
-_prepare_vnc_dir() {
-    mkdir -p /root/.vnc
-    chmod 700 /root/.vnc
-}
-
-# Start x11vnc (fallback VNC server)
-# This is the traditional VNC server with lower performance but wider compatibility
-_start_x11vnc() {
-    log_info "Starting VNC server (x11vnc fallback)..."
-
-    export DISPLAY=:99
-
-    # Wait for X11 to be ready
-    sleep 2
-
-    # Start x11vnc with optimized settings
-    # -rfbport 5901: VNC protocol port
-    # -shared: Allow multiple connections
-    # -forever: Keep listening after disconnect
-    # -nopw: No authentication (container-safe)
-    # -xkb: Handle keyboard properly
-    # -bg: Run in background
-    x11vnc -display "$DISPLAY" \
-        -rfbport 5901 \
-        -shared \
-        -forever \
-        -nopw \
-        -xkb \
-        -bg \
-        -o /tmp/x11vnc.log 2>/dev/null &
-
-    VNC_PID=$!
-
-    # Wait for VNC to start
-    if _wait_for_vnc_port "x11vnc" 10; then
-        log_success "VNC server started on port 5901 (x11vnc)"
-        return 0
-    else
-        log_error "VNC server failed to start on port 5901 (x11vnc)"
-        return 1
-    fi
-}
-
-# Start TigerVNC (high-performance VNC server with built-in X server)
-# Features: Tight encoding (50% bandwidth reduction), session persistence
-# Note: TigerVNC runs its own X server (Xvnc), replacing Xvfb for display :99
-# Ubuntu 25.04 Note: TigerVNC now uses ~/.config/tigervnc for configuration
-_start_tigervnc() {
-    log_info "Starting VNC server (TigerVNC with built-in X server)..."
-
-    # Stop Xvfb if running (TigerVNC provides its own X server)
-    if [ -n "$XVFB_PID" ] && kill -0 "$XVFB_PID" 2>/dev/null; then
-        log_info "Stopping Xvfb (TigerVNC includes X server)..."
-        kill "$XVFB_PID" 2>/dev/null || true
-        XVFB_PID=""
-        sleep 2
-    fi
-
-    # Set up runtime directory
-    mkdir -p /run/user/0
-    chmod 700 /run/user/0
-
-    # Clean up any old .vnc directory that might cause migration issues on Ubuntu 25.04
-    rm -rf /root/.vnc
-    mkdir -p /root/.config/tigervnc
-
-    # Create xstartup and XFCE configs
-    export DISPLAY=:99
-    export XDG_RUNTIME_DIR=/run/user/0
-
-    mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml
-    mkdir -p /root/.config/xfce4/panel
-
-    [ -f /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml ] || \
-        cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
-           /root/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
-    [ -f /root/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml ] || \
-        cp /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml \
-           /root/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
-    [ -f /root/.config/xfce4/panel/whiskermenu-1.rc ] || \
-        cp /etc/xdg/xfce4/panel/whiskermenu-1.rc \
-           /root/.config/xfce4/panel/ 2>/dev/null || true
-
-    cp /etc/vnc/xstartup.template /root/.config/tigervnc/xstartup
-    chmod +x /root/.config/tigervnc/xstartup
-
-    # Start TigerVNC with NO authentication
-    vncserver :99 \
-        -geometry ${DESKTOP_RESOLUTION} \
-        -depth 24 \
-        -rfbport 5901 \
-        -localhost no \
-        -securitytypes none \
-        --I-KNOW-THIS-IS-INSECURE \
-        -AlwaysShared \
-        2>&1 | tee /tmp/tigervnc.log &
-
-    VNC_PID=$!
-
-    # Wait for TigerVNC to start (longer timeout for session initialization)
-    if _wait_for_vnc_port "TigerVNC" 15; then
-        log_success "TigerVNC started on port 5901 (with built-in X server)"
-        return 0
-    else
-        log_warn "TigerVNC failed to start (check logs: docker exec <container> cat /tmp/tigervnc.log)"
-        kill $VNC_PID 2>/dev/null || true
-        vncserver -kill :99 2>/dev/null || true
-        sleep 1
-        return 1
-    fi
-}
-
-# Start VNC Server (TigerVNC with x11vnc fallback)
-# Priority: TigerVNC (default, better performance) > x11vnc (fallback)
-# Environment variable VNC_SERVER_TYPE can force selection: "tigervnc" or "x11vnc"
-# NOTE: VNC failures are non-fatal - container continues running for MCP server
-start_vnc() {
-    # Check if user wants to force x11vnc
-    if [ "$VNC_SERVER_TYPE" = "x11vnc" ]; then
-        log_info "Forcing x11vnc (VNC_SERVER_TYPE=x11vnc)..."
-        if _start_x11vnc; then
-            return 0
-        else
-            log_warn "x11vnc failed to start, desktop will not be available"
-            return 1
-        fi
-    fi
-
-    # Try TigerVNC first (better performance: 50% bandwidth reduction)
-    if command -v vncserver &> /dev/null; then
-        if _start_tigervnc; then
-            return 0
-        fi
-        # Fall through to x11vnc if TigerVNC failed
-        log_info "Falling back to x11vnc..."
-    else
-        log_info "TigerVNC not available, using x11vnc..."
-    fi
-
-    # Fallback to x11vnc if TigerVNC not available or failed
-    if _start_x11vnc; then
-        return 0
-    else
-        log_warn "All VNC servers failed to start, desktop will not be available"
-        log_warn "MCP server will continue running"
-        return 1
-    fi
-}
-
-# Start noVNC (Remote Desktop)
-start_novnc() {
-    log_info "Starting noVNC (Remote Desktop) on port $DESKTOP_PORT..."
-
-    # Start noVNC with websockify
-    # Connects to VNC server on port 5901
-    # Use /usr/bin/websockify directly (installed via apt python3-websockify)
-    cd /opt/noVNC
-    /usr/bin/websockify --web=/opt/noVNC --heartbeat 30 "$DESKTOP_PORT" localhost:5901 &
-    PIDS+=($!)
-
-    sleep 2
-
-    if netstat -tln 2>/dev/null | grep -q ":$DESKTOP_PORT "; then
-        log_success "noVNC started on http://localhost:$DESKTOP_PORT"
-    else
-        log_warn "noVNC may not be running properly on port $DESKTOP_PORT"
-    fi
 }
 
 # Start ttyd (Web Terminal) as root
 start_ttyd() {
     log_info "Starting ttyd (Web Terminal) on port $TERMINAL_PORT..."
 
-    # Start ttyd with login shell
     ttyd -p "$TERMINAL_PORT" -- /bin/bash &
     PIDS+=($!)
 
@@ -404,9 +184,9 @@ start_mcp_server() {
 # Main startup sequence
 main() {
     echo ""
-    echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║           Sandbox MCP Server - Starting Services           ║"
-    echo "╚════════════════════════════════════════════════════════════╝"
+    echo "========================================================"
+    echo "     Sandbox MCP Server - Starting Services (KasmVNC)"
+    echo "========================================================"
     echo ""
 
     # Configure hostname first
@@ -415,63 +195,37 @@ main() {
     # Start MCP Server first (always required)
     start_mcp_server
 
-    # Start Desktop if enabled
-    # NOTE: VNC failure is non-fatal - we continue running for MCP server
-    VNC_STARTED=false
+    # Start Desktop if enabled (KasmVNC = single process for VNC + Web)
     if [ "$DESKTOP_ENABLED" = "true" ]; then
-        # Start Xvfb if needed (x11vnc mode requires it, TigerVNC has built-in X server)
-        if ! ([ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null); then
-            start_xvfb || log_warn "Xvfb failed to start"
-        fi
-
-        # Start VNC server (TigerVNC or x11vnc)
-        if start_vnc; then
-            VNC_STARTED=true
-            # Start desktop environment (XFCE)
-            # Note: TigerVNC runs xstartup automatically, so skip start_desktop
-            if [ "$VNC_SERVER_TYPE" = "tigervnc" ] && command -v vncserver &> /dev/null; then
-                log_info "TigerVNC manages desktop via xstartup, skipping start_desktop"
-            else
-                start_desktop
-            fi
-
-            # Start noVNC web client
-            start_novnc
-        else
-            log_warn "Desktop will not be available due to VNC startup failure"
-        fi
+        start_kasmvnc || log_warn "Desktop will not be available"
     fi
 
     # Start Terminal
     start_ttyd
 
     echo ""
-    echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                  All Services Started                      ║"
-    echo "╚════════════════════════════════════════════════════════════╝"
+    echo "========================================================"
+    echo "                 All Services Started"
+    echo "========================================================"
     echo ""
     log_info "Service Endpoints:"
-    echo "  • MCP Server:     http://localhost:$MCP_PORT"
-    echo "  • Health Check:   http://localhost:$MCP_PORT/health"
+    echo "  * MCP Server:     http://localhost:$MCP_PORT"
+    echo "  * Health Check:   http://localhost:$MCP_PORT/health"
     if [ "$DESKTOP_ENABLED" = "true" ]; then
-        echo "  • Remote Desktop: http://localhost:$DESKTOP_PORT/vnc.html"
+        echo "  * Remote Desktop: http://localhost:$DESKTOP_PORT"
         echo ""
-        log_info "VNC Server: $VNC_SERVER_TYPE"
-        log_info "Note: XFCE may take 20-30 seconds to fully load."
+        log_info "Desktop: KasmVNC (WebP + dynamic resize + clipboard + audio)"
     fi
-    echo "  • Web Terminal:  ws://localhost:$TERMINAL_PORT"
+    echo "  * Web Terminal:   ws://localhost:$TERMINAL_PORT"
     echo ""
     log_info "Container ready. Waiting for signals..."
 
-    # Wait for MCP server - this is the primary service
+    # Wait for MCP server
     if [ -n "$MCP_PID" ] && kill -0 "$MCP_PID" 2>/dev/null; then
-        # Wait for MCP server process - this is the main blocking call
         wait $MCP_PID
         exit_code=$?
         log_info "MCP server exited with code $exit_code"
     else
-        # MCP server not running, but we should still keep container alive
-        # This allows health checks and manual debugging
         log_warn "MCP server not running, entering standby mode"
         while true; do
             sleep 60
