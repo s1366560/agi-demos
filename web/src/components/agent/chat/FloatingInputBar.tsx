@@ -9,7 +9,7 @@
  * Backward compatibility maintained through individual prop support.
  */
 
-import { KeyboardEvent, useState, useId } from 'react';
+import { KeyboardEvent, useState, useId, useRef, useCallback } from 'react';
 
 /**
  * Plan mode configuration
@@ -179,12 +179,23 @@ export function FloatingInputBar({
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
+    const target = e.currentTarget;
+    target.style.height = 'auto';
+    // Minimum height for 3 lines (approx 60px + padding)
+    const minHeight = 60;
+    const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 200));
+    target.style.height = `${newHeight}px`;
+  }, []);
 
   const handleStop = () => {
     onStop?.();
@@ -206,18 +217,22 @@ export function FloatingInputBar({
             </button>
           )}
 
-          {/* Text Input */}
-          <input
+          {/* Text Input - Textarea for multi-line support */}
+          <textarea
+            ref={textareaRef}
             value={inputValue}
-            onChange={(e) => handleChange(e.target.value)}
+            onChange={(e) => {
+              handleChange(e.target.value);
+              handleInput(e);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={disabled ? 'Agent is thinking...' : placeholder}
             disabled={disabled}
             maxLength={maxLength}
-            className={`flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white py-2 px-0 placeholder:text-text-muted text-sm ${
+            rows={3}
+            className={`flex-1 bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white py-2 px-0 placeholder:text-text-muted text-sm resize-none overflow-hidden min-h-[60px] ${
               disabled ? 'cursor-not-allowed opacity-50' : ''
             }`}
-            type="text"
             aria-label="Message input"
           />
 
@@ -322,13 +337,7 @@ export function FloatingInputBar({
                 </>
               )}
             </div>
-            <div className="text-[10px] text-slate-400">
-              Press{' '}
-              <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 font-sans">
-                Enter
-              </kbd>{' '}
-              to send
-            </div>
+
           </div>
         )}
       </div>

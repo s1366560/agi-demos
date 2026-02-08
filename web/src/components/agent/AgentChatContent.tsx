@@ -49,9 +49,9 @@ const PANEL_MIN_WIDTH = 280;
 const PANEL_DEFAULT_WIDTH = 360;
 const PANEL_MAX_PERCENT = 0.9; // 90% of viewport width
 
-const INPUT_MIN_HEIGHT = 120;
+const INPUT_MIN_HEIGHT = 140;
 const INPUT_MAX_HEIGHT = 400;
-const INPUT_DEFAULT_HEIGHT = 160;
+const INPUT_DEFAULT_HEIGHT = 180;
 
 export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   className = '',

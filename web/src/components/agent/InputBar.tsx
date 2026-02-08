@@ -121,7 +121,10 @@ export const InputBar = memo<InputBarProps>(
     const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
       const target = e.currentTarget;
       target.style.height = 'auto';
-      target.style.height = `${Math.min(target.scrollHeight, 400)}px`;
+      // Minimum height for 3 lines (approx 72px + padding)
+      const minHeight = 72;
+      const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 400));
+      target.style.height = `${newHeight}px`;
       setContent(target.value);
     }, []);
 
@@ -197,7 +200,7 @@ export const InputBar = memo<InputBarProps>(
             </div>
           )}
 
-          {/* Text Area - fills available space */}
+          {/* Text Area - fills available space, minimum 3 rows */}
           <div className="flex-1 min-h-0 px-4 py-3">
             <textarea
               ref={textareaRef}
@@ -211,12 +214,14 @@ export const InputBar = memo<InputBarProps>(
                   ? 'Describe what you want to plan in detail...'
                   : "Ask me anything, or type '/' for commands..."
               }
+              rows={3}
               className="
               w-full h-full resize-none bg-transparent
               text-slate-800 dark:text-slate-100
               placeholder:text-slate-400 dark:placeholder:text-slate-500
               focus:outline-none
               text-[15px] leading-relaxed
+              min-h-[72px]
             "
             />
           </div>
@@ -345,24 +350,6 @@ export const InputBar = memo<InputBarProps>(
           </div>
         </div>
 
-        {/* Footer hint */}
-        <div className="flex-shrink-0 mt-2 text-center">
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-center gap-2">
-            <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans text-[10px]">
-                Enter
-              </kbd>
-              to send
-            </span>
-            <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-            <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 dark:text-slate-400 font-sans text-[10px]">
-                Shift + Enter
-              </kbd>
-              for new line
-            </span>
-          </p>
-        </div>
       </div>
     );
   }

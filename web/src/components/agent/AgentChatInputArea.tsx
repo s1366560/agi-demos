@@ -58,7 +58,7 @@ export const AgentChatInputArea = ({
   disabled = false,
   isPlanMode = false,
   onTogglePlanMode,
-  minHeight = 120,
+  minHeight = 140,
   maxHeight = 400,
   conversationId,
   projectId,

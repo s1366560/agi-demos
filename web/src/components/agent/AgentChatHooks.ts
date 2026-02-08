@@ -16,9 +16,9 @@ export const PANEL_MIN_WIDTH = 280;
 export const PANEL_DEFAULT_WIDTH = 360;
 export const PANEL_MAX_PERCENT = 0.9; // 90% of viewport width
 
-export const INPUT_MIN_HEIGHT = 120;
+export const INPUT_MIN_HEIGHT = 140;
 export const INPUT_MAX_HEIGHT = 400;
-export const INPUT_DEFAULT_HEIGHT = 160;
+export const INPUT_DEFAULT_HEIGHT = 180;
 
 /**
  * Hook for managing panel and input resize state

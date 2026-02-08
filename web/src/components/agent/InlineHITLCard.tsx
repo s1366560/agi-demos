@@ -119,35 +119,35 @@ const getHITLColor = (type: HITLType) => {
   }
 };
 
-// Get light gradient background for card (matching MessageBubble glass-morphism style)
-const getHITLLightGradientClass = (type: HITLType) => {
+// Get background class for card (unified with ToolExecution/WorkPlan style)
+const getHITLBackgroundClass = (type: HITLType) => {
   switch (type) {
     case 'clarification':
-      return 'from-blue-50/90 to-sky-50/70 dark:from-blue-900/25 dark:to-sky-900/15';
+      return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50';
     case 'decision':
-      return 'from-amber-50/90 to-orange-50/70 dark:from-amber-900/25 dark:to-orange-900/15';
+      return 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50';
     case 'env_var':
-      return 'from-violet-50/90 to-purple-50/70 dark:from-violet-900/25 dark:to-purple-900/15';
+      return 'bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800/50';
     case 'permission':
-      return 'from-rose-50/90 to-red-50/70 dark:from-rose-900/25 dark:to-red-900/15';
+      return 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800/50';
     default:
-      return 'from-blue-50/90 to-sky-50/70 dark:from-blue-900/25 dark:to-sky-900/15';
+      return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50';
   }
 };
 
-// Get border color class
-const getHITLBorderClass = (type: HITLType) => {
+// Get header background class
+const getHITLHeaderBgClass = (type: HITLType) => {
   switch (type) {
     case 'clarification':
-      return 'border-blue-200/50 dark:border-blue-800/30';
+      return 'bg-blue-100/70 dark:bg-blue-900/40 border-blue-200/70 dark:border-blue-800/40';
     case 'decision':
-      return 'border-amber-200/50 dark:border-amber-800/30';
+      return 'bg-amber-100/70 dark:bg-amber-900/40 border-amber-200/70 dark:border-amber-800/40';
     case 'env_var':
-      return 'border-violet-200/50 dark:border-violet-800/30';
+      return 'bg-violet-100/70 dark:bg-violet-900/40 border-violet-200/70 dark:border-violet-800/40';
     case 'permission':
-      return 'border-rose-200/50 dark:border-rose-800/30';
+      return 'bg-rose-100/70 dark:bg-rose-900/40 border-rose-200/70 dark:border-rose-800/40';
     default:
-      return 'border-blue-200/50 dark:border-blue-800/30';
+      return 'bg-blue-100/70 dark:bg-blue-900/40 border-blue-200/70 dark:border-blue-800/40';
   }
 };
 
@@ -260,13 +260,15 @@ const CountdownTimer: React.FC<{
 });
 CountdownTimer.displayName = 'CountdownTimer';
 
-/** Clarification card content - Unified styling */
+/** Clarification card content - Supports both active and answered states */
 const ClarificationContent: React.FC<{
   data: ClarificationAskedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-}> = memo(({ data, onSubmit, isSubmitting }) => {
-  const [selected, setSelected] = useState<string | null>(null);
+  isAnswered?: boolean;
+  answeredValue?: string;
+}> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
+  const [selected, setSelected] = useState<string | null>(isAnswered ? answeredValue || null : null);
   const [customInput, setCustomInput] = useState('');
 
   const handleSubmit = useCallback(() => {
@@ -285,41 +287,60 @@ const ClarificationContent: React.FC<{
     <div className="space-y-4">
       <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">{data.question}</p>
 
-      <Radio.Group
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
-        className="flex flex-col gap-3 w-full"
-      >
-        {data.options.map((option) => (
-          <div
-            key={option.id}
-            className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
-              selected === option.id
-                ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
-                : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
-            }`}
-            onClick={() => setSelected(option.id)}
-          >
-            <Radio value={option.id} className="w-full">
+      <div className="flex flex-col gap-3 w-full">
+        {data.options.map((option) => {
+          const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
+          return (
+            <div
+              key={option.id}
+              className={`p-3 rounded-xl border-2 transition-all ${
+                isSelected
+                  ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
+                  : isAnswered
+                    ? 'border-slate-100 dark:border-slate-800 opacity-50'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 cursor-pointer'
+              }`}
+              onClick={!isAnswered ? () => setSelected(option.id) : undefined}
+            >
               <div className="flex items-center gap-2">
-                <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+                {isAnswered ? (
+                  isSelected ? (
+                    <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0" />
+                  )
+                ) : (
+                  <Radio value={option.id} checked={isSelected} className="flex-shrink-0">
+                    <></>
+                  </Radio>
+                )}
+                <span className={`font-medium text-sm ${
+                  isSelected ? 'text-slate-800 dark:text-slate-200' : 'text-slate-600 dark:text-slate-400'
+                }`}>
                   {option.label}
                 </span>
-                {option.recommended && (
+                {option.recommended && !isAnswered && (
                   <LazyTag color="green" className="text-xs">
                     推荐
                   </LazyTag>
                 )}
+                {isSelected && isAnswered && (
+                  <LazyTag color="blue" className="text-xs ml-auto">
+                    已选择
+                  </LazyTag>
+                )}
               </div>
               {option.description && (
-                <p className="text-xs text-slate-500 dark:text-slate-400 ml-6 mt-1 leading-relaxed">
+                <p className={`text-xs ml-6 mt-1 leading-relaxed ${
+                  isSelected ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500'
+                }`}>
                   {option.description}
                 </p>
               )}
-            </Radio>
-          </div>
-        ))}
-        {data.allow_custom && (
+            </div>
+          );
+        })}
+        {data.allow_custom && !isAnswered && (
           <div
             className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
               selected === '__custom__'
@@ -328,16 +349,16 @@ const ClarificationContent: React.FC<{
             }`}
             onClick={() => setSelected('__custom__')}
           >
-            <Radio value="__custom__" className="w-full">
+            <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
               <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
                 自定义回答
               </span>
             </Radio>
           </div>
         )}
-      </Radio.Group>
+      </div>
 
-      {selected === '__custom__' && data.allow_custom && (
+      {!isAnswered && selected === '__custom__' && data.allow_custom && (
         <Input.TextArea
           value={customInput}
           onChange={(e) => setCustomInput(e.target.value)}
@@ -347,30 +368,36 @@ const ClarificationContent: React.FC<{
         />
       )}
 
-      <div className="flex justify-end pt-2">
-        <LazyButton
-          type="primary"
-          onClick={handleSubmit}
-          disabled={isDisabled}
-          loading={isSubmitting}
-          size="middle"
-          className="rounded-lg"
-        >
-          确认
-        </LazyButton>
-      </div>
+      {!isAnswered && (
+        <div className="flex justify-end pt-2">
+          <LazyButton
+            type="primary"
+            onClick={handleSubmit}
+            disabled={isDisabled}
+            loading={isSubmitting}
+            size="middle"
+            className="rounded-lg"
+          >
+            确认
+          </LazyButton>
+        </div>
+      )}
     </div>
   );
 });
 ClarificationContent.displayName = 'ClarificationContent';
 
-/** Decision card content - Unified styling */
+/** Decision card content - Supports both active and answered states */
 const DecisionContent: React.FC<{
   data: DecisionAskedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-}> = memo(({ data, onSubmit, isSubmitting }) => {
-  const [selected, setSelected] = useState<string | null>(data.default_option || null);
+  isAnswered?: boolean;
+  answeredValue?: string;
+}> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
+  const [selected, setSelected] = useState<string | null>(
+    isAnswered ? answeredValue || null : data.default_option || null
+  );
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const handleSubmit = useCallback(() => {
@@ -385,43 +412,60 @@ const DecisionContent: React.FC<{
 
       <div className="space-y-3">
         {data.options.map((option) => {
-          const isSelected = selected === option.id;
+          const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
           const isExpanded = expanded === option.id;
-          const hasDetails = option.estimated_time || option.estimated_cost || option.risks?.length;
+          const hasDetails = !isAnswered && (option.estimated_time || option.estimated_cost || option.risks?.length);
 
           return (
             <div
               key={option.id}
               className={`
-                rounded-xl p-4 cursor-pointer transition-all border-2
+                rounded-xl p-4 transition-all border-2
                 ${
                   isSelected
                     ? 'border-amber-400 bg-amber-50/50 dark:bg-amber-900/20 shadow-sm'
-                    : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700'
+                    : isAnswered
+                      ? 'border-slate-100 dark:border-slate-800 opacity-50'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer'
                 }
               `}
-              onClick={() => setSelected(option.id)}
+              onClick={!isAnswered ? () => setSelected(option.id) : undefined}
             >
               <div className="flex items-start gap-3">
-                <div
-                  className={`
-                  w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center
-                  ${isSelected ? 'border-amber-500 bg-amber-500' : 'border-slate-300 dark:border-slate-600'}
-                `}
-                >
-                  {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                </div>
+                {isAnswered ? (
+                  isSelected ? (
+                    <CheckCircle2 className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-600 flex-shrink-0 mt-0.5" />
+                  )
+                ) : (
+                  <div
+                    className={`
+                    w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0 flex items-center justify-center
+                    ${isSelected ? 'border-amber-500 bg-amber-500' : 'border-slate-300 dark:border-slate-600'}
+                  `}
+                  >
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+                    <span className={`font-medium text-sm ${
+                      isSelected ? 'text-slate-800 dark:text-slate-200' : 'text-slate-600 dark:text-slate-400'
+                    }`}>
                       {option.label}
                     </span>
-                    {option.recommended && (
+                    {option.recommended && !isAnswered && (
                       <LazyTag color="green" className="text-xs">
                         推荐
                       </LazyTag>
                     )}
-                    {option.risks && option.risks.length > 0 && (
+                    {isSelected && isAnswered && (
+                      <LazyTag color="amber" className="text-xs ml-auto">
+                        已选择
+                      </LazyTag>
+                    )}
+                    {!isSelected && option.risks && option.risks.length > 0 && !isAnswered && (
                       <LazyTag color="orange" className="text-xs">
                         <AlertTriangle className="w-3 h-3 mr-1" />
                         有风险
@@ -429,13 +473,15 @@ const DecisionContent: React.FC<{
                     )}
                   </div>
                   {option.description && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                    <p className={`text-xs mt-1.5 leading-relaxed ${
+                      isSelected ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500'
+                    }`}>
                       {option.description}
                     </p>
                   )}
 
-                  {/* Metadata row */}
-                  {(option.estimated_time || option.estimated_cost) && (
+                  {/* Metadata row - only show when not answered */}
+                  {!isAnswered && (option.estimated_time || option.estimated_cost) && (
                     <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
                       {option.estimated_time && (
                         <span className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md">
@@ -451,7 +497,7 @@ const DecisionContent: React.FC<{
                     </div>
                   )}
 
-                  {/* Expandable risks */}
+                  {/* Expandable risks - only show when not answered */}
                   {hasDetails && (
                     <button
                       className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 mt-3 transition-colors"
@@ -489,29 +535,32 @@ const DecisionContent: React.FC<{
         })}
       </div>
 
-      <div className="flex justify-end pt-2">
-        <LazyButton
-          type="primary"
-          onClick={handleSubmit}
-          disabled={!selected}
-          loading={isSubmitting}
-          size="middle"
-          className="rounded-lg"
-        >
-          确认选择
-        </LazyButton>
-      </div>
+      {!isAnswered && (
+        <div className="flex justify-end pt-2">
+          <LazyButton
+            type="primary"
+            onClick={handleSubmit}
+            disabled={!selected}
+            loading={isSubmitting}
+            size="middle"
+            className="rounded-lg"
+          >
+            确认选择
+          </LazyButton>
+        </div>
+      )}
     </div>
   );
 });
 DecisionContent.displayName = 'DecisionContent';
 
-/** EnvVar card content - Unified styling */
+/** EnvVar card content - Supports both active and answered states */
 const EnvVarContent: React.FC<{
   data: EnvVarRequestedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-}> = memo(({ data, onSubmit, isSubmitting }) => {
+  isAnswered?: boolean;
+}> = memo(({ data, onSubmit, isSubmitting, isAnswered }) => {
   const [form] = Form.useForm();
   const [saveForLater, setSaveForLater] = useState(true);
 
@@ -535,79 +584,100 @@ const EnvVarContent: React.FC<{
         <span>工具: {data.tool_name}</span>
       </div>
 
-      <Form form={form} layout="vertical" size="middle">
-        {data.fields && data.fields.length > 0 ? (
-          data.fields.map((field) => (
-            <Form.Item
-              key={field.name}
-              name={field.name}
-              label={
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {field.label}
-                  {field.required && <span className="text-rose-500 ml-1">*</span>}
-                </span>
-              }
-              rules={field.required ? [{ required: true, message: `请输入 ${field.label}` }] : []}
-              tooltip={field.description}
-              initialValue={field.default_value}
-            >
-              {field.input_type === 'password' ? (
-                <Input.Password
-                  placeholder={field.placeholder || `请输入 ${field.label}`}
-                  className="rounded-lg"
-                />
-              ) : field.input_type === 'textarea' ? (
-                <Input.TextArea
-                  placeholder={field.placeholder || `请输入 ${field.label}`}
-                  rows={3}
-                  className="rounded-lg"
-                />
-              ) : (
-                <Input
-                  placeholder={field.placeholder || `请输入 ${field.label}`}
-                  className="rounded-lg"
-                />
-              )}
-            </Form.Item>
-          ))
-        ) : (
-          <div className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
-            暂无需配置的环境变量
+      {!isAnswered ? (
+        <Form form={form} layout="vertical" size="middle">
+          {data.fields && data.fields.length > 0 ? (
+            data.fields.map((field) => (
+              <Form.Item
+                key={field.name}
+                name={field.name}
+                label={
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {field.label}
+                    {field.required && <span className="text-rose-500 ml-1">*</span>}
+                  </span>
+                }
+                rules={field.required ? [{ required: true, message: `请输入 ${field.label}` }] : []}
+                tooltip={field.description}
+                initialValue={field.default_value}
+              >
+                {field.input_type === 'password' ? (
+                  <Input.Password
+                    placeholder={field.placeholder || `请输入 ${field.label}`}
+                    className="rounded-lg"
+                  />
+                ) : field.input_type === 'textarea' ? (
+                  <Input.TextArea
+                    placeholder={field.placeholder || `请输入 ${field.label}`}
+                    rows={3}
+                    className="rounded-lg"
+                  />
+                ) : (
+                  <Input
+                    placeholder={field.placeholder || `请输入 ${field.label}`}
+                    className="rounded-lg"
+                  />
+                )}
+              </Form.Item>
+            ))
+          ) : (
+            <div className="text-sm text-slate-500 dark:text-slate-400 py-4 text-center">
+              暂无需配置的环境变量
+            </div>
+          )}
+        </Form>
+      ) : (
+        <div className="p-3 rounded-xl border-2 border-green-400 bg-green-50/50 dark:bg-green-900/20">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+              已配置
+            </span>
+            <LazyTag color="green" className="text-xs">
+              已完成
+            </LazyTag>
           </div>
-        )}
-      </Form>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">
+            {data.fields?.map(f => f.label).join(', ') || '环境变量'}
+          </p>
+        </div>
+      )}
 
-      <div className="flex items-center justify-between pt-2">
-        <label className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
-          <input
-            type="checkbox"
-            checked={saveForLater}
-            onChange={(e) => setSaveForLater(e.target.checked)}
-            className="rounded w-4 h-4 accent-violet-500"
-          />
-          <span>保存配置以便下次使用</span>
-        </label>
-        <LazyButton
-          type="primary"
-          onClick={handleSubmit}
-          loading={isSubmitting}
-          size="middle"
-          className="rounded-lg"
-        >
-          提交
-        </LazyButton>
-      </div>
+      {!isAnswered && (
+        <div className="flex items-center justify-between pt-2">
+          <label className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+            <input
+              type="checkbox"
+              checked={saveForLater}
+              onChange={(e) => setSaveForLater(e.target.checked)}
+              className="rounded w-4 h-4 accent-violet-500"
+            />
+            <span>保存配置以便下次使用</span>
+          </label>
+          <LazyButton
+            type="primary"
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            size="middle"
+            className="rounded-lg"
+          >
+            提交
+          </LazyButton>
+        </div>
+      )}
     </div>
   );
 });
 EnvVarContent.displayName = 'EnvVarContent';
 
-/** Permission card content - Unified styling */
+/** Permission card content - Supports both active and answered states */
 const PermissionContent: React.FC<{
   data: PermissionAskedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-}> = memo(({ data, onSubmit, isSubmitting }) => {
+  isAnswered?: boolean;
+  answeredValue?: string;
+}> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
   const [remember, setRemember] = useState(false);
 
   const riskConfig = {
@@ -617,6 +687,8 @@ const PermissionContent: React.FC<{
   } as const;
 
   const risk = data.risk_level ? riskConfig[data.risk_level] : null;
+
+  const wasGranted = isAnswered && (answeredValue === 'allow' || answeredValue === 'Granted');
 
   return (
     <div className="space-y-4">
@@ -629,14 +701,18 @@ const PermissionContent: React.FC<{
             {data.tool_name}
           </span>
         </div>
-        {data.risk_level && (
+        {isAnswered ? (
+          <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
+            {wasGranted ? '已授权' : '已拒绝'}
+          </LazyTag>
+        ) : data.risk_level ? (
           <LazyTag color={risk?.color} className="text-xs">
             风险: {data.risk_level === 'low' ? '低' : data.risk_level === 'medium' ? '中' : '高'}
           </LazyTag>
-        )}
+        ) : null}
       </div>
 
-      {risk && (
+      {risk && !isAnswered && (
         <div className={`p-3 rounded-lg border ${risk.bgClass} ${risk.borderClass}`}>
           <p className={`text-sm ${risk.textClass} flex items-center gap-2`}>
             <AlertTriangle className="w-4 h-4" />
@@ -653,93 +729,59 @@ const PermissionContent: React.FC<{
 
       <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">{data.description}</p>
 
-      <div className="flex items-center justify-between pt-2">
-        <label className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-            className="rounded w-4 h-4 accent-rose-500"
-          />
-          <span>记住此选择</span>
-        </label>
-        <div className="flex gap-2">
-          <LazyButton
-            danger
-            onClick={() => onSubmit({ action: 'deny', remember })}
-            loading={isSubmitting}
-            size="middle"
-            className="rounded-lg"
-          >
-            拒绝
-          </LazyButton>
-          <LazyButton
-            type="primary"
-            onClick={() => onSubmit({ action: 'allow', remember })}
-            loading={isSubmitting}
-            size="middle"
-            className="rounded-lg"
-          >
-            允许
-          </LazyButton>
+      {isAnswered ? (
+        <div className={`p-3 rounded-xl border-2 ${
+          wasGranted
+            ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20'
+            : 'border-red-400 bg-red-50/50 dark:bg-red-900/20'
+        }`}>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className={`w-4 h-4 ${wasGranted ? 'text-green-500' : 'text-red-500'}`} />
+            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+              {wasGranted ? '已授权执行' : '已拒绝执行'}
+            </span>
+            <LazyTag color={wasGranted ? 'green' : 'red'} className="text-xs">
+              已{wasGranted ? '允许' : '拒绝'}
+            </LazyTag>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between pt-2">
+          <label className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="rounded w-4 h-4 accent-rose-500"
+            />
+            <span>记住此选择</span>
+          </label>
+          <div className="flex gap-2">
+            <LazyButton
+              danger
+              onClick={() => onSubmit({ action: 'deny', remember })}
+              loading={isSubmitting}
+              size="middle"
+              className="rounded-lg"
+            >
+              拒绝
+            </LazyButton>
+            <LazyButton
+              type="primary"
+              onClick={() => onSubmit({ action: 'allow', remember })}
+              loading={isSubmitting}
+              size="middle"
+              className="rounded-lg"
+            >
+              允许
+            </LazyButton>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
 PermissionContent.displayName = 'PermissionContent';
-
-/** Answered state display - Unified with MessageBubble style */
-const AnsweredState: React.FC<{
-  hitlType: HITLType;
-  answeredValue?: string;
-  createdAt?: string;
-}> = memo(({ hitlType, answeredValue, createdAt }) => {
-  const iconBgClass = getHITLIconBgClass(hitlType);
-  const iconColorClass = getHITLIconColorClass(hitlType);
-  const lightGradientClass = getHITLLightGradientClass(hitlType);
-  const borderClass = getHITLBorderClass(hitlType);
-
-  const title =
-    hitlType === 'clarification'
-      ? '已回答'
-      : hitlType === 'decision'
-        ? '已确认'
-        : hitlType === 'env_var'
-          ? '已配置'
-          : '已授权';
-
-  return (
-    <div className="flex items-start gap-3 animate-fade-in-up">
-      <div
-        className={`w-8 h-8 rounded-xl bg-gradient-to-br ${iconBgClass} flex items-center justify-center flex-shrink-0`}
-      >
-        <CheckCircle2 className={`w-4 h-4 ${iconColorClass}`} />
-      </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%]">
-        <div
-          className={`bg-gradient-to-r ${lightGradientClass} rounded-xl p-4 border ${borderClass} shadow-sm`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-800 dark:text-slate-200 flex items-center gap-2">
-              <CheckCircle2 className={`w-4 h-4 ${iconColorClass}`} />
-              {title}
-            </span>
-            {createdAt && (
-              <span className="text-xs text-slate-400">{formatTimeAgo(createdAt)}</span>
-            )}
-          </div>
-          {answeredValue && (
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 pl-6">
-              选择: <span className="font-medium text-slate-800 dark:text-slate-200">{answeredValue}</span>
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-AnsweredState.displayName = 'AnsweredState';
 
 // =============================================================================
 // Main Component
@@ -791,20 +833,13 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
       [requestId, hitlType, submitResponse]
     );
 
-    // Show answered state
-    if (isAnswered) {
-      return (
-        <AnsweredState hitlType={hitlType} answeredValue={answeredValue} createdAt={createdAt} />
-      );
-    }
-
     const icon = getHITLIcon(hitlType);
     const title = getHITLTitle(hitlType);
     const color = getHITLColor(hitlType);
     const iconBgClass = getHITLIconBgClass(hitlType);
     const iconColorClass = getHITLIconColorClass(hitlType);
-    const lightGradientClass = getHITLLightGradientClass(hitlType);
-    const borderClass = getHITLBorderClass(hitlType);
+    const bgClass = getHITLBackgroundClass(hitlType);
+    const headerBgClass = getHITLHeaderBgClass(hitlType);
 
     return (
       <div className="flex items-start gap-3 animate-fade-in-up">
@@ -815,32 +850,48 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
           <span className={iconColorClass}>{icon}</span>
         </div>
 
-        {/* Card - Modern glass-morphism style unified with MessageBubble */}
+        {/* Card - Unified with ToolExecution/WorkPlan style */}
         <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
           <div
-            className={`bg-gradient-to-r ${lightGradientClass} rounded-2xl rounded-tl-sm border ${borderClass} shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden`}
+            className={`${bgClass} border rounded-xl overflow-hidden shadow-sm ${
+              !isAnswered ? 'hover:shadow-md transition-all duration-200' : ''
+            }`}
           >
-            {/* Header - Modern style */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-inherit border-opacity-50">
+            {/* Header - Unified style */}
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${headerBgClass}`}>
               <div className="flex items-center gap-2">
                 <Bot className={`w-4 h-4 ${iconColorClass}`} />
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                   {title}
                 </span>
-                <LazyTag color={color} className="text-xs rounded-full">
-                  {hitlType}
-                </LazyTag>
+                {isAnswered ? (
+                  <LazyTag color={color} className="text-xs rounded-full opacity-60">
+                    已完成
+                  </LazyTag>
+                ) : (
+                  <LazyTag color={color} className="text-xs rounded-full">
+                    {hitlType}
+                  </LazyTag>
+                )}
               </div>
-              <CountdownTimer expiresAt={expiresAt} timeoutSeconds={timeoutSeconds} color={color} />
+              {isAnswered ? (
+                createdAt && (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{formatTimeAgo(createdAt)}</span>
+                )
+              ) : (
+                <CountdownTimer expiresAt={expiresAt} timeoutSeconds={timeoutSeconds} color={color} />
+              )}
             </div>
 
             {/* Content */}
-            <div className="p-4 bg-white/60 dark:bg-slate-900/40">
+            <div className="p-4 bg-white/80 dark:bg-slate-900/60">
               {hitlType === 'clarification' && clarificationData && (
                 <ClarificationContent
                   data={clarificationData}
                   onSubmit={handleSubmit}
                   isSubmitting={isCurrentlySubmitting}
+                  isAnswered={isAnswered}
+                  answeredValue={answeredValue}
                 />
               )}
               {hitlType === 'decision' && decisionData && (
@@ -848,6 +899,8 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                   data={decisionData}
                   onSubmit={handleSubmit}
                   isSubmitting={isCurrentlySubmitting}
+                  isAnswered={isAnswered}
+                  answeredValue={answeredValue}
                 />
               )}
               {hitlType === 'env_var' && envVarData && (
@@ -855,6 +908,7 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                   data={envVarData}
                   onSubmit={handleSubmit}
                   isSubmitting={isCurrentlySubmitting}
+                  isAnswered={isAnswered}
                 />
               )}
               {hitlType === 'permission' && permissionData && (
@@ -862,6 +916,8 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
                   data={permissionData}
                   onSubmit={handleSubmit}
                   isSubmitting={isCurrentlySubmitting}
+                  isAnswered={isAnswered}
+                  answeredValue={answeredValue}
                 />
               )}
             </div>
