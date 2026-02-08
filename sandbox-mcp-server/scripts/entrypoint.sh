@@ -119,12 +119,14 @@ start_kasmvnc() {
 
     # Start KasmVNC server
     # KasmVNC provides: X server + VNC + WebSocket + Web client (all-in-one)
+    # -SecurityTypes None: skip VNC auth (API proxy handles authentication)
     vncserver "$VNC_DISPLAY" \
         -geometry "${DESKTOP_RESOLUTION}" \
         -depth 24 \
         -websocketPort "$DESKTOP_PORT" \
         -interface 0.0.0.0 \
         -disableBasicAuth \
+        -SecurityTypes None \
         2>&1 | tee /tmp/kasmvnc.log &
 
     # Wait for KasmVNC to start

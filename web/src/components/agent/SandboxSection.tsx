@@ -242,7 +242,7 @@ const DesktopTab: React.FC<{
 // Output Tab Content
 const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) => {
   return (
-    <div className="h-full overflow-y-auto p-4">
+    <div className="h-full overflow-y-auto p-4 bg-white dark:bg-slate-900">
       {executions.length === 0 ? (
         <LazyEmpty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tool executions yet" />
       ) : (
@@ -269,7 +269,7 @@ const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) =>
                 </pre>
               )}
               {exec.output && (
-                <div className="text-xs text-slate-500 mt-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                   <span className="font-medium">Output:</span>
                   <pre className="mt-1 p-2 bg-slate-50 dark:bg-slate-900 rounded overflow-x-auto">
                     <code>{exec.output}</code>
@@ -290,7 +290,6 @@ const OutputTab: React.FC<{ executions: ToolExecution[] }> = ({ executions }) =>
 export const SandboxSection: React.FC<SandboxSectionProps> = ({
   sandboxId,
   toolExecutions,
-  currentTool,
   className,
 }) => {
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
@@ -369,17 +368,7 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
   ];
 
   return (
-    <div className={`h-full flex flex-col ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-2">
-          <Terminal size={18} className="text-slate-500" />
-          <span className="font-medium text-slate-900 dark:text-slate-100">Sandbox</span>
-          {sandboxId && <span className="text-xs text-slate-400">({sandboxId.slice(0, 12)})</span>}
-        </div>
-        {currentTool && <LazyBadge status="processing" text={currentTool.name} />}
-      </div>
-
+    <div className={`h-full flex flex-col bg-white dark:bg-slate-900 ${className}`}>
       {/* Tabs */}
       <LazyTabs
         activeKey={activeTab}
@@ -389,7 +378,6 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
         tabBarStyle={{
           margin: 0,
           padding: '0 16px',
-          borderBottom: '1px solid #e2e8f0',
         }}
       />
 
@@ -399,6 +387,12 @@ export const SandboxSection: React.FC<SandboxSectionProps> = ({
           display: flex;
           flex-direction: column;
           height: 100%;
+        }
+        .sandbox-tabs > .ant-tabs-nav {
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .dark .sandbox-tabs > .ant-tabs-nav {
+          border-bottom: 1px solid #334155;
         }
         .sandbox-tabs .ant-tabs-content {
           flex: 1;

@@ -991,7 +991,7 @@ async def proxy_project_desktop_websocket(
         )
         return
 
-    # Build WebSocket URL from desktop_url (http://host:port -> ws://host:port/)
+    # Build WebSocket URL — KasmVNC websocket is at root path
     desktop_base = info.desktop_url.rstrip("/")
     ws_target = desktop_base.replace("http://", "ws://").replace("https://", "wss://") + "/"
 
@@ -1012,7 +1012,8 @@ async def proxy_project_desktop_websocket(
         upstream_ws = await websockets.connect(
             ws_target,
             subprotocols=["binary"],
-            max_size=2**22,  # 4MB max frame
+            additional_headers={"Origin": info.desktop_url},
+            max_size=2**23,  # 8MB max frame for desktop data
             open_timeout=10,
             ping_interval=30,
             ping_timeout=10,
@@ -1020,30 +1021,47 @@ async def proxy_project_desktop_websocket(
             ssl=ssl_context,
         )
 
+        logger.info(f"Desktop WS proxy: upstream connected to {ws_target}")
+
         async def relay_browser_to_upstream():
             """Forward frames from browser to KasmVNC."""
+            frame_count = 0
             try:
                 while True:
                     data = await websocket.receive()
+                    msg_type = data.get("type", "")
+                    if msg_type == "websocket.disconnect":
+                        logger.info("Browser disconnected normally")
+                        break
                     if "bytes" in data and data["bytes"]:
+                        frame_count += 1
                         await upstream_ws.send(data["bytes"])
                     elif "text" in data and data["text"]:
+                        frame_count += 1
                         await upstream_ws.send(data["text"])
             except WebSocketDisconnect:
-                pass
+                logger.info(f"Browser WebSocket disconnected after {frame_count} frames")
             except Exception as e:
-                logger.debug(f"Browser->upstream relay ended: {e}")
+                logger.warning(
+                    f"Browser->upstream relay ended after {frame_count} frames: "
+                    f"{type(e).__name__}: {e}"
+                )
 
         async def relay_upstream_to_browser():
             """Forward frames from KasmVNC to browser."""
+            frame_count = 0
             try:
                 async for message in upstream_ws:
+                    frame_count += 1
                     if isinstance(message, bytes):
                         await websocket.send_bytes(message)
                     else:
                         await websocket.send_text(message)
             except Exception as e:
-                logger.debug(f"Upstream->browser relay ended: {e}")
+                logger.warning(
+                    f"Upstream->browser relay ended after {frame_count} frames: "
+                    f"{type(e).__name__}: {e}"
+                )
 
         browser_task = asyncio.create_task(relay_browser_to_upstream())
         upstream_task = asyncio.create_task(relay_upstream_to_browser())

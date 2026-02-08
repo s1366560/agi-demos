@@ -56,6 +56,13 @@ fi
 # Start PulseAudio for audio streaming
 pulseaudio --start --log-target=syslog 2>/dev/null || true
 
-# Launch KDE Plasma X11 session
-# startplasma-x11 handles launching kwin, plasmashell, and all Plasma components
-exec dbus-launch --exit-with-session startplasma-x11
+# Launch desktop session
+# Ubuntu 25.04 removed kwin-x11 (KDE Plasma 6 is Wayland-only).
+# Use openbox as the X11 window manager for title bars, dragging, and resizing,
+# then start plasmashell for the KDE panel, taskbar, and system tray.
+openbox --replace &
+sleep 1
+plasmashell &
+
+# Keep the script alive (VNC session terminates when xstartup exits)
+wait

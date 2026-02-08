@@ -1,16 +1,12 @@
 /**
- * KasmVNCViewer - Embedded KasmVNC web client for sandbox desktop access
+ * KasmVNCViewer - Direct KasmVNC RFB client for desktop access
  *
- * Embeds KasmVNC's built-in web client via iframe, providing:
- * - WebP encoding with dynamic quality adjustment
- * - Bi-directional clipboard (text + images)
- * - File transfer (drag-drop upload/download)
- * - Audio streaming via PulseAudio
- * - Dynamic resolution resize
- * - WebRTC transport option for lower latency
+ * Uses KasmVNC's own noVNC fork (vendored) which supports KasmVNC's
+ * proprietary protocol extensions (WebP encoding, QOI, etc.).
+ * Standard noVNC cannot handle these extensions and disconnects.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   AudioMutedOutlined,
@@ -25,9 +21,15 @@ import {
 } from '@ant-design/icons';
 import { Button, Select, Space, Spin, Tooltip } from 'antd';
 
+// @ts-expect-error -- vendored KasmVNC noVNC fork
+import MouseButtonMapper, { XVNC_BUTTONS } from '@/vendor/kasmvnc/core/mousebuttonmapper.js';
+// @ts-expect-error -- vendored KasmVNC noVNC fork (ES modules, no TS declarations)
+import RFB from '@/vendor/kasmvnc/core/rfb.js';
+
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 const RESOLUTION_PRESETS = [
+  { label: 'Auto (fit panel)', value: 'auto' },
   { label: '1280x720 (HD)', value: '1280x720' },
   { label: '1600x900', value: '1600x900' },
   { label: '1920x1080 (FHD)', value: '1920x1080' },
@@ -35,8 +37,8 @@ const RESOLUTION_PRESETS = [
 ];
 
 export interface KasmVNCViewerProps {
-  /** URL to the KasmVNC web client (proxied through API) */
-  proxyUrl: string;
+  /** WebSocket URL to the KasmVNC proxy endpoint */
+  wsUrl: string;
   /** Current resolution */
   resolution?: string;
   /** Whether audio is enabled */
@@ -56,58 +58,191 @@ export interface KasmVNCViewerProps {
 }
 
 export function KasmVNCViewer({
-  proxyUrl,
-  resolution = '1920x1080',
+  wsUrl,
+  resolution = 'auto',
   audioEnabled = false,
   dynamicResize = true,
   onConnect,
+  onDisconnect,
   onError,
   onResolutionChange,
   showToolbar = true,
 }: KasmVNCViewerProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const rfbRef = useRef<InstanceType<typeof RFB> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const intentionalDisconnectRef = useRef(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(!audioEnabled);
   const [currentResolution, setCurrentResolution] = useState(resolution);
 
-  // Build the KasmVNC client URL with auto-connect parameters
-  const iframeUrl = useMemo(() => {
-    const url = new URL(proxyUrl, window.location.origin);
-    // KasmVNC auto-connect parameters
-    url.searchParams.set('autoconnect', '1');
-    url.searchParams.set('resize', dynamicResize ? 'remote' : 'scale');
-
-    // Override WebSocket path so KasmVNC connects through our API proxy
-    // KasmVNC builds WS URL as: {wss|ws}://{host}:{port}/{path}
-    // We need it to hit our WebSocket proxy endpoint
-    const proxyBase = proxyUrl.split('?')[0].replace(/\/$/, '');
-    const token = url.searchParams.get('token');
-    let wsPath = `${proxyBase}/websockify`;
-    if (token) {
-      wsPath += `?token=${encodeURIComponent(token)}`;
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
-    // Remove leading slash — KasmVNC prepends "/"
-    url.searchParams.set('path', wsPath.replace(/^\//, ''));
+  }, []);
 
-    return url.toString();
-  }, [proxyUrl, dynamicResize]);
+  // Safely disconnect RFB, handling the case where it hasn't finished initializing
+  const safeDisconnect = useCallback((rfb: InstanceType<typeof RFB> | null) => {
+    if (!rfb) return;
+    try {
+      // KasmVNC RFB defers state transition to 'connecting' via setTimeout.
+      // If React StrictMode unmounts before that fires, state is still ''.
+      // Check internal state to avoid "Bad transition" error.
+      const state = rfb._rfbConnectionState;
+      if (state === 'connected' || state === 'connecting') {
+        rfb.disconnect();
+      } else {
+        // Force-close the underlying WebSocket if state hasn't initialized
+        rfb._sock?.close();
+      }
+    } catch {
+      // ignore cleanup errors
+    }
+  }, []);
 
-  const handleIframeLoad = useCallback(() => {
-    setConnectionState('connected');
-    onConnect?.();
-  }, [onConnect]);
+  // Connect to the VNC server via KasmVNC RFB
+  const connectRFB = useCallback(() => {
+    const target = canvasContainerRef.current;
+    if (!target || !wsUrl) return;
 
-  const handleIframeError = useCallback(() => {
-    setConnectionState('error');
-    onError?.('Failed to load KasmVNC web client');
-  }, [onError]);
+    // Clean up existing connection
+    if (rfbRef.current) {
+      intentionalDisconnectRef.current = true;
+      safeDisconnect(rfbRef.current);
+      rfbRef.current = null;
+    }
+
+    // Clear canvas container (RFB appends its own canvas)
+    target.innerHTML = '';
+    setConnectionState('connecting');
+    intentionalDisconnectRef.current = false;
+
+    try {
+      // KasmVNC RFB constructor: (target, touchInput, url, options)
+      // touchInput is required for keyboard input (used by Keyboard class)
+      const touchInput = document.createElement('textarea');
+      touchInput.style.cssText =
+        'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;';
+      touchInput.setAttribute('autocapitalize', 'off');
+      touchInput.setAttribute('autocomplete', 'off');
+      touchInput.setAttribute('spellcheck', 'false');
+      touchInput.setAttribute('tabindex', '-1');
+      target.appendChild(touchInput);
+
+      const rfb = new RFB(target, touchInput, wsUrl, {
+        wsProtocols: ['binary'],
+        shared: true,
+      });
+
+      const isAuto = currentResolution === 'auto';
+      rfb.scaleViewport = true;
+      rfb.resizeSession = isAuto && dynamicResize;
+      rfb.clipViewport = false;
+      rfb.background = '#000000';
+      rfb.qualityLevel = 8;
+
+      // Initialize mouse button mapper (required by KasmVNC's RFB)
+      const mapper = new MouseButtonMapper();
+      mapper.set(0, XVNC_BUTTONS.LEFT_BUTTON);
+      mapper.set(1, XVNC_BUTTONS.MIDDLE_BUTTON);
+      mapper.set(2, XVNC_BUTTONS.RIGHT_BUTTON);
+      mapper.set(3, XVNC_BUTTONS.BACK_BUTTON);
+      mapper.set(4, XVNC_BUTTONS.FORWARD_BUTTON);
+      rfb.mouseButtonMapper = mapper;
+
+      rfb.addEventListener('connect', () => {
+        setConnectionState('connected');
+        reconnectAttemptRef.current = 0;
+        onConnect?.();
+      });
+
+      rfb.addEventListener('disconnect', (e: { detail: { clean: boolean; reason?: string } }) => {
+        console.warn('[KasmVNC] Disconnected', {
+          clean: e.detail.clean,
+          reason: e.detail.reason || '(no reason)',
+        });
+        rfbRef.current = null;
+
+        if (intentionalDisconnectRef.current) {
+          setConnectionState('disconnected');
+          onDisconnect?.();
+          return;
+        }
+
+        // Auto-reconnect on unexpected disconnect
+        const attempt = reconnectAttemptRef.current;
+        const MAX_RECONNECT_ATTEMPTS = 10;
+        if (attempt < MAX_RECONNECT_ATTEMPTS) {
+          const delay = Math.min(1000 * Math.pow(1.5, attempt), 15000);
+          reconnectAttemptRef.current = attempt + 1;
+          setConnectionState('connecting');
+          console.info(`[KasmVNC] Auto-reconnect attempt ${attempt + 1} in ${delay}ms`);
+          reconnectTimerRef.current = setTimeout(() => {
+            connectRFB();
+          }, delay);
+        } else {
+          setConnectionState('error');
+          onError?.('Connection lost after max retries');
+          onDisconnect?.('Connection lost');
+        }
+      });
+
+      rfb.addEventListener('credentialsrequired', () => {
+        // KasmVNC with -disableBasicAuth should not need credentials
+        // but send empty password just in case
+        rfb.sendCredentials({ password: '' });
+      });
+
+      rfb.addEventListener('desktopname', (e: { detail: { name: string } }) => {
+        // Desktop name received (informational)
+        void e;
+      });
+
+      rfb.addEventListener('clipboard', (e: { detail: { text: string } }) => {
+        // Server clipboard -> browser clipboard
+        navigator.clipboard?.writeText(e.detail.text).catch(() => {
+          // clipboard write may fail without user gesture
+        });
+      });
+
+      rfbRef.current = rfb;
+    } catch (err) {
+      setConnectionState('error');
+      onError?.(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [wsUrl, currentResolution, dynamicResize, onConnect, onDisconnect, onError, clearReconnectTimer, safeDisconnect]);
+
+  // Connect on mount and when wsUrl changes
+  useEffect(() => {
+    if (!wsUrl) return;
+    connectRFB();
+    return () => {
+      clearReconnectTimer();
+      intentionalDisconnectRef.current = true;
+      safeDisconnect(rfbRef.current);
+      rfbRef.current = null;
+    };
+    // Only reconnect when wsUrl changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsUrl]);
+
+  // Update RFB resize mode when resolution changes (no reconnect needed)
+  useEffect(() => {
+    const rfb = rfbRef.current;
+    if (!rfb) return;
+    const isAuto = currentResolution === 'auto';
+    rfb.resizeSession = isAuto && dynamicResize;
+    rfb.scaleViewport = true;
+  }, [currentResolution, dynamicResize]);
 
   // Handle fullscreen toggle
   const toggleFullscreen = useCallback(async () => {
     if (!containerRef.current) return;
-
     try {
       if (!document.fullscreenElement) {
         await containerRef.current.requestFullscreen();
@@ -117,7 +252,6 @@ export function KasmVNCViewer({
         setIsFullscreen(false);
       }
     } catch {
-      // Fallback: toggle CSS-based fullscreen
       setIsFullscreen((prev) => !prev);
     }
   }, []);
@@ -140,13 +274,12 @@ export function KasmVNCViewer({
     [onResolutionChange],
   );
 
-  // Reload iframe
-  const handleReload = useCallback(() => {
-    if (iframeRef.current) {
-      setConnectionState('connecting');
-      iframeRef.current.src = iframeUrl;
-    }
-  }, [iframeUrl]);
+  // Reconnect (manual)
+  const handleReconnect = useCallback(() => {
+    clearReconnectTimer();
+    reconnectAttemptRef.current = 0;
+    connectRFB();
+  }, [connectRFB, clearReconnectTimer]);
 
   const containerStyle: React.CSSProperties = isFullscreen
     ? { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 50 }
@@ -205,13 +338,13 @@ export function KasmVNCViewer({
               />
             </Tooltip>
 
-            {/* Reload */}
+            {/* Reconnect */}
             <Tooltip title="Reconnect">
               <Button
                 type="text"
                 size="small"
                 icon={<ReloadOutlined />}
-                onClick={handleReload}
+                onClick={handleReconnect}
                 disabled={connectionState === 'connecting'}
                 className="text-gray-400 hover:text-white"
                 aria-label="Reconnect"
@@ -233,35 +366,32 @@ export function KasmVNCViewer({
         </div>
       )}
 
-      {/* KasmVNC iframe container */}
+      {/* VNC canvas container */}
       <div className="flex-1 relative bg-black overflow-hidden">
         {connectionState === 'connecting' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 z-10 pointer-events-none">
             <Spin indicator={<LoadingOutlined style={{ fontSize: 32 }} spin />} />
             <span className="text-white text-sm">Connecting to desktop...</span>
           </div>
         )}
 
-        {connectionState === 'error' && (
+        {(connectionState === 'error' || connectionState === 'disconnected') && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
             <DisconnectOutlined className="text-4xl text-gray-500" />
-            <span className="text-gray-400">Failed to connect to desktop</span>
-            <Button size="small" onClick={handleReload}>
-              Retry
+            <span className="text-gray-400">
+              {connectionState === 'error' ? 'Failed to connect to desktop' : 'Disconnected'}
+            </span>
+            <Button size="small" onClick={handleReconnect}>
+              Reconnect
             </Button>
           </div>
         )}
 
-        <iframe
-          ref={iframeRef}
-          src={iframeUrl}
-          title="Remote Desktop (KasmVNC)"
-          className="w-full h-full border-0"
-          allow="clipboard-read; clipboard-write; autoplay"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          onLoad={handleIframeLoad}
-          onError={handleIframeError}
-          style={{ display: connectionState === 'error' ? 'none' : 'block' }}
+        <div
+          ref={canvasContainerRef}
+          className="w-full h-full"
+          style={{ touchAction: 'none', userSelect: 'none' }}
+          onDragStart={(e) => e.preventDefault()}
         />
       </div>
     </div>

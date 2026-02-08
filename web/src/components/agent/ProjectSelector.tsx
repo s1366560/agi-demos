@@ -212,7 +212,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           <strong>{currentProjectName || 'the current project'}</strong>. Switching projects will
           clear this conversation from your view.
         </p>
-        <p style={{ color: '#666' }}>
+        <p className="text-slate-500 dark:text-slate-400">
           The conversation will be preserved and can be accessed again by switching back to this
           project.
         </p>

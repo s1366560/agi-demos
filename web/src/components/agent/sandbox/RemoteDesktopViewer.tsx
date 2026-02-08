@@ -1,16 +1,17 @@
 /**
  * RemoteDesktopViewer - KasmVNC client viewer for sandbox desktop access
  *
- * Embeds KasmVNC web client with dynamic resolution, clipboard sync,
- * file transfer, and audio streaming support.
+ * Connects to KasmVNC via direct noVNC RFB WebSocket connection through
+ * the API proxy, with auto-resize and clipboard support.
  */
 
 import { DesktopOutlined } from '@ant-design/icons';
 
-import type { DesktopStatus } from '../../../types/agent';
 import { getAuthToken } from '../../../utils/tokenResolver';
 
 import { KasmVNCViewer } from './KasmVNCViewer';
+
+import type { DesktopStatus } from '../../../types/agent';
 
 export interface RemoteDesktopViewerProps {
   /** Sandbox container ID */
@@ -55,14 +56,18 @@ export function RemoteDesktopViewer({
     );
   }
 
-  // Build proxy URL for KasmVNC web client with auth token
+  // Build WebSocket URL for direct RFB connection through the API proxy
   const token = getAuthToken();
-  const proxyUrl = `/api/v1/projects/${projectId}/sandbox/desktop/proxy/${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl =
+    `${wsProtocol}//${window.location.host}` +
+    `/api/v1/projects/${projectId}/sandbox/desktop/proxy/websockify` +
+    (token ? `?token=${encodeURIComponent(token)}` : '');
 
   return (
     <KasmVNCViewer
-      proxyUrl={proxyUrl}
-      resolution={desktopStatus?.resolution}
+      wsUrl={wsUrl}
+      resolution="auto"
       audioEnabled={desktopStatus?.audioEnabled}
       dynamicResize={desktopStatus?.dynamicResize}
       onConnect={onReady}

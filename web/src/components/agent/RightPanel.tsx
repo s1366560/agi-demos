@@ -164,7 +164,6 @@ export const RightPanel = memo<RightPanelProps>(
               margin: 0,
               paddingLeft: 16,
               paddingRight: 16,
-              borderBottom: '1px solid #e2e8f0',
             }}
           />
 
@@ -177,6 +176,12 @@ export const RightPanel = memo<RightPanelProps>(
             display: flex;
             flex-direction: column;
             height: 100%;
+          }
+          .right-panel-tabs > .ant-tabs-nav {
+            border-bottom: 1px solid #e2e8f0;
+          }
+          .dark .right-panel-tabs > .ant-tabs-nav {
+            border-bottom: 1px solid #334155;
           }
           .right-panel-tabs .ant-tabs-content {
             flex: 1;

@@ -289,6 +289,8 @@ RUN set -eux; \
     plasma-workspace-wallpapers \
     # Sound (PulseAudio for KasmVNC audio streaming)
     pulseaudio pulseaudio-utils pavucontrol-qt \
+    # X11 window manager (kwin-x11 removed in Ubuntu 25.04, openbox as fallback)
+    openbox \
     # Utilities
     dbus-x11 \
     # SSL certificates (required by KasmVNC)
@@ -379,6 +381,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ====================
 # KDE Plasma configs (Breeze theme defaults)
 COPY docker/kde-configs/ /etc/xdg/
+
+# Openbox window manager config (Breeze-ob theme, used as X11 WM since kwin-x11 is removed)
+COPY docker/openbox-configs/rc.xml /etc/xdg/openbox/rc.xml
 
 # KasmVNC configs
 COPY docker/kasmvnc-configs/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml

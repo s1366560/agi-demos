@@ -1,12 +1,16 @@
 /**
- * AgentChatContent - Agent Chat content for use in layouts
+ * AgentChatContent - Agent Chat content with multi-mode layout
  *
- * This version is designed to work inside layouts that already have
- * a conversation sidebar as the primary navigation.
+ * Supports four layout modes:
+ * - chat: Full chat view with optional right panel (Plan/Terminal/Desktop tabs)
+ * - code: Split view — chat (left) + terminal (right), resizable
+ * - desktop: Split view — chat (left, compact) + remote desktop (right, wide)
+ * - focus: Fullscreen desktop with floating chat bubble
  *
  * Features:
- * - Draggable resize for right panel (horizontal)
- * - Draggable resize for input area (vertical)
+ * - Cmd+1/2/3/4 to switch modes
+ * - Draggable split ratio in code/desktop modes
+ * - Flat right panel tabs (Plan | Terminal | Desktop)
  */
 
 import * as React from 'react';
@@ -15,11 +19,12 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { PanelRight, GripHorizontal } from 'lucide-react';
+import { GripHorizontal } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
 
@@ -29,7 +34,10 @@ import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
 import { EmptyState } from './EmptyState';
+import { FocusDesktopOverlay } from './layout/FocusDesktopOverlay';
+import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { Resizer } from './Resizer';
+import { SandboxSection } from './SandboxSection';
 
 import { MessageArea, InputBar, RightPanel, ProjectAgentStatusBar } from './index';
 
@@ -45,13 +53,14 @@ interface AgentChatContentProps {
 }
 
 // Constants for resize constraints
-const PANEL_MIN_WIDTH = 280;
-const PANEL_DEFAULT_WIDTH = 360;
-const PANEL_MAX_PERCENT = 0.9; // 90% of viewport width
-
 const INPUT_MIN_HEIGHT = 140;
 const INPUT_MAX_HEIGHT = 400;
 const INPUT_DEFAULT_HEIGHT = 180;
+
+// Right panel width constraints (chat mode only)
+const PANEL_MIN_WIDTH = 280;
+const PANEL_DEFAULT_WIDTH = 360;
+const PANEL_MAX_WIDTH = 600;
 
 export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   className = '',
@@ -89,7 +98,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     workPlan,
     executionPlan,
     isPlanMode,
-    showPlanPanel,
     // HITL state now rendered inline in timeline via InlineHITLCard
     // pendingClarification, pendingDecision, pendingEnvVarRequest removed
     doomLoopDetected,
@@ -121,7 +129,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       workPlan: state.workPlan,
       executionPlan: state.executionPlan,
       isPlanMode: state.isPlanMode,
-      showPlanPanel: state.showPlanPanel,
       doomLoopDetected: state.doomLoopDetected,
       hasEarlier: state.hasEarlier,
       loadConversations: state.loadConversations,
@@ -183,31 +190,27 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Note: HITL is now rendered inline in the message timeline via InlineHITLCard.
   // The useUnifiedHITL hook and modal rendering have been removed.
 
+  // Layout mode state
+  const { mode: layoutMode, splitRatio, setSplitRatio, chatPanelVisible } = useLayoutModeStore(
+    useShallow((state) => ({
+      mode: state.mode,
+      splitRatio: state.splitRatio,
+      setSplitRatio: state.setSplitRatio,
+      chatPanelVisible: state.chatPanelVisible,
+    }))
+  );
+
   // Local UI state
-  const [panelCollapsed, setPanelCollapsed] = useState(!showPlanPanel);
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
   const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
 
-  // Calculate max width based on viewport (90%)
-  const [maxPanelWidth, setMaxPanelWidth] = useState(
-    typeof window !== 'undefined' ? window.innerWidth * PANEL_MAX_PERCENT : 1200
-  );
+  // In chat mode, right panel visibility is controlled by chatPanelVisible
+  const panelCollapsed = layoutMode === 'chat' ? !chatPanelVisible : true;
 
-  // Update max width on window resize
-  useEffect(() => {
-    const updateMaxWidth = () => {
-      setMaxPanelWidth(window.innerWidth * PANEL_MAX_PERCENT);
-    };
-
-    updateMaxWidth();
-    window.addEventListener('resize', updateMaxWidth);
-    return () => window.removeEventListener('resize', updateMaxWidth);
-  }, []);
-
-  // Clamp panel width when max changes - use useMemo for derived state
+  // Clamp panel width (chat mode only)
   const clampedPanelWidth = useMemo(() => {
-    return panelWidth > maxPanelWidth ? maxPanelWidth : panelWidth;
-  }, [panelWidth, maxPanelWidth]);
+    return Math.min(panelWidth, PANEL_MAX_WIDTH);
+  }, [panelWidth]);
 
   // Load conversations
   useEffect(() => {
@@ -299,9 +302,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   );
 
   const handleViewPlan = useCallback(() => {
-    setPanelCollapsed(false);
+    if (layoutMode === 'chat') {
+      const store = useLayoutModeStore.getState();
+      if (!store.chatPanelVisible) store.toggleChatPanel();
+      store.setRightPanelTab('plan');
+    }
     togglePlanPanel();
-  }, [togglePlanPanel]);
+  }, [togglePlanPanel, layoutMode]);
 
   const handleExitPlanMode = useCallback(async () => {
     if (!activeConversationId || !planModeStatus?.current_plan_id) return;
@@ -371,14 +378,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
         toolExecutions={toolExecutions}
         currentTool={currentTool}
         onClose={() => {
-          setPanelCollapsed(true);
+          useLayoutModeStore.getState().toggleChatPanel();
           togglePlanPanel();
         }}
         collapsed={panelCollapsed}
         width={clampedPanelWidth}
         onWidthChange={setPanelWidth}
         minWidth={PANEL_MIN_WIDTH}
-        maxWidth={maxPanelWidth}
+        maxWidth={PANEL_MAX_WIDTH}
       />
     ),
     [
@@ -390,8 +397,19 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       panelCollapsed,
       clampedPanelWidth,
       togglePlanPanel,
-      maxPanelWidth,
     ]
+  );
+
+  // Sandbox content for code/desktop/focus split modes
+  const sandboxContent = useMemo(
+    () => (
+      <SandboxSection
+        sandboxId={activeSandboxId || null}
+        toolExecutions={toolExecutions}
+        currentTool={currentTool || null}
+      />
+    ),
+    [activeSandboxId, toolExecutions, currentTool]
   );
 
   const statusBar = useMemo(
@@ -406,77 +424,149 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     [projectId, tenantId, timeline.length]
   );
 
+  // Split mode drag handler
+  const handleSplitDrag = useCallback(
+    (e: React.MouseEvent) => {
+      if (layoutMode !== 'code' && layoutMode !== 'desktop') return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startRatio = splitRatio;
+      const containerWidth = (e.currentTarget as HTMLElement).parentElement?.offsetWidth || window.innerWidth;
+
+      const onMove = (ev: MouseEvent) => {
+        const delta = ev.clientX - startX;
+        const newRatio = startRatio + delta / containerWidth;
+        setSplitRatio(newRatio);
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [layoutMode, splitRatio, setSplitRatio]
+  );
+
+  // Chat column content (reused across modes)
+  const chatColumn = (
+    <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+      {headerExtra && (
+        <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2">
+          {headerExtra}
+        </div>
+      )}
+      <div className="flex-1 overflow-hidden relative min-h-0">{messageArea}</div>
+      <div
+        className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
+        style={{ height: inputHeight }}
+      >
+        <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
+          <Resizer
+            direction="vertical"
+            currentSize={inputHeight}
+            minSize={INPUT_MIN_HEIGHT}
+            maxSize={INPUT_MAX_HEIGHT}
+            onResize={setInputHeight}
+            position="top"
+          />
+          <div className="pointer-events-none absolute top-1 flex items-center gap-1 text-slate-400">
+            <GripHorizontal size={12} />
+          </div>
+        </div>
+        <InputBar
+          onSend={handleSend}
+          onAbort={abortStream}
+          isStreaming={isStreaming}
+          isPlanMode={isPlanMode}
+          onTogglePlanMode={togglePlanMode}
+          disabled={isLoadingHistory}
+          conversationId={activeConversationId || undefined}
+          projectId={projectId || undefined}
+        />
+      </div>
+    </div>
+  );
+
+  // Status bar with layout mode selector
+  const statusBarWithLayout = (
+    <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
+      <div className="flex-1">{statusBar}</div>
+      <div className="flex items-center gap-2 pr-3">
+        <LayoutModeSelector />
+      </div>
+    </div>
+  );
+
+  // Focus mode: fullscreen desktop with floating chat
+  if (layoutMode === 'focus') {
+    return (
+      <div className={`flex flex-col h-full w-full overflow-hidden ${className}`}>
+        <FocusDesktopOverlay
+          desktopContent={sandboxContent}
+          chatContent={messageArea}
+          onSend={(content) => handleSend(content)}
+          isStreaming={isStreaming}
+        />
+        {statusBarWithLayout}
+      </div>
+    );
+  }
+
+  // Code/Desktop split modes
+  if (layoutMode === 'code' || layoutMode === 'desktop') {
+    const leftPercent = `${splitRatio * 100}%`;
+    const rightPercent = `${(1 - splitRatio) * 100}%`;
+
+    return (
+      <div
+        className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+      >
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Left: Chat */}
+          <div className="h-full overflow-hidden flex flex-col" style={{ width: leftPercent }}>
+            {chatColumn}
+          </div>
+
+          {/* Drag handle */}
+          <div
+            className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
+              hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors z-10"
+            onMouseDown={handleSplitDrag}
+          >
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-blue-500/70 transition-colors" />
+          </div>
+
+          {/* Right: Sandbox (Terminal or Desktop depending on mode) */}
+          <div
+            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900"
+            style={{ width: rightPercent }}
+          >
+            {sandboxContent}
+          </div>
+        </div>
+
+        {statusBarWithLayout}
+      </div>
+    );
+  }
+
+  // Chat mode (default): classic layout with optional right panel
   return (
     <div
       className={`flex h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
     >
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
-        {/* Header Extra Content (if provided) */}
-        {headerExtra && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm px-4 py-2">
-            {headerExtra}
-          </div>
-        )}
-
-        {/* Message Area - Takes remaining space */}
-        <div className="flex-1 overflow-hidden relative min-h-0">{messageArea}</div>
-
-        {/* Resizable Input Area */}
-        <div
-          className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
-          style={{ height: inputHeight }}
-        >
-          {/* Resize handle for input area (at top) */}
-          <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
-            <Resizer
-              direction="vertical"
-              currentSize={inputHeight}
-              minSize={INPUT_MIN_HEIGHT}
-              maxSize={INPUT_MAX_HEIGHT}
-              onResize={setInputHeight}
-              position="top"
-            />
-            <div className="pointer-events-none absolute top-1 flex items-center gap-1 text-slate-400">
-              <GripHorizontal size={12} />
-            </div>
-          </div>
-
-          <InputBar
-            onSend={handleSend}
-            onAbort={abortStream}
-            isStreaming={isStreaming}
-            isPlanMode={isPlanMode}
-            onTogglePlanMode={togglePlanMode}
-            disabled={isLoadingHistory}
-            conversationId={activeConversationId || undefined}
-            projectId={projectId || undefined}
-          />
-        </div>
-
-        {/* Status Bar with Panel Toggle */}
-        <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
-          <div className="flex-1">{statusBar}</div>
-          <button
-            type="button"
-            title={panelCollapsed ? t('agent.chat.panel.show') : t('agent.chat.panel.hide')}
-            onClick={() => {
-              setPanelCollapsed(!panelCollapsed);
-              togglePlanPanel();
-            }}
-            className="h-8 px-3 mr-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/50 transition-all"
-            aria-label={panelCollapsed ? t('agent.chat.panel.show') : t('agent.chat.panel.hide')}
-          >
-            {panelCollapsed ? (
-              <PanelRight size={16} />
-            ) : (
-              <PanelRight size={16} className="rotate-180" />
-            )}
-          </button>
-        </div>
+        {chatColumn}
+        {statusBarWithLayout}
       </main>
 
-      {/* Right Panel with built-in resize handle */}
+      {/* Right Panel with built-in resize handle (Plan / Sandbox tabs) */}
       <aside
         className={`
           flex-shrink-0 h-full
@@ -489,17 +579,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       >
         {!panelCollapsed && rightPanel}
       </aside>
-
-      {/* 
-        HITL is now rendered inline in the message timeline via MessageBubble.
-        The UnifiedHITLPanel modal has been removed to prevent:
-        1. History refresh issues when modal opens
-        2. State conflicts between modal and timeline
-        3. Unnatural conversation flow interruption
-        
-        HITL events (clarification_asked, decision_asked, etc.) are rendered
-        as InlineHITLCard components directly in the timeline.
-      */}
     </div>
   );
 };

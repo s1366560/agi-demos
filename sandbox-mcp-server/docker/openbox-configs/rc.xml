@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <theme>
+    <name>Breeze-ob</name>
+    <titleLayout>NLIMC</titleLayout>
+    <keepBorder>yes</keepBorder>
+    <animateIconify>no</animateIconify>
+    <font place="ActiveWindow"><name>Noto Sans</name><size>10</size><weight>Bold</weight></font>
+    <font place="InactiveWindow"><name>Noto Sans</name><size>10</size><weight>Bold</weight></font>
+    <font place="MenuHeader"><name>Noto Sans</name><size>10</size><weight>Bold</weight></font>
+    <font place="MenuItem"><name>Noto Sans</name><size>10</size><weight>Normal</weight></font>
+  </theme>
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+  <placement>
+    <policy>Smart</policy>
+    <center>yes</center>
+  </placement>
+  <desktops>
+    <number>1</number>
+  </desktops>
+  <resize>
+    <drawContents>yes</drawContents>
+  </resize>
+  <applications>
+    <application class="*">
+      <decor>yes</decor>
+    </application>
+  </applications>
+</openbox_config>
