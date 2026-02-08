@@ -26,6 +26,9 @@ import type {
   PlanExecutionStartEvent,
   PlanExecutionCompleteEvent,
   ReflectionCompleteEvent,
+  ArtifactReadyEventData,
+  ArtifactErrorEventData,
+  ArtifactCreatedEvent,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -109,18 +112,19 @@ export function createStreamEventHandlers(
             const { activeConversationId, updateConversationState, getConversationState } = get();
 
             const convState = getConversationState(handlerConversationId);
+            const newThought = convState.streamingThought + bufferedContent;
             updateConversationState(handlerConversationId, {
-              streamingThought: convState.streamingThought + bufferedContent,
+              streamingThought: newThought,
               isThinkingStreaming: true,
               agentState: 'thinking',
             });
 
             if (handlerConversationId === activeConversationId) {
-              setState((state: any) => ({
-                streamingThought: state.streamingThought + bufferedContent,
+              setState({
+                streamingThought: newThought,
                 isThinkingStreaming: true,
                 agentState: 'thinking',
-              }));
+              });
             }
           }
         }, thoughtBatchIntervalMs);
@@ -423,16 +427,17 @@ export function createStreamEventHandlers(
             const { activeConversationId, updateConversationState, getConversationState } = get();
 
             const convState = getConversationState(handlerConversationId);
+            const newContent = convState.streamingAssistantContent + bufferedContent;
             updateConversationState(handlerConversationId, {
-              streamingAssistantContent: convState.streamingAssistantContent + bufferedContent,
+              streamingAssistantContent: newContent,
               streamStatus: 'streaming',
             });
 
             if (handlerConversationId === activeConversationId) {
-              setState((state: any) => ({
-                streamingAssistantContent: state.streamingAssistantContent + bufferedContent,
+              setState({
+                streamingAssistantContent: newContent,
                 streamStatus: 'streaming',
-              }));
+              });
             }
           }
         }, tokenBatchIntervalMs);
@@ -661,6 +666,61 @@ export function createStreamEventHandlers(
         timeline: updatedTimeline,
       });
 
+      if (handlerConversationId === activeConversationId) {
+        setState({ timeline: updatedTimeline });
+      }
+    },
+
+    onArtifactReady: (event) => {
+      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const data = event.data as ArtifactReadyEventData;
+
+      console.log('[AgentV3] Artifact ready event:', data.artifact_id);
+      const convState = getConversationState(handlerConversationId);
+
+      // Update the existing artifact_created timeline entry with URL
+      const updatedTimeline = convState.timeline.map((item) => {
+        if (
+          item.type === 'artifact_created' &&
+          (item as ArtifactCreatedEvent).artifactId === data.artifact_id
+        ) {
+          return {
+            ...item,
+            url: data.url,
+            previewUrl: data.preview_url,
+          };
+        }
+        return item;
+      });
+
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+      if (handlerConversationId === activeConversationId) {
+        setState({ timeline: updatedTimeline });
+      }
+    },
+
+    onArtifactError: (event) => {
+      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const data = event.data as ArtifactErrorEventData;
+
+      console.warn('[AgentV3] Artifact error event:', data.artifact_id, data.error);
+      const convState = getConversationState(handlerConversationId);
+
+      // Update the existing artifact_created timeline entry with error
+      const updatedTimeline = convState.timeline.map((item) => {
+        if (
+          item.type === 'artifact_created' &&
+          (item as ArtifactCreatedEvent).artifactId === data.artifact_id
+        ) {
+          return {
+            ...item,
+            error: data.error,
+          };
+        }
+        return item;
+      });
+
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
       if (handlerConversationId === activeConversationId) {
         setState({ timeline: updatedTimeline });
       }

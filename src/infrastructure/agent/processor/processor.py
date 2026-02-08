@@ -21,6 +21,7 @@ Reference: OpenCode's SessionProcessor in processor.ts (406 lines)
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -718,7 +719,10 @@ class SessionProcessor:
                         yield AgentTextEndEvent(full_text=full_text)
 
                     elif event.type == StreamEventType.REASONING_START:
-                        yield AgentThoughtEvent(content="", thought_level="reasoning")
+                        # Only track state internally - don't emit an empty thought event.
+                        # The subsequent REASONING_DELTA events handle streaming display,
+                        # and REASONING_END emits the full thought content.
+                        pass
 
                     elif event.type == StreamEventType.REASONING_DELTA:
                         delta = event.data.get("delta", "")
@@ -1223,7 +1227,17 @@ class SessionProcessor:
 
             # Handle structured return format {title, output, metadata}
             # Reference: OpenCode SkillTool structured return
-            if isinstance(result, dict) and "output" in result:
+            if isinstance(result, dict) and "artifact" in result:
+                # Artifact result (e.g., export_artifact) - use summary, never base64
+                artifact = result["artifact"]
+                output_str = result.get(
+                    "output",
+                    f"Exported artifact: {artifact.get('filename', 'unknown')} "
+                    f"({artifact.get('mime_type', 'unknown')}, "
+                    f"{artifact.get('size', 0)} bytes)",
+                )
+                sse_result = result
+            elif isinstance(result, dict) and "output" in result:
                 # Extract output for tool_part (used for LLM context)
                 output_str = result.get("output", "")
                 # Keep full result for SSE event (frontend can use metadata)
@@ -1237,7 +1251,7 @@ class SessionProcessor:
 
             # Update tool part
             tool_part.status = ToolState.COMPLETED
-            tool_part.output = output_str
+            tool_part.output = self._sanitize_tool_output(output_str)
             tool_part.end_time = end_time
 
             # Update work plan step status to completed
@@ -1288,6 +1302,35 @@ class SessionProcessor:
             )
 
         self._state = ProcessorState.OBSERVING
+
+    # Max bytes for tool output stored in LLM context
+    _MAX_TOOL_OUTPUT_BYTES = 30_000
+
+    # Regex matching long base64-like sequences (256+ chars of [A-Za-z0-9+/=])
+    _BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/=]{256,}')
+
+    def _sanitize_tool_output(self, output: str) -> str:
+        """Sanitize tool output to prevent binary/base64 data from entering LLM context.
+
+        Applies two defensive filters:
+        1. Replace long base64-like sequences with a placeholder.
+        2. Truncate output exceeding _MAX_TOOL_OUTPUT_BYTES.
+        """
+        if not output:
+            return output
+
+        # Strip embedded base64 blobs
+        sanitized = self._BASE64_PATTERN.sub("[binary data omitted]", output)
+
+        # Hard size cap
+        encoded = sanitized.encode("utf-8", errors="replace")
+        if len(encoded) > self._MAX_TOOL_OUTPUT_BYTES:
+            sanitized = encoded[: self._MAX_TOOL_OUTPUT_BYTES].decode(
+                "utf-8", errors="ignore"
+            )
+            sanitized += "\n... [output truncated]"
+
+        return sanitized
 
     async def _process_tool_artifacts(
         self,

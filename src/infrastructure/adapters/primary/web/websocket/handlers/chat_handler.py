@@ -243,6 +243,8 @@ async def stream_agent_to_websocket(
                 "data": event_data,
                 "seq": event.get("id"),
                 "timestamp": event.get("timestamp", datetime.utcnow().isoformat()),
+                "event_time_us": event.get("event_time_us"),
+                "event_counter": event.get("event_counter"),
             }
 
             # Broadcast to ALL sessions subscribed to this conversation
@@ -317,6 +319,8 @@ async def stream_hitl_response_to_websocket(
                 "data": event_data,
                 "seq": event.get("id"),
                 "timestamp": event.get("timestamp", datetime.utcnow().isoformat()),
+                "event_time_us": event.get("event_time_us"),
+                "event_counter": event.get("event_counter"),
             }
 
             # Broadcast to ALL sessions subscribed to this conversation
