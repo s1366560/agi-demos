@@ -26,6 +26,7 @@ import {
 import remarkGfm from 'remark-gfm';
 
 import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
+import { useSandboxStore } from '@/stores/sandbox';
 
 // Import types without type qualifier
 import { InlineHITLCard } from '../InlineHITLCard';
@@ -735,6 +736,13 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Subscribe to sandbox store for live URL updates (artifact_ready event)
+  const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
+  const artifactUrl = storeArtifact?.url || event.url;
+  const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
+  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : 'uploading');
+  const artifactError = storeArtifact?.errorMessage;
+
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'image':
@@ -763,7 +771,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   };
 
   const isImage = event.category === 'image';
-  const url = event.url || event.previewUrl;
+  const url = artifactUrl || artifactPreviewUrl;
 
   return (
     <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
@@ -831,6 +839,18 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 <span className="material-symbols-outlined text-base">download</span>
                 Download
               </a>
+            )}
+            {!url && artifactStatus === 'uploading' && (
+              <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                <Loader2 size={14} className="animate-spin" />
+                Uploading...
+              </span>
+            )}
+            {!url && artifactStatus === 'error' && (
+              <span className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400">
+                <XCircle size={14} />
+                {artifactError || 'Upload failed'}
+              </span>
             )}
           </div>
 

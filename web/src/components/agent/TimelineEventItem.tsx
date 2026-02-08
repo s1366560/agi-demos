@@ -14,6 +14,9 @@
 
 import { memo, lazy, Suspense, useState } from 'react';
 
+import { Loader2 } from 'lucide-react';
+
+import { useSandboxStore } from '../../stores/sandbox';
 import { useAgentV3Store } from '../../stores/agentV3';
 import { formatDistanceToNowCN, formatReadableTime } from '../../utils/date';
 
@@ -698,6 +701,13 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Subscribe to sandbox store for live URL updates (artifact_ready event)
+  const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
+  const artifactUrl = storeArtifact?.url || event.url;
+  const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
+  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : 'uploading');
+  const artifactError = storeArtifact?.errorMessage || event.error;
+
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -728,8 +738,8 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
   };
 
   const isImage = event.category === 'image';
-  const url = event.url || event.previewUrl;
-  const hasError = !!event.error;
+  const url = artifactUrl || artifactPreviewUrl;
+  const hasError = artifactStatus === 'error';
 
   return (
     <div className="flex flex-col gap-1">
@@ -786,7 +796,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                   error
                 </span>
                 <span className="text-xs text-red-600 dark:text-red-400">
-                  {event.error}
+                  {artifactError}
                 </span>
               </div>
             )}
@@ -815,6 +825,12 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                   <span className="material-symbols-outlined text-base">download</span>
                   下载
                 </a>
+              )}
+              {!url && artifactStatus === 'uploading' && (
+                <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                  <Loader2 size={14} className="animate-spin" />
+                  上传中...
+                </span>
               )}
             </div>
 
