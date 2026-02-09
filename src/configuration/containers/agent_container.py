@@ -106,6 +106,7 @@ class AgentContainer:
         self._sandbox_orchestrator_factory = sandbox_orchestrator_factory
         self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
         self._sequence_service_factory = sequence_service_factory
+        self._skill_service_instance: Optional[SkillService] = None
 
     # === Agent Repositories ===
 
@@ -230,7 +231,10 @@ class AgentContainer:
     # === Skill Service ===
 
     def skill_service(self) -> SkillService:
-        """Get SkillService for progressive skill loading."""
+        """Get SkillService for progressive skill loading (cached singleton)."""
+        if self._skill_service_instance is not None:
+            return self._skill_service_instance
+
         from pathlib import Path
 
         from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
@@ -249,10 +253,11 @@ class AgentContainer:
             scanner=scanner,
         )
 
-        return SkillService(
+        self._skill_service_instance = SkillService(
             skill_repository=self.skill_repository(),
             filesystem_loader=fs_loader,
         )
+        return self._skill_service_instance
 
     # === Agent Service ===
 
