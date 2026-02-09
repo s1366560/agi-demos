@@ -58,6 +58,8 @@ class SandboxUploadServiceClass {
     onProgress?.({ loaded: file.size / 2, total: file.size, percentage: 50 });
 
     // Call import_file tool via sandbox execute API
+    // Use longer timeout for large files (base64 encoding + network transfer)
+    const timeoutSec = Math.max(60, Math.ceil(file.size / (1024 * 1024)) * 2);
     try {
       const response = await projectSandboxService.executeTool(projectId, {
         tool_name: 'import_file',
@@ -67,7 +69,7 @@ class SandboxUploadServiceClass {
           destination: '/workspace/input',
           overwrite: true,
         },
-        timeout: 60,
+        timeout: timeoutSec,
       });
 
       // Report complete

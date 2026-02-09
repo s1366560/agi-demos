@@ -29,8 +29,9 @@ const client = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // Reduced timeout for faster failure and retry
-  timeout: 15000, // 15 seconds
+  timeout: 30000, // 30 seconds (default; individual calls can override)
+  maxContentLength: 200 * 1024 * 1024, // 200MB (base64 inflates ~33%)
+  maxBodyLength: 200 * 1024 * 1024,
 });
 
 /**

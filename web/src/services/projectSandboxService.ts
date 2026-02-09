@@ -361,13 +361,15 @@ class ProjectSandboxServiceImpl implements ProjectSandboxService {
     logger.debug(
       `[ProjectSandboxService] Executing tool ${request.tool_name} for project: ${projectId}`
     );
+    const timeoutMs = (request.timeout ?? 30) * 1000 + 10000; // tool timeout + 10s buffer
     const response = await this.api.post<ExecuteToolResponse>(
       `/projects/${projectId}/sandbox/execute`,
       {
         tool_name: request.tool_name,
         arguments: request.arguments,
         timeout: request.timeout ?? 30,
-      }
+      },
+      { timeout: timeoutMs }
     );
     return response;
   }
