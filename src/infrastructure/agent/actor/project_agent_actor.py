@@ -14,7 +14,7 @@ from src.configuration.factories import create_native_graph_adapter
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+from src.infrastructure.agent.state.agent_worker_state import (
     set_agent_graph_service,
     set_mcp_sandbox_adapter,
     sync_mcp_sandbox_adapter_from_docker,

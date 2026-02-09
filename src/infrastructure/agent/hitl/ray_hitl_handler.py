@@ -17,8 +17,8 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_redis_client
-from src.infrastructure.agent.hitl.temporal_hitl_handler import (
+from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+from src.infrastructure.agent.hitl.hitl_strategies import (
     ClarificationStrategy,
     DecisionStrategy,
     EnvVarStrategy,

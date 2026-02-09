@@ -641,7 +641,7 @@ async def get_or_create_agent_session(
             LocalSkillResourceAdapter,
             SandboxSkillResourceAdapter,
         )
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+        from src.infrastructure.agent.state.agent_worker_state import (
             get_mcp_sandbox_adapter,
         )
         from src.infrastructure.agent.core.skill_executor import SkillExecutor

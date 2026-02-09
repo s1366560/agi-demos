@@ -364,7 +364,7 @@ async def _publish_hitl_response_to_redis(
     """
     try:
         from src.configuration.config import get_settings
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+        from src.infrastructure.agent.state.agent_worker_state import (
             get_redis_client,
         )
 

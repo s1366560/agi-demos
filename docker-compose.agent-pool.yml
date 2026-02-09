@@ -27,8 +27,6 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - TEMPORAL_HOST=temporal
-      - TEMPORAL_PORT=7233
       # LLM Providers (from .env)
       - LLM_PROVIDER=${LLM_PROVIDER:-zai}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -83,8 +81,6 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - TEMPORAL_HOST=temporal
-      - TEMPORAL_PORT=7233
       # LLM Providers (from .env)
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -137,8 +133,6 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - TEMPORAL_HOST=temporal
-      - TEMPORAL_PORT=7233
       # LLM Providers (from .env)
       - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - GEMINI_API_KEY=${GEMINI_API_KEY}

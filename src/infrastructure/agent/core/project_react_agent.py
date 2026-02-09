@@ -284,7 +284,7 @@ class ProjectReActAgent:
 
             # Import dependencies here to avoid circular imports
             from src.configuration.di_container import DIContainer as Container
-            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            from src.infrastructure.agent.state.agent_worker_state import (
                 get_agent_graph_service,
                 get_or_create_agent_session,
                 get_or_create_llm_client,
@@ -514,7 +514,7 @@ class ProjectReActAgent:
             return False
 
         try:
-            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            from src.infrastructure.agent.state.agent_worker_state import (
                 get_mcp_sandbox_adapter,
             )
 
@@ -852,7 +852,7 @@ class ProjectReActAgent:
 
         # Clear session cache
         try:
-            from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+            from src.infrastructure.agent.state.agent_session_pool import (
                 invalidate_agent_session,
             )
 

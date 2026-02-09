@@ -177,7 +177,7 @@ class AgentRuntimeBootstrapper:
                 return
 
             from src.configuration.factories import create_native_graph_adapter
-            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            from src.infrastructure.agent.state.agent_worker_state import (
                 get_agent_graph_service,
                 set_agent_graph_service,
             )
@@ -198,7 +198,7 @@ class AgentRuntimeBootstrapper:
                     raise
 
             # Initialize MCP Sandbox Adapter for Project Sandbox tool loading
-            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            from src.infrastructure.agent.state.agent_worker_state import (
                 get_mcp_sandbox_adapter,
                 set_mcp_sandbox_adapter,
                 sync_mcp_sandbox_adapter_from_docker,

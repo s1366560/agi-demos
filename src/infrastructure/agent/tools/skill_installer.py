@@ -528,7 +528,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         """
         try:
             # Import here to avoid circular dependency
-            from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+            from src.infrastructure.agent.state.agent_worker_state import (
                 invalidate_skill_loader_cache,
             )
 

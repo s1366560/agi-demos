@@ -1,7 +1,7 @@
 """
-Unit tests for TemporalHITLHandler.
+Unit tests for HITL strategies.
 
-Tests the unified HITL handler in src/infrastructure/agent/hitl/temporal_hitl_handler.py
+Tests the HITL strategy classes in src/infrastructure/agent/hitl/hitl_strategies.py
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,12 +20,11 @@ from src.domain.model.agent.hitl_types import (
     PermissionAction,
     RiskLevel,
 )
-from src.infrastructure.agent.hitl.temporal_hitl_handler import (
+from src.infrastructure.agent.hitl.hitl_strategies import (
     ClarificationStrategy,
     DecisionStrategy,
     EnvVarStrategy,
     PermissionStrategy,
-    TemporalHITLHandler,
 )
 
 
@@ -262,57 +261,3 @@ class TestPermissionStrategy:
         assert value is True
 
 
-@pytest.mark.unit
-class TestTemporalHITLHandler:
-    """Test TemporalHITLHandler."""
-
-    @pytest.fixture
-    def mock_sse_callback(self):
-        """Create a mock SSE callback."""
-        return AsyncMock()
-
-    @pytest.fixture
-    def handler(self, mock_sse_callback):
-        """Create a TemporalHITLHandler instance."""
-        return TemporalHITLHandler(
-            conversation_id="conv-123",
-            tenant_id="tenant-456",
-            project_id="project-789",
-            message_id="msg-001",
-            default_timeout=300.0,
-            emit_sse_callback=mock_sse_callback,
-        )
-
-    def test_init(self, handler):
-        """Test handler initialization."""
-        assert handler.conversation_id == "conv-123"
-        assert handler.tenant_id == "tenant-456"
-        assert handler.project_id == "project-789"
-        assert handler.message_id == "msg-001"
-        assert handler.default_timeout == 300.0
-
-    def test_get_strategy(self, handler):
-        """Test getting a strategy by type."""
-        strategy = handler._get_strategy(HITLType.CLARIFICATION)
-        assert isinstance(strategy, ClarificationStrategy)
-
-        strategy = handler._get_strategy(HITLType.DECISION)
-        assert isinstance(strategy, DecisionStrategy)
-
-        strategy = handler._get_strategy(HITLType.ENV_VAR)
-        assert isinstance(strategy, EnvVarStrategy)
-
-        strategy = handler._get_strategy(HITLType.PERMISSION)
-        assert isinstance(strategy, PermissionStrategy)
-
-    def test_get_strategy_invalid(self, handler):
-        """Test getting an invalid strategy raises error."""
-        with pytest.raises(ValueError, match="No strategy registered"):
-            handler._get_strategy("invalid_type")
-
-    def test_strategies_class_attribute(self):
-        """Test that strategies are registered as class attribute."""
-        assert HITLType.CLARIFICATION in TemporalHITLHandler._strategies
-        assert HITLType.DECISION in TemporalHITLHandler._strategies
-        assert HITLType.ENV_VAR in TemporalHITLHandler._strategies
-        assert HITLType.PERMISSION in TemporalHITLHandler._strategies

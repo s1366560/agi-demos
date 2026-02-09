@@ -13,7 +13,7 @@ class TestPoolAdapterState:
 
     def test_set_and_get_pool_adapter(self):
         """测试设置和获取池适配器."""
-        from src.infrastructure.adapters.secondary.temporal import agent_worker_state
+        from src.infrastructure.agent.state import agent_worker_state
 
         # 清理状态
         agent_worker_state._pool_adapter = None
@@ -31,7 +31,7 @@ class TestPoolAdapterState:
 
     def test_is_pool_enabled_true(self):
         """测试池启用检查 - 已启用."""
-        from src.infrastructure.adapters.secondary.temporal import agent_worker_state
+        from src.infrastructure.agent.state import agent_worker_state
 
         mock_adapter = MagicMock()
         mock_adapter._running = True
@@ -41,7 +41,7 @@ class TestPoolAdapterState:
 
     def test_is_pool_enabled_false_not_running(self):
         """测试池启用检查 - 未运行."""
-        from src.infrastructure.adapters.secondary.temporal import agent_worker_state
+        from src.infrastructure.agent.state import agent_worker_state
 
         mock_adapter = MagicMock()
         mock_adapter._running = False
@@ -51,7 +51,7 @@ class TestPoolAdapterState:
 
     def test_is_pool_enabled_false_no_adapter(self):
         """测试池启用检查 - 无适配器."""
-        from src.infrastructure.adapters.secondary.temporal import agent_worker_state
+        from src.infrastructure.agent.state import agent_worker_state
 
         agent_worker_state._pool_adapter = None
 
@@ -59,6 +59,6 @@ class TestPoolAdapterState:
 
     def teardown_method(self):
         """测试后清理."""
-        from src.infrastructure.adapters.secondary.temporal import agent_worker_state
+        from src.infrastructure.agent.state import agent_worker_state
 
         agent_worker_state._pool_adapter = None

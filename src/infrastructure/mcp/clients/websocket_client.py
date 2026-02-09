@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
-from src.infrastructure.adapters.secondary.temporal.mcp.subprocess_client import (
+from src.infrastructure.mcp.clients.subprocess_client import (
     MCPToolResult,
     MCPToolSchema,
 )

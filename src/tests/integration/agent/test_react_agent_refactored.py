@@ -64,13 +64,17 @@ class TestRefactoredArchitectureIntegration:
 
         assert hasattr(ToolExecutor, "execute")
 
-    def test_temporal_hitl_handler_class_exists(self):
-        """Test TemporalHITLHandler class exists."""
-        from src.infrastructure.agent.hitl.temporal_hitl_handler import (
-            TemporalHITLHandler,
+    def test_hitl_strategies_exist(self):
+        """Test HITL strategy classes exist."""
+        from src.infrastructure.agent.hitl.hitl_strategies import (
+            ClarificationStrategy,
+            DecisionStrategy,
+            EnvVarStrategy,
+            PermissionStrategy,
         )
 
-        assert TemporalHITLHandler is not None
+        assert ClarificationStrategy is not None
+        assert DecisionStrategy is not None
 
     def test_artifact_extractor_singleton(self):
         """Test ArtifactExtractor singleton pattern."""
@@ -181,12 +185,12 @@ class TestModuleImports:
         from src.infrastructure.agent.tools.executor import ToolExecutor
         assert ToolExecutor is not None
 
-    def test_import_temporal_hitl_handler(self):
-        """Test TemporalHITLHandler module imports."""
-        from src.infrastructure.agent.hitl.temporal_hitl_handler import (
-            TemporalHITLHandler,
+    def test_import_hitl_strategies(self):
+        """Test HITL strategies module imports."""
+        from src.infrastructure.agent.hitl.hitl_strategies import (
+            ClarificationStrategy,
         )
-        assert TemporalHITLHandler is not None
+        assert ClarificationStrategy is not None
 
     def test_import_artifact_extractor(self):
         """Test ArtifactExtractor module imports."""

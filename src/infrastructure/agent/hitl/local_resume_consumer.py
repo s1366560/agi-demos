@@ -245,7 +245,7 @@ async def get_or_create_local_consumer() -> LocalHITLResumeConsumer:
     """Get or create the local HITL resume consumer singleton."""
     global _local_consumer
     if _local_consumer is None:
-        from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+        from src.infrastructure.agent.state.agent_worker_state import (
             get_redis_client,
         )
 

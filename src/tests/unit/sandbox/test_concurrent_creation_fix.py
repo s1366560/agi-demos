@@ -276,7 +276,7 @@ class TestAgentWorkerSandboxConsistency:
         mock_session.__aexit__ = AsyncMock()
 
         # Patch database session factory and global adapter
-        import src.infrastructure.adapters.secondary.temporal.agent_worker_state as worker_state
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
 
         original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
 
@@ -297,7 +297,7 @@ class TestAgentWorkerSandboxConsistency:
                 )
 
                 # Call the function
-                from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                from src.infrastructure.agent.state.agent_worker_state import (
                     _load_project_sandbox_tools,
                 )
 
@@ -351,7 +351,7 @@ class TestAgentWorkerSandboxConsistency:
             return_value=[{"name": "bash"}, {"name": "read"}]
         )
 
-        import src.infrastructure.adapters.secondary.temporal.agent_worker_state as worker_state
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
 
         original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
 
@@ -368,7 +368,7 @@ class TestAgentWorkerSandboxConsistency:
                     MagicMock(return_value=mock_repo),
                 )
 
-                from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+                from src.infrastructure.agent.state.agent_worker_state import (
                     _load_project_sandbox_tools,
                 )
 
@@ -431,7 +431,7 @@ class TestAgentWorkerSandboxConsistency:
             }
         )
 
-        import src.infrastructure.adapters.secondary.temporal.agent_worker_state as worker_state
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
 
         original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
 

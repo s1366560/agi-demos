@@ -13,7 +13,6 @@ def initialize_container(
     graph_service: Any,
     redis_client: Optional[object],
     workflow_engine: Optional[Any],
-    temporal_client: Optional[Any],
 ) -> DIContainer:
     """
     Initialize the DI container with all services.
@@ -21,8 +20,7 @@ def initialize_container(
     Args:
         graph_service: The NativeGraphAdapter instance.
         redis_client: The Redis client instance.
-        workflow_engine: The Temporal workflow engine.
-        temporal_client: The Temporal client.
+        workflow_engine: The workflow engine.
 
     Returns:
         Configured DIContainer instance.
@@ -33,7 +31,6 @@ def initialize_container(
         graph_service=graph_service,
         redis_client=redis_client,
         workflow_engine=workflow_engine,
-        temporal_client=temporal_client if workflow_engine else None,
     )
     logger.info("DI container initialized")
     return container

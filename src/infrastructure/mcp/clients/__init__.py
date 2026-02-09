@@ -9,9 +9,9 @@ Components:
 - MCPWebSocketClient: WebSocket transport client for sandbox connections
 """
 
-from src.infrastructure.adapters.secondary.temporal.mcp.http_client import MCPHttpClient
-from src.infrastructure.adapters.secondary.temporal.mcp.subprocess_client import MCPSubprocessClient
-from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
+from src.infrastructure.mcp.clients.http_client import MCPHttpClient
+from src.infrastructure.mcp.clients.subprocess_client import MCPSubprocessClient
+from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
 __all__ = [
     "MCPSubprocessClient",

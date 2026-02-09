@@ -319,7 +319,7 @@ async def get_hitl_state_store() -> HITLStateStore:
     Returns:
         Configured HITLStateStore instance
     """
-    from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+    from src.infrastructure.agent.state.agent_worker_state import (
         get_redis_client,
     )
 

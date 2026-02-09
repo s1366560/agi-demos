@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+from src.infrastructure.agent.state.agent_worker_state import (
     get_redis_client,
 )
 

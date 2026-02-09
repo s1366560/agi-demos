@@ -95,7 +95,6 @@ async def create_episode(
 
         if background:
             # Background mode: Create task and return task_id for SSE streaming
-            from src.configuration.temporal_config import get_temporal_settings
             from src.infrastructure.adapters.secondary.persistence.database import (
                 async_session_factory,
             )
@@ -135,13 +134,12 @@ async def create_episode(
 
             # Start Temporal workflow
             workflow_id = f"episode-{episode_uuid}"
-            temporal_settings = get_temporal_settings()
 
             await workflow_engine.start_workflow(
                 workflow_name="episode_processing",
                 workflow_id=workflow_id,
                 input_data=task_payload,
-                task_queue=temporal_settings.temporal_default_task_queue,
+                task_queue="default",
             )
 
             logger.info(

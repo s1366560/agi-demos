@@ -1,11 +1,11 @@
 /**
  * Unified HITL Service - Human-in-the-Loop API Client
  *
- * New Temporal-based implementation that uses a single unified endpoint.
+ * Uses a single unified endpoint for all HITL interactions.
  * Replaces the legacy multiple endpoint approach.
  *
  * Architecture:
- *   Frontend → POST /hitl/respond → API → Temporal Signal → Workflow
+ *   Frontend → POST /hitl/respond → API → Redis → Agent
  */
 
 import { apiToUnifiedRequest, buildResponseData } from '../types/hitl.unified';
@@ -37,7 +37,6 @@ const HITL_BASE_URL = '/agent/hitl';
 export const unifiedHitlService = {
   /**
    * Submit a response to any HITL request using the unified endpoint.
-   * This sends a Temporal Signal to the running workflow.
    *
    * @param requestId - The HITL request ID
    * @param hitlType - Type of HITL request

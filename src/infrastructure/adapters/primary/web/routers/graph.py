@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
+    get_graph_service,
     get_neo4j_client,
     get_workflow_engine,
 )
@@ -715,6 +716,7 @@ async def rebuild_communities(
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
     workflow_engine=Depends(get_workflow_engine),
+    graph_service=Depends(get_graph_service),
 ):
     """
     Rebuild communities using the Louvain algorithm for the specified project.
@@ -741,7 +743,6 @@ async def rebuild_communities(
 
     # Execute either synchronously or submit to background workflow
     if background:
-        from src.configuration.temporal_config import get_temporal_settings
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
@@ -773,13 +774,12 @@ async def rebuild_communities(
 
         # Start Temporal workflow
         workflow_id = f"rebuild-communities-{target_project_id}-{task_id[:8]}"
-        temporal_settings = get_temporal_settings()
 
         await workflow_engine.start_workflow(
             workflow_name="rebuild_communities",
             workflow_id=workflow_id,
             input_data=task_payload,
-            task_queue=temporal_settings.temporal_default_task_queue,
+            task_queue="default",
         )
 
         logger.info(
@@ -789,17 +789,15 @@ async def rebuild_communities(
 
         return {
             "status": "submitted",
-            "message": "Community rebuild started in background via Temporal",
+            "message": "Community rebuild started in background",
             "task_id": task_id,
             "workflow_id": workflow_id,
             "task_url": f"/api/v1/tasks/{task_id}",
         }
     else:
         # For synchronous execution, use the graph service directly
-        from src.infrastructure.adapters.secondary.temporal.worker_state import get_graph_service
         from src.infrastructure.graph.schemas import EntityNode
 
-        graph_service = get_graph_service()
         if not graph_service:
             raise HTTPException(status_code=500, detail="Graph service not initialized")
 

@@ -18,7 +18,7 @@ from src.infrastructure.agent.core.project_react_agent import (
 
 # The correct import path for patching is where the module imports these functions
 # For functions imported inside initialize(), we need to patch the full path
-TEMPORAL_IMPORTS = "src.infrastructure.adapters.secondary.temporal.agent_worker_state"
+WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
 
 
 class MockConnectionManager:
@@ -133,30 +133,30 @@ class TestProjectReActAgentLifecycleNotifications:
         # Patch all the dependencies imported in initialize()
         # Note: Must use the full import path since they're imported inside the method
         with patch(
-            f"{TEMPORAL_IMPORTS}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
             return_value=mock_graph_service,
         ):
             with patch(
-                f"{TEMPORAL_IMPORTS}.get_redis_client",
+                f"{WORKER_STATE_MODULE}.get_redis_client",
                 return_value=mock_redis_client,
             ):
                 with patch(
-                    f"{TEMPORAL_IMPORTS}.get_or_create_provider_config",
+                    f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
                     new_callable=AsyncMock,
                     return_value=mock_provider_config,
                 ):
                     with patch(
-                        f"{TEMPORAL_IMPORTS}.get_or_create_llm_client",
+                        f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
                         new_callable=AsyncMock,
                         return_value=mock_llm_client,
                     ):
                         with patch(
-                            f"{TEMPORAL_IMPORTS}.get_or_create_tools",
+                            f"{WORKER_STATE_MODULE}.get_or_create_tools",
                             new_callable=AsyncMock,
                             return_value=mock_tools,
                         ):
                             with patch(
-                                f"{TEMPORAL_IMPORTS}.get_or_create_skills",
+                                f"{WORKER_STATE_MODULE}.get_or_create_skills",
                                 new_callable=AsyncMock,
                                 return_value=mock_skills,
                             ):
@@ -167,7 +167,7 @@ class TestProjectReActAgentLifecycleNotifications:
                                     return_value=mock_subagents,
                                 ):
                                     with patch(
-                                        f"{TEMPORAL_IMPORTS}.get_or_create_agent_session",
+                                        f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
                                         new_callable=AsyncMock,
                                         return_value=mock_session_context,
                                     ):
@@ -213,7 +213,7 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Patch get_agent_graph_service to raise an error
         with patch(
-            f"{TEMPORAL_IMPORTS}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
             return_value=None,
         ):
             # Inject the mock notifier
@@ -486,30 +486,30 @@ class TestProjectReActAgentNotificationContent:
         mock_subagents = [MagicMock(name="subagent1")]
 
         with patch(
-            f"{TEMPORAL_IMPORTS}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
             return_value=mock_graph_service,
         ):
             with patch(
-                f"{TEMPORAL_IMPORTS}.get_redis_client",
+                f"{WORKER_STATE_MODULE}.get_redis_client",
                 return_value=mock_redis_client,
             ):
                 with patch(
-                    f"{TEMPORAL_IMPORTS}.get_or_create_provider_config",
+                    f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
                     new_callable=AsyncMock,
                     return_value=mock_provider_config,
                 ):
                     with patch(
-                        f"{TEMPORAL_IMPORTS}.get_or_create_llm_client",
+                        f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
                         new_callable=AsyncMock,
                         return_value=mock_llm_client,
                     ):
                         with patch(
-                            f"{TEMPORAL_IMPORTS}.get_or_create_tools",
+                            f"{WORKER_STATE_MODULE}.get_or_create_tools",
                             new_callable=AsyncMock,
                             return_value=mock_tools,
                         ):
                             with patch(
-                                f"{TEMPORAL_IMPORTS}.get_or_create_skills",
+                                f"{WORKER_STATE_MODULE}.get_or_create_skills",
                                 new_callable=AsyncMock,
                                 return_value=mock_skills,
                             ):
@@ -520,7 +520,7 @@ class TestProjectReActAgentNotificationContent:
                                     return_value=mock_subagents,
                                 ):
                                     with patch(
-                                        f"{TEMPORAL_IMPORTS}.get_or_create_agent_session",
+                                        f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
                                         new_callable=AsyncMock,
                                         return_value=mock_session_context,
                                     ):
@@ -613,7 +613,7 @@ class TestProjectReActAgentNotificationContent:
 
         # Mock initialization to raise a specific error
         with patch(
-            f"{TEMPORAL_IMPORTS}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
             return_value=None,
         ):
             # Inject the mock notifier

@@ -79,7 +79,7 @@ async def create_mcp_server(
                 await db.commit()
 
                 if server_data.enabled:
-                    from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                    from src.infrastructure.agent.state.agent_session_pool import (
                         invalidate_mcp_tools_cache,
                     )
 
@@ -284,7 +284,7 @@ async def update_mcp_server(
                     await manager.stop_server(project_id, updated_server["name"])
                     logger.info(f"Stopped MCP server {server_id}")
 
-                from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                from src.infrastructure.agent.state.agent_session_pool import (
                     invalidate_mcp_tools_cache,
                 )
 
@@ -342,7 +342,7 @@ async def delete_mcp_server(
                 manager = await get_sandbox_mcp_server_manager(request, db)
                 await manager.stop_server(server["project_id"], server["name"])
 
-                from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+                from src.infrastructure.agent.state.agent_session_pool import (
                     invalidate_mcp_tools_cache,
                 )
 
@@ -420,7 +420,7 @@ async def sync_mcp_server_tools(
         await db.commit()
 
         if server["enabled"]:
-            from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+            from src.infrastructure.agent.state.agent_session_pool import (
                 invalidate_mcp_tools_cache,
             )
 

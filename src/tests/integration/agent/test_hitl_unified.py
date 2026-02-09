@@ -161,56 +161,17 @@ class TestHITLTypeSystemIntegration:
 
 @pytest.mark.integration
 class TestHITLHandlerIntegration:
-    """Integration tests for the TemporalHITLHandler."""
-
-    def test_handler_can_be_instantiated(self):
-        """Test TemporalHITLHandler can be instantiated."""
-        from src.infrastructure.agent.hitl.temporal_hitl_handler import (
-            TemporalHITLHandler,
-        )
-
-        handler = TemporalHITLHandler(
-            conversation_id="conv_test",
-            tenant_id="tenant_1",
-            project_id="project_1",
-        )
-
-        assert handler.conversation_id == "conv_test"
-        assert handler.tenant_id == "tenant_1"
-        assert handler.project_id == "project_1"
-
-    def test_all_strategies_are_registered(self):
-        """Test all HITL type strategies are registered."""
-        from src.infrastructure.agent.hitl.temporal_hitl_handler import (
-            TemporalHITLHandler,
-            ClarificationStrategy,
-            DecisionStrategy,
-            EnvVarStrategy,
-            PermissionStrategy,
-        )
-        from src.domain.model.agent.hitl_types import HITLType
-
-        # Access private _strategies attribute
-        assert HITLType.CLARIFICATION in TemporalHITLHandler._strategies
-        assert HITLType.DECISION in TemporalHITLHandler._strategies
-        assert HITLType.ENV_VAR in TemporalHITLHandler._strategies
-        assert HITLType.PERMISSION in TemporalHITLHandler._strategies
-
-        assert isinstance(TemporalHITLHandler._strategies[HITLType.CLARIFICATION], ClarificationStrategy)
-        assert isinstance(TemporalHITLHandler._strategies[HITLType.DECISION], DecisionStrategy)
-        assert isinstance(TemporalHITLHandler._strategies[HITLType.ENV_VAR], EnvVarStrategy)
-        assert isinstance(TemporalHITLHandler._strategies[HITLType.PERMISSION], PermissionStrategy)
+    """Integration tests for the HITL strategies."""
 
     def test_strategy_request_id_prefixes(self):
         """Test each strategy generates correct request ID prefix."""
-        from src.infrastructure.agent.hitl.temporal_hitl_handler import (
+        from src.infrastructure.agent.hitl.hitl_strategies import (
             ClarificationStrategy,
             DecisionStrategy,
             EnvVarStrategy,
             PermissionStrategy,
         )
 
-        # Strategies are instances, not classes
         clar_strategy = ClarificationStrategy()
         dec_strategy = DecisionStrategy()
         env_strategy = EnvVarStrategy()
@@ -245,64 +206,6 @@ class TestHITLServicePortIntegration:
         assert "create_request" in abstract_methods
         assert "get_request" in abstract_methods
         assert "submit_response" in abstract_methods
-
-    def test_temporal_service_implements_port(self):
-        """Test TemporalHITLService implements HITLServicePort."""
-        from src.domain.ports.services.hitl_service_port import HITLServicePort
-        from src.infrastructure.adapters.secondary.temporal.services.temporal_hitl_service import (
-            TemporalHITLService,
-        )
-
-        # TemporalHITLService should be a subclass of HITLServicePort
-        assert issubclass(TemporalHITLService, HITLServicePort)
-
-
-@pytest.mark.integration
-class TestHITLActivitiesIntegration:
-    """Integration tests for HITL Temporal activities."""
-
-    def test_activities_can_be_imported(self):
-        """Test all HITL activities can be imported."""
-        from src.infrastructure.adapters.secondary.temporal.activities.hitl import (
-            create_hitl_request_activity,
-            emit_hitl_sse_event_activity,
-            record_hitl_history_activity,
-            get_pending_hitl_requests_activity,
-            cancel_hitl_request_activity,
-        )
-
-        # All should be callable
-        assert callable(create_hitl_request_activity)
-        assert callable(emit_hitl_sse_event_activity)
-        assert callable(record_hitl_history_activity)
-        assert callable(get_pending_hitl_requests_activity)
-        assert callable(cancel_hitl_request_activity)
-
-    def test_activities_are_decorated(self):
-        """Test activities have Temporal decorators."""
-        from src.infrastructure.adapters.secondary.temporal.activities.hitl import (
-            create_hitl_request_activity,
-        )
-
-        # Check if it's wrapped as a Temporal activity
-        # Activities typically have __wrapped__ or specific attributes
-        assert hasattr(create_hitl_request_activity, "__wrapped__") or callable(
-            create_hitl_request_activity
-        )
-
-
-@pytest.mark.integration
-class TestHITLWorkflowSignalsIntegration:
-    """Integration tests for HITL workflow signal handling."""
-
-    def test_workflow_can_be_imported(self):
-        """Test ProjectAgentWorkflow can be imported."""
-        from src.infrastructure.adapters.secondary.temporal.workflows.project_agent_workflow import (
-            ProjectAgentWorkflow,
-        )
-
-        # Workflow class should exist
-        assert ProjectAgentWorkflow is not None
 
     def test_signal_name_constant_exists(self):
         """Test HITL signal name constant is accessible."""
@@ -384,8 +287,11 @@ class TestHITLEndToEndFlow:
             create_env_var_request,
             create_permission_request,
         )
-        from src.infrastructure.agent.hitl.temporal_hitl_handler import (
-            TemporalHITLHandler,
+        from src.infrastructure.agent.hitl.hitl_strategies import (
+            ClarificationStrategy,
+            DecisionStrategy,
+            EnvVarStrategy,
+            PermissionStrategy,
         )
 
         # All types should have factory functions
@@ -396,9 +302,14 @@ class TestHITLEndToEndFlow:
             HITLType.PERMISSION: create_permission_request,
         }
 
-        for hitl_type in HITLType:
-            # Should have factory function
-            assert hitl_type in factory_map, f"Missing factory for {hitl_type}"
+        # All types should have strategy implementations
+        strategy_map = {
+            HITLType.CLARIFICATION: ClarificationStrategy,
+            HITLType.DECISION: DecisionStrategy,
+            HITLType.ENV_VAR: EnvVarStrategy,
+            HITLType.PERMISSION: PermissionStrategy,
+        }
 
-            # Should have strategy in handler (using private attribute)
-            assert hitl_type in TemporalHITLHandler._strategies, f"Missing strategy for {hitl_type}"
+        for hitl_type in HITLType:
+            assert hitl_type in factory_map, f"Missing factory for {hitl_type}"
+            assert hitl_type in strategy_map, f"Missing strategy for {hitl_type}"

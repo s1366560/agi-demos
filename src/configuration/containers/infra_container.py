@@ -1,20 +1,17 @@
 """DI sub-container for infrastructure services."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import redis.asyncio as redis
 
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
-if TYPE_CHECKING:
-    from temporalio.client import Client as TemporalClient
-
 
 class InfraContainer:
     """Sub-container for infrastructure services.
 
-    Provides factory methods for Redis, Temporal, storage, distributed locks,
+    Provides factory methods for Redis, storage, distributed locks,
     sandbox adapters, and other cross-cutting infrastructure concerns.
     """
 
@@ -22,12 +19,10 @@ class InfraContainer:
         self,
         redis_client: Optional[redis.Redis] = None,
         workflow_engine: Optional[WorkflowEnginePort] = None,
-        temporal_client: Optional["TemporalClient"] = None,
         settings=None,
     ) -> None:
         self._redis_client = redis_client
         self._workflow_engine = workflow_engine
-        self._temporal_client = temporal_client
         self._settings = settings
 
     def redis(self) -> Optional[redis.Redis]:
@@ -94,24 +89,8 @@ class InfraContainer:
         )
 
     def workflow_engine_port(self) -> Optional[WorkflowEnginePort]:
-        """Get WorkflowEnginePort for workflow orchestration (Temporal)."""
+        """Get WorkflowEnginePort for workflow orchestration."""
         return self._workflow_engine
-
-    async def temporal_client(self) -> Optional["TemporalClient"]:
-        """Get Temporal client for direct workflow operations.
-
-        Returns the cached client if available, otherwise creates a new connection.
-        """
-        if self._temporal_client is not None:
-            return self._temporal_client
-
-        from src.infrastructure.adapters.secondary.temporal.client import TemporalClientFactory
-
-        try:
-            self._temporal_client = await TemporalClientFactory.get_client()
-            return self._temporal_client
-        except Exception:
-            return None
 
     def sandbox_adapter(self):
         """Get the MCP Sandbox adapter for desktop and terminal management."""

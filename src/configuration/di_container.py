@@ -9,9 +9,6 @@ from typing import TYPE_CHECKING, Optional
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-if TYPE_CHECKING:
-    from temporalio.client import Client as TemporalClient
-
 from src.application.services.agent_service import AgentService
 from src.application.services.memory_service import MemoryService
 from src.application.services.project_service import ProjectService
@@ -138,7 +135,6 @@ class DIContainer:
         redis_client: Optional[redis.Redis] = None,
         session_factory: Optional[async_sessionmaker[AsyncSession]] = None,
         workflow_engine: Optional[WorkflowEnginePort] = None,
-        temporal_client: Optional["TemporalClient"] = None,
     ):
         # Store raw deps for with_db() and properties
         self._db = db
@@ -159,7 +155,6 @@ class DIContainer:
         self._infra = InfraContainer(
             redis_client=redis_client,
             workflow_engine=workflow_engine,
-            temporal_client=temporal_client,
             settings=self._settings,
         )
         self._sandbox = SandboxContainer(
@@ -190,7 +185,6 @@ class DIContainer:
             redis_client=self._redis_client,
             session_factory=self._session_factory,
             workflow_engine=self._infra.workflow_engine_port(),
-            temporal_client=self._infra._temporal_client,
         )
 
     # === Properties that stay on the main class ===
@@ -294,9 +288,6 @@ class DIContainer:
 
     def workflow_engine_port(self) -> Optional[WorkflowEnginePort]:
         return self._infra.workflow_engine_port()
-
-    async def temporal_client(self) -> Optional["TemporalClient"]:
-        return await self._infra.temporal_client()
 
     def sandbox_adapter(self):
         return self._infra.sandbox_adapter()

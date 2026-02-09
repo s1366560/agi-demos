@@ -2,10 +2,6 @@
 MCP Server Domain Models.
 
 Defines the MCPServer entity, configuration, and status value objects.
-Consolidates definitions from:
-- src/infrastructure/adapters/secondary/temporal/mcp/adapter.py (MCPServerStatus)
-- src/infrastructure/adapters/secondary/temporal/mcp/workflows.py (MCPServerConfig)
-- src/application/services/mcp_bridge_service.py (MCPConnectionInfo)
 """
 
 from dataclasses import dataclass, field

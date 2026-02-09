@@ -188,7 +188,7 @@ src/
 ├── infrastructure/           # External implementations (adapters)
 │   ├── adapters/
 │   │   ├── primary/         # Driving adapters (FastAPI routers: 31 modules, 50+ endpoints)
-│   │   └── secondary/       # Driven adapters (persistence, temporal, external APIs)
+│   │   └── secondary/       # Driven adapters (persistence, workflow, external APIs)
 │   ├── agent/               # ReAct Agent system (4-layer architecture)
 │   ├── llm/                 # LiteLLM unified client
 │   ├── graph/               # Neo4j knowledge graph
@@ -261,14 +261,9 @@ DIRECT_SKILL → SUBAGENT → PLAN_MODE → REACT_LOOP
 | **Git** | `git_diff`, `git_log`, `generate_commit` |
 | **Terminal/Desktop** | `start_terminal`, `start_desktop` (ttyd + noVNC) |
 
-## Temporal 工作流 / Temporal Workflows
+## 后台工作流 / Background Workflows
 
-| Workflow | Purpose |
-|----------|---------|
-| `ProjectAgentWorkflow` | Persistent agent session with HITL support |
-| `EpisodeProcessingWorkflow` | Knowledge graph episode processing |
-| `DeduplicateEntitiesWorkflow` | Entity deduplication with embeddings |
-| `RebuildCommunitiesWorkflow` | Community detection and rebuilding |
+Background workflows run as asyncio tasks with retry and status tracking via TaskLog.
 
 **HITL (Human-in-the-Loop) Types:**
 - `clarification`: Request user clarification
@@ -612,7 +607,6 @@ class TestUserService:
 | File | Purpose |
 |------|---------|
 | `src/infrastructure/adapters/primary/web/main.py` | API entry point |
-| `src/worker_temporal.py` | Temporal worker |
 | `src/configuration/config.py` | Pydantic Settings |
 | `src/configuration/di_container.py` | Dependency injection |
 
@@ -670,7 +664,6 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 
 **Service URLs:**
 - Swagger UI: http://localhost:8000/docs
-- Temporal UI: http://localhost:8080/namespaces/default
 - Web Frontend: http://localhost:3000
 
 ## 环境变量 / Environment Variables
@@ -682,7 +675,6 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | **Neo4j** | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` | Graph database |
 | **PostgreSQL** | `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Metadata DB |
 | **Redis** | `REDIS_HOST`, `REDIS_PORT` | Cache |
-| **Temporal** | `TEMPORAL_HOST`, `TEMPORAL_PORT`, `TEMPORAL_NAMESPACE` | Workflow engine |
 | **LLM** | `LLM_PROVIDER` | Provider: `gemini`, `qwen`, `openai`, `deepseek` |
 | **LLM Keys** | `GEMINI_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY` | API keys |
 | **Sandbox** | `SANDBOX_DEFAULT_PROVIDER`, `SANDBOX_TIMEOUT_SECONDS` | Code execution |
@@ -693,7 +685,7 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | Layer | Technologies |
 |-------|--------------|
 | **Backend** | Python 3.12+, FastAPI 0.104+, SQLAlchemy 2.0+, PostgreSQL 16+, Redis 7+, Neo4j 5.26+ |
-| **Workflow** | Temporal.io |
+| **Workflow** | asyncio + Ray Actors |
 | **LLM** | LiteLLM (Gemini, Qwen, Deepseek, OpenAI, Anthropic) |
 | **Frontend** | React 19.2+, TypeScript 5.9+, Vite 7.3+, Ant Design 6.1+, Zustand 5.0+ |
 | **Testing** | pytest 7.4+, Vitest, Playwright (80%+ coverage target) |

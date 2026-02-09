@@ -17,7 +17,7 @@ from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
-from src.infrastructure.adapters.secondary.temporal.agent_worker_state import get_redis_client
+from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.actor.state.running_state import (
     clear_agent_running,
     refresh_agent_running_ttl,

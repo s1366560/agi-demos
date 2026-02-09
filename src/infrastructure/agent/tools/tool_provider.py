@@ -27,7 +27,7 @@ def create_cached_tool_provider(
     Returns:
         A callable that returns current tools dict
     """
-    from src.infrastructure.adapters.secondary.temporal.agent_worker_state import (
+    from src.infrastructure.agent.state.agent_worker_state import (
         get_cached_tools_for_project,
     )
 
@@ -94,7 +94,7 @@ def create_mcp_tool_provider(
         # Note: This accesses the internal cache structure
         # A more robust solution would expose a sync API in agent_session_pool
         try:
-            from src.infrastructure.adapters.secondary.temporal.agent_session_pool import (
+            from src.infrastructure.agent.state.agent_session_pool import (
                 _mcp_tools_cache,
             )
 

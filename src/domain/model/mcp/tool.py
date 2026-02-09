@@ -2,11 +2,6 @@
 MCP Tool Domain Models.
 
 Defines the MCPTool entity, schema, and result value objects.
-Consolidates definitions from:
-- src/infrastructure/mcp/config.py (MCPToolDefinition, MCPToolResult)
-- src/infrastructure/adapters/secondary/temporal/mcp/workflows.py (MCPToolCallResult)
-- src/infrastructure/adapters/secondary/temporal/mcp/subprocess_client.py (MCPToolSchema, MCPToolResult)
-- src/application/services/mcp_bridge_service.py (MCPTool, MCPToolResult)
 """
 
 from dataclasses import dataclass, field

@@ -289,12 +289,12 @@ export interface HITLRequestFromApi {
 }
 
 // =============================================================================
-// Temporal Signal Types
+// Signal Types
 // =============================================================================
 
 /**
- * Payload for HITL response Temporal Signal.
- * This is sent from API to Workflow when user responds.
+ * Payload for HITL response signal.
+ * This is sent from API to Agent when user responds.
  */
 export interface HITLSignalPayload {
   requestId: string;

@@ -26,7 +26,7 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
-from src.infrastructure.agent.hitl.temporal_hitl_handler import (
+from src.infrastructure.agent.hitl.hitl_strategies import (
     ClarificationStrategy,
     DecisionStrategy,
     EnvVarStrategy,

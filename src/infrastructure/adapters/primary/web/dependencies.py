@@ -14,5 +14,5 @@ def get_graph_service(request: Request) -> GraphServicePort:
 
 
 def get_workflow_engine(request: Request) -> WorkflowEnginePort:
-    """Get WorkflowEngine (Temporal) from app state."""
+    """Get WorkflowEngine from app state."""
     return request.app.state.workflow_engine

@@ -193,7 +193,7 @@ class LocalToolAdapter(BaseMCPToolAdapter):
 
     async def _initialize_internal(self) -> None:
         """Initialize subprocess client."""
-        from src.infrastructure.adapters.secondary.temporal.mcp.subprocess_client import (
+        from src.infrastructure.mcp.clients.subprocess_client import (
             MCPSubprocessClient,
         )
 
@@ -266,7 +266,7 @@ class WebSocketToolAdapter(BaseMCPToolAdapter):
 
     async def _initialize_internal(self) -> None:
         """Initialize WebSocket client."""
-        from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import (
+        from src.infrastructure.mcp.clients.websocket_client import (
             MCPWebSocketClient,
         )
 

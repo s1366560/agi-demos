@@ -41,7 +41,6 @@ async def incremental_refresh(
     """
     from uuid import uuid4
 
-    from src.configuration.temporal_config import get_temporal_settings
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
@@ -84,13 +83,12 @@ async def incremental_refresh(
 
         # Start Temporal workflow
         workflow_id = f"incremental-refresh-{group_id}-{task_id[:8]}"
-        temporal_settings = get_temporal_settings()
 
         await workflow_engine.start_workflow(
             workflow_name="incremental_refresh",
             workflow_id=workflow_id,
             input_data=task_payload,
-            task_queue=temporal_settings.temporal_default_task_queue,
+            task_queue="default",
         )
 
         logger.info(
@@ -128,7 +126,6 @@ async def deduplicate_entities(
     """
     from uuid import uuid4
 
-    from src.configuration.temporal_config import get_temporal_settings
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
@@ -197,13 +194,12 @@ async def deduplicate_entities(
 
             # Start Temporal workflow
             workflow_id = f"deduplicate-entities-{group_id}-{task_id[:8]}"
-            temporal_settings = get_temporal_settings()
 
             await workflow_engine.start_workflow(
                 workflow_name="deduplicate_entities",
                 workflow_id=workflow_id,
                 input_data=task_payload,
-                task_queue=temporal_settings.temporal_default_task_queue,
+                task_queue="default",
             )
 
             logger.info(
@@ -399,7 +395,6 @@ async def optimize_graph(
     """
     from uuid import uuid4
 
-    from src.configuration.temporal_config import get_temporal_settings
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
@@ -412,7 +407,6 @@ async def optimize_graph(
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-        temporal_settings = get_temporal_settings()
         group_id = getattr(current_user, "project_id", None) or "neo4j"
         project_id = getattr(current_user, "project_id", None)
         tenant_id = getattr(current_user, "tenant_id", None)
@@ -448,7 +442,7 @@ async def optimize_graph(
                     workflow_name="incremental_refresh",
                     workflow_id=workflow_id,
                     input_data=task_payload,
-                    task_queue=temporal_settings.temporal_default_task_queue,
+                    task_queue="default",
                 )
                 results["operations_run"].append(
                     {
@@ -514,7 +508,7 @@ async def optimize_graph(
                         workflow_name="deduplicate_entities",
                         workflow_id=workflow_id,
                         input_data=task_payload,
-                        task_queue=temporal_settings.temporal_default_task_queue,
+                        task_queue="default",
                     )
                     results["operations_run"].append(
                         {
@@ -600,7 +594,7 @@ async def optimize_graph(
                         workflow_name="rebuild_communities",
                         workflow_id=workflow_id,
                         input_data=task_payload,
-                        task_queue=temporal_settings.temporal_default_task_queue,
+                        task_queue="default",
                     )
                     results["operations_run"].append(
                         {

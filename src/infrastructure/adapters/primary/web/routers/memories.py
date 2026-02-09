@@ -286,7 +286,6 @@ async def create_memory(
             )
 
             # Submit to Temporal workflow for processing
-            from src.configuration.temporal_config import get_temporal_settings
             from src.infrastructure.adapters.secondary.persistence.database import (
                 async_session_factory,
             )
@@ -324,13 +323,12 @@ async def create_memory(
             task_payload["task_id"] = task_id
 
             # Start Temporal workflow
-            temporal_settings = get_temporal_settings()
             workflow_id = f"episode-{memory.id}"
             await workflow_engine.start_workflow(
                 workflow_name="episode_processing",
                 workflow_id=workflow_id,
                 input_data=task_payload,
-                task_queue=temporal_settings.temporal_default_task_queue,
+                task_queue="default",
             )
             logger.info(f"Memory {memory.id} submitted to Temporal workflow {workflow_id}")
 
@@ -583,7 +581,6 @@ async def reprocess_memory(
             raise HTTPException(status_code=404, detail="Project not found")
 
         # Submit to Temporal workflow for processing
-        from src.configuration.temporal_config import get_temporal_settings
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
@@ -621,13 +618,12 @@ async def reprocess_memory(
         task_payload["task_id"] = task_id
 
         # Start Temporal workflow
-        temporal_settings = get_temporal_settings()
         workflow_id = f"episode-reprocess-{memory.id}"
         await workflow_engine.start_workflow(
             workflow_name="episode_processing",
             workflow_id=workflow_id,
             input_data=task_payload,
-            task_queue=temporal_settings.temporal_default_task_queue,
+            task_queue="default",
         )
 
         memory.processing_status = "PENDING"
@@ -736,7 +732,6 @@ async def update_memory(
                 memory.processing_status = "FAILED"
             else:
                 # Submit to Temporal workflow for processing
-                from src.configuration.temporal_config import get_temporal_settings
                 from src.infrastructure.adapters.secondary.persistence.database import (
                     async_session_factory,
                 )
@@ -774,13 +769,12 @@ async def update_memory(
                 task_payload["task_id"] = task_id
 
                 # Start Temporal workflow
-                temporal_settings = get_temporal_settings()
                 workflow_id = f"episode-update-{memory.id}-{task_id[:8]}"
                 await workflow_engine.start_workflow(
                     workflow_name="episode_processing",
                     workflow_id=workflow_id,
                     input_data=task_payload,
-                    task_queue=temporal_settings.temporal_default_task_queue,
+                    task_queue="default",
                 )
                 memory.processing_status = "PENDING"
                 memory.task_id = task_id

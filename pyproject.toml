@@ -41,8 +41,6 @@ dependencies = [
     "playwright>=1.45.0",
     "orjson>=3.11.5",
     "slowapi>=0.1.9",
-    # Temporal.io for enterprise workflow orchestration
-    "temporalio>=1.6.0",
     "networkx>=3.6.1",
     "docker>=7.1.0",
     "aioboto3>=15.5.0",

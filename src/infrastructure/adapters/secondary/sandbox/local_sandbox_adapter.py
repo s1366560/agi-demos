@@ -32,7 +32,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxProvider,
     SandboxStatus,
 )
-from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import (
+from src.infrastructure.mcp.clients.websocket_client import (
     MCPWebSocketClient as WebSocketMCPClient,
 )
 

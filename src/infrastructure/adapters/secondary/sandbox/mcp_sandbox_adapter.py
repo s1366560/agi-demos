@@ -35,7 +35,7 @@ from src.infrastructure.adapters.secondary.sandbox.url_service import (
     SandboxInstanceInfo,
     SandboxUrlService,
 )
-from src.infrastructure.adapters.secondary.temporal.mcp.websocket_client import MCPWebSocketClient
+from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
 logger = logging.getLogger(__name__)
 
