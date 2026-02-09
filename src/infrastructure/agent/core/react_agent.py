@@ -120,6 +120,8 @@ class ReActAgent:
         artifact_service: Optional["ArtifactService"] = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
         llm_client: Optional[Any] = None,
+        # Skill resource sync service for sandbox resource injection
+        resource_sync_service: Optional[Any] = None,
         # ====================================================================
         # Hot-plug support: Optional tool provider function for dynamic tools
         # When provided, tools are fetched at each stream() call instead of
@@ -193,6 +195,7 @@ class ReActAgent:
         self.plan_mode_detector = plan_mode_detector  # Plan Mode detection
         self.artifact_service = artifact_service  # Artifact service for rich outputs
         self._llm_client = llm_client  # LLM client for unified resilience
+        self._resource_sync_service = resource_sync_service  # Skill resource sync
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -723,6 +726,23 @@ class ReActAgent:
 
         # Path B: Prompt injection mode (existing logic) or fallback from direct execution
 
+        # Sync skill resources to sandbox before prompt injection
+        # This ensures resources are available when LLM generates tool calls
+        if should_inject_prompt and matched_skill and self._resource_sync_service:
+            sandbox_id = self._extract_sandbox_id_from_tools()
+            if sandbox_id:
+                try:
+                    await self._resource_sync_service.sync_for_skill(
+                        skill_name=matched_skill.name,
+                        sandbox_id=sandbox_id,
+                        skill_content=matched_skill.prompt_template,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Skill resource sync failed for INJECT mode "
+                        f"(skill={matched_skill.name}): {e}"
+                    )
+
         # Build system prompt (uses SubAgent prompt if routed)
         # Only inject skill into prompt if should_inject_prompt is True
         system_prompt = await self._build_system_prompt(
@@ -924,6 +944,14 @@ class ReActAgent:
 
         async for event in self._skill_orchestrator.execute_directly(skill, context):
             yield event
+
+    def _extract_sandbox_id_from_tools(self) -> Optional[str]:
+        """Extract sandbox_id from any available sandbox tool wrapper."""
+        current_tools, _ = self._get_current_tools()
+        for tool in current_tools.values():
+            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
+                return tool.sandbox_id
+        return None
 
     def _convert_domain_event(self, domain_event: AgentDomainEvent) -> Optional[Dict[str, Any]]:
         """

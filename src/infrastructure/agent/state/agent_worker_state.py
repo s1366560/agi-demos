@@ -429,6 +429,11 @@ async def get_or_create_tools(
             project_id=project_id,
             agent_mode=agent_mode,
         )
+        # Set sandbox_id from loaded sandbox tools for resource sync
+        for tool in tools.values():
+            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
+                skill_loader.set_sandbox_id(tool.sandbox_id)
+                break
         tools["skill_loader"] = skill_loader
         logger.info(
             f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
@@ -751,9 +756,7 @@ async def _load_user_mcp_server_tools(
 
         # Parse server list from response
         servers = _parse_mcp_server_list(content)
-        running_names = {
-            s.get("name") for s in servers if s.get("status") == "running"
-        }
+        running_names = {s.get("name") for s in servers if s.get("status") == "running"}
 
         # Auto-restore: if DB has enabled servers not running, install & start them
         await _auto_restore_mcp_servers(
@@ -845,8 +848,7 @@ async def _auto_restore_mcp_servers(
 
         # Find servers that need restoring
         servers_to_restore = [
-            s for s in db_servers
-            if s.get("name") and s["name"] not in running_names
+            s for s in db_servers if s.get("name") and s["name"] not in running_names
         ]
 
         if not servers_to_restore:
@@ -897,8 +899,7 @@ async def _auto_restore_mcp_servers(
                 )
                 if start_result.get("is_error"):
                     logger.warning(
-                        f"[AgentWorker] Failed to start MCP server '{server_name}': "
-                        f"{start_result}"
+                        f"[AgentWorker] Failed to start MCP server '{server_name}': {start_result}"
                     )
                     continue
 
@@ -908,9 +909,7 @@ async def _auto_restore_mcp_servers(
                 )
 
             except Exception as e:
-                logger.warning(
-                    f"[AgentWorker] Error restoring MCP server '{server_name}': {e}"
-                )
+                logger.warning(f"[AgentWorker] Error restoring MCP server '{server_name}': {e}")
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error in auto-restore MCP servers: {e}")

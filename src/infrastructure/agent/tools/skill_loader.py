@@ -21,6 +21,7 @@ from src.domain.model.agent.skill import Skill
 from src.infrastructure.agent.tools.base import AgentTool
 
 if TYPE_CHECKING:
+    from src.application.services.skill_resource_sync_service import SkillResourceSyncService
     from src.infrastructure.agent.permission.manager import PermissionManager
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,8 @@ class SkillLoaderTool(AgentTool):
         agent_mode: str = "default",
         permission_manager: Optional["PermissionManager"] = None,
         session_id: Optional[str] = None,
+        resource_sync_service: Optional["SkillResourceSyncService"] = None,
+        sandbox_id: Optional[str] = None,
     ):
         """
         Initialize the skill loader tool.
@@ -64,6 +67,8 @@ class SkillLoaderTool(AgentTool):
             agent_mode: Agent mode for filtering skills (e.g., "default", "plan")
             permission_manager: Optional permission manager for access control
             session_id: Optional session ID for permission requests
+            resource_sync_service: Optional sync service for sandbox resource injection
+            sandbox_id: Optional sandbox ID for resource sync target
         """
         # Initialize with placeholder description
         super().__init__(
@@ -77,6 +82,8 @@ class SkillLoaderTool(AgentTool):
         self._agent_mode = agent_mode
         self._permission_manager = permission_manager
         self._session_id = session_id
+        self._resource_sync_service = resource_sync_service
+        self._sandbox_id = sandbox_id
         self._skills_cache: List[Skill] = []
         self._description_built = False
 
@@ -270,6 +277,23 @@ class SkillLoaderTool(AgentTool):
                     available_skills=available,
                 )
 
+            # Sync skill resources to sandbox (if sync service and sandbox available)
+            resource_hint = ""
+            if self._resource_sync_service and self._sandbox_id:
+                try:
+                    sync_status = await self._resource_sync_service.sync_for_skill(
+                        skill_name=skill_name,
+                        sandbox_id=self._sandbox_id,
+                        skill_content=content,
+                    )
+                    if sync_status.synced and sync_status.resource_paths:
+                        resource_hint = self._resource_sync_service.build_resource_paths_hint(
+                            skill_name=skill_name,
+                            resource_paths=sync_status.resource_paths,
+                        )
+                except Exception as e:
+                    logger.warning(f"Skill resource sync failed for '{skill_name}': {e}")
+
             # Record usage (async, don't wait)
             try:
                 await self._skill_service.record_skill_usage(
@@ -283,7 +307,7 @@ class SkillLoaderTool(AgentTool):
             # Return structured result (reference: OpenCode)
             return {
                 "title": f"Loaded skill: {skill_name}",
-                "output": self._format_skill_content(skill_name, content),
+                "output": self._format_skill_content(skill_name, content, resource_hint),
                 "metadata": {
                     "name": skill_name,
                     "skill_id": cached_skill.id if cached_skill else None,
@@ -295,9 +319,9 @@ class SkillLoaderTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to load skill '{skill_name}': {e}")
-            return self._error_response(f"Error loading skill: {str(e)}")
+            return self._error_response(f"Error loading skill: {e!s}")
 
-    def _format_skill_content(self, skill_name: str, content: str) -> str:
+    def _format_skill_content(self, skill_name: str, content: str, resource_hint: str = "") -> str:
         """
         Format skill content for agent consumption.
 
@@ -306,6 +330,7 @@ class SkillLoaderTool(AgentTool):
         Args:
             skill_name: Name of the loaded skill
             content: Raw skill content
+            resource_hint: Optional resource path hints for sandbox
 
         Returns:
             Formatted content string
@@ -318,6 +343,7 @@ class SkillLoaderTool(AgentTool):
             f"## Skill: {skill_name}\n\n"
             f"**Base directory**: {base_dir}\n\n"
             f"{content.strip()}\n\n"
+            f"{resource_hint}"
             "---\n"
             "Follow these instructions to complete the task. "
             "If you encounter issues, you can load additional skills or ask for clarification."
@@ -387,6 +413,24 @@ class SkillLoaderTool(AgentTool):
             permission_manager: Permission manager instance
         """
         self._permission_manager = permission_manager
+
+    def set_sandbox_id(self, sandbox_id: str) -> None:
+        """
+        Set the sandbox ID for resource synchronization.
+
+        Args:
+            sandbox_id: Sandbox container ID
+        """
+        self._sandbox_id = sandbox_id
+
+    def set_resource_sync_service(self, sync_service: "SkillResourceSyncService") -> None:
+        """
+        Set the resource sync service for sandbox resource injection.
+
+        Args:
+            sync_service: SkillResourceSyncService instance
+        """
+        self._resource_sync_service = sync_service
 
     def get_output_schema(self) -> Dict[str, Any]:
         """Get the output schema for tool composition."""

@@ -284,6 +284,8 @@ class ProjectReActAgent:
 
             # Import dependencies here to avoid circular imports
             from src.configuration.di_container import DIContainer as Container
+            from src.infrastructure.agent.core.processor import ProcessorConfig
+            from src.infrastructure.agent.core.react_agent import ReActAgent
             from src.infrastructure.agent.state.agent_worker_state import (
                 get_agent_graph_service,
                 get_or_create_agent_session,
@@ -293,8 +295,6 @@ class ProjectReActAgent:
                 get_or_create_tools,
                 get_redis_client,
             )
-            from src.infrastructure.agent.core.processor import ProcessorConfig
-            from src.infrastructure.agent.core.react_agent import ReActAgent
 
             # Get shared services
             graph_service = get_agent_graph_service()
@@ -381,6 +381,7 @@ class ProjectReActAgent:
                 subagents=self._subagents,
                 artifact_service=self._artifact_service,  # Pass artifact service
                 llm_client=llm_client,  # Pass cached LiteLLMClient
+                resource_sync_service=self._session_context.resource_sync_service,
                 # Use cached components from session pool
                 _cached_tool_definitions=self._session_context.tool_definitions,
                 _cached_system_prompt_manager=self._session_context.system_prompt_manager,

@@ -54,6 +54,7 @@ class AgentSessionContext:
     # Cached optional components
     subagent_router: Optional[Any] = None  # SubAgentRouter with built keyword index
     skill_executor: Optional[Any] = None  # SkillExecutor instance
+    resource_sync_service: Optional[Any] = None  # SkillResourceSyncService instance
     skills: List[Any] = field(default_factory=list)  # List[Skill]
 
     # Shared singleton references
@@ -354,7 +355,7 @@ def _convert_tools_to_definitions(tools: Dict[str, Any]) -> List[Any]:
                     else:
                         raise ValueError(f"Tool {tool_name} has no execute method")
                 except Exception as e:
-                    return f"Error executing tool {tool_name}: {str(e)}"
+                    return f"Error executing tool {tool_name}: {e!s}"
 
             return execute_wrapper
 
@@ -632,40 +633,42 @@ async def get_or_create_agent_session(
         match_threshold=subagent_match_threshold,
     )
 
-    # Create SkillExecutor with unified SkillResourcePort
+    # Create SkillExecutor and SkillResourceSyncService
+    # SkillExecutor requires pre-loaded skills, but resource_sync_service should
+    # always be available for dynamically loaded skills via skill_loader tool.
     skill_executor = None
+    resource_sync_service = None
+
+    from pathlib import Path
+
+    from src.infrastructure.adapters.secondary.skill import (
+        LocalSkillResourceAdapter,
+        SandboxSkillResourceAdapter,
+    )
+    from src.infrastructure.agent.state.agent_worker_state import (
+        get_mcp_sandbox_adapter,
+    )
+
+    # Get sandbox adapter for resource injection
+    sandbox_adapter = get_mcp_sandbox_adapter()
+
+    # Always use sandbox workspace path for skill resources
+    sandbox_workspace = Path("/workspace")
+
+    # Create unified SkillResourcePort based on environment
+    skill_resource_port = None
+    if sandbox_adapter:
+        skill_resource_port = SandboxSkillResourceAdapter(
+            sandbox_adapter=sandbox_adapter,
+            default_project_path=sandbox_workspace,
+        )
+    else:
+        skill_resource_port = LocalSkillResourceAdapter(
+            default_project_path=sandbox_workspace,
+        )
+
     if skills:
-        from pathlib import Path
-
-        from src.infrastructure.adapters.secondary.skill import (
-            LocalSkillResourceAdapter,
-            SandboxSkillResourceAdapter,
-        )
-        from src.infrastructure.agent.state.agent_worker_state import (
-            get_mcp_sandbox_adapter,
-        )
         from src.infrastructure.agent.core.skill_executor import SkillExecutor
-
-        # Get sandbox adapter for resource injection
-        sandbox_adapter = get_mcp_sandbox_adapter()
-
-        # Always use sandbox workspace path for skill resources
-        # Never expose host filesystem paths to agent
-        sandbox_workspace = Path("/workspace")
-
-        # Create unified SkillResourcePort based on environment
-        # If sandbox_adapter is available, use SandboxSkillResourceAdapter
-        # Otherwise, use LocalSkillResourceAdapter
-        skill_resource_port = None
-        if sandbox_adapter:
-            skill_resource_port = SandboxSkillResourceAdapter(
-                sandbox_adapter=sandbox_adapter,
-                default_project_path=sandbox_workspace,
-            )
-        else:
-            skill_resource_port = LocalSkillResourceAdapter(
-                default_project_path=sandbox_workspace,
-            )
 
         skill_executor = SkillExecutor(
             tools=tools,
@@ -674,6 +677,25 @@ async def get_or_create_agent_session(
             project_id=project_id,
             project_path=sandbox_workspace,
         )
+
+    # Create SkillResourceSyncService unconditionally — needed for
+    # dynamically loaded skills via skill_loader tool even when
+    # no pre-loaded skills exist at session start.
+    from src.application.services.skill_resource_sync_service import (
+        SkillResourceSyncService,
+    )
+
+    resource_sync_service = SkillResourceSyncService(
+        skill_resource_port=skill_resource_port,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        project_path=sandbox_workspace,
+    )
+
+    # Wire sync service to SkillLoaderTool if present
+    skill_loader = tools.get("skill_loader")
+    if skill_loader and hasattr(skill_loader, "set_resource_sync_service"):
+        skill_loader.set_resource_sync_service(resource_sync_service)
 
     # Get SystemPromptManager singleton
     system_prompt_manager = await get_system_prompt_manager()
@@ -688,6 +710,7 @@ async def get_or_create_agent_session(
         raw_tools=tools,
         subagent_router=subagent_router,
         skill_executor=skill_executor,
+        resource_sync_service=resource_sync_service,
         skills=skills,
         system_prompt_manager=system_prompt_manager,
         processor_config=processor_config,
