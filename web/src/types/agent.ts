@@ -719,8 +719,13 @@ export interface ChatRequest {
   conversation_id: string;
   message: string;
   project_id?: string;
-  /** Attachment IDs to include with the message */
-  attachment_ids?: string[];
+  /** File metadata for files uploaded to sandbox */
+  file_metadata?: Array<{
+    filename: string;
+    sandbox_path: string;
+    mime_type: string;
+    size_bytes: number;
+  }>;
 }
 
 /**

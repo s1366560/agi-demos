@@ -63,6 +63,7 @@ async def execute_project_chat(
             conversation_context=request.conversation_context,
             tenant_id=agent.config.tenant_id,
             message_id=request.message_id,
+            file_metadata=request.file_metadata,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us

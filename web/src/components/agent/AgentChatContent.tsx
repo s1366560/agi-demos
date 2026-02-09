@@ -30,6 +30,8 @@ import { useSandboxStore } from '@/stores/sandbox';
 
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
+import type { FileMetadata } from '@/services/sandboxUploadService';
+
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
@@ -276,10 +278,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
 
   const handleSend = useCallback(
-    async (content: string, attachmentIds?: string[]) => {
+    async (content: string, fileMetadata?: FileMetadata[]) => {
       if (!projectId) return;
-      // Note: Sandbox auto-creation removed - backend should handle sandbox provisioning
-      const newId = await sendMessage(content, projectId, { onAct, onObserve, attachmentIds });
+      const newId = await sendMessage(content, projectId, { onAct, onObserve, fileMetadata });
       if (!conversationId && newId) {
         if (customBasePath) {
           navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
@@ -485,7 +486,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           isPlanMode={isPlanMode}
           onTogglePlanMode={togglePlanMode}
           disabled={isLoadingHistory}
-          conversationId={activeConversationId || undefined}
           projectId={projectId || undefined}
         />
       </div>

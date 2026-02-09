@@ -1,12 +1,12 @@
 /**
- * InputBar - Modern floating input bar with file attachment support
+ * InputBar - Chat input bar with inline file upload
  *
  * Features:
- * - Glass-morphism design
- * - Auto-resizing textarea
- * - File attachment preview
+ * - Glass-morphism design with auto-resizing textarea
+ * - Drag-and-drop file upload on the entire input card
+ * - Paperclip button opens native file picker directly
+ * - Inline attachment chips with progress / error states
  * - Plan mode toggle
- * - Modern iconography
  */
 
 import { useState, useRef, useCallback, memo } from 'react';
@@ -15,31 +15,33 @@ import {
   Send,
   Square,
   Paperclip,
-  Mic,
   Wand2,
   X,
   FileText,
   Image as ImageIcon,
   File,
+  Upload,
   Sparkles,
+  AlertCircle,
+  RotateCw,
 } from 'lucide-react';
 
-import { LazyButton, LazyTooltip, LazyBadge, LazyPopover } from '@/components/ui/lazyAntd';
+import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
-import { FileUploader, type PendingAttachment } from './FileUploader';
+import { useFileUpload, type PendingAttachment } from './FileUploader';
+
+import type { FileMetadata } from '@/services/sandboxUploadService';
 
 interface InputBarProps {
-  onSend: (content: string, attachmentIds?: string[]) => void;
+  onSend: (content: string, fileMetadata?: FileMetadata[]) => void;
   onAbort: () => void;
   isStreaming: boolean;
   isPlanMode: boolean;
   onTogglePlanMode: () => void;
   disabled?: boolean;
-  conversationId?: string;
   projectId?: string;
 }
 
-// Get icon for file type
 const getFileIcon = (mimeType: string) => {
   if (mimeType.startsWith('image/')) return <ImageIcon size={14} className="text-emerald-500" />;
   if (mimeType.includes('pdf') || mimeType.includes('document'))
@@ -47,36 +49,32 @@ const getFileIcon = (mimeType: string) => {
   return <File size={14} className="text-blue-500" />;
 };
 
-// Format file size
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
-// Memoized InputBar to prevent unnecessary re-renders
 export const InputBar = memo<InputBarProps>(
-  ({
-    onSend,
-    onAbort,
-    isStreaming,
-    isPlanMode,
-    onTogglePlanMode,
-    disabled,
-    conversationId,
-    projectId,
-  }) => {
+  ({ onSend, onAbort, isStreaming, isPlanMode, onTogglePlanMode, disabled, projectId }) => {
     const [content, setContent] = useState('');
     const [isFocused, setIsFocused] = useState(false);
-    const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-    const [showUploader, setShowUploader] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const dragCounter = useRef(0);
 
-    // Get completed attachment IDs
-    const uploadedAttachments = attachments.filter((a) => a.status === 'uploaded' && a.attachment);
+    const { attachments, addFiles, removeAttachment, retryAttachment, clearAll } = useFileUpload({
+      projectId,
+      maxFiles: 10,
+      maxSizeMB: 100,
+    });
+
+    const uploadedAttachments = attachments.filter(
+      (a) => a.status === 'uploaded' && a.fileMetadata
+    );
     const pendingCount = attachments.filter((a) => a.status === 'uploading').length;
 
-    // Combine disabled and isStreaming for send button state
     const canSend =
       !disabled &&
       !isStreaming &&
@@ -91,16 +89,16 @@ export const InputBar = memo<InputBarProps>(
         pendingCount > 0
       )
         return;
-      const attachmentIds = uploadedAttachments
-        .filter((a) => a.attachment !== undefined)
-        .map((a) => a.attachment?.id ?? '');
-      onSend(content.trim(), attachmentIds.length > 0 ? attachmentIds : undefined);
+      const fileMetadataList = uploadedAttachments
+        .filter((a) => a.fileMetadata !== undefined)
+        .map((a) => a.fileMetadata!);
+      onSend(content.trim(), fileMetadataList.length > 0 ? fileMetadataList : undefined);
       setContent('');
-      setAttachments([]);
+      clearAll();
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
-    }, [content, uploadedAttachments, isStreaming, disabled, pendingCount, onSend]);
+    }, [content, uploadedAttachments, isStreaming, disabled, pendingCount, onSend, clearAll]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
@@ -121,38 +119,132 @@ export const InputBar = memo<InputBarProps>(
     const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
       const target = e.currentTarget;
       target.style.height = 'auto';
-      // Minimum height for 3 lines (approx 72px + padding)
       const minHeight = 72;
       const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 400));
       target.style.height = `${newHeight}px`;
       setContent(target.value);
     }, []);
 
-    const removeAttachment = useCallback((id: string) => {
-      setAttachments((prev) => prev.filter((a) => a.id !== id));
+    // --- Paste files (Ctrl/Cmd+V with images or files) ---
+    const handlePaste = useCallback(
+      (e: React.ClipboardEvent) => {
+        if (disabled) return;
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        const files: File[] = [];
+        for (const item of items) {
+          if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) files.push(file);
+          }
+        }
+
+        if (files.length > 0) {
+          e.preventDefault();
+          const dt = new DataTransfer();
+          files.forEach((f) => dt.items.add(f));
+          addFiles(dt.files);
+        }
+      },
+      [disabled, addFiles]
+    );
+
+    // --- Drag-and-drop on the entire input card ---
+    const handleDragEnter = useCallback(
+      (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current += 1;
+        if (!disabled && e.dataTransfer.types.includes('Files')) {
+          setIsDragging(true);
+        }
+      },
+      [disabled]
+    );
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
     }, []);
 
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current -= 1;
+      if (dragCounter.current <= 0) {
+        dragCounter.current = 0;
+        setIsDragging(false);
+      }
+    }, []);
+
+    const handleDrop = useCallback(
+      (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current = 0;
+        setIsDragging(false);
+        if (!disabled && e.dataTransfer.files.length > 0) {
+          addFiles(e.dataTransfer.files);
+        }
+      },
+      [disabled, addFiles]
+    );
+
+    const handleFileInputChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+          addFiles(e.target.files);
+        }
+        e.target.value = '';
+      },
+      [addFiles]
+    );
+
     const charCount = content.length;
-    const showCharCount = charCount > 0;
 
     return (
       <div className="h-full flex flex-col p-4">
-        {/* Main input card - Glass morphism style */}
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileInputChange}
+          className="hidden"
+          disabled={disabled}
+        />
+
+        {/* Main input card */}
         <div
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           className={`
-        flex-1 flex flex-col min-h-0 rounded-2xl border 
-        bg-white/90 dark:bg-slate-800/90
-        backdrop-blur-sm
-        transition-all duration-300 ease-out
-        shadow-lg
-        ${
-          isFocused
-            ? 'border-primary/40 shadow-primary/10 ring-2 ring-primary/10'
-            : 'border-slate-200/60 dark:border-slate-700/60 shadow-slate-200/50 dark:shadow-black/20'
-        }
-        ${disabled ? 'opacity-60 pointer-events-none' : ''}
-      `}
+            flex-1 flex flex-col min-h-0 rounded-2xl border relative
+            bg-white/90 dark:bg-slate-800/90
+            backdrop-blur-sm transition-all duration-300 ease-out shadow-lg
+            ${
+              isDragging
+                ? 'border-primary/60 ring-2 ring-primary/20 shadow-primary/15'
+                : isFocused
+                  ? 'border-primary/40 shadow-primary/10 ring-2 ring-primary/10'
+                  : 'border-slate-200/60 dark:border-slate-700/60 shadow-slate-200/50 dark:shadow-black/20'
+            }
+            ${disabled ? 'opacity-60 pointer-events-none' : ''}
+          `}
         >
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 z-20 rounded-2xl bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
+              <div className="flex flex-col items-center gap-2 text-primary">
+                <Upload size={28} strokeWidth={1.5} />
+                <span className="text-sm font-medium">Drop files to upload</span>
+              </div>
+            </div>
+          )}
+
           {/* Plan Mode Badge */}
           {isPlanMode && (
             <div className="px-4 pt-3 flex-shrink-0">
@@ -163,50 +255,30 @@ export const InputBar = memo<InputBarProps>(
             </div>
           )}
 
-          {/* Attachments Preview */}
+          {/* Inline Attachment Chips */}
           {attachments.length > 0 && (
             <div className="px-4 pt-3 flex-shrink-0">
               <div className="flex flex-wrap gap-2">
                 {attachments.map((file) => (
-                  <div
+                  <AttachmentChip
                     key={file.id}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border ${
-                      file.status === 'error'
-                        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
-                        : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
-                    }`}
-                  >
-                    {getFileIcon(file.mimeType)}
-                    <span className="max-w-[120px] truncate text-slate-700 dark:text-slate-300">
-                      {file.filename}
-                    </span>
-                    <span className="text-slate-400">{formatSize(file.sizeBytes)}</span>
-                    {file.status === 'uploading' && (
-                      <span className="text-blue-500 font-medium">{file.progress}%</span>
-                    )}
-                    {file.status === 'error' && (
-                      <span className="text-red-500 text-xs font-medium">Failed</span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(file.id)}
-                      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors ml-1"
-                    >
-                      <X size={12} className="text-slate-400 hover:text-slate-600" />
-                    </button>
-                  </div>
+                    file={file}
+                    onRemove={removeAttachment}
+                    onRetry={retryAttachment}
+                  />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Text Area - fills available space, minimum 3 rows */}
+          {/* Text Area */}
           <div className="flex-1 min-h-0 px-4 py-3">
             <textarea
               ref={textareaRef}
               value={content}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               placeholder={
@@ -216,13 +288,11 @@ export const InputBar = memo<InputBarProps>(
               }
               rows={3}
               className="
-              w-full h-full resize-none bg-transparent
-              text-slate-800 dark:text-slate-100
-              placeholder:text-slate-400 dark:placeholder:text-slate-500
-              focus:outline-none
-              text-[15px] leading-relaxed
-              min-h-[72px]
-            "
+                w-full h-full resize-none bg-transparent
+                text-slate-800 dark:text-slate-100
+                placeholder:text-slate-400 dark:placeholder:text-slate-500
+                focus:outline-none text-[15px] leading-relaxed min-h-[72px]
+              "
             />
           </div>
 
@@ -230,52 +300,18 @@ export const InputBar = memo<InputBarProps>(
           <div className="flex-shrink-0 px-3 pb-3 flex items-center justify-between">
             {/* Left Actions */}
             <div className="flex items-center gap-1">
-              <LazyPopover
-                content={
-                  <FileUploader
-                    conversationId={conversationId}
-                    projectId={projectId}
-                    attachments={attachments}
-                    onAttachmentsChange={setAttachments}
-                    maxFiles={10}
-                    maxSizeMB={100}
-                  />
-                }
-                trigger="click"
-                open={showUploader}
-                onOpenChange={setShowUploader}
-                placement="topLeft"
-                overlayClassName="file-uploader-popover"
-              >
-                <LazyTooltip title="Attach file">
-                  <LazyButton
-                    type="text"
-                    size="small"
-                    icon={
-                      <LazyBadge count={attachments.length} size="small" offset={[-2, 2]}>
-                        <Paperclip size={18} />
-                      </LazyBadge>
-                    }
-                    className={`
+              <LazyTooltip title="Attach files (or drag & drop)">
+                <LazyButton
+                  type="text"
+                  size="small"
+                  icon={<Paperclip size={18} />}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
                     rounded-lg h-9 w-9 flex items-center justify-center
                     ${attachments.length > 0 ? 'text-primary' : ''}
                   `}
-                  />
-                </LazyTooltip>
-              </LazyPopover>
-
-              <LazyTooltip title="Voice input">
-                <LazyButton
-                  type="text"
-                  size="small"
-                  icon={<Mic size={18} />}
-                  className="
-                  text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
-                  hover:bg-slate-100 dark:hover:bg-slate-700/50
-                  rounded-lg h-9 w-9 flex items-center justify-center
-                "
                 />
               </LazyTooltip>
 
@@ -287,13 +323,13 @@ export const InputBar = memo<InputBarProps>(
                   size="small"
                   onClick={onTogglePlanMode}
                   className={`
-                  flex items-center gap-1.5 h-9 px-3 rounded-lg transition-all
-                  ${
-                    isPlanMode
-                      ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
-                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                  }
-                `}
+                    flex items-center gap-1.5 h-9 px-3 rounded-lg transition-all
+                    ${
+                      isPlanMode
+                        ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                    }
+                  `}
                 >
                   <Wand2 size={16} />
                   <span className="text-sm font-medium">Plan</span>
@@ -303,19 +339,14 @@ export const InputBar = memo<InputBarProps>(
 
             {/* Right Actions */}
             <div className="flex items-center gap-3">
-              {/* Character Count */}
-              {showCharCount && (
+              {charCount > 0 && (
                 <span
-                  className={`
-                text-xs transition-colors font-medium
-                ${charCount > 4000 ? 'text-amber-500' : 'text-slate-400'}
-              `}
+                  className={`text-xs font-medium transition-colors ${charCount > 4000 ? 'text-amber-500' : 'text-slate-400'}`}
                 >
                   {charCount.toLocaleString()}
                 </span>
               )}
 
-              {/* Send/Stop Button */}
               {isStreaming ? (
                 <LazyButton
                   type="primary"
@@ -335,13 +366,13 @@ export const InputBar = memo<InputBarProps>(
                   onClick={handleSend}
                   disabled={!canSend}
                   className={`
-                  rounded-xl flex items-center gap-2 h-9 px-4
-                  bg-gradient-to-r from-primary to-primary-600
-                  hover:from-primary-600 hover:to-primary-700
-                  shadow-lg shadow-primary/25
-                  disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
-                  transition-all duration-200
-                `}
+                    rounded-xl flex items-center gap-2 h-9 px-4
+                    bg-gradient-to-r from-primary to-primary-600
+                    hover:from-primary-600 hover:to-primary-700
+                    shadow-lg shadow-primary/25
+                    disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
+                    transition-all duration-200
+                  `}
                 >
                   Send
                 </LazyButton>
@@ -349,12 +380,60 @@ export const InputBar = memo<InputBarProps>(
             </div>
           </div>
         </div>
-
       </div>
     );
   }
 );
 
 InputBar.displayName = 'InputBar';
+
+// --- Attachment Chip ---
+
+const AttachmentChip = memo<{
+  file: PendingAttachment;
+  onRemove: (id: string) => void;
+  onRetry: (id: string) => void;
+}>(({ file, onRemove, onRetry }) => (
+  <div
+    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+      file.status === 'error'
+        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
+        : 'bg-slate-50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600'
+    }`}
+  >
+    {getFileIcon(file.mimeType)}
+    <span className="max-w-[120px] truncate text-slate-700 dark:text-slate-300">
+      {file.filename}
+    </span>
+    <span className="text-slate-400">{formatSize(file.sizeBytes)}</span>
+    {file.status === 'uploading' && (
+      <span className="text-blue-500 font-medium">{file.progress}%</span>
+    )}
+    {file.status === 'error' && (
+      <>
+        <LazyTooltip title={file.error}>
+          <AlertCircle size={13} className="text-red-500 cursor-help" />
+        </LazyTooltip>
+        <button
+          type="button"
+          onClick={() => onRetry(file.id)}
+          className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+        >
+          <RotateCw size={12} className="text-red-500" />
+        </button>
+      </>
+    )}
+    <button
+      type="button"
+      onClick={() => onRemove(file.id)}
+      disabled={file.status === 'uploading'}
+      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors ml-0.5 disabled:opacity-30"
+    >
+      <X size={12} className="text-slate-400 hover:text-slate-600" />
+    </button>
+  </div>
+));
+
+AttachmentChip.displayName = 'AttachmentChip';
 
 export default InputBar;

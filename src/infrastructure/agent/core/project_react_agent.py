@@ -577,6 +577,7 @@ class ProjectReActAgent:
         tenant_id: Optional[str] = None,
         message_id: Optional[str] = None,
         abort_signal: Optional[asyncio.Event] = None,
+        file_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -683,6 +684,7 @@ class ProjectReActAgent:
                 conversation_context=conversation_context or [],
                 message_id=message_id,
                 abort_signal=abort_signal,
+                attachment_metadata=file_metadata,
             ):
                 event_count += 1
 

@@ -22,6 +22,7 @@ class AgentRuntimeBootstrapper:
         user_message: str,
         conversation_context: list[Dict[str, Any]],
         attachment_ids: Optional[List[str]] = None,
+        file_metadata: Optional[list] = None,
         correlation_id: Optional[str] = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
@@ -62,6 +63,7 @@ class AgentRuntimeBootstrapper:
             user_id=conversation.user_id,
             conversation_context=conversation_context,
             attachment_ids=attachment_ids,
+            file_metadata=file_metadata,
             correlation_id=correlation_id,
         )
 

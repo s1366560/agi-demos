@@ -35,6 +35,8 @@ import {
 import { logger } from '../utils/logger';
 import { tabSync, type TabSyncMessage } from '../utils/tabSync';
 
+import type { FileMetadata } from '../services/sandboxUploadService';
+
 import { createHITLActions } from './agent/hitlActions';
 import { createStreamEventHandlers } from './agent/streamEventHandlers';
 
@@ -174,8 +176,8 @@ if (typeof window !== 'undefined') {
 export interface AdditionalAgentHandlers {
   onAct?: (event: AgentEvent<ActEventData>) => void;
   onObserve?: (event: AgentEvent<ObserveEventData>) => void;
-  /** Attachment IDs to include with the message */
-  attachmentIds?: string[];
+  /** File metadata for files uploaded to sandbox */
+  fileMetadata?: FileMetadata[];
 }
 
 /**
@@ -1342,7 +1344,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                   conversation_id: conversationId!,
                   message: content,
                   project_id: projectId,
-                  attachment_ids: additionalHandlers?.attachmentIds,
+                  file_metadata: additionalHandlers?.fileMetadata,
                 },
                 handler
               )
@@ -1369,7 +1371,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 conversation_id: conversationId!,
                 message: content,
                 project_id: projectId,
-                attachment_ids: additionalHandlers?.attachmentIds,
+                file_metadata: additionalHandlers?.fileMetadata,
               },
               handler
             );

@@ -1184,7 +1184,7 @@ class AgentServiceImpl implements AgentService {
    * @see AgentStreamHandler - Handler interface for all available callbacks
    */
   async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {
-    const { conversation_id, message, project_id, attachment_ids } = request;
+    const { conversation_id, message, project_id, file_metadata } = request;
 
     // Ensure WebSocket is connected
     if (!this.isConnected()) {
@@ -1195,13 +1195,13 @@ class AgentServiceImpl implements AgentService {
     this.handlers.set(conversation_id, handler);
     this.subscriptions.add(conversation_id);
 
-    // Send message through WebSocket (include attachment_ids if present)
+    // Send message through WebSocket (include file_metadata if present)
     const sent = this.send({
       type: 'send_message',
       conversation_id,
       message,
       project_id,
-      ...(attachment_ids && attachment_ids.length > 0 && { attachment_ids }),
+      ...(file_metadata && file_metadata.length > 0 && { file_metadata }),
     });
 
     if (!sent) {

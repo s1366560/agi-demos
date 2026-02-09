@@ -17,13 +17,15 @@ import { Resizer } from './Resizer';
 
 import type { INPUT_MIN_HEIGHT, INPUT_MAX_HEIGHT } from './AgentChatHooks';
 
+import type { FileMetadata } from '@/services/sandboxUploadService';
+
 export interface AgentChatInputAreaProps {
   /** Current height of the input area */
   inputHeight: number;
   /** Callback when height changes */
   onHeightChange: (height: number) => void;
   /** Callback when user sends a message */
-  onSend: (content: string, attachmentIds?: string[]) => void | Promise<void>;
+  onSend: (content: string, fileMetadata?: FileMetadata[]) => void | Promise<void>;
   /** Callback when user aborts streaming */
   onAbort: () => void;
   /** Whether agent is currently streaming */
@@ -38,8 +40,6 @@ export interface AgentChatInputAreaProps {
   minHeight?: typeof INPUT_MIN_HEIGHT;
   /** Maximum height constraint */
   maxHeight?: typeof INPUT_MAX_HEIGHT;
-  /** Current conversation ID for file attachments */
-  conversationId?: string;
   /** Current project ID for file attachments */
   projectId?: string;
 }
@@ -60,7 +60,6 @@ export const AgentChatInputArea = ({
   onTogglePlanMode,
   minHeight = 140,
   maxHeight = 400,
-  conversationId,
   projectId,
 }: AgentChatInputAreaProps) => {
   return (
@@ -91,7 +90,6 @@ export const AgentChatInputArea = ({
         isPlanMode={isPlanMode}
         onTogglePlanMode={onTogglePlanMode}
         disabled={disabled}
-        conversationId={conversationId}
         projectId={projectId}
       />
     </div>

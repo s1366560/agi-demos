@@ -174,6 +174,7 @@ class AgentService(AgentServicePort):
         user_id: str,
         tenant_id: str,
         attachment_ids: Optional[List[str]] = None,
+        file_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
@@ -184,7 +185,8 @@ class AgentService(AgentServicePort):
             project_id: Project ID
             user_id: User ID
             tenant_id: Tenant ID
-            attachment_ids: Optional list of attachment IDs to include with the message
+            attachment_ids: Optional list of attachment IDs (legacy, deprecated)
+            file_metadata: Optional list of file metadata dicts for sandbox-uploaded files
 
         Yields:
             Event dictionaries with type and data
@@ -220,11 +222,12 @@ class AgentService(AgentServicePort):
             # Generate correlation ID for this request (used to track all events from this request)
             correlation_id = f"req_{uuid.uuid4().hex[:12]}"
 
-            # Use Domain Event - include attachment_ids at creation time (model is frozen)
+            # Use Domain Event - include attachment_ids/file_metadata at creation time (model is frozen)
             user_domain_event = AgentMessageEvent(
                 role="user",
                 content=user_message,
                 attachment_ids=attachment_ids if attachment_ids else None,
+                file_metadata=file_metadata if file_metadata else None,
             )
 
             # Get next event time
@@ -273,6 +276,8 @@ class AgentService(AgentServicePort):
             }
             if attachment_ids:
                 user_event_data["attachment_ids"] = attachment_ids
+            if file_metadata:
+                user_event_data["file_metadata"] = file_metadata
 
             yield {
                 "type": "message",
@@ -305,6 +310,7 @@ class AgentService(AgentServicePort):
                 user_message=user_message,
                 conversation_context=conversation_context,
                 attachment_ids=attachment_ids,
+                file_metadata=file_metadata,
                 correlation_id=correlation_id,
             )
             logger.info(
@@ -335,6 +341,7 @@ class AgentService(AgentServicePort):
         user_message: str,
         conversation_context: list[Dict[str, Any]],
         attachment_ids: Optional[List[str]] = None,
+        file_metadata: Optional[List[Dict[str, Any]]] = None,
         correlation_id: Optional[str] = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
@@ -344,6 +351,7 @@ class AgentService(AgentServicePort):
             user_message=user_message,
             conversation_context=conversation_context,
             attachment_ids=attachment_ids,
+            file_metadata=file_metadata,
             correlation_id=correlation_id,
         )
 
