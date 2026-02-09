@@ -31,8 +31,8 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     Resources are synchronized from local file system to container.
     """
 
-    # Resource directories to scan
-    RESOURCE_DIRS = ["scripts", "references", "assets", "templates"]
+    # Directories and files to exclude from sync
+    EXCLUDED_NAMES = {"__pycache__", ".git", ".DS_Store", "node_modules"}
 
     # Container base path for skills
     CONTAINER_SKILL_BASE = "/workspace/.skills"
@@ -174,41 +174,48 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
         self,
         context: SkillResourceContext,
     ) -> List[SkillResource]:
-        """List all resources for a skill from local file system."""
+        """List all resources for a skill from local file system.
+
+        Scans the entire skill directory recursively, excluding SKILL.md
+        (handled separately) and ignored directories like __pycache__.
+        """
         skill_dir = await self._get_local_skill_dir(context)
         if not skill_dir:
             return []
 
         resources = []
 
-        for dir_name in self.RESOURCE_DIRS:
-            resource_dir = skill_dir / dir_name
-            if not resource_dir.exists() or not resource_dir.is_dir():
-                continue
+        try:
+            for item in skill_dir.rglob("*"):
+                if not item.is_file():
+                    continue
 
-            try:
-                for item in resource_dir.rglob("*"):
-                    if not item.is_file():
-                        continue
+                # Skip SKILL.md (loaded separately via load_skill_content)
+                if item.name == "SKILL.md" and item.parent == skill_dir:
+                    continue
 
-                    relative_path = item.relative_to(skill_dir)
-                    virtual_path = self.build_virtual_path(context.skill_name, str(relative_path))
-                    container_path = self._get_container_path(
-                        context.skill_name, str(relative_path)
-                    )
+                # Skip excluded directories
+                if any(part in self.EXCLUDED_NAMES for part in item.relative_to(skill_dir).parts):
+                    continue
 
-                    resource = SkillResource(
-                        virtual_path=virtual_path,
-                        name=item.name,
-                        local_path=item,
-                        container_path=container_path,
-                        size_bytes=item.stat().st_size,
-                        is_binary=self._is_binary_file(item),
-                    )
-                    resources.append(resource)
+                relative_path = item.relative_to(skill_dir)
+                virtual_path = self.build_virtual_path(context.skill_name, str(relative_path))
+                container_path = self._get_container_path(
+                    context.skill_name, str(relative_path)
+                )
 
-            except Exception as e:
-                logger.warning(f"Error scanning {resource_dir}: {e}")
+                resource = SkillResource(
+                    virtual_path=virtual_path,
+                    name=item.name,
+                    local_path=item,
+                    container_path=container_path,
+                    size_bytes=item.stat().st_size,
+                    is_binary=self._is_binary_file(item),
+                )
+                resources.append(resource)
+
+        except Exception as e:
+            logger.warning(f"Error scanning skill directory {skill_dir}: {e}")
 
         return resources
 

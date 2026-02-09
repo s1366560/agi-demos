@@ -35,6 +35,7 @@ class ProjectChatRequest:
     attachment_ids: Optional[List[str]] = None
     file_metadata: Optional[List[Dict[str, Any]]] = None
     correlation_id: Optional[str] = None
+    forced_skill_name: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     max_steps: Optional[int] = None

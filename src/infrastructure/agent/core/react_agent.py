@@ -393,6 +393,7 @@ class ReActAgent:
         current_step: int = 1,
         project_id: str = "",
         tenant_id: str = "",
+        force_execution: bool = False,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -406,6 +407,7 @@ class ReActAgent:
             current_step: Current execution step number
             project_id: Project ID for context
             tenant_id: Tenant ID for context
+            force_execution: If True, skill injection uses mandatory wording
 
         Returns:
             System prompt string
@@ -435,6 +437,7 @@ class ReActAgent:
                 "description": matched_skill.description,
                 "tools": matched_skill.tools,
                 "prompt_template": matched_skill.prompt_template,
+                "force_execution": force_execution,
             }
 
         # Convert tool definitions to dict format - use current tools (hot-plug support)
@@ -477,6 +480,7 @@ class ReActAgent:
         attachment_content: Optional[List[Dict[str, Any]]] = None,
         attachment_metadata: Optional[List[Dict[str, Any]]] = None,
         abort_signal: Optional[asyncio.Event] = None,
+        forced_skill_name: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -497,6 +501,7 @@ class ReActAgent:
             tenant_id: Tenant ID
             conversation_context: Optional conversation history
             message_id: Optional message ID for HITL request persistence
+            forced_skill_name: Optional skill name to force direct execution
 
         Yields:
             Event dictionaries compatible with existing SSE format:
@@ -582,30 +587,43 @@ class ReActAgent:
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-        # Check for Skill matching (L2)
-        matched_skill, skill_score = self._match_skill(user_message)
+        # Check for Skill matching (L2) - forced or confidence-based
+        is_forced = False
+        if forced_skill_name:
+            result = self._skill_orchestrator.find_by_name(forced_skill_name)
+            if result.matched:
+                matched_skill = result.skill
+                skill_score = result.score
+                is_forced = True
+            else:
+                # Forced skill not found - emit warning, fall back to normal matching
+                yield {
+                    "type": "thought",
+                    "data": {
+                        "content": f"Forced skill '{forced_skill_name}' not found, "
+                        f"falling back to normal matching",
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+                matched_skill, skill_score = self._match_skill(user_message)
+        else:
+            matched_skill, skill_score = self._match_skill(user_message)
 
-        # Determine execution mode based on match score
-        should_direct_execute = (
-            matched_skill is not None
-            and skill_score >= self.skill_direct_execute_threshold
-            and self.skill_executor is not None
-        )
-
+        # All skill execution goes through prompt injection into the ReAct loop.
+        # Forced skills use mandatory injection; confidence-based uses recommendation.
         should_inject_prompt = (
             matched_skill is not None
-            and skill_score >= self.skill_match_threshold
-            and not should_direct_execute
+            and (is_forced or skill_score >= self.skill_match_threshold)
         )
 
-        # If score is too low, don't use skill at all
-        if matched_skill and skill_score < self.skill_match_threshold:
+        # If score is too low and not forced, don't use skill at all
+        if not is_forced and matched_skill and skill_score < self.skill_match_threshold:
             matched_skill = None
             skill_score = 0.0
 
-        # Emit skill_matched event with execution mode
+        # Emit skill_matched event
         if matched_skill:
-            execution_mode = "direct" if should_direct_execute else "prompt"
+            execution_mode = "forced" if is_forced else "prompt"
             yield {
                 "type": "skill_matched",
                 "data": {
@@ -617,114 +635,6 @@ class ReActAgent:
                 },
                 "timestamp": datetime.utcnow().isoformat(),
             }
-
-        # Path A: Direct skill execution via SkillExecutor
-        if should_direct_execute:
-            skill_success = False
-            skill_execution_result = None
-
-            try:
-                async for skill_event in self._execute_skill_directly(
-                    matched_skill,
-                    user_message,
-                    project_id,
-                    user_id,
-                    tenant_id,
-                ):
-                    yield skill_event
-
-                    # Capture final result
-                    if skill_event.get("type") == "skill_execution_complete":
-                        skill_execution_result = skill_event.get("data", {})
-                        skill_success = skill_execution_result.get("success", False)
-
-                # Record skill usage
-                matched_skill.record_usage(skill_success)
-
-                if skill_success:
-                    # Success: return skill result directly
-                    yield {
-                        "type": "complete",
-                        "data": {
-                            "content": skill_execution_result.get("summary", ""),
-                            "skill_used": matched_skill.name,
-                            "execution_mode": "direct",
-                        },
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                    return  # Early exit, skip LLM flow
-
-                elif not self.skill_fallback_on_error:
-                    # Failed and no fallback allowed
-                    yield {
-                        "type": "error",
-                        "data": {
-                            "message": f"Skill execution failed: "
-                            f"{skill_execution_result.get('error', 'Unknown error')}",
-                            "code": "SKILL_EXECUTION_FAILED",
-                        },
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                    return
-
-                else:
-                    # Failed but fallback allowed - continue to LLM flow
-                    logger.warning(
-                        f"Skill {matched_skill.name} execution failed, falling back to LLM"
-                    )
-                    yield {
-                        "type": "skill_fallback",
-                        "data": {
-                            "skill_name": matched_skill.name,
-                            "reason": "execution_failed",
-                            "error": (
-                                skill_execution_result.get("error")
-                                if skill_execution_result
-                                else None
-                            ),
-                        },
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                    # Inject partial results into context
-                    if skill_execution_result and skill_execution_result.get("tool_results"):
-                        conversation_context.append(
-                            {
-                                "role": "system",
-                                "content": f"Skill '{matched_skill.name}' attempted but failed. "
-                                f"Partial results: {skill_execution_result.get('tool_results', [])}",
-                            }
-                        )
-                    # Reset matched_skill for prompt injection since we're falling back
-                    should_inject_prompt = True
-
-            except Exception as e:
-                logger.error(f"Skill direct execution error: {e}", exc_info=True)
-                matched_skill.record_usage(False)
-
-                if not self.skill_fallback_on_error:
-                    yield {
-                        "type": "error",
-                        "data": {
-                            "message": str(e),
-                            "code": "SKILL_EXECUTION_ERROR",
-                        },
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                    return
-
-                # Fallback to LLM
-                yield {
-                    "type": "skill_fallback",
-                    "data": {
-                        "skill_name": matched_skill.name,
-                        "reason": "execution_error",
-                        "error": str(e),
-                    },
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-                should_inject_prompt = True
-
-        # Path B: Prompt injection mode (existing logic) or fallback from direct execution
 
         # Sync skill resources to sandbox before prompt injection
         # This ensures resources are available when LLM generates tool calls
@@ -744,7 +654,7 @@ class ReActAgent:
                     )
 
         # Build system prompt (uses SubAgent prompt if routed)
-        # Only inject skill into prompt if should_inject_prompt is True
+        # Inject skill into prompt: mandatory for forced, recommendation for matched
         system_prompt = await self._build_system_prompt(
             user_message,
             conversation_context,
@@ -754,6 +664,7 @@ class ReActAgent:
             current_step=1,  # Initial step
             project_id=project_id,
             tenant_id=tenant_id,
+            force_execution=is_forced,
         )
 
         # Build context using ContextFacade - replaces inline message building

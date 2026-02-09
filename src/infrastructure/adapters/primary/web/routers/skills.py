@@ -109,6 +109,8 @@ class SkillResponse(BaseModel):
     created_at: str
     updated_at: str
     metadata: Optional[Dict[str, Any]]
+    current_version: int = 0
+    version_label: Optional[str] = None
 
 
 class SkillMatchRequest(BaseModel):
@@ -152,6 +154,8 @@ def skill_to_response(skill: Skill) -> SkillResponse:
         created_at=skill.created_at.isoformat(),
         updated_at=skill.updated_at.isoformat(),
         metadata=skill.metadata,
+        current_version=getattr(skill, "current_version", 0),
+        version_label=getattr(skill, "version_label", None),
     )
 
 
@@ -252,18 +256,36 @@ async def list_skills(
     """
     List all skills for the current tenant.
 
+    Merges skills from both filesystem (SKILL.md) and database sources.
     Optionally filter by scope (system, tenant, project) and status.
     """
+    from pathlib import Path
+
+    from src.application.services.skill_service import SkillService
+
     container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    skill_repo = container.skill_repository()
 
     skill_status = SkillStatus(status_filter) if status_filter else None
     skill_scope = SkillScope(scope_filter) if scope_filter else None
 
-    skills = await repo.list_by_tenant(
-        tenant_id, status=skill_status, scope=skill_scope, limit=limit, offset=offset
+    skill_service = SkillService.create(
+        skill_repository=skill_repo,
+        base_path=Path.cwd(),
+        tenant_id=tenant_id,
+        include_system=True,
     )
-    total = await repo.count_by_tenant(tenant_id, status=skill_status, scope=skill_scope)
+
+    skills = await skill_service.list_available_skills(
+        tenant_id=tenant_id,
+        tier=2,
+        status=skill_status,
+        scope=skill_scope,
+    )
+
+    # Apply pagination
+    total = len(skills)
+    skills = skills[offset : offset + limit]
 
     return SkillListResponse(
         skills=[skill_to_response(s) for s in skills],
@@ -694,3 +716,178 @@ async def update_skill_content(
 
     logger.info(f"Skill content updated: {skill_id}")
     return skill_to_response(result)
+
+
+# === Version History Endpoints ===
+
+
+class SkillVersionResponse(BaseModel):
+    """Schema for skill version response."""
+
+    id: str
+    skill_id: str
+    version_number: int
+    version_label: Optional[str]
+    change_summary: Optional[str]
+    created_by: str
+    created_at: str
+
+
+class SkillVersionDetailResponse(SkillVersionResponse):
+    """Schema for skill version detail (includes content)."""
+
+    skill_md_content: str
+    resource_files: Optional[Dict[str, Any]] = None
+
+
+class SkillVersionListResponse(BaseModel):
+    """Schema for skill version list response."""
+
+    versions: List[SkillVersionResponse]
+    total: int
+
+
+class SkillRollbackRequest(BaseModel):
+    """Schema for skill rollback request."""
+
+    version_number: int = Field(..., ge=1, description="Version number to rollback to")
+
+
+@router.get(
+    "/{skill_id}/versions",
+    response_model=SkillVersionListResponse,
+    summary="List skill versions",
+)
+async def list_skill_versions(
+    skill_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    tenant: dict = Depends(get_current_user_tenant),
+):
+    """List all versions of a skill, ordered by version_number DESC."""
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
+
+    version_repo = SqlSkillVersionRepository(db)
+    versions = await version_repo.list_by_skill(skill_id, limit=limit, offset=offset)
+    total = await version_repo.count_by_skill(skill_id)
+
+    return SkillVersionListResponse(
+        versions=[
+            SkillVersionResponse(
+                id=v.id,
+                skill_id=v.skill_id,
+                version_number=v.version_number,
+                version_label=v.version_label,
+                change_summary=v.change_summary,
+                created_by=v.created_by,
+                created_at=v.created_at.isoformat(),
+            )
+            for v in versions
+        ],
+        total=total,
+    )
+
+
+@router.get(
+    "/{skill_id}/versions/{version_number}",
+    response_model=SkillVersionDetailResponse,
+    summary="Get skill version detail",
+)
+async def get_skill_version(
+    skill_id: str,
+    version_number: int,
+    db: AsyncSession = Depends(get_db),
+    tenant: dict = Depends(get_current_user_tenant),
+):
+    """Get a specific version of a skill including content and resource files."""
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
+
+    version_repo = SqlSkillVersionRepository(db)
+    version = await version_repo.get_by_version(skill_id, version_number)
+
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version {version_number} not found for skill {skill_id}",
+        )
+
+    return SkillVersionDetailResponse(
+        id=version.id,
+        skill_id=version.skill_id,
+        version_number=version.version_number,
+        version_label=version.version_label,
+        skill_md_content=version.skill_md_content,
+        resource_files=version.resource_files,
+        change_summary=version.change_summary,
+        created_by=version.created_by,
+        created_at=version.created_at.isoformat(),
+    )
+
+
+@router.post(
+    "/{skill_id}/rollback",
+    response_model=SkillResponse,
+    summary="Rollback skill to a previous version",
+)
+async def rollback_skill(
+    skill_id: str,
+    request_body: SkillRollbackRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant: dict = Depends(get_current_user_tenant),
+):
+    """Rollback a skill to a specific version. Creates a new version entry."""
+    from pathlib import Path
+
+    from src.application.services.skill_reverse_sync import SkillReverseSync
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
+
+    skill_repo = SqlSkillRepository(db)
+    version_repo = SqlSkillVersionRepository(db)
+
+    # Verify skill exists and belongs to tenant
+    skill = await skill_repo.get_by_id(skill_id)
+    if not skill:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Skill not found: {skill_id}",
+        )
+
+    tenant_id = tenant["tenant_id"]
+    if skill.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+    reverse_sync = SkillReverseSync(
+        skill_repository=skill_repo,
+        skill_version_repository=version_repo,
+        host_project_path=Path.cwd(),
+    )
+
+    result = await reverse_sync.rollback_to_version(
+        skill_id=skill_id,
+        version_number=request_body.version_number,
+    )
+
+    if "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result["error"],
+        )
+
+    await db.commit()
+
+    # Return updated skill
+    updated_skill = await skill_repo.get_by_id(skill_id)
+    return skill_to_response(updated_skill)

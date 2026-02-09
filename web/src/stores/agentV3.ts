@@ -178,6 +178,8 @@ export interface AdditionalAgentHandlers {
   onObserve?: (event: AgentEvent<ObserveEventData>) => void;
   /** File metadata for files uploaded to sandbox */
   fileMetadata?: FileMetadata[];
+  /** Force execution of a specific skill by name */
+  forcedSkillName?: string;
 }
 
 /**
@@ -1345,6 +1347,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                   message: content,
                   project_id: projectId,
                   file_metadata: additionalHandlers?.fileMetadata,
+                  forced_skill_name: additionalHandlers?.forcedSkillName,
                 },
                 handler
               )
@@ -1372,6 +1375,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 message: content,
                 project_id: projectId,
                 file_metadata: additionalHandlers?.fileMetadata,
+                forced_skill_name: additionalHandlers?.forcedSkillName,
               },
               handler
             );

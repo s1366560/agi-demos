@@ -278,9 +278,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
 
   const handleSend = useCallback(
-    async (content: string, fileMetadata?: FileMetadata[]) => {
+    async (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => {
       if (!projectId) return;
-      const newId = await sendMessage(content, projectId, { onAct, onObserve, fileMetadata });
+      const newId = await sendMessage(content, projectId, {
+        onAct,
+        onObserve,
+        fileMetadata,
+        forcedSkillName,
+      });
       if (!conversationId && newId) {
         if (customBasePath) {
           navigate(`${basePath}/${newId}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);

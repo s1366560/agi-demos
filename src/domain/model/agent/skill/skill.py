@@ -177,6 +177,9 @@ class Skill:
     allowed_tools_raw: Optional[str] = None  # Raw allowed-tools string
     allowed_tools_parsed: List[Any] = field(default_factory=list)  # List[AllowedTool]
     spec_version: str = "1.0"  # AgentSkills.io spec version
+    # Version tracking
+    current_version: int = 0  # Latest version_number from skill_versions
+    version_label: Optional[str] = None  # Display version from SKILL.md (e.g., "1.2.0")
 
     # Name validation pattern (AgentSkills.io spec)
     _NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -390,6 +393,8 @@ class Skill:
             agent_modes=list(self.agent_modes),
             scope=self.scope,
             is_system_skill=self.is_system_skill,
+            current_version=self.current_version,
+            version_label=self.version_label,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -425,6 +430,8 @@ class Skill:
                 t.to_dict() if hasattr(t, "to_dict") else t for t in self.allowed_tools_parsed
             ],
             "spec_version": self.spec_version,
+            "current_version": self.current_version,
+            "version_label": self.version_label,
         }
 
     @classmethod
@@ -461,6 +468,8 @@ class Skill:
             allowed_tools_raw=data.get("allowed_tools_raw"),
             allowed_tools_parsed=data.get("allowed_tools_parsed", []),
             spec_version=data.get("spec_version", "1.0"),
+            current_version=data.get("current_version", 0),
+            version_label=data.get("version_label"),
         )
 
     @classmethod

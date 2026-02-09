@@ -310,23 +310,42 @@ When a skill matches the user's request, you can use its tools in sequence for o
 
     def _build_skill_recommendation(self, skill: Dict[str, Any]) -> str:
         """
-        Build the recommended skill section.
+        Build the skill injection section.
+
+        Uses mandatory wording when force_execution is True (slash-command),
+        otherwise uses recommendation wording (confidence-based match).
 
         Args:
-            skill: The matched skill dictionary.
+            skill: The matched skill dictionary (may include force_execution flag).
 
         Returns:
-            Skill recommendation XML block.
+            Skill injection XML block.
         """
-        content = f"""<skill-recommendation>
-RECOMMENDED SKILL: {skill.get("name", "unknown")}
-Description: {skill.get("description", "")}
-Use these tools in order: {", ".join(skill.get("tools", []))}"""
+        is_forced = skill.get("force_execution", False)
+        name = skill.get("name", "unknown")
+        description = skill.get("description", "")
+        tools = ", ".join(skill.get("tools", []))
 
-        if skill.get("prompt_template"):
-            content += f"\nGuidance: {skill['prompt_template']}"
+        if is_forced:
+            content = f"""<mandatory-skill>
+The user has explicitly requested execution of the skill "{name}".
+You MUST follow the skill instructions below. Do NOT skip or modify the execution plan.
 
-        content += "\n</skill-recommendation>"
+Skill: {name}
+Description: {description}
+Required tools (use in order): {tools}"""
+            if skill.get("prompt_template"):
+                content += f"\n\nInstructions:\n{skill['prompt_template']}"
+            content += "\n</mandatory-skill>"
+        else:
+            content = f"""<skill-recommendation>
+RECOMMENDED SKILL: {name}
+Description: {description}
+Use these tools in order: {tools}"""
+            if skill.get("prompt_template"):
+                content += f"\nGuidance: {skill['prompt_template']}"
+            content += "\n</skill-recommendation>"
+
         return content
 
     async def _load_mode_reminder(self, mode: PromptMode) -> Optional[str]:

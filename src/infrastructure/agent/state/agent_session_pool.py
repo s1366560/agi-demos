@@ -652,7 +652,12 @@ async def get_or_create_agent_session(
     # Get sandbox adapter for resource injection
     sandbox_adapter = get_mcp_sandbox_adapter()
 
-    # Always use sandbox workspace path for skill resources
+    # Host project path: where skill files live on the host filesystem.
+    # Used by SandboxSkillResourceAdapter to find and read local SKILL.md
+    # and resource files before syncing them to the container.
+    host_project_path = Path.cwd()
+
+    # Container workspace path: where files are written inside the sandbox.
     sandbox_workspace = Path("/workspace")
 
     # Create unified SkillResourcePort based on environment
@@ -660,11 +665,11 @@ async def get_or_create_agent_session(
     if sandbox_adapter:
         skill_resource_port = SandboxSkillResourceAdapter(
             sandbox_adapter=sandbox_adapter,
-            default_project_path=sandbox_workspace,
+            default_project_path=host_project_path,
         )
     else:
         skill_resource_port = LocalSkillResourceAdapter(
-            default_project_path=sandbox_workspace,
+            default_project_path=host_project_path,
         )
 
     if skills:
@@ -689,7 +694,7 @@ async def get_or_create_agent_session(
         skill_resource_port=skill_resource_port,
         tenant_id=tenant_id,
         project_id=project_id,
-        project_path=sandbox_workspace,
+        project_path=host_project_path,
     )
 
     # Wire sync service to SkillLoaderTool if present

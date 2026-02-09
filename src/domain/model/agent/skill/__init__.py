@@ -17,6 +17,7 @@ from src.domain.model.agent.skill.skill_permission import (
     restricted_skill_ruleset,
 )
 from src.domain.model.agent.skill.skill_source import SkillSource
+from src.domain.model.agent.skill.skill_version import SkillVersion
 from src.domain.model.agent.skill.tool_composition import ToolComposition
 from src.domain.model.agent.skill.tool_environment_variable import (
     EnvVarScope,
@@ -33,6 +34,7 @@ __all__ = [
     "SkillScope",
     "SkillSource",
     "SkillStatus",
+    "SkillVersion",
     "ToolComposition",
     "ToolEnvironmentVariable",
     "ToolExecutionRecord",

@@ -81,6 +81,8 @@ class SkillMarkdown:
     compatibility: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     allowed_tools_raw: Optional[str] = None
+    # Version tracking
+    version: Optional[str] = None
 
     @property
     def full_content(self) -> str:
@@ -203,6 +205,10 @@ class MarkdownParser:
         if not isinstance(metadata, dict):
             metadata = {}
 
+        # Extract version field
+        version_field = frontmatter.get("version")
+        version_str = str(version_field).strip() if version_field is not None else None
+
         return SkillMarkdown(
             frontmatter=frontmatter,
             content=markdown_content,
@@ -219,6 +225,7 @@ class MarkdownParser:
             compatibility=str(compatibility) if compatibility else None,
             metadata=metadata,
             allowed_tools_raw=allowed_tools_raw if isinstance(allowed_tools_raw, str) else None,
+            version=version_str,
         )
 
     def parse_file(self, file_path: str) -> SkillMarkdown:
@@ -240,7 +247,7 @@ class MarkdownParser:
                 content = f.read()
         except FileNotFoundError:
             raise MarkdownParseError(f"File not found: {file_path}", file_path)
-        except IOError as e:
+        except OSError as e:
             raise MarkdownParseError(f"Error reading file: {e}", file_path)
 
         return self.parse(content, file_path)

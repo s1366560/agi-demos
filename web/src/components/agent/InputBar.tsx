@@ -24,16 +24,20 @@ import {
   Sparkles,
   AlertCircle,
   RotateCw,
+  Zap,
 } from 'lucide-react';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import { useFileUpload, type PendingAttachment } from './FileUploader';
+import { SlashCommandDropdown } from './SlashCommandDropdown';
 
+import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
 import type { FileMetadata } from '@/services/sandboxUploadService';
+import type { SkillResponse } from '@/types/agent';
 
 interface InputBarProps {
-  onSend: (content: string, fileMetadata?: FileMetadata[]) => void;
+  onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => void;
   onAbort: () => void;
   isStreaming: boolean;
   isPlanMode: boolean;
@@ -60,8 +64,13 @@ export const InputBar = memo<InputBarProps>(
     const [content, setContent] = useState('');
     const [isFocused, setIsFocused] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null);
+    const [slashDropdownVisible, setSlashDropdownVisible] = useState(false);
+    const [slashQuery, setSlashQuery] = useState('');
+    const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const slashDropdownRef = useRef<SlashCommandDropdownHandle>(null);
     const dragCounter = useRef(0);
 
     const { attachments, addFiles, removeAttachment, retryAttachment, clearAll } = useFileUpload({
@@ -92,16 +101,59 @@ export const InputBar = memo<InputBarProps>(
       const fileMetadataList = uploadedAttachments
         .filter((a) => a.fileMetadata !== undefined)
         .map((a) => a.fileMetadata!);
-      onSend(content.trim(), fileMetadataList.length > 0 ? fileMetadataList : undefined);
+      onSend(
+        content.trim(),
+        fileMetadataList.length > 0 ? fileMetadataList : undefined,
+        selectedSkill?.name
+      );
       setContent('');
+      setSelectedSkill(null);
+      setSlashDropdownVisible(false);
       clearAll();
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
-    }, [content, uploadedAttachments, isStreaming, disabled, pendingCount, onSend, clearAll]);
+    }, [
+      content,
+      uploadedAttachments,
+      isStreaming,
+      disabled,
+      pendingCount,
+      onSend,
+      clearAll,
+      selectedSkill,
+    ]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
+        // Slash-command keyboard navigation
+        if (slashDropdownVisible) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSlashSelectedIndex((prev) => prev + 1);
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSlashSelectedIndex((prev) => Math.max(0, prev - 1));
+            return;
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const skill = slashDropdownRef.current?.getSelectedSkill();
+            if (skill) {
+              handleSkillSelect(skill);
+            }
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setSlashDropdownVisible(false);
+            setContent('');
+            return;
+          }
+        }
+
         if (
           e.key === 'Enter' &&
           !e.shiftKey &&
@@ -113,16 +165,50 @@ export const InputBar = memo<InputBarProps>(
           handleSend();
         }
       },
-      [handleSend, disabled, isStreaming]
+      [handleSend, disabled, isStreaming, slashDropdownVisible]
     );
 
-    const handleInput = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
-      const target = e.currentTarget;
-      target.style.height = 'auto';
-      const minHeight = 72;
-      const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 400));
-      target.style.height = `${newHeight}px`;
-      setContent(target.value);
+    const handleInput = useCallback(
+      (e: React.FormEvent<HTMLTextAreaElement>) => {
+        const target = e.currentTarget;
+        target.style.height = 'auto';
+        const minHeight = 72;
+        const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 400));
+        target.style.height = `${newHeight}px`;
+        const value = target.value;
+        setContent(value);
+
+        // Slash-command detection: "/" at start of input
+        if (value.startsWith('/') && !selectedSkill) {
+          const query = value.slice(1);
+          // Only show dropdown for single-word slash query (no spaces = still typing skill name)
+          if (!query.includes(' ')) {
+            setSlashQuery(query);
+            setSlashDropdownVisible(true);
+            setSlashSelectedIndex(0);
+            return;
+          }
+        }
+
+        // Close dropdown if conditions no longer met
+        if (slashDropdownVisible) {
+          setSlashDropdownVisible(false);
+        }
+      },
+      [selectedSkill, slashDropdownVisible]
+    );
+
+    const handleSkillSelect = useCallback((skill: SkillResponse) => {
+      setSelectedSkill(skill);
+      setSlashDropdownVisible(false);
+      setContent('');
+      setSlashQuery('');
+      // Focus textarea for typing the message
+      textareaRef.current?.focus();
+    }, []);
+
+    const handleRemoveSkill = useCallback(() => {
+      setSelectedSkill(null);
     }, []);
 
     // --- Paste files (Ctrl/Cmd+V with images or files) ---
@@ -271,8 +357,34 @@ export const InputBar = memo<InputBarProps>(
             </div>
           )}
 
+          {/* Selected Skill Badge */}
+          {selectedSkill && (
+            <div className="px-4 pt-3 flex-shrink-0">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/10 dark:to-primary/15 text-primary border border-primary/20 dark:border-primary/30 rounded-full text-xs font-medium">
+                <Zap size={12} />
+                <span>/{selectedSkill.name}</span>
+                <button
+                  type="button"
+                  onClick={handleRemoveSkill}
+                  className="ml-0.5 p-0.5 hover:bg-primary/10 rounded-full transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3">
+          <div className="flex-1 min-h-0 px-4 py-3 relative">
+            <SlashCommandDropdown
+              ref={slashDropdownRef}
+              query={slashQuery}
+              visible={slashDropdownVisible}
+              onSelect={handleSkillSelect}
+              onClose={() => setSlashDropdownVisible(false)}
+              selectedIndex={slashSelectedIndex}
+              onSelectedIndexChange={setSlashSelectedIndex}
+            />
             <textarea
               ref={textareaRef}
               value={content}

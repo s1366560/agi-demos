@@ -79,6 +79,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             scope=skill.scope.value,
             is_system_skill=skill.is_system_skill,
             full_content=skill.full_content,
+            current_version=skill.current_version,
+            version_label=skill.version_label,
         )
 
         self._session.add(db_skill)
@@ -131,6 +133,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         db_skill.scope = skill.scope.value
         db_skill.is_system_skill = skill.is_system_skill
         db_skill.full_content = skill.full_content
+        db_skill.current_version = skill.current_version
+        db_skill.version_label = skill.version_label
 
         await self._session.flush()
 
@@ -266,6 +270,15 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         if hasattr(db_skill, "full_content"):
             full_content = db_skill.full_content
 
+        # Handle version fields (may not exist in old records)
+        current_version = 0
+        if hasattr(db_skill, "current_version") and db_skill.current_version is not None:
+            current_version = db_skill.current_version
+
+        version_label = None
+        if hasattr(db_skill, "version_label"):
+            version_label = db_skill.version_label
+
         return Skill(
             id=db_skill.id,
             tenant_id=db_skill.tenant_id,
@@ -286,6 +299,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             scope=scope,
             is_system_skill=is_system_skill,
             full_content=full_content,
+            current_version=current_version,
+            version_label=version_label,
         )
 
     def _to_db(self, domain_entity: Skill) -> DBSkill:
@@ -309,4 +324,6 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             scope=domain_entity.scope.value,
             is_system_skill=domain_entity.is_system_skill,
             full_content=domain_entity.full_content,
+            current_version=domain_entity.current_version,
+            version_label=domain_entity.version_label,
         )

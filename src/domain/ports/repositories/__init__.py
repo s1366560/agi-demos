@@ -16,6 +16,7 @@ from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.repositories.plan_repository import PlanRepository
 from src.domain.ports.repositories.project_repository import ProjectRepository
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.domain.ports.repositories.tenant_repository import TenantRepository
@@ -41,6 +42,7 @@ __all__ = [
     "WorkflowPatternRepositoryPort",
     "ToolCompositionRepositoryPort",
     "SkillRepositoryPort",
+    "SkillVersionRepositoryPort",
     "SubAgentRepositoryPort",
     "PlanRepository",
     "ToolEnvironmentVariableRepositoryPort",

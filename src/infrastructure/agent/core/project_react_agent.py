@@ -579,6 +579,7 @@ class ProjectReActAgent:
         message_id: Optional[str] = None,
         abort_signal: Optional[asyncio.Event] = None,
         file_metadata: Optional[List[Dict[str, Any]]] = None,
+        forced_skill_name: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -686,6 +687,7 @@ class ProjectReActAgent:
                 message_id=message_id,
                 abort_signal=abort_signal,
                 attachment_metadata=file_metadata,
+                forced_skill_name=forced_skill_name,
             ):
                 event_count += 1
 

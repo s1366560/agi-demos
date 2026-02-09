@@ -250,6 +250,28 @@ class SkillOrchestrator:
             mode=mode,
         )
 
+    def find_by_name(self, name: str) -> SkillMatchResult:
+        """Find a skill by exact name (case-insensitive) for forced execution.
+
+        Args:
+            name: Skill name to look up
+
+        Returns:
+            SkillMatchResult with mode=DIRECT and score=1.0 if found
+        """
+        name_lower = name.strip().lower()
+        for skill in self._skills:
+            if skill.name.lower() == name_lower and skill.status.value == "active":
+                logger.info(f"[SkillOrchestrator] Forced skill found: {skill.name}")
+                return SkillMatchResult(
+                    skill=skill,
+                    score=1.0,
+                    mode=SkillExecutionMode.DIRECT,
+                )
+
+        logger.warning(f"[SkillOrchestrator] Forced skill not found: {name}")
+        return SkillMatchResult()
+
     def _determine_mode(
         self,
         skill: Optional[SkillProtocol],
@@ -337,13 +359,15 @@ class SkillOrchestrator:
 
             # Track tool results
             if domain_event.event_type == AgentEventType.OBSERVE:
-                tool_results.append({
-                    "tool_name": domain_event.tool_name,
-                    "result": domain_event.result,
-                    "error": domain_event.error,
-                    "duration_ms": domain_event.duration_ms,
-                    "status": domain_event.status,
-                })
+                tool_results.append(
+                    {
+                        "tool_name": domain_event.tool_name,
+                        "result": domain_event.result,
+                        "error": domain_event.error,
+                        "duration_ms": domain_event.duration_ms,
+                        "status": domain_event.status,
+                    }
+                )
                 current_step += 1
 
             # Handle completion

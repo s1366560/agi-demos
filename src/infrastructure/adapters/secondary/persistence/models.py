@@ -884,9 +884,15 @@ class Skill(Base):
     # True if this is a database copy of a system skill (for usage tracking)
     full_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Full SKILL.md content for Web UI editing
+    # Version tracking
+    current_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    version_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Relationships
     project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
+    versions: Mapped[List["SkillVersion"]] = relationship(
+        back_populates="skill", cascade="all, delete-orphan", order_by="SkillVersion.version_number"
+    )
 
     # Indexes for efficient queries
     __table_args__ = (Index("ix_skills_tenant_scope", "tenant_id", "scope"),)
@@ -929,6 +935,37 @@ class TenantSkillConfig(Base):
     # Unique constraint: one config per tenant per system skill
     __table_args__ = (
         UniqueConstraint("tenant_id", "system_skill_name", name="uq_tenant_skill_config"),
+    )
+
+
+class SkillVersion(Base):
+    """
+    Versioned snapshot of a skill.
+
+    Stores complete SKILL.md content and all resource files at a specific
+    point in time. Each skill_sync call creates a new version entry.
+    """
+
+    __tablename__ = "skill_versions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    skill_id: Mapped[str] = mapped_column(
+        String, ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    skill_md_content: Mapped[str] = mapped_column(Text, nullable=False)
+    resource_files: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    change_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(20), nullable=False, default="agent")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    skill: Mapped["Skill"] = relationship(back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint("skill_id", "version_number", name="uq_skill_version_number"),
+        Index("ix_skill_versions_skill_id", "skill_id"),
     )
 
 

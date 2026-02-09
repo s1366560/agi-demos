@@ -1202,6 +1202,7 @@ class AgentServiceImpl implements AgentService {
       message,
       project_id,
       ...(file_metadata && file_metadata.length > 0 && { file_metadata }),
+      ...(request.forced_skill_name && { forced_skill_name: request.forced_skill_name }),
     });
 
     if (!sent) {

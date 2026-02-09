@@ -455,6 +455,32 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillInstallerTool: {e}")
 
+    # 5b. Add SkillSyncTool for syncing skills from sandbox back to the system
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as sync_session_factory,
+        )
+        from src.infrastructure.agent.tools.skill_sync import SkillSyncTool
+
+        skill_sync_tool = SkillSyncTool(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            sandbox_adapter=_mcp_sandbox_adapter,
+            session_factory=sync_session_factory,
+        )
+        # Set sandbox_id from loaded sandbox tools
+        for tool in tools.values():
+            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
+                skill_sync_tool.set_sandbox_id(tool.sandbox_id)
+                break
+        # Set reference to skill_loader for cache invalidation
+        if "skill_loader" in tools:
+            skill_sync_tool.set_skill_loader_tool(tools["skill_loader"])
+        tools["skill_sync"] = skill_sync_tool
+        logger.info(f"Agent Worker: SkillSyncTool added for tenant {tenant_id}")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create SkillSyncTool: {e}")
+
     # 7. Add Environment Variable Tools (GetEnvVarTool, RequestEnvVarTool, CheckEnvVarsTool)
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (

@@ -17,7 +17,6 @@ from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import AgentExecutionEvent
-from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.actor.state.running_state import (
     clear_agent_running,
     refresh_agent_running_ttl,
@@ -31,6 +30,7 @@ from src.infrastructure.agent.actor.state.snapshot_repo import (
 from src.infrastructure.agent.actor.types import ProjectChatRequest, ProjectChatResult
 from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
 from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateStore
+from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ async def execute_project_chat(
             tenant_id=agent.config.tenant_id,
             message_id=request.message_id,
             file_metadata=request.file_metadata,
+            forced_skill_name=request.forced_skill_name,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us

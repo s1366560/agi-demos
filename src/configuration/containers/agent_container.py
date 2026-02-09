@@ -48,6 +48,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_plan_snapshot_reposit
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
     SqlSkillRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+    SqlSkillVersionRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
     SqlSubAgentRepository,
 )
@@ -153,6 +156,10 @@ class AgentContainer:
     def skill_repository(self) -> SqlSkillRepository:
         """Get SqlSkillRepository for skill persistence."""
         return SqlSkillRepository(self._db)
+
+    def skill_version_repository(self) -> SqlSkillVersionRepository:
+        """Get SqlSkillVersionRepository for skill version persistence."""
+        return SqlSkillVersionRepository(self._db)
 
     def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
         """Get SqlTenantSkillConfigRepository for tenant skill config persistence."""

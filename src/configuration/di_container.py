@@ -4,7 +4,7 @@ The DIContainer delegates to domain-specific sub-containers while preserving
 the exact same public interface for all callers.
 """
 
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -352,6 +352,9 @@ class DIContainer:
 
     def skill_repository(self) -> SqlSkillRepository:
         return self._agent.skill_repository()
+
+    def skill_version_repository(self):
+        return self._agent.skill_version_repository()
 
     def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
         return self._agent.tenant_skill_config_repository()

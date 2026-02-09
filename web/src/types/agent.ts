@@ -726,6 +726,8 @@ export interface ChatRequest {
     mime_type: string;
     size_bytes: number;
   }>;
+  /** Force execution of a specific skill by name */
+  forced_skill_name?: string;
 }
 
 /**
@@ -1303,6 +1305,8 @@ export interface SkillResponse {
   created_at: string;
   updated_at: string;
   metadata?: Record<string, unknown>;
+  current_version: number;
+  version_label: string | null;
 }
 
 /**
