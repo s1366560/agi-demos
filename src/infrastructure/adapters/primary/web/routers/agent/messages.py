@@ -156,6 +156,26 @@ async def get_conversation_messages(
                 "response_metadata": req.response_metadata or {},
             }
 
+        # Build artifact status map: merge artifact_ready/error into artifact_created
+        artifact_ready_map: dict = {}  # artifact_id -> {url, preview_url, ...}
+        artifact_error_map: dict = {}  # artifact_id -> {error}
+        for event in events:
+            event_type = event.event_type
+            data = event.event_data or {}
+            if event_type == "artifact_ready":
+                aid = data.get("artifact_id", "")
+                if aid:
+                    artifact_ready_map[aid] = {
+                        "url": data.get("url", ""),
+                        "preview_url": data.get("preview_url", ""),
+                    }
+            elif event_type == "artifact_error":
+                aid = data.get("artifact_id", "")
+                if aid:
+                    artifact_error_map[aid] = {
+                        "error": data.get("error", "Upload failed"),
+                    }
+
         timeline = []
         for event in events:
             event_type = event.event_type
@@ -211,7 +231,8 @@ async def get_conversation_messages(
                 item["status"] = data.get("status", "completed")
 
             elif event_type == "artifact_created":
-                item["artifactId"] = data.get("artifact_id", "")
+                artifact_id = data.get("artifact_id", "")
+                item["artifactId"] = artifact_id
                 item["filename"] = data.get("filename", "")
                 item["mimeType"] = data.get("mime_type", "")
                 item["category"] = data.get("category", "other")
@@ -220,6 +241,18 @@ async def get_conversation_messages(
                 item["previewUrl"] = data.get("preview_url", "")
                 item["sourceTool"] = data.get("source_tool", "")
                 item["metadata"] = data.get("metadata", {})
+                # Merge artifact_ready data if available
+                if artifact_id in artifact_ready_map:
+                    ready = artifact_ready_map[artifact_id]
+                    item["url"] = ready.get("url") or item["url"]
+                    item["previewUrl"] = ready.get("preview_url") or item["previewUrl"]
+                # Merge artifact_error data if available
+                if artifact_id in artifact_error_map:
+                    item["error"] = artifact_error_map[artifact_id].get("error", "")
+
+            # Skip artifact_ready/error - merged into artifact_created above
+            elif event_type in ("artifact_ready", "artifact_error"):
+                continue
 
             # HITL events - determine answered status from:
             # 1. Corresponding *_answered event in timeline

@@ -70,6 +70,7 @@ class InfraContainer:
             access_key_id=self._settings.aws_access_key_id,
             secret_access_key=self._settings.aws_secret_access_key,
             endpoint_url=self._settings.s3_endpoint_url,
+            no_proxy=self._settings.s3_no_proxy,
         )
 
     def distributed_lock_adapter(self):

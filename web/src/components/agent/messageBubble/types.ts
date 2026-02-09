@@ -112,7 +112,7 @@ export interface TextEndProps {
  * Props for Artifact Created sub-component
  */
 export interface ArtifactCreatedProps {
-  event: ArtifactCreatedEvent;
+  event: ArtifactCreatedEvent & { error?: string };
 }
 
 /**

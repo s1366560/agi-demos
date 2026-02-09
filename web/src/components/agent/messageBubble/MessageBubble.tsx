@@ -740,8 +740,8 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
   const artifactUrl = storeArtifact?.url || event.url;
   const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
-  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : 'uploading');
-  const artifactError = storeArtifact?.errorMessage;
+  const artifactError = storeArtifact?.errorMessage || event.error;
+  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -928,7 +928,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'artifact_created':
         console.log('[MessageBubble] Rendering artifact_created event:', event);
-        return <ArtifactCreated event={event as unknown as ArtifactCreatedEvent} />;
+        return <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string }} />;
 
       // HITL Events - Render inline cards
       case 'clarification_asked': {

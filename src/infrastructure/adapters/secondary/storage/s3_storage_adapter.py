@@ -30,6 +30,7 @@ class S3StorageAdapter(StorageServicePort):
         access_key_id: Optional[str] = None,
         secret_access_key: Optional[str] = None,
         endpoint_url: Optional[str] = None,
+        no_proxy: bool = False,
     ):
         """
         Initialize S3 storage adapter.
@@ -40,6 +41,7 @@ class S3StorageAdapter(StorageServicePort):
             access_key_id: AWS access key ID (optional, can use IAM role)
             secret_access_key: AWS secret access key (optional, can use IAM role)
             endpoint_url: Custom endpoint URL for MinIO or S3-compatible services
+            no_proxy: Bypass system proxy for S3 requests
         """
         self._bucket = bucket_name
         self._region = region
@@ -56,15 +58,20 @@ class S3StorageAdapter(StorageServicePort):
         # Configure timeouts to prevent indefinite hangs
         from botocore.config import Config
 
-        self._client_config = Config(
-            connect_timeout=10,
-            read_timeout=30,
-            retries={"max_attempts": 2},
-        )
+        config_kwargs: dict = {
+            "connect_timeout": 10,
+            "read_timeout": 30,
+            "retries": {"max_attempts": 5, "mode": "standard"},
+        }
+        if no_proxy:
+            config_kwargs["proxies"] = {"http": None, "https": None}
+
+        self._client_config = Config(**config_kwargs)
 
         logger.info(
             f"S3StorageAdapter initialized: bucket={bucket_name}, "
-            f"region={region}, endpoint={endpoint_url or 'AWS S3'}"
+            f"region={region}, endpoint={endpoint_url or 'AWS S3'}, "
+            f"no_proxy={no_proxy}"
         )
 
     async def _get_client(self):

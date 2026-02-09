@@ -1522,6 +1522,7 @@ class SessionProcessor:
                     secret_key: str,
                     region: str,
                     mime: str,
+                    no_proxy: bool = False,
                 ) -> dict:
                     """Synchronous S3 upload in a thread pool."""
                     import boto3
@@ -1529,17 +1530,21 @@ class SessionProcessor:
                     from datetime import date
                     from urllib.parse import quote
 
+                    config_kwargs: dict = {
+                        "connect_timeout": 10,
+                        "read_timeout": 30,
+                        "retries": {"max_attempts": 5, "mode": "standard"},
+                    }
+                    if no_proxy:
+                        config_kwargs["proxies"] = {"http": None, "https": None}
+
                     s3 = boto3.client(
                         "s3",
                         endpoint_url=endpoint,
                         aws_access_key_id=access_key,
                         aws_secret_access_key=secret_key,
                         region_name=region,
-                        config=BotoConfig(
-                            connect_timeout=10,
-                            read_timeout=30,
-                            retries={"max_attempts": 2},
-                        ),
+                        config=BotoConfig(**config_kwargs),
                     )
 
                     date_part = date.today().strftime("%Y/%m/%d")
@@ -1616,6 +1621,7 @@ class SessionProcessor:
                             secret_key=settings.aws_secret_access_key,
                             region=settings.aws_region,
                             mime=mime,
+                            no_proxy=settings.s3_no_proxy,
                         )
                         logger.warning(
                             f"[ArtifactUpload] Threaded upload SUCCESS: "

@@ -705,8 +705,8 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
   const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
   const artifactUrl = storeArtifact?.url || event.url;
   const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
-  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : 'uploading');
   const artifactError = storeArtifact?.errorMessage || event.error;
+  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
 
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
