@@ -9,6 +9,7 @@ from typing import Any
 import ray
 
 from src.configuration.ray_config import get_ray_settings
+from src.infrastructure.adapters.secondary.ray import _ray_init_failed
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,10 @@ async def init_ray_if_needed() -> bool:
     """
     global _ray_available
 
+    # If module-level init already determined Ray is unreachable, skip
+    if _ray_init_failed:
+        return False
+
     if ray.is_initialized():
         _ray_available = True
         return True
@@ -34,6 +39,21 @@ async def init_ray_if_needed() -> bool:
             return True
 
         settings = get_ray_settings()
+
+        # TCP pre-check to avoid hanging on ray.init()
+        from src.infrastructure.adapters.secondary.ray import _check_ray_reachable
+        reachable = await asyncio.get_running_loop().run_in_executor(
+            None, _check_ray_reachable, settings.ray_address, 3
+        )
+        if not reachable:
+            _ray_available = False
+            logger.warning(
+                "[Ray] Cluster at %s is unreachable (TCP check). "
+                "Agent chat will use local in-process execution.",
+                settings.ray_address,
+            )
+            return False
+
         try:
             ray.init(
                 address=settings.ray_address,
