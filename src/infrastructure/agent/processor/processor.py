@@ -1596,8 +1596,9 @@ class SessionProcessor:
                     mime: str,
                     cat: str,
                 ):
-                    """Run sync upload in thread, then publish result to Redis."""
+                    """Run sync upload in thread, then publish result to Redis and DB."""
                     from src.infrastructure.agent.actor.execution import (
+                        _persist_events,
                         _publish_event_to_stream,
                     )
                     from src.configuration.config import get_settings
@@ -1638,12 +1639,24 @@ class SessionProcessor:
                             tool_execution_id=texec_id,
                             source_tool=tname,
                         )
+                        ready_event_dict = ready_event.to_event_dict()
+                        ready_time_us = int(_time.time() * 1_000_000)
                         await _publish_event_to_stream(
                             conversation_id=conv_id,
-                            event=ready_event.to_event_dict(),
+                            event=ready_event_dict,
                             message_id=msg_id,
-                            event_time_us=int(_time.time() * 1_000_000),
+                            event_time_us=ready_time_us,
                             event_counter=0,
+                        )
+                        # Persist to DB so history loading can merge URL into artifact_created
+                        await _persist_events(
+                            conversation_id=conv_id,
+                            message_id=msg_id,
+                            events=[{
+                                **ready_event_dict,
+                                "event_time_us": ready_time_us,
+                                "event_counter": 0,
+                            }],
                         )
                     except Exception as upload_err:
                         logger.error(
@@ -1656,17 +1669,34 @@ class SessionProcessor:
                             tool_execution_id=texec_id,
                             error=f"Upload failed: {upload_err}",
                         )
+                        error_event_dict = error_event.to_event_dict()
+                        error_time_us = int(_time.time() * 1_000_000)
                         try:
                             await _publish_event_to_stream(
                                 conversation_id=conv_id,
-                                event=error_event.to_event_dict(),
+                                event=error_event_dict,
                                 message_id=msg_id,
-                                event_time_us=int(_time.time() * 1_000_000),
+                                event_time_us=error_time_us,
                                 event_counter=0,
                             )
                         except Exception:
                             logger.error(
                                 "[ArtifactUpload] Failed to publish error event"
+                            )
+                        # Persist to DB so history loading shows error instead of uploading
+                        try:
+                            await _persist_events(
+                                conversation_id=conv_id,
+                                message_id=msg_id,
+                                events=[{
+                                    **error_event_dict,
+                                    "event_time_us": error_time_us,
+                                    "event_counter": 0,
+                                }],
+                            )
+                        except Exception:
+                            logger.error(
+                                "[ArtifactUpload] Failed to persist error event"
                             )
 
                 asyncio.create_task(
