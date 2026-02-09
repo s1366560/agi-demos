@@ -950,7 +950,7 @@ class SkillVersion(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     skill_id: Mapped[str] = mapped_column(
-        String, ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+        String, ForeignKey("skills.id", ondelete="CASCADE"), nullable=False
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     version_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
