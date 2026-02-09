@@ -58,9 +58,9 @@ class TestSkillReverseSync:
         service, skill_repo, version_repo = self._make_service()
         adapter = AsyncMock()
 
-        # glob returns files, but no SKILL.md
+        # glob returns workspace-relative paths (no SKILL.md)
         adapter.call_tool.side_effect = [
-            {"content": [{"type": "text", "text": "readme.txt"}]},
+            {"content": [{"type": "text", "text": ".memstack/skills/my-skill/readme.txt"}]},
             {"content": [{"type": "text", "text": "Hello"}]},
         ]
 
@@ -80,11 +80,22 @@ class TestSkillReverseSync:
         mock_write.return_value = None
 
         adapter = AsyncMock()
+        # MCP glob returns workspace-relative paths as newline-separated text
         adapter.call_tool.side_effect = [
-            # glob returns SKILL.md
-            {"content": [{"type": "text", "text": "SKILL.md"}]},
+            # glob result: workspace-relative paths
+            {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": ".memstack/skills/test-skill/SKILL.md\n"
+                        ".memstack/skills/test-skill/scripts/run.py",
+                    }
+                ]
+            },
             # read SKILL.md
             {"content": [{"type": "text", "text": SAMPLE_SKILL_MD}]},
+            # read scripts/run.py
+            {"content": [{"type": "text", "text": "print('hello')"}]},
         ]
 
         skill_repo.get_by_name.return_value = None
@@ -156,3 +167,34 @@ class TestSkillReverseSync:
         assert "SKILL.md modified" in summary
         assert "Added" in summary
         assert "Removed" in summary
+
+    def test_extract_file_paths_newline_separated(self):
+        """MCP glob returns newline-separated paths in a single text item."""
+        glob_result = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": ".skills/my-skill/SKILL.md\n"
+                    ".skills/my-skill/scripts/run.py\n"
+                    ".skills/my-skill/templates/report.html",
+                }
+            ]
+        }
+        paths = SkillReverseSync._extract_file_paths(glob_result)
+        assert len(paths) == 3
+        assert ".skills/my-skill/SKILL.md" in paths
+        assert ".skills/my-skill/scripts/run.py" in paths
+
+    def test_extract_file_paths_filters_errors(self):
+        """Error messages and trailing info should be filtered."""
+        glob_result = {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "file1.py\nfile2.py\n... and 50 more files",
+                }
+            ]
+        }
+        paths = SkillReverseSync._extract_file_paths(glob_result)
+        assert len(paths) == 2
+        assert "file1.py" in paths

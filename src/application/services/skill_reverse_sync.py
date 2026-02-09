@@ -239,27 +239,51 @@ class SkillReverseSync:
                 logger.warning(f"No files found in sandbox at {container_path}")
                 return files
 
-            # Read each file
+            # The MCP glob tool returns paths relative to /workspace,
+            # e.g. ".skills/my-skill/SKILL.md" when path="/workspace/.skills/my-skill".
+            # We need to: (1) build correct absolute read paths,
+            # (2) extract relative paths within the skill directory.
+            container_path_stripped = container_path.rstrip("/")
+            # Prefix to strip: relative form of container_path from /workspace
+            # e.g. container_path="/workspace/.skills/my-skill" -> rel_prefix=".skills/my-skill"
+            workspace_root = "/workspace"
+            if container_path_stripped.startswith(workspace_root):
+                rel_prefix = container_path_stripped[len(workspace_root) :].lstrip("/")
+            else:
+                rel_prefix = ""
+
             for file_path in file_paths:
                 try:
-                    full_path = (
-                        f"{container_path}/{file_path}"
-                        if not file_path.startswith("/")
-                        else file_path
-                    )
+                    # Build absolute path for reading
+                    if file_path.startswith("/"):
+                        abs_path = file_path
+                    elif rel_prefix and file_path.startswith(rel_prefix + "/"):
+                        # Glob returned workspace-relative path including skill dir
+                        abs_path = f"{workspace_root}/{file_path}"
+                    elif rel_prefix and file_path.startswith(rel_prefix):
+                        abs_path = f"{workspace_root}/{file_path}"
+                    else:
+                        # Assume relative to container_path
+                        abs_path = f"{container_path_stripped}/{file_path}"
+
                     read_result = await sandbox_adapter.call_tool(
                         sandbox_id=sandbox_id,
                         tool_name="read",
-                        arguments={"file_path": full_path},
+                        arguments={"file_path": abs_path},
                     )
                     content = self._extract_content(read_result)
                     if content is not None:
-                        # Use relative path as key
-                        rel_path = (
-                            file_path
-                            if not file_path.startswith("/")
-                            else file_path.replace(container_path + "/", "", 1)
-                        )
+                        # Extract relative path within the skill directory
+                        if file_path.startswith("/"):
+                            # Absolute path: strip container_path prefix
+                            rel_path = file_path.replace(container_path_stripped + "/", "", 1)
+                        elif rel_prefix and file_path.startswith(rel_prefix + "/"):
+                            # Workspace-relative: strip rel_prefix
+                            rel_path = file_path[len(rel_prefix) + 1 :]
+                        elif rel_prefix and file_path == rel_prefix:
+                            rel_path = file_path
+                        else:
+                            rel_path = file_path
                         files[rel_path] = content
                 except Exception as e:
                     logger.warning(f"Failed to read file {file_path}: {e}")
@@ -267,6 +291,7 @@ class SkillReverseSync:
         except Exception as e:
             logger.error(f"Failed to list files in sandbox at {container_path}: {e}")
 
+        logger.debug(f"Read {len(files)} files from sandbox, keys: {list(files.keys())}")
         return files
 
     async def _upsert_skill(
@@ -415,28 +440,38 @@ class SkillReverseSync:
 
     @staticmethod
     def _extract_file_paths(glob_result: Any) -> List[str]:
-        """Extract file paths from MCP glob tool result."""
+        """Extract file paths from MCP glob tool result.
+
+        The MCP glob tool returns newline-separated file paths in a single
+        text content item. We need to split and filter them.
+        """
+        raw_paths: List[str] = []
+
         if isinstance(glob_result, dict):
-            # Handle various result formats
             if "files" in glob_result:
-                return glob_result["files"]
-            if "content" in glob_result:
+                raw_paths = glob_result["files"]
+            elif "content" in glob_result:
                 content = glob_result["content"]
                 if isinstance(content, list):
-                    return [
-                        item.get("text", "") if isinstance(item, dict) else str(item)
-                        for item in content
-                        if item
-                    ]
-                if isinstance(content, str):
-                    return [p.strip() for p in content.split("\n") if p.strip()]
-            if "result" in glob_result:
+                    for item in content:
+                        text = item.get("text", "") if isinstance(item, dict) else str(item)
+                        if text:
+                            raw_paths.extend(text.split("\n"))
+                elif isinstance(content, str):
+                    raw_paths = content.split("\n")
+            elif "result" in glob_result:
                 result = glob_result["result"]
                 if isinstance(result, list):
-                    return result
-        if isinstance(glob_result, list):
-            return glob_result
-        return []
+                    raw_paths = result
+        elif isinstance(glob_result, list):
+            raw_paths = glob_result
+
+        # Filter empty strings, error messages, and trailing info lines
+        return [
+            p.strip()
+            for p in raw_paths
+            if p.strip() and not p.strip().startswith("Error:") and not p.strip().startswith("...")
+        ]
 
     @staticmethod
     def _extract_content(read_result: Any) -> Optional[str]:
