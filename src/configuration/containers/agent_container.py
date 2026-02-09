@@ -200,6 +200,8 @@ class AgentContainer:
         return AttachmentService(
             storage_service=storage_service,
             attachment_repository=self.attachment_repository(),
+            upload_max_size_llm_mb=self._settings.upload_max_size_llm_mb,
+            upload_max_size_sandbox_mb=self._settings.upload_max_size_sandbox_mb,
         )
 
     def artifact_service(self):

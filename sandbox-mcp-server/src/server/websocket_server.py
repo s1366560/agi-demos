@@ -320,9 +320,22 @@ class MCPWebSocketServer:
 
                         response = await self._handle_message(data)
                         if response:
+                            if ws.closed:
+                                logger.debug(
+                                    f"[MCP] WS closed before response for {client_id}, "
+                                    f"dropping method={method}"
+                                )
+                                break
                             await ws.send_json(response)
+                    except ConnectionResetError:
+                        logger.debug(
+                            f"[MCP] Connection reset while sending to {client_id}"
+                        )
+                        break
                     except json.JSONDecodeError as e:
                         logger.warning(f"[MCP] Invalid JSON from client {client_id}: {e}")
+                        if ws.closed:
+                            break
                         await ws.send_json(
                             {
                                 "jsonrpc": "2.0",

@@ -54,10 +54,15 @@ async def get_attachment_service(
     session: AsyncSession = Depends(get_db),
 ) -> AttachmentService:
     """Get attachment service with per-request database session."""
+    from src.configuration.config import get_settings
+
+    settings = get_settings()
     repository = SqlAttachmentRepository(session)
     return AttachmentService(
         storage_service=_get_storage_service(),
         attachment_repository=repository,
+        upload_max_size_llm_mb=settings.upload_max_size_llm_mb,
+        upload_max_size_sandbox_mb=settings.upload_max_size_sandbox_mb,
     )
 
 

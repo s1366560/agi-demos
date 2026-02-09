@@ -624,6 +624,12 @@ class ReActAgent:
         # Emit skill_matched event
         if matched_skill:
             execution_mode = "forced" if is_forced else "prompt"
+            logger.info(
+                f"[ReActAgent] Skill matched: name={matched_skill.name}, "
+                f"mode={execution_mode}, score={skill_score}, "
+                f"prompt_len={len(matched_skill.prompt_template or '')}, "
+                f"tools={list(matched_skill.tools)}"
+            )
             yield {
                 "type": "skill_matched",
                 "data": {

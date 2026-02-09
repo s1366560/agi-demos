@@ -127,15 +127,18 @@ class SystemPromptManager:
         """
         Build the complete system prompt for the agent.
 
-        Assembly order (following OpenCode's pattern):
+        Assembly order:
         1. SubAgent override (if provided)
         2. Base system prompt (model-specific)
-        3. Section modules (safety, memory guidance)
-        4. Tools and skills section
-        5. Environment context
-        6. Mode reminder (Plan/Build)
-        7. Max steps warning (if applicable)
-        8. Custom rules (.memstack/AGENTS.md)
+        3. Forced skill injection (if user specified /skill-name, placed here
+           for maximum LLM attention; skips skills listing to reduce noise)
+        4. Tools section
+        5. Skills section (skipped when forced skill is active)
+        6. Non-forced skill recommendation (confidence-based match)
+        7. Environment context
+        8. Mode reminder (Plan/Build)
+        9. Max steps warning (if applicable)
+        10. Custom rules (.memstack/AGENTS.md)
 
         Args:
             context: The prompt context containing all dynamic information.
@@ -152,27 +155,38 @@ class SystemPromptManager:
 
         sections: List[str] = []
 
+        # Check if we have a forced skill (highest priority injection)
+        is_forced_skill = (
+            context.matched_skill
+            and context.matched_skill.get("force_execution", False)
+        )
+
         # 2. Base system prompt (model-specific)
         base_prompt = await self._load_base_prompt(context.model_provider)
         if base_prompt:
             sections.append(base_prompt)
 
-        # 3. Section modules (safety, memory guidance) - embedded in base prompt
+        # 3. Forced skill injection (immediately after base prompt for maximum attention)
+        if is_forced_skill:
+            skill_injection = self._build_skill_recommendation(context.matched_skill)
+            sections.append(skill_injection)
+
+        # 4. Section modules (safety, memory guidance) - embedded in base prompt
         # Note: These are included in the base prompt files for better organization
 
-        # 4. Tools section
+        # 5. Tools section
         tools_section = self._build_tools_section(context)
         if tools_section:
             sections.append(tools_section)
 
-        # 5. Skills section
-        if context.skills:
+        # 6. Skills section (skip when forced skill is active to reduce noise)
+        if context.skills and not is_forced_skill:
             skill_section = self._build_skill_section(context)
             if skill_section:
                 sections.append(skill_section)
 
-        # 6. Matched skill recommendation
-        if context.matched_skill:
+        # 7. Non-forced skill recommendation (confidence-based match)
+        if context.matched_skill and not is_forced_skill:
             skill_recommendation = self._build_skill_recommendation(context.matched_skill)
             sections.append(skill_recommendation)
 
@@ -327,15 +341,26 @@ When a skill matches the user's request, you can use its tools in sequence for o
         tools = ", ".join(skill.get("tools", []))
 
         if is_forced:
-            content = f"""<mandatory-skill>
-The user has explicitly requested execution of the skill "{name}".
-You MUST follow the skill instructions below. Do NOT skip or modify the execution plan.
+            content = f"""<mandatory-skill priority="highest">
+IMPORTANT: The user has explicitly activated the skill "/{name}" via slash command.
+This is your PRIMARY DIRECTIVE for this conversation turn.
+
+You MUST:
+1. Follow ALL skill instructions below exactly as specified
+2. Use the skill's workflow, tools, and output format as described
+3. Do NOT skip, summarize, or modify the execution plan
+4. Do NOT ask for confirmation before executing - proceed immediately
 
 Skill: {name}
-Description: {description}
-Required tools (use in order): {tools}"""
+Description: {description}"""
+            if tools:
+                content += f"\nRequired tools: {tools}"
             if skill.get("prompt_template"):
-                content += f"\n\nInstructions:\n{skill['prompt_template']}"
+                content += f"""
+
+=== SKILL INSTRUCTIONS (follow these precisely) ===
+{skill['prompt_template']}
+=== END SKILL INSTRUCTIONS ==="""
             content += "\n</mandatory-skill>"
         else:
             content = f"""<skill-recommendation>

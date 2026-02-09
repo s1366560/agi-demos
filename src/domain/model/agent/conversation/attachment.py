@@ -240,12 +240,27 @@ class Attachment:
         }
 
 
-# File size limits by purpose
+# Default file size limits by purpose (in bytes)
+DEFAULT_MAX_SIZE_LLM_MB = 100
+DEFAULT_MAX_SIZE_SANDBOX_MB = 100
+
 FILE_SIZE_LIMITS = {
-    AttachmentPurpose.LLM_CONTEXT: 10 * 1024 * 1024,  # 10MB for LLM
-    AttachmentPurpose.SANDBOX_INPUT: 100 * 1024 * 1024,  # 100MB for sandbox
-    AttachmentPurpose.BOTH: 10 * 1024 * 1024,  # Use stricter limit
+    AttachmentPurpose.LLM_CONTEXT: DEFAULT_MAX_SIZE_LLM_MB * 1024 * 1024,
+    AttachmentPurpose.SANDBOX_INPUT: DEFAULT_MAX_SIZE_SANDBOX_MB * 1024 * 1024,
+    AttachmentPurpose.BOTH: DEFAULT_MAX_SIZE_LLM_MB * 1024 * 1024,  # Use LLM limit (stricter)
 }
+
+
+def build_file_size_limits(
+    llm_max_mb: int = DEFAULT_MAX_SIZE_LLM_MB,
+    sandbox_max_mb: int = DEFAULT_MAX_SIZE_SANDBOX_MB,
+) -> dict:
+    """Build file size limits dict from configurable MB values."""
+    return {
+        AttachmentPurpose.LLM_CONTEXT: llm_max_mb * 1024 * 1024,
+        AttachmentPurpose.SANDBOX_INPUT: sandbox_max_mb * 1024 * 1024,
+        AttachmentPurpose.BOTH: min(llm_max_mb, sandbox_max_mb) * 1024 * 1024,
+    }
 
 # Allowed MIME types by purpose
 ALLOWED_MIME_TYPES = {

@@ -282,6 +282,14 @@ class Settings(BaseSettings):
     s3_no_proxy: bool = Field(default=True, alias="S3_NO_PROXY")
     presigned_url_expiration: int = Field(default=3600, alias="PRESIGNED_URL_EXPIRATION")
 
+    # Upload Size Limits (in MB)
+    upload_max_size_llm_mb: int = Field(
+        default=100, alias="UPLOAD_MAX_SIZE_LLM_MB"
+    )  # Max file size for LLM context uploads
+    upload_max_size_sandbox_mb: int = Field(
+        default=100, alias="UPLOAD_MAX_SIZE_SANDBOX_MB"
+    )  # Max file size for sandbox input uploads
+
     # Sandbox Settings
     sandbox_default_provider: str = Field(default="docker", alias="SANDBOX_DEFAULT_PROVIDER")
     sandbox_default_image: str = Field(

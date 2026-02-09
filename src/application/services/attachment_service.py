@@ -13,12 +13,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.domain.model.agent.attachment import (
     ALLOWED_MIME_TYPES,
     DEFAULT_PART_SIZE,
-    FILE_SIZE_LIMITS,
     MULTIPART_THRESHOLD,
     Attachment,
     AttachmentMetadata,
     AttachmentPurpose,
     AttachmentStatus,
+    build_file_size_limits,
 )
 from src.domain.ports.repositories.attachment_repository import AttachmentRepositoryPort
 from src.domain.ports.services.storage_service_port import (
@@ -43,6 +43,8 @@ class AttachmentService:
         attachment_repository: AttachmentRepositoryPort,
         bucket_prefix: str = "attachments",
         default_expiration_hours: int = 24,
+        upload_max_size_llm_mb: int = 100,
+        upload_max_size_sandbox_mb: int = 100,
     ):
         """
         Initialize the attachment service.
@@ -52,11 +54,17 @@ class AttachmentService:
             attachment_repository: Repository for attachment persistence
             bucket_prefix: Prefix for storage object keys
             default_expiration_hours: Default expiration time for attachments
+            upload_max_size_llm_mb: Max upload size for LLM context in MB
+            upload_max_size_sandbox_mb: Max upload size for sandbox input in MB
         """
         self._storage = storage_service
         self._repo = attachment_repository
         self._bucket_prefix = bucket_prefix
         self._default_expiration_hours = default_expiration_hours
+        self._file_size_limits = build_file_size_limits(
+            llm_max_mb=upload_max_size_llm_mb,
+            sandbox_max_mb=upload_max_size_sandbox_mb,
+        )
 
     def _generate_object_key(
         self,
@@ -98,7 +106,9 @@ class AttachmentService:
             Tuple of (is_valid, error_message)
         """
         # Check size limit
-        max_size = FILE_SIZE_LIMITS.get(purpose, FILE_SIZE_LIMITS[AttachmentPurpose.BOTH])
+        max_size = self._file_size_limits.get(
+            purpose, self._file_size_limits[AttachmentPurpose.BOTH]
+        )
         if size_bytes > max_size:
             max_mb = max_size // (1024 * 1024)
             return False, f"File size exceeds limit ({max_mb}MB for {purpose.value})"
