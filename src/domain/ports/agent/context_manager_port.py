@@ -102,7 +102,7 @@ class ContextBuildResult:
 
     def to_event_data(self) -> Dict[str, Any]:
         """Convert to SSE event data."""
-        return {
+        data = {
             "was_compressed": self.was_compressed,
             "compression_strategy": self.compression_strategy.value,
             "original_message_count": self.original_message_count,
@@ -112,6 +112,11 @@ class ContextBuildResult:
             "budget_utilization_pct": round(self.budget_utilization_pct, 2),
             "summarized_message_count": self.summarized_message_count,
         }
+        if self.metadata.get("compression_history"):
+            data["compression_history_summary"] = self.metadata["compression_history"]
+        if self.metadata.get("compression_level"):
+            data["compression_level"] = self.metadata["compression_level"]
+        return data
 
 
 @runtime_checkable

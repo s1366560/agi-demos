@@ -96,13 +96,16 @@ export const useContextStore = create<ContextState>()(
       detailExpanded: false,
 
       handleContextStatus: (data) => {
+        const prevHistory = get().status?.compressionHistory ?? defaultStatus.compressionHistory;
+        const incomingHistory = data.compression_history_summary as CompressionHistorySummary | undefined;
+        const hasHistory = incomingHistory && (incomingHistory.total_compressions ?? 0) > 0;
         const status: ContextStatus = {
           currentTokens: (data.current_tokens as number) ?? 0,
           tokenBudget: (data.token_budget as number) ?? 128000,
           occupancyPct: (data.occupancy_pct as number) ?? 0,
           compressionLevel: (data.compression_level as string) ?? 'none',
           tokenDistribution: (data.token_distribution as TokenDistribution) ?? defaultStatus.tokenDistribution,
-          compressionHistory: (data.compression_history_summary as CompressionHistorySummary) ?? get().status?.compressionHistory ?? defaultStatus.compressionHistory,
+          compressionHistory: hasHistory ? incomingHistory : prevHistory,
           fromCache: (data.from_cache as boolean) ?? false,
           messagesInSummary: (data.messages_in_summary as number) ?? 0,
         };
@@ -111,7 +114,8 @@ export const useContextStore = create<ContextState>()(
 
       handleContextCompressed: (data) => {
         const prev = get().status ?? { ...defaultStatus };
-        const historyData = data.compression_history_summary as CompressionHistorySummary | undefined;
+        const incomingHistory = data.compression_history_summary as CompressionHistorySummary | undefined;
+        const hasHistory = incomingHistory && (incomingHistory.total_compressions ?? 0) > 0;
 
         set({
           status: {
@@ -121,7 +125,7 @@ export const useContextStore = create<ContextState>()(
             occupancyPct: (data.budget_utilization_pct as number) ?? prev.occupancyPct,
             compressionLevel: (data.compression_level as string) ?? prev.compressionLevel,
             tokenDistribution: (data.token_distribution as TokenDistribution) ?? prev.tokenDistribution,
-            compressionHistory: historyData ?? prev.compressionHistory,
+            compressionHistory: hasHistory ? incomingHistory : prev.compressionHistory,
           },
         });
       },
