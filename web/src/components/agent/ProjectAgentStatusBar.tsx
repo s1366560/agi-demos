@@ -58,6 +58,7 @@ import {
   type InstanceStatus,
 } from '../../services/poolService';
 
+import { ContextStatusIndicator } from './context/ContextStatusIndicator';
 import { SandboxStatusIndicator } from './sandbox/SandboxStatusIndicator';
 
 interface ProjectAgentStatusBarProps {
@@ -590,6 +591,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             <span>{messageCount}</span>
           </div>
         </LazyTooltip>
+
+        {/* Context Window Status */}
+        <ContextStatusIndicator />
 
         {/* Plan Mode */}
         {status.planMode.isActive && (

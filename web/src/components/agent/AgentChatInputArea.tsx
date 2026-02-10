@@ -12,12 +12,13 @@
 
 import { GripHorizontal } from 'lucide-react';
 
+import type { FileMetadata } from '@/services/sandboxUploadService';
+
 import { InputBar } from './InputBar';
 import { Resizer } from './Resizer';
 
 import type { INPUT_MIN_HEIGHT, INPUT_MAX_HEIGHT } from './AgentChatHooks';
 
-import type { FileMetadata } from '@/services/sandboxUploadService';
 
 export interface AgentChatInputAreaProps {
   /** Current height of the input area */

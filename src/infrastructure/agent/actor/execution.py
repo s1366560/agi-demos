@@ -45,6 +45,7 @@ async def execute_project_chat(
     final_content = ""
     is_error = False
     error_message = None
+    summary_save_data: Optional[Dict[str, Any]] = None
 
     await set_agent_running(request.conversation_id, request.message_id)
 
@@ -65,6 +66,7 @@ async def execute_project_chat(
             message_id=request.message_id,
             file_metadata=request.file_metadata,
             forced_skill_name=request.forced_skill_name,
+            context_summary_data=request.context_summary_data,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
@@ -87,6 +89,8 @@ async def execute_project_chat(
             elif event_type == "error":
                 is_error = True
                 error_message = event.get("data", {}).get("message", "Unknown error")
+            elif event_type == "context_summary_generated":
+                summary_save_data = event.get("data")
 
             now = time_module.time()
             if now - last_refresh > 60:
@@ -99,6 +103,14 @@ async def execute_project_chat(
             events=events,
             correlation_id=request.correlation_id,
         )
+
+        # Save context summary if compression generated one
+        if summary_save_data and not is_error:
+            await _save_context_summary(
+                conversation_id=request.conversation_id,
+                summary_data=summary_save_data,
+                last_event_time_us=time_gen.last_time_us,
+            )
 
         execution_time_ms = (time_module.time() - start_time) * 1000
 
@@ -477,6 +489,41 @@ async def _persist_events(
             f"[ActorExecution] Failed to persist {len(events)} events "
             f"for conversation {conversation_id}: {e}",
             exc_info=True,
+        )
+
+
+async def _save_context_summary(
+    conversation_id: str,
+    summary_data: Dict[str, Any],
+    last_event_time_us: int,
+) -> None:
+    """Save context summary to conversation metadata."""
+    try:
+        from src.domain.model.agent.conversation.context_summary import ContextSummary
+        from src.infrastructure.adapters.secondary.persistence.sql_context_summary_adapter import (
+            SqlContextSummaryAdapter,
+        )
+
+        summary = ContextSummary(
+            summary_text=summary_data.get("summary_text", ""),
+            summary_tokens=summary_data.get("summary_tokens", 0),
+            messages_covered_up_to=last_event_time_us,
+            messages_covered_count=summary_data.get("messages_covered_count", 0),
+            compression_level=summary_data.get("compression_level", "summarize"),
+        )
+
+        async with async_session_factory() as session:
+            async with session.begin():
+                adapter = SqlContextSummaryAdapter(session)
+                await adapter.save_summary(conversation_id, summary)
+
+        logger.info(
+            f"[ActorExecution] Saved context summary for {conversation_id}: "
+            f"{summary.messages_covered_count} messages covered"
+        )
+    except Exception as e:
+        logger.warning(
+            f"[ActorExecution] Failed to save context summary for {conversation_id}: {e}"
         )
 
 

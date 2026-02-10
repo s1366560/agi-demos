@@ -401,7 +401,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       previousScrollTopRef.current = 0;
     }, []);
 
-    // Aggressive preload logic
+    // Aggressive preload logic with screen height adaptation
     const checkAndPreload = useCallback(() => {
       const container = containerRef.current;
       if (!container) return;
@@ -412,12 +412,21 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         hasEarlierMessages &&
         onLoadEarlier
       ) {
-        const { scrollTop } = container;
+        const { scrollTop, scrollHeight, clientHeight } = container;
 
+        // If content doesn't fill the container (no scrollbar needed), 
+        // trigger loading immediately to fill the screen
+        const contentFillsContainer = scrollHeight > clientHeight + 10; // 10px tolerance
+        
         const avgMessageHeight = 100;
         const visibleItemsFromTop = Math.ceil(scrollTop / avgMessageHeight);
 
-        if (visibleItemsFromTop < preloadItemCount) {
+        // Trigger load when:
+        // 1. Content doesn't fill container (need more messages to fill screen), OR
+        // 2. User has scrolled near the top (visibleItemsFromTop < threshold)
+        const shouldTriggerLoad = !contentFillsContainer || visibleItemsFromTop < preloadItemCount;
+
+        if (shouldTriggerLoad) {
           const now = Date.now();
           if (now - lastLoadTimeRef.current < 300) return;
 
@@ -558,6 +567,17 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         }
       };
     }, []);
+
+    // Clear loading indicator when hasEarlierMessages becomes false
+    useEffect(() => {
+      if (!hasEarlierMessages) {
+        setShowLoadingIndicator(false);
+        if (loadingIndicatorTimeoutRef.current) {
+          clearTimeout(loadingIndicatorTimeoutRef.current);
+          loadingIndicatorTimeoutRef.current = null;
+        }
+      }
+    }, [hasEarlierMessages]);
 
     // Reset userScrolledUpRef when streaming ends
     useEffect(() => {

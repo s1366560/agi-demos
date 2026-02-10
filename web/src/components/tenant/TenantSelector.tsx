@@ -2,9 +2,10 @@ import React from 'react';
 
 import { Building2, Plus, Settings } from 'lucide-react';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { useTenantStore } from '../../stores/tenant';
 import { Tenant } from '../../types/memory';
-import { formatDateOnly } from '@/utils/date';
 
 interface TenantSelectorProps {
   onCreateTenant?: () => void;

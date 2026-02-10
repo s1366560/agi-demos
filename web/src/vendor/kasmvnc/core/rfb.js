@@ -60,12 +60,12 @@ const DOUBLE_TAP_THRESHOLD = 50;
 
 // Extended clipboard pseudo-encoding formats
 const extendedClipboardFormatText   = 1;
-/*eslint-disable no-unused-vars */
+ 
 const extendedClipboardFormatRtf    = 1 << 1;
 const extendedClipboardFormatHtml   = 1 << 2;
 const extendedClipboardFormatDib    = 1 << 3;
 const extendedClipboardFormatFiles  = 1 << 4;
-/*eslint-enable */
+ 
 
 // Extended clipboard pseudo-encoding actions
 const extendedClipboardActionCaps    = 1 << 24;
@@ -4294,13 +4294,13 @@ RFB.cursors = {
     },
 
     dot: {
-        /* eslint-disable indent */
+         
         rgbaPixels: new Uint8Array([
             255, 255, 255, 255,   0,   0,   0, 255, 255, 255, 255, 255,
               0,   0,   0, 255,   0,   0,   0,   0,   0,   0,  0,  255,
             255, 255, 255, 255,   0,   0,   0, 255, 255, 255, 255, 255,
         ]),
-        /* eslint-enable indent */
+         
         w: 3, h: 3,
         hotx: 1, hoty: 1,
     }

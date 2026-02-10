@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { X, Settings, Trash2 } from 'lucide-react';
+
 import { formatDateOnly } from '@/utils/date';
 
 interface Project {

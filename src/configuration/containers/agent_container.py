@@ -27,6 +27,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
     SqlAgentExecutionRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_context_summary_adapter import (
+    SqlContextSummaryAdapter,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
 )
@@ -137,6 +140,19 @@ class AgentContainer:
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         """Get SqlWorkflowPatternRepository for workflow pattern persistence."""
         return SqlWorkflowPatternRepository(self._db)
+
+    def context_summary_adapter(self) -> SqlContextSummaryAdapter:
+        """Get SqlContextSummaryAdapter for context summary persistence."""
+        return SqlContextSummaryAdapter(self._db)
+
+    def context_loader(self):
+        """Get ContextLoader for smart context loading with summary caching."""
+        from src.application.services.agent.context_loader import ContextLoader
+
+        return ContextLoader(
+            event_repo=self.agent_execution_event_repository(),
+            summary_adapter=self.context_summary_adapter(),
+        )
 
     def tool_composition_repository(self) -> SqlToolCompositionRepository:
         """Get SqlToolCompositionRepository for tool composition persistence."""
@@ -295,6 +311,7 @@ class AgentContainer:
             storage_service=storage_service,
             db_session=self._db,
             sequence_service=sequence_service,
+            context_loader=self.context_loader(),
         )
 
     # === Agent Orchestrators ===

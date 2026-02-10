@@ -98,15 +98,11 @@ class ContextFacade(ContextManagerPort):
         self._debug = self.config.debug_logging
 
         # Initialize components
-        self._message_builder = message_builder or MessageBuilder(
-            self.config.message_builder
-        )
+        self._message_builder = message_builder or MessageBuilder(self.config.message_builder)
         self._attachment_injector = attachment_injector or AttachmentInjector(
             self.config.attachment_injector
         )
-        self._window_manager = window_manager or ContextWindowManager(
-            self.config.context_window
-        )
+        self._window_manager = window_manager or ContextWindowManager(self.config.context_window)
 
     @property
     def message_builder(self) -> MessageBuilder:
@@ -123,9 +119,7 @@ class ContextFacade(ContextManagerPort):
         """Get window manager instance."""
         return self._window_manager
 
-    async def build_context(
-        self, request: ContextBuildRequest
-    ) -> ContextBuildResult:
+    async def build_context(self, request: ContextBuildRequest) -> ContextBuildResult:
         """
         Build complete context window from request.
 
@@ -154,6 +148,24 @@ class ContextFacade(ContextManagerPort):
             request.conversation_context
         )
 
+        # Step 1.5: Inject cached summary as conversation history prefix
+        if request.context_summary and request.context_summary.summary_text:
+            summary_msg = {
+                "role": "system",
+                "content": (
+                    f"[Previous conversation summary - covers "
+                    f"{request.context_summary.messages_covered_count} earlier messages]\n\n"
+                    f"{request.context_summary.summary_text}"
+                ),
+            }
+            context_messages.insert(0, summary_msg)
+            if self._debug:
+                logger.info(
+                    f"[ContextFacade] Injected cached summary: "
+                    f"{request.context_summary.summary_tokens} tokens, "
+                    f"covers {request.context_summary.messages_covered_count} messages"
+                )
+
         # Step 2: Parse attachment metadata and content
         attachment_metadata = self._attachment_injector.parse_metadata_list(
             request.attachment_metadata
@@ -170,8 +182,7 @@ class ContextFacade(ContextManagerPort):
             )
             if self._debug:
                 logger.info(
-                    f"[ContextFacade] Injected context for "
-                    f"{len(attachment_metadata)} attachments"
+                    f"[ContextFacade] Injected context for {len(attachment_metadata)} attachments"
                 )
 
         # Step 4: Build user message
@@ -188,9 +199,7 @@ class ContextFacade(ContextManagerPort):
                 )
         else:
             # Simple text message
-            user_message = self._message_builder.build_user_message(
-                text=enhanced_message
-            )
+            user_message = self._message_builder.build_user_message(text=enhanced_message)
 
         # Add user message to context (skip for HITL resume as it's already in context)
         if not request.is_hitl_resume:
@@ -208,9 +217,7 @@ class ContextFacade(ContextManagerPort):
         # Convert to domain result
         return self._convert_window_result(window_result)
 
-    def _convert_window_result(
-        self, window_result: ContextWindowResult
-    ) -> ContextBuildResult:
+    def _convert_window_result(self, window_result: ContextWindowResult) -> ContextBuildResult:
         """
         Convert ContextWindowResult to ContextBuildResult.
 

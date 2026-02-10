@@ -11,8 +11,8 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
 import { projectSandboxService } from '../services/projectSandboxService';
-import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
 import { sandboxSSEService } from '../services/sandboxSSEService';
+import { buildDesktopWebSocketUrl } from '../services/sandboxWebSocketUtils';
 import { logger } from '../utils/logger';
 import { getAuthToken } from '../utils/tokenResolver';
 

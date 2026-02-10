@@ -22,13 +22,14 @@ import {
   Globe,
 } from 'lucide-react';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { AppLayout, NavigationGroup } from '@/components/shared/layouts/AppLayout';
 import { ProjectCreateModal } from '@/components/tenant/ProjectCreateModal';
 
 import { tenantAPI } from '../services/api';
 import { useProjectStore } from '../stores/project';
 import { useTenantStore } from '../stores/tenant';
-import { formatDateOnly } from '@/utils/date';
 import { Project } from '../types/memory';
 
 export const SpaceDashboard: React.FC = () => {

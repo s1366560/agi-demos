@@ -653,6 +653,20 @@ export function createStreamEventHandlers(
       if (handlerConversationId === activeConversationId) {
         setState({ costTracking });
       }
+
+      // Forward to context store
+      const { useContextStore } = require('../../stores/contextStore');
+      useContextStore.getState().handleCostUpdate(costData as unknown as Record<string, unknown>);
+    },
+
+    onContextCompressed: (event) => {
+      const { useContextStore } = require('../../stores/contextStore');
+      useContextStore.getState().handleContextCompressed(event.data as unknown as Record<string, unknown>);
+    },
+
+    onContextStatus: (event) => {
+      const { useContextStore } = require('../../stores/contextStore');
+      useContextStore.getState().handleContextStatus(event.data as unknown as Record<string, unknown>);
     },
 
     onArtifactCreated: (event) => {

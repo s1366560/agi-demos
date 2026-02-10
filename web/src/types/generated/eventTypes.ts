@@ -40,6 +40,8 @@ export type AgentEventType =
   | 'env_var_provided'
   | 'cost_update'
   | 'context_compressed'
+  | 'context_status'
+  | 'context_summary_generated'
   | 'pattern_match'
   | 'skill_matched'
   | 'skill_execution_start'
@@ -139,6 +141,8 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   env_var_provided: 'hitl',
   cost_update: 'system',
   context_compressed: 'system',
+  context_status: 'system',
+  context_summary_generated: 'system',
   pattern_match: 'agent',
   skill_matched: 'agent',
   skill_execution_start: 'agent',
@@ -211,6 +215,8 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'env_var_provided',
   'cost_update',
   'context_compressed',
+  'context_status',
+  'context_summary_generated',
   'pattern_match',
   'skill_matched',
   'skill_execution_start',

@@ -28,9 +28,10 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
 
+import type { FileMetadata } from '@/services/sandboxUploadService';
+
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
-import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 

@@ -3,11 +3,12 @@ import React, { useEffect, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 import type { TFunction } from 'i18next';
-import { formatDateOnly } from '@/utils/date';
 
 // Hoist formatStorage outside component to avoid recreation on every render (rendering-hoist-jsx)
 const formatStorage = (bytes: number): string => {

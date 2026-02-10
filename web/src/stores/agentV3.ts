@@ -35,10 +35,11 @@ import {
 import { logger } from '../utils/logger';
 import { tabSync, type TabSyncMessage } from '../utils/tabSync';
 
-import type { FileMetadata } from '../services/sandboxUploadService';
 
 import { createHITLActions } from './agent/hitlActions';
 import { createStreamEventHandlers } from './agent/streamEventHandlers';
+
+import type { FileMetadata } from '../services/sandboxUploadService';
 
 /**
  * Token delta batching configuration

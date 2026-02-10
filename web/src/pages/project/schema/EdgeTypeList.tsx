@@ -31,8 +31,9 @@ import {
   History,
 } from 'lucide-react';
 
-import { schemaAPI } from '../../../services/api';
 import { formatDateTime } from '@/utils/date';
+
+import { schemaAPI } from '../../../services/api';
 
 // ============================================================================
 // Types

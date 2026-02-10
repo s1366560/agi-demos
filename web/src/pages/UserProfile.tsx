@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { authAPI } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 
 import type { UserUpdate, UserProfile as UserProfileType } from '../types/memory';
-import { formatDateOnly } from '@/utils/date';
 
 export const UserProfile: React.FC = () => {
   const { t } = useTranslation();

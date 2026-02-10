@@ -247,6 +247,8 @@ export type AgentEventType =
   | 'skill_fallback' // Skill execution fallback to LLM
   // Context management events
   | 'context_compressed' // Context window compression occurred
+  | 'context_status' // Context health status update
+  | 'context_summary_generated' // Summary cache saved (internal)
   // Plan mode events
   | 'plan_mode_enter' // Entered plan mode
   | 'plan_mode_exit' // Exited plan mode
@@ -891,6 +893,7 @@ export interface AgentStreamHandler {
   onArtifactError?: (event: AgentEvent<ArtifactErrorEventData>) => void;
   // Context management handlers
   onContextCompressed?: (event: AgentEvent<ContextCompressedEventData>) => void;
+  onContextStatus?: (event: AgentEvent<ContextStatusEventData>) => void;
   // Title generation handlers
   onTitleGenerated?: (event: AgentEvent<TitleGeneratedEventData>) => void;
   // Plan Mode handlers
@@ -1509,12 +1512,32 @@ export interface SkillFallbackEventData {
 export interface ContextCompressedEventData {
   was_compressed: boolean;
   compression_strategy: 'none' | 'truncate' | 'summarize';
+  compression_level: string;
   original_message_count: number;
   final_message_count: number;
   estimated_tokens: number;
   token_budget: number;
   budget_utilization_pct: number;
   summarized_message_count: number;
+  tokens_saved: number;
+  compression_ratio: number;
+  pruned_tool_outputs: number;
+  duration_ms: number;
+  token_distribution: Record<string, number>;
+  compression_history_summary: Record<string, unknown>;
+}
+
+/**
+ * Context status event data
+ * Periodic context health report emitted at start of each step
+ */
+export interface ContextStatusEventData {
+  current_tokens: number;
+  token_budget: number;
+  occupancy_pct: number;
+  compression_level: string;
+  token_distribution: Record<string, number>;
+  compression_history_summary: Record<string, unknown>;
 }
 
 /**

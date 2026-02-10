@@ -97,6 +97,7 @@ import type {
   SkillExecutionCompleteEventData,
   SkillFallbackEventData,
   ContextCompressedEventData,
+  ContextStatusEventData,
   PlanModeEnterEventData,
   PlanModeExitEventData,
   PlanCreatedEventData,
@@ -760,6 +761,9 @@ class AgentServiceImpl implements AgentService {
       // Context management events
       case 'context_compressed':
         handler.onContextCompressed?.(event as AgentEvent<ContextCompressedEventData>);
+        break;
+      case 'context_status':
+        handler.onContextStatus?.(event as AgentEvent<ContextStatusEventData>);
         break;
       // Plan Mode events
       case 'plan_mode_enter':

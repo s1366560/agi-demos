@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
+from src.domain.model.agent.conversation.context_summary import ContextSummary
+
 
 class CompressionStrategy(str, Enum):
     """Context compression strategy."""
@@ -76,6 +78,8 @@ class ContextBuildRequest:
     max_output_tokens: Optional[int] = None
     # HITL resume flag: when True, skip adding user_message as it's already in conversation_context
     is_hitl_resume: bool = False
+    # Cached context summary from previous turns
+    context_summary: Optional[ContextSummary] = None
 
 
 @dataclass
@@ -119,9 +123,7 @@ class MessageBuilderPort(Protocol):
     - Maintain message structure consistency
     """
 
-    def convert_to_openai_format(
-        self, messages: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def convert_to_openai_format(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Convert conversation messages to OpenAI message format.
 
@@ -174,9 +176,7 @@ class AttachmentInjectorPort(Protocol):
     - Handle different attachment types
     """
 
-    def build_attachment_context(
-        self, metadata_list: List[AttachmentMetadata]
-    ) -> str:
+    def build_attachment_context(self, metadata_list: List[AttachmentMetadata]) -> str:
         """
         Build attachment context prompt from metadata.
 
@@ -234,9 +234,7 @@ class ContextManagerPort(Protocol):
     - Coordinate message building and attachment injection
     """
 
-    async def build_context(
-        self, request: ContextBuildRequest
-    ) -> ContextBuildResult:
+    async def build_context(self, request: ContextBuildRequest) -> ContextBuildResult:
         """
         Build context window from conversation and attachments.
 
@@ -273,4 +271,25 @@ class ContextManagerPort(Protocol):
         Returns:
             Estimated token count
         """
+        ...
+
+
+@runtime_checkable
+class ContextSummaryPort(Protocol):
+    """Port for persisting and retrieving context summaries.
+
+    Summaries are stored as cache alongside original events.
+    They can be regenerated if missing or stale.
+    """
+
+    async def get_summary(self, conversation_id: str) -> Optional[ContextSummary]:
+        """Get cached context summary for a conversation."""
+        ...
+
+    async def save_summary(self, conversation_id: str, summary: ContextSummary) -> None:
+        """Save context summary to conversation metadata."""
+        ...
+
+    async def invalidate_summary(self, conversation_id: str) -> None:
+        """Remove cached summary (forces re-generation on next turn)."""
         ...

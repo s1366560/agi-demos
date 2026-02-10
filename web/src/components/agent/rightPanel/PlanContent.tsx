@@ -14,8 +14,9 @@
 
 import { CheckCircle2, Play, Clock } from 'lucide-react';
 
-import { formatTimeOnly } from '@/utils/date';
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
+
+import { formatTimeOnly } from '@/utils/date';
 
 import { LazyEmpty, Empty, LazyAlert, LazySpin } from '@/components/ui/lazyAntd';
 

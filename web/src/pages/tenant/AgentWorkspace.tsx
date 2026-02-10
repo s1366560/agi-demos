@@ -15,6 +15,7 @@ import { Empty as AntEmpty } from 'antd';
 import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
 import { AgentChatContent } from '../../components/agent/AgentChatContent';
+import { ContextDetailPanel } from '../../components/agent/context/ContextDetailPanel';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useAgentV3Store } from '../../stores/agentV3';
 import { useAuthStore } from '../../stores/auth';
@@ -145,7 +146,13 @@ export const AgentWorkspace: React.FC = () => {
   return (
     <div className="w-full h-full">
       {effectiveProjectId ? (
-        <AgentChatContent externalProjectId={effectiveProjectId} basePath={basePath} />
+        <>
+          <AgentChatContent
+            externalProjectId={effectiveProjectId}
+            basePath={basePath}
+          />
+          <ContextDetailPanel />
+        </>
       ) : (
         <div className="h-full flex items-center justify-center">
           <LazyEmpty

@@ -23,9 +23,11 @@ import {
   MessageSquare,
   Download,
 } from 'lucide-react';
-import { formatTimeOnly } from '@/utils/date';
 
 import type { SearchMode } from '@/hooks/useSearchState';
+
+import { formatTimeOnly } from '@/utils/date';
+
 
 export interface SearchHeaderProps {
   // Search mode

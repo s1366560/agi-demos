@@ -27,7 +27,7 @@ export function initLogging(level) {
     Debug = Info = Warn = Error = () => {};
 
     if (typeof window.console !== "undefined") {
-        /* eslint-disable no-console, no-fallthrough */
+         
         switch (level) {
             case 'debug':
                 Debug = console.debug.bind(window.console);
@@ -42,7 +42,7 @@ export function initLogging(level) {
             default:
                 throw new window.Error("invalid logging type '" + level + "'");
         }
-        /* eslint-enable no-console, no-fallthrough */
+         
     }
 }
 

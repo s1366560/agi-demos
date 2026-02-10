@@ -21,8 +21,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { EditOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Typography } from 'antd';
 
-import { formatDateTime } from '@/utils/date';
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
+
+import { formatDateTime } from '@/utils/date';
 
 import {
   LazyAlert,

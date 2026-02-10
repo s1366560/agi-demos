@@ -27,14 +27,16 @@ import {
   Zap,
 } from 'lucide-react';
 
+import type { FileMetadata } from '@/services/sandboxUploadService';
+
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
 import { useFileUpload, type PendingAttachment } from './FileUploader';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
-import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
-import type { FileMetadata } from '@/services/sandboxUploadService';
 import type { SkillResponse } from '@/types/agent';
+
+import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
 
 interface InputBarProps {
   onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => void;

@@ -236,7 +236,7 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
     });
   }, [timeline.length, eventVirtualizer]);
 
-  // 核心优化：激进的预加载逻辑
+  // 核心优化：激进的预加载逻辑，适配不同屏幕高度
   const checkAndPreload = useCallback(() => {
     if (
       !isLoadingEarlierRef.current &&
@@ -245,11 +245,22 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
       onLoadEarlier &&
       virtualItems.length > 0
     ) {
+      const container = scrollContainerRef.current;
       const firstVisibleIndex = virtualItems[0].index;
 
+      // Check if content fills the container (scrollbar exists)
+      // If container is not filled, we need to load more messages
+      let contentFillsContainer = true;
+      if (container) {
+        const { scrollHeight, clientHeight } = container;
+        contentFillsContainer = scrollHeight > clientHeight + 10; // 10px tolerance
+      }
+
       // 当第一个可见项目索引小于阈值时，触发预加载
-      // 这意味着用户还没滚动到顶部，但已经"接近"顶部了
-      if (firstVisibleIndex < preloadThreshold) {
+      // 或者当内容未填满容器时（高屏幕情况），也触发加载
+      const shouldTriggerLoad = firstVisibleIndex < preloadThreshold || !contentFillsContainer;
+
+      if (shouldTriggerLoad) {
         // 防抖动：确保两次加载之间至少有 300ms 间隔
         const now = Date.now();
         if (now - lastLoadTimeRef.current < 300) return;
@@ -414,6 +425,17 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
       }
     };
   }, []);
+
+  // Clear loading indicator when hasEarlierMessages becomes false
+  useEffect(() => {
+    if (!hasEarlierMessages) {
+      setShowLoadingIndicator(false);
+      if (loadingIndicatorTimeoutRef.current) {
+        clearTimeout(loadingIndicatorTimeoutRef.current);
+        loadingIndicatorTimeoutRef.current = null;
+      }
+    }
+  }, [hasEarlierMessages]);
 
   // Reset userScrolledUpRef when streaming ends
   useEffect(() => {

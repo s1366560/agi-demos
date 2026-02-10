@@ -11,13 +11,14 @@
 
 import { useState } from 'react';
 
+import { formatTimeWithSeconds } from '@/utils/date';
+
 import {
   isImageUrl as _isImageUrl,
   parseBase64Image,
   extractImageUrl,
   foldTextWithMetadata,
 } from '../../../utils/toolResultUtils';
-import { formatTimeWithSeconds } from '@/utils/date';
 import { MaterialIcon } from '../shared';
 
 import type { ToolExecution } from '../../../types/agent';

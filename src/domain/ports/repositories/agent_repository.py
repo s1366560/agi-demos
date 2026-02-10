@@ -556,6 +556,29 @@ class AgentExecutionEventRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_message_events_after(
+        self,
+        conversation_id: str,
+        after_time_us: int,
+        limit: int = 200,
+    ) -> List[AgentExecutionEvent]:
+        """
+        Get message events after a given event_time_us cutoff.
+
+        Used for loading only recent messages when a cached summary
+        covers older history.
+
+        Args:
+            conversation_id: The conversation ID
+            after_time_us: Only return events with event_time_us > this value
+            limit: Safety limit to prevent unbounded queries
+
+        Returns:
+            List of message events in sequence order (oldest first)
+        """
+        pass
+
+    @abstractmethod
     async def count_messages(self, conversation_id: str) -> int:
         """
         Count message events in a conversation.

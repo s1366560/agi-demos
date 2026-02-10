@@ -13,6 +13,7 @@ import { BulbOutlined, ToolOutlined } from '@ant-design/icons';
 import { Collapse } from 'antd';
 
 import { formatTimeOnly } from '@/utils/date';
+
 import { ToolCall, ToolResult } from '../../types/agent';
 
 import { ToolCard } from './ToolCard';

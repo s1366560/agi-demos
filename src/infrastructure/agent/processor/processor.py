@@ -35,6 +35,7 @@ from src.domain.events.agent_events import (
     AgentArtifactReadyEvent,
     AgentCompactNeededEvent,
     AgentCompleteEvent,
+    AgentContextStatusEvent,
     AgentCostUpdateEvent,
     AgentDomainEvent,
     AgentDoomLoopDetectedEvent,
@@ -896,6 +897,22 @@ class SessionProcessor:
                                 "output": step_tokens.output,
                                 "reasoning": step_tokens.reasoning,
                             },
+                        )
+
+                        # Emit context status using this call's input tokens
+                        # (= actual context window size the LLM processed)
+                        context_limit = self.config.context_limit
+                        current_input = step_tokens.input
+                        occupancy = (
+                            (current_input / context_limit * 100)
+                            if context_limit > 0
+                            else 0
+                        )
+                        yield AgentContextStatusEvent(
+                            current_tokens=current_input,
+                            token_budget=context_limit,
+                            occupancy_pct=round(occupancy, 1),
+                            compression_level="none",
                         )
 
                         # Check for compaction need

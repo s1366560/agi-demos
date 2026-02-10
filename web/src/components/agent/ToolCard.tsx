@@ -18,6 +18,7 @@ import {
 import { Card, Tag, Collapse, Typography } from 'antd';
 
 import { formatTimeOnly } from '@/utils/date';
+
 import { foldText } from '../../utils/toolResultUtils';
 
 const { Panel } = Collapse;

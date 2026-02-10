@@ -302,18 +302,41 @@ class AgentRetryEvent(AgentDomainEvent):
 
 class AgentCompactNeededEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COMPACT_NEEDED
+    compression_level: str = ""
+    current_tokens: int = 0
+    token_budget: int = 0
+    occupancy_pct: float = 0.0
 
 
 class AgentContextCompressedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.CONTEXT_COMPRESSED
     was_compressed: bool
     compression_strategy: str
+    compression_level: str = ""
     original_message_count: int
     final_message_count: int
     estimated_tokens: int
     token_budget: int
     budget_utilization_pct: float
     summarized_message_count: int = 0
+    tokens_saved: int = 0
+    compression_ratio: float = 0.0
+    pruned_tool_outputs: int = 0
+    duration_ms: float = 0.0
+    token_distribution: Dict[str, int] = {}
+    compression_history_summary: Dict[str, Any] = {}
+
+
+class AgentContextStatusEvent(AgentDomainEvent):
+    """Periodic context health report emitted at start of each step."""
+
+    event_type: AgentEventType = AgentEventType.CONTEXT_STATUS
+    current_tokens: int
+    token_budget: int
+    occupancy_pct: float
+    compression_level: str
+    token_distribution: Dict[str, int] = {}
+    compression_history_summary: Dict[str, Any] = {}
 
 
 # === Pattern Events ===

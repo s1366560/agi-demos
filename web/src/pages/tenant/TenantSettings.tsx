@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { useTenantStore } from '../../stores/tenant';
 import { Tenant } from '../../types/memory';
-import { formatDateOnly } from '@/utils/date';
 
 const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
   const { t } = useTranslation();

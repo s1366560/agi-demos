@@ -2,13 +2,14 @@ import React, { useEffect, useState, useCallback } from 'react';
 
 import { Brain, Search, Plus, Clock, User, Tag, AlertCircle, Eye, Trash2 } from 'lucide-react';
 
+import { formatDateTime } from '@/utils/date';
+
 import { useMemoryStore } from '../../stores/memory';
 import { useProjectStore } from '../../stores/project';
 import { Memory } from '../../types/memory';
 import { MemoryCreateModal } from '../MemoryCreateModal';
 
 import { MemoryDetailModal } from './MemoryDetailModal';
-import { formatDateTime } from '@/utils/date';
 
 interface MemoryManagerProps {
   onMemorySelect?: (memory: Memory) => void;

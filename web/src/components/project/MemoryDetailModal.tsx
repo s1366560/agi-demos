@@ -15,9 +15,10 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { formatDateTimeFull } from '@/utils/date';
+
 import { memoryService } from '../../services/memoryService';
 import { Memory } from '../../types/memory';
-import { formatDateTimeFull } from '@/utils/date';
 
 interface MemoryDetailModalProps {
   isOpen: boolean;

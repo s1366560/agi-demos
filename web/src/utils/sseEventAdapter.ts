@@ -605,6 +605,8 @@ export function sseEventToTimeline(
     case 'skill_fallback':
     case 'pattern_match':
     case 'context_compressed':
+    case 'context_status':
+    case 'context_summary_generated':
     case 'plan_mode_enter':
     case 'plan_mode_exit':
     case 'plan_created':

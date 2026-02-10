@@ -17,6 +17,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
+
 import { formatTimeOnly } from '@/utils/date';
 
 export type SearchMode = 'semantic' | 'graphTraversal' | 'temporal' | 'faceted' | 'community';

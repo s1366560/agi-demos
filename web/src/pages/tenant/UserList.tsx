@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { useTenantStore } from '../../stores/tenant';
 
 import type { UserTenant } from '../../types/memory';
-import { formatDateOnly } from '@/utils/date';
 
 interface TenantMember {
   user_id: string;

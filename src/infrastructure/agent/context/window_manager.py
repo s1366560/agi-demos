@@ -25,12 +25,17 @@ from src.infrastructure.agent.context.compaction import (
     is_overflow,
     should_compact,
 )
+from src.infrastructure.agent.context.compression_engine import (
+    AdaptiveThresholds,
+    ContextCompressionEngine,
+)
+from src.infrastructure.agent.context.compression_state import CompressionLevel
 
 logger = logging.getLogger(__name__)
 
 
 class CompressionStrategy(str, Enum):
-    """Context compression strategy."""
+    """Context compression strategy (legacy, kept for backward compatibility)."""
 
     NONE = "none"  # No compression needed
     TRUNCATE = "truncate"  # Simple truncation of old messages
@@ -54,6 +59,14 @@ class ContextWindowConfig:
     # Compression thresholds
     compression_trigger_pct: float = 0.80  # Trigger at 80% occupancy
     summary_max_tokens: int = 500  # Max tokens for summary
+
+    # Adaptive compression thresholds
+    l1_trigger_pct: float = 0.60  # L1 prune at 60%
+    l2_trigger_pct: float = 0.80  # L2 summarize at 80%
+    l3_trigger_pct: float = 0.90  # L3 deep compress at 90%
+
+    # Incremental summarization
+    chunk_size: int = 10  # Messages per summary chunk
 
     # Token estimation
     chars_per_token: float = 4.0  # Rough estimate for tokenization
@@ -138,6 +151,24 @@ class ContextWindowManager:
         """
         self.config = config or ContextWindowConfig()
         self._token_cache: Dict[str, int] = {}
+
+        # Initialize adaptive compression engine
+        self._compression_engine = ContextCompressionEngine(
+            estimate_tokens=self.estimate_tokens,
+            estimate_message_tokens=self.estimate_message_tokens,
+            thresholds=AdaptiveThresholds(
+                l1_trigger_pct=self.config.l1_trigger_pct,
+                l2_trigger_pct=self.config.l2_trigger_pct,
+                l3_trigger_pct=self.config.l3_trigger_pct,
+            ),
+            chunk_size=self.config.chunk_size,
+            summary_max_tokens=self.config.summary_max_tokens,
+        )
+
+    @property
+    def compression_engine(self) -> ContextCompressionEngine:
+        """Access the adaptive compression engine."""
+        return self._compression_engine
 
     def estimate_tokens(self, text: str) -> int:
         """
@@ -658,3 +689,73 @@ Summary:"""
             )
 
         return calculate_usable_context(model_limits)
+
+    async def build_adaptive_context(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, Any]],
+        llm_client: Optional[Any] = None,
+        model_limits: Optional[ModelLimits] = None,
+    ) -> ContextWindowResult:
+        """
+        Build context window using adaptive multi-level compression.
+
+        Delegates to ContextCompressionEngine for level selection and
+        compression. Falls back to build_context_window() if engine
+        is not available or compression is not needed.
+
+        Args:
+            system_prompt: System prompt text
+            messages: Conversation messages in OpenAI format
+            llm_client: Optional LLM client for summary generation
+            model_limits: Optional model limits override
+
+        Returns:
+            ContextWindowResult with optimized messages
+        """
+        if model_limits is None:
+            model_limits = ModelLimits(
+                context=self.config.max_context_tokens,
+                input=0,
+                output=self.config.max_output_tokens,
+            )
+
+        result = await self._compression_engine.compress(
+            system_prompt=system_prompt,
+            messages=messages,
+            model_limits=model_limits,
+            llm_client=llm_client,
+        )
+
+        # Map CompressionLevel to legacy CompressionStrategy
+        if result.level == CompressionLevel.NONE:
+            strategy = CompressionStrategy.NONE
+        elif result.level == CompressionLevel.L1_PRUNE:
+            strategy = CompressionStrategy.TRUNCATE
+        else:
+            strategy = CompressionStrategy.SUMMARIZE
+
+        return ContextWindowResult(
+            messages=result.messages,
+            was_compressed=result.level != CompressionLevel.NONE,
+            compression_strategy=strategy,
+            original_message_count=result.messages_before,
+            final_message_count=result.messages_after,
+            estimated_tokens=result.tokens_after,
+            token_budget=calculate_usable_context(model_limits),
+            budget_utilization_pct=(
+                (result.tokens_after / calculate_usable_context(model_limits)) * 100
+                if calculate_usable_context(model_limits) > 0
+                else 0.0
+            ),
+            summary=result.summary,
+            summarized_message_count=(self._compression_engine.state.messages_summarized_up_to),
+            metadata={
+                "compression_level": result.level.value,
+                "tokens_saved": result.tokens_saved,
+                "compression_ratio": round(result.compression_ratio, 3),
+                "pruned_tool_outputs": result.pruned_tool_outputs,
+                "duration_ms": round(result.duration_ms, 1),
+                "compression_history": self._compression_engine.history.to_summary(),
+            },
+        )

@@ -15,8 +15,9 @@ import { memo, useCallback, useRef, useState, KeyboardEvent } from 'react';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 
-import { Memory } from '@/types/memory';
 import { formatDateOnly } from '@/utils/date';
+
+import { Memory } from '@/types/memory';
 
 // ============================================================================
 // Types

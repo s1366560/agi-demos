@@ -10,10 +10,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 
 import { Modal, Form, Input, Select, Switch, message, Alert } from 'antd';
+import { useShallow } from 'zustand/react/shallow';
 
 import { useMCPStore } from '../../stores/mcp';
 import { useProjectStore } from '../../stores/project';
-import { useShallow } from 'zustand/react/shallow';
 
 import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '../../types/agent';
 

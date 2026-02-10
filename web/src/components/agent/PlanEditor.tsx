@@ -15,8 +15,6 @@ import {
   FileTextOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
-
-import { formatDateTime } from '@/utils/date';
 import {
   Card,
   Button,
@@ -30,6 +28,8 @@ import {
   Spin,
   Divider,
 } from 'antd';
+
+import { formatDateTime } from '@/utils/date';
 
 import type { PlanDocument, PlanDocumentStatus } from '../../types/agent';
 

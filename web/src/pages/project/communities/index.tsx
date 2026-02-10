@@ -17,12 +17,13 @@ import React, {
 
 import { useParams } from 'react-router-dom';
 
+import { formatDateOnly, formatDateTime } from '@/utils/date';
+
 import { VirtualGrid } from '../../../components/common';
 import { TaskList } from '../../../components/tasks/TaskList';
 import { createApiUrl } from '../../../services/client/urlUtils';
 import { graphService } from '../../../services/graphService';
 import { logger } from '../../../utils/logger';
-import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import type { Community, Entity, BackgroundTask } from './types';
 

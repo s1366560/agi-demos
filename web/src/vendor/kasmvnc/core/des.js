@@ -75,7 +75,7 @@
  * fine Java utilities: http://www.acme.com/java/
  */
 
-/* eslint-disable comma-spacing */
+ 
 
 // Tables, permutations, S-boxes, etc.
 const PC2 = [13,16,10,23, 0, 4, 2,27,14, 5,20, 9,22,18,11, 3,
@@ -126,7 +126,7 @@ const SP8 = [b|f,z|e,a|z,c|f,b|z,b|f,z|d,b|z,a|d,c|z,c|f,a|e,c|e,a|f,z|e,z|d,
              a|f,a|z,c|e,z|e,z|d,c|d,z|e,a|f,b|e,z|d,b|d,c|z,c|d,b|z,a|z,b|f,
              z|z,c|f,a|d,b|d,c|z,b|e,b|f,z|z,c|f,a|e,a|e,z|f,z|f,a|d,b|z,c|e];
 
-/* eslint-enable comma-spacing */
+ 
 
 export default class DES {
     constructor(password) {

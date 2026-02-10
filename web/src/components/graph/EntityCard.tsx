@@ -14,6 +14,7 @@
 import React, { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
+
 import { formatDateOnly } from '@/utils/date';
 
 export interface Entity {

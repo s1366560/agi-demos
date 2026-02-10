@@ -22,6 +22,14 @@ from .compaction import (
     is_overflow,
     prune_tool_outputs,
 )
+from .compression_engine import (
+    AdaptiveStrategySelector,
+    AdaptiveThresholds,
+    CompressionResult,
+    ContextCompressionEngine,
+)
+from .compression_history import CompressionHistory, CompressionRecord
+from .compression_state import CompressionLevel, CompressionState, SummaryChunk
 from .context_facade import ContextFacade, ContextFacadeConfig
 from .window_manager import ContextWindowConfig, ContextWindowManager, ContextWindowResult
 
@@ -36,6 +44,17 @@ __all__ = [
     "ContextWindowManager",
     "ContextWindowConfig",
     "ContextWindowResult",
+    # Compression Engine
+    "ContextCompressionEngine",
+    "CompressionResult",
+    "AdaptiveStrategySelector",
+    "AdaptiveThresholds",
+    # Compression State & History
+    "CompressionLevel",
+    "CompressionState",
+    "SummaryChunk",
+    "CompressionHistory",
+    "CompressionRecord",
     # Compaction
     "Message",
     "ModelLimits",

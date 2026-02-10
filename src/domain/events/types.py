@@ -121,6 +121,8 @@ class AgentEventType(str, Enum):
     # =========================================================================
     COMPACT_NEEDED = "compact_needed"
     CONTEXT_COMPRESSED = "context_compressed"
+    CONTEXT_STATUS = "context_status"
+    CONTEXT_SUMMARY_GENERATED = "context_summary_generated"
 
     # =========================================================================
     # Pattern events
@@ -263,6 +265,8 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     # System events
     AgentEventType.COMPACT_NEEDED: EventCategory.SYSTEM,
     AgentEventType.CONTEXT_COMPRESSED: EventCategory.SYSTEM,
+    AgentEventType.CONTEXT_STATUS: EventCategory.SYSTEM,
+    AgentEventType.CONTEXT_SUMMARY_GENERATED: EventCategory.SYSTEM,
     AgentEventType.COST_UPDATE: EventCategory.SYSTEM,
     AgentEventType.RETRY: EventCategory.SYSTEM,
 }

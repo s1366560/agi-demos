@@ -12,9 +12,10 @@ import {
   Plus,
 } from 'lucide-react';
 
+import { formatDateTime } from '@/utils/date';
+
 import api from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
-import { formatDateTime } from '@/utils/date';
 
 interface SupportTicket {
   id: string;

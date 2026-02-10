@@ -16,8 +16,8 @@ import { memo, lazy, Suspense, useState } from 'react';
 
 import { Loader2 } from 'lucide-react';
 
-import { useSandboxStore } from '../../stores/sandbox';
 import { useAgentV3Store } from '../../stores/agentV3';
+import { useSandboxStore } from '../../stores/sandbox';
 import { formatDistanceToNowCN, formatReadableTime, formatDateTime } from '../../utils/date';
 
 import { AssistantMessage } from './chat/AssistantMessage';

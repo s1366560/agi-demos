@@ -239,6 +239,29 @@ class SqlAgentExecutionEventRepository(
         db_events = list(reversed(result.scalars().all()))
         return [self._to_domain(e) for e in db_events]
 
+    async def get_message_events_after(
+        self,
+        conversation_id: str,
+        after_time_us: int,
+        limit: int = 200,
+    ) -> List[AgentExecutionEvent]:
+        """Get message events after a given event_time_us cutoff."""
+        result = await self._session.execute(
+            select(DBAgentExecutionEvent)
+            .where(
+                DBAgentExecutionEvent.conversation_id == conversation_id,
+                DBAgentExecutionEvent.event_type.in_(["user_message", "assistant_message"]),
+                DBAgentExecutionEvent.event_time_us > after_time_us,
+            )
+            .order_by(
+                DBAgentExecutionEvent.event_time_us.asc(),
+                DBAgentExecutionEvent.event_counter.asc(),
+            )
+            .limit(limit)
+        )
+        db_events = result.scalars().all()
+        return [self._to_domain(e) for e in db_events]
+
     async def count_messages(self, conversation_id: str) -> int:
         """Count message events in a conversation."""
         result = await self._session.execute(

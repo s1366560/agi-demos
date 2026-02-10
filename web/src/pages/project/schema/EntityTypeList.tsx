@@ -31,8 +31,9 @@ import {
   GripVertical,
 } from 'lucide-react';
 
-import { schemaAPI } from '../../../services/api';
 import { formatDateOnly, formatDateTime } from '@/utils/date';
+
+import { schemaAPI } from '../../../services/api';
 
 // ============================================================================
 // Types

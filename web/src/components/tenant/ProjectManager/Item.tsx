@@ -8,10 +8,11 @@ import React, { FC } from 'react';
 
 import { Folder, Settings, Trash2 } from 'lucide-react';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { useProjectManagerContext } from './context';
 
 import type { ProjectManagerItemProps } from './types';
-import { formatDateOnly } from '@/utils/date';
 
 export const Item: FC<ProjectManagerItemProps> = ({
   project,

@@ -481,6 +481,7 @@ class ReActAgent:
         attachment_metadata: Optional[List[Dict[str, Any]]] = None,
         abort_signal: Optional[asyncio.Event] = None,
         forced_skill_name: Optional[str] = None,
+        context_summary_data: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -611,9 +612,8 @@ class ReActAgent:
 
         # All skill execution goes through prompt injection into the ReAct loop.
         # Forced skills use mandatory injection; confidence-based uses recommendation.
-        should_inject_prompt = (
-            matched_skill is not None
-            and (is_forced or skill_score >= self.skill_match_threshold)
+        should_inject_prompt = matched_skill is not None and (
+            is_forced or skill_score >= self.skill_match_threshold
         )
 
         # If score is too low and not forced, don't use skill at all
@@ -675,6 +675,16 @@ class ReActAgent:
 
         # Build context using ContextFacade - replaces inline message building
         # and attachment injection (was ~115 lines, now ~10 lines)
+        # Deserialize cached context summary if available
+        cached_summary = None
+        if context_summary_data:
+            from src.domain.model.agent.conversation.context_summary import ContextSummary
+
+            try:
+                cached_summary = ContextSummary.from_dict(context_summary_data)
+            except (KeyError, TypeError, ValueError) as e:
+                logger.warning(f"[ReActAgent] Invalid context summary data: {e}")
+
         context_request = ContextBuildRequest(
             system_prompt=system_prompt,
             conversation_context=conversation_context,
@@ -682,6 +692,7 @@ class ReActAgent:
             attachment_metadata=attachment_metadata,
             attachment_content=attachment_content,
             is_hitl_resume=False,
+            context_summary=cached_summary,
         )
         context_result = await self.context_facade.build_context(context_request)
         messages = context_result.messages
@@ -707,6 +718,37 @@ class ReActAgent:
                 f"{context_result.final_message_count} messages, "
                 f"strategy: {context_result.compression_strategy.value}"
             )
+
+            # Emit summary save event if compression produced a summary
+            if context_result.summary and not cached_summary:
+                yield {
+                    "type": "context_summary_generated",
+                    "data": {
+                        "summary_text": context_result.summary,
+                        "summary_tokens": context_result.estimated_tokens,
+                        "messages_covered_count": context_result.summarized_message_count,
+                        "compression_level": context_result.compression_strategy.value,
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
+        # Emit initial context_status with token estimation from context build
+        yield {
+            "type": "context_status",
+            "data": {
+                "current_tokens": context_result.estimated_tokens,
+                "token_budget": context_result.token_budget,
+                "occupancy_pct": round(context_result.budget_utilization_pct, 1),
+                "compression_level": "none",
+                "token_distribution": {},
+                "compression_history_summary": {},
+                "from_cache": cached_summary is not None,
+                "messages_in_summary": (
+                    cached_summary.messages_covered_count if cached_summary else 0
+                ),
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
         # Determine tools to use - hot-plug support: fetch current tools
         current_raw_tools, current_tool_definitions = self._get_current_tools()

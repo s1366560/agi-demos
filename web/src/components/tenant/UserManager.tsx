@@ -4,13 +4,14 @@ import { useTranslation } from 'react-i18next';
 
 import { Users, UserPlus, Shield, Trash2, Edit3, Search, Mail, Calendar } from 'lucide-react';
 
+import { formatDateOnly } from '@/utils/date';
+
 import { projectService } from '../../services/projectService';
 import { tenantService } from '../../services/tenantService';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 import { EditUserModal } from './EditUserModal';
-import { formatDateOnly } from '@/utils/date';
 
 interface User {
   id: string;

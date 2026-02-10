@@ -16,6 +16,8 @@ import {
   BulbOutlined,
 } from '@ant-design/icons';
 
+import { formatTimeOnly } from '@/utils/date';
+
 import {
   Modal,
   Radio,
@@ -27,7 +29,6 @@ import {
   Typography,
 } from '@/components/ui/lazyAntd';
 
-import { formatTimeOnly } from '@/utils/date';
 
 const { Text, Title } = Typography;
 

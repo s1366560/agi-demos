@@ -22,6 +22,7 @@ import {
 import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from 'antd';
 
 import { formatTimeOnly } from '@/utils/date';
+
 import { ArtifactRenderer } from '../../artifact';
 
 import type { Artifact } from '../../../types/agent';

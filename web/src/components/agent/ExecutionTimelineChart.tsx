@@ -4,8 +4,9 @@
  * Displays execution activity over time with count, success, and failure metrics.
  */
 
-import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
 import { formatDateTime } from '@/utils/date';
+
+import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
 
 import { MaterialIcon } from './shared';
 

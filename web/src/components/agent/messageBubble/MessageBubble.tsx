@@ -25,8 +25,9 @@ import {
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 
-import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
 import { useSandboxStore } from '@/stores/sandbox';
+
+import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
 
 // Import types without type qualifier
 import { InlineHITLCard } from '../InlineHITLCard';

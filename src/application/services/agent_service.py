@@ -87,6 +87,7 @@ class AgentService(AgentServicePort):
         storage_service=None,
         db_session=None,
         sequence_service=None,
+        context_loader=None,
     ):
         """
         Initialize the agent service.
@@ -133,6 +134,7 @@ class AgentService(AgentServicePort):
         self._storage_service = storage_service
         self._db_session = db_session
         self._sequence_service = sequence_service
+        self._context_loader = context_loader
 
         # Initialize Redis Event Bus if client available
         self._event_bus = None
@@ -290,21 +292,30 @@ class AgentService(AgentServicePort):
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
-            # Get conversation context BEFORE saving user message to avoid duplication
-            # The user message was just saved above, but get_message_events will include it
-            # We need to exclude it from conversation_context since Activity will add it again
-            message_events = await self._agent_execution_event_repo.get_message_events(
-                conversation_id=conversation.id, limit=50
-            )
-            # Exclude the user message we just saved (it will be added by the Activity)
-            conversation_context = [
-                {
-                    "role": event.event_data.get("role", "user"),
-                    "content": event.event_data.get("content", ""),
-                }
-                for event in message_events
-                if event.id != user_msg_event.id  # Exclude current user message
-            ]
+            # Get conversation context with smart summary caching.
+            # The user message was just saved above, so exclude it since
+            # the Activity will add it again via build_context().
+            context_summary = None
+            if self._context_loader:
+                load_result = await self._context_loader.load_context(
+                    conversation_id=conversation.id,
+                    exclude_event_id=user_msg_event.id,
+                )
+                conversation_context = load_result.messages
+                context_summary = load_result.summary
+            else:
+                # Fallback: direct message loading (no summary caching)
+                message_events = await self._agent_execution_event_repo.get_message_events(
+                    conversation_id=conversation.id, limit=50
+                )
+                conversation_context = [
+                    {
+                        "role": event.event_data.get("role", "user"),
+                        "content": event.event_data.get("content", ""),
+                    }
+                    for event in message_events
+                    if event.id != user_msg_event.id
+                ]
 
             # Start Ray Actor
             # Events will be published to Redis Stream by the Actor runtime
@@ -317,6 +328,7 @@ class AgentService(AgentServicePort):
                 file_metadata=file_metadata,
                 correlation_id=correlation_id,
                 forced_skill_name=forced_skill_name,
+                context_summary_data=(context_summary.to_dict() if context_summary else None),
             )
             logger.info(
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
@@ -349,6 +361,7 @@ class AgentService(AgentServicePort):
         file_metadata: Optional[List[Dict[str, Any]]] = None,
         correlation_id: Optional[str] = None,
         forced_skill_name: Optional[str] = None,
+        context_summary_data: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -360,6 +373,7 @@ class AgentService(AgentServicePort):
             file_metadata=file_metadata,
             correlation_id=correlation_id,
             forced_skill_name=forced_skill_name,
+            context_summary_data=context_summary_data,
         )
 
     async def _get_stream_events(
@@ -579,11 +593,8 @@ class AgentService(AgentServicePort):
                                 first_user_msg = ""
                                 if message_id:
                                     try:
-                                        msg_events = (
-                                            await self._agent_execution_event_repo
-                                            .get_events_by_message(
-                                                message_id=message_id
-                                            )
+                                        msg_events = await self._agent_execution_event_repo.get_events_by_message(
+                                            message_id=message_id
                                         )
                                         for me in msg_events:
                                             if me.event_type == "user_message":
@@ -710,9 +721,7 @@ class AgentService(AgentServicePort):
         status_val = status.value if status else "all"
         return f"conv_list:{project_id}:{status_val}:{offset}:{limit}"
 
-    def _conv_count_cache_key(
-        self, project_id: str, status: ConversationStatus | None
-    ) -> str:
+    def _conv_count_cache_key(self, project_id: str, status: ConversationStatus | None) -> str:
         status_val = status.value if status else "all"
         return f"conv_count:{project_id}:{status_val}"
 
@@ -790,9 +799,7 @@ class AgentService(AgentServicePort):
         if self._redis_client:
             try:
                 cache_key = self._conv_count_cache_key(project_id, status)
-                await self._redis_client.set(
-                    cache_key, str(count), ex=self._CONV_LIST_CACHE_TTL
-                )
+                await self._redis_client.set(cache_key, str(count), ex=self._CONV_LIST_CACHE_TTL)
             except Exception as e:
                 logger.debug(f"Cache write failed for conversation count: {e}")
 
