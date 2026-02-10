@@ -56,6 +56,16 @@ class ConversationResponse(BaseModel):
         )
 
 
+class PaginatedConversationsResponse(BaseModel):
+    """Paginated response for conversation listing."""
+
+    items: list[ConversationResponse]
+    total: int
+    has_more: bool
+    offset: int
+    limit: int
+
+
 class ChatRequest(BaseModel):
     """Request to chat with the agent."""
 

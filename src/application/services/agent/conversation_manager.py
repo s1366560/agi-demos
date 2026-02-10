@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from src.domain.llm_providers.llm_types import LLMClient, Message as LLMMessage
@@ -62,9 +62,9 @@ class ConversationManager:
             title=title or "New Conversation",
             status=ConversationStatus.ACTIVE,
             agent_config=agent_config or {},
-            metadata={"created_at": datetime.utcnow().isoformat()},
+            metadata={"created_at": datetime.now(timezone.utc).isoformat()},
             message_count=0,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         await self._conversation_repo.save(conversation)
@@ -91,11 +91,22 @@ class ConversationManager:
         project_id: str,
         user_id: str,
         limit: int = 50,
+        offset: int = 0,
         status: ConversationStatus | None = None,
     ) -> list[Conversation]:
         """List conversations for a project."""
         return await self._conversation_repo.list_by_project(
-            project_id=project_id, limit=limit, status=status
+            project_id=project_id, limit=limit, offset=offset, status=status
+        )
+
+    async def count_conversations(
+        self,
+        project_id: str,
+        status: ConversationStatus | None = None,
+    ) -> int:
+        """Count conversations for a project, optionally filtered by status."""
+        return await self._conversation_repo.count_by_project(
+            project_id=project_id, status=status
         )
 
     async def delete_conversation(

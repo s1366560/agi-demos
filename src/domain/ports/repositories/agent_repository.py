@@ -105,12 +105,15 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def count_by_project(self, project_id: str) -> int:
+    async def count_by_project(
+        self, project_id: str, status: "ConversationStatus | None" = None
+    ) -> int:
         """
         Count conversations for a project.
 
         Args:
             project_id: The project ID
+            status: Optional status filter
 
         Returns:
             Number of conversations

@@ -1,7 +1,7 @@
 """Conversation entity for multi-turn agent interactions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -35,7 +35,7 @@ class Conversation(Entity):
     agent_config: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
     message_count: int = 0
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = None
 
     # Multi-level thinking support (work plan is stored in WorkPlan table)
@@ -49,17 +49,17 @@ class Conversation(Entity):
     def archive(self) -> None:
         """Archive this conversation."""
         self.status = ConversationStatus.ARCHIVED
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def delete(self) -> None:
         """Mark this conversation as deleted."""
         self.status = ConversationStatus.DELETED
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def increment_message_count(self) -> None:
         """Increment the message counter."""
         self.message_count += 1
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def update_agent_config(self, config: Dict[str, Any]) -> None:
         """
@@ -69,7 +69,7 @@ class Conversation(Entity):
             config: New agent configuration dictionary
         """
         self.agent_config.update(config)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def update_title(self, new_title: str) -> None:
         """
@@ -79,7 +79,7 @@ class Conversation(Entity):
             new_title: New title for the conversation
         """
         self.title = new_title
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     # Plan Mode methods
 
@@ -100,7 +100,7 @@ class Conversation(Entity):
 
         self.current_mode = AgentMode.PLAN
         self.current_plan_id = plan_id
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def exit_plan_mode(self) -> None:
         """
@@ -116,7 +116,7 @@ class Conversation(Entity):
 
         self.current_mode = AgentMode.BUILD
         self.current_plan_id = None
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def set_explore_mode(self) -> None:
         """
@@ -126,7 +126,7 @@ class Conversation(Entity):
         code exploration during Plan Mode.
         """
         self.current_mode = AgentMode.EXPLORE
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     @property
     def is_in_plan_mode(self) -> bool:
@@ -142,3 +142,34 @@ class Conversation(Entity):
     def is_subagent_session(self) -> bool:
         """Check if this is a SubAgent session."""
         return self.parent_conversation_id is not None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for caching."""
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "tenant_id": self.tenant_id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "status": self.status.value,
+            "message_count": self.message_count,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Conversation":
+        """Deserialize from dictionary."""
+        return cls(
+            id=data["id"],
+            project_id=data["project_id"],
+            tenant_id=data["tenant_id"],
+            user_id=data["user_id"],
+            title=data["title"],
+            status=ConversationStatus(data["status"]),
+            message_count=data.get("message_count", 0),
+            created_at=datetime.fromisoformat(data["created_at"]),
+            updated_at=(
+                datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None
+            ),
+        )

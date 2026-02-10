@@ -155,7 +155,9 @@ class SqlConversationRepository(
         if status:
             query = query.where(DBConversation.status == status.value)
 
-        query = query.order_by(desc(DBConversation.updated_at)).offset(offset).limit(limit)
+        query = query.order_by(
+            desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
+        ).offset(offset).limit(limit)
 
         result = await self._session.execute(query)
         db_conversations = result.scalars().all()
@@ -185,7 +187,9 @@ class SqlConversationRepository(
         if project_id:
             query = query.where(DBConversation.project_id == project_id)
 
-        query = query.order_by(desc(DBConversation.updated_at)).offset(offset).limit(limit)
+        query = query.order_by(
+            desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
+        ).offset(offset).limit(limit)
 
         result = await self._session.execute(query)
         db_conversations = result.scalars().all()
@@ -207,21 +211,27 @@ class SqlConversationRepository(
         )
         await self._session.flush()
 
-    async def count_by_project(self, project_id: str) -> int:
+    async def count_by_project(
+        self, project_id: str, status: Optional[ConversationStatus] = None
+    ) -> int:
         """
         Count conversations for a project.
 
         Args:
             project_id: Project ID to count conversations for
+            status: Optional status filter
 
         Returns:
             Number of conversations
         """
-        result = await self._session.execute(
+        query = (
             select(func.count())
             .select_from(DBConversation)
             .where(DBConversation.project_id == project_id)
         )
+        if status:
+            query = query.where(DBConversation.status == status.value)
+        result = await self._session.execute(query)
         return result.scalar() or 0
 
     # === Conversion methods ===

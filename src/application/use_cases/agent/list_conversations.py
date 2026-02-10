@@ -31,6 +31,7 @@ class ListConversationsUseCase:
         project_id: str,
         user_id: str,
         limit: int = 50,
+        offset: int = 0,
         status: ConversationStatus | None = None,
     ) -> List[Conversation]:
         """
@@ -40,6 +41,7 @@ class ListConversationsUseCase:
             project_id: Project ID to filter by
             user_id: User ID to filter by
             limit: Maximum number of conversations to return
+            offset: Number of results to skip
             status: Optional status filter
 
         Returns:
@@ -57,9 +59,35 @@ class ListConversationsUseCase:
             project_id=project_id,
             user_id=user_id,
             limit=limit,
+            offset=offset,
             status=status,
         )
 
         logger.info(f"Listed {len(conversations)} conversations for project {project_id}")
 
         return conversations
+
+    async def count(
+        self,
+        project_id: str,
+        user_id: str,
+        status: ConversationStatus | None = None,
+    ) -> int:
+        """
+        Count total conversations matching the filter.
+
+        Args:
+            project_id: Project ID to filter by
+            user_id: User ID for authorization context
+            status: Optional status filter
+
+        Returns:
+            Total count of matching conversations
+        """
+        if not project_id:
+            raise ValueError("project_id is required")
+
+        return await self._agent_service.count_conversations(
+            project_id=project_id,
+            status=status,
+        )

@@ -13,10 +13,12 @@ MCP (Model Context Protocol) Support:
 - Automatic tool namespace management
 """
 
+import asyncio
+import json
 import logging
 import time as time_module
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.events.agent_events import AgentMessageEvent
@@ -201,7 +203,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": "error",
                     "data": {"message": f"Conversation {conversation_id} not found"},
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 return
 
@@ -214,7 +216,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": "error",
                     "data": {"message": "You do not have permission to access this conversation"},
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 return
 
@@ -285,7 +287,7 @@ class AgentService(AgentServicePort):
                 "type": "message",
                 "data": user_event_data,
                 "correlation_id": correlation_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             # Get conversation context BEFORE saving user message to avoid duplication
@@ -334,7 +336,7 @@ class AgentService(AgentServicePort):
             yield {
                 "type": "error",
                 "data": {"message": str(e)},
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def _start_chat_actor(
@@ -494,7 +496,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": event.get("type"),
                     "data": event.get("data"),
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "event_time_us": event.get("event_time_us", 0),
                     "event_counter": event.get("event_counter", 0),
                 }
@@ -550,7 +552,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": event_type,
                     "data": event_data,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "event_time_us": evt_time_us,
                     "event_counter": evt_counter,
                 }
@@ -567,6 +569,43 @@ class AgentService(AgentServicePort):
                         f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
                         f"reading delayed events for 5 seconds"
                     )
+
+                    # Launch background title generation (fire-and-forget)
+                    if event_type == "complete":
+                        try:
+                            conv = await self._conversation_repo.find_by_id(conversation_id)
+                            if conv and conv.title in ("New Conversation", "New Chat"):
+                                # Extract first user message from the event data
+                                first_user_msg = ""
+                                if message_id:
+                                    try:
+                                        msg_events = (
+                                            await self._agent_execution_event_repo
+                                            .get_events_by_message(
+                                                message_id=message_id
+                                            )
+                                        )
+                                        for me in msg_events:
+                                            if me.event_type == "user_message":
+                                                first_user_msg = (
+                                                    me.event_data.get("content", "")
+                                                    if isinstance(me.event_data, dict)
+                                                    else ""
+                                                )
+                                                break
+                                    except Exception:
+                                        pass
+                                if first_user_msg:
+                                    asyncio.create_task(
+                                        self._trigger_title_generation(
+                                            conversation_id=conversation_id,
+                                            project_id=conv.project_id,
+                                            user_message=first_user_msg,
+                                        )
+                                    )
+                        except Exception as title_err:
+                            logger.debug(f"Title generation check failed: {title_err}")
+
                     # Continue reading for a short time to catch delayed events like title_generated
                     # and artifact_ready (uploaded in background after agent completes)
                     delayed_start = time_module.time()
@@ -611,7 +650,7 @@ class AgentService(AgentServicePort):
                                 yield {
                                     "type": delayed_type,
                                     "data": delayed_data,
-                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
                                     "event_time_us": delayed_time_us,
                                     "event_counter": delayed_counter,
                                 }
@@ -642,13 +681,15 @@ class AgentService(AgentServicePort):
         agent_config: Dict[str, Any] | None = None,
     ) -> Conversation:
         """Create a new conversation."""
-        return await self._conversation_mgr.create_conversation(
+        conversation = await self._conversation_mgr.create_conversation(
             project_id=project_id,
             user_id=user_id,
             tenant_id=tenant_id,
             title=title,
             agent_config=agent_config,
         )
+        await self._invalidate_conv_cache(project_id)
+        return conversation
 
     async def get_conversation(
         self, conversation_id: str, project_id: str, user_id: str
@@ -660,41 +701,129 @@ class AgentService(AgentServicePort):
             user_id=user_id,
         )
 
+    # Cache TTL for conversation lists (30 seconds)
+    _CONV_LIST_CACHE_TTL = 30
+
+    def _conv_list_cache_key(
+        self, project_id: str, offset: int, limit: int, status: ConversationStatus | None
+    ) -> str:
+        status_val = status.value if status else "all"
+        return f"conv_list:{project_id}:{status_val}:{offset}:{limit}"
+
+    def _conv_count_cache_key(
+        self, project_id: str, status: ConversationStatus | None
+    ) -> str:
+        status_val = status.value if status else "all"
+        return f"conv_count:{project_id}:{status_val}"
+
+    async def _invalidate_conv_cache(self, project_id: str) -> None:
+        """Invalidate all conversation list caches for a project."""
+        if not self._redis_client:
+            return
+        try:
+            for prefix in ("conv_list:", "conv_count:"):
+                keys = await self._redis_client.keys(f"{prefix}{project_id}:*")
+                for key in keys:
+                    await self._redis_client.delete(key)
+        except Exception as e:
+            logger.debug(f"Failed to invalidate conversation cache: {e}")
+
     async def list_conversations(
         self,
         project_id: str,
         user_id: str,
         limit: int = 50,
+        offset: int = 0,
         status: ConversationStatus | None = None,
     ) -> list[Conversation]:
-        """List conversations for a project."""
-        return await self._conversation_mgr.list_conversations(
+        """List conversations for a project with Redis caching."""
+        # Try cache first
+        if self._redis_client:
+            cache_key = self._conv_list_cache_key(project_id, offset, limit, status)
+            try:
+                cached = await self._redis_client.get(cache_key)
+                if cached:
+                    data = json.loads(cached)
+                    return [Conversation.from_dict(d) for d in data]
+            except Exception as e:
+                logger.debug(f"Cache read failed for conversations: {e}")
+
+        conversations = await self._conversation_mgr.list_conversations(
             project_id=project_id,
             user_id=user_id,
             limit=limit,
+            offset=offset,
             status=status,
         )
+
+        # Cache the result
+        if self._redis_client:
+            try:
+                cache_key = self._conv_list_cache_key(project_id, offset, limit, status)
+                data = json.dumps([c.to_dict() for c in conversations])
+                await self._redis_client.set(cache_key, data, ex=self._CONV_LIST_CACHE_TTL)
+            except Exception as e:
+                logger.debug(f"Cache write failed for conversations: {e}")
+
+        return conversations
+
+    async def count_conversations(
+        self,
+        project_id: str,
+        status: ConversationStatus | None = None,
+    ) -> int:
+        """Count conversations for a project with Redis caching."""
+        if self._redis_client:
+            cache_key = self._conv_count_cache_key(project_id, status)
+            try:
+                cached = await self._redis_client.get(cache_key)
+                if cached:
+                    return int(cached)
+            except Exception as e:
+                logger.debug(f"Cache read failed for conversation count: {e}")
+
+        count = await self._conversation_mgr.count_conversations(
+            project_id=project_id,
+            status=status,
+        )
+
+        if self._redis_client:
+            try:
+                cache_key = self._conv_count_cache_key(project_id, status)
+                await self._redis_client.set(
+                    cache_key, str(count), ex=self._CONV_LIST_CACHE_TTL
+                )
+            except Exception as e:
+                logger.debug(f"Cache write failed for conversation count: {e}")
+
+        return count
 
     async def delete_conversation(
         self, conversation_id: str, project_id: str, user_id: str
     ) -> bool:
         """Delete a conversation and all its messages."""
-        return await self._conversation_mgr.delete_conversation(
+        result = await self._conversation_mgr.delete_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=user_id,
         )
+        if result:
+            await self._invalidate_conv_cache(project_id)
+        return result
 
     async def update_conversation_title(
         self, conversation_id: str, project_id: str, user_id: str, title: str
     ) -> Conversation | None:
         """Update conversation title."""
-        return await self._conversation_mgr.update_conversation_title(
+        conversation = await self._conversation_mgr.update_conversation_title(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=user_id,
             title=title,
         )
+        if conversation:
+            await self._invalidate_conv_cache(project_id)
+        return conversation
 
     async def generate_conversation_title(self, first_message: str, llm: LLMClient) -> str:
         """Generate a friendly, concise title for a conversation."""
@@ -706,6 +835,68 @@ class AgentService(AgentServicePort):
     def _generate_fallback_title(self, first_message: str) -> str:
         """Generate a fallback title from the first message when LLM fails."""
         return self._conversation_mgr._generate_fallback_title(first_message)
+
+    async def _trigger_title_generation(
+        self,
+        conversation_id: str,
+        project_id: str,
+        user_message: str,
+    ) -> None:
+        """
+        Generate a title for a new conversation and publish title_generated event.
+
+        Runs as a background task after the first assistant response completes.
+        Fire-and-forget: errors are logged but don't affect the chat flow.
+        """
+        try:
+            conversation = await self._conversation_repo.find_by_id(conversation_id)
+            if not conversation:
+                return
+
+            # Only generate if title is still the default
+            if conversation.title not in ("New Conversation", "New Chat"):
+                return
+
+            # Only generate for early conversations (first few messages)
+            if conversation.message_count > 4:
+                return
+
+            title = await self._conversation_mgr.generate_conversation_title(
+                first_message=user_message, llm=self._llm
+            )
+
+            # Update the conversation title in DB
+            conversation.update_title(title)
+            await self._conversation_repo.save_and_commit(conversation)
+
+            # Invalidate conversation list cache
+            await self._invalidate_conv_cache(project_id)
+
+            # Publish title_generated event to Redis stream
+            if self._redis_client:
+                now_us = int(time_module.time() * 1_000_000)
+                stream_event = {
+                    "type": "title_generated",
+                    "event_time_us": now_us,
+                    "event_counter": 0,
+                    "data": {
+                        "conversation_id": conversation_id,
+                        "title": title,
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "conversation_id": conversation_id,
+                }
+                stream_key = f"agent:events:{conversation_id}"
+                await self._redis_client.xadd(
+                    stream_key, {"data": json.dumps(stream_event)}, maxlen=1000
+                )
+                logger.info(
+                    f"[AgentService] Published title_generated event: "
+                    f"conversation={conversation_id}, title='{title}'"
+                )
+        except Exception as e:
+            logger.warning(f"[AgentService] Title generation failed (non-fatal): {e}")
 
     async def get_conversation_messages(
         self,

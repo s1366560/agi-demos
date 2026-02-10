@@ -23,6 +23,7 @@ from src.infrastructure.adapters.secondary.persistence.models import User
 from .schemas import (
     ConversationResponse,
     CreateConversationRequest,
+    PaginatedConversationsResponse,
     UpdateConversationTitleRequest,
 )
 from .utils import get_container_with_db
@@ -86,17 +87,18 @@ async def create_conversation(
         )
 
 
-@router.get("/conversations", response_model=list[ConversationResponse])
+@router.get("/conversations", response_model=PaginatedConversationsResponse)
 async def list_conversations(
     project_id: str = Query(..., description="Project ID to filter by"),
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number to return"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> list[ConversationResponse]:
-    """List conversations for a project."""
+) -> PaginatedConversationsResponse:
+    """List conversations for a project with pagination."""
     try:
         engine = db.get_bind()
         pool = engine.pool
@@ -114,9 +116,26 @@ async def list_conversations(
             project_id=project_id,
             user_id=current_user.id,
             limit=limit,
+            offset=offset,
             status=conv_status,
         )
-        return [ConversationResponse.from_domain(c) for c in conversations]
+
+        total = await use_case.count(
+            project_id=project_id,
+            user_id=current_user.id,
+            status=conv_status,
+        )
+
+        items = [ConversationResponse.from_domain(c) for c in conversations]
+        has_more = offset + limit < total
+
+        return PaginatedConversationsResponse(
+            items=items,
+            total=total,
+            has_more=has_more,
+            offset=offset,
+            limit=limit,
+        )
 
     except Exception as e:
         logger.error(f"Error listing conversations: {e}")
