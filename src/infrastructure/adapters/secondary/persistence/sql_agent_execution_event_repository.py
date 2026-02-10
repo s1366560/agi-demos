@@ -17,7 +17,7 @@ Migration Benefits:
 import logging
 from typing import List, Optional, Set
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
