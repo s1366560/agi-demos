@@ -11,6 +11,7 @@ import { Folder, Settings, Trash2 } from 'lucide-react';
 import { useProjectManagerContext } from './context';
 
 import type { ProjectManagerItemProps } from './types';
+import { formatDateOnly } from '@/utils/date';
 
 export const Item: FC<ProjectManagerItemProps> = ({
   project,
@@ -106,7 +107,7 @@ export const Item: FC<ProjectManagerItemProps> = ({
       )}
 
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-500">
-        <span>创建于 {new Date(project.created_at).toLocaleDateString()}</span>
+        <span>创建于 {formatDateOnly(project.created_at)}</span>
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ import { ProjectCreateModal } from '@/components/tenant/ProjectCreateModal';
 import { tenantAPI } from '../services/api';
 import { useProjectStore } from '../stores/project';
 import { useTenantStore } from '../stores/tenant';
+import { formatDateOnly } from '@/utils/date';
 import { Project } from '../types/memory';
 
 export const SpaceDashboard: React.FC = () => {
@@ -550,7 +551,7 @@ export const SpaceDashboard: React.FC = () => {
                 </div>
 
                 <div className="px-5 py-3 bg-gray-50 dark:bg-slate-800 border-t border-gray-100 dark:border-slate-800 rounded-b-lg flex items-center justify-between text-xs text-gray-500 dark:text-slate-500">
-                  <span>{new Date(project.created_at).toLocaleDateString()}</span>
+                  <span>{formatDateOnly(project.created_at)}</span>
                   <span>{t('space.dashboard.projects_tab.member_count', { count: 1 })}</span>
                 </div>
               </div>

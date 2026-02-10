@@ -8,6 +8,7 @@ import { Memory } from '../../types/memory';
 import { MemoryCreateModal } from '../MemoryCreateModal';
 
 import { MemoryDetailModal } from './MemoryDetailModal';
+import { formatDateTime } from '@/utils/date';
 
 interface MemoryManagerProps {
   onMemorySelect?: (memory: Memory) => void;
@@ -93,13 +94,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return formatDateTime(dateString);
   };
 
   if (!currentProject) {

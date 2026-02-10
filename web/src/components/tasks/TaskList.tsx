@@ -13,7 +13,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo, createContext, useContext } from 'react';
 
-import { format } from 'date-fns';
+import { formatDateTimeFull } from '@/utils/date';
 import { RefreshCw, Search, MoreVertical, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
 
 import { taskAPI } from '../../services/api';
@@ -372,7 +372,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
       ...task,
       statusColor: getStatusColor(task.status),
       statusDot: getStatusDot(task.status),
-      formattedDate: format(new Date(task.created_at), 'MMM d, HH:mm:ss'),
+      formattedDate: formatDateTimeFull(task.created_at),
       shortId: task.id.substring(0, 8),
       canRetry: task.status === 'Failed',
       canStop: task.status === 'Pending' || task.status === 'Processing',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { X, Settings, Trash2 } from 'lucide-react';
+import { formatDateOnly } from '@/utils/date';
 
 interface Project {
   id: string;
@@ -144,7 +145,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               </code>
             </p>
             <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">
-              创建于 {new Date(project.created_at).toLocaleDateString('zh-CN')}
+              创建于 {formatDateOnly(project.created_at)}
             </p>
           </div>
 

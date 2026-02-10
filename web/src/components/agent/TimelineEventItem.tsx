@@ -18,7 +18,7 @@ import { Loader2 } from 'lucide-react';
 
 import { useSandboxStore } from '../../stores/sandbox';
 import { useAgentV3Store } from '../../stores/agentV3';
-import { formatDistanceToNowCN, formatReadableTime } from '../../utils/date';
+import { formatDistanceToNowCN, formatReadableTime, formatDateTime } from '../../utils/date';
 
 import { AssistantMessage } from './chat/AssistantMessage';
 import {
@@ -71,7 +71,7 @@ function TimeBadge({ timestamp }: { timestamp: number }) {
   return (
     <span
       className="text-[10px] text-slate-400 dark:text-slate-500 select-none"
-      title={new Date(timestamp).toLocaleString('zh-CN')}
+      title={formatDateTime(timestamp)}
     >
       {naturalTime} · {readableTime}
     </span>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../../types/memory';
+import { formatDateTime } from '@/utils/date';
 
 interface ProviderModalProps {
   isOpen: boolean;
@@ -471,11 +472,11 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                       <>
                         <p>
                           <span className="font-medium">Created:</span>{' '}
-                          {new Date(provider.created_at).toLocaleString()}
+                          {formatDateTime(provider.created_at)}
                         </p>
                         <p>
                           <span className="font-medium">Updated:</span>{' '}
-                          {new Date(provider.updated_at).toLocaleString()}
+                          {formatDateTime(provider.updated_at)}
                         </p>
                       </>
                     )}

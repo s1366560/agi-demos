@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Download,
 } from 'lucide-react';
+import { formatTimeOnly } from '@/utils/date';
 
 import type { SearchMode } from '@/hooks/useSearchState';
 
@@ -348,7 +349,7 @@ function SearchHistoryDropdown({
             <span className="text-xs text-slate-500 capitalize">{getModeLabel(item.mode)}</span>
           </div>
           <span className="text-xs text-slate-400">
-            {new Date(item.timestamp).toLocaleTimeString()}
+            {formatTimeOnly(item.timestamp)}
           </span>
         </button>
       ))}

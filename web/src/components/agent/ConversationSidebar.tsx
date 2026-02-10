@@ -81,7 +81,7 @@ const ConversationItem = memo<ConversationItemProps>(
   ({ conversation, isActive, onSelect, onDelete, onRename, compact = false, status }) => {
     const timeAgo = useMemo(() => {
       try {
-        return formatDistanceToNow(new Date(conversation.created_at));
+        return formatDistanceToNow(conversation.created_at);
       } catch {
         return '';
       }

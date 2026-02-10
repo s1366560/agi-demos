@@ -22,6 +22,7 @@ import { TaskList } from '../../../components/tasks/TaskList';
 import { createApiUrl } from '../../../services/client/urlUtils';
 import { graphService } from '../../../services/graphService';
 import { logger } from '../../../utils/logger';
+import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 import type { Community, Entity, BackgroundTask } from './types';
 
@@ -561,7 +562,7 @@ const List: React.FC = memo(() => {
           )}
           {community.created_at && (
             <div className="mt-2 text-xs text-slate-500">
-              Created: {new Date(community.created_at).toLocaleDateString()}
+              Created: {formatDateOnly(community.created_at)}
             </div>
           )}
         </div>
@@ -677,7 +678,7 @@ const Detail: React.FC = memo(() => {
               {TEXTS.created}
             </label>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              {new Date(selectedCommunity.created_at).toLocaleString()}
+              {formatDateTime(selectedCommunity.created_at)}
             </p>
           </div>
         )}

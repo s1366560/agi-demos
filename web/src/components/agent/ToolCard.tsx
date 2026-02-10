@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons';
 import { Card, Tag, Collapse, Typography } from 'antd';
 
+import { formatTimeOnly } from '@/utils/date';
 import { foldText } from '../../utils/toolResultUtils';
 
 const { Panel } = Collapse;
@@ -81,8 +82,8 @@ export const ToolCard: React.FC<ToolCardProps> = memo(
             {/* Timing Info */}
             {(startTime || endTime) && !embedded && (
               <div className="flex gap-4 text-xs text-slate-400 mb-2 border-b border-slate-100 pb-2">
-                {startTime && <span>Start: {new Date(startTime).toLocaleTimeString()}</span>}
-                {endTime && <span>End: {new Date(endTime).toLocaleTimeString()}</span>}
+                {startTime && <span>Start: {formatTimeOnly(startTime)}</span>}
+                {endTime && <span>End: {formatTimeOnly(endTime)}</span>}
               </div>
             )}
 

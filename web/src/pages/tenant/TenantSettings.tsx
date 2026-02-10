@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useTenantStore } from '../../stores/tenant';
 import { Tenant } from '../../types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
   const { t } = useTranslation();
@@ -119,7 +120,7 @@ const TenantSettingsForm: React.FC<{ tenant: Tenant }> = ({ tenant }) => {
             </div>
             <p className="text-sm text-slate-500 mb-6">
               {t('tenant.settings.plan.active_since', {
-                date: new Date(tenant.created_at).toLocaleDateString(),
+                date: formatDateOnly(tenant.created_at),
               })}
             </p>
             <button className="text-primary hover:text-primary-dark font-medium text-sm flex items-center gap-1">

@@ -27,6 +27,8 @@ import {
   Typography,
 } from '@/components/ui/lazyAntd';
 
+import { formatTimeOnly } from '@/utils/date';
+
 const { Text, Title } = Typography;
 
 export interface DoomLoopDetectedEventData {
@@ -173,7 +175,7 @@ export const DoomLoopInterventionModal: React.FC<DoomLoopInterventionModalProps>
                         {call.tool}
                       </Text>
                       <Text type="secondary" className="text-xs">
-                        {new Date(call.timestamp).toLocaleTimeString()}
+                        {formatTimeOnly(call.timestamp)}
                       </Text>
                     </div>
                     <pre className="text-xs text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-2 rounded overflow-x-auto">

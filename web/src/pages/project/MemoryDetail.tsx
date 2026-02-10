@@ -11,6 +11,7 @@ import { TaskList } from '../../components/tasks/TaskList';
 import { subscribeToTask, TaskStatus } from '../../hooks/useTaskSSE';
 import { memoryAPI } from '../../services/api';
 import { Memory } from '../../types/memory';
+import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 interface ProcessingProgress {
   progress: number;
@@ -326,7 +327,7 @@ export const MemoryDetail: React.FC = () => {
                           </span>
                         </span>
                         <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                        <span>{new Date(memory.created_at).toLocaleDateString()}</span>
+                        <span>{formatDateOnly(memory.created_at)}</span>
                       </p>
                     </div>
                   </div>
@@ -468,7 +469,7 @@ export const MemoryDetail: React.FC = () => {
               <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-[16px]">history</span>
-                  {t('common.created_at')} {new Date(memory.created_at).toLocaleString()}
+                  {t('common.created_at')} {formatDateTime(memory.created_at)}
                 </div>
                 <div>ID: {memory.id ? memory.id.slice(0, 12) : 'N/A'}...</div>
               </div>

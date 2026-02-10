@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { EditOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Typography } from 'antd';
 
+import { formatDateTime } from '@/utils/date';
 import { agentConfigService, TenantAgentConfigError } from '@/services/agentConfigService';
 
 import {
@@ -65,7 +66,7 @@ interface TenantAgentConfigViewProps {
  * Format a timestamp as a localized date/time string
  */
 function formatTimestamp(isoString: string): string {
-  return new Date(isoString).toLocaleString();
+  return formatDateTime(isoString);
 }
 
 /**

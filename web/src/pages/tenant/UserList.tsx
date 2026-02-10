@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useTenantStore } from '../../stores/tenant';
 
 import type { UserTenant } from '../../types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 interface TenantMember {
   user_id: string;
@@ -263,7 +264,7 @@ export const UserList: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                      {new Date(member.created_at).toLocaleDateString()}
+                      {formatDateOnly(member.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">

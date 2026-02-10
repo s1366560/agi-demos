@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, X, Check, Trash2, Loader2 } from 'lucide-react';
 
 import { useNotificationStore } from '@/stores/notification';
+import { formatDateTime } from '@/utils/date';
 
 export const NotificationPanel: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -147,7 +148,7 @@ export const NotificationPanel: React.FC = () => {
                         {notification.message}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
-                        {new Date(notification.created_at).toLocaleString('zh-CN')}
+                        {formatDateTime(notification.created_at)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 ml-2">

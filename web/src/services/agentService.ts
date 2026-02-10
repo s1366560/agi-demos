@@ -51,6 +51,7 @@ import type {
   CreateConversationRequest,
   CreateConversationResponse,
   ConversationMessagesResponse,
+  PaginatedConversationsResponse,
   ExecutionHistoryResponse,
   ExecutionStatsResponse,
   ToolExecutionsResponse,
@@ -991,16 +992,20 @@ class AgentServiceImpl implements AgentService {
   async listConversations(
     projectId: string,
     status?: 'active' | 'archived' | 'deleted',
-    limit = 50
-  ): Promise<Conversation[]> {
+    limit = 10,
+    offset = 0
+  ): Promise<PaginatedConversationsResponse> {
     const params: Record<string, string | number> = {
       project_id: projectId,
       limit,
+      offset,
     };
     if (status) {
       params.status = status;
     }
-    const response = await api.get<Conversation[]>('/agent/conversations', { params });
+    const response = await api.get<PaginatedConversationsResponse>('/agent/conversations', {
+      params,
+    });
     return response;
   }
 

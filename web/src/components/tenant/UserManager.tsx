@@ -10,6 +10,7 @@ import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 import { EditUserModal } from './EditUserModal';
+import { formatDateOnly } from '@/utils/date';
 
 interface User {
   id: string;
@@ -155,7 +156,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ context }) => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return formatDateOnly(dateString);
   };
 
   if (!currentTenant && context === 'tenant') {

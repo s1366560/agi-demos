@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { X } from 'lucide-react';
+import { formatDateOnly } from '@/utils/date';
 
 interface User {
   id: string;
@@ -127,7 +128,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   {t('tenant.users.joined_at_label')}
                 </p>
                 <p className="text-gray-900 dark:text-white font-medium">
-                  {new Date(user.created_at).toLocaleDateString()}
+                  {formatDateOnly(user.created_at)}
                 </p>
               </div>
               <div>
@@ -136,7 +137,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 </p>
                 <p className="text-gray-900 dark:text-white font-medium">
                   {user.last_login
-                    ? new Date(user.last_login).toLocaleDateString()
+                    ? formatDateOnly(user.last_login)
                     : t('common.time.never')}
                 </p>
               </div>

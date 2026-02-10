@@ -15,6 +15,8 @@ import {
   FileTextOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
+
+import { formatDateTime } from '@/utils/date';
 import {
   Card,
   Button,
@@ -268,10 +270,10 @@ export const PlanEditor = memo<PlanEditorProps>(
 
         <Space direction="vertical" style={{ width: '100%' }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Created: {new Date(plan.created_at).toLocaleString()}
+            Created: {formatDateTime(plan.created_at)}
           </Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            Updated: {new Date(plan.updated_at).toLocaleString()}
+            Updated: {formatDateTime(plan.updated_at)}
           </Text>
           {Array.isArray(plan.metadata?.explored_files) && (
             <div>

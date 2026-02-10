@@ -17,6 +17,7 @@ import {
   extractImageUrl,
   foldTextWithMetadata,
 } from '../../../utils/toolResultUtils';
+import { formatTimeWithSeconds } from '@/utils/date';
 import { MaterialIcon } from '../shared';
 
 import type { ToolExecution } from '../../../types/agent';
@@ -66,13 +67,7 @@ function formatDuration(ms: number | undefined): string {
 function formatTime(isoString: string | undefined): string {
   if (!isoString) return '-';
   try {
-    const date = new Date(isoString);
-    return date.toLocaleTimeString('en-US', {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    return formatTimeWithSeconds(isoString) || '-';
   } catch {
     return '-';
   }

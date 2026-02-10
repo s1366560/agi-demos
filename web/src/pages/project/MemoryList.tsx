@@ -21,6 +21,7 @@ import { useDebounce } from 'use-debounce';
 
 import { memoryAPI } from '../../services/api';
 import { Memory } from '../../types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 // ============================================================================
 // Types
@@ -609,7 +610,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
           <MemoryList.StatusBadge status={memory.processing_status} progress={progress} />
         </td>
         <td className="px-6 py-3 text-slate-600 dark:text-slate-300 text-right">
-          {memory.created_at ? new Date(memory.created_at).toLocaleDateString() : '-'}
+          {memory.created_at ? formatDateOnly(memory.created_at) : '-'}
         </td>
         <td className="px-6 py-3 text-right">
           <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

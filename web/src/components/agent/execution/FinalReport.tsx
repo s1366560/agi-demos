@@ -6,6 +6,8 @@
 
 import { useState, useEffect } from 'react';
 
+import { formatDateTime } from '@/utils/date';
+
 import { MaterialIcon } from '../shared';
 
 export interface FinalReportProps {
@@ -46,14 +48,7 @@ export function FinalReport({
 }: FinalReportProps) {
   // Format timestamp for display
   const formatTimestamp = (isoString: string) => {
-    const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return formatDateTime(isoString);
   };
 
   // Simple markdown rendering for basic formatting

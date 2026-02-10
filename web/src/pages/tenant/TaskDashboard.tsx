@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { format } from 'date-fns';
+import { formatTimeOnly } from '@/utils/date';
 import { RefreshCw, Plus, ListTodo, Gauge, Hourglass, AlertCircle } from 'lucide-react';
 
 import { TaskList } from '../../components/tasks/TaskList';
@@ -91,7 +91,7 @@ const TaskDashboardInner: React.FC<{
         const depth = (queueData as { depth?: number }).depth;
         const count = total ?? depth ?? 0;
         const newPoint = {
-          time: format(now, 'HH:mm'),
+          time: formatTimeOnly(now),
           count,
         };
         const newHistory = [...prev, newPoint];

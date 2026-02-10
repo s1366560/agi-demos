@@ -17,6 +17,7 @@ import {
 
 import { memoryService } from '../../services/memoryService';
 import { Memory } from '../../types/memory';
+import { formatDateTimeFull } from '@/utils/date';
 
 interface MemoryDetailModalProps {
   isOpen: boolean;
@@ -39,14 +40,7 @@ export const MemoryDetailModal: React.FC<MemoryDetailModalProps> = ({
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
-    return new Date(dateString).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    return formatDateTimeFull(dateString);
   };
 
   const getTypeColor = (type: string) => {

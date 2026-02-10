@@ -40,6 +40,7 @@ import {
 } from 'antd';
 
 import { usePoolStore } from '../../stores/pool';
+import { formatDateTime } from '@/utils/date';
 
 import type { PoolInstance, ProjectTier } from '../../services/poolService';
 import type { ColumnsType } from 'antd/es/table';
@@ -257,7 +258,7 @@ const PoolDashboard: React.FC = () => {
       dataIndex: 'last_request_at',
       key: 'last_request_at',
       width: 160,
-      render: (time: string | null) => (time ? new Date(time).toLocaleString() : '-'),
+      render: (time: string | null) => (time ? formatDateTime(time) : '-'),
     },
     {
       title: 'Actions',

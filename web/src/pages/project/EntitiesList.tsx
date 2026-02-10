@@ -37,6 +37,7 @@ import { useDebounce } from 'use-debounce';
 import { VirtualGrid } from '../../components/common';
 import { EntityCard, getEntityTypeColor } from '../../components/graph';
 import { graphService } from '../../services/graphService';
+import { formatDateTime } from '@/utils/date';
 
 import type {
   EntitiesListRootProps,
@@ -588,7 +589,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                       </label>
                       <p className="text-sm text-slate-600 dark:text-slate-400">
                         {selectedEntity.created_at
-                          ? new Date(selectedEntity.created_at).toLocaleString()
+                          ? formatDateTime(selectedEntity.created_at)
                           : t('common.status.unknown', 'Unknown')}
                       </p>
                     </div>

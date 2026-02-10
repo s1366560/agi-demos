@@ -20,6 +20,8 @@ import {
 } from '@ant-design/icons';
 import { Collapse, Tooltip } from 'antd';
 
+import { formatTimeOnly } from '@/utils/date';
+
 import type { ToolCall, ToolResult } from '../../../types/agent';
 
 /**
@@ -68,10 +70,7 @@ const formatRelativeTime = (timestamp: number): string => {
   if (diff < 1000) return 'now';
   if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  return new Date(timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatTimeOnly(timestamp);
 };
 
 // Format duration in ms to human readable

@@ -9,6 +9,8 @@ import React from 'react';
 
 import { DollarOutlined, ThunderboltOutlined } from '@ant-design/icons';
 
+import { formatTimeOnly } from '@/utils/date';
+
 import { Typography, Space, Tooltip, Progress } from '@/components/ui/lazyAntd';
 
 import type { CostTrackingState } from '../../types/conversationState';
@@ -151,7 +153,7 @@ export const CostTrackerPanel: React.FC<CostTrackerProps> = ({
 
         {/* Last Updated */}
         <Text type="secondary" style={{ fontSize: 11 }}>
-          更新于: {new Date(costTracking.lastUpdated).toLocaleTimeString()}
+          更新于: {formatTimeOnly(costTracking.lastUpdated)}
         </Text>
       </Space>
     </div>

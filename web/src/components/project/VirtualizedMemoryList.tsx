@@ -16,6 +16,7 @@ import { memo, useCallback, useRef, useState, KeyboardEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { Memory } from '@/types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 // ============================================================================
 // Types
@@ -83,8 +84,7 @@ export const MemoryRow = memo<MemoryRowProps>(({ memory, onClick, index, isFocus
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+    return formatDateOnly(dateString);
   };
 
   const getMemoryTitle = (memory: Memory) => {

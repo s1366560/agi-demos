@@ -26,6 +26,8 @@ import {
 } from '@ant-design/icons';
 import { Tooltip, Drawer, Tag, Empty, Segmented } from 'antd';
 
+import { formatTimeWithSeconds } from '@/utils/date';
+
 /**
  * Tool execution item for visualization
  */
@@ -82,11 +84,7 @@ const formatDuration = (ms: number): string => {
 
 // Format timestamp
 const formatTime = (timestamp: number): string => {
-  return new Date(timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  return formatTimeWithSeconds(timestamp);
 };
 
 /**

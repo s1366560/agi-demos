@@ -6,6 +6,7 @@ import { authAPI } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 
 import type { UserUpdate, UserProfile as UserProfileType } from '../types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 export const UserProfile: React.FC = () => {
   const { t } = useTranslation();
@@ -142,7 +143,7 @@ export const UserProfile: React.FC = () => {
                   <span className="material-symbols-outlined text-lg">calendar_month</span>
                   <span>
                     {t('user_profile.member_since', {
-                      date: new Date(user.created_at).toLocaleDateString(),
+                      date: formatDateOnly(user.created_at),
                     })}
                   </span>
                 </div>

@@ -5,6 +5,7 @@
  */
 
 import { LazyCard, LazyEmpty } from '@/components/ui/lazyAntd';
+import { formatDateTime } from '@/utils/date';
 
 import { MaterialIcon } from './shared';
 
@@ -91,11 +92,7 @@ export function ExecutionTimelineChart({ stats }: ExecutionTimelineChartProps) {
 
                 {/* Time label */}
                 <div className="text-xs text-slate-600 dark:text-slate-400 transform -rotate-45 origin-top-left whitespace-nowrap">
-                  {new Date(item.time).toLocaleString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                  })}
+                  {formatDateTime(item.time)}
                 </div>
               </div>
             );

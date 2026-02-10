@@ -29,6 +29,8 @@ import {
 } from '@ant-design/icons';
 import { Progress, Typography, Card, List, Tag, Space, Spin, Empty } from 'antd';
 
+import { formatDateTime, formatTimeOnly } from '@/utils/date';
+
 import { usePlanModeEvents, ReflectionResult, PlanAdjustment } from '../../hooks/usePlanModeEvents';
 import { ExecutionPlan, ExecutionStep } from '../../types/agent';
 
@@ -268,7 +270,7 @@ const StepItem: React.FC<StepItemProps> = ({ step }) => {
             {step.started_at && (
               <div className="text-xs">
                 <Text type="secondary">
-                  Started: {new Date(step.started_at).toLocaleTimeString()}
+                  Started: {formatTimeOnly(step.started_at)}
                 </Text>
               </div>
             )}
@@ -276,7 +278,7 @@ const StepItem: React.FC<StepItemProps> = ({ step }) => {
             {step.completed_at && (
               <div className="text-xs">
                 <Text type="secondary">
-                  Completed: {new Date(step.completed_at).toLocaleTimeString()}
+                  Completed: {formatTimeOnly(step.completed_at)}
                 </Text>
               </div>
             )}
@@ -303,7 +305,7 @@ const ReflectionCard: React.FC<ReflectionCardProps> = ({ reflection }) => {
         <Space size="small">
           <Tag color="blue">Cycle {reflection.cycle_number}</Tag>
           <Text type="secondary" className="text-xs">
-            {new Date(reflection.timestamp).toLocaleTimeString()}
+            {formatTimeOnly(reflection.timestamp)}
           </Text>
         </Space>
         {reflection.confidence !== undefined && (
@@ -371,7 +373,7 @@ const AdjustmentsList: React.FC<AdjustmentsListProps> = ({ adjustments }) => {
               {getAdjustmentIcon(adjustment.type)}
               <Text>{adjustment.description}</Text>
               <Text type="secondary" className="text-xs">
-                {new Date(adjustment.timestamp).toLocaleTimeString()}
+                {formatTimeOnly(adjustment.timestamp)}
               </Text>
             </Space>
           </List.Item>
@@ -456,11 +458,11 @@ export const ExecutionPlanViewer: React.FC<ExecutionPlanViewerProps> = ({ plan }
                 : 'Running...'}
             </Text>
             <Text type="secondary" className="text-xs">
-              Started: {new Date(plan.started_at).toLocaleString()}
+              Started: {formatDateTime(plan.started_at)}
             </Text>
             {plan.completed_at && (
               <Text type="secondary" className="text-xs">
-                Completed at: {new Date(plan.completed_at).toLocaleString()}
+                Completed at: {formatDateTime(plan.completed_at)}
               </Text>
             )}
             {plan.error && (

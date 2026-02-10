@@ -14,6 +14,7 @@ import {
 
 import api from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
+import { formatDateTime } from '@/utils/date';
 
 interface SupportTicket {
   id: string;
@@ -383,7 +384,7 @@ export const Support: React.FC = () => {
                       </span>
                       <span className="text-gray-500 dark:text-gray-400">
                         {t('project.support.tickets.created_at')}{' '}
-                        {new Date(ticket.created_at).toLocaleString()}
+                        {formatDateTime(ticket.created_at)}
                       </span>
                     </div>
                   </div>
@@ -406,7 +407,7 @@ export const Support: React.FC = () => {
                 {ticket.resolved_at && (
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     {t('project.support.tickets.resolved_at')}{' '}
-                    {new Date(ticket.resolved_at).toLocaleString()}
+                    {formatDateTime(ticket.resolved_at)}
                   </p>
                 )}
               </div>

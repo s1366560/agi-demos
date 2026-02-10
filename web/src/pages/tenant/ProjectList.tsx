@@ -7,6 +7,7 @@ import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
 import type { TFunction } from 'i18next';
+import { formatDateOnly } from '@/utils/date';
 
 // Hoist formatStorage outside component to avoid recreation on every render (rendering-hoist-jsx)
 const formatStorage = (bytes: number): string => {
@@ -33,7 +34,7 @@ const createFormatTime = (t: TFunction) => {
       return `${Math.floor(diffInSeconds / 3600)}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`;
     if (diffInSeconds < 604800)
       return `${Math.floor(diffInSeconds / 86400)}${t('common.time.days')} ${t('common.time.ago', { time: '' })}`;
-    return date.toLocaleDateString();
+    return formatDateOnly(date);
   };
 };
 

@@ -328,6 +328,8 @@ interface AgentV3State {
   // Conversation State
   conversations: Conversation[];
   activeConversationId: string | null;
+  hasMoreConversations: boolean;
+  conversationsTotal: number;
 
   // Per-conversation state (isolated for multi-conversation support)
   conversationStates: Map<string, ConversationState>;
@@ -389,6 +391,7 @@ interface AgentV3State {
   // Actions
   setActiveConversation: (id: string | null) => void;
   loadConversations: (projectId: string) => Promise<void>;
+  loadMoreConversations: (projectId: string) => Promise<void>;
   loadMessages: (conversationId: string, projectId: string) => Promise<void>;
   loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;
   createNewConversation: (projectId: string) => Promise<string | null>;
@@ -419,6 +422,8 @@ export const useAgentV3Store = create<AgentV3State>()(
       (set, get) => ({
         conversations: [],
         activeConversationId: null,
+        hasMoreConversations: false,
+        conversationsTotal: 0,
 
         // Per-conversation state map
         conversationStates: new Map<string, ConversationState>(),
@@ -798,11 +803,38 @@ export const useAgentV3Store = create<AgentV3State>()(
           }
 
           try {
-            const conversations = await agentService.listConversations(projectId);
-            console.log(`[agentV3] Loaded ${conversations.length} conversations`);
-            set({ conversations });
+            const response = await agentService.listConversations(projectId);
+            console.log(`[agentV3] Loaded ${response.items.length} conversations`);
+            set({
+              conversations: response.items,
+              hasMoreConversations: response.has_more,
+              conversationsTotal: response.total,
+            });
           } catch (error) {
             console.error('[agentV3] Failed to list conversations', error);
+          }
+        },
+
+        loadMoreConversations: async (projectId) => {
+          const state = get();
+          if (!state.hasMoreConversations) return;
+
+          try {
+            const offset = state.conversations.length;
+            const response = await agentService.listConversations(
+              projectId,
+              undefined,
+              10,
+              offset
+            );
+            console.log(`[agentV3] Loaded ${response.items.length} more conversations`);
+            set({
+              conversations: [...state.conversations, ...response.items],
+              hasMoreConversations: response.has_more,
+              conversationsTotal: response.total,
+            });
+          } catch (error) {
+            console.error('[agentV3] Failed to load more conversations', error);
           }
         },
 

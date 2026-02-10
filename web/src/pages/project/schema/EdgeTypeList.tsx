@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 import { schemaAPI } from '../../../services/api';
+import { formatDateTime } from '@/utils/date';
 
 // ============================================================================
 // Types
@@ -1030,7 +1031,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 {TEXTS.modal.lastSaved.replace(
                   '{{time}}',
                   editingEdge?.updated_at
-                    ? new Date(editingEdge.updated_at).toLocaleString()
+                    ? formatDateTime(editingEdge.updated_at)
                     : TEXTS.modal.neverSaved
                 )}
               </span>

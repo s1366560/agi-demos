@@ -4,6 +4,7 @@ import { Building2, Plus, Settings } from 'lucide-react';
 
 import { useTenantStore } from '../../stores/tenant';
 import { Tenant } from '../../types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 interface TenantSelectorProps {
   onCreateTenant?: () => void;
@@ -103,7 +104,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                           {tenant.plan}
                         </span>
                         <span className="text-xs text-gray-500 dark:text-slate-400">
-                          {new Date(tenant.created_at).toLocaleDateString()}
+                          {formatDateOnly(tenant.created_at)}
                         </span>
                       </div>
                     </div>

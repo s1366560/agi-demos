@@ -14,6 +14,7 @@
 import React, { memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { formatDateOnly } from '@/utils/date';
 
 export interface Entity {
   uuid: string;
@@ -112,7 +113,7 @@ const EntityCardInternal: React.FC<EntityCardProps> = ({ entity, onClick, isSele
       <div className="mt-2 text-xs text-slate-500">
         {t('project.graph.entities.detail.created')}:{' '}
         {entity.created_at
-          ? new Date(entity.created_at).toLocaleDateString()
+          ? formatDateOnly(entity.created_at)
           : t('common.status.unknown', 'Unknown')}
       </div>
     </div>

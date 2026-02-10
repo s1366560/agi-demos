@@ -12,6 +12,7 @@ import React, { memo, useMemo } from 'react';
 import { BulbOutlined, ToolOutlined } from '@ant-design/icons';
 import { Collapse } from 'antd';
 
+import { formatTimeOnly } from '@/utils/date';
 import { ToolCall, ToolResult } from '../../types/agent';
 
 import { ToolCard } from './ToolCard';
@@ -40,7 +41,7 @@ const formatRelativeTime = (timestamp: number): string => {
   if (diff < 1000) return 'now';
   if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatTimeOnly(timestamp);
 };
 
 // Sequence number formatter (circled numbers)

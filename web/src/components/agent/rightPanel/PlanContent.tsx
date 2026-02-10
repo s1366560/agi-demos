@@ -14,6 +14,7 @@
 
 import { CheckCircle2, Play, Clock } from 'lucide-react';
 
+import { formatTimeOnly } from '@/utils/date';
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
 
 import { LazyEmpty, Empty, LazyAlert, LazySpin } from '@/components/ui/lazyAntd';
@@ -136,7 +137,7 @@ const PlanMeta = ({ plan }: { plan: WorkPlan | ExecutionPlan }) => {
         {(plan as any).created_at && (
           <span className="flex items-center gap-1">
             <Clock size={12} />
-            {new Date((plan as any).created_at).toLocaleTimeString()}
+            {formatTimeOnly((plan as any).created_at)}
           </span>
         )}
       </div>

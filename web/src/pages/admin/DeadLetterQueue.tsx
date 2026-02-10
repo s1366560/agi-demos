@@ -45,6 +45,7 @@ import {
 
 import { dlqService } from '@/services/dlqService';
 import type { DLQMessage, DLQMessageStatus, DLQStats } from '@/services/dlqService';
+import { formatDateTime } from '@/utils/date';
 
 import type { ColumnsType } from 'antd/es/table';
 
@@ -99,10 +100,6 @@ const formatAge = (seconds: number): string => {
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
   return `${Math.round(seconds / 86400)}d`;
-};
-
-const formatDateTime = (iso: string): string => {
-  return new Date(iso).toLocaleString();
 };
 
 // ============================================================================

@@ -20,6 +20,8 @@ import {
 } from '@ant-design/icons';
 import { Card, Typography, Space, Tag, Image as AntImage } from 'antd';
 
+import { formatTimeOnly } from '@/utils/date';
+
 import {
   isImageUrl as _isImageUrl,
   parseBase64Image,
@@ -183,10 +185,7 @@ export const ToolExecutionCard = memo<ToolExecutionCardProps>(({ toolCall }) => 
 
   // Format timestamp
   const timeDisplay = toolCall.timestamp
-    ? new Date(toolCall.timestamp).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+    ? formatTimeOnly(toolCall.timestamp)
     : undefined;
 
   // Convert tool name to class-friendly format (replace underscores with hyphens)

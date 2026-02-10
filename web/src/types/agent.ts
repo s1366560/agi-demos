@@ -181,6 +181,17 @@ export interface Conversation {
 }
 
 /**
+ * Paginated response for conversation listing
+ */
+export interface PaginatedConversationsResponse {
+  items: Conversation[];
+  total: number;
+  has_more: boolean;
+  offset: number;
+  limit: number;
+}
+
+/**
  * Agent execution tracking
  */
 export interface AgentExecution {
@@ -928,8 +939,9 @@ export interface AgentService {
   listConversations(
     projectId: string,
     status?: ConversationStatus,
-    limit?: number
-  ): Promise<Conversation[]>;
+    limit?: number,
+    offset?: number
+  ): Promise<PaginatedConversationsResponse>;
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null>;
   chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void>;
   stopChat(conversationId: string): void;

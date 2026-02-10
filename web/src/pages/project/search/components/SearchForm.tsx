@@ -17,6 +17,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
+import { formatTimeOnly } from '@/utils/date';
 
 export type SearchMode = 'semantic' | 'graphTraversal' | 'temporal' | 'faceted' | 'community';
 
@@ -301,7 +302,7 @@ const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onIte
           <span className="text-xs text-slate-500 capitalize">{item.mode}</span>
         </div>
         <span className="text-xs text-slate-400">
-          {new Date(item.timestamp).toLocaleTimeString()}
+          {formatTimeOnly(item.timestamp)}
         </span>
       </button>
     ))}

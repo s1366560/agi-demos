@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 import { schemaAPI } from '../../../services/api';
+import { formatDateOnly, formatDateTime } from '@/utils/date';
 
 // ============================================================================
 // Types
@@ -695,7 +696,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
       </div>
       <div className="col-span-2 flex flex-col justify-start pt-1">
         <span className="text-sm text-slate-700 dark:text-white">
-          {new Date(entity.created_at || Date.now()).toLocaleDateString()}
+          {formatDateOnly(entity.created_at || Date.now())}
         </span>
         <span className="text-xs text-slate-400 dark:text-[#95a0c6]">by Admin</span>
       </div>
@@ -1250,7 +1251,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 {TEXTS.modal.lastSaved.replace(
                   '{{time}}',
                   editingEntity?.updated_at
-                    ? new Date(editingEntity.updated_at).toLocaleString()
+                    ? formatDateTime(editingEntity.updated_at)
                     : TEXTS.modal.neverSaved
                 )}
               </span>

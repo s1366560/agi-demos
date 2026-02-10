@@ -12,6 +12,8 @@ import ReactMarkdown from 'react-markdown';
 
 import remarkGfm from 'remark-gfm';
 
+import { formatDateOnly } from '@/utils/date';
+
 export interface FinalResponseDisplayProps {
   /** Report content (markdown) */
   content: string;
@@ -49,7 +51,7 @@ export function FinalResponseDisplay({
     if (diffMins < 60) return `${diffMins}m ago`;
     const diffHours = Math.floor(diffMins / 3600000);
     if (diffHours < 24) return `${diffHours}h ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return formatDateOnly(date);
   };
 
   const handleCopy = async () => {

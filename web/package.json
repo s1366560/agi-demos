@@ -64,7 +64,6 @@
         "axios": "^1.13.2",
         "chart.js": "^4.5.1",
         "cytoscape": "^3.33.1",
-        "date-fns": "^4.1.0",
         "html2pdf.js": "^0.14.0",
         "i18next": "^25.7.3",
         "i18next-browser-languagedetector": "^8.2.0",

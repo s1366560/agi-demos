@@ -19,6 +19,8 @@ import {
 } from '@ant-design/icons';
 import { Typography, Card, Tag, Space, Collapse, Alert, Descriptions, Badge } from 'antd';
 
+import { formatDateTime, formatTimeOnly } from '@/utils/date';
+
 import {
   ExecutionPlan,
   ExecutionStep,
@@ -144,7 +146,7 @@ const StepDisplay: React.FC<StepDisplayProps> = ({ step, index }) => {
 
           {step.started_at && (
             <Text type="secondary" className="text-xs block">
-              Started: {new Date(step.started_at).toLocaleTimeString()}
+              Started: {formatTimeOnly(step.started_at)}
             </Text>
           )}
 
@@ -313,9 +315,9 @@ export const PlanModeViewer: React.FC<PlanModeViewerProps> = ({
       {/* Footer */}
       {plan.started_at && (
         <div className="mt-4 pt-4 border-t border-slate-200 text-xs text-slate-500">
-          Started: {new Date(plan.started_at).toLocaleString()}
+          Started: {formatDateTime(plan.started_at)}
           {plan.completed_at && (
-            <span className="ml-4">Completed: {new Date(plan.completed_at).toLocaleString()}</span>
+            <span className="ml-4">Completed: {formatDateTime(plan.completed_at)}</span>
           )}
         </div>
       )}

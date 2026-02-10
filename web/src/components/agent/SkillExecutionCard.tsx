@@ -20,6 +20,8 @@ import {
 } from '@ant-design/icons';
 import { Card, Typography, Space, Tag, Progress, Steps, Tooltip } from 'antd';
 
+import { formatTimeOnly } from '@/utils/date';
+
 import type { SkillExecutionState, SkillToolExecution } from '../../types/agent';
 
 const { Text } = Typography;
@@ -263,10 +265,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
           {skillExecution.started_at && (
             <Text type="secondary" style={{ fontSize: 10 }}>
               Started:{' '}
-              {new Date(skillExecution.started_at).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatTimeOnly(skillExecution.started_at)}
             </Text>
           )}
         </Space>

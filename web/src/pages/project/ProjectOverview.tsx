@@ -5,6 +5,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 
 import { projectAPI, memoryAPI } from '../../services/api';
 import { Project, Memory } from '../../types/memory';
+import { formatDateOnly } from '@/utils/date';
 
 export const ProjectOverview: React.FC = () => {
   const { t } = useTranslation();
@@ -67,7 +68,7 @@ export const ProjectOverview: React.FC = () => {
       return `${Math.floor(diffInSeconds / 60)}${t('common.time.minutes')} ${t('common.time.ago', { time: '' })}`;
     if (diffInSeconds < 86400)
       return `${Math.floor(diffInSeconds / 3600)}${t('common.time.hours')} ${t('common.time.ago', { time: '' })}`;
-    return date.toLocaleDateString();
+    return formatDateOnly(date);
   };
 
   const getMemoryStatus = (memory: Memory) => {

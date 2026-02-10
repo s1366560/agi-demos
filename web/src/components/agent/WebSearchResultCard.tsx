@@ -6,6 +6,8 @@
 
 import { useState } from 'react';
 
+import { formatDateTime, formatDateOnly } from '@/utils/date';
+
 import { MaterialIcon } from './shared';
 
 export interface SearchResult {
@@ -45,7 +47,7 @@ export function WebSearchResultCard({
 
   const formatTimestamp = (ts?: string) => {
     if (!ts) return null;
-    return new Date(ts).toLocaleString();
+    return formatDateTime(ts);
   };
 
   return (
@@ -111,7 +113,7 @@ export function WebSearchResultCard({
                 {/* Published Date */}
                 {result.published_date && (
                   <div className="text-xs text-slate-500">
-                    Published: {new Date(result.published_date).toLocaleDateString()}
+                    Published: {formatDateOnly(result.published_date)}
                   </div>
                 )}
 

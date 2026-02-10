@@ -21,6 +21,7 @@ import {
 } from '@ant-design/icons';
 import { Typography, Tag, Empty, Collapse, Button, Tooltip, message } from 'antd';
 
+import { formatTimeOnly } from '@/utils/date';
 import { ArtifactRenderer } from '../../artifact';
 
 import type { Artifact } from '../../../types/agent';
@@ -243,7 +244,7 @@ export function SandboxOutputViewer({
             {exec.toolName}
           </Tag>
           <Text className="text-sm text-slate-600">
-            {new Date(exec.timestamp).toLocaleTimeString()}
+            {formatTimeOnly(exec.timestamp)}
           </Text>
           {exec.error && <Tag color="error">Error</Tag>}
           {exec.artifacts && exec.artifacts.length > 0 && (

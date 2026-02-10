@@ -43,8 +43,11 @@ interface ConversationsState {
   conversations: Conversation[];
   currentConversation: Conversation | null;
   conversationsLoading: boolean;
+  conversationsLoadingMore: boolean;
   conversationsError: string | null;
   isNewConversationPending: boolean;
+  hasMoreConversations: boolean;
+  conversationsTotal: number;
 
   // Actions
   listConversations: (
@@ -52,6 +55,7 @@ interface ConversationsState {
     status?: ConversationStatus,
     limit?: number
   ) => Promise<void>;
+  loadMoreConversations: (projectId: string, status?: ConversationStatus) => Promise<void>;
   createConversation: (projectId: string, title?: string) => Promise<Conversation>;
   getConversation: (conversationId: string, projectId: string) => Promise<Conversation | null>;
   deleteConversation: (conversationId: string, projectId: string) => Promise<void>;
@@ -70,8 +74,11 @@ export const initialState = {
   conversations: [],
   currentConversation: null,
   conversationsLoading: false,
+  conversationsLoadingMore: false,
   conversationsError: null,
   isNewConversationPending: false,
+  hasMoreConversations: false,
+  conversationsTotal: 0,
 };
 
 /**
@@ -89,9 +96,9 @@ export const useConversationsStore = create<ConversationsState>()(
        *
        * @param projectId - The project ID
        * @param status - Optional status filter
-       * @param limit - Optional limit (default 50)
+       * @param limit - Optional limit (default 10)
        */
-      listConversations: async (projectId: string, status?: ConversationStatus, limit = 50) => {
+      listConversations: async (projectId: string, status?: ConversationStatus, limit = 10) => {
         // Skip if already loading for the same project
         const state = get();
         if (state.conversationsLoading) {
@@ -103,8 +110,13 @@ export const useConversationsStore = create<ConversationsState>()(
 
         set({ conversationsLoading: true, conversationsError: null });
         try {
-          const conversations = await agentService.listConversations(projectId, status, limit);
-          set({ conversations, conversationsLoading: false });
+          const response = await agentService.listConversations(projectId, status, limit, 0);
+          set({
+            conversations: response.items,
+            hasMoreConversations: response.has_more,
+            conversationsTotal: response.total,
+            conversationsLoading: false,
+          });
         } catch (error: unknown) {
           const err = error as { response?: { data?: { detail?: string } }; message?: string };
           set({
@@ -112,6 +124,31 @@ export const useConversationsStore = create<ConversationsState>()(
             conversationsLoading: false,
           });
           throw error;
+        }
+      },
+
+      loadMoreConversations: async (projectId: string, status?: ConversationStatus) => {
+        const state = get();
+        if (state.conversationsLoadingMore || !state.hasMoreConversations) {
+          return;
+        }
+
+        set({ conversationsLoadingMore: true, conversationsError: null });
+        try {
+          const offset = state.conversations.length;
+          const response = await agentService.listConversations(projectId, status, 10, offset);
+          set({
+            conversations: [...state.conversations, ...response.items],
+            hasMoreConversations: response.has_more,
+            conversationsTotal: response.total,
+            conversationsLoadingMore: false,
+          });
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { detail?: string } }; message?: string };
+          set({
+            conversationsError: err?.response?.data?.detail || 'Failed to load more conversations',
+            conversationsLoadingMore: false,
+          });
         }
       },
 
@@ -332,6 +369,18 @@ export const useConversationsError = () =>
  */
 export const useIsNewConversationPending = () =>
   useConversationsStore((state) => state.isNewConversationPending);
+
+/**
+ * Derived selector: Has more conversations to load
+ */
+export const useHasMoreConversations = () =>
+  useConversationsStore((state) => state.hasMoreConversations);
+
+/**
+ * Derived selector: Get conversations loading more state
+ */
+export const useConversationsLoadingMore = () =>
+  useConversationsStore((state) => state.conversationsLoadingMore);
 
 /**
  * Type export for store (used in tests)

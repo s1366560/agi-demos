@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react';
-import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, memo } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -70,7 +70,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
   ({ conversation, isActive, onSelect, onDelete, onRename, compact = false }) => {
     const timeAgo = React.useMemo(() => {
       try {
-        return formatDistanceToNow(new Date(conversation.created_at));
+        return formatDistanceToNow(conversation.created_at);
       } catch {
         return '';
       }
@@ -219,6 +219,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   // Use ref for width during drag to avoid re-renders
   const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const sidebarRef = useRef<HTMLElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollTopRef = useRef<number | null>(null);
 
   // Internal state for uncontrolled mode
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -241,8 +243,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     activeConversationId,
     isLoadingHistory,
     loadConversations,
+    loadMoreConversations,
     createNewConversation,
     deleteConversation,
+    hasMoreConversations,
   } = useAgentV3Store();
 
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
@@ -296,8 +300,28 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }));
   }, [conversations, selectedProjectId, projects]);
 
+  const isLoadingMoreRef = useRef(false);
+  const handleConversationScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
+      const target = e.currentTarget;
+      const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+      if (nearBottom) {
+        isLoadingMoreRef.current = true;
+        loadMoreConversations(selectedProjectId).finally(() => {
+          isLoadingMoreRef.current = false;
+        });
+      }
+    },
+    [hasMoreConversations, selectedProjectId, loadMoreConversations]
+  );
+
   const handleSelectConversation = useCallback(
     (id: string, projectId: string) => {
+      // Save scroll position before navigation triggers re-render
+      if (scrollContainerRef.current) {
+        savedScrollTopRef.current = scrollContainerRef.current.scrollTop;
+      }
       if (tenantId) {
         navigate(`/tenant/${tenantId}/agent-workspace/${id}?projectId=${projectId}`);
       } else {
@@ -306,6 +330,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     },
     [navigate, tenantId]
   );
+
+  // Restore scroll position after conversation switch re-render
+  useLayoutEffect(() => {
+    if (savedScrollTopRef.current !== null && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = savedScrollTopRef.current;
+      savedScrollTopRef.current = null;
+    }
+  }, [activeConversationId]);
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -577,7 +609,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       </div>
 
       {/* Conversation List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto custom-scrollbar"
+        onScroll={handleConversationScroll}
+      >
         <div className={collapsed ? 'px-2' : 'px-3'}>
           {isLoadingHistory ? (
             <div className="flex items-center justify-center py-8">
@@ -607,6 +643,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                     compact={collapsed}
                   />
                 ))
+              )}
+              {hasMoreConversations && !collapsed && (
+                <div className="flex items-center justify-center py-3">
+                  <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                </div>
               )}
             </>
           )}
