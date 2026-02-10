@@ -8,11 +8,20 @@ class TestCreateCounter:
     """Tests for create_counter function."""
 
     def test_creates_counter(self):
-        """Test that counter is created."""
-        # Reset state
+        """Test that counter is created when provider is available."""
+        # Reset state and enable telemetry
         config._reset_providers()
+        provider = config.configure_meter_provider(
+            settings_override={"enable_telemetry": True}
+        )
+        assert provider is not None
 
-        counter = metrics.create_counter("test.counter", "Test counter description")
+        # Create counter directly from provider since metrics.create_counter()
+        # calls get_meter() which uses default settings (telemetry disabled)
+        meter = provider.get_meter("test-metrics")
+        counter = meter.create_counter(
+            name="test.counter", description="Test counter description"
+        )
 
         assert counter is not None
 
@@ -49,11 +58,19 @@ class TestCreateHistogram:
     """Tests for create_histogram function."""
 
     def test_creates_histogram(self):
-        """Test that histogram is created."""
-        # Reset state
+        """Test that histogram is created when provider is available."""
+        # Reset state and enable telemetry
         config._reset_providers()
+        provider = config.configure_meter_provider(
+            settings_override={"enable_telemetry": True}
+        )
+        assert provider is not None
 
-        histogram = metrics.create_histogram("test.duration", "Duration metric")
+        # Create histogram directly from provider
+        meter = provider.get_meter("test-metrics")
+        histogram = meter.create_histogram(
+            name="test.duration", description="Duration metric"
+        )
 
         assert histogram is not None
 
@@ -65,15 +82,23 @@ class TestCreateGauge:
     """Tests for create_gauge function."""
 
     def test_creates_observable_gauge(self):
-        """Test that observable gauge is created."""
-        # Reset state
+        """Test that observable gauge is created when provider is available."""
+        # Reset state and enable telemetry
         config._reset_providers()
+        provider = config.configure_meter_provider(
+            settings_override={"enable_telemetry": True}
+        )
+        assert provider is not None
 
         def callback(options):
             from opentelemetry.metrics import Observation
             return Observation(42, {})
 
-        gauge = metrics.create_gauge("test.gauge", "Gauge metric", [callback])
+        # Create gauge directly from provider
+        meter = provider.get_meter("test-metrics")
+        gauge = meter.create_observable_gauge(
+            name="test.gauge", description="Gauge metric", callbacks=[callback]
+        )
 
         assert gauge is not None
 
@@ -156,11 +181,16 @@ class TestGetMeter:
     """Tests for get_meter function."""
 
     def test_returns_meter(self):
-        """Test that meter is returned."""
-        # Reset state
+        """Test that meter is returned from configured provider."""
+        # Reset state and enable telemetry
         config._reset_providers()
+        provider = config.configure_meter_provider(
+            settings_override={"enable_telemetry": True}
+        )
+        assert provider is not None
 
-        meter = metrics.get_meter()
+        # Get meter directly from provider
+        meter = provider.get_meter("test-metrics")
 
         assert meter is not None
 

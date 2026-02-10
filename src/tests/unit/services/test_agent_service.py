@@ -220,7 +220,8 @@ class TestAgentServiceAuthorization:
                 message_id="",
                 event_type=USER_MESSAGE,  # Timeline-specific event type
                 event_data={"role": "user", "content": "Hello"},
-                sequence_number=1,
+                event_time_us=1000000,
+                event_counter=0,
                 created_at=datetime.now(),
             )
         ]

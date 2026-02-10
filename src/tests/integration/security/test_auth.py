@@ -103,4 +103,4 @@ async def test_api_key_expiration(test_db):
 
     # Check if expired
     # Note: SQLite doesn't preserve timezone info, so expires_at is naive UTC
-    assert api_key_obj.expires_at < datetime.now(timezone.utc)
+    assert api_key_obj.expires_at < datetime.now(timezone.utc).replace(tzinfo=None)

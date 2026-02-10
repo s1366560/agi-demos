@@ -51,13 +51,13 @@ class TestSandboxUrlService:
         """应该构建带端口的 Desktop URL."""
         url = service.build_desktop_url(full_instance)
 
-        assert url == "http://localhost:16080/vnc.html"
+        assert url == "https://localhost:16080"
 
     def test_build_desktop_url_with_token(self, service: SandboxUrlService, full_instance: SandboxInstanceInfo) -> None:
         """应该构建带 token 的 Desktop URL."""
         url = service.build_desktop_url(full_instance, token="abc123token")
 
-        assert url == "http://localhost:16080/vnc.html?token=abc123token"
+        assert url == "https://localhost:16080?token=abc123token"
 
     def test_build_desktop_url_without_port(self, service: SandboxUrlService, minimal_instance: SandboxInstanceInfo) -> None:
         """当没有 Desktop 端口时，应该返回 None."""
@@ -94,8 +94,8 @@ class TestSandboxUrlService:
         urls = service.build_all_urls(full_instance, project_id="project-123")
 
         assert urls.mcp_url == "ws://localhost:18765"
-        assert urls.desktop_url == "http://localhost:16080/vnc.html"
-        assert urls.desktop_url_with_token == "http://localhost:16080/vnc.html"
+        assert urls.desktop_url == "https://localhost:16080"
+        assert urls.desktop_url_with_token == "https://localhost:16080"
         assert urls.terminal_url == "ws://localhost:17681"
         assert urls.sse_url == "/api/v1/sandbox/events/project-123"
 
@@ -103,7 +103,7 @@ class TestSandboxUrlService:
         """应该构建带 token 的所有 URL."""
         urls = service.build_all_urls(full_instance, project_id="project-123", token="secret-token")
 
-        assert urls.desktop_url_with_token == "http://localhost:16080/vnc.html?token=secret-token"
+        assert urls.desktop_url_with_token == "https://localhost:16080?token=secret-token"
 
     def test_build_all_urls_minimal(self, service: SandboxUrlService, minimal_instance: SandboxInstanceInfo) -> None:
         """应该处理最小配置的实例."""

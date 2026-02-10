@@ -61,7 +61,7 @@ class TestPlanModeDetectionIntegration:
         return detector
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_simple_query_bypasses_plan_mode(
         self, mock_llm_stream, mock_tools, simple_detector
     ):
@@ -97,7 +97,7 @@ class TestPlanModeDetectionIntegration:
         assert plan_mode_events[0]["data"]["should_trigger"] is False
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_detector_none_graceful_handling(
         self, mock_llm_stream, mock_tools
     ):
@@ -146,7 +146,7 @@ class TestPlanModeEventFlow:
         return {"test_tool": tool}
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_plan_mode_event_structure(
         self, mock_llm_stream, mock_tools
     ):
@@ -194,7 +194,7 @@ class TestPlanModeEventFlow:
             assert "timestamp" in event
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_conversation_context_passed_to_detector(
         self, mock_llm_stream, mock_tools
     ):
@@ -251,7 +251,7 @@ class TestPlanModeWithSkillsAndSubagents:
         return {"test_tool": tool}
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_plan_mode_with_matched_skill(
         self, mock_llm_stream, mock_tools
     ):
@@ -301,7 +301,7 @@ class TestPlanModeWithSkillsAndSubagents:
         assert detector.detect.called
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_plan_mode_with_subagent(
         self, mock_llm_stream, mock_tools
     ):
@@ -368,7 +368,7 @@ class TestPlanModeErrorHandling:
         return {"test_tool": tool}
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_detector_exception_fallback(
         self, mock_llm_stream, mock_tools
     ):
@@ -402,7 +402,7 @@ class TestPlanModeErrorHandling:
         assert failed_events[0]["data"]["fallback"] == "react"
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_detector_times_out_gracefully(
         self, mock_llm_stream, mock_tools
     ):

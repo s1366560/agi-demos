@@ -117,6 +117,8 @@ class ProjectSandboxLifecycleService:
         default_profile: SandboxProfileType = SandboxProfileType.STANDARD,
         health_check_interval_seconds: int = 60,
         auto_recover: bool = True,
+        memory_limit_override: Optional[str] = None,
+        cpu_limit_override: Optional[str] = None,
     ):
         """Initialize the lifecycle service.
 
@@ -128,6 +130,8 @@ class ProjectSandboxLifecycleService:
             default_profile: Default sandbox profile
             health_check_interval_seconds: Minimum seconds between health checks
             auto_recover: Whether to auto-recover unhealthy sandboxes
+            memory_limit_override: Override for memory limit (e.g. from config)
+            cpu_limit_override: Override for CPU limit (e.g. from config)
         """
         self._repository = repository
         self._adapter = sandbox_adapter
@@ -135,6 +139,8 @@ class ProjectSandboxLifecycleService:
         self._default_profile = default_profile
         self._health_check_interval = health_check_interval_seconds
         self._auto_recover = auto_recover
+        self._memory_limit_override = memory_limit_override
+        self._cpu_limit_override = cpu_limit_override
 
         # Per-project locks to prevent concurrent sandbox creation for the same project
         # This ensures exactly one sandbox per project even under high concurrency
@@ -916,10 +922,14 @@ class ProjectSandboxLifecycleService:
         # Get image from profile or use default
         image = sandbox_profile.image_name or "sandbox-mcp-server:latest"
 
+        # Apply global overrides if set
+        memory_limit = self._memory_limit_override or sandbox_profile.memory_limit
+        cpu_limit = self._cpu_limit_override or sandbox_profile.cpu_limit
+
         config = SandboxConfig(
             image=image,
-            memory_limit=sandbox_profile.memory_limit,
-            cpu_limit=sandbox_profile.cpu_limit,
+            memory_limit=memory_limit,
+            cpu_limit=cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
             desktop_enabled=sandbox_profile.desktop_enabled,
             environment=config_override.get("environment") if config_override else {},

@@ -33,7 +33,7 @@ class TestDesktopTool:
         """Test tool is initialized with correct name and description."""
         assert desktop_tool.name == "desktop"
         assert "remote desktop" in desktop_tool.description.lower()
-        assert "noVNC" in desktop_tool.description or "LXDE" in desktop_tool.description
+        assert "noVNC" in desktop_tool.description or "LXDE" in desktop_tool.description or "KasmVNC" in desktop_tool.description
 
     def test_get_parameters_schema(self, desktop_tool):
         """Test parameters schema is correctly defined."""

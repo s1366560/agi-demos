@@ -1,0 +1,571 @@
+{
+  "total_relationships": 12,
+  "top_relationships": [
+    {
+      "person_a": "A",
+      "person_b": "B",
+      "message_count": 20,
+      "patterns": [
+        "financial_corruption"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-03-16 00:00:00 07:55:00",
+          "sender": "A",
+          "receiver": "B",
+          "content": "报！编程现在挺重要的，应急资金留 10 万够不够？我明天去银行办理转存手续",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-06-19 00:00:00 07:55:00",
+          "sender": "A",
+          "receiver": "B",
+          "content": "可以，我明天去银行办理，能省不少利息。对了，儿子想报夏令营，费用 3000，批准了",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-07-20 00:00:00 08:05:00",
+          "sender": "A",
+          "receiver": "B",
+          "content": "给儿子报了个衔接班，费用 5000，开学前让他适应下高中课程",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-07-21 00:00:00 07:52:00",
+          "sender": "A",
+          "receiver": "B",
+          "content": "看好一套 120 平的学区房，总价 380 万，首付 150 万，我们的资金差不多够了，下周去签合同",
+          "patterns": [
+            "financial_corruption"
+          ]
+        }
+      ],
+      "strength": 1.0,
+      "relationship_type": [
+        "资金往来"
+      ],
+      "risk_level": "🟠 中风险 - 需要关注 (5/10)"
+    },
+    {
+      "person_a": "A",
+      "person_b": "C",
+      "message_count": 16,
+      "patterns": [
+        "collusion"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-09-13 00:00:00 10:40:00",
+          "sender": "A",
+          "receiver": "C",
+          "content": "带供应商评估表、既往合作记录、产品检测报告，还有我们的采购需求清单",
+          "patterns": [
+            "collusion"
+          ]
+        }
+      ],
+      "strength": 0.8,
+      "relationship_type": [
+        "串通勾结"
+      ],
+      "risk_level": "🟠 中风险 - 需要关注 (4/10)"
+    },
+    {
+      "person_a": "A",
+      "person_b": "D",
+      "message_count": 16,
+      "patterns": [
+        "financial_corruption",
+        "collusion"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-09-13 00:00:00 09:25:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "王总，这次的货物质量要把控好，别出问题，不然下次没法合作了",
+          "patterns": [
+            "collusion"
+          ]
+        },
+        {
+          "timestamp": "2021-07-28 00:00:00 08:30:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "下次有个 100 万的采购项目，你们报价 95 万，底价是 98 万，中标后给我 6 个点回扣",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-01-18 00:00:00 08:25:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "年底有个 80 万的采购项目，你们报价 75 万，回扣还是 5 个点，怎么样？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-02-25 00:00:00 10:30:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "合同已经签了，尽快安排生产，别耽误交货期。对了，回扣什么时候转？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-06-15 00:00:00 08:40:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "有个 120 万的大项目，底价 110 万，你们报价 108 万，中标后给我 8 个点回扣",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-05-25 00:00:00 08:30:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "下次有个 90 万的项目，底价 85 万，你们报价 83 万，回扣 6 个点，怎么样？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-09-18 00:00:00 08:45:00",
+          "sender": "A",
+          "receiver": "D",
+          "content": "收到了，谢谢王总。下次有项目再联系你，继续合作",
+          "patterns": [
+            "collusion"
+          ]
+        }
+      ],
+      "strength": 0.8,
+      "relationship_type": [
+        "资金往来",
+        "串通勾结"
+      ],
+      "risk_level": "🔴 高风险 - 需要重点关注 (7/10)"
+    },
+    {
+      "person_a": "D",
+      "person_b": "D",
+      "message_count": 14,
+      "patterns": [
+        "financial_corruption",
+        "secret_meeting",
+        "collusion"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-03-16 00:00:00 08:40:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "李经理，价格已经是成本价了，不过要是能合作成功，我私下给你 5 个点的回扣，你看怎么样？",
+          "patterns": [
+            "financial_corruption",
+            "secret_meeting",
+            "collusion"
+          ]
+        },
+        {
+          "timestamp": "2021-07-08 00:00:00 08:35:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "明白！谢谢李经理透露，中标后我马上把 3.9 万回扣转到你指定的账户",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2021-09-12 00:00:00 09:05:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "太好了！合同我明天就让人送过去，回扣已经转到你尾号 6789 的银行卡了，查收一下",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2021-09-13 00:00:00 11:50:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "放心吧李经理，绝对没问题！对了，下次再有采购项目，还请多关照，回扣比例可以再提高点",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-04-05 00:00:00 11:40:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "李经理，价格真的降不了了，不过回扣可以给你 7 个点，你看行不行？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-02-15 00:00:00 10:40:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "放心吧李经理，我们一定报低价，回扣比例不变，还是按之前的来",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2021-07-28 00:00:00 09:15:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "没问题李经理！一定照办，这次回扣 6 万，中标后立马转过去",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-01-18 00:00:00 09:10:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "太感谢李经理了！一定报价 75 万，回扣 4 万，等中标后转你账户。对了，过年给你准备了点礼品",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-06-15 00:00:00 09:25:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "太给力了李经理！一定照办，回扣 9.6 万，中标后立马转，绝对不会让你失望",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-08-20 00:00:00 11:35:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "明白李经理！合同明天送过去，回扣已经转了，查收一下。以后还请多关照",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-05-25 00:00:00 09:15:00",
+          "sender": "D",
+          "receiver": "D",
+          "content": "没问题李经理！一定照办，中标后马上转回扣 5.4 万，感谢你的照顾",
+          "patterns": [
+            "financial_corruption"
+          ]
+        }
+      ],
+      "strength": 0.7,
+      "relationship_type": [
+        "资金往来",
+        "秘密会面",
+        "串通勾结"
+      ],
+      "risk_level": "🔴 高风险 - 需要重点关注 (10/10)"
+    },
+    {
+      "person_a": "A",
+      "person_b": "F",
+      "message_count": 13,
+      "patterns": [],
+      "evidence": [],
+      "strength": 0.65,
+      "relationship_type": [
+        "频繁联系"
+      ],
+      "risk_level": "🟢 低风险 - 正常监控 (2/10)"
+    },
+    {
+      "person_a": "F",
+      "person_b": "F",
+      "message_count": 13,
+      "patterns": [],
+      "evidence": [],
+      "strength": 0.65,
+      "relationship_type": [
+        "频繁联系"
+      ],
+      "risk_level": "🟢 低风险 - 正常监控 (2/10)"
+    },
+    {
+      "person_a": "C",
+      "person_b": "C",
+      "message_count": 11,
+      "patterns": [],
+      "evidence": [],
+      "strength": 0.55,
+      "relationship_type": [
+        "频繁联系"
+      ],
+      "risk_level": "🟢 低风险 - 正常监控 (2/10)"
+    },
+    {
+      "person_a": "A",
+      "person_b": "E",
+      "message_count": 11,
+      "patterns": [
+        "financial_corruption",
+        "collusion"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-05-20 00:00:00 09:25:00",
+          "sender": "A",
+          "receiver": "E",
+          "content": "张总，你们公司想跟我们合作，报价怎么样？有没有诚意？",
+          "patterns": [
+            "collusion"
+          ]
+        },
+        {
+          "timestamp": "2022-01-20 00:00:00 09:02:00",
+          "sender": "A",
+          "receiver": "E",
+          "content": "年底有个 100 万的项目，底价 95 万，你们报价 93 万，回扣 6 个点，怎么样？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-05-11 00:00:00 10:50:00",
+          "sender": "A",
+          "receiver": "E",
+          "content": "张总，最近有个 110 万的项目，底价 100 万，你们报价 98 万，回扣 7 个点，怎么样？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-04-12 00:00:00 08:20:00",
+          "sender": "A",
+          "receiver": "E",
+          "content": "张总，这次的货物有点小问题，下次注意点，不然没法继续合作了",
+          "patterns": [
+            "collusion"
+          ]
+        },
+        {
+          "timestamp": "2022-06-18 00:00:00 10:30:00",
+          "sender": "A",
+          "receiver": "E",
+          "content": "下次有个 80 万的项目，底价 75 万，你们报价 73 万，回扣还是 5 个点",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-05-15 00:00:00 08:30:00",
+          "sender": "A",
+          "receiver": "E",
+          "content": "收到了，谢谢张总。下次有项目再跟你联系，继续合作",
+          "patterns": [
+            "collusion"
+          ]
+        }
+      ],
+      "strength": 0.55,
+      "relationship_type": [
+        "资金往来",
+        "串通勾结"
+      ],
+      "risk_level": "🔴 高风险 - 需要重点关注 (7/10)"
+    },
+    {
+      "person_a": "B",
+      "person_b": "B",
+      "message_count": 10,
+      "patterns": [
+        "financial_corruption"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-03-15 00:00:00 10:02:00",
+          "sender": "B",
+          "receiver": "B",
+          "content": "可以啊，不过得留一部分应急资金。对了，儿子下学期想报编程兴趣班，学费一年 8000，要不要报？",
+          "patterns": [
+            "financial_corruption"
+          ]
+        }
+      ],
+      "strength": 0.5,
+      "relationship_type": [
+        "资金往来"
+      ],
+      "risk_level": "🟢 低风险 - 正常监控 (3/10)"
+    },
+    {
+      "person_a": "E",
+      "person_b": "E",
+      "message_count": 9,
+      "patterns": [
+        "financial_corruption",
+        "secret_meeting",
+        "collusion"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2021-05-20 00:00:00 11:33:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "李经理，我们非常有诚意，报价比市场价低 3 个点，要是能合作，我私下给你 4 个点回扣",
+          "patterns": [
+            "financial_corruption",
+            "secret_meeting",
+            "collusion"
+          ]
+        },
+        {
+          "timestamp": "2021-05-21 00:00:00 11:45:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "没问题李经理！5 个点回扣，报价 68 万，一定照办，感谢你透露底价",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-01-20 00:00:00 11:20:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "太感谢李经理了！一定照办，回扣 5.58 万，中标后马上转，以后还请多关照",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-05-11 00:00:00 11:45:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "没问题李经理！一定报价 98 万，回扣 6.86 万，中标后立马转，感谢你的照顾",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-02-05 00:00:00 10:15:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "太好了！合同明天送过去，回扣 3.4 万已经转到你指定的账户，查收一下",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-04-12 00:00:00 09:05:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "抱歉李经理！下次一定注意，我再给你补 1 个点的回扣，作为补偿",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-06-18 00:00:00 11:15:00",
+          "sender": "E",
+          "receiver": "E",
+          "content": "谢谢李经理！一定报价 73 万，回扣 3.65 万，中标后立马转，绝对不会出问题",
+          "patterns": [
+            "financial_corruption"
+          ]
+        }
+      ],
+      "strength": 0.45,
+      "relationship_type": [
+        "资金往来",
+        "秘密会面",
+        "串通勾结"
+      ],
+      "risk_level": "🔴 高风险 - 需要重点关注 (8/10)"
+    },
+    {
+      "person_a": "A",
+      "person_b": "G",
+      "message_count": 4,
+      "patterns": [
+        "financial_corruption",
+        "power_abuse"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2022-04-05 00:00:00 14:25:00",
+          "sender": "A",
+          "receiver": "G",
+          "content": "赵总，我儿子明年要上小学了，想进市实验小学，你那边有没有关系能帮忙疏通下？费用不是问题",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2022-06-19 00:00:00 10:50:00",
+          "sender": "A",
+          "receiver": "G",
+          "content": "没问题，5 万我明天转到你账户。对了，我儿子叫李明宇，2016 年出生，现在 6 岁，身份证号 33010620160815XXXX",
+          "patterns": [
+            "financial_corruption"
+          ]
+        },
+        {
+          "timestamp": "2023-07-21 00:00:00 08:40:00",
+          "sender": "A",
+          "receiver": "G",
+          "content": "太感谢了赵总！5 万好处费没白花，下次有个 60 万的采购项目，直接给你们公司做，回扣按惯例 5 个点",
+          "patterns": [
+            "financial_corruption",
+            "power_abuse"
+          ]
+        }
+      ],
+      "strength": 0.2,
+      "relationship_type": [
+        "资金往来",
+        "权力滥用"
+      ],
+      "risk_level": "🟠 中风险 - 需要关注 (4/10)"
+    },
+    {
+      "person_a": "G",
+      "person_b": "G",
+      "message_count": 3,
+      "patterns": [
+        "financial_corruption"
+      ],
+      "evidence": [
+        {
+          "timestamp": "2022-06-19 00:00:00 08:42:00",
+          "sender": "G",
+          "receiver": "G",
+          "content": "李经理，没问题！我表哥是市教育局的，这事我帮你办。不过需要打点一下，大概 5 万好处费",
+          "patterns": [
+            "financial_corruption"
+          ]
+        }
+      ],
+      "strength": 0.15,
+      "relationship_type": [
+        "资金往来"
+      ],
+      "risk_level": "🟢 低风险 - 正常监控 (2/10)"
+    }
+  ],
+  "statistics": {
+    "avg_message_count": 11.666666666666666,
+    "max_message_count": 20,
+    "high_risk_count": 4,
+    "medium_risk_count": 3,
+    "low_risk_count": 5
+  }
+}

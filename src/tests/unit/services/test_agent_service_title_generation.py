@@ -448,7 +448,7 @@ class TestTitleGenerationWithMessages:
                 message_id="msg-1",
                 event_type=USER_MESSAGE,
                 event_data={"role": "user", "content": "First user message"},
-                sequence_number=1,
+                event_time_us=1000000, event_counter=0,
                 created_at=datetime.now(),
             ),
             AgentExecutionEvent(
@@ -457,7 +457,7 @@ class TestTitleGenerationWithMessages:
                 message_id="msg-2",
                 event_type="thought",  # Not a message event
                 event_data={"thought": "Agent is thinking"},
-                sequence_number=2,
+                event_time_us=2000000, event_counter=0,
                 created_at=datetime.now(),
             ),
             AgentExecutionEvent(
@@ -466,7 +466,7 @@ class TestTitleGenerationWithMessages:
                 message_id="msg-3",
                 event_type=ASSISTANT_MESSAGE,
                 event_data={"role": "assistant", "content": "Assistant response"},
-                sequence_number=3,
+                event_time_us=3000000, event_counter=0,
                 created_at=datetime.now(),
             ),
         ]

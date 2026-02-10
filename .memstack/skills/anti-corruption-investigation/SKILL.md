@@ -1,8 +1,6 @@
 ---
 name: anti-corruption-investigation
 description: Advanced anti-corruption investigation system for analyzing chat logs and communications to detect suspicious patterns, corruption indicators, and relationship networks. Supports Chinese and English chat logs in JSON/TXT formats, handles million-scale datasets, and provides human-friendly relationship analysis with evidence-backed conclusions.
-version: "7.0"
-author: Claude Code
 ---
 
 # Anti-Corruption Investigation v7.0

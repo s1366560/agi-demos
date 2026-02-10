@@ -135,9 +135,10 @@ class HITLStreamRouterActor:
             if not tenant_id or not project_id:
                 tenant_id, project_id = self._parse_stream_key(stream_key)
 
+            conversation_id = payload.get("conversation_id")
             actor = await self._get_or_create_actor(tenant_id, project_id, agent_mode)
 
-            await await_ray(actor.continue_chat.remote(request_id, response_data))
+            await await_ray(actor.continue_chat.remote(request_id, response_data, conversation_id))
             await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)
 
         except Exception as e:

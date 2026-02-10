@@ -26,7 +26,7 @@ class TestDesktopConfig:
         """Test default configuration values."""
         config = DesktopConfig()
 
-        assert config.resolution == "1280x720"
+        assert config.resolution == "1920x1080"
         assert config.display == ":1"
         assert config.port == 6080
 
@@ -214,7 +214,7 @@ class TestSandboxOrchestrator:
                     "display": ":1",
                     "resolution": "1920x1080",  # Should match requested resolution
                     "port": 6080,
-                    "xvfb_pid": 12345,
+                    "kasmvnc_pid": 12345,
                 })
             }],
             "is_error": False,
@@ -530,7 +530,7 @@ class TestSandboxOrchestrator:
                     "display": ":1",
                     "resolution": "1920x1080",
                     "port": 6080,
-                    "xvfb_pid": 12345,
+                    "kasmvnc_pid": 12345,
                 })
             }],
             "is_error": False,

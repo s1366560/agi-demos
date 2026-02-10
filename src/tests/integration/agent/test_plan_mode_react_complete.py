@@ -14,6 +14,7 @@ This test file ensures that:
 """
 
 import json
+import time
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -59,9 +60,6 @@ class MockStreamEvent:
 
     def __repr__(self):
         return f"MockStreamEvent(type={self.type}, data={self.data})"
-
-
-import time
 
 
 @pytest.mark.integration
@@ -150,7 +148,7 @@ class TestPlanModeCompleteWorkflow:
         return mock_generate
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_plan_mode_generates_initial_plan(
         self, MockLLMStream, mock_tools, plan_mode_detector, mock_llm_stream
     ):
@@ -200,7 +198,7 @@ class TestPlanModeCompleteWorkflow:
         assert len(completion_events) > 0
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_orchestrator_executes_complete_workflow(
         self, MockLLMStream, mock_tools, plan_mode_detector, mock_llm_stream
     ):
@@ -249,7 +247,7 @@ class TestPlanModeCompleteWorkflow:
             assert len(plan_generated["data"]["steps"]) > 0
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_sse_events_emitted_during_execution(
         self, MockLLMStream, mock_tools, plan_mode_detector, mock_llm_stream
     ):
@@ -297,7 +295,7 @@ class TestPlanModeCompleteWorkflow:
             assert "timestamp" in event
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_reflection_triggers_on_failure(
         self, mock_llm_stream, mock_tools, plan_mode_detector
     ):
@@ -335,7 +333,7 @@ class TestPlanModeCompleteWorkflow:
             assert "plan_id" in event["data"]
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_adjustments_applied_correctly(
         self, MockLLMStream, mock_tools, plan_mode_detector, mock_llm_stream
     ):
@@ -379,7 +377,7 @@ class TestPlanModeCompleteWorkflow:
             assert "failed_steps" in plan_complete["data"]
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_plan_mode_handles_errors_gracefully(
         self, mock_llm_stream, mock_tools, plan_mode_detector
     ):
@@ -416,7 +414,7 @@ class TestPlanModeCompleteWorkflow:
         assert len(events) > 0
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_max_reflection_cycles_enforced(
         self, mock_llm_stream, mock_tools, plan_mode_detector
     ):
@@ -452,7 +450,7 @@ class TestPlanModeCompleteWorkflow:
         assert len(reflection_events) <= 3
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_plan_mode_disabled_bypasses_orchestrator(
         self, mock_llm_stream, mock_tools
     ):
@@ -561,7 +559,7 @@ class TestPlanModeEventStreaming:
         return mock_generate
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_event_streaming_is_sequential(
         self, MockLLMStream, mock_tools, detector, mock_llm_stream_simple
     ):
@@ -607,7 +605,7 @@ class TestPlanModeEventStreaming:
             assert generated_idx < complete_idx
 
     @pytest.mark.asyncio
-    @patch("src.infrastructure.agent.core.processor.LLMStream")
+    @patch("src.infrastructure.agent.processor.processor.LLMStream")
     async def test_events_contain_required_fields(
         self, MockLLMStream, mock_tools, detector, mock_llm_stream_simple
     ):

@@ -1,0 +1,1584 @@
+{
+  "summary": {
+    "total_messages": 140,
+    "corruption_events": 52,
+    "persons_involved": 7,
+    "high_risk_persons": 3,
+    "networks_detected": 2
+  },
+  "persons": [
+    {
+      "name": "A",
+      "risk_score": 100,
+      "risk_level": "high",
+      "role": "采购经理（官员）- 核心受贿人",
+      "behavior": {
+        "bribery_given": 0,
+        "bribery_received": 27,
+        "info_leaked": 18,
+        "info_received": 0
+      },
+      "financial": {
+        "given": 0,
+        "received": 22969900.0
+      },
+      "connections": [
+        "E",
+        "B",
+        "G",
+        "F",
+        "C",
+        "D"
+      ]
+    },
+    {
+      "name": "D",
+      "risk_score": 100,
+      "risk_level": "high",
+      "role": "供应商 - 行贿人",
+      "behavior": {
+        "bribery_given": 15,
+        "bribery_received": 0,
+        "info_leaked": 0,
+        "info_received": 7
+      },
+      "financial": {
+        "given": 11479000.0,
+        "received": 0
+      },
+      "connections": [
+        "A"
+      ]
+    },
+    {
+      "name": "E",
+      "risk_score": 100,
+      "risk_level": "high",
+      "role": "供应商 - 行贿人",
+      "behavior": {
+        "bribery_given": 9,
+        "bribery_received": 1,
+        "info_leaked": 0,
+        "info_received": 5
+      },
+      "financial": {
+        "given": 10790900.0,
+        "received": 0
+      },
+      "connections": [
+        "A"
+      ]
+    },
+    {
+      "name": "G",
+      "risk_score": 40,
+      "risk_level": "medium",
+      "role": "中介/掮客",
+      "behavior": {
+        "bribery_given": 3,
+        "bribery_received": 0,
+        "info_leaked": 0,
+        "info_received": 1
+      },
+      "financial": {
+        "given": 700000.0,
+        "received": 0
+      },
+      "connections": [
+        "A"
+      ]
+    },
+    {
+      "name": "C",
+      "risk_score": 22,
+      "risk_level": "low",
+      "role": "A的下属",
+      "behavior": {
+        "bribery_given": 1,
+        "bribery_received": 0,
+        "info_leaked": 0,
+        "info_received": 3
+      },
+      "financial": {
+        "given": 0,
+        "received": 0
+      },
+      "connections": [
+        "A"
+      ]
+    },
+    {
+      "name": "B",
+      "risk_score": 8,
+      "risk_level": "low",
+      "role": "A的家属（妻子）",
+      "behavior": {
+        "bribery_given": 0,
+        "bribery_received": 0,
+        "info_leaked": 0,
+        "info_received": 2
+      },
+      "financial": {
+        "given": 0,
+        "received": 0
+      },
+      "connections": [
+        "A"
+      ]
+    },
+    {
+      "name": "F",
+      "risk_score": 7,
+      "risk_level": "low",
+      "role": "其他",
+      "behavior": {
+        "bribery_given": 0,
+        "bribery_received": 0,
+        "info_leaked": 0,
+        "info_received": 0
+      },
+      "financial": {
+        "given": 0,
+        "received": 0
+      },
+      "connections": [
+        "A"
+      ]
+    }
+  ],
+  "relationships": {
+    "A-D": {
+      "person1": "A",
+      "person2": "D",
+      "risk_score": 100,
+      "risk_level": "high",
+      "suspicious_interactions": 19,
+      "fund_transfers": [
+        {
+          "amount": 39000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2021-07-08 00:00:00 08:35:00",
+          "context": "明白！谢谢李经理透露，中标后我马上把 3.9 万回扣转到你指定的账户"
+        },
+        {
+          "amount": 1000000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2021-07-28 00:00:00 08:30:00",
+          "context": "下次有个 100 万的采购项目，你们报价 95 万，底价是 98 万，中标后给我 6 个点回扣"
+        },
+        {
+          "amount": 950000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2021-07-28 00:00:00 08:30:00",
+          "context": "下次有个 100 万的采购项目，你们报价 95 万，底价是 98 万，中标后给我 6 个点回扣"
+        },
+        {
+          "amount": 980000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2021-07-28 00:00:00 08:30:00",
+          "context": "下次有个 100 万的采购项目，你们报价 95 万，底价是 98 万，中标后给我 6 个点回扣"
+        },
+        {
+          "amount": 60000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2021-07-28 00:00:00 09:15:00",
+          "context": "没问题李经理！一定照办，这次回扣 6 万，中标后立马转过去"
+        },
+        {
+          "amount": 800000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-01-18 00:00:00 08:25:00",
+          "context": "年底有个 80 万的采购项目，你们报价 75 万，回扣还是 5 个点，怎么样？"
+        },
+        {
+          "amount": 750000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-01-18 00:00:00 08:25:00",
+          "context": "年底有个 80 万的采购项目，你们报价 75 万，回扣还是 5 个点，怎么样？"
+        },
+        {
+          "amount": 750000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-01-18 00:00:00 09:10:00",
+          "context": "太感谢李经理了！一定报价 75 万，回扣 4 万，等中标后转你账户。对了，过年给你准备了点礼品"
+        },
+        {
+          "amount": 40000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-01-18 00:00:00 09:10:00",
+          "context": "太感谢李经理了！一定报价 75 万，回扣 4 万，等中标后转你账户。对了，过年给你准备了点礼品"
+        },
+        {
+          "amount": 1200000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-06-15 00:00:00 08:40:00",
+          "context": "有个 120 万的大项目，底价 110 万，你们报价 108 万，中标后给我 8 个点回扣"
+        },
+        {
+          "amount": 1100000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-06-15 00:00:00 08:40:00",
+          "context": "有个 120 万的大项目，底价 110 万，你们报价 108 万，中标后给我 8 个点回扣"
+        },
+        {
+          "amount": 1080000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-06-15 00:00:00 08:40:00",
+          "context": "有个 120 万的大项目，底价 110 万，你们报价 108 万，中标后给我 8 个点回扣"
+        },
+        {
+          "amount": 96000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2022-06-15 00:00:00 09:25:00",
+          "context": "太给力了李经理！一定照办，回扣 9.6 万，中标后立马转，绝对不会让你失望"
+        },
+        {
+          "amount": 900000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2023-05-25 00:00:00 08:30:00",
+          "context": "下次有个 90 万的项目，底价 85 万，你们报价 83 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "amount": 850000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2023-05-25 00:00:00 08:30:00",
+          "context": "下次有个 90 万的项目，底价 85 万，你们报价 83 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "amount": 830000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2023-05-25 00:00:00 08:30:00",
+          "context": "下次有个 90 万的项目，底价 85 万，你们报价 83 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "amount": 54000.0,
+          "from": "D",
+          "to": "A",
+          "time": "2023-05-25 00:00:00 09:15:00",
+          "context": "没问题李经理！一定照办，中标后马上转回扣 5.4 万，感谢你的照顾"
+        }
+      ],
+      "total_fund": 11479000.0,
+      "info_leaks": [
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2021-03-15 00:00:00 11:23:00",
+          "content": "王总，上次跟你说的那个采购项目，你们的报价能不能再低一点？现在竞争挺激烈的"
+        },
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2021-03-16 00:00:00 14:18:00",
+          "content": "这个嘛，也不是不行。对了，这次招标的底价是 80 万，你报价 78 万，大概率能中标"
+        },
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2023-02-15 00:00:00 09:25:00",
+          "content": "王总，最近市场价格波动大，你们的报价要灵活点，别太高，不然我不好帮你说话"
+        },
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2021-07-28 00:00:00 08:30:00",
+          "content": "下次有个 100 万的采购项目，你们报价 95 万，底价是 98 万，中标后给我 6 个点回扣"
+        },
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2022-01-18 00:00:00 08:25:00",
+          "content": "年底有个 80 万的采购项目，你们报价 75 万，回扣还是 5 个点，怎么样？"
+        },
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2022-06-15 00:00:00 08:40:00",
+          "content": "有个 120 万的大项目，底价 110 万，你们报价 108 万，中标后给我 8 个点回扣"
+        },
+        {
+          "leaker": "A",
+          "receiver": "D",
+          "time": "2023-05-25 00:00:00 08:30:00",
+          "content": "下次有个 90 万的项目，底价 85 万，你们报价 83 万，回扣 6 个点，怎么样？"
+        }
+      ]
+    },
+    "A-C": {
+      "person1": "A",
+      "person2": "C",
+      "risk_score": 44,
+      "risk_level": "medium",
+      "suspicious_interactions": 4,
+      "fund_transfers": [],
+      "total_fund": 0,
+      "info_leaks": [
+        {
+          "leaker": "A",
+          "receiver": "C",
+          "time": "2021-03-16 00:00:00 09:30:00",
+          "content": "对，周三上午 9 点，在三楼会议室，你提前准备好招标资料，记得核对下报价单"
+        },
+        {
+          "leaker": "A",
+          "receiver": "C",
+          "time": "2022-06-18 00:00:00 14:10:00",
+          "content": "公司要采购一批新的办公设备，预算 20 万，你找几家供应商报价，下周对比筛选"
+        },
+        {
+          "leaker": "A",
+          "receiver": "C",
+          "time": "2023-02-14 00:00:00 14:05:00",
+          "content": "这次采购招标，D 供应商的报价有点高，你跟他们再谈一谈，争取降 3 个点"
+        }
+      ]
+    },
+    "A-E": {
+      "person1": "A",
+      "person2": "E",
+      "risk_score": 100,
+      "risk_level": "high",
+      "suspicious_interactions": 13,
+      "fund_transfers": [
+        {
+          "amount": 680000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2021-05-21 00:00:00 11:45:00",
+          "context": "没问题李经理！5 个点回扣，报价 68 万，一定照办，感谢你透露底价"
+        },
+        {
+          "amount": 1000000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-01-20 00:00:00 09:02:00",
+          "context": "年底有个 100 万的项目，底价 95 万，你们报价 93 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "amount": 950000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-01-20 00:00:00 09:02:00",
+          "context": "年底有个 100 万的项目，底价 95 万，你们报价 93 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "amount": 930000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-01-20 00:00:00 09:02:00",
+          "context": "年底有个 100 万的项目，底价 95 万，你们报价 93 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "amount": 55800.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-01-20 00:00:00 11:20:00",
+          "context": "太感谢李经理了！一定照办，回扣 5.58 万，中标后马上转，以后还请多关照"
+        },
+        {
+          "amount": 1100000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2023-05-11 00:00:00 10:50:00",
+          "context": "张总，最近有个 110 万的项目，底价 100 万，你们报价 98 万，回扣 7 个点，怎么样？"
+        },
+        {
+          "amount": 1000000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2023-05-11 00:00:00 10:50:00",
+          "context": "张总，最近有个 110 万的项目，底价 100 万，你们报价 98 万，回扣 7 个点，怎么样？"
+        },
+        {
+          "amount": 980000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2023-05-11 00:00:00 10:50:00",
+          "context": "张总，最近有个 110 万的项目，底价 100 万，你们报价 98 万，回扣 7 个点，怎么样？"
+        },
+        {
+          "amount": 980000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2023-05-11 00:00:00 11:45:00",
+          "context": "没问题李经理！一定报价 98 万，回扣 6.86 万，中标后立马转，感谢你的照顾"
+        },
+        {
+          "amount": 68600.0,
+          "from": "E",
+          "to": "A",
+          "time": "2023-05-11 00:00:00 11:45:00",
+          "context": "没问题李经理！一定报价 98 万，回扣 6.86 万，中标后立马转，感谢你的照顾"
+        },
+        {
+          "amount": 800000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-06-18 00:00:00 10:30:00",
+          "context": "下次有个 80 万的项目，底价 75 万，你们报价 73 万，回扣还是 5 个点"
+        },
+        {
+          "amount": 750000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-06-18 00:00:00 10:30:00",
+          "context": "下次有个 80 万的项目，底价 75 万，你们报价 73 万，回扣还是 5 个点"
+        },
+        {
+          "amount": 730000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-06-18 00:00:00 10:30:00",
+          "context": "下次有个 80 万的项目，底价 75 万，你们报价 73 万，回扣还是 5 个点"
+        },
+        {
+          "amount": 730000.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-06-18 00:00:00 11:15:00",
+          "context": "谢谢李经理！一定报价 73 万，回扣 3.65 万，中标后立马转，绝对不会出问题"
+        },
+        {
+          "amount": 36500.0,
+          "from": "E",
+          "to": "A",
+          "time": "2022-06-18 00:00:00 11:15:00",
+          "context": "谢谢李经理！一定报价 73 万，回扣 3.65 万，中标后立马转，绝对不会出问题"
+        }
+      ],
+      "total_fund": 10790900.0,
+      "info_leaks": [
+        {
+          "leaker": "A",
+          "receiver": "E",
+          "time": "2021-05-20 00:00:00 09:25:00",
+          "content": "张总，你们公司想跟我们合作，报价怎么样？有没有诚意？"
+        },
+        {
+          "leaker": "A",
+          "receiver": "E",
+          "time": "2021-05-21 00:00:00 09:12:00",
+          "content": "4 个点有点少，最少 5 个点。对了，这次招标的底价是 70 万，你报价 68 万，才有机会中标"
+        },
+        {
+          "leaker": "A",
+          "receiver": "E",
+          "time": "2022-01-20 00:00:00 09:02:00",
+          "content": "年底有个 100 万的项目，底价 95 万，你们报价 93 万，回扣 6 个点，怎么样？"
+        },
+        {
+          "leaker": "A",
+          "receiver": "E",
+          "time": "2023-05-11 00:00:00 10:50:00",
+          "content": "张总，最近有个 110 万的项目，底价 100 万，你们报价 98 万，回扣 7 个点，怎么样？"
+        },
+        {
+          "leaker": "A",
+          "receiver": "E",
+          "time": "2022-06-18 00:00:00 10:30:00",
+          "content": "下次有个 80 万的项目，底价 75 万，你们报价 73 万，回扣还是 5 个点"
+        }
+      ]
+    },
+    "A-B": {
+      "person1": "A",
+      "person2": "B",
+      "risk_score": 26,
+      "risk_level": "low",
+      "suspicious_interactions": 2,
+      "fund_transfers": [],
+      "total_fund": 0,
+      "info_leaks": [
+        {
+          "leaker": "A",
+          "receiver": "B",
+          "time": "2021-05-21 00:00:00 08:20:00",
+          "content": "我让供应商那边帮着问问，他们有家电资源，可能能拿到内部价，比商场便宜不少"
+        },
+        {
+          "leaker": "A",
+          "receiver": "B",
+          "time": "2023-09-30 00:00:00 08:10:00",
+          "content": "房子过户手续办好了，下个月就能装修了，预算 20 万，我让供应商那边帮着找装修队，能省点"
+        }
+      ]
+    },
+    "A-G": {
+      "person1": "A",
+      "person2": "G",
+      "risk_score": 63,
+      "risk_level": "high",
+      "suspicious_interactions": 5,
+      "fund_transfers": [
+        {
+          "amount": 50000.0,
+          "from": "G",
+          "to": "A",
+          "time": "2022-06-19 00:00:00 08:42:00",
+          "context": "李经理，没问题！我表哥是市教育局的，这事我帮你办。不过需要打点一下，大概 5 万好处费"
+        },
+        {
+          "amount": 50000.0,
+          "from": "G",
+          "to": "A",
+          "time": "2023-07-21 00:00:00 08:40:00",
+          "context": "太感谢了赵总！5 万好处费没白花，下次有个 60 万的采购项目，直接给你们公司做，回扣按惯例 5 个点"
+        },
+        {
+          "amount": 600000.0,
+          "from": "G",
+          "to": "A",
+          "time": "2023-07-21 00:00:00 08:40:00",
+          "context": "太感谢了赵总！5 万好处费没白花，下次有个 60 万的采购项目，直接给你们公司做，回扣按惯例 5 个点"
+        }
+      ],
+      "total_fund": 700000.0,
+      "info_leaks": [
+        {
+          "leaker": "A",
+          "receiver": "G",
+          "time": "2023-07-20 00:00:00 09:18:00",
+          "content": "赵总，孩子入学的事怎么样了？有消息吗？"
+        }
+      ]
+    },
+    "C-E": {
+      "person1": "C",
+      "person2": "E",
+      "risk_score": 5,
+      "risk_level": "low",
+      "suspicious_interactions": 1,
+      "fund_transfers": [],
+      "total_fund": 0,
+      "info_leaks": []
+    },
+    "A-F": {
+      "person1": "A",
+      "person2": "F",
+      "risk_score": 15,
+      "risk_level": "low",
+      "suspicious_interactions": 3,
+      "fund_transfers": [],
+      "total_fund": 0,
+      "info_leaks": []
+    }
+  },
+  "networks": [
+    {
+      "type": "以 A 为中心的腐败网络",
+      "center": "A",
+      "members": [
+        "A",
+        "E",
+        "B",
+        "G",
+        "F",
+        "C",
+        "D"
+      ],
+      "periphery": [
+        {
+          "person": "E",
+          "suspicious_count": 13,
+          "fund_transfers": 15
+        },
+        {
+          "person": "B",
+          "suspicious_count": 2,
+          "fund_transfers": 0
+        },
+        {
+          "person": "G",
+          "suspicious_count": 5,
+          "fund_transfers": 3
+        },
+        {
+          "person": "F",
+          "suspicious_count": 3,
+          "fund_transfers": 0
+        },
+        {
+          "person": "C",
+          "suspicious_count": 4,
+          "fund_transfers": 0
+        },
+        {
+          "person": "D",
+          "suspicious_count": 19,
+          "fund_transfers": 17
+        }
+      ]
+    },
+    {
+      "type": "竞争供应商共谋网络",
+      "members": [
+        "D",
+        "E"
+      ],
+      "description": "D 和 E 都向 A 行贿，存在围标串标嫌疑"
+    }
+  ],
+  "events": [
+    {
+      "time": "2021-03-15 00:00:00 11:23:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "王总，上次跟你说的那个采购项目，你们的报价能不能再低一点？现在竞争挺激烈的",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2021-03-16 00:00:00 08:40:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "李经理，价格已经是成本价了，不过要是能合作成功，我私下给你 5 个点的回扣，你看怎么样？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "secret_meeting",
+          "keyword": "私下",
+          "weight": 2
+        }
+      ],
+      "amounts": [],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2021-03-16 00:00:00 09:30:00",
+      "sender": "A",
+      "receiver": "C",
+      "content": "对，周三上午 9 点，在三楼会议室，你提前准备好招标资料，记得核对下报价单",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2021-03-16 00:00:00 14:18:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "这个嘛，也不是不行。对了，这次招标的底价是 80 万，你报价 78 万，大概率能中标",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        800000.0,
+        780000.0
+      ]
+    },
+    {
+      "time": "2021-05-20 00:00:00 09:25:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "张总，你们公司想跟我们合作，报价怎么样？有没有诚意？",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2021-05-20 00:00:00 10:05:00",
+      "sender": "B",
+      "receiver": "B",
+      "content": "谢谢老公～ 对了，我妈说想换个冰箱，预算 5000 以内，你有靠谱的渠道吗？",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "预算",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2021-05-20 00:00:00 11:33:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "李经理，我们非常有诚意，报价比市场价低 3 个点，要是能合作，我私下给你 4 个点回扣",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "secret_meeting",
+          "keyword": "私下",
+          "weight": 2
+        },
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "E",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2021-05-21 00:00:00 08:20:00",
+      "sender": "A",
+      "receiver": "B",
+      "content": "我让供应商那边帮着问问，他们有家电资源，可能能拿到内部价，比商场便宜不少",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "内部",
+          "weight": 2
+        },
+        {
+          "type": "information_leak",
+          "keyword": "内部价",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2021-05-21 00:00:00 09:12:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "4 个点有点少，最少 5 个点。对了，这次招标的底价是 70 万，你报价 68 万，才有机会中标",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        700000.0,
+        680000.0
+      ]
+    },
+    {
+      "time": "2021-05-21 00:00:00 11:45:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "没问题李经理！5 个点回扣，报价 68 万，一定照办，感谢你透露底价",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        680000.0
+      ],
+      "real_sender": "E",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2021-07-08 00:00:00 08:35:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "明白！谢谢李经理透露，中标后我马上把 3.9 万回扣转到你指定的账户",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "透露",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        39000.0
+      ],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2021-09-12 00:00:00 09:05:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "太好了！合同我明天就让人送过去，回扣已经转到你尾号 6789 的银行卡了，查收一下",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2021-09-13 00:00:00 11:50:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "放心吧李经理，绝对没问题！对了，下次再有采购项目，还请多关照，回扣比例可以再提高点",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-01-20 00:00:00 09:02:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "年底有个 100 万的项目，底价 95 万，你们报价 93 万，回扣 6 个点，怎么样？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        1000000.0,
+        950000.0,
+        930000.0
+      ]
+    },
+    {
+      "time": "2022-01-20 00:00:00 11:20:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "太感谢李经理了！一定照办，回扣 5.58 万，中标后马上转，以后还请多关照",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        55800.0
+      ],
+      "real_sender": "E",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-04-05 00:00:00 11:40:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "李经理，价格真的降不了了，不过回扣可以给你 7 个点，你看行不行？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-04-05 00:00:00 14:25:00",
+      "sender": "A",
+      "receiver": "G",
+      "content": "赵总，我儿子明年要上小学了，想进市实验小学，你那边有没有关系能帮忙疏通下？费用不是问题",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "帮忙",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2022-06-18 00:00:00 14:10:00",
+      "sender": "A",
+      "receiver": "C",
+      "content": "公司要采购一批新的办公设备，预算 20 万，你找几家供应商报价，下周对比筛选",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "预算",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        200000.0
+      ]
+    },
+    {
+      "time": "2022-06-19 00:00:00 08:42:00",
+      "sender": "G",
+      "receiver": "G",
+      "content": "李经理，没问题！我表哥是市教育局的，这事我帮你办。不过需要打点一下，大概 5 万好处费",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "好处费",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        50000.0
+      ],
+      "real_sender": "G",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-06-19 00:00:00 09:30:00",
+      "sender": "C",
+      "receiver": "C",
+      "content": "好的，我已经联系了 3 家，明天给你发报价单。对了，E 供应商的样品已经到了，要不要现在去看看？",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "C",
+      "real_receiver": "E",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-06-19 00:00:00 11:35:00",
+      "sender": "A",
+      "receiver": "C",
+      "content": "现在去吧，看完一起吃午饭。对了，下个月的部门团建，你负责安排下地点和行程",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "安排",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-02-14 00:00:00 14:05:00",
+      "sender": "A",
+      "receiver": "C",
+      "content": "这次采购招标，D 供应商的报价有点高，你跟他们再谈一谈，争取降 3 个点",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-02-15 00:00:00 08:33:00",
+      "sender": "C",
+      "receiver": "C",
+      "content": "好的，我马上联系。对了，领导让你做个下半年采购预算，下周五之前提交",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "预算",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-02-15 00:00:00 09:25:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "王总，最近市场价格波动大，你们的报价要灵活点，别太高，不然我不好帮你说话",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-02-15 00:00:00 10:40:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "放心吧李经理，我们一定报低价，回扣比例不变，还是按之前的来",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2023-05-11 00:00:00 10:50:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "张总，最近有个 110 万的项目，底价 100 万，你们报价 98 万，回扣 7 个点，怎么样？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        1100000.0,
+        1000000.0,
+        980000.0
+      ]
+    },
+    {
+      "time": "2023-05-11 00:00:00 11:45:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "没问题李经理！一定报价 98 万，回扣 6.86 万，中标后立马转，感谢你的照顾",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "power_abuse",
+          "keyword": "照顾",
+          "weight": 2
+        },
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        980000.0,
+        68600.0
+      ],
+      "real_sender": "E",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2023-07-20 00:00:00 09:18:00",
+      "sender": "A",
+      "receiver": "G",
+      "content": "赵总，孩子入学的事怎么样了？有消息吗？",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "消息",
+          "weight": 3
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-07-20 00:00:00 11:30:00",
+      "sender": "G",
+      "receiver": "G",
+      "content": "搞定了！录取通知书已经下来了，下周可以去学校办理入学手续。李经理，下次采购项目可得优先考虑我们公司啊",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "搞定",
+          "weight": 2
+        }
+      ],
+      "amounts": [],
+      "real_sender": "G",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2023-07-21 00:00:00 08:40:00",
+      "sender": "A",
+      "receiver": "G",
+      "content": "太感谢了赵总！5 万好处费没白花，下次有个 60 万的采购项目，直接给你们公司做，回扣按惯例 5 个点",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        50000.0,
+        600000.0
+      ]
+    },
+    {
+      "time": "2023-09-30 00:00:00 08:10:00",
+      "sender": "A",
+      "receiver": "B",
+      "content": "房子过户手续办好了，下个月就能装修了，预算 20 万，我让供应商那边帮着找装修队，能省点",
+      "patterns": [
+        {
+          "type": "information_leak",
+          "keyword": "预算",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        200000.0
+      ]
+    },
+    {
+      "time": "2021-07-28 00:00:00 08:30:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "下次有个 100 万的采购项目，你们报价 95 万，底价是 98 万，中标后给我 6 个点回扣",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        1000000.0,
+        950000.0,
+        980000.0
+      ]
+    },
+    {
+      "time": "2021-07-28 00:00:00 09:15:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "没问题李经理！一定照办，这次回扣 6 万，中标后立马转过去",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        60000.0
+      ],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-01-18 00:00:00 08:25:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "年底有个 80 万的采购项目，你们报价 75 万，回扣还是 5 个点，怎么样？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        800000.0,
+        750000.0
+      ]
+    },
+    {
+      "time": "2022-01-18 00:00:00 09:10:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "太感谢李经理了！一定报价 75 万，回扣 4 万，等中标后转你账户。对了，过年给你准备了点礼品",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        750000.0,
+        40000.0
+      ],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-02-25 00:00:00 10:30:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "合同已经签了，尽快安排生产，别耽误交货期。对了，回扣什么时候转？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "power_abuse",
+          "keyword": "安排",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2022-06-15 00:00:00 08:40:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "有个 120 万的大项目，底价 110 万，你们报价 108 万，中标后给我 8 个点回扣",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        1200000.0,
+        1100000.0,
+        1080000.0
+      ]
+    },
+    {
+      "time": "2022-06-15 00:00:00 09:25:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "太给力了李经理！一定照办，回扣 9.6 万，中标后立马转，绝对不会让你失望",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        96000.0
+      ],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-08-20 00:00:00 10:50:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "中标结果出来了，你们中标了，尽快签合同，安排生产，质量一定要过关",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "安排",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2022-08-20 00:00:00 11:35:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "明白李经理！合同明天送过去，回扣已经转了，查收一下。以后还请多关照",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2023-05-25 00:00:00 08:30:00",
+      "sender": "A",
+      "receiver": "D",
+      "content": "下次有个 90 万的项目，底价 85 万，你们报价 83 万，回扣 6 个点，怎么样？",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        900000.0,
+        850000.0,
+        830000.0
+      ]
+    },
+    {
+      "time": "2023-05-25 00:00:00 09:15:00",
+      "sender": "D",
+      "receiver": "D",
+      "content": "没问题李经理！一定照办，中标后马上转回扣 5.4 万，感谢你的照顾",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "power_abuse",
+          "keyword": "照顾",
+          "weight": 2
+        }
+      ],
+      "amounts": [
+        54000.0
+      ],
+      "real_sender": "D",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-02-05 00:00:00 10:15:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "太好了！合同明天送过去，回扣 3.4 万已经转到你指定的账户，查收一下",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        34000.0
+      ]
+    },
+    {
+      "time": "2022-04-12 00:00:00 09:05:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "抱歉李经理！下次一定注意，我再给你补 1 个点的回扣，作为补偿",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        }
+      ],
+      "amounts": [],
+      "real_sender": "E",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-06-18 00:00:00 10:30:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "下次有个 80 万的项目，底价 75 万，你们报价 73 万，回扣还是 5 个点",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "底价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        800000.0,
+        750000.0,
+        730000.0
+      ]
+    },
+    {
+      "time": "2022-06-18 00:00:00 11:15:00",
+      "sender": "E",
+      "receiver": "E",
+      "content": "谢谢李经理！一定报价 73 万，回扣 3.65 万，中标后立马转，绝对不会出问题",
+      "patterns": [
+        {
+          "type": "fund_transfer",
+          "keyword": "回扣",
+          "weight": 3
+        },
+        {
+          "type": "information_leak",
+          "keyword": "报价",
+          "weight": 3
+        }
+      ],
+      "amounts": [
+        730000.0,
+        36500.0
+      ],
+      "real_sender": "E",
+      "real_receiver": "A",
+      "is_self_note": true
+    },
+    {
+      "time": "2022-08-05 00:00:00 08:40:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "中标了，尽快安排生产，交货期别耽误，质量要把控好",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "安排",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-09-05 00:00:00 09:15:00",
+      "sender": "A",
+      "receiver": "E",
+      "content": "中标了，尽快签合同，安排生产，别耽误工期，不然我这边不好交代",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "安排",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2022-10-10 00:00:00 08:45:00",
+      "sender": "A",
+      "receiver": "F",
+      "content": "宝贝，公寓已经装修好了，地址是杭州市滨江区江南大道 1500 号江景公寓 8 栋 1803，下次见面带你去住",
+      "patterns": [
+        {
+          "type": "secret_meeting",
+          "keyword": "见面",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2022-11-05 00:00:00 08:30:00",
+      "sender": "A",
+      "receiver": "F",
+      "content": "安排！已经给你订好了，下周寄给你，快递单号 JD9876543210987。对了，我公司名称是浙江恒通供应链有限公司，2010 年入职的，现在是采购经理，手机号 1385812XXXX，办公 OA 账号是 liming@zjhontong.com",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "安排",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-03-21 00:00:00 10:55:00",
+      "sender": "A",
+      "receiver": "F",
+      "content": "嗯，已经上一年级了，多亏了供应商 G 帮忙找关系。对了，我就一个孩子，以后我们要是有孩子，也让他上最好的学校",
+      "patterns": [
+        {
+          "type": "power_abuse",
+          "keyword": "帮忙",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    },
+    {
+      "time": "2023-03-21 00:00:00 11:40:00",
+      "sender": "F",
+      "receiver": "F",
+      "content": "好呀～ 我等着呢！亲爱的，下次见面给你带点礼物",
+      "patterns": [
+        {
+          "type": "secret_meeting",
+          "keyword": "见面",
+          "weight": 2
+        }
+      ],
+      "amounts": []
+    }
+  ]
+}

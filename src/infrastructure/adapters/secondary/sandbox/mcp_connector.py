@@ -123,7 +123,7 @@ class MCPConnector:
         """
         if instance.mcp_client:
             try:
-                await instance.mcp_client.close()
+                await instance.mcp_client.disconnect()
                 logger.info(f"Disconnected MCP client for sandbox {instance.id}")
             except Exception as e:
                 logger.warning(f"Error disconnecting MCP client: {e}")

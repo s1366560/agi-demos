@@ -1,0 +1,130 @@
+{
+  "summary": {
+    "total_messages": 140,
+    "suspicious_messages": 52,
+    "total_persons": 7,
+    "high_risk_relationships": 4,
+    "corruption_networks": 0
+  },
+  "persons": {
+    "A": {
+      "score": 100,
+      "level": "high",
+      "roles": [
+        "family",
+        "intermediary",
+        "business",
+        "official"
+      ],
+      "connections": [
+        "B",
+        "D",
+        "G",
+        "C",
+        "E",
+        "F"
+      ],
+      "behavior_summary": {
+        "info_leak": 18,
+        "fund_out": 9
+      }
+    },
+    "B": {
+      "score": 17,
+      "level": "low",
+      "roles": [
+        "family"
+      ],
+      "connections": [
+        "A",
+        "B"
+      ],
+      "behavior_summary": {
+        "info_leak": 1
+      }
+    },
+    "C": {
+      "score": 28,
+      "level": "low",
+      "roles": [
+        "family",
+        "business",
+        "official"
+      ],
+      "connections": [
+        "C",
+        "A"
+      ],
+      "behavior_summary": {
+        "info_leak": 2
+      }
+    },
+    "D": {
+      "score": 100,
+      "level": "high",
+      "roles": [
+        "family",
+        "business",
+        "official"
+      ],
+      "connections": [
+        "A",
+        "D"
+      ],
+      "behavior_summary": {
+        "fund_out": 11,
+        "fund_in": 16,
+        "info_leak": 1
+      }
+    },
+    "E": {
+      "score": 100,
+      "level": "high",
+      "roles": [
+        "family",
+        "business",
+        "official"
+      ],
+      "connections": [
+        "A",
+        "E"
+      ],
+      "behavior_summary": {
+        "fund_out": 7,
+        "fund_in": 10,
+        "info_leak": 4
+      }
+    },
+    "F": {
+      "score": 8,
+      "level": "low",
+      "roles": [
+        "family",
+        "business"
+      ],
+      "connections": [
+        "F",
+        "A"
+      ],
+      "behavior_summary": {}
+    },
+    "G": {
+      "score": 41,
+      "level": "medium",
+      "roles": [
+        "intermediary",
+        "business",
+        "official"
+      ],
+      "connections": [
+        "A",
+        "G"
+      ],
+      "behavior_summary": {
+        "fund_out": 1,
+        "fund_in": 2
+      }
+    }
+  },
+  "relationships": {
+    

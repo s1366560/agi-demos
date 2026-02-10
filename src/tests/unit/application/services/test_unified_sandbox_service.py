@@ -598,9 +598,9 @@ class TestHealthCheck:
             sandbox_id="sb-existing",
             status=ProjectSandboxStatus.RUNNING,
         )
-        # Mock recent health check (using naive datetime to match domain model)
+        # Mock recent health check (using timezone-aware datetime to match domain model)
         import datetime
-        existing.health_checked_at = datetime.datetime.now()
+        existing.health_checked_at = datetime.datetime.now(datetime.timezone.utc)
         service._repository.find_by_project.return_value = existing
 
         result = await service.health_check(project_id="proj-123")

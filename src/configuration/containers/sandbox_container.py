@@ -78,6 +78,8 @@ class SandboxContainer:
             default_profile=self._settings.sandbox_profile_type if self._settings else "basic",
             health_check_interval_seconds=60,
             auto_recover=True,
+            memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
+            cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
         )
 
     def project_sandbox_lifecycle_service(self):
@@ -97,6 +99,8 @@ class SandboxContainer:
             default_profile=self._settings.sandbox_profile_type if self._settings else "basic",
             health_check_interval_seconds=60,
             auto_recover=True,
+            memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
+            cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
         )
 
     def sandbox_mcp_server_manager(self):

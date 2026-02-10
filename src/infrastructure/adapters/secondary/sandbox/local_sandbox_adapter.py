@@ -258,7 +258,7 @@ class LocalSandboxAdapter(SandboxPort):
         """Disconnect from a local sandbox."""
         if connection.client:
             try:
-                await connection.client.close()
+                await connection.client.disconnect()
             except Exception as e:
                 logger.warning(f"Error closing connection {connection.sandbox_id}: {e}")
             connection.client = None
@@ -681,6 +681,14 @@ class LocalSandboxAdapter(SandboxPort):
             return True  # Already connected
 
         try:
+            # Disconnect old client to avoid resource leak
+            if conn.client:
+                try:
+                    await conn.client.disconnect()
+                except Exception:
+                    pass
+                conn.client = None
+
             # Create new client
             client = WebSocketMCPClient(conn.tunnel_url)
             await asyncio.wait_for(

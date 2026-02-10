@@ -314,8 +314,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const StatusIcon = config.icon;
   const isError = lifecycleState === 'error';
 
-  // Check if agent can be started (not running)
-  const canStart = lifecycleState === 'uninitialized' || lifecycleState === 'error';
   // Check if agent can be stopped (is running)
   const canStop =
     lifecycleState === 'ready' || lifecycleState === 'executing' || lifecycleState === 'paused';
@@ -335,20 +333,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const instanceKey = `${tenantId}:${projectId}:chat`;
 
   // Lifecycle control handlers - use pool API when enabled, fallback to WebSocket
-  const handleStartAgent = useCallback(async () => {
-    setIsActionPending(true);
-    try {
-      // For pool mode, starting is handled automatically on first request
-      // For WebSocket mode, send start signal
-      if (!enablePoolManagement || !poolEnabled) {
-        agentService.startAgent(projectId);
-      }
-      message.info('正在启动 Agent...');
-    } finally {
-      setTimeout(() => setIsActionPending(false), 3000);
-    }
-  }, [projectId, enablePoolManagement, poolEnabled]);
-
   const handleStopAgent = useCallback(async () => {
     setIsActionPending(true);
     try {
@@ -641,31 +625,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       <div className="flex items-center gap-3 text-xs">
         {/* Lifecycle Control Buttons */}
         <div className="flex items-center gap-1.5">
-          {/* Start Button - shown when agent is not running */}
-          {canStart && (
-            <LazyTooltip title="启动 Agent">
-              <button
-                type="button"
-                onClick={handleStartAgent}
-                disabled={isActionPending}
-                className={`
-                  p-1 rounded transition-colors
-                  ${
-                    isActionPending
-                      ? 'text-slate-400 cursor-not-allowed'
-                      : 'text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
-                  }
-                `}
-              >
-                {isActionPending ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Play size={14} />
-                )}
-              </button>
-            </LazyTooltip>
-          )}
-
           {/* Pause Button - pool mode only, shown when agent is ready */}
           {canPause && (
             <LazyTooltip title="暂停 Agent (停止接收新请求)">

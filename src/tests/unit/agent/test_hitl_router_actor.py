@@ -12,8 +12,8 @@ class _FakeContinue:
     def __init__(self):
         self.called_with = None
 
-    def remote(self, request_id, response_data):
-        self.called_with = (request_id, response_data)
+    def remote(self, request_id, response_data, conversation_id=None):
+        self.called_with = (request_id, response_data, conversation_id)
         return "ref"
 
 
@@ -54,7 +54,7 @@ class TestHITLStreamRouterActor:
             fields={"data": json.dumps(payload)},
         )
 
-        assert fake_actor.continue_chat.called_with == ("req-1", {"answer": "ok"})
+        assert fake_actor.continue_chat.called_with == ("req-1", {"answer": "ok"}, None)
         await_ray_mock.assert_awaited_once()
         get_actor_mock.assert_awaited_once_with("tenant-1", "project-1", "default")
         actor._redis.xack.assert_awaited_once_with(
