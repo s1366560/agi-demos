@@ -161,6 +161,10 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   // This is used to disable auto-scroll if user explicitly scrolls up to read
   const userScrolledUpRef = useRef(false);
   const lastLoadTimeRef = useRef(0);
+  
+  // Track conversation switch to prevent scroll jitter
+  const isSwitchingConversationRef = useRef(false);
+  const lastConversationIdRef = useRef(conversationId);
 
   // Build display list: real timeline + synthetic streaming items at the end
   const displayTimeline: DisplayItem[] = useMemo(() => {
@@ -335,6 +339,9 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
 
   // Handle timeline changes - restore scroll position after loading earlier messages
   useEffect(() => {
+    // Skip if switching conversation to prevent scroll jitter
+    if (isSwitchingConversationRef.current) return;
+    
     const previousLength = previousTimelineLengthRef.current;
     const currentLength = timeline.length;
 
@@ -357,6 +364,9 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
 
   // Auto-scroll to bottom when streaming new messages (only if user is near bottom)
   useEffect(() => {
+    // Skip if switching conversation to prevent scroll jitter
+    if (isSwitchingConversationRef.current) return;
+    
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -385,6 +395,9 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   // Auto-scroll when streaming content or thought updates (for real-time streaming)
   // Since streaming items are now inside the virtual list, use scrollToIndex
   useEffect(() => {
+    // Skip if switching conversation to prevent scroll jitter
+    if (isSwitchingConversationRef.current) return;
+    
     if (!isStreaming || userScrolledUpRef.current) return;
     if (displayTimeline.length === 0) return;
 
@@ -395,6 +408,13 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
 
   // Reset scroll state when conversation changes
   useEffect(() => {
+    // Only handle actual conversation changes, not initial mount
+    if (lastConversationIdRef.current === conversationId) return;
+    lastConversationIdRef.current = conversationId;
+    
+    // Set switching flag to prevent other effects from interfering
+    isSwitchingConversationRef.current = true;
+    
     // Reset all scroll-related refs when conversationId changes
     isInitialLoadRef.current = true;
     hasScrolledInitiallyRef.current = false;
@@ -412,10 +432,12 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
         hasScrolledInitiallyRef.current = true;
         previousTimelineLengthRef.current = timeline.length;
       }
-    }, 100);
+      // Clear switching flag after scroll is complete
+      isSwitchingConversationRef.current = false;
+    }, 150);
 
     return () => clearTimeout(timeoutId);
-  }, [conversationId, eventVirtualizer]); // Only trigger when conversationId changes
+  }, [conversationId, eventVirtualizer, timeline.length]); // Include timeline.length for initial load
 
   // Cleanup timeout on unmount
   useEffect(() => {

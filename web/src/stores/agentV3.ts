@@ -679,6 +679,10 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Prevents stale streaming content from previous conversation
           clearAllDeltaBuffers();
 
+          // Reset context status for the new conversation
+          const { useContextStore } = require('../stores/contextStore');
+          useContextStore.getState().reset();
+
           // Save current conversation state before switching
           if (activeConversationId && activeConversationId !== id) {
             const newStates = new Map(conversationStates);
@@ -987,7 +991,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           try {
             // Parallelize independent API calls (async-parallel)
             // Include recovery info in execution status check
-            const [response, planStatus, execStatus] = await Promise.all([
+            const [response, planStatus, execStatus, _contextStatusResult] = await Promise.all([
               agentService.getConversationMessages(
                 conversationId,
                 projectId,
@@ -1000,6 +1004,14 @@ export const useAgentV3Store = create<AgentV3State>()(
               }),
               agentService.getExecutionStatus(conversationId, true, lastKnownTimeUs).catch((e) => {
                 console.warn(`[AgentV3] getExecutionStatus failed:`, e);
+                return null;
+              }),
+              // Restore context status indicator on conversation switch / page refresh
+              (async () => {
+                const { useContextStore } = await import('../stores/contextStore');
+                await useContextStore.getState().fetchContextStatus(conversationId, projectId);
+              })().catch((e) => {
+                console.warn(`[AgentV3] fetchContextStatus failed:`, e);
                 return null;
               }),
             ]);

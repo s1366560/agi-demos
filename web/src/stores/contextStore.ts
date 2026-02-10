@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
+import { agentService } from '@/services/agentService';
+
 /**
  * Token distribution by message category
  */
@@ -65,6 +67,7 @@ interface ContextState {
   handleContextStatus: (data: Record<string, unknown>) => void;
   handleContextCompressed: (data: Record<string, unknown>) => void;
   handleCostUpdate: (data: Record<string, unknown>) => void;
+  fetchContextStatus: (conversationId: string, projectId: string) => Promise<void>;
   setDetailExpanded: (expanded: boolean) => void;
   reset: () => void;
 }
@@ -134,6 +137,23 @@ export const useContextStore = create<ContextState>()(
         });
       },
 
+      fetchContextStatus: async (conversationId, projectId) => {
+        const data = await agentService.getContextStatus(conversationId, projectId);
+        if (!data) return;
+
+        const prev = get().status;
+        set({
+          status: {
+            ...(prev ?? { ...defaultStatus }),
+            compressionLevel: data.compression_level,
+            fromCache: data.from_cache,
+            messagesInSummary: data.messages_in_summary,
+            // Preserve live token data if we have it, otherwise use summary tokens
+            currentTokens: prev?.currentTokens ?? data.summary_tokens,
+          },
+        });
+      },
+
       setDetailExpanded: (expanded) => set({ detailExpanded: expanded }),
 
       reset: () => set({ status: null, detailExpanded: false }),
@@ -153,6 +173,7 @@ export const useContextActions = () =>
       handleContextStatus: state.handleContextStatus,
       handleContextCompressed: state.handleContextCompressed,
       handleCostUpdate: state.handleCostUpdate,
+      fetchContextStatus: state.fetchContextStatus,
       setDetailExpanded: state.setDetailExpanded,
       reset: state.reset,
     }))

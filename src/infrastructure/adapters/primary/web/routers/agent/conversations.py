@@ -62,7 +62,7 @@ async def create_conversation(
             exc_info=True,
             extra={"error_id": AGENT_CONVERSATION_CREATE_FAILED},
         )
-        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid request: {e!s}")
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
@@ -139,7 +139,7 @@ async def list_conversations(
 
     except Exception as e:
         logger.error(f"Error listing conversations: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list conversations: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list conversations: {e!s}")
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -172,7 +172,7 @@ async def get_conversation(
         raise
     except Exception as e:
         logger.error(f"Error getting conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {e!s}")
 
 
 @router.get("/conversations/{conversation_id}/context-status")
@@ -238,9 +238,7 @@ async def get_context_status(
         raise
     except Exception as e:
         logger.error(f"Error getting context status: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get context status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get context status: {e!s}")
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -277,7 +275,7 @@ async def delete_conversation(
         raise
     except Exception as e:
         logger.error(f"Error deleting conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {e!s}")
 
 
 @router.patch("/conversations/{conversation_id}/title", response_model=ConversationResponse)
@@ -330,9 +328,7 @@ async def update_conversation_title(
         raise
     except Exception as e:
         logger.error(f"Error updating conversation title: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to update conversation title: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to update conversation title: {e!s}")
 
 
 @router.post(
@@ -419,6 +415,4 @@ async def generate_conversation_title(
         raise
     except Exception as e:
         logger.error(f"Error generating conversation title: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to generate conversation title: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to generate conversation title: {e!s}")
