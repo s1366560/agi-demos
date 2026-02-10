@@ -14,7 +14,7 @@ Key features:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -258,7 +258,7 @@ Working Directory: {workspace_path}
 Project ID: {context.project_id}
 Is Git Repository: {"Yes" if is_git_repo else "No"}
 Platform: Linux (Sandbox Container)
-Today's Date: {datetime.now().strftime("%Y-%m-%d")}
+Current Time: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC (%A)")}
 Conversation History: {context.conversation_history_length} messages
 Current Step: {context.current_step}/{context.max_steps}
 </env>"""
