@@ -119,9 +119,18 @@ class SandboxMCPToolWrapper(AgentTool):
         Returns:
             String result for regular tools, or dict with artifact data for export_artifact
         """
+        import time
+
         last_error: Optional[MCPToolError] = None
+        configured_timeout_s: Optional[float] = None
+
+        # Extract configured timeout from tool arguments for duration-aware classification
+        tool_timeout = kwargs.get("timeout")
+        if tool_timeout and isinstance(tool_timeout, (int, float)):
+            configured_timeout_s = float(tool_timeout)
 
         for attempt in range(self._retry_config.max_retries + 1):
+            start_time = time.time()
             try:
                 logger.debug(
                     f"SandboxMCPToolWrapper: Executing {self.name} "
@@ -132,17 +141,18 @@ class SandboxMCPToolWrapper(AgentTool):
                 # Route to sandbox adapter's call_tool method
                 # Extract timeout from tool arguments (e.g., bash tool's timeout param)
                 # and use it as MCP request timeout with padding for overhead
-                tool_timeout = kwargs.get("timeout")
                 call_kwargs: dict[str, Any] = {}
-                if tool_timeout and isinstance(tool_timeout, (int, float)):
-                    call_kwargs["timeout"] = float(tool_timeout) + 30.0
+                if configured_timeout_s is not None:
+                    call_kwargs["timeout"] = configured_timeout_s + 30.0
 
+                start_time = time.time()
                 result = await self._adapter.call_tool(
                     self.sandbox_id,
                     self.tool_name,
                     kwargs,
                     **call_kwargs,
                 )
+                elapsed_ms = int((time.time() - start_time) * 1000)
 
                 # Parse result - check both is_error (client normalized) and isError (MCP standard)
                 if result.get("is_error") or result.get("isError"):
@@ -161,22 +171,32 @@ class SandboxMCPToolWrapper(AgentTool):
                     # If still no error message, provide debugging info
                     if not error_msg:
                         logger.warning(
-                            f"SandboxMCPToolWrapper: Tool returned is_error=True but no error message. "
-                            f"Full result: {result}"
+                            f"SandboxMCPToolWrapper: Tool returned is_error=True but no error "
+                            f"message. Full result: {result}"
                         )
                         error_msg = (
                             f"Tool execution failed (no details provided). Raw result: {result}"
                         )
 
-                    # Create error from tool result
+                    # Create error from tool result with duration context
                     error = Exception(error_msg)
                     mcp_error = MCPToolErrorClassifier.classify(
                         error=error,
                         tool_name=self.tool_name,
                         sandbox_id=self.sandbox_id,
-                        context={"kwargs": kwargs, "attempt": attempt},
+                        context={
+                            "kwargs": kwargs,
+                            "attempt": attempt,
+                            "execution_duration_ms": elapsed_ms,
+                            "configured_timeout_s": configured_timeout_s,
+                        },
                     )
                     mcp_error.retry_count = attempt
+
+                    logger.debug(
+                        f"SandboxMCPToolWrapper: Error classified as {mcp_error.error_type.value} "
+                        f"(duration={elapsed_ms}ms, timeout={configured_timeout_s}s)"
+                    )
 
                     # Check if retryable
                     if mcp_error.is_retryable and attempt < self._retry_config.max_retries:
@@ -222,12 +242,18 @@ class SandboxMCPToolWrapper(AgentTool):
                 return "Success"
 
             except Exception as e:
-                # Classify the exception
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                # Classify the exception with duration context
                 mcp_error = MCPToolErrorClassifier.classify(
                     error=e,
                     tool_name=self.tool_name,
                     sandbox_id=self.sandbox_id,
-                    context={"kwargs": kwargs, "attempt": attempt},
+                    context={
+                        "kwargs": kwargs,
+                        "attempt": attempt,
+                        "execution_duration_ms": elapsed_ms,
+                        "configured_timeout_s": configured_timeout_s,
+                    },
                 )
                 mcp_error.retry_count = attempt
                 last_error = mcp_error
@@ -235,7 +261,8 @@ class SandboxMCPToolWrapper(AgentTool):
                 # Log the error
                 logger.error(
                     f"SandboxMCPToolWrapper: Exception during execution: "
-                    f"{mcp_error.error_type.value} - {mcp_error.message}"
+                    f"{mcp_error.error_type.value} - {mcp_error.message} "
+                    f"(duration={elapsed_ms}ms, timeout={configured_timeout_s}s)"
                 )
 
                 # Check if retryable

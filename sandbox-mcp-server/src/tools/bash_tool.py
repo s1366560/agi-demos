@@ -129,7 +129,12 @@ async def execute_bash(
             process.kill()
             await process.wait()
             return {
-                "content": [{"type": "text", "text": f"Error: Command timed out after {timeout}s"}],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Error: Command execution timed out after {timeout}s limit",
+                    }
+                ],
                 "isError": True,
             }
 

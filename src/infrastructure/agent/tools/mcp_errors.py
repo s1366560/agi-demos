@@ -51,10 +51,12 @@ class MCPToolError:
     max_retries: int = 0
     context: Dict[str, Any] = field(default_factory=dict)
     original_error: Optional[Exception] = None
+    execution_duration_ms: Optional[int] = None
+    configured_timeout_s: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        result = {
             "error_type": self.error_type.value,
             "message": self.message,
             "tool_name": self.tool_name,
@@ -65,13 +67,24 @@ class MCPToolError:
             "max_retries": self.max_retries,
             "context": self.context,
         }
+        if self.execution_duration_ms is not None:
+            result["execution_duration_ms"] = self.execution_duration_ms
+        if self.configured_timeout_s is not None:
+            result["configured_timeout_s"] = self.configured_timeout_s
+        return result
 
     def get_user_message(self) -> str:
         """Get user-friendly error message."""
         if self.error_type == MCPToolErrorType.CONNECTION_ERROR:
             return "无法连接到 sandbox 容器，请稍后重试"
         if self.error_type == MCPToolErrorType.TIMEOUT_ERROR:
-            return f"工具执行超时: {self.tool_name}"
+            duration_info = ""
+            if self.execution_duration_ms is not None and self.configured_timeout_s is not None:
+                actual_s = self.execution_duration_ms / 1000
+                duration_info = (
+                    f" (实际执行 {actual_s:.1f}s / 超时限制 {self.configured_timeout_s:.0f}s)"
+                )
+            return f"工具执行超时: {self.tool_name}{duration_info}"
         if self.error_type == MCPToolErrorType.PARAMETER_ERROR:
             return f"参数错误: {self.message}"
         if self.error_type == MCPToolErrorType.PERMISSION_ERROR:
@@ -152,6 +165,29 @@ class MCPToolErrorClassifier:
         "file too large",
     ]
 
+    # Threshold ratio: if actual duration < this fraction of configured timeout,
+    # the error is NOT a real timeout (just contains "timeout" in output text).
+    TIMEOUT_DURATION_THRESHOLD = 0.8
+
+    @classmethod
+    def _is_real_timeout(
+        cls,
+        execution_duration_ms: Optional[int],
+        configured_timeout_s: Optional[float],
+    ) -> bool:
+        """Check if duration indicates a real timeout vs false positive from text matching.
+
+        Returns True if we cannot rule out a real timeout (including when
+        duration info is unavailable), False if duration clearly shows
+        the tool finished well before its timeout limit.
+        """
+        if execution_duration_ms is None or configured_timeout_s is None:
+            return True
+        if configured_timeout_s <= 0:
+            return True
+        actual_s = execution_duration_ms / 1000.0
+        return actual_s >= configured_timeout_s * cls.TIMEOUT_DURATION_THRESHOLD
+
     @classmethod
     def classify(
         cls,
@@ -163,15 +199,25 @@ class MCPToolErrorClassifier:
         """
         Classify an error into an MCPToolError.
 
+        Uses duration-aware classification to avoid false timeout positives:
+        if the error text contains "timeout" but the tool completed well before
+        its configured timeout, it is classified as EXECUTION_ERROR instead.
+
         Args:
             error: The exception that occurred
             tool_name: Name of the tool being executed
             sandbox_id: ID of the sandbox
-            context: Additional context information
+            context: Additional context information. May include:
+                - execution_duration_ms: Actual execution time in milliseconds
+                - configured_timeout_s: The tool's configured timeout in seconds
 
         Returns:
             MCPToolError with classification and retry strategy
         """
+        ctx = context or {}
+        execution_duration_ms: Optional[int] = ctx.get("execution_duration_ms")
+        configured_timeout_s: Optional[float] = ctx.get("configured_timeout_s")
+
         error_message = str(error).lower()
         error_type = MCPToolErrorType.UNKNOWN_ERROR
         is_retryable = False
@@ -180,9 +226,16 @@ class MCPToolErrorClassifier:
         # Check timeout errors (MUST be before connection errors since
         # "timeout or connection lost" contains both patterns)
         if any(pattern in error_message for pattern in cls.TIMEOUT_PATTERNS):
-            error_type = MCPToolErrorType.TIMEOUT_ERROR
-            is_retryable = False
-            max_retries = 0
+            # Duration-aware: if the tool finished well before its timeout limit,
+            # the word "timeout" is from command output, not an actual timeout.
+            if cls._is_real_timeout(execution_duration_ms, configured_timeout_s):
+                error_type = MCPToolErrorType.TIMEOUT_ERROR
+                is_retryable = False
+                max_retries = 0
+            else:
+                error_type = MCPToolErrorType.EXECUTION_ERROR
+                is_retryable = False
+                max_retries = 0
 
         # Check connection errors
         elif any(pattern in error_message for pattern in cls.CONNECTION_PATTERNS):
@@ -236,8 +289,10 @@ class MCPToolErrorClassifier:
             sandbox_id=sandbox_id,
             is_retryable=is_retryable,
             max_retries=max_retries,
-            context=context or {},
+            context=ctx,
             original_error=error,
+            execution_duration_ms=execution_duration_ms,
+            configured_timeout_s=configured_timeout_s,
         )
 
 

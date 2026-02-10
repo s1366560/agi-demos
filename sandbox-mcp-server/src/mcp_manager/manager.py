@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 # Timeout for MCP protocol initialization
 MCP_INIT_TIMEOUT = 30
 
-# Timeout for tool calls
-TOOL_CALL_TIMEOUT = 60
+# Timeout for tool calls (default, overridden by tool-specific timeout when available)
+TOOL_CALL_TIMEOUT = 600
 
 
 @dataclass
@@ -460,10 +460,17 @@ class MCPServerManager:
         arguments: Dict[str, Any],
     ) -> MCPCallResult:
         """Call a tool on a stdio MCP server."""
+        # Use tool-specific timeout if available (e.g., bash tool's timeout param)
+        tool_timeout = arguments.get("timeout")
+        timeout = TOOL_CALL_TIMEOUT
+        if tool_timeout and isinstance(tool_timeout, (int, float)):
+            timeout = int(tool_timeout) + 30  # Add overhead for MCP protocol
+
         result = await self._send_stdio_request(
             name,
             "tools/call",
             {"name": tool_name, "arguments": arguments},
+            timeout=timeout,
         )
         content = result.get("content", [{"type": "text", "text": str(result)}])
         is_error = result.get("isError", False)

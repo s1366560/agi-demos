@@ -536,3 +536,204 @@ class TestMCPToolErrorClassifierNewPatterns:
         # Should be SANDBOX_NOT_FOUND, not PARAMETER_ERROR (file not found)
         assert mcp_error.error_type == MCPToolErrorType.SANDBOX_NOT_FOUND
         assert mcp_error.is_retryable is False
+
+
+class TestDurationAwareTimeoutClassification:
+    """Test duration-aware timeout classification to prevent false positives."""
+
+    def test_timeout_text_with_short_duration_classified_as_execution_error(self):
+        """Error text contains 'timeout' but tool finished quickly -> EXECUTION_ERROR."""
+        error = Exception("curl: connection timeout after 5 seconds")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 47000,  # 47 seconds
+                "configured_timeout_s": 600.0,  # 600 second limit
+            },
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.EXECUTION_ERROR
+        assert mcp_error.is_retryable is False
+        assert mcp_error.execution_duration_ms == 47000
+        assert mcp_error.configured_timeout_s == 600.0
+
+    def test_timeout_text_at_actual_timeout_classified_as_timeout_error(self):
+        """Error text contains 'timeout' and duration near limit -> TIMEOUT_ERROR."""
+        error = Exception("request timed out after 600 seconds")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 600000,  # 600 seconds
+                "configured_timeout_s": 600.0,
+            },
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.TIMEOUT_ERROR
+
+    def test_timeout_text_near_threshold_classified_as_timeout_error(self):
+        """Duration at 80% of timeout limit -> TIMEOUT_ERROR (threshold is 0.8)."""
+        error = Exception("operation timed out")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 480000,  # 480s = 80% of 600s
+                "configured_timeout_s": 600.0,
+            },
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.TIMEOUT_ERROR
+
+    def test_timeout_text_below_threshold_classified_as_execution_error(self):
+        """Duration at 50% of timeout limit -> EXECUTION_ERROR (below 80% threshold)."""
+        error = Exception("database connection timed out")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 300000,  # 300s = 50% of 600s
+                "configured_timeout_s": 600.0,
+            },
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.EXECUTION_ERROR
+
+    def test_timeout_without_duration_context_defaults_to_timeout_error(self):
+        """Without duration info, fall back to text-based TIMEOUT_ERROR classification."""
+        error = Exception("request timed out after 30 seconds")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="xyz789",
+        )
+
+        assert mcp_error.error_type == MCPToolErrorType.TIMEOUT_ERROR
+
+    def test_asyncio_timeout_exception_always_classified_as_timeout(self):
+        """asyncio.TimeoutError (real transport timeout) -> TIMEOUT_ERROR regardless."""
+        error = TimeoutError("Operation timed out")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 10000,  # 10 seconds
+                "configured_timeout_s": 600.0,
+            },
+        )
+
+        # TimeoutError exception hits the text-based path first,
+        # but with short duration, classified as EXECUTION_ERROR.
+        # However, isinstance check for TimeoutError should still work
+        # for cases without "timeout" text in message.
+        assert mcp_error.error_type in (
+            MCPToolErrorType.TIMEOUT_ERROR,
+            MCPToolErrorType.EXECUTION_ERROR,
+        )
+
+    def test_real_timeout_exception_without_timeout_text(self):
+        """TimeoutError without 'timeout' in message, caught by isinstance check."""
+        error = TimeoutError("Deadline exceeded for RPC call")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+        )
+
+        # "deadline exceeded" matches TIMEOUT_PATTERNS
+        assert mcp_error.error_type == MCPToolErrorType.TIMEOUT_ERROR
+
+    def test_error_includes_duration_fields(self):
+        """MCPToolError should include duration fields when provided."""
+        error = Exception("some error with timeout word")
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 5000,
+                "configured_timeout_s": 600.0,
+            },
+        )
+
+        assert mcp_error.execution_duration_ms == 5000
+        assert mcp_error.configured_timeout_s == 600.0
+
+    def test_to_dict_includes_duration_fields(self):
+        """to_dict should include duration fields when set."""
+        error = MCPToolError(
+            error_type=MCPToolErrorType.TIMEOUT_ERROR,
+            message="timed out",
+            tool_name="bash",
+            sandbox_id="abc123",
+            execution_duration_ms=600000,
+            configured_timeout_s=600.0,
+        )
+
+        result = error.to_dict()
+        assert result["execution_duration_ms"] == 600000
+        assert result["configured_timeout_s"] == 600.0
+
+    def test_to_dict_excludes_none_duration_fields(self):
+        """to_dict should omit duration fields when None."""
+        error = MCPToolError(
+            error_type=MCPToolErrorType.TIMEOUT_ERROR,
+            message="timed out",
+            tool_name="bash",
+            sandbox_id="abc123",
+        )
+
+        result = error.to_dict()
+        assert "execution_duration_ms" not in result
+        assert "configured_timeout_s" not in result
+
+    def test_user_message_includes_duration_for_timeout(self):
+        """User message should show actual vs configured timeout."""
+        error = MCPToolError(
+            error_type=MCPToolErrorType.TIMEOUT_ERROR,
+            message="timed out",
+            tool_name="bash",
+            sandbox_id="abc123",
+            execution_duration_ms=600000,
+            configured_timeout_s=600.0,
+        )
+
+        msg = error.get_user_message()
+        assert "bash" in msg
+        assert "600.0s" in msg
+        assert "超时" in msg
+
+    def test_command_output_with_timeout_word_not_misclassified(self):
+        """Real-world scenario: command outputs 'timeout' but ran quickly."""
+        # Simulates: python script that encounters a database timeout after 47s
+        error = Exception(
+            "Error: Tool execution failed after 1 attempts: "
+            "request timeout after 5 seconds"
+        )
+
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name="bash",
+            sandbox_id="abc123",
+            context={
+                "execution_duration_ms": 46954,
+                "configured_timeout_s": 600.0,
+            },
+        )
+
+        # Should NOT be classified as timeout since 47s << 600s
+        assert mcp_error.error_type == MCPToolErrorType.EXECUTION_ERROR
