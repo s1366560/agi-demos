@@ -342,6 +342,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Track if user has manually scrolled up during streaming
     const userScrolledUpRef = useRef(false);
+    
+    // Track conversation switch to prevent scroll jitter
+    const isSwitchingConversationRef = useRef(false);
+    const lastConversationIdRef = useRef(conversationId);
 
     // Context value
     const contextValue: _MessageAreaContextValue = {
@@ -473,6 +477,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Handle timeline changes
     useEffect(() => {
+      // Skip if switching conversation to prevent scroll jitter
+      if (isSwitchingConversationRef.current) return;
+      
       const container = containerRef.current;
       if (!container) return;
 
@@ -524,6 +531,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Auto-scroll when streaming content updates
     useEffect(() => {
+      // Skip if switching conversation to prevent scroll jitter
+      if (isSwitchingConversationRef.current) return;
+      
       const container = containerRef.current;
       if (!container) return;
 
@@ -538,6 +548,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Reset scroll state when conversation changes
     useEffect(() => {
+      // Only handle actual conversation changes, not initial mount
+      if (lastConversationIdRef.current === conversationId) return;
+      lastConversationIdRef.current = conversationId;
+      
+      // Set switching flag to prevent other effects from interfering
+      isSwitchingConversationRef.current = true;
+      
       isInitialLoadRef.current = true;
       hasScrolledInitiallyRef.current = false;
       prevTimelineLengthRef.current = 0;
@@ -554,10 +571,12 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           hasScrolledInitiallyRef.current = true;
           prevTimelineLengthRef.current = timeline.length;
         }
-      }, 100);
+        // Clear switching flag after scroll is complete
+        isSwitchingConversationRef.current = false;
+      }, 150);
 
       return () => clearTimeout(timeoutId);
-    }, [conversationId]);
+    }, [conversationId, timeline.length]);
 
     // Cleanup timeout on unmount
     useEffect(() => {
