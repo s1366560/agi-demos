@@ -1,6 +1,6 @@
 """Tests for ProjectSandboxLifecycleService."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,7 +22,7 @@ class TestSandboxInfo:
 
     def test_to_dict(self) -> None:
         """Should convert SandboxInfo to dictionary."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         info = SandboxInfo(
             sandbox_id="sb-123",
             project_id="proj-456",
@@ -101,8 +101,8 @@ class TestProjectSandboxLifecycleService:
             tenant_id="tenant-789",
             sandbox_id="sb-abc",
             status=ProjectSandboxStatus.RUNNING,
-            created_at=datetime.utcnow(),
-            last_accessed_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            last_accessed_at=datetime.now(timezone.utc),
         )
 
     @pytest.mark.asyncio
@@ -174,7 +174,7 @@ class TestProjectSandboxLifecycleService:
             tenant_id="tenant-789",
             sandbox_id="sb-stopped",
             status=ProjectSandboxStatus.STOPPED,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         mock_repository.find_by_project.return_value = stopped_association
 
@@ -342,7 +342,7 @@ class TestProjectSandboxLifecycleService:
             tenant_id="tenant-789",
             sandbox_id="sb-old",
             status=ProjectSandboxStatus.RUNNING,
-            last_accessed_at=datetime.utcnow() - timedelta(hours=2),
+            last_accessed_at=datetime.now(timezone.utc) - timedelta(hours=2),
         )
         mock_repository.find_stale.return_value = [stale_association]
 
@@ -363,7 +363,7 @@ class TestProjectSandboxLifecycleService:
             tenant_id="tenant-789",
             sandbox_id="sb-old",
             status=ProjectSandboxStatus.RUNNING,
-            last_accessed_at=datetime.utcnow() - timedelta(hours=2),
+            last_accessed_at=datetime.now(timezone.utc) - timedelta(hours=2),
         )
         mock_repository.find_stale.return_value = [stale_association]
 
@@ -417,7 +417,7 @@ class TestProjectSandboxLifecycleService:
             tenant_id="tenant-789",
             sandbox_id="sb-unhealthy",
             status=ProjectSandboxStatus.UNHEALTHY,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         mock_repository.find_by_project.return_value = unhealthy_association
         mock_adapter.health_check.return_value = True
@@ -442,7 +442,7 @@ class TestProjectSandboxLifecycleService:
             tenant_id="tenant-789",
             sandbox_id="sb-failed",
             status=ProjectSandboxStatus.UNHEALTHY,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         mock_repository.find_by_project.return_value = unhealthy_association
         mock_adapter.health_check.return_value = False

@@ -1,6 +1,6 @@
 """Shared fixtures for LLM provider tests."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -32,7 +32,7 @@ def auto_mock_encryption_service():
 @pytest.fixture
 def provider_config():
     """Create a test ProviderConfig."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return ProviderConfig(
         id=uuid4(),
         name="Test Provider",
@@ -51,7 +51,7 @@ def provider_config():
 @pytest.fixture
 def openai_provider_config():
     """Create a test ProviderConfig for OpenAI."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return ProviderConfig(
         id=uuid4(),
         name="OpenAI Test",
@@ -70,7 +70,7 @@ def openai_provider_config():
 @pytest.fixture
 def gemini_provider_config():
     """Create a test ProviderConfig for Gemini."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return ProviderConfig(
         id=uuid4(),
         name="Gemini Test",
@@ -89,7 +89,7 @@ def gemini_provider_config():
 @pytest.fixture
 def deepseek_provider_config():
     """Create a test ProviderConfig for Deepseek."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return ProviderConfig(
         id=uuid4(),
         name="Deepseek Test",
@@ -109,7 +109,7 @@ def deepseek_provider_config():
 @pytest.fixture
 def zai_provider_config():
     """Create a test ProviderConfig for Z.AI."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return ProviderConfig(
         id=uuid4(),
         name="Z.AI Test",

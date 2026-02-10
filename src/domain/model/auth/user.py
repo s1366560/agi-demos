@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.domain.shared_kernel import Entity
@@ -14,4 +14,4 @@ class User(Entity):
     password_hash: str
     is_active: bool = True
     profile: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

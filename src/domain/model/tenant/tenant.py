@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from src.domain.shared_kernel import Entity
@@ -16,5 +16,5 @@ class Tenant(Entity):
     max_projects: int = 3
     max_users: int = 10
     max_storage: int = 1073741824  # 1GB in bytes
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None

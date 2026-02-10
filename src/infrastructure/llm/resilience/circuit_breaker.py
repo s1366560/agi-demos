@@ -28,7 +28,7 @@ Example:
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Callable, Optional
 
@@ -105,7 +105,7 @@ class CircuitBreaker:
         self._success_count = 0
         self._half_open_requests = 0
         self._last_failure_time: Optional[datetime] = None
-        self._last_state_change = datetime.utcnow()
+        self._last_state_change = datetime.now(timezone.utc)
         self._stats = CircuitBreakerStats()
         self._lock = asyncio.Lock()
 
@@ -151,7 +151,7 @@ class CircuitBreaker:
         """Record a successful request."""
         self._stats.total_requests += 1
         self._stats.successful_requests += 1
-        self._stats.last_success_time = datetime.utcnow()
+        self._stats.last_success_time = datetime.now(timezone.utc)
 
         if self._state == CircuitState.HALF_OPEN:
             self._success_count += 1
@@ -175,8 +175,8 @@ class CircuitBreaker:
         """
         self._stats.total_requests += 1
         self._stats.failed_requests += 1
-        self._stats.last_failure_time = datetime.utcnow()
-        self._last_failure_time = datetime.utcnow()
+        self._stats.last_failure_time = datetime.now(timezone.utc)
+        self._last_failure_time = datetime.now(timezone.utc)
 
         if self._state == CircuitState.HALF_OPEN:
             # Any failure in half-open immediately opens circuit
@@ -212,7 +212,7 @@ class CircuitBreaker:
         """Check if state should transition based on timeouts."""
         if self._state == CircuitState.OPEN:
             if self._last_failure_time:
-                time_since_failure = datetime.utcnow() - self._last_failure_time
+                time_since_failure = datetime.now(timezone.utc) - self._last_failure_time
                 if time_since_failure >= self.config.recovery_timeout:
                     self._transition_to(CircuitState.HALF_OPEN)
                     logger.info(
@@ -227,7 +227,7 @@ class CircuitBreaker:
             return
 
         self._state = new_state
-        self._last_state_change = datetime.utcnow()
+        self._last_state_change = datetime.now(timezone.utc)
         self._stats.state_changes += 1
         self._stats.last_state_change = self._last_state_change
 

@@ -5,7 +5,7 @@ Agent Pool 类型定义.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -206,7 +206,7 @@ class LifecycleEvent:
     event_type: str  # created, initialized, started, paused, resumed, stopped, error, recovered
     from_status: Optional[AgentInstanceStatus] = None
     to_status: Optional[AgentInstanceStatus] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     details: Dict[str, Any] = field(default_factory=dict)
     error_message: Optional[str] = None
 

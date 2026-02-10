@@ -7,7 +7,7 @@ which is then cached in Redis for performance.
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -305,7 +305,7 @@ class WebSearchTool(AgentTool):
                 results=search_results,
                 total_results=len(search_results),
                 cached=False,
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
             )
 
             # Cache the results

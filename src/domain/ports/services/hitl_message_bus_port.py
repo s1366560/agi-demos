@@ -20,7 +20,7 @@ Key Features:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -52,7 +52,7 @@ class HITLMessage:
     request_id: str
     message_type: HITLMessageType
     payload: Dict[str, Any]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -77,7 +77,7 @@ class HITLMessage:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if isinstance(data.get("timestamp"), str)
-                else data.get("timestamp", datetime.utcnow())
+                else data.get("timestamp", datetime.now(timezone.utc))
             ),
             metadata=data.get("metadata"),
         )

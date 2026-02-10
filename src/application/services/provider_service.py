@@ -6,7 +6,7 @@ Handles business logic and coordinates between domain and infrastructure layers.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID
 
@@ -375,7 +375,7 @@ class ProviderService:
         health = ProviderHealth(
             provider_id=provider_id,
             status=status,
-            last_check=datetime.utcnow(),
+            last_check=datetime.now(timezone.utc),
             error_message=error_message,
             response_time_ms=response_time_ms,
         )

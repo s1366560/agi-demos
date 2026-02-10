@@ -24,7 +24,7 @@ Example:
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Optional
 
@@ -53,7 +53,7 @@ class HealthCheckResult:
     status: HealthStatus
     response_time_ms: Optional[float] = None
     error_message: Optional[str] = None
-    checked_at: datetime = field(default_factory=datetime.utcnow)
+    checked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def is_healthy(self) -> bool:
@@ -192,7 +192,7 @@ class HealthChecker:
                 error_message="Provider not registered",
             )
 
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         result: HealthCheckResult
 
         try:

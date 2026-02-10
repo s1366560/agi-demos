@@ -1,7 +1,7 @@
 """Notification API endpoints."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -36,10 +36,17 @@ async def list_notifications(
 
     # Filter out expired notifications
     valid_notifications = []
+    now_utc = datetime.now(timezone.utc)
     for notif in notifications:
         # Include notification if not expired (no expires_at or expires_at is in future)
-        if not notif.expires_at or notif.expires_at > datetime.utcnow():
+        if not notif.expires_at:
             valid_notifications.append(notif)
+        else:
+            exp = notif.expires_at
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp > now_utc:
+                valid_notifications.append(notif)
 
     return {
         "notifications": [

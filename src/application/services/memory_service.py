@@ -6,7 +6,7 @@ for entity extraction and knowledge graph operations.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.domain.model.enums import ProcessingStatus
@@ -84,7 +84,7 @@ class MemoryService:
             status="ENABLED",
             processing_status=ProcessingStatus.PENDING.value,
             metadata=metadata or {},
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         # Save memory to database
@@ -97,7 +97,7 @@ class MemoryService:
             name=title,
             content=content,
             source_type=SourceType.TEXT,
-            valid_at=datetime.utcnow(),
+            valid_at=datetime.now(timezone.utc),
             metadata={
                 "memory_id": memory.id,
                 "tenant_id": tenant_id,
@@ -255,7 +255,7 @@ class MemoryService:
         if metadata is not None:
             memory.metadata.update(metadata)
 
-        memory.updated_at = datetime.utcnow()
+        memory.updated_at = datetime.now(timezone.utc)
 
         # If content changed, reprocess by updating processing status
         if content_changed:
@@ -272,7 +272,7 @@ class MemoryService:
                     name=memory.title,
                     content=memory.content,
                     source_type=SourceType.TEXT,
-                    valid_at=datetime.utcnow(),
+                    valid_at=datetime.now(timezone.utc),
                     metadata={
                         "memory_id": memory.id,
                         "tenant_id": memory.metadata.get("tenant_id"),
@@ -357,7 +357,7 @@ class MemoryService:
             if user_id not in memory.collaborators:
                 memory.collaborators.append(user_id)
 
-        memory.updated_at = datetime.utcnow()
+        memory.updated_at = datetime.now(timezone.utc)
         await self._memory_repo.save(memory)
         logger.info(f"Shared memory {memory_id} with {len(collaborators)} collaborators")
 

@@ -24,7 +24,7 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from threading import Lock
 from typing import Any, Generator, Optional
@@ -88,7 +88,7 @@ class AggregatedMetrics:
     completion_tokens: int = 0
     total_cost_usd: float = 0.0
     error_types: dict[str, int] = field(default_factory=dict)
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = None
 
     @property
@@ -290,7 +290,7 @@ class MetricsCollector:
         self._recent_requests: list[RequestMetrics] = []
 
         self._lock = Lock()
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
 
     @contextmanager
     def track_request(
@@ -469,7 +469,7 @@ class MetricsCollector:
             self._by_model.clear()
             self._overall = AggregatedMetrics()
             self._recent_requests.clear()
-            self._start_time = datetime.utcnow()
+            self._start_time = datetime.now(timezone.utc)
             logger.info("Metrics collector reset")
 
 

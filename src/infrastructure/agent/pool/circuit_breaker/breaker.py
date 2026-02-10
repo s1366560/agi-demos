@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from ..types import CircuitState
@@ -284,7 +284,7 @@ class CircuitBreaker:
             {
                 "from": old_state.value,
                 "to": new_state.value,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
 

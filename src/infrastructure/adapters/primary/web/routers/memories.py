@@ -1,7 +1,7 @@
 """Memories API endpoints."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import uuid4
 
@@ -245,8 +245,8 @@ async def create_memory(
             version=1,
             status="ENABLED",
             processing_status="PENDING",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
 
         db.add(memory)
@@ -316,7 +316,7 @@ async def create_memory(
                         status="PENDING",
                         payload=task_payload,
                         entity_type="episode",
-                        created_at=datetime.utcnow(),
+                        created_at=datetime.now(timezone.utc),
                     )
                     task_session.add(task_log)
 
@@ -611,7 +611,7 @@ async def reprocess_memory(
                     status="PENDING",
                     payload=task_payload,
                     entity_type="episode",
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
                 task_session.add(task_log)
 
@@ -762,7 +762,7 @@ async def update_memory(
                             status="PENDING",
                             payload=task_payload,
                             entity_type="episode",
-                            created_at=datetime.utcnow(),
+                            created_at=datetime.now(timezone.utc),
                         )
                         task_session.add(task_log)
 
@@ -857,7 +857,7 @@ async def create_memory_share(
     elif "expires_in_days" in share_data:
         days = share_data["expires_in_days"]
         if isinstance(days, int) and days > 0:
-            expires_at = datetime.utcnow() + timedelta(days=days)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=days)
     share = MemoryShare(
         id=str(uuid4()),
         memory_id=memory_id,
@@ -869,7 +869,7 @@ async def create_memory_share(
         if permission_level
         else share_data.get("permissions", {"view": True, "edit": False}),
         shared_by=current_user.id,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         expires_at=expires_at,
         access_count=0,
     )

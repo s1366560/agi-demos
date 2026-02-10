@@ -394,7 +394,7 @@ async def check_project_sandbox_health(
             sandbox_id=info.sandbox_id,
             healthy=healthy,
             status=info.status,
-            checked_at=datetime.utcnow().isoformat(),
+            checked_at=datetime.now(timezone.utc).isoformat(),
         )
 
     except HTTPException:

@@ -1,7 +1,7 @@
 import uuid
 from abc import ABC
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, TypeVar
 
 T = TypeVar("T")
@@ -50,7 +50,7 @@ class DomainEvent(ABC):
     They are immutable and contain all necessary data.
     """
 
-    occurred_at: datetime = field(default_factory=datetime.utcnow)
+    occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 

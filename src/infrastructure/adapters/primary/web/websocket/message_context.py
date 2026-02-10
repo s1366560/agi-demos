@@ -11,7 +11,7 @@ Provides a context object for message handlers with access to:
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import WebSocket
@@ -62,7 +62,7 @@ class MessageContext:
         message = {
             "type": "ack",
             "action": action,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             **kwargs,
         }
         if extra:

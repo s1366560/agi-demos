@@ -227,7 +227,7 @@ def _build_provider_config_from_settings(settings, provider: str):
     Returns:
         ProviderConfig instance configured from settings
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     from uuid import uuid4
 
     from src.domain.llm_providers.models import ProviderConfig, ProviderType
@@ -298,7 +298,7 @@ def _build_provider_config_from_settings(settings, provider: str):
     api_key = config["api_key"] or ""
     api_key_encrypted = encryption_service.encrypt(api_key) if api_key else ""
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     return ProviderConfig(
         id=uuid4(),

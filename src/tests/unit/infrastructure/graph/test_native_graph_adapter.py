@@ -1,6 +1,6 @@
 """Unit tests for NativeGraphAdapter."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -110,7 +110,7 @@ class TestNativeGraphAdapterAddEpisode:
             id=str(uuid4()),
             content="Test episode content",
             source_type=SourceType.TEXT,
-            valid_at=datetime.utcnow(),
+            valid_at=datetime.now(timezone.utc),
             tenant_id="tenant-1",
             project_id="project-1",
             user_id="user-1",

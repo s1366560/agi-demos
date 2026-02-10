@@ -15,7 +15,7 @@ Migration Benefits:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import delete, select, update
@@ -137,7 +137,7 @@ class SqlAttachmentRepository(
 
     async def delete_expired(self) -> int:
         """Delete all expired attachments."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         result = await self._session.execute(
             delete(AttachmentModel).where(
                 AttachmentModel.expires_at.isnot(None),

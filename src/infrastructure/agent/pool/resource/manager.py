@@ -7,7 +7,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from ..config import AgentInstanceConfig, PoolConfig, ResourceQuota
@@ -34,8 +34,8 @@ class ProjectResourceAllocation:
     active_requests: int = 0
 
     # 时间戳
-    allocated_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    allocated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def allocation_key(self) -> str:
@@ -247,7 +247,7 @@ class ResourceManager:
             allocation.active_instances += 1
             allocation.memory_used_mb += memory_mb
             allocation.cpu_used_cores += cpu_cores
-            allocation.updated_at = datetime.utcnow()
+            allocation.updated_at = datetime.now(timezone.utc)
 
             # 更新全局追踪
             self._total_instances += 1
@@ -291,7 +291,7 @@ class ResourceManager:
             allocation.active_instances = max(0, allocation.active_instances - 1)
             allocation.memory_used_mb = max(0, allocation.memory_used_mb - memory_mb)
             allocation.cpu_used_cores = max(0, allocation.cpu_used_cores - cpu_cores)
-            allocation.updated_at = datetime.utcnow()
+            allocation.updated_at = datetime.now(timezone.utc)
 
             # 更新全局追踪
             self._total_instances = max(0, self._total_instances - 1)
@@ -331,7 +331,7 @@ class ResourceManager:
                 return False
 
             allocation.active_requests += 1
-            allocation.updated_at = datetime.utcnow()
+            allocation.updated_at = datetime.now(timezone.utc)
             return True
 
     async def release_request(
@@ -358,7 +358,7 @@ class ResourceManager:
                 return False
 
             allocation.active_requests = max(0, allocation.active_requests - 1)
-            allocation.updated_at = datetime.utcnow()
+            allocation.updated_at = datetime.now(timezone.utc)
             return True
 
     async def get_usage(
@@ -480,7 +480,7 @@ class ResourceManager:
                 return False
 
             allocation.quota = quota
-            allocation.updated_at = datetime.utcnow()
+            allocation.updated_at = datetime.now(timezone.utc)
 
             logger.info(
                 f"[ResourceManager] Quota updated: project={project_id}, "

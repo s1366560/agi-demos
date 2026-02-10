@@ -7,7 +7,7 @@ like community rebuilding. For production, consider using Redis or a database-ba
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, Optional
 from uuid import uuid4
@@ -31,7 +31,7 @@ class BackgroundTask:
         self.args = args
         self.kwargs = kwargs
         self.status = TaskStatus.PENDING
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
         self.started_at: Optional[datetime] = None
         self.completed_at: Optional[datetime] = None
         self.progress = 0
@@ -43,20 +43,20 @@ class BackgroundTask:
     async def run(self):
         """Execute the task and update status."""
         self.status = TaskStatus.RUNNING
-        self.started_at = datetime.utcnow()
+        self.started_at = datetime.now(timezone.utc)
         self.message = "Task started"
 
         try:
             logger.info(f"Task {self.task_id} started")
             self.result = await self.func(*self.args, **self.kwargs)
             self.status = TaskStatus.COMPLETED
-            self.completed_at = datetime.utcnow()
+            self.completed_at = datetime.now(timezone.utc)
             self.message = "Task completed successfully"
             self.progress = 100
             logger.info(f"Task {self.task_id} completed successfully")
         except Exception as e:
             self.status = TaskStatus.FAILED
-            self.completed_at = datetime.utcnow()
+            self.completed_at = datetime.now(timezone.utc)
             self.error = str(e)
             self.message = f"Task failed: {str(e)}"
             logger.error(f"Task {self.task_id} failed: {e}")
@@ -67,7 +67,7 @@ class BackgroundTask:
         if self._task and not self._task.done():
             self._task.cancel()
             self.status = TaskStatus.CANCELLED
-            self.completed_at = datetime.utcnow()
+            self.completed_at = datetime.now(timezone.utc)
             self.message = "Task cancelled"
             logger.info(f"Task {self.task_id} cancelled")
 
@@ -100,7 +100,7 @@ class TaskManager:
         async def cleanup_old_tasks():
             while True:
                 await asyncio.sleep(3600)  # Cleanup every hour
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 to_remove = []
                 for task_id, task in self.tasks.items():
                     # Remove tasks completed more than 24 hours ago

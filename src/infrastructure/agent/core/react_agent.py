@@ -20,7 +20,7 @@ Reference: OpenCode SessionProcessor architecture
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Plan Mode detection
@@ -536,7 +536,7 @@ class ReActAgent:
                         "confidence": detection_result.confidence,
                         "should_trigger": detection_result.should_trigger,
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
                 # If Plan Mode is triggered, execute it
@@ -568,7 +568,7 @@ class ReActAgent:
                         "error": str(e),
                         "fallback": "react",
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
         # Check for SubAgent routing (L3)
@@ -584,7 +584,7 @@ class ReActAgent:
                     "confidence": subagent_match.confidence,
                     "reason": subagent_match.match_reason,
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         # Check for Skill matching (L2) - forced or confidence-based
@@ -603,7 +603,7 @@ class ReActAgent:
                         "content": f"Forced skill '{forced_skill_name}' not found, "
                         f"falling back to normal matching",
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 matched_skill, skill_score = self._match_skill(user_message)
         else:
@@ -639,7 +639,7 @@ class ReActAgent:
                     "match_score": skill_score,
                     "execution_mode": execution_mode,
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         # Sync skill resources to sandbox before prompt injection
@@ -700,7 +700,7 @@ class ReActAgent:
             yield {
                 "type": "context_compressed",
                 "data": context_result.to_event_data(),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             logger.info(
                 f"Context compressed: {context_result.original_message_count} -> "
@@ -795,7 +795,7 @@ class ReActAgent:
                     "subagent_used": active_subagent.name if active_subagent else None,
                     "skill_used": matched_skill.name if matched_skill else None,
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -807,7 +807,7 @@ class ReActAgent:
                     "message": str(e),
                     "code": type(e).__name__,
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         finally:

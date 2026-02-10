@@ -1,7 +1,7 @@
 """Data export and management API routes."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -71,7 +71,7 @@ async def export_data(
     """
     try:
         data = {
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
             "tenant_id": tenant_id,
             "episodes": [],
             "entities": [],
@@ -146,7 +146,7 @@ async def export_data(
     except Exception as e:
         logger.error(f"Failed to export data: {e}")
         return {
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
             "tenant_id": tenant_id,
             "episodes": [],
             "entities": [],
@@ -265,7 +265,7 @@ async def cleanup_data(
             effective_days = 90
         effective_tenant = body.get("tenant_id") if body and "tenant_id" in body else tenant_id
 
-        cutoff_date = datetime.utcnow() - timedelta(days=int(effective_days))
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=int(effective_days))
 
         # Count episodes that would be deleted
         tenant_filter = "{tenant_id: $tenant_id}" if effective_tenant else ""

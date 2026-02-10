@@ -2,7 +2,7 @@
 Authentication models for API Key management.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -16,7 +16,7 @@ class APIKey(BaseModel):
     key: str  # This will be the actual API key (hashed in storage)
     name: str
     user_id: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
     is_active: bool = True
     permissions: list[str] = Field(default_factory=list)
@@ -43,7 +43,7 @@ class User(BaseModel):
     name: str
     roles: list[str] = Field(default_factory=list)
     is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     profile: Optional[dict] = Field(default_factory=dict)
 
     class Config:

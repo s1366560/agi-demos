@@ -14,7 +14,7 @@ Reference: Extracted from react_agent.py::_convert_domain_event() and
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Protocol
 
 from src.domain.events.agent_events import (
@@ -357,7 +357,7 @@ class EventConverter:
         return {
             "type": type_mapping.get(event_type, event_type.lower()),
             "data": event.get("data", {}),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
 

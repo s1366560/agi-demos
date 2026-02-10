@@ -6,7 +6,7 @@ including roles and permissions.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from src.domain.model.tenant.tenant import Tenant
@@ -53,7 +53,7 @@ class TenantService:
             owner_id=owner_id,
             description=description,
             plan=plan,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         await self._tenant_repo.save(tenant)
@@ -120,7 +120,7 @@ class TenantService:
         if plan is not None:
             tenant.plan = plan
 
-        tenant.updated_at = datetime.utcnow()
+        tenant.updated_at = datetime.now(timezone.utc)
 
         await self._tenant_repo.save(tenant)
         logger.info(f"Updated tenant {tenant_id}")

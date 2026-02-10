@@ -1,7 +1,7 @@
 """Recall API routes for short-term memory retrieval."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -61,7 +61,7 @@ async def short_term_recall(
         )
 
         # Calculate time window
-        since_date = datetime.utcnow() - timedelta(minutes=payload.window_minutes)
+        since_date = datetime.now(timezone.utc) - timedelta(minutes=payload.window_minutes)
 
         # Build query
         conditions = ["e.created_at >= datetime($since_date)"]

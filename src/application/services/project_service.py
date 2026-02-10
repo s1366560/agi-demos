@@ -6,7 +6,7 @@ following the hexagonal architecture pattern.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from src.domain.model.project.project import Project
@@ -60,7 +60,7 @@ class ProjectService:
             owner_id=owner_id,
             description=description,
             is_public=is_public,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             member_ids=[owner_id],  # Owner is automatically a member
         )
 
@@ -147,7 +147,7 @@ class ProjectService:
         if graph_config is not None:
             project.graph_config = graph_config
 
-        project.updated_at = datetime.utcnow()
+        project.updated_at = datetime.now(timezone.utc)
 
         await self._project_repo.save(project)
         logger.info(f"Updated project {project_id}")
@@ -194,7 +194,7 @@ class ProjectService:
             return
 
         project.member_ids.append(user_id)
-        project.updated_at = datetime.utcnow()
+        project.updated_at = datetime.now(timezone.utc)
 
         await self._project_repo.save(project)
         logger.info(f"Added user {user_id} to project {project_id}")
@@ -223,7 +223,7 @@ class ProjectService:
             return
 
         project.member_ids.remove(user_id)
-        project.updated_at = datetime.utcnow()
+        project.updated_at = datetime.now(timezone.utc)
 
         await self._project_repo.save(project)
         logger.info(f"Removed user {user_id} from project {project_id}")

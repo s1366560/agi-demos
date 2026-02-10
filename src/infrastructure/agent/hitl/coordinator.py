@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity, HITLRequestType
@@ -114,7 +114,7 @@ class HITLCoordinator:
                 message_id=self.message_id,
                 timeout_seconds=timeout,
                 type_data=hitl_request.type_specific_data,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
         except Exception:
             self._pending.pop(request_id, None)

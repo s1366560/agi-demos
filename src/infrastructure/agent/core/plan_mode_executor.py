@@ -9,7 +9,7 @@ Encapsulates the Plan Mode execution workflow:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
 from .processor import ToolDefinition
@@ -110,7 +110,7 @@ class PlanModeExecutor:
                 "method": detection_result.method,
                 "confidence": detection_result.confidence,
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Create LLM client for Plan Mode components
@@ -175,7 +175,7 @@ class PlanModeExecutor:
                     "conversation_id": conversation_id,
                     "query": user_message[:100],
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             plan = await generator.generate_plan(
@@ -204,7 +204,7 @@ class PlanModeExecutor:
                         for step in plan.steps
                     ],
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             # Execute plan with orchestrator
@@ -215,7 +215,7 @@ class PlanModeExecutor:
                     "plan_id": plan.id,
                     "step_count": len(plan.steps),
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             # Stream plan events during execution
@@ -247,7 +247,7 @@ class PlanModeExecutor:
                     "failed_steps": failed_steps,
                     "total_steps": len(final_plan.steps),
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -260,7 +260,7 @@ class PlanModeExecutor:
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     def _convert_plan_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -289,5 +289,5 @@ class PlanModeExecutor:
         return {
             "type": type_mapping.get(event_type, event_type.lower()),
             "data": event.get("data", {}),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }

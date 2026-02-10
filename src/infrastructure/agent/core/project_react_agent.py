@@ -37,7 +37,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.model.agent.skill import Skill
@@ -211,7 +211,7 @@ class ProjectReActAgent:
             tenant_id=config.tenant_id,
             project_id=config.project_id,
             agent_mode=config.agent_mode,
-            created_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
         )
         self._metrics = ProjectAgentMetrics()
 
@@ -616,7 +616,7 @@ class ProjectReActAgent:
                         "message": "Agent initialization failed",
                         "code": "AGENT_NOT_INITIALIZED",
                     },
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 return
 
@@ -633,7 +633,7 @@ class ProjectReActAgent:
                     "message": "Agent is shutting down",
                     "code": "AGENT_SHUTTING_DOWN",
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             return
 
@@ -645,7 +645,7 @@ class ProjectReActAgent:
                     "message": f"Max concurrent chats ({self.config.max_concurrent_chats}) reached",
                     "code": "MAX_CONCURRENT_CHATS",
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             return
 
@@ -656,7 +656,7 @@ class ProjectReActAgent:
         # Update status
         self._status.active_chats += 1
         self._status.is_executing = True
-        self._status.last_activity_at = datetime.utcnow().isoformat()
+        self._status.last_activity_at = datetime.now(timezone.utc).isoformat()
 
         # Notify executing state
         if notifier:
@@ -737,7 +737,7 @@ class ProjectReActAgent:
                     "message": error_message,
                     "code": "CHAT_EXECUTION_ERROR",
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         finally:
@@ -1213,7 +1213,7 @@ class ProjectAgentManager:
         Returns:
             Number of agents cleaned up
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         agents_to_stop = []
 
         async with self._lock:

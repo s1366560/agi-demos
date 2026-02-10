@@ -6,7 +6,7 @@ Handles send_message and stop_session message types.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -250,7 +250,7 @@ async def stream_agent_to_websocket(
                 "conversation_id": conversation_id,
                 "data": event_data,
                 "seq": event.get("id"),
-                "timestamp": event.get("timestamp", datetime.utcnow().isoformat()),
+                "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
                 "event_time_us": event.get("event_time_us"),
                 "event_counter": event.get("event_counter"),
             }
@@ -326,7 +326,7 @@ async def stream_hitl_response_to_websocket(
                 "conversation_id": conversation_id,
                 "data": event_data,
                 "seq": event.get("id"),
-                "timestamp": event.get("timestamp", datetime.utcnow().isoformat()),
+                "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
                 "event_time_us": event.get("event_time_us"),
                 "event_counter": event.get("event_counter"),
             }

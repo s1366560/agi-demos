@@ -11,7 +11,7 @@ Manages WebSocket connections for agent chat with support for:
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
 from fastapi import WebSocket
@@ -314,7 +314,7 @@ class ConnectionManager:
             "type": "lifecycle_state_change",
             "project_id": project_id,
             "data": state,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         return await self.broadcast_to_project(tenant_id, project_id, message)
 
@@ -326,7 +326,7 @@ class ConnectionManager:
             "type": "sandbox_state_change",
             "project_id": project_id,
             "data": state,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         return await self.broadcast_to_project(tenant_id, project_id, message)
 

@@ -6,7 +6,7 @@ Handles subscribe_status and unsubscribe_status for agent status polling.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -156,7 +156,7 @@ async def monitor_agent_status(
                             "type": "status_update",
                             "project_id": project_id,
                             "data": status_data,
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         },
                     )
                     last_status = status_data

@@ -1,7 +1,7 @@
 """Message entity for conversation messages."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict
 
@@ -83,7 +83,7 @@ class Message(Entity):
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_results: list[ToolResult] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Multi-level thinking support
     work_plan_ref: str | None = None  # ID of the work plan this belongs to

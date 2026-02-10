@@ -12,7 +12,7 @@ Extracted from react_agent.py to reduce complexity and improve testability.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol
 
 logger = logging.getLogger(__name__)
@@ -327,7 +327,7 @@ class SubAgentOrchestrator:
                 "confidence": result.confidence,
                 "reason": result.match_reason,
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def record_execution(

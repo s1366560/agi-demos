@@ -5,7 +5,7 @@ enabling recovery from failures and disconnections.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -44,7 +44,7 @@ class ExecutionCheckpoint(Entity):
     checkpoint_type: CheckpointType | str
     execution_state: Dict[str, Any] = field(default_factory=dict)
     step_number: Optional[int] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""

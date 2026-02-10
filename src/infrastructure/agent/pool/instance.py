@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from .config import AgentInstanceConfig
@@ -95,12 +95,12 @@ class AgentInstance:
         self._request_lock = asyncio.Lock()
 
         # 指标
-        self._metrics = InstanceMetrics(created_at=datetime.utcnow())
+        self._metrics = InstanceMetrics(created_at=datetime.now(timezone.utc))
         self._latencies: List[float] = []  # 最近N次请求延迟
 
         # 时间戳
-        self._created_at = datetime.utcnow()
-        self._last_activity_at = datetime.utcnow()
+        self._created_at = datetime.now(timezone.utc)
+        self._last_activity_at = datetime.now(timezone.utc)
         self._initialized_at: Optional[datetime] = None
 
         # 健康检查
@@ -162,7 +162,7 @@ class AgentInstance:
 
             # 初始化完成
             self._lifecycle.transition("initialization_complete")
-            self._initialized_at = datetime.utcnow()
+            self._initialized_at = datetime.now(timezone.utc)
 
             logger.info(f"[AgentInstance] Initialized successfully: id={self.id}")
             return True
@@ -225,7 +225,7 @@ class AgentInstance:
 
             try:
                 # 更新活动时间
-                self._last_activity_at = datetime.utcnow()
+                self._last_activity_at = datetime.now(timezone.utc)
 
                 # 执行请求
                 event_count = 0
@@ -269,9 +269,9 @@ class AgentInstance:
             self._metrics.successful_requests += 1
         else:
             self._metrics.failed_requests += 1
-            self._metrics.last_error_at = datetime.utcnow()
+            self._metrics.last_error_at = datetime.now(timezone.utc)
 
-        self._metrics.last_request_at = datetime.utcnow()
+        self._metrics.last_request_at = datetime.now(timezone.utc)
 
         # 更新延迟统计
         self._latencies.append(latency_ms)
@@ -300,7 +300,7 @@ class AgentInstance:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     error_message="Instance is terminated",
-                    last_check_at=datetime.utcnow(),
+                    last_check_at=datetime.now(timezone.utc),
                 )
 
             # 检查agent是否可用
@@ -308,7 +308,7 @@ class AgentInstance:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     error_message="Agent not initialized",
-                    last_check_at=datetime.utcnow(),
+                    last_check_at=datetime.now(timezone.utc),
                 )
 
             # 检查错误率
@@ -327,7 +327,7 @@ class AgentInstance:
                 latency_ms=latency_ms,
                 error_rate=error_rate,
                 active_requests=self._active_requests,
-                last_check_at=datetime.utcnow(),
+                last_check_at=datetime.now(timezone.utc),
                 details={
                     "total_requests": self._metrics.total_requests,
                     "failed_requests": self._metrics.failed_requests,
@@ -345,7 +345,7 @@ class AgentInstance:
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=latency_ms,
                 error_message=str(e),
-                last_check_at=datetime.utcnow(),
+                last_check_at=datetime.now(timezone.utc),
             )
             self._last_health_check = result
             return result
@@ -427,7 +427,7 @@ class AgentInstance:
 
     def get_idle_seconds(self) -> float:
         """获取空闲时间 (秒)."""
-        return (datetime.utcnow() - self._last_activity_at).total_seconds()
+        return (datetime.now(timezone.utc) - self._last_activity_at).total_seconds()
 
     def is_idle_expired(self) -> bool:
         """是否空闲超时."""

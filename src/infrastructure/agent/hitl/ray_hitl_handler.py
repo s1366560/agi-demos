@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity
@@ -236,7 +236,7 @@ class RayHITLHandler:
                 message_id=request.message_id,
                 timeout_seconds=timeout_seconds,
                 type_data=request.type_specific_data,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
 
             await _emit_hitl_sse_event(

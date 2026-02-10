@@ -8,7 +8,7 @@ local sandboxes (running on user's machine, connected via WebSocket tunnel).
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -147,9 +147,9 @@ class ProjectSandbox(Entity):
     sandbox_id: str
     sandbox_type: SandboxType = SandboxType.CLOUD
     status: ProjectSandboxStatus = ProjectSandboxStatus.STARTING
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = None
-    last_accessed_at: datetime = field(default_factory=datetime.utcnow)
+    last_accessed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     health_checked_at: Optional[datetime] = None
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -163,12 +163,12 @@ class ProjectSandbox(Entity):
 
     def mark_accessed(self) -> None:
         """Update last accessed timestamp."""
-        self.last_accessed_at = datetime.utcnow()
+        self.last_accessed_at = datetime.now(timezone.utc)
 
     def mark_healthy(self) -> None:
         """Mark sandbox as healthy and running."""
         self.status = ProjectSandboxStatus.RUNNING
-        self.health_checked_at = datetime.utcnow()
+        self.health_checked_at = datetime.now(timezone.utc)
         self.error_message = None
 
     def mark_unhealthy(self, reason: Optional[str] = None) -> None:
@@ -246,7 +246,7 @@ class ProjectSandbox(Entity):
         """Check if health check is needed based on last check time."""
         if self.health_checked_at is None:
             return True
-        elapsed = (datetime.utcnow() - self.health_checked_at).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self.health_checked_at).total_seconds()
         return elapsed > max_age_seconds
 
     def get_connection_url(self) -> Optional[str]:

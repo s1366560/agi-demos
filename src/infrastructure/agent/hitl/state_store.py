@@ -21,7 +21,7 @@ Key Design Decisions:
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class HITLAgentState:
     total_output_tokens: int = 0
 
     # Metadata
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     timeout_seconds: float = 300.0
 
     # Pending HITL tool call ID (for injecting tool result on resume)

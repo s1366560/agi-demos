@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of WorkPlanRepositoryPort using BaseRepository.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import delete, select
@@ -47,7 +47,7 @@ class SqlWorkPlanRepository(BaseRepository[object, DBWorkPlan], WorkPlanReposito
             # Update existing plan
             for key, value in plan_data.items():
                 setattr(db_plan, key, value)
-            db_plan.updated_at = datetime.utcnow()
+            db_plan.updated_at = datetime.now(timezone.utc)
         else:
             # Create new plan
             db_plan = DBWorkPlan(

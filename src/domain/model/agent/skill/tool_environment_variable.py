@@ -5,7 +5,7 @@ or project level for multi-tenant isolation.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -50,7 +50,7 @@ class ToolEnvironmentVariable(Entity):
     is_required: bool = True
     is_secret: bool = True
     scope: EnvVarScope = EnvVarScope.TENANT
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None
 
     def __post_init__(self):
@@ -71,12 +71,12 @@ class ToolEnvironmentVariable(Entity):
     def update_value(self, new_encrypted_value: str) -> None:
         """Update the encrypted value."""
         self.encrypted_value = new_encrypted_value
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def update_description(self, description: str) -> None:
         """Update the description."""
         self.description = description
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     @property
     def scoped_key(self) -> str:

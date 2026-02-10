@@ -20,7 +20,7 @@ Thread Safety:
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class HITLWaiter:
     request_id: str
     conversation_id: str
     hitl_type: str
-    registered_at: datetime = field(default_factory=datetime.utcnow)
+    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # Callback to invoke when response arrives
     response_callback: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]] = None
     # Event to signal when response is ready (alternative to callback)
@@ -277,7 +277,7 @@ class AgentSessionRegistry:
         Returns:
             Number of waiters cleaned up
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired_ids = []
 
         async with self._lock:

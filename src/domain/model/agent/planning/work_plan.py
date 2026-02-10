@@ -1,7 +1,7 @@
 """WorkPlan entity for multi-level thinking support."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.domain.model.agent.planning.plan_status import PlanStatus
@@ -25,7 +25,7 @@ class WorkPlan(Entity):
     current_step_index: int = 0
     completed_step_indices: list[int] = field(default_factory=list)  # Track completed steps
     workflow_pattern_id: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime | None = None
 
     def get_current_step(self) -> PlanStep | None:
@@ -46,28 +46,28 @@ class WorkPlan(Entity):
         self.complete_current_step()
         if self.current_step_index + 1 < len(self.steps):
             self.current_step_index += 1
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
 
     def complete_current_step(self) -> None:
         """Mark the current step as completed."""
         if self.current_step_index not in self.completed_step_indices:
             self.completed_step_indices.append(self.current_step_index)
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
 
     def mark_in_progress(self) -> None:
         """Mark the plan as in progress."""
         self.status = PlanStatus.IN_PROGRESS
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def mark_completed(self) -> None:
         """Mark the plan as completed."""
         self.status = PlanStatus.COMPLETED
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def mark_failed(self) -> None:
         """Mark the plan as failed."""
         self.status = PlanStatus.FAILED
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     @property
     def is_complete(self) -> bool:

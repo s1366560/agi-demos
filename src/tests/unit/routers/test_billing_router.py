@@ -1,7 +1,7 @@
 """Unit tests for billing API endpoints."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -53,8 +53,8 @@ class TestGetBillingInfo:
             amount=2999,
             currency="USD",
             status="paid",
-            period_start=datetime.utcnow() - timedelta(days=30),
-            period_end=datetime.utcnow(),
+            period_start=datetime.now(timezone.utc) - timedelta(days=30),
+            period_end=datetime.now(timezone.utc),
         )
         test_db.add(invoice)
         await test_db.commit()
@@ -213,8 +213,8 @@ class TestGetBillingInfo:
                 amount=1000 + i * 100,
                 currency="USD",
                 status="paid",
-                period_start=datetime.utcnow() - timedelta(days=30 + i),
-                period_end=datetime.utcnow() - timedelta(days=29 + i),
+                period_start=datetime.now(timezone.utc) - timedelta(days=30 + i),
+                period_end=datetime.now(timezone.utc) - timedelta(days=29 + i),
             )
             test_db.add(invoice)
         await test_db.commit()
@@ -248,8 +248,8 @@ class TestListInvoices:
                 amount=1000 * (i + 1),
                 currency="USD",
                 status="paid" if i < 2 else "pending",
-                period_start=datetime.utcnow() - timedelta(days=30 * (i + 1)),
-                period_end=datetime.utcnow() - timedelta(days=30 * i),
+                period_start=datetime.now(timezone.utc) - timedelta(days=30 * (i + 1)),
+                period_end=datetime.now(timezone.utc) - timedelta(days=30 * i),
             )
             test_db.add(invoice)
         await test_db.commit()
@@ -331,7 +331,7 @@ class TestListInvoices:
         test_db.add(user_tenant)
 
         # Create invoices with different timestamps
-        base_time = datetime.utcnow()
+        base_time = datetime.now(timezone.utc)
         for i in range(3):
             invoice = Invoice(
                 id=f"inv_order_{i}",

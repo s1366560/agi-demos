@@ -20,7 +20,7 @@ import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional, Set
 
@@ -63,8 +63,8 @@ class FeatureFlagConfig:
     end_percentage: float = 100.0
 
     # Metadata
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # Default feature flags for Agent Pool
@@ -158,7 +158,7 @@ class FeatureFlags:
 
     def set_flag(self, config: FeatureFlagConfig) -> None:
         """Set or update a flag."""
-        config.updated_at = datetime.utcnow()
+        config.updated_at = datetime.now(timezone.utc)
         self._flags[config.name] = config
         # Clear cache for this flag
         self._cache = {k: v for k, v in self._cache.items() if not k.startswith(config.name)}
@@ -228,7 +228,7 @@ class FeatureFlags:
             return False
 
         flag.tenant_allowlist.add(tenant_id)
-        flag.updated_at = datetime.utcnow()
+        flag.updated_at = datetime.now(timezone.utc)
 
         # If currently using denylist, remove from denylist
         flag.tenant_denylist.discard(tenant_id)
@@ -244,7 +244,7 @@ class FeatureFlags:
         flag.tenant_allowlist.discard(tenant_id)
         if flag.strategy == RolloutStrategy.DENYLIST:
             flag.tenant_denylist.add(tenant_id)
-        flag.updated_at = datetime.utcnow()
+        flag.updated_at = datetime.now(timezone.utc)
 
         return True
 
@@ -262,7 +262,7 @@ class FeatureFlags:
         key = f"{tenant_id}:{project_id}"
         flag.project_allowlist.add(key)
         flag.project_denylist.discard(key)
-        flag.updated_at = datetime.utcnow()
+        flag.updated_at = datetime.now(timezone.utc)
 
         return True
 
@@ -274,7 +274,7 @@ class FeatureFlags:
 
         flag.percentage = max(0.0, min(100.0, percentage))
         flag.strategy = RolloutStrategy.PERCENTAGE
-        flag.updated_at = datetime.utcnow()
+        flag.updated_at = datetime.now(timezone.utc)
 
         return True
 
@@ -293,12 +293,12 @@ class FeatureFlags:
         from datetime import timedelta
 
         flag.strategy = RolloutStrategy.GRADUAL
-        flag.start_date = datetime.utcnow()
+        flag.start_date = datetime.now(timezone.utc)
         flag.end_date = flag.start_date + timedelta(days=duration_days)
         flag.start_percentage = start_percentage
         flag.end_percentage = end_percentage
         flag.enabled = True
-        flag.updated_at = datetime.utcnow()
+        flag.updated_at = datetime.now(timezone.utc)
 
         logger.info(
             f"Started gradual rollout for {flag_name}: "
@@ -378,7 +378,7 @@ class FeatureFlags:
         if not flag.start_date or not flag.end_date:
             return False
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Before start
         if now < flag.start_date:

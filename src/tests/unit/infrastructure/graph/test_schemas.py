@@ -1,6 +1,6 @@
 """Unit tests for graph schemas."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -41,7 +41,7 @@ class TestEpisodicNode:
     def test_create_episodic_node_full(self):
         """Test creating episodic node with all fields."""
         uuid = str(uuid4())
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         node = EpisodicNode(
             uuid=uuid,

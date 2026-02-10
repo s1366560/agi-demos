@@ -6,7 +6,7 @@ Uses the handler pattern for clean separation of concerns.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -80,7 +80,7 @@ class MessageRouter:
             await context.send_json(
                 {
                     "type": "pong",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
             return

@@ -16,7 +16,7 @@ while using the MemStack platform for orchestration.
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 from uuid import uuid4
 
@@ -50,7 +50,7 @@ class LocalSandboxConnection:
     workspace_path: str
     status: SandboxStatus = SandboxStatus.CREATING
     client: Optional[WebSocketMCPClient] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_activity_at: Optional[datetime] = None
     error_message: Optional[str] = None
     auth_token: Optional[str] = None
@@ -236,7 +236,7 @@ class LocalSandboxAdapter(SandboxPort):
 
             connection.client = client
             connection.status = SandboxStatus.RUNNING
-            connection.last_activity_at = datetime.utcnow()
+            connection.last_activity_at = datetime.now(timezone.utc)
 
             self._connections[sandbox_id] = connection
             logger.info(f"Connected to local sandbox {sandbox_id}")
@@ -282,7 +282,7 @@ class LocalSandboxAdapter(SandboxPort):
                                 conn.client.call_tool("ping", {}),
                                 timeout=5,
                             )
-                            conn.last_activity_at = datetime.utcnow()
+                            conn.last_activity_at = datetime.now(timezone.utc)
                     except Exception as e:
                         logger.warning(f"Health check failed for {sandbox_id}: {e}")
                         await self._handle_connection_lost(sandbox_id, f"Health check failed: {e}")
@@ -489,7 +489,7 @@ class LocalSandboxAdapter(SandboxPort):
             )
 
         try:
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
 
             # Use bash tool to execute code
             result = await conn.client.call_tool(
@@ -501,8 +501,8 @@ class LocalSandboxAdapter(SandboxPort):
                 },
             )
 
-            execution_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
-            conn.last_activity_at = datetime.utcnow()
+            execution_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+            conn.last_activity_at = datetime.now(timezone.utc)
 
             # Parse result
             content = result.get("content", [])
@@ -646,7 +646,7 @@ class LocalSandboxAdapter(SandboxPort):
                     "content": content,
                 },
             )
-            conn.last_activity_at = datetime.utcnow()
+            conn.last_activity_at = datetime.now(timezone.utc)
             return True
 
         except Exception as e:
@@ -692,7 +692,7 @@ class LocalSandboxAdapter(SandboxPort):
             conn.client = client
             conn.status = SandboxStatus.RUNNING
             conn.error_message = None
-            conn.last_activity_at = datetime.utcnow()
+            conn.last_activity_at = datetime.now(timezone.utc)
 
             logger.info(f"Reconnected to local sandbox {sandbox_id}")
             return True

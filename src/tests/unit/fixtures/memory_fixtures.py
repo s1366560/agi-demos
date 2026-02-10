@@ -5,7 +5,7 @@ Provides builder pattern for creating test Memory instances with sensible defaul
 and the ability to customize specific fields.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import uuid4
 
@@ -146,7 +146,7 @@ class MemoryTestDataBuilder:
             status=self._status,
             processing_status=self._processing_status,
             metadata=self._metadata.copy(),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             updated_at=None,
         )
 

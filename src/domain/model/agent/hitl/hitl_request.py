@@ -5,7 +5,7 @@ enabling recovery after page refresh and audit trails.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -85,7 +85,7 @@ class HITLRequest(Entity):
     status: HITLRequestStatus = HITLRequestStatus.PENDING
     response: Optional[str] = None
     response_metadata: Optional[Dict[str, Any]] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
     answered_at: Optional[datetime] = None
 
@@ -122,7 +122,7 @@ class HITLRequest(Entity):
     @property
     def is_expired(self) -> bool:
         """Check if request has expired."""
-        return datetime.utcnow() > self.expires_at if self.expires_at else False
+        return datetime.now(timezone.utc) > self.expires_at if self.expires_at else False
 
     def answer(
         self,
@@ -136,7 +136,7 @@ class HITLRequest(Entity):
         self.response = response
         self.response_metadata = response_metadata
         self.status = HITLRequestStatus.ANSWERED
-        self.answered_at = datetime.utcnow()
+        self.answered_at = datetime.now(timezone.utc)
 
     def mark_processing(self) -> None:
         """Mark request as being processed by Agent."""

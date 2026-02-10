@@ -8,7 +8,7 @@ CRITICAL: The 'slug' field is required in the database schema but not in the dom
 This builder ensures tests include proper slug values to prevent constraint violations.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -115,7 +115,7 @@ class TenantTestDataBuilder:
             max_projects=self._max_projects,
             max_users=self._max_users,
             max_storage=self._max_storage,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             updated_at=None,
         )
 

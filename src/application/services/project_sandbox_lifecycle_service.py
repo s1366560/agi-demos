@@ -17,7 +17,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -716,7 +716,7 @@ class ProjectSandboxLifecycleService:
             # Update association with success
             association.sandbox_id = instance.id  # Use actual container ID
             association.status = ProjectSandboxStatus.RUNNING
-            association.started_at = datetime.utcnow()
+            association.started_at = datetime.now(timezone.utc)
             association.mark_healthy()
             await self._repository.save(association)
 
@@ -804,7 +804,7 @@ class ProjectSandboxLifecycleService:
             # Update status (sandbox_id should remain the same)
             association.sandbox_id = instance.id
             association.status = ProjectSandboxStatus.RUNNING
-            association.started_at = datetime.utcnow()
+            association.started_at = datetime.now(timezone.utc)
             association.mark_healthy()
             await self._repository.save(association)
 

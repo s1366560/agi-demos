@@ -5,7 +5,7 @@ sandbox/MCP tool executions that need to be stored and displayed in the UI.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -277,7 +277,7 @@ class Artifact(Entity):
 
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self):
         """Auto-detect category from mime_type if not set."""

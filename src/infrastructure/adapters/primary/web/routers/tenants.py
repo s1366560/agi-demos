@@ -1,6 +1,6 @@
 """Tenant management API endpoints."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -443,7 +443,7 @@ async def get_tenant_stats(
     storage_used = storage_result.scalar() or 0
 
     # New projects this week
-    one_week_ago = datetime.utcnow() - timedelta(days=7)
+    one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     new_projects_result = await db.execute(
         select(func.count(Project.id)).where(
             and_(Project.tenant_id == tenant_id, Project.created_at >= one_week_ago)

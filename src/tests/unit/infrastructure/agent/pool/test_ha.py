@@ -8,7 +8,7 @@ Tests:
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -147,7 +147,7 @@ class TestStateCheckpoint:
             "checkpoint_id": "cp-456",
             "instance_key": "t:p:m",
             "checkpoint_type": "execution",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "state_data": {"foo": "bar"},
             "metadata": {},
         }

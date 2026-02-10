@@ -7,7 +7,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from ..config import AgentInstanceConfig
@@ -42,8 +42,8 @@ class WorkerSlot:
         """分配实例到槽位."""
         self.instance = instance
         self.project_key = instance.config.instance_key
-        self.assigned_at = datetime.utcnow()
-        self.last_used_at = datetime.utcnow()
+        self.assigned_at = datetime.now(timezone.utc)
+        self.last_used_at = datetime.now(timezone.utc)
         self.request_count = 0
 
     def release(self) -> Optional[AgentInstance]:
@@ -56,7 +56,7 @@ class WorkerSlot:
 
     def touch(self) -> None:
         """更新使用时间."""
-        self.last_used_at = datetime.utcnow()
+        self.last_used_at = datetime.now(timezone.utc)
         self.request_count += 1
 
 

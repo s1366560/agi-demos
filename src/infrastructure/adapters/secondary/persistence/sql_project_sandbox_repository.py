@@ -5,7 +5,7 @@ V2 SQLAlchemy implementation of ProjectSandboxRepository using BaseRepository.
 import hashlib
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator, List, Optional
 
 from sqlalchemy import select, text
@@ -190,7 +190,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             ProjectSandbox as ProjectSandboxORM,
         )
 
-        cutoff_time = datetime.utcnow() - timedelta(seconds=max_idle_seconds)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=max_idle_seconds)
 
         query = (
             select(ProjectSandboxORM)

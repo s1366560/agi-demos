@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.domain.shared_kernel import Entity
@@ -19,7 +19,7 @@ class TaskLog(Entity):
     worker_id: Optional[str] = None
     retry_count: int = 0
     error_message: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     stopped_at: Optional[datetime] = None

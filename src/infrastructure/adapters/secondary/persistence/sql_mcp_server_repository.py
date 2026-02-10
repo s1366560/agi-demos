@@ -4,7 +4,7 @@ V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import delete, select
@@ -147,7 +147,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         if enabled is not None:
             db_server.enabled = enabled
 
-        db_server.updated_at = datetime.utcnow()
+        db_server.updated_at = datetime.now(timezone.utc)
         await self._session.flush()
 
         logger.info(f"Updated MCP server: {server_id}")
@@ -171,7 +171,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         db_server.discovered_tools = tools
         db_server.sync_error = sync_error
         db_server.last_sync_at = last_sync_at
-        db_server.updated_at = datetime.utcnow()
+        db_server.updated_at = datetime.now(timezone.utc)
 
         await self._session.flush()
 

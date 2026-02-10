@@ -14,7 +14,7 @@ Features:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 import redis.asyncio as redis
@@ -91,7 +91,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             "event_counter": event_counter,
             "event_type": event_type.value,
             "data": json.dumps(data, default=str),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "conversation_id": conversation_id,
             "message_id": message_id,
         }
@@ -278,7 +278,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 json.dumps(
                     {
                         "status": "complete",
-                        "completed_at": datetime.utcnow().isoformat(),
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
                     }
                 ),
             )
@@ -384,7 +384,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 event_counter=counter,
                 event_type=AgentEventType(event_type) if event_type else AgentEventType.THOUGHT,
                 data=data,
-                timestamp=(datetime.fromisoformat(timestamp) if timestamp else datetime.utcnow()),
+                timestamp=(datetime.fromisoformat(timestamp) if timestamp else datetime.now(timezone.utc)),
                 message_id=message_id,
                 conversation_id=conversation_id,
             )

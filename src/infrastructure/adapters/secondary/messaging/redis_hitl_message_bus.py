@@ -21,7 +21,7 @@ Consumer group naming convention:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 import redis.asyncio as redis
@@ -99,7 +99,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
             "request_id": request_id,
             "message_type": HITLMessageType.RESPONSE.value,
             "payload": {response_key: response_value},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "metadata": metadata or {},
         }
 
@@ -237,7 +237,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 timestamp=(
                     datetime.fromisoformat(data["timestamp"])
                     if isinstance(data.get("timestamp"), str)
-                    else datetime.utcnow()
+                    else datetime.now(timezone.utc)
                 ),
                 metadata=data.get("metadata"),
             )

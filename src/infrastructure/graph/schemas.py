@@ -66,7 +66,7 @@ class EpisodicNode(BaseNode):
     content: str
     source_description: str = ""
     source: EpisodeType = EpisodeType.TEXT
-    valid_at: datetime = Field(default_factory=datetime.utcnow)
+    valid_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     group_id: str = "global"
     memory_id: Optional[str] = None
     status: EpisodeStatus = EpisodeStatus.PROCESSING
@@ -186,7 +186,7 @@ class BaseEdge(BaseModel):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
     source_uuid: str
     target_uuid: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Config:
         """Pydantic config."""

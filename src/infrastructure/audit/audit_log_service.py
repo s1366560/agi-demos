@@ -6,7 +6,7 @@ Logs provider CRUD operations, configuration changes, and tenant assignments.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID
 
@@ -19,7 +19,7 @@ class AuditLogEntry(BaseModel):
     """Audit log entry model."""
 
     id: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     actor: Optional[str] = None  # User ID or system
     action: str  # e.g., "provider.created", "provider.updated"
     resource_type: str  # e.g., "provider", "tenant_mapping"

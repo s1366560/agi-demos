@@ -1,6 +1,6 @@
 """Unit tests for LLM providers router."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -39,10 +39,10 @@ def create_provider_response(
         is_active=is_active,
         is_default=is_default,
         api_key_masked="sk-...xyz",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
         health_status=ProviderStatus.HEALTHY,
-        health_last_check=datetime.utcnow(),
+        health_last_check=datetime.now(timezone.utc),
         response_time_ms=150,
         error_message=None,
     )
@@ -455,7 +455,7 @@ class TestLLMProvidersRouterHealthCheck:
             provider_id=provider_id,
             status=ProviderStatus.HEALTHY,
             response_time_ms=150,
-            last_check=datetime.utcnow(),
+            last_check=datetime.now(timezone.utc),
             error_message=None,
         )
         mock_provider_service.check_provider_health.return_value = mock_health

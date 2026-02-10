@@ -7,7 +7,7 @@ for LLM multimodal understanding and sandbox import.
 import base64
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.domain.model.agent.attachment import (
@@ -77,7 +77,7 @@ class AttachmentService:
         # Extract extension
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
         unique_id = uuid.uuid4().hex[:12]
-        timestamp = datetime.utcnow().strftime("%Y%m%d")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
 
         if ext:
             key = f"{self._bucket_prefix}/{tenant_id}/{project_id}/{conversation_id}/{timestamp}_{unique_id}.{ext}"
@@ -213,8 +213,8 @@ class AttachmentService:
             purpose=purpose,
             status=AttachmentStatus.UPLOADED,
             metadata=metadata or AttachmentMetadata(),
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(hours=self._default_expiration_hours),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=self._default_expiration_hours),
         )
 
         await self._repo.save(attachment)
@@ -288,8 +288,8 @@ class AttachmentService:
             total_parts=total_parts,
             uploaded_parts=0,
             metadata=metadata or AttachmentMetadata(),
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(hours=self._default_expiration_hours),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=self._default_expiration_hours),
         )
 
         await self._repo.save(attachment)

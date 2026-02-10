@@ -85,7 +85,7 @@ class TestEdgeCases:
                 "content": "Test content",
                 "metadata": {
                     "source": "api",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "nested": {"key": "value", "array": [1, 2, 3]},
                 },
             },
@@ -196,7 +196,7 @@ class TestEdgeCases:
         result = await test_db.execute(select(TaskLog).where(TaskLog.id == "task_workflow"))
         task = result.scalar_one()
         task.status = "PROCESSING"
-        task.started_at = datetime.utcnow()
+        task.started_at = datetime.now(timezone.utc)
         await test_db.commit()
 
         # Verify transition
@@ -207,7 +207,7 @@ class TestEdgeCases:
 
         # Transition to COMPLETED
         task.status = "COMPLETED"
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
         await test_db.commit()
 
         # Verify final state

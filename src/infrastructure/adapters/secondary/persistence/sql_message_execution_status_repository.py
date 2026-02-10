@@ -10,7 +10,7 @@ message generation status.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -166,7 +166,7 @@ class SqlMessageExecutionStatusRepository(
             AgentExecutionStatus.FAILED,
             AgentExecutionStatus.CANCELLED,
         ):
-            update_data["completed_at"] = datetime.utcnow()
+            update_data["completed_at"] = datetime.now(timezone.utc)
 
         if error_message:
             update_data["error_message"] = error_message

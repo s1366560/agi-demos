@@ -5,7 +5,7 @@ Provides builder pattern for creating test User instances with sensible defaults
 and the ability to customize specific fields.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 from uuid import uuid4
 
@@ -72,7 +72,7 @@ class UserTestDataBuilder:
             password_hash=self._password_hash,
             is_active=self._is_active,
             profile=self._profile.copy(),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
 

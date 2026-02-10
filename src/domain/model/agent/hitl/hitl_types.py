@@ -306,7 +306,7 @@ class HITLRequest:
     # Common fields
     status: HITLStatus = HITLStatus.PENDING
     timeout_seconds: float = 300.0
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
 
     # Tenant context
@@ -420,7 +420,7 @@ class HITLResponse:
     permission_response: Optional[PermissionResponse] = None
 
     # Response metadata
-    responded_at: datetime = field(default_factory=datetime.utcnow)
+    responded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     user_id: Optional[str] = None
 
     @property
@@ -475,7 +475,7 @@ class HITLSignalPayload:
     hitl_type: HITLType
     response_data: Dict[str, Any]  # Type-specific response data
     user_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -496,7 +496,7 @@ class HITLSignalPayload:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if data.get("timestamp")
-                else datetime.utcnow()
+                else datetime.now(timezone.utc)
             ),
         )
 

@@ -10,7 +10,7 @@ This service handles:
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.domain.events.agent_events import (
@@ -91,7 +91,7 @@ class ArtifactService:
 
         Format: artifacts/{tenant_id}/{project_id}/{date}/{execution_id}/{uuid}_{filename}
         """
-        date_part = datetime.utcnow().strftime("%Y/%m/%d")
+        date_part = datetime.now(timezone.utc).strftime("%Y/%m/%d")
         unique_id = uuid.uuid4().hex[:8]
 
         if tool_execution_id:

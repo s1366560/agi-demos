@@ -7,7 +7,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from ..instance import AgentInstance
@@ -80,7 +80,7 @@ class InstanceHealthState:
             return False
 
         if self.last_recovery_at:
-            elapsed = (datetime.utcnow() - self.last_recovery_at).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - self.last_recovery_at).total_seconds()
             if elapsed < config.recovery_cooldown_seconds:
                 return False
 
@@ -89,7 +89,7 @@ class InstanceHealthState:
     def record_recovery_attempt(self) -> None:
         """记录恢复尝试."""
         self.recovery_attempts += 1
-        self.last_recovery_at = datetime.utcnow()
+        self.last_recovery_at = datetime.now(timezone.utc)
 
     def reset_recovery_state(self) -> None:
         """重置恢复状态 (成功恢复后)."""
@@ -189,7 +189,7 @@ class HealthMonitor:
             result = HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
                 error_message="Health check timeout",
-                last_check_at=datetime.utcnow(),
+                last_check_at=datetime.now(timezone.utc),
             )
 
             async with self._lock:
@@ -204,7 +204,7 @@ class HealthMonitor:
             result = HealthCheckResult(
                 status=HealthStatus.UNKNOWN,
                 error_message=str(e),
-                last_check_at=datetime.utcnow(),
+                last_check_at=datetime.now(timezone.utc),
             )
 
             async with self._lock:

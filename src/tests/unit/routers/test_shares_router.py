@@ -1,7 +1,7 @@
 """Unit tests for memory sharing API endpoints."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -37,7 +37,7 @@ class TestCreateShare:
     @pytest.mark.asyncio
     async def test_create_share_with_expires_at(self, test_db, client, test_memory_with_project):
         """Test share creation with specific expiration date."""
-        expires_at = (datetime.utcnow() + timedelta(days=14)).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
         share_data = {"permissions": {"view": True, "edit": True}, "expires_at": expires_at}
 
         response = client.post(
@@ -387,7 +387,7 @@ class TestGetSharedMemory:
             share_token="expired_token",
             shared_by=user.id,
             permissions={"view": True},
-            expires_at=datetime.utcnow() - timedelta(days=1),  # Expired yesterday
+            expires_at=datetime.now(timezone.utc) - timedelta(days=1),  # Expired yesterday
         )
         test_db.add(expired_share)
         await test_db.commit()

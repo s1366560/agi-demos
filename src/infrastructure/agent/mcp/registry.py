@@ -7,7 +7,7 @@ providing efficient tool lookup and server health monitoring.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from src.infrastructure.agent.mcp.client import MCPClient
@@ -114,7 +114,7 @@ class MCPServerRegistry:
         try:
             await client.connect()
             self._clients[server_id] = client
-            self._health_status[server_id] = (True, datetime.utcnow())
+            self._health_status[server_id] = (True, datetime.now(timezone.utc))
             logger.info(f"Registered MCP server: {server_id}")
 
             # Initial tool discovery
@@ -155,7 +155,7 @@ class MCPServerRegistry:
         # Check cache
         if not force and server_id in self._tool_cache:
             tools, last_sync = self._tool_cache[server_id]
-            age = datetime.utcnow() - last_sync
+            age = datetime.now(timezone.utc) - last_sync
             if age.total_seconds() < self.cache_ttl_seconds:
                 logger.debug(f"Using cached tools for server {server_id}")
                 return tools
@@ -167,7 +167,7 @@ class MCPServerRegistry:
 
         try:
             tools = await client.list_tools()
-            self._tool_cache[server_id] = (tools, datetime.utcnow())
+            self._tool_cache[server_id] = (tools, datetime.now(timezone.utc))
             logger.info(f"Synced {len(tools)} tools from server {server_id}")
             return tools
         except Exception as e:
@@ -246,11 +246,11 @@ class MCPServerRegistry:
 
         try:
             is_healthy = await client.health_check()
-            self._health_status[server_id] = (is_healthy, datetime.utcnow())
+            self._health_status[server_id] = (is_healthy, datetime.now(timezone.utc))
             return is_healthy
         except Exception as e:
             logger.error(f"Health check failed for server {server_id}: {e}")
-            self._health_status[server_id] = (False, datetime.utcnow())
+            self._health_status[server_id] = (False, datetime.now(timezone.utc))
             return False
 
     def get_health_status(self, server_id: str) -> Optional[tuple[bool, datetime]]:
@@ -311,7 +311,7 @@ class MCPServerRegistry:
                 # Verify connection with health check
                 if await client.health_check():
                     logger.info(f"Successfully reconnected to server {server_id}")
-                    self._health_status[server_id] = (True, datetime.utcnow())
+                    self._health_status[server_id] = (True, datetime.now(timezone.utc))
                     return
             except Exception as e:
                 logger.error(f"Reconnect attempt {attempt + 1} failed for {server_id}: {e}")
@@ -320,4 +320,4 @@ class MCPServerRegistry:
         logger.error(
             f"Failed to reconnect to server {server_id} after {self.max_reconnect_attempts} attempts"
         )
-        self._health_status[server_id] = (False, datetime.utcnow())
+        self._health_status[server_id] = (False, datetime.now(timezone.utc))

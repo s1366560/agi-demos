@@ -1,6 +1,6 @@
 """Unit tests for support ticket API endpoints."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -373,7 +373,7 @@ class TestCloseSupportTicket:
         """Test closing an already closed ticket."""
         # Close it first
         test_support_ticket.status = "closed"
-        test_support_ticket.resolved_at = datetime.utcnow()
+        test_support_ticket.resolved_at = datetime.now(timezone.utc)
         await test_db.commit()
 
         response = client.post(f"/support/tickets/{test_support_ticket.id}/close")

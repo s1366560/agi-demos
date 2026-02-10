@@ -9,7 +9,7 @@ for backward compatibility.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Union
 
 # Import unified types - SINGLE SOURCE OF TRUTH
@@ -55,7 +55,7 @@ class AgentDomainEvent:
     """
 
     event_type: AgentEventType  # Now uses unified type
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     conversation_id: Optional[str] = None
     sandbox_id: Optional[str] = None
     data: Dict[str, Any] = field(default_factory=dict)

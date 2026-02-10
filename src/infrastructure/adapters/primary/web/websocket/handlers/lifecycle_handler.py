@@ -8,7 +8,7 @@ Handles agent lifecycle control messages:
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -62,7 +62,7 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                                 "is_active": False,
                                 "is_initialized": False,
                             },
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                     )
                     logger.debug(
@@ -90,7 +90,7 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                             "subagent_count": status.subagent_count or 0,
                             "error_message": None,
                         },
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 )
                 logger.debug(
@@ -175,7 +175,7 @@ class StartAgentHandler(WebSocketMessageHandler):
                             project_id,
                             agent_mode,
                         ),
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 )
                 return
@@ -213,7 +213,7 @@ class StartAgentHandler(WebSocketMessageHandler):
                     "project_id": project_id,
                     "status": "started",
                     "workflow_id": actor_id,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
 
@@ -268,7 +268,7 @@ class StopAgentHandler(WebSocketMessageHandler):
                         "project_id": project_id,
                         "status": "not_found",
                         "workflow_id": actor_id,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 )
                 return
@@ -285,7 +285,7 @@ class StopAgentHandler(WebSocketMessageHandler):
                     "project_id": project_id,
                     "status": "stopping",
                     "workflow_id": actor_id,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
 
@@ -392,7 +392,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
                     "project_id": project_id,
                     "status": "restarted",
                     "workflow_id": actor_id,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
 

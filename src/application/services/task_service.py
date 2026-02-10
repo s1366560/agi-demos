@@ -7,7 +7,7 @@ Temporal's built-in mechanisms.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from src.domain.model.task.task_log import TaskLog
@@ -137,7 +137,7 @@ class TaskService:
 
         # Update task status
         task.status = "STOPPED"
-        task.stopped_at = datetime.utcnow()
+        task.stopped_at = datetime.now(timezone.utc)
         await self._task_repo.save(task)
 
         logger.info(f"Stopped task {task_id}")

@@ -1,6 +1,6 @@
 """Unit tests for episodes router."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -91,8 +91,8 @@ class TestEpisodesRouter:
                     "name": "Test Episode",
                     "content": "Test content",
                     "source_description": "text",
-                    "created_at": datetime.utcnow().isoformat(),
-                    "valid_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "valid_at": datetime.now(timezone.utc).isoformat(),
                     "tenant_id": "tenant_123",
                     "project_id": "proj_123",
                     "user_id": "user_123",
@@ -147,7 +147,7 @@ class TestEpisodesRouter:
                 "uuid": f"ep_{i}",
                 "name": f"Episode {i}",
                 "content": f"Content {i}",
-                "created_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "status": "completed",
             }
             record = Mock()
@@ -294,7 +294,7 @@ class TestEpisodesRouterIntegration:
             "uuid": episode_id,
             "name": sample_episode_data["name"],
             "content": sample_episode_data["content"],
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "processing",
         }
         record = Mock()

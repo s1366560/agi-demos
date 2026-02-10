@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from src.domain.shared_kernel import Entity
@@ -14,6 +14,6 @@ class APIKey(Entity):
     name: str
     is_active: bool = True
     permissions: List[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None

@@ -8,7 +8,7 @@ message types. Uses Redis Streams to communicate with the running Ray Actor.
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
@@ -58,7 +58,7 @@ async def _publish_hitl_response_to_redis(
             "tenant_id": tenant_id,
             "project_id": project_id,
             "agent_mode": agent_mode,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         await redis.xadd(stream_key, {"data": json.dumps(message_data)}, maxlen=1000)
@@ -128,7 +128,7 @@ async def _handle_hitl_response(
                     options=[],
                     context={},
                     metadata=row.request_metadata or {},
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                     status=HITLRequestStatus(row.status.lower())
                     if row.status
                     else HITLRequestStatus.PENDING,

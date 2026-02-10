@@ -172,7 +172,7 @@ async def create_episode(
                     name=episode.name,
                     episode_body=episode.content,  # Graphiti expects 'episode_body' not 'content'
                     source_description=episode.source_description or "text",
-                    reference_time=datetime.utcnow(),  # Required parameter
+                    reference_time=datetime.now(timezone.utc),  # Required parameter
                 )
 
                 episode_uuid = result.episode.uuid if result.episode else str(uuid4())
@@ -185,7 +185,7 @@ async def create_episode(
                     content=episode.content,
                     status="processing",
                     message="Episode queued for ingestion",
-                    created_at=datetime.utcnow().isoformat(),
+                    created_at=datetime.now(timezone.utc).isoformat(),
                 )
             finally:
                 # CRITICAL: Always restore original driver state
@@ -373,6 +373,6 @@ async def health_check(
     try:
         # Simple check - can we execute a query?
         await graphiti_client.driver.execute_query("RETURN 1 as test")
-        return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+        return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")

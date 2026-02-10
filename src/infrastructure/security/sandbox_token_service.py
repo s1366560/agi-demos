@@ -14,7 +14,7 @@ import hmac
 import logging
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class SandboxAccessToken:
 
     def is_expired(self) -> bool:
         """Check if token has expired."""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""
@@ -46,7 +46,7 @@ class SandboxAccessToken:
             "project_id": self.project_id,
             "sandbox_type": self.sandbox_type,
             "expires_at": self.expires_at.isoformat(),
-            "expires_in": max(0, int((self.expires_at - datetime.utcnow()).total_seconds())),
+            "expires_in": max(0, int((self.expires_at - datetime.now(timezone.utc)).total_seconds())),
         }
 
 
@@ -110,7 +110,7 @@ class SandboxTokenService:
         Returns:
             SandboxAccessToken with token string and metadata
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         ttl = ttl_override if ttl_override is not None else self._token_ttl
         expires_at = now + timedelta(seconds=ttl)
 
@@ -176,7 +176,7 @@ class SandboxTokenService:
         # Check expiration
         try:
             expires_at = datetime.fromisoformat(token_data["expires_at"])
-            if datetime.utcnow() > expires_at:
+            if datetime.now(timezone.utc) > expires_at:
                 # Clean up expired token
                 del self._tokens[token]
                 logger.info(f"Token expired for project={token_data.get('project_id')}")
@@ -243,7 +243,7 @@ class SandboxTokenService:
         Returns:
             Number of tokens cleaned up
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = [
             token
             for token, data in self._tokens.items()
@@ -282,7 +282,7 @@ class SandboxTokenService:
         Returns:
             Count of active tokens
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         count = 0
         for token, data in self._tokens.items():
             try:

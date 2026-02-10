@@ -12,7 +12,7 @@ This fixes the issue where API restarts leave containers without tracking.
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
@@ -40,7 +40,7 @@ class OrphanContainer:
     ports: Dict[str, int]  # service_type -> port
     labels: Dict[str, str]
     created_at: datetime
-    discovered_at: datetime = field(default_factory=datetime.utcnow)
+    discovered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     action_taken: Optional[OrphanAction] = None
     error_message: Optional[str] = None
 
@@ -142,7 +142,7 @@ class SandboxReconciler:
         for orphan in orphans:
             try:
                 # Check age - very old orphans should always be terminated
-                age_hours = (datetime.utcnow() - orphan.created_at).total_seconds() / 3600
+                age_hours = (datetime.now(timezone.utc) - orphan.created_at).total_seconds() / 3600
                 effective_action = (
                     OrphanAction.TERMINATE if age_hours > self._max_orphan_age_hours else action
                 )
@@ -258,7 +258,7 @@ class SandboxReconciler:
                 tzinfo=None
             )
         except Exception:
-            created_at = datetime.utcnow()
+            created_at = datetime.now(timezone.utc)
 
         # Extract port information
         ports = {}

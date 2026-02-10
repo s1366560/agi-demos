@@ -1,7 +1,7 @@
 """Attachment entity for conversation file uploads."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -113,7 +113,7 @@ class Attachment:
     metadata: AttachmentMetadata = field(default_factory=AttachmentMetadata)
 
     # Timestamps
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
 
     # Error tracking

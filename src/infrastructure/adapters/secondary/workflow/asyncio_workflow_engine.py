@@ -7,7 +7,7 @@ using the existing TaskManager for lifecycle tracking.
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from src.domain.ports.services.workflow_engine_port import (
@@ -93,7 +93,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
             workflow_id=workflow_id,
             run_id=run_id,
             status=WorkflowStatus.RUNNING,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
         )
 
     async def get_workflow_status(self, workflow_id: str) -> WorkflowExecution:

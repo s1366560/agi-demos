@@ -7,7 +7,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..config import AgentInstanceConfig, ResourceQuota
@@ -47,12 +47,12 @@ class PrewarmedInstance:
     instance: AgentInstance
     tier: ProjectTier
     level: int  # 1, 2, or 3
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     ttl_seconds: int = 3600
 
     def is_expired(self) -> bool:
         """是否过期."""
-        elapsed = (datetime.utcnow() - self.created_at).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self.created_at).total_seconds()
         return elapsed > self.ttl_seconds
 
 
@@ -63,7 +63,7 @@ class InstanceTemplate:
     tier: ProjectTier
     quota: ResourceQuota
     config_template: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class PrewarmPool:

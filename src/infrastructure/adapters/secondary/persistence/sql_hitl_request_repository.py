@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of HITLRequestRepository using BaseRepository.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import select, update
@@ -133,7 +133,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         # Exclude expired requests if requested
         if exclude_expired:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             conditions.append(
                 (HITLRequestRecord.expires_at.is_(None)) | (HITLRequestRecord.expires_at > now)
             )
@@ -181,7 +181,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
             HITLRequest as HITLRequestRecord,
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         result = await self._session.execute(
             update(HITLRequestRecord)

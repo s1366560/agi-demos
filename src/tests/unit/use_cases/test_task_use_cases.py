@@ -2,7 +2,7 @@
 Unit tests for Task use cases.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -255,8 +255,8 @@ class TestUpdateTaskUseCase:
     async def test_update_task_all_fields(self):
         """Test updating all task fields"""
         # Arrange
-        started_at = datetime.utcnow()
-        completed_at = datetime.utcnow()
+        started_at = datetime.now(timezone.utc)
+        completed_at = datetime.now(timezone.utc)
 
         task = TaskLog(id="task_123", group_id="group_123", task_type="test_task", status="PENDING")
 

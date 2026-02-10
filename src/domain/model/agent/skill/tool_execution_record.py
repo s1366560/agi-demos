@@ -1,7 +1,7 @@
 """ToolExecutionRecord entity for tracking tool executions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.domain.shared_kernel import Entity
@@ -26,7 +26,7 @@ class ToolExecutionRecord(Entity):
     error: str | None = None
     step_number: int | None = None
     sequence_number: int = 0  # Order within message
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
     duration_ms: int | None = None
 
@@ -34,7 +34,7 @@ class ToolExecutionRecord(Entity):
         """Mark this execution as successful."""
         self.status = "success"
         self.tool_output = output
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
 
@@ -42,7 +42,7 @@ class ToolExecutionRecord(Entity):
         """Mark this execution as failed."""
         self.status = "failed"
         self.error = error
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
 

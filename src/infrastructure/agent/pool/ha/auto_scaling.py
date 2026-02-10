@@ -17,7 +17,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -85,7 +85,7 @@ class ScalingMetrics:
     active_requests: int = 0
     healthy_instances: int = 0
     total_instances: int = 0
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -99,7 +99,7 @@ class ScalingEvent:
     previous_count: int
     target_count: int
     metrics: ScalingMetrics
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     success: bool = False
     error_message: Optional[str] = None
 
@@ -362,7 +362,7 @@ class AutoScalingService:
             return None  # Not enough data
 
         # Check cooldowns
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Check scale up conditions
         scale_up_decision = self._check_scale_up(instance_key, policy, history, now)
@@ -524,9 +524,9 @@ class AutoScalingService:
 
         # Update state
         if event.direction == ScalingDirection.UP:
-            self._last_scale_up[instance_key] = datetime.utcnow()
+            self._last_scale_up[instance_key] = datetime.now(timezone.utc)
         elif event.direction == ScalingDirection.DOWN:
-            self._last_scale_down[instance_key] = datetime.utcnow()
+            self._last_scale_down[instance_key] = datetime.now(timezone.utc)
 
         self._current_counts[instance_key] = event.target_count
 

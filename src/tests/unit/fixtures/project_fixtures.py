@@ -5,7 +5,7 @@ Provides builder pattern for creating test Project instances with sensible defau
 and the ability to customize specific fields.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import uuid4
 
@@ -98,7 +98,7 @@ class ProjectTestDataBuilder:
             memory_rules=self._memory_rules.copy(),
             graph_config=self._graph_config.copy(),
             is_public=self._is_public,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             updated_at=None,
         )
 

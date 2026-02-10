@@ -1,6 +1,6 @@
 """Support ticket management router."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -180,7 +180,7 @@ async def close_support_ticket(
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     ticket.status = "closed"
-    ticket.resolved_at = datetime.utcnow()
+    ticket.resolved_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(ticket)

@@ -1,7 +1,7 @@
 """AgentExecution entity for tracking agent execution cycles."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict
 
@@ -52,7 +52,7 @@ class AgentExecution(Entity):
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     # Timestamps
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
     # Multi-level thinking support
@@ -65,7 +65,7 @@ class AgentExecution(Entity):
     def mark_completed(self) -> None:
         """Mark this execution as completed."""
         self.status = ExecutionStatus.COMPLETED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     def mark_failed(self, error: str) -> None:
         """
@@ -75,7 +75,7 @@ class AgentExecution(Entity):
             error: Error message describing the failure
         """
         self.status = ExecutionStatus.FAILED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         self.metadata["error"] = error
 
     def set_thinking(self, thought: str) -> None:

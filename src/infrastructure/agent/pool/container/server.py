@@ -23,7 +23,7 @@ import sys
 import time
 from concurrent import futures
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, Optional
 
 # gRPC imports will be generated from proto
@@ -119,7 +119,7 @@ class AgentContainerServer:
     def uptime_seconds(self) -> int:
         if self._start_time is None:
             return 0
-        return int((datetime.utcnow() - self._start_time).total_seconds())
+        return int((datetime.now(timezone.utc) - self._start_time).total_seconds())
 
     @property
     def is_healthy(self) -> bool:
@@ -132,7 +132,7 @@ class AgentContainerServer:
 
     async def start(self) -> None:
         """Start the gRPC server."""
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
         self._lifecycle_state = "initializing"
 
@@ -378,7 +378,7 @@ class AgentContainerServer:
         start_time = time.time()
         self._metrics.total_requests += 1
         self._active_requests += 1
-        self._last_request_time = datetime.utcnow()
+        self._last_request_time = datetime.now(timezone.utc)
         self._lifecycle_state = "executing"
 
         try:

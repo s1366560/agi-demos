@@ -14,7 +14,7 @@ Features:
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import orjson
@@ -153,7 +153,7 @@ async def agent_websocket_endpoint(
                 "data": {
                     "user_id": user_id,
                     "session_id": session_id,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             }
         )

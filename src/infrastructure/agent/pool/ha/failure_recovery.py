@@ -19,7 +19,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -65,7 +65,7 @@ class FailureEvent:
     event_id: str
     instance_key: str
     failure_type: FailureType
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     error_message: Optional[str] = None
     error_details: Dict[str, Any] = field(default_factory=dict)
     recovery_attempted: bool = False
@@ -496,7 +496,7 @@ class FailureRecoveryService:
         if instance_key not in self._failure_history:
             return
 
-        cutoff = datetime.utcnow() - self._pattern_window
+        cutoff = datetime.now(timezone.utc) - self._pattern_window
         self._failure_history[instance_key] = [
             f for f in self._failure_history[instance_key] if f.timestamp > cutoff
         ]

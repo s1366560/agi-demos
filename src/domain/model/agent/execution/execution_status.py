@@ -8,7 +8,7 @@ This model tracks the execution status of agent responses, enabling:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -51,7 +51,7 @@ class AgentExecution:
     message_id: str
     status: AgentExecutionStatus
     last_event_sequence: int = 0
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     tenant_id: Optional[str] = None
@@ -74,23 +74,23 @@ class AgentExecution:
     def mark_running(self) -> None:
         """Mark execution as running."""
         self.status = AgentExecutionStatus.RUNNING
-        self.started_at = datetime.utcnow()
+        self.started_at = datetime.now(timezone.utc)
 
     def mark_completed(self) -> None:
         """Mark execution as completed."""
         self.status = AgentExecutionStatus.COMPLETED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     def mark_failed(self, error_message: str) -> None:
         """Mark execution as failed with error message."""
         self.status = AgentExecutionStatus.FAILED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
         self.error_message = error_message
 
     def mark_cancelled(self) -> None:
         """Mark execution as cancelled."""
         self.status = AgentExecutionStatus.CANCELLED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     def update_sequence(self, sequence: int) -> None:
         """Update the last event sequence number."""

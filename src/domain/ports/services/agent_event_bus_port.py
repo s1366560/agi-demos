@@ -20,7 +20,7 @@ Note: AgentEventType is imported from types.py (Single Source of Truth).
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 # Import AgentEventType from the unified types module (Single Source of Truth)
@@ -48,7 +48,7 @@ class AgentEvent:
     event_counter: int
     event_type: AgentEventType
     data: Dict[str, Any]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     message_id: Optional[str] = None
     conversation_id: Optional[str] = None
 
@@ -77,7 +77,7 @@ class AgentEvent:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if isinstance(data.get("timestamp"), str)
-                else data.get("timestamp", datetime.utcnow())
+                else data.get("timestamp", datetime.now(timezone.utc))
             ),
             message_id=data.get("message_id"),
             conversation_id=data.get("conversation_id"),

@@ -1,7 +1,7 @@
 """Graph maintenance and optimization API routes."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -74,7 +74,7 @@ async def incremental_refresh(
                     status="PENDING",
                     payload=task_payload,
                     entity_type="episode",
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
                 session.add(task_log)
 
@@ -185,7 +185,7 @@ async def deduplicate_entities(
                         status="PENDING",
                         payload=task_payload,
                         entity_type="entity",
-                        created_at=datetime.utcnow(),
+                        created_at=datetime.now(timezone.utc),
                     )
                     session.add(task_log)
 
@@ -237,7 +237,7 @@ async def invalidate_stale_edges(
     Set dry_run=false to actually delete stale edges.
     """
     try:
-        cutoff_date = datetime.utcnow() - timedelta(days=days_since_update)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_since_update)
 
         # Find stale edges (relationships with created_at timestamp)
         query = """
@@ -316,7 +316,7 @@ async def get_maintenance_status(
         community_count = community_result.records[0]["count"] if community_result.records else 0
 
         # Get old episodes count
-        cutoff_date = datetime.utcnow() - timedelta(days=90)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=90)
         old_query = """
         MATCH (e:Episodic)
         WHERE e.created_at < datetime($cutoff_date)
@@ -365,7 +365,7 @@ async def get_maintenance_status(
                 "old_episodes": old_episode_count,
             },
             "recommendations": recommendations,
-            "last_checked": datetime.utcnow().isoformat(),
+            "last_checked": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as e:
@@ -404,7 +404,7 @@ async def optimize_graph(
         results = {
             "operations_run": [],
             "dry_run": dry_run,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         group_id = getattr(current_user, "project_id", None) or "neo4j"
@@ -433,7 +433,7 @@ async def optimize_graph(
                             status="PENDING",
                             payload=task_payload,
                             entity_type="episode",
-                            created_at=datetime.utcnow(),
+                            created_at=datetime.now(timezone.utc),
                         )
                         session.add(task_log)
                 task_payload["task_id"] = task_id
@@ -499,7 +499,7 @@ async def optimize_graph(
                                 status="PENDING",
                                 payload=task_payload,
                                 entity_type="entity",
-                                created_at=datetime.utcnow(),
+                                created_at=datetime.now(timezone.utc),
                             )
                             session.add(task_log)
                     task_payload["task_id"] = task_id
@@ -523,7 +523,7 @@ async def optimize_graph(
 
             elif operation == "invalidate_edges":
                 days_since_update = 30
-                cutoff_date = datetime.utcnow() - timedelta(days=days_since_update)
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_since_update)
 
                 if dry_run:
                     query = """
@@ -585,7 +585,7 @@ async def optimize_graph(
                                 status="PENDING",
                                 payload=task_payload,
                                 entity_type="community",
-                                created_at=datetime.utcnow(),
+                                created_at=datetime.now(timezone.utc),
                             )
                             session.add(task_log)
                     task_payload["task_id"] = task_id

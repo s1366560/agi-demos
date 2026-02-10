@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -91,7 +91,7 @@ class Project(Entity):
     graph_config: Dict[str, Any] = field(default_factory=dict)
     sandbox_config: SandboxConfig = field(default_factory=SandboxConfig)
     is_public: bool = False
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = None
 
     def is_local_sandbox(self) -> bool:

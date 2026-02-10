@@ -368,7 +368,7 @@ async def stop_task_endpoint(
         )
 
     # Mark task as stopped
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     await update_use_case.execute(
         UpdateTaskCommand(
             task_id=task_id,

@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of ToolExecutionRecordRepository using BaseReposito
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy import delete, select, update
@@ -136,7 +136,7 @@ class SqlToolExecutionRecordRepository(
         """Update the status of a tool execution record."""
         update_values = {
             "status": status,
-            "completed_at": datetime.utcnow(),
+            "completed_at": datetime.now(timezone.utc),
         }
         if output is not None:
             update_values["tool_output"] = output

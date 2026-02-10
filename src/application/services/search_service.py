@@ -7,7 +7,7 @@ pagination.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from src.domain.ports.repositories.memory_repository import MemoryRepository
@@ -223,7 +223,7 @@ class SearchService:
             List of memories within date range
         """
         if date_to is None:
-            date_to = datetime.utcnow()
+            date_to = datetime.now(timezone.utc)
 
         try:
             # Get all memories in project
@@ -343,7 +343,7 @@ class SearchService:
             Dictionary with recent memories, entities, and activity summary
         """
         try:
-            date_from = datetime.utcnow() - timedelta(days=days)
+            date_from = datetime.now(timezone.utc) - timedelta(days=days)
 
             # Get recent memories
             memories = await self.search_by_date_range(

@@ -6,7 +6,7 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -74,7 +74,7 @@ async def create_mcp_server(
                 await repository.update_discovered_tools(
                     server_id=server_id,
                     tools=tools,
-                    last_sync_at=datetime.utcnow(),
+                    last_sync_at=datetime.now(timezone.utc),
                 )
                 await db.commit()
 
@@ -99,7 +99,7 @@ async def create_mcp_server(
                     await repository.update_discovered_tools(
                         server_id=server_id,
                         tools=[],
-                        last_sync_at=datetime.utcnow(),
+                        last_sync_at=datetime.now(timezone.utc),
                         sync_error=sync_err,
                     )
                     await db.commit()
@@ -257,7 +257,7 @@ async def update_mcp_server(
                         await repository.update_discovered_tools(
                             server_id=server_id,
                             tools=tools,
-                            last_sync_at=datetime.utcnow(),
+                            last_sync_at=datetime.now(timezone.utc),
                         )
                         await db.commit()
                         logger.info(
@@ -274,7 +274,7 @@ async def update_mcp_server(
                             await repository.update_discovered_tools(
                                 server_id=server_id,
                                 tools=[],
-                                last_sync_at=datetime.utcnow(),
+                                last_sync_at=datetime.now(timezone.utc),
                                 sync_error=sync_err,
                             )
                             await db.commit()
@@ -414,7 +414,7 @@ async def sync_mcp_server_tools(
         await repository.update_discovered_tools(
             server_id=server_id,
             tools=tools,
-            last_sync_at=datetime.utcnow(),
+            last_sync_at=datetime.now(timezone.utc),
             sync_error=None,
         )
         await db.commit()

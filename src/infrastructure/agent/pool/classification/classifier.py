@@ -6,7 +6,7 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from ..config import ClassificationConfig
@@ -246,6 +246,6 @@ class ProjectClassifier:
             from_tier=from_tier,
             to_tier=to_tier,
             reason=reason,
-            scheduled_at=datetime.utcnow(),
+            scheduled_at=datetime.now(timezone.utc),
             status="pending",
         )

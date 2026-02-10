@@ -5,7 +5,7 @@ Agent实例生命周期状态机.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Set
 
 from ..types import AgentInstanceStatus, LifecycleEvent
@@ -226,7 +226,7 @@ class LifecycleStateMachine:
             event_type=event_type,
             from_status=from_status,
             to_status=to_status,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             details=details or {},
             error_message=error_message,
         )
@@ -284,7 +284,7 @@ class LifecycleStateMachine:
         if not self._history:
             return 0.0
         first_event = self._history[0]
-        return (datetime.utcnow() - first_event.timestamp).total_seconds()
+        return (datetime.now(timezone.utc) - first_event.timestamp).total_seconds()
 
     def get_last_event(self) -> Optional[LifecycleEvent]:
         """获取最后一个事件."""

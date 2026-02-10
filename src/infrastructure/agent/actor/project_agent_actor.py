@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import ray
@@ -44,7 +44,7 @@ class ProjectAgentActor:
     def __init__(self) -> None:
         self._config: Optional[ProjectAgentActorConfig] = None
         self._agent: Optional[ProjectReActAgent] = None
-        self._created_at = datetime.utcnow()
+        self._created_at = datetime.now(timezone.utc)
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
@@ -131,7 +131,7 @@ class ProjectAgentActor:
     async def status(self) -> ProjectAgentStatus:
         """Return current actor status."""
         agent_status = self._agent.get_status() if self._agent else None
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         uptime_seconds = (now - self._created_at).total_seconds()
 
         return ProjectAgentStatus(

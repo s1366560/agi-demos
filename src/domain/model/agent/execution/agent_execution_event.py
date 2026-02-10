@@ -5,7 +5,7 @@ enabling event replay for reconnection and conversation switching scenarios.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from src.domain.events.agent_events import (
@@ -47,7 +47,7 @@ class AgentExecutionEvent(Entity):
     event_data: Dict[str, Any] = field(default_factory=dict)
     event_time_us: int = 0
     event_counter: int = 0
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API response."""

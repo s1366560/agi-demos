@@ -1,6 +1,6 @@
 """Pytest configuration and shared fixtures for testing."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, AsyncGenerator
 from unittest.mock import AsyncMock, Mock
 
@@ -682,7 +682,7 @@ def sample_entity_data() -> dict:
         "summary": "A test organization",
         "tenant_id": "tenant_123",
         "project_id": "proj_123",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
 

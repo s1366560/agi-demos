@@ -13,7 +13,7 @@ NOTE: This test file uses AgentEventType from the unified domain events types.
 EventType is now an alias for AgentEventType for backward compatibility.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -454,7 +454,7 @@ class TestEventScenarios:
             return {
                 "action": "executing",
                 "target": tool_name,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
         mapper.register_transformer(AgentEventType.ACT, transform_act)

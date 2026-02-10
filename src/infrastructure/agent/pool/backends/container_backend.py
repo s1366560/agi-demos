@@ -18,7 +18,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from ..config import AgentInstanceConfig
@@ -46,7 +46,7 @@ class ContainerInfo:
     grpc_endpoint: str
     health_endpoint: str
     status: str  # created, running, paused, stopped, error
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = None
     error_message: Optional[str] = None
     resource_limits: Dict[str, Any] = field(default_factory=dict)
@@ -485,7 +485,7 @@ class ContainerBackend(Backend):
         container = self._docker_client.containers.get(container_info.container_id)
         container.start()
         container_info.status = "running"
-        container_info.started_at = datetime.utcnow()
+        container_info.started_at = datetime.now(timezone.utc)
         logger.info(f"Started container: {container_info.container_id[:12]}")
 
     async def _remove_container(self, container_info: ContainerInfo) -> None:

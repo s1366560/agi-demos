@@ -13,7 +13,7 @@ Extracted from react_agent.py to reduce complexity and improve testability.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
 
@@ -342,7 +342,7 @@ class SkillOrchestrator:
                 "tools": list(skill.tools),
                 "total_steps": len(skill.tools),
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         tool_results = []
@@ -388,7 +388,7 @@ class SkillOrchestrator:
                             "execution_time_ms": domain_event.execution_time_ms,
                             "error": domain_event.error,
                         },
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
 
     def _extract_sandbox_id(self, tool_names: List[str]) -> Optional[str]:
@@ -416,7 +416,7 @@ class SkillOrchestrator:
         Returns:
             Converted event dict or None
         """
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         if domain_event.event_type == AgentEventType.THOUGHT:
             thought_level = getattr(domain_event, "thought_level", "reasoning")

@@ -13,7 +13,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 
@@ -36,7 +36,7 @@ class HealthCheckResult:
     sandbox_id: str
     healthy: bool
     level: HealthCheckLevel
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     container_running: bool = False
     mcp_connected: bool = False
     services_healthy: bool = False
