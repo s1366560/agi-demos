@@ -904,9 +904,7 @@ class SessionProcessor:
                         context_limit = self.config.context_limit
                         current_input = step_tokens.input
                         occupancy = (
-                            (current_input / context_limit * 100)
-                            if context_limit > 0
-                            else 0
+                            (current_input / context_limit * 100) if context_limit > 0 else 0
                         )
                         yield AgentContextStatusEvent(
                             current_tokens=current_input,
@@ -975,6 +973,22 @@ class SessionProcessor:
             cost=step_cost,
             finish_reason=finish_reason,
             trace_url=trace_url,
+        )
+
+        # Emit context status update after each step.
+        # If LLM reported usage (via USAGE event), step_tokens.input is accurate.
+        # Otherwise, estimate from message content length (~4 chars/token).
+        context_limit = self.config.context_limit
+        current_input = step_tokens.input
+        if current_input == 0:
+            total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+            current_input = total_chars // 4
+        occupancy = (current_input / context_limit * 100) if context_limit > 0 else 0
+        yield AgentContextStatusEvent(
+            current_tokens=current_input,
+            token_budget=context_limit,
+            occupancy_pct=round(occupancy, 1),
+            compression_level="none",
         )
 
         # Emit step end
@@ -1362,7 +1376,7 @@ class SessionProcessor:
     _MAX_TOOL_OUTPUT_BYTES = 30_000
 
     # Regex matching long base64-like sequences (256+ chars of [A-Za-z0-9+/=])
-    _BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/=]{256,}')
+    _BASE64_PATTERN = re.compile(r"[A-Za-z0-9+/=]{256,}")
 
     def _sanitize_tool_output(self, output: str) -> str:
         """Sanitize tool output to prevent binary/base64 data from entering LLM context.
@@ -1380,9 +1394,7 @@ class SessionProcessor:
         # Hard size cap
         encoded = sanitized.encode("utf-8", errors="replace")
         if len(encoded) > self._MAX_TOOL_OUTPUT_BYTES:
-            sanitized = encoded[: self._MAX_TOOL_OUTPUT_BYTES].decode(
-                "utf-8", errors="ignore"
-            )
+            sanitized = encoded[: self._MAX_TOOL_OUTPUT_BYTES].decode("utf-8", errors="ignore")
             sanitized += "\n... [output truncated]"
 
         return sanitized
@@ -1429,8 +1441,7 @@ class SessionProcessor:
 
         if not project_id or not tenant_id:
             logger.warning(
-                f"[ArtifactUpload] Missing context: "
-                f"project_id={project_id}, tenant_id={tenant_id}"
+                f"[ArtifactUpload] Missing context: project_id={project_id}, tenant_id={tenant_id}"
             )
             return
 
@@ -1469,9 +1480,7 @@ class SessionProcessor:
                             f"[ArtifactUpload] Decoded {len(file_content)} bytes from base64"
                         )
                     else:
-                        logger.warning(
-                            "[ArtifactUpload] base64 encoding but no data found"
-                        )
+                        logger.warning("[ArtifactUpload] base64 encoding but no data found")
                         return
                 else:
                     # Text file - get from content
@@ -1542,10 +1551,11 @@ class SessionProcessor:
                     no_proxy: bool = False,
                 ) -> dict:
                     """Synchronous S3 upload in a thread pool."""
-                    import boto3
-                    from botocore.config import Config as BotoConfig
                     from datetime import date
                     from urllib.parse import quote
+
+                    import boto3
+                    from botocore.config import Config as BotoConfig
 
                     config_kwargs: dict = {
                         "connect_timeout": 10,
@@ -1614,12 +1624,13 @@ class SessionProcessor:
                     cat: str,
                 ):
                     """Run sync upload in thread, then publish result to Redis and DB."""
+                    import time as _time
+
+                    from src.configuration.config import get_settings
                     from src.infrastructure.agent.actor.execution import (
                         _persist_events,
                         _publish_event_to_stream,
                     )
-                    from src.configuration.config import get_settings
-                    import time as _time
 
                     settings = get_settings()
 
@@ -1669,16 +1680,17 @@ class SessionProcessor:
                         await _persist_events(
                             conversation_id=conv_id,
                             message_id=msg_id,
-                            events=[{
-                                **ready_event_dict,
-                                "event_time_us": ready_time_us,
-                                "event_counter": 0,
-                            }],
+                            events=[
+                                {
+                                    **ready_event_dict,
+                                    "event_time_us": ready_time_us,
+                                    "event_counter": 0,
+                                }
+                            ],
                         )
                     except Exception as upload_err:
                         logger.error(
-                            f"[ArtifactUpload] Threaded upload failed: "
-                            f"{fname}: {upload_err}"
+                            f"[ArtifactUpload] Threaded upload failed: {fname}: {upload_err}"
                         )
                         error_event = AgentArtifactErrorEvent(
                             artifact_id=art_id,
@@ -1697,24 +1709,22 @@ class SessionProcessor:
                                 event_counter=0,
                             )
                         except Exception:
-                            logger.error(
-                                "[ArtifactUpload] Failed to publish error event"
-                            )
+                            logger.error("[ArtifactUpload] Failed to publish error event")
                         # Persist to DB so history loading shows error instead of uploading
                         try:
                             await _persist_events(
                                 conversation_id=conv_id,
                                 message_id=msg_id,
-                                events=[{
-                                    **error_event_dict,
-                                    "event_time_us": error_time_us,
-                                    "event_counter": 0,
-                                }],
+                                events=[
+                                    {
+                                        **error_event_dict,
+                                        "event_time_us": error_time_us,
+                                        "event_counter": 0,
+                                    }
+                                ],
                             )
                         except Exception:
-                            logger.error(
-                                "[ArtifactUpload] Failed to persist error event"
-                            )
+                            logger.error("[ArtifactUpload] Failed to persist error event")
 
                 asyncio.create_task(
                     _threaded_upload(
