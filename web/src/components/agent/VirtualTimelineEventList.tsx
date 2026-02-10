@@ -339,15 +339,15 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
 
   // Handle timeline changes - restore scroll position after loading earlier messages
   useEffect(() => {
-    // Skip if switching conversation to prevent scroll jitter
-    if (isSwitchingConversationRef.current) return;
-    
     const previousLength = previousTimelineLengthRef.current;
     const currentLength = timeline.length;
 
     // If we loaded earlier messages (timeline grew from the beginning)
     if (currentLength > previousLength && previousLength > 0 && !isLoadingEarlier) {
-      restoreScrollPosition();
+      // Only restore scroll position if not switching conversation
+      if (!isSwitchingConversationRef.current) {
+        restoreScrollPosition();
+      }
       previousTimelineLengthRef.current = currentLength;
 
       // 隐藏 loading 指示器
@@ -364,9 +364,6 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
 
   // Auto-scroll to bottom when streaming new messages (only if user is near bottom)
   useEffect(() => {
-    // Skip if switching conversation to prevent scroll jitter
-    if (isSwitchingConversationRef.current) return;
-    
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -375,6 +372,9 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
 
     // Check if new messages were added at the end
     if (currentLength > previousLength) {
+      // Clear switching flag when new messages arrive (user is interacting with this conversation)
+      isSwitchingConversationRef.current = false;
+      
       // Only auto-scroll if streaming or user is near bottom
       if (isStreaming || isNearBottom(container, 200)) {
         requestAnimationFrame(() => {
@@ -395,11 +395,11 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   // Auto-scroll when streaming content or thought updates (for real-time streaming)
   // Since streaming items are now inside the virtual list, use scrollToIndex
   useEffect(() => {
-    // Skip if switching conversation to prevent scroll jitter
-    if (isSwitchingConversationRef.current) return;
-    
     if (!isStreaming || userScrolledUpRef.current) return;
     if (displayTimeline.length === 0) return;
+
+    // Clear switching flag during streaming (user is actively viewing this conversation)
+    isSwitchingConversationRef.current = false;
 
     requestAnimationFrame(() => {
       eventVirtualizer.scrollToIndex(displayTimeline.length - 1, { align: 'end' });

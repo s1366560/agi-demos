@@ -477,9 +477,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Handle timeline changes
     useEffect(() => {
-      // Skip if switching conversation to prevent scroll jitter
-      if (isSwitchingConversationRef.current) return;
-      
       const container = containerRef.current;
       if (!container) return;
 
@@ -488,6 +485,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       const hasNewMessages = currentTimelineLength > previousTimelineLength;
       const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
 
+      // Handle initial load (skip only scroll restoration if switching)
       if (isInitialLoad && !hasScrolledInitiallyRef.current) {
         hasScrolledInitiallyRef.current = true;
         isInitialLoadRef.current = false;
@@ -501,8 +499,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         return;
       }
 
+      // Handle pagination scroll restoration (skip if switching conversation)
       if (hasNewMessages && !isLoading && previousScrollHeightRef.current > 0) {
-        restoreScrollPosition();
+        if (!isSwitchingConversationRef.current) {
+          restoreScrollPosition();
+        }
         prevTimelineLengthRef.current = currentTimelineLength;
 
         if (loadingIndicatorTimeoutRef.current) {
@@ -513,7 +514,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         return;
       }
 
+      // Handle new messages - clear switching flag and auto-scroll
       if (hasNewMessages) {
+        // Clear switching flag when new messages arrive
+        isSwitchingConversationRef.current = false;
+        
         if (isStreaming || isNearBottom(container, 200)) {
           requestAnimationFrame(() => {
             if (containerRef.current) {
@@ -531,13 +536,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Auto-scroll when streaming content updates
     useEffect(() => {
-      // Skip if switching conversation to prevent scroll jitter
-      if (isSwitchingConversationRef.current) return;
-      
       const container = containerRef.current;
       if (!container) return;
 
       if (isStreaming && !userScrolledUpRef.current) {
+        // Clear switching flag during streaming (user is actively viewing this conversation)
+        isSwitchingConversationRef.current = false;
+        
         requestAnimationFrame(() => {
           if (containerRef.current) {
             containerRef.current.scrollTop = containerRef.current.scrollHeight;
