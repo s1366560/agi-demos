@@ -7,6 +7,7 @@
 
 import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
+import { useContextStore } from '../contextStore';
 
 import type {
   AgentStreamHandler,
@@ -655,17 +656,14 @@ export function createStreamEventHandlers(
       }
 
       // Forward to context store
-      const { useContextStore } = require('../../stores/contextStore');
       useContextStore.getState().handleCostUpdate(costData as unknown as Record<string, unknown>);
     },
 
     onContextCompressed: (event) => {
-      const { useContextStore } = require('../../stores/contextStore');
       useContextStore.getState().handleContextCompressed(event.data as unknown as Record<string, unknown>);
     },
 
     onContextStatus: (event) => {
-      const { useContextStore } = require('../../stores/contextStore');
       useContextStore.getState().handleContextStatus(event.data as unknown as Record<string, unknown>);
     },
 

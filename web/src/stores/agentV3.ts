@@ -679,9 +679,10 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Prevents stale streaming content from previous conversation
           clearAllDeltaBuffers();
 
-          // Reset context status for the new conversation
-          const { useContextStore } = require('../stores/contextStore');
-          useContextStore.getState().reset();
+          // Reset context status for the new conversation (async import for browser compatibility)
+          import('../stores/contextStore').then(({ useContextStore }) => {
+            useContextStore.getState().reset();
+          }).catch(console.error);
 
           // Save current conversation state before switching
           if (activeConversationId && activeConversationId !== id) {
