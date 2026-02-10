@@ -693,6 +693,7 @@ class ReActAgent:
             attachment_content=attachment_content,
             is_hitl_resume=False,
             context_summary=cached_summary,
+            llm_client=self._llm_client,
         )
         context_result = await self.context_facade.build_context(context_request)
         messages = context_result.messages
@@ -733,15 +734,18 @@ class ReActAgent:
                 }
 
         # Emit initial context_status with token estimation from context build
+        compression_level = context_result.metadata.get("compression_level", "none")
         yield {
             "type": "context_status",
             "data": {
                 "current_tokens": context_result.estimated_tokens,
                 "token_budget": context_result.token_budget,
                 "occupancy_pct": round(context_result.budget_utilization_pct, 1),
-                "compression_level": "none",
+                "compression_level": compression_level,
                 "token_distribution": {},
-                "compression_history_summary": {},
+                "compression_history_summary": context_result.metadata.get(
+                    "compression_history", {}
+                ),
                 "from_cache": cached_summary is not None,
                 "messages_in_summary": (
                     cached_summary.messages_covered_count if cached_summary else 0

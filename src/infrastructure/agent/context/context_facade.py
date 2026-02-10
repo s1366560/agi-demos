@@ -207,11 +207,11 @@ class ContextFacade(ContextManagerPort):
         elif self._debug:
             logger.debug("[ContextFacade] Skipping user message append for HITL resume")
 
-        # Step 5: Apply context window management
-        window_result = await self._window_manager.build_context_window(
+        # Step 5: Apply context window management (adaptive multi-level compression)
+        window_result = await self._window_manager.build_adaptive_context(
             system_prompt=request.system_prompt,
             messages=context_messages,
-            llm_client=None,  # TODO: Pass LLM client for summary generation
+            llm_client=request.llm_client,
         )
 
         # Convert to domain result

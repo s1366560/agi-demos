@@ -80,6 +80,8 @@ class ContextBuildRequest:
     is_hitl_resume: bool = False
     # Cached context summary from previous turns
     context_summary: Optional[ContextSummary] = None
+    # LLM client for compression summarization (Optional[Any] to avoid infrastructure dependency)
+    llm_client: Optional[Any] = None
 
 
 @dataclass
