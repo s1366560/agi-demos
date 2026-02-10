@@ -338,6 +338,9 @@ class DIContainer:
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         return self._agent.workflow_pattern_repository()
 
+    def context_summary_adapter(self):
+        return self._agent.context_summary_adapter()
+
     def tool_composition_repository(self) -> SqlToolCompositionRepository:
         return self._agent.tool_composition_repository()
 

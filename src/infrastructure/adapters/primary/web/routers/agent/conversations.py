@@ -175,6 +175,74 @@ async def get_conversation(
         raise HTTPException(status_code=500, detail=f"Failed to get conversation: {str(e)}")
 
 
+@router.get("/conversations/{conversation_id}/context-status")
+async def get_context_status(
+    conversation_id: str,
+    project_id: str = Query(..., description="Project ID for authorization"),
+    current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+) -> dict:
+    """Get context window status for a conversation.
+
+    Returns the cached context summary info (if any) and message count,
+    so the frontend can restore the context status indicator after page
+    refresh or conversation switch.
+    """
+    try:
+        container = get_container_with_db(request, db)
+        llm = create_llm_client(tenant_id)
+        use_case = container.get_conversation_use_case(llm)
+
+        conversation = await use_case.execute(
+            conversation_id=conversation_id,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Load cached context summary from conversation meta
+        adapter = container.context_summary_adapter()
+        summary = await adapter.get_summary(conversation_id)
+
+        result: dict = {
+            "conversation_id": conversation_id,
+            "message_count": conversation.message_count,
+            "has_summary": summary is not None,
+        }
+
+        if summary:
+            result.update(
+                {
+                    "summary_tokens": summary.summary_tokens,
+                    "messages_in_summary": summary.messages_covered_count,
+                    "compression_level": summary.compression_level,
+                    "from_cache": True,
+                }
+            )
+        else:
+            result.update(
+                {
+                    "summary_tokens": 0,
+                    "messages_in_summary": 0,
+                    "compression_level": "none",
+                    "from_cache": False,
+                }
+            )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting context status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get context status: {str(e)}"
+        )
+
+
 @router.delete("/conversations/{conversation_id}", status_code=204)
 async def delete_conversation(
     conversation_id: str,

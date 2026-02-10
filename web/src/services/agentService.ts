@@ -1048,6 +1048,33 @@ class AgentServiceImpl implements AgentService {
   }
 
   /**
+   * Get context window status for a conversation.
+   *
+   * Returns cached context summary info so the frontend can restore
+   * the context status indicator after page refresh or conversation switch.
+   */
+  async getContextStatus(
+    conversationId: string,
+    projectId: string
+  ): Promise<{
+    conversation_id: string;
+    message_count: number;
+    has_summary: boolean;
+    summary_tokens: number;
+    messages_in_summary: number;
+    compression_level: string;
+    from_cache: boolean;
+  } | null> {
+    try {
+      return await api.get(`/agent/conversations/${conversationId}/context-status`, {
+        params: { project_id: projectId },
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Stop the chat/agent execution for a conversation
    *
    * Sends a stop signal through WebSocket to halt ongoing Agent execution.

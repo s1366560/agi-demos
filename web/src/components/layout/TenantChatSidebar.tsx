@@ -301,19 +301,31 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   }, [conversations, selectedProjectId, projects]);
 
   const isLoadingMoreRef = useRef(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  const loadMore = useCallback(async () => {
+    if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
+    
+    isLoadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      await loadMoreConversations(selectedProjectId);
+    } finally {
+      isLoadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  }, [hasMoreConversations, selectedProjectId, loadMoreConversations]);
+  
   const handleConversationScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
       const target = e.currentTarget;
       const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
       if (nearBottom) {
-        isLoadingMoreRef.current = true;
-        loadMoreConversations(selectedProjectId).finally(() => {
-          isLoadingMoreRef.current = false;
-        });
+        loadMore();
       }
     },
-    [hasMoreConversations, selectedProjectId, loadMoreConversations]
+    [hasMoreConversations, selectedProjectId, loadMore]
   );
 
   const handleSelectConversation = useCallback(
@@ -338,6 +350,22 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       savedScrollTopRef.current = null;
     }
   }, [activeConversationId]);
+
+  // Auto-load more conversations when content doesn't fill the container
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) {
+      return;
+    }
+
+    // Check if content fills the container
+    const contentFillsContainer = container.scrollHeight > container.clientHeight + 10;
+    
+    // If content doesn't fill container and there are more conversations, load more
+    if (!contentFillsContainer && conversations.length > 0) {
+      loadMore();
+    }
+  }, [conversations.length, hasMoreConversations, selectedProjectId, loadMore]);
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -644,7 +672,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   />
                 ))
               )}
-              {hasMoreConversations && !collapsed && (
+              {isLoadingMore && !collapsed && (
                 <div className="flex items-center justify-center py-3">
                   <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
                 </div>
