@@ -35,7 +35,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     EXCLUDED_NAMES = {"__pycache__", ".git", ".DS_Store", "node_modules"}
 
     # Container base path for skills
-    CONTAINER_SKILL_BASE = "/workspace/.skills"
+    CONTAINER_SKILL_BASE = "/workspace/.memstack/skills"
 
     def __init__(
         self,
@@ -278,7 +278,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
                 if container_path and container_path.startswith("/workspace/"):
                     relative_path = container_path[11:]  # Remove "/workspace/"
                 else:
-                    relative_path = f".skills/{context.skill_name}/{resource.name}"
+                    relative_path = f".memstack/skills/{context.skill_name}/{resource.name}"
 
                 # Write to container via MCP
                 result = await self._sandbox_adapter.call_tool(
@@ -346,7 +346,7 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
                 sandbox_id=context.sandbox_id,
                 tool_name="write",
                 arguments={
-                    "file_path": f".skills/{skill_name}/env.sh",
+                    "file_path": f".memstack/skills/{skill_name}/env.sh",
                     "content": setup_script,
                 },
             )

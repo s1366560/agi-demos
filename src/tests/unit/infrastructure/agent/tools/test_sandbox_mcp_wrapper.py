@@ -409,7 +409,7 @@ class TestSandboxMCPToolWrapperRetry:
     @pytest.mark.asyncio
     async def test_custom_retry_config(self):
         """Test custom retry configuration."""
-        adapter = MockSandboxAdapter(fail_count=2, error_message="timeout")
+        adapter = MockSandboxAdapter(fail_count=2, error_message="connection reset")
 
         retry_config = RetryConfig(
             max_retries=3,

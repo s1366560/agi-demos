@@ -134,7 +134,7 @@ class SkillResourceLoader:
         """
         资源在 Sandbox 容器内的路径
 
-        所有 SKILL 资源统一放在 /workspace/.skills/ 目录下
+        所有 SKILL 资源统一放在 /workspace/.memstack/skills/ 目录下
 
         Args:
             skill_name: SKILL 名称
@@ -148,9 +148,9 @@ class SkillResourceLoader:
             try:
                 # 计算相对于 SKILL 目录的路径
                 rel_path = resource_path.relative_to(skill_dir)
-                return f"/workspace/.skills/{skill_name}/{rel_path}"
+                return f"/workspace/.memstack/skills/{skill_name}/{rel_path}"
             except ValueError:
                 pass
 
         # Fallback: 使用文件名
-        return f"/workspace/.skills/{skill_name}/{resource_path.name}"
+        return f"/workspace/.memstack/skills/{skill_name}/{resource_path.name}"

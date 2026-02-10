@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Default timeout in seconds
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 600
 
 
 @dataclass

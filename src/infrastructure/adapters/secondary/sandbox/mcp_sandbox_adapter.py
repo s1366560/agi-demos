@@ -2181,7 +2181,7 @@ class MCPSandboxAdapter(SandboxPort):
         sandbox_id: str,
         tool_name: str,
         arguments: Dict[str, Any],
-        timeout: float = 30.0,
+        timeout: float = 600.0,
         max_retries: int = 2,
     ) -> Dict[str, Any]:
         """

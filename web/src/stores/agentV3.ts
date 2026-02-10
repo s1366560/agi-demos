@@ -49,6 +49,14 @@ const TOKEN_BATCH_INTERVAL_MS = 50; // Batch tokens every 50ms for smooth stream
 const THOUGHT_BATCH_INTERVAL_MS = 50; // Same for thought deltas
 
 /**
+ * Maximum number of conversation states to keep in memory.
+ * When exceeded, the least-recently-accessed non-active, non-streaming
+ * conversations are evicted to prevent unbounded memory growth.
+ * Evicted conversations can be re-loaded from server on demand.
+ */
+const MAX_CACHED_CONVERSATIONS = 10;
+
+/**
  * Per-conversation delta buffer state
  * Using Map to isolate buffers per conversation, preventing cross-conversation contamination
  */
@@ -115,6 +123,58 @@ function clearAllDeltaBuffers(): void {
  */
 const pendingSaves = new Map<string, NodeJS.Timeout>();
 const SAVE_DEBOUNCE_MS = 500;
+
+/**
+ * LRU access order tracking for conversation state cache eviction.
+ * Most recently accessed conversation ID is at the end.
+ */
+const conversationAccessOrder: string[] = [];
+
+/**
+ * Record a conversation as recently accessed (move to end of LRU list)
+ */
+function touchConversation(conversationId: string): void {
+  const idx = conversationAccessOrder.indexOf(conversationId);
+  if (idx !== -1) {
+    conversationAccessOrder.splice(idx, 1);
+  }
+  conversationAccessOrder.push(conversationId);
+}
+
+/**
+ * Evict least-recently-used conversation states when cache exceeds limit.
+ * Skips the active conversation and any currently streaming conversations.
+ * Evicted conversations are persisted to IndexedDB before removal.
+ */
+function evictStaleConversationStates(
+  states: Map<string, ConversationState>,
+  activeId: string | null
+): Map<string, ConversationState> {
+  if (states.size <= MAX_CACHED_CONVERSATIONS) {
+    return states;
+  }
+
+  const newStates = new Map(states);
+  const evictCount = newStates.size - MAX_CACHED_CONVERSATIONS;
+  let evicted = 0;
+
+  // Walk LRU list from oldest (front) to newest
+  for (let i = 0; i < conversationAccessOrder.length && evicted < evictCount; i++) {
+    const id = conversationAccessOrder[i];
+    if (id === activeId) continue;
+    const convState = newStates.get(id);
+    if (convState?.isStreaming) continue;
+
+    // Persist to IndexedDB before eviction
+    saveConversationState(id, convState!).catch(console.error);
+    newStates.delete(id);
+    conversationAccessOrder.splice(i, 1);
+    i--;
+    evicted++;
+  }
+
+  return newStates;
+}
 
 /**
  * Schedule a debounced save for a conversation
@@ -738,6 +798,18 @@ export const useAgentV3Store = create<AgentV3State>()(
             );
           }
 
+          // Track LRU access order and evict stale entries
+          if (id) {
+            touchConversation(id);
+          }
+          {
+            const currentStates = get().conversationStates;
+            const evictedStates = evictStaleConversationStates(currentStates, id);
+            if (evictedStates.size !== currentStates.size) {
+              set({ conversationStates: evictedStates });
+            }
+          }
+
           // Load new conversation state if exists
           if (id) {
             const newState = conversationStates.get(id);
@@ -807,13 +879,13 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
 
         loadConversations: async (projectId) => {
-          console.log(`[agentV3] loadConversations called for project: ${projectId}`);
+          logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
 
           // Prevent duplicate calls for the same project
           const currentConvos = get().conversations;
           const firstConvoProject = currentConvos[0]?.project_id;
           if (currentConvos.length > 0 && firstConvoProject === projectId) {
-            console.log(
+            logger.debug(
               `[agentV3] Conversations already loaded for project ${projectId}, skipping`
             );
             return;
@@ -821,7 +893,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
           try {
             const response = await agentService.listConversations(projectId);
-            console.log(`[agentV3] Loaded ${response.items.length} conversations`);
+            logger.debug(`[agentV3] Loaded ${response.items.length} conversations`);
             set({
               conversations: response.items,
               hasMoreConversations: response.has_more,
@@ -844,7 +916,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               10,
               offset
             );
-            console.log(`[agentV3] Loaded ${response.items.length} more conversations`);
+            logger.debug(`[agentV3] Loaded ${response.items.length} more conversations`);
             set({
               conversations: [...state.conversations, ...response.items],
               hasMoreConversations: response.has_more,
@@ -872,6 +944,10 @@ export const useAgentV3Store = create<AgentV3State>()(
               clearTimeout(pendingTimer);
               pendingSaves.delete(conversationId);
             }
+
+            // Remove from LRU tracking
+            const lruIdx = conversationAccessOrder.indexOf(conversationId);
+            if (lruIdx !== -1) conversationAccessOrder.splice(lruIdx, 1);
 
             // Remove from local state and conversation states map
             set((state) => {
@@ -934,6 +1010,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             const newConvState = createDefaultConversationState();
 
             // Add to conversations list and set as active
+            touchConversation(newConv.id);
             set((state) => {
               const newStates = new Map(state.conversationStates);
               newStates.set(newConv.id, newConvState);
@@ -974,7 +1051,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           );
 
           // DEBUG: Log recovery attempt parameters
-          console.log(
+          logger.debug(
             `[AgentV3] loadMessages starting for ${conversationId}, lastKnownTimeUs=${lastKnownTimeUs}`
           );
 
@@ -1011,11 +1088,11 @@ export const useAgentV3Store = create<AgentV3State>()(
               ) as Promise<any>,
               // Use catch to prevent one failure from blocking others
               planService.getPlanModeStatus(conversationId).catch((e) => {
-                console.warn(`[AgentV3] getPlanModeStatus failed:`, e);
+                logger.warn(`[AgentV3] getPlanModeStatus failed:`, e);
                 return null;
               }),
               agentService.getExecutionStatus(conversationId, true, lastKnownTimeUs).catch((e) => {
-                console.warn(`[AgentV3] getExecutionStatus failed:`, e);
+                logger.warn(`[AgentV3] getExecutionStatus failed:`, e);
                 return null;
               }),
               // Restore context status indicator on conversation switch / page refresh
@@ -1023,13 +1100,13 @@ export const useAgentV3Store = create<AgentV3State>()(
                 const { useContextStore } = await import('../stores/contextStore');
                 await useContextStore.getState().fetchContextStatus(conversationId, projectId);
               })().catch((e) => {
-                console.warn(`[AgentV3] fetchContextStatus failed:`, e);
+                logger.warn(`[AgentV3] fetchContextStatus failed:`, e);
                 return null;
               }),
             ]);
 
             if (get().activeConversationId !== conversationId) {
-              console.log('Conversation changed during load, ignoring result');
+              logger.debug('Conversation changed during load, ignoring result');
               return;
             }
 
@@ -1053,7 +1130,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               prevTimeUs = event.eventTimeUs;
               prevCounter = event.eventCounter;
             }
-            console.log(`[AgentV3] loadMessages API response:`, {
+            logger.debug(`[AgentV3] loadMessages API response:`, {
               conversationId,
               totalEvents: response.timeline.length,
               eventTypeCounts,
@@ -1083,14 +1160,14 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             // DEBUG: Log assistant_message events
             const assistantMsgs = mergedTimeline.filter((e: any) => e.type === 'assistant_message');
-            console.log(
+            logger.debug(
               `[AgentV3] loadMessages: Found ${assistantMsgs.length} assistant_message events`,
               assistantMsgs
             );
 
             // DEBUG: Log artifact events in timeline
             const artifactEvents = mergedTimeline.filter((e: any) => e.type === 'artifact_created');
-            console.log(
+            logger.debug(
               `[AgentV3] loadMessages: Found ${artifactEvents.length} artifact_created events in timeline`,
               artifactEvents
             );
@@ -1135,7 +1212,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             saveConversationState(conversationId, newConvState).catch(console.error);
 
             // DEBUG: Log execution status for recovery debugging
-            console.log(`[AgentV3] execStatus for ${conversationId}:`, {
+            logger.debug(`[AgentV3] execStatus for ${conversationId}:`, {
               execStatus,
               is_running: execStatus?.is_running,
               lastKnownTimeUs,
@@ -1146,7 +1223,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             // The normal WebSocket event flow will handle incoming events
             // No special recovery logic needed - just subscribe and wait for events
             if (execStatus?.is_running) {
-              console.log(
+              logger.debug(
                 `[AgentV3] Conversation ${conversationId} is running, ` +
                   `subscribing to WebSocket for live events...`
               );
@@ -1160,7 +1237,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
               // Ensure WebSocket is connected
               if (!agentService.isConnected()) {
-                console.log(`[AgentV3] Connecting WebSocket...`);
+                logger.debug(`[AgentV3] Connecting WebSocket...`);
                 await agentService.connect();
               }
 
@@ -1183,7 +1260,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
               // Subscribe to conversation - WebSocket will forward events from Redis Stream
               agentService.subscribe(conversationId, streamHandler);
-              console.log(`[AgentV3] Subscribed to conversation ${conversationId}`);
+              logger.debug(`[AgentV3] Subscribed to conversation ${conversationId}`);
             }
 
             set({ isLoadingHistory: false });
@@ -1201,13 +1278,13 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Guard: Don't load if already loading or no pagination point exists
           if (activeConversationId !== conversationId) return false;
           if (!earliestTimeUs || isLoadingEarlier) {
-            console.log(
+            logger.debug(
               '[AgentV3] Cannot load earlier messages: no pagination point or already loading'
             );
             return false;
           }
 
-          console.log(
+          logger.debug(
             '[AgentV3] Loading earlier messages before timeUs:',
             earliestTimeUs,
             'counter:',
@@ -1228,7 +1305,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
             // Check if conversation is still active
             if (get().activeConversationId !== conversationId) {
-              console.log(
+              logger.debug(
                 '[AgentV3] Conversation changed during load earlier messages, ignoring result'
               );
               return false;
@@ -1256,7 +1333,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               earliestCounter: newFirstCounter,
             });
 
-            console.log(
+            logger.debug(
               '[AgentV3] Loaded earlier messages, total timeline length:',
               mergedTimeline.length
             );
@@ -1506,19 +1583,19 @@ export const useAgentV3Store = create<AgentV3State>()(
          * the recovery service will handle it when Worker restarts.
          */
         loadPendingHITL: async (conversationId) => {
-          console.log('[agentV3] Loading pending HITL requests for conversation:', conversationId);
+          logger.debug('[agentV3] Loading pending HITL requests for conversation:', conversationId);
           try {
             const response = await agentService.getPendingHITLRequests(conversationId);
-            console.log('[agentV3] Pending HITL response:', response);
+            logger.debug('[agentV3] Pending HITL response:', response);
 
             if (response.requests.length === 0) {
-              console.log('[agentV3] No pending HITL requests');
+              logger.debug('[agentV3] No pending HITL requests');
               return;
             }
 
             // Process each pending request and restore dialog state
             for (const request of response.requests) {
-              console.log(
+              logger.debug(
                 '[agentV3] Restoring pending HITL request:',
                 request.request_type,
                 request.id

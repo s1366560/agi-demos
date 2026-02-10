@@ -240,12 +240,12 @@ class SkillReverseSync:
                 return files
 
             # The MCP glob tool returns paths relative to /workspace,
-            # e.g. ".skills/my-skill/SKILL.md" when path="/workspace/.skills/my-skill".
+            # e.g. ".memstack/skills/my-skill/SKILL.md" when path="/workspace/.memstack/skills/my-skill".
             # We need to: (1) build correct absolute read paths,
             # (2) extract relative paths within the skill directory.
             container_path_stripped = container_path.rstrip("/")
             # Prefix to strip: relative form of container_path from /workspace
-            # e.g. container_path="/workspace/.skills/my-skill" -> rel_prefix=".skills/my-skill"
+            # e.g. container_path="/workspace/.memstack/skills/my-skill" -> rel_prefix=".memstack/skills/my-skill"
             workspace_root = "/workspace"
             if container_path_stripped.startswith(workspace_root):
                 rel_prefix = container_path_stripped[len(workspace_root) :].lstrip("/")

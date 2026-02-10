@@ -168,8 +168,8 @@ class TestMCPToolErrorClassifier:
         )
 
         assert mcp_error.error_type == MCPToolErrorType.TIMEOUT_ERROR
-        assert mcp_error.is_retryable is True
-        assert mcp_error.max_retries == 2
+        assert mcp_error.is_retryable is False
+        assert mcp_error.max_retries == 0
 
     def test_classify_parameter_error(self):
         """Test classification of parameter errors."""
@@ -238,7 +238,7 @@ class TestMCPToolErrorClassifier:
         )
 
         assert mcp_error.error_type == MCPToolErrorType.TIMEOUT_ERROR
-        assert mcp_error.is_retryable is True
+        assert mcp_error.is_retryable is False
 
     def test_classify_unknown_error(self):
         """Test classification of unknown errors."""

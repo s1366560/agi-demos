@@ -141,7 +141,7 @@ class SkillResourceInjector:
         # 创建环境设置脚本
         setup_script = f"""#!/bin/bash
 # SKILL environment setup for {skill_name}
-export SKILL_ROOT="/workspace/.skills/{skill_name}"
+export SKILL_ROOT="/workspace/.memstack/skills/{skill_name}"
 export PATH="$SKILL_ROOT/scripts:$PATH"
 """
 
@@ -149,7 +149,7 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
             sandbox_id=sandbox_id,
             tool_name="write",
             arguments={
-                "file_path": f".skills/{skill_name}/env.sh",
+                "file_path": f".memstack/skills/{skill_name}/env.sh",
                 "content": setup_script,
             },
         )

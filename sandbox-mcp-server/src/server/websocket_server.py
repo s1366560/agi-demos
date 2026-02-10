@@ -326,7 +326,14 @@ class MCPWebSocketServer:
                                     f"dropping method={method}"
                                 )
                                 break
-                            await ws.send_json(response)
+                            try:
+                                await ws.send_json(response)
+                            except (ConnectionResetError, RuntimeError) as send_err:
+                                logger.debug(
+                                    f"[MCP] Cannot send response to {client_id} "
+                                    f"(method={method}): {send_err}"
+                                )
+                                break
                     except ConnectionResetError:
                         logger.debug(
                             f"[MCP] Connection reset while sending to {client_id}"

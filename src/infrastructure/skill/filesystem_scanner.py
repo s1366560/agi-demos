@@ -7,9 +7,7 @@ and OpenCode conventions.
 Supported directory structures:
 - src/builtin/skills/{skill-name}/SKILL.md (system-level, read-only)
 - .memstack/skills/{skill-name}/SKILL.md (project-level)
-- .claude/skills/{skill-name}/SKILL.md (project-level)
 - ~/.memstack/skills/{skill-name}/SKILL.md (global)
-- ~/.claude/skills/{skill-name}/SKILL.md (global)
 - Custom paths
 
 Reference: vendor/opencode/packages/opencode/src/skill/skill.ts
@@ -111,10 +109,8 @@ class FileSystemSkillScanner:
 
     Scans multiple directory patterns with priority order:
     1. System/builtin skills (lowest priority - can be overridden)
-    2. Global directories (~/.memstack/skills/, ~/.claude/skills/)
-    3. Project directories (.memstack/skills/, .claude/skills/) (highest priority)
-
-    Reference: vendor/opencode/packages/opencode/src/skill/skill.ts
+    2. Global directories (~/.memstack/skills/)
+    3. Project directories (.memstack/skills/) (highest priority)
 
     Example:
         scanner = FileSystemSkillScanner()
@@ -132,15 +128,11 @@ class FileSystemSkillScanner:
     # Default skill directory patterns relative to base path (project-level)
     DEFAULT_SKILL_DIRS = [
         ".memstack/skills",
-        ".memstack/skill",
-        ".claude/skills",
     ]
 
     # Global skill directories (relative to user home)
-    # Reference: OpenCode uses ~/.claude/skills/
     GLOBAL_SKILL_DIRS = [
         "~/.memstack/skills",
-        "~/.claude/skills",
     ]
 
     # Name of the skill definition file
@@ -193,8 +185,8 @@ class FileSystemSkillScanner:
 
         Scans in order (later sources can override earlier ones):
         1. System/builtin skills (lowest priority)
-        2. Global directories (~/.memstack/skills/, ~/.claude/skills/)
-        3. Project directories (.memstack/skills/, .claude/skills/) (highest priority)
+        2. Global directories (~/.memstack/skills/)
+        3. Project directories (.memstack/skills/) (highest priority)
 
         Args:
             base_path: Base directory to start scanning from

@@ -178,7 +178,7 @@ class TestSkillSandboxIntegration:
             read_result = await sandbox_adapter.call_tool(
                 sandbox.id,
                 "read",
-                {"file_path": ".skills/test-skill/scripts/test.sh"},
+                {"file_path": ".memstack/skills/test-skill/scripts/test.sh"},
             )
 
             assert not read_result.get("is_error"), "Script not found in sandbox"
@@ -223,7 +223,7 @@ class TestSkillSandboxIntegration:
             script_result = await sandbox_adapter.call_tool(
                 sandbox.id,
                 "read",
-                {"file_path": ".skills/test-skill/scripts/test.sh"},
+                {"file_path": ".memstack/skills/test-skill/scripts/test.sh"},
             )
             assert not script_result.get("is_error")
 
@@ -231,7 +231,7 @@ class TestSkillSandboxIntegration:
             ref_result = await sandbox_adapter.call_tool(
                 sandbox.id,
                 "read",
-                {"file_path": ".skills/test-skill/references/guide.md"},
+                {"file_path": ".memstack/skills/test-skill/references/guide.md"},
             )
             assert not ref_result.get("is_error")
             assert "# Guide" in ref_result["content"][0]["text"]
@@ -269,7 +269,7 @@ class TestSkillSandboxIntegration:
             result = await sandbox_adapter.call_tool(
                 sandbox.id,
                 "read",
-                {"file_path": ".skills/test-skill/env.sh"},
+                {"file_path": ".memstack/skills/test-skill/env.sh"},
             )
 
             assert not result.get("is_error")

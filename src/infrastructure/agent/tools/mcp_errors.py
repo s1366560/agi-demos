@@ -177,17 +177,18 @@ class MCPToolErrorClassifier:
         is_retryable = False
         max_retries = 0
 
+        # Check timeout errors (MUST be before connection errors since
+        # "timeout or connection lost" contains both patterns)
+        if any(pattern in error_message for pattern in cls.TIMEOUT_PATTERNS):
+            error_type = MCPToolErrorType.TIMEOUT_ERROR
+            is_retryable = False
+            max_retries = 0
+
         # Check connection errors
-        if any(pattern in error_message for pattern in cls.CONNECTION_PATTERNS):
+        elif any(pattern in error_message for pattern in cls.CONNECTION_PATTERNS):
             error_type = MCPToolErrorType.CONNECTION_ERROR
             is_retryable = True
             max_retries = 3
-
-        # Check timeout errors
-        elif any(pattern in error_message for pattern in cls.TIMEOUT_PATTERNS):
-            error_type = MCPToolErrorType.TIMEOUT_ERROR
-            is_retryable = True
-            max_retries = 2
 
         # Check parameter errors
         elif any(pattern in error_message for pattern in cls.PARAMETER_PATTERNS):

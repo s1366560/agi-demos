@@ -287,7 +287,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             description=db_skill.description,
             trigger_type=TriggerType(db_skill.trigger_type),
             trigger_patterns=trigger_patterns,
-            tools=list(db_skill.tools or []),
+            tools=list(db_skill.tools or []) or ["terminal"],
             prompt_template=db_skill.prompt_template,
             status=SkillStatus(db_skill.status),
             success_count=db_skill.success_count,

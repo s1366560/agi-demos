@@ -53,6 +53,13 @@ interface TimelineState {
 }
 
 /**
+ * Maximum number of timeline events kept in memory.
+ * When exceeded, oldest events are trimmed from the front
+ * and hasEarlier is set to true so they can be re-loaded via pagination.
+ */
+const MAX_TIMELINE_EVENTS = 2000;
+
+/**
  * Initial state for Timeline store
  */
 export const initialState = {
@@ -87,7 +94,9 @@ export const useTimelineStore = create<TimelineState>()(
        * @param projectId - The project ID
        */
       getTimeline: async (conversationId: string, projectId: string) => {
-        console.log('[TimelineStore] getTimeline called:', conversationId, projectId);
+        if (import.meta.env.DEV) {
+          console.log('[TimelineStore] getTimeline called:', conversationId, projectId);
+        }
         set({ timelineLoading: true, timelineError: null });
 
         try {
@@ -96,7 +105,9 @@ export const useTimelineStore = create<TimelineState>()(
             projectId,
             50 // Changed from 100 to 50
           )) as any; // Type cast to access pagination metadata
-          console.log('[TimelineStore] getTimeline response:', response.timeline.length, 'events');
+          if (import.meta.env.DEV) {
+            console.log('[TimelineStore] getTimeline response:', response.timeline.length, 'events');
+          }
 
           // Extract pagination metadata from response
           const firstTimeUs = response.first_time_us ?? null;
@@ -134,15 +145,23 @@ export const useTimelineStore = create<TimelineState>()(
       addTimelineEvent: (event: TimelineEvent) => {
         const { timeline } = get();
 
-        console.log(
-          '[TimelineStore] Adding timeline event:',
-          event.type,
-          'timeUs:',
-          event.eventTimeUs,
-          'counter:',
-          event.eventCounter
-        );
-        set({ timeline: [...timeline, event] });
+        if (import.meta.env.DEV) {
+          console.log(
+            '[TimelineStore] Adding timeline event:',
+            event.type,
+            'timeUs:',
+            event.eventTimeUs,
+            'counter:',
+            event.eventCounter
+          );
+        }
+        let newTimeline = [...timeline, event];
+        if (newTimeline.length > MAX_TIMELINE_EVENTS) {
+          newTimeline = newTimeline.slice(newTimeline.length - MAX_TIMELINE_EVENTS);
+          set({ timeline: newTimeline, hasEarlier: true });
+        } else {
+          set({ timeline: newTimeline });
+        }
       },
 
       /**
@@ -162,8 +181,11 @@ export const useTimelineStore = create<TimelineState>()(
        */
       prependTimelineEvents: (events: TimelineEvent[]) => {
         const { timeline } = get();
-        // Add new events at the beginning of the timeline
-        set({ timeline: [...events, ...timeline] });
+        let newTimeline = [...events, ...timeline];
+        if (newTimeline.length > MAX_TIMELINE_EVENTS) {
+          newTimeline = newTimeline.slice(0, MAX_TIMELINE_EVENTS);
+        }
+        set({ timeline: newTimeline });
       },
 
       /**
@@ -181,18 +203,22 @@ export const useTimelineStore = create<TimelineState>()(
 
         // Guard: Don't load if already loading or no pagination point exists
         if (!earliestTimeUs || isLoadingEarlier) {
-          console.log(
-            '[TimelineStore] Cannot load earlier messages: no pagination point or already loading'
-          );
+          if (import.meta.env.DEV) {
+            console.log(
+              '[TimelineStore] Cannot load earlier messages: no pagination point or already loading'
+            );
+          }
           return false;
         }
 
-        console.log(
-          '[TimelineStore] Loading earlier messages before timeUs:',
-          earliestTimeUs,
-          'counter:',
-          earliestCounter
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            '[TimelineStore] Loading earlier messages before timeUs:',
+            earliestTimeUs,
+            'counter:',
+            earliestCounter
+          );
+        }
         set({ isLoadingEarlier: true, timelineError: null });
 
         try {
@@ -208,7 +234,10 @@ export const useTimelineStore = create<TimelineState>()(
 
           // Prepend new events to existing timeline
           const { timeline } = get();
-          const newTimeline = [...response.timeline, ...timeline];
+          let newTimeline = [...response.timeline, ...timeline];
+          if (newTimeline.length > MAX_TIMELINE_EVENTS) {
+            newTimeline = newTimeline.slice(0, MAX_TIMELINE_EVENTS);
+          }
 
           set({
             timeline: newTimeline,
@@ -308,23 +337,6 @@ export const useLatestCounter = () => useTimelineStore((state) => state.latestCo
  * @returns Whether there are earlier messages to load
  */
 export const useHasEarlier = () => useTimelineStore((state) => state.hasEarlier);
-
-/**
- * Derived selector: Get timeline with chat-specific fields
- *
- * Adds default fields expected by ChatArea component.
- *
- * @returns Timeline events with additional fields
- */
-export const useTimelineWithChatFields = () =>
-  useTimelineStore((state) =>
-    state.timeline.map((event) => ({
-      ...event,
-      // These fields may not be present in all timeline events but are expected by ChatArea
-      content: (event as any).content ?? '',
-      role: (event as any).role ?? (event.type === 'user_message' ? 'user' : 'assistant'),
-    }))
-  );
 
 /**
  * Type export for store (used in tests)

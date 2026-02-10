@@ -179,24 +179,24 @@ class TestFileSystemSkillScanner:
             assert len(result.skills) == 1
             assert result.skills[0].skill_id == "test-skill"
 
-    def test_scan_finds_claude_skills_directory(self):
-        """Test that scanner also finds skills in .claude/skills directory."""
+    def test_scan_finds_memstack_skills_directory(self):
+        """Test that scanner finds skills in .memstack/skills directory."""
         from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
         with tempfile.TemporaryDirectory() as tmpdir:
             base_path = Path(tmpdir)
 
-            # Create .claude/skills structure
-            skill_dir = base_path / ".claude" / "skills" / "claude-skill"
+            # Create .memstack/skills structure (second project)
+            skill_dir = base_path / ".memstack" / "skills" / "memstack-skill"
             skill_dir.mkdir(parents=True)
             skill_file = skill_dir / "SKILL.md"
-            skill_file.write_text("---\nname: claude\ndescription: claude skill\n---\nContent")
+            skill_file.write_text("---\nname: memstack\ndescription: memstack skill\n---\nContent")
 
             scanner = FileSystemSkillScanner(include_system=False, include_global=False)
             result = scanner.scan(base_path, include_system=False, include_global=False)
 
             assert result.count == 1
-            assert result.skills[0].skill_id == "claude-skill"
+            assert result.skills[0].skill_id == "memstack-skill"
 
     def test_scan_handles_empty_directory(self):
         """Test that scanner handles empty directory gracefully."""

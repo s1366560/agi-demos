@@ -130,10 +130,18 @@ class SandboxMCPToolWrapper(AgentTool):
                 )
 
                 # Route to sandbox adapter's call_tool method
+                # Extract timeout from tool arguments (e.g., bash tool's timeout param)
+                # and use it as MCP request timeout with padding for overhead
+                tool_timeout = kwargs.get("timeout")
+                call_kwargs: dict[str, Any] = {}
+                if tool_timeout and isinstance(tool_timeout, (int, float)):
+                    call_kwargs["timeout"] = float(tool_timeout) + 30.0
+
                 result = await self._adapter.call_tool(
                     self.sandbox_id,
                     self.tool_name,
                     kwargs,
+                    **call_kwargs,
                 )
 
                 # Parse result - check both is_error (client normalized) and isError (MCP standard)

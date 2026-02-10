@@ -175,10 +175,30 @@ class EventDispatcher:
                 return False
             raise
 
+        except asyncio.TimeoutError:
+            # Delta events are ephemeral — drop on timeout instead of retrying
+            event_type = event.data.get("type", "")
+            if "delta" in event_type:
+                self.stats["failed"] += 1
+                return False
+
+            # Non-delta events: retry
+            if event.retry_count < self.config.max_retries:
+                event.retry_count += 1
+                self.stats["retried"] += 1
+                await asyncio.sleep(self.config.retry_delay * event.retry_count)
+                return await self._send_event(event)
+
+            logger.warning(
+                f"[Dispatcher] Send timeout for {self.session_id[:8]}...: type={event_type}"
+            )
+            self.stats["failed"] += 1
+            return False
+
         except Exception as e:
             logger.warning(
                 f"[Dispatcher] Send failed for {self.session_id[:8]}...: "
-                f"type={event.data.get('type')}, error={e}"
+                f"type={event.data.get('type')}, error={type(e).__name__}: {e}"
             )
 
             # Retry on failure

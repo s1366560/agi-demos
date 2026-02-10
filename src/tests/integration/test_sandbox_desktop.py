@@ -57,7 +57,7 @@ class TestSandboxDesktopEndpoints:
             return create_mock_sandbox_instance(sandbox_id)
 
         # Mock the MCP tool call response - returns the expected format
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 30.0):
+        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
             if tool_name == "start_desktop":
                 # Return in the format that MCP adapter returns
                 return {
@@ -106,7 +106,7 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 30.0):
+        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
             if tool_name == "start_desktop":
                 resolution = arguments.get("resolution", "1280x720")
                 return {
@@ -177,7 +177,7 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 30.0):
+        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
             if tool_name == "stop_desktop":
                 return {
                     "content": [{
@@ -242,7 +242,7 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 30.0):
+        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
             if tool_name == "get_desktop_status":
                 return {
                     "content": [{
@@ -285,7 +285,7 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 30.0):
+        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
             if tool_name == "get_desktop_status":
                 return {
                     "content": [{

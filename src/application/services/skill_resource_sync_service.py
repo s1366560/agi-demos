@@ -27,7 +27,7 @@ from src.domain.ports.services.skill_resource_port import (
 logger = logging.getLogger(__name__)
 
 # Container base path matching SandboxSkillResourceAdapter.CONTAINER_SKILL_BASE
-CONTAINER_SKILL_BASE = "/workspace/.skills"
+CONTAINER_SKILL_BASE = "/workspace/.memstack/skills"
 
 
 @dataclass

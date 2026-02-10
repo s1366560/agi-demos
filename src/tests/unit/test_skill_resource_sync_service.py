@@ -63,7 +63,7 @@ def sample_resources():
             name="analyze.py",
             content="print('hello')",
             local_path=Path("/workspace/.memstack/skills/analyze-data/scripts/analyze.py"),
-            container_path="/workspace/.skills/analyze-data/scripts/analyze.py",
+            container_path="/workspace/.memstack/skills/analyze-data/scripts/analyze.py",
             size_bytes=100,
         ),
         SkillResource(
@@ -71,7 +71,7 @@ def sample_resources():
             name="guide.md",
             content="# Guide",
             local_path=Path("/workspace/.memstack/skills/analyze-data/references/guide.md"),
-            container_path="/workspace/.skills/analyze-data/references/guide.md",
+            container_path="/workspace/.memstack/skills/analyze-data/references/guide.md",
             size_bytes=50,
         ),
     ]
@@ -229,15 +229,15 @@ class TestBuildResourcePathsHint:
         hint = service.build_resource_paths_hint(
             skill_name="analyze-data",
             resource_paths=[
-                "/workspace/.skills/analyze-data/scripts/analyze.py",
-                "/workspace/.skills/analyze-data/references/guide.md",
+                "/workspace/.memstack/skills/analyze-data/scripts/analyze.py",
+                "/workspace/.memstack/skills/analyze-data/references/guide.md",
             ],
         )
 
         assert "SKILL_ROOT" in hint
         assert f"{CONTAINER_SKILL_BASE}/analyze-data" in hint
-        assert "/workspace/.skills/analyze-data/scripts/analyze.py" in hint
-        assert "/workspace/.skills/analyze-data/references/guide.md" in hint
+        assert "/workspace/.memstack/skills/analyze-data/scripts/analyze.py" in hint
+        assert "/workspace/.memstack/skills/analyze-data/references/guide.md" in hint
         assert "$SKILL_ROOT" in hint
 
     def test_hint_empty_resources(self):
@@ -262,8 +262,8 @@ class TestBuildResourcePathsHint:
         hint = service.build_resource_paths_hint(
             skill_name="test",
             resource_paths=[
-                "/workspace/.skills/test/scripts/z.py",
-                "/workspace/.skills/test/scripts/a.py",
+                "/workspace/.memstack/skills/test/scripts/z.py",
+                "/workspace/.memstack/skills/test/scripts/a.py",
             ],
         )
 

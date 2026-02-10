@@ -174,16 +174,16 @@ class TestSkillReverseSync:
             "content": [
                 {
                     "type": "text",
-                    "text": ".skills/my-skill/SKILL.md\n"
-                    ".skills/my-skill/scripts/run.py\n"
-                    ".skills/my-skill/templates/report.html",
+                    "text": ".memstack/skills/my-skill/SKILL.md\n"
+                    ".memstack/skills/my-skill/scripts/run.py\n"
+                    ".memstack/skills/my-skill/templates/report.html",
                 }
             ]
         }
         paths = SkillReverseSync._extract_file_paths(glob_result)
         assert len(paths) == 3
-        assert ".skills/my-skill/SKILL.md" in paths
-        assert ".skills/my-skill/scripts/run.py" in paths
+        assert ".memstack/skills/my-skill/SKILL.md" in paths
+        assert ".memstack/skills/my-skill/scripts/run.py" in paths
 
     def test_extract_file_paths_filters_errors(self):
         """Error messages and trailing info should be filtered."""

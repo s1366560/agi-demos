@@ -171,9 +171,9 @@ class TestSkillResourceInjectionIntegration:
 
         # Verify env.sh was written
         written_files = mock_sandbox_adapter._written_files
-        assert ".skills/test-skill/env.sh" in written_files
+        assert ".memstack/skills/test-skill/env.sh" in written_files
 
-        env_content = written_files.get(".skills/test-skill/env.sh", "")
+        env_content = written_files.get(".memstack/skills/test-skill/env.sh", "")
         assert "SKILL_ROOT" in env_content
         assert "test-skill" in env_content
         assert "PATH" in env_content
@@ -383,8 +383,8 @@ class TestSkillResourcePathResolution:
             skill_project / ".memstack" / "skills" / "test-skill",
         )
 
-        # Should be in /workspace/.skills/test-skill/scripts/
-        assert container_path.startswith("/workspace/.skills/test-skill/")
+        # Should be in /workspace/.memstack/skills/test-skill/scripts/
+        assert container_path.startswith("/workspace/.memstack/skills/test-skill/")
         assert "analyze.sh" in container_path
 
     @pytest.mark.asyncio
@@ -403,5 +403,5 @@ class TestSkillResourcePathResolution:
         )
 
         # Should still generate a valid path
-        assert container_path.startswith("/workspace/.skills/test-skill/")
+        assert container_path.startswith("/workspace/.memstack/skills/test-skill/")
         assert "analyze.sh" in container_path

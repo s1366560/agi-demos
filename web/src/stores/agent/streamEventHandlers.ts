@@ -710,7 +710,9 @@ export function createStreamEventHandlers(
     onArtifactCreated: (event) => {
       const { activeConversationId, updateConversationState, getConversationState } = get();
 
-      console.log('[AgentV3] Artifact created event:', event.data);
+      if (import.meta.env.DEV) {
+        console.log('[AgentV3] Artifact created event:', event.data);
+      }
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
@@ -727,7 +729,9 @@ export function createStreamEventHandlers(
       const { activeConversationId, updateConversationState, getConversationState } = get();
       const data = event.data as ArtifactReadyEventData;
 
-      console.log('[AgentV3] Artifact ready event:', data.artifact_id);
+      if (import.meta.env.DEV) {
+        console.log('[AgentV3] Artifact ready event:', data.artifact_id);
+      }
       const convState = getConversationState(handlerConversationId);
 
       // Update the existing artifact_created timeline entry with URL
@@ -755,7 +759,9 @@ export function createStreamEventHandlers(
       const { activeConversationId, updateConversationState, getConversationState } = get();
       const data = event.data as ArtifactErrorEventData;
 
-      console.warn('[AgentV3] Artifact error event:', data.artifact_id, data.error);
+      if (import.meta.env.DEV) {
+        console.warn('[AgentV3] Artifact error event:', data.artifact_id, data.error);
+      }
       const convState = getConversationState(handlerConversationId);
 
       // Update the existing artifact_created timeline entry with error
@@ -786,7 +792,9 @@ export function createStreamEventHandlers(
         message_id?: string;
         generated_by?: string;
       };
-      console.log('[AgentV3] Title generated event:', data);
+      if (import.meta.env.DEV) {
+        console.log('[AgentV3] Title generated event:', data);
+      }
 
       setState((state: any) => {
         const updatedList = state.conversations.map((c: any) =>
@@ -797,9 +805,11 @@ export function createStreamEventHandlers(
     },
 
     onComplete: (event) => {
-      console.log(
-        `[AgentV3] onComplete: handler=${handlerConversationId}, content preview="${(event.data as any)?.content?.substring(0, 50)}..."`
-      );
+      if (import.meta.env.DEV) {
+        console.log(
+          `[AgentV3] onComplete: handler=${handlerConversationId}, content preview="${(event.data as any)?.content?.substring(0, 50)}..."`
+        );
+      }
       const { activeConversationId, updateConversationState, getConversationState } = get();
 
       clearAllDeltaBuffers();

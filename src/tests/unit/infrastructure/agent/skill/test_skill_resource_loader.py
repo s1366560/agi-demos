@@ -189,8 +189,8 @@ class TestSkillResourceLoader:
             "test-skill", resource_path, skill_dir
         )
 
-        # Should be /workspace/.skills/test-skill/scripts/analyze.py
-        assert container_path == "/workspace/.skills/test-skill/scripts/analyze.py"
+        # Should be /workspace/.memstack/skills/test-skill/scripts/analyze.py
+        assert container_path == "/workspace/.memstack/skills/test-skill/scripts/analyze.py"
 
     def test_get_resource_container_path_fallback(self, temp_project_path: Path):
         """Test get_resource_container_path fallback without skill_dir."""
@@ -204,4 +204,4 @@ class TestSkillResourceLoader:
         container_path = loader.get_resource_container_path("test-skill", resource_path)
 
         # Fallback: uses filename only
-        assert container_path == "/workspace/.skills/test-skill/analyze.py"
+        assert container_path == "/workspace/.memstack/skills/test-skill/analyze.py"
