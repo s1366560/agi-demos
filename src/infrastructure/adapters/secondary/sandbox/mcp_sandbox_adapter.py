@@ -490,11 +490,11 @@ class MCPSandboxAdapter(SandboxPort):
             logger.error(f"Sandbox {sandbox_id} not found")
             return False
 
-        # Create MCP client
+        # Create MCP client (heartbeat=None to avoid PONG timeout killing long tool calls)
         client = MCPWebSocketClient(
             url=instance.websocket_url,
             timeout=timeout,
-            heartbeat_interval=30.0,
+            heartbeat_interval=None,
         )
 
         # Connect with exponential backoff retry

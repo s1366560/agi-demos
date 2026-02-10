@@ -67,7 +67,8 @@ class WebSocketTransport(BaseTransport):
             logger.info(f"Connecting to MCP server via WebSocket: {config.url}")
 
             timeout = config.timeout_seconds if config.timeout else 30.0
-            heartbeat = config.heartbeat_interval or 30
+            # None disables heartbeat; avoids PONG timeout killing long tool calls
+            heartbeat = config.heartbeat_interval
 
             self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout))
 

@@ -39,7 +39,7 @@ class MCPWebSocketClientConfig:
     url: str
     headers: Dict[str, str] = field(default_factory=dict)
     timeout: float = DEFAULT_TIMEOUT
-    heartbeat_interval: float = 30.0
+    heartbeat_interval: Optional[float] = None
     reconnect_attempts: int = 3
 
 
@@ -77,7 +77,7 @@ class MCPWebSocketClient:
         url: str,
         headers: Optional[Dict[str, str]] = None,
         timeout: float = DEFAULT_TIMEOUT,
-        heartbeat_interval: float = 30.0,
+        heartbeat_interval: Optional[float] = None,
         reconnect_attempts: int = 3,
     ):
         """
@@ -87,7 +87,10 @@ class MCPWebSocketClient:
             url: WebSocket URL of the MCP server (ws:// or wss://)
             headers: HTTP headers for connection upgrade
             timeout: Default timeout for operations in seconds
-            heartbeat_interval: Ping interval in seconds for connection health
+            heartbeat_interval: Ping interval in seconds for connection health.
+                None disables heartbeat (recommended for long-running tool calls).
+                aiohttp uses heartbeat/2 as PONG timeout, so heartbeat=30 means
+                connections are killed after 15s without PONG.
             reconnect_attempts: Max reconnection attempts on connection loss
         """
         if not url:
@@ -369,6 +372,9 @@ class MCPWebSocketClient:
 
         Returns:
             Tool execution result
+
+        Raises:
+            ConnectionError: If the WebSocket connection is lost (enables retry).
         """
         timeout = timeout or self.timeout
         logger.info(f"Calling MCP tool: {name}")
@@ -385,9 +391,12 @@ class MCPWebSocketClient:
                 return MCPToolResult(
                     content=result.get("content", []),
                     isError=result.get("isError", False),
-                    artifact=result.get("artifact"),  # Preserve artifact data from export_artifact
+                    artifact=result.get("artifact"),
                 )
 
+        except ConnectionError:
+            # Re-raise connection errors so callers can retry
+            raise
         except Exception as e:
             logger.error(f"Tool call error: {e}")
             return MCPToolResult(
@@ -395,15 +404,15 @@ class MCPWebSocketClient:
                 isError=True,
             )
 
-        # _send_request returned None - this means timeout or connection issue
+        # _send_request returned None - this means timeout
         logger.error(
-            f"Tool '{name}' call failed: request returned no result (timeout or connection issue)"
+            f"Tool '{name}' call failed: request timed out"
         )
         return MCPToolResult(
             content=[
                 {
                     "type": "text",
-                    "text": f"Error: Tool '{name}' request failed - timeout or connection lost",
+                    "text": f"Error: Tool '{name}' request timed out after {timeout}s",
                 }
             ],
             isError=True,
@@ -419,10 +428,13 @@ class MCPWebSocketClient:
         params: Dict[str, Any],
         timeout: float = DEFAULT_TIMEOUT,
     ) -> Optional[Dict[str, Any]]:
-        """Send a JSON-RPC request and wait for response."""
+        """Send a JSON-RPC request and wait for response.
+
+        Raises:
+            ConnectionError: If the WebSocket connection is closed or lost.
+        """
         if not self._ws or self._ws.closed:
-            logger.error("WebSocket not connected")
-            return None
+            raise ConnectionError(f"WebSocket not connected to {self.url}")
 
         async with self._lock:
             self._request_id += 1
@@ -451,6 +463,16 @@ class MCPWebSocketClient:
                 self._pending_requests.pop(request_id, None)
             logger.error(f"MCP request '{method}' timed out after {timeout}s")
             return None
+        except (ConnectionError, ConnectionResetError, RuntimeError) as e:
+            async with self._lock:
+                self._pending_requests.pop(request_id, None)
+            error_str = str(e)
+            if "closed" in error_str.lower() or "connection" in error_str.lower():
+                logger.error(f"MCP WebSocket connection lost: {e}")
+                self._connected = False
+                raise ConnectionError(f"WebSocket connection lost: {e}") from e
+            logger.error(f"MCP request error: {e}")
+            raise
         except Exception as e:
             async with self._lock:
                 self._pending_requests.pop(request_id, None)

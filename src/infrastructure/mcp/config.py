@@ -124,8 +124,10 @@ class McpWebSocketConfig(BaseModel):
     )
     enabled: bool = Field(default=True, description="Enable or disable the MCP server on startup")
     timeout: int = Field(default=30000, description="Request timeout in ms (default: 30s)")
-    heartbeat_interval: int = Field(
-        default=30, description="WebSocket ping interval in seconds (default: 30s)"
+    heartbeat_interval: Optional[int] = Field(
+        default=None,
+        description="WebSocket ping interval in seconds. None disables heartbeat "
+        "(recommended to prevent PONG timeout killing long-running tool calls)",
     )
     reconnect_attempts: int = Field(
         default=3, description="Max reconnection attempts on connection loss (default: 3)"

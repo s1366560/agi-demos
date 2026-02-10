@@ -361,6 +361,9 @@ class Settings(BaseSettings):
         default=120000, alias="MCP_DEFAULT_TIMEOUT"
     )  # ms (increased from 30000 to 120000 = 2 minutes)
     mcp_auto_connect: bool = Field(default=True, alias="MCP_AUTO_CONNECT")
+    mcp_websocket_heartbeat: Optional[int] = Field(
+        default=None, alias="MCP_WEBSOCKET_HEARTBEAT"
+    )  # seconds; None disables heartbeat (prevents PONG timeout killing long tool calls)
 
     # Plan Mode Detection Settings (Hybrid Detection Strategy)
     plan_mode_enabled: bool = Field(default=False, alias="PLAN_MODE_ENABLED")

@@ -283,7 +283,7 @@ class MCPWebSocketServer:
             return ws
 
         ws = web.WebSocketResponse(
-            heartbeat=30.0,
+            heartbeat=300.0,  # 5min ping interval (PONG timeout = 150s) to tolerate long tool calls
             max_msg_size=100 * 1024 * 1024,  # 100MB to support large file imports
         )
         await ws.prepare(request)
