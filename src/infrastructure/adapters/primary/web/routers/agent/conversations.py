@@ -382,9 +382,11 @@ async def generate_conversation_title(
                 status_code=400, detail="No user message found to generate title from"
             )
 
+        # Use DB provider config (same as ReActAgent) for title generation
+        title_llm = await agent_service._get_title_llm()
         generated_title = await agent_service.generate_conversation_title(
             first_message=first_user_message,
-            llm=llm,
+            llm=title_llm,
         )
 
         updated_conversation = await agent_service.update_conversation_title(

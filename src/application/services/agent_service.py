@@ -850,6 +850,9 @@ class AgentService(AgentServicePort):
 
         Runs as a background task after the first assistant response completes.
         Fire-and-forget: errors are logged but don't affect the chat flow.
+
+        Uses the same DB-configured LLM provider as the ReActAgent to ensure
+        model name and API endpoint consistency.
         """
         try:
             conversation = await self._conversation_repo.find_by_id(conversation_id)
@@ -864,8 +867,11 @@ class AgentService(AgentServicePort):
             if conversation.message_count > 4:
                 return
 
+            # Use DB-configured provider (same as ReActAgent) instead of self._llm
+            llm = await self._get_title_llm()
+
             title = await self._conversation_mgr.generate_conversation_title(
-                first_message=user_message, llm=self._llm
+                first_message=user_message, llm=llm
             )
 
             # Update the conversation title in DB
@@ -900,6 +906,30 @@ class AgentService(AgentServicePort):
                 )
         except Exception as e:
             logger.warning(f"[AgentService] Title generation failed (non-fatal): {e}")
+
+    async def _get_title_llm(self) -> "LLMClient":
+        """Get LLM client for title generation using DB provider config.
+
+        Uses the same provider configuration as the ReActAgent (from database)
+        to ensure model name and API endpoint consistency. Falls back to
+        the injected self._llm if DB provider is unavailable.
+        """
+        try:
+            from src.infrastructure.agent.state.agent_worker_state import (
+                get_or_create_llm_client,
+                get_or_create_provider_config,
+            )
+            from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
+
+            provider_config = await get_or_create_provider_config()
+            litellm_client = await get_or_create_llm_client(provider_config)
+            return UnifiedLLMClient(litellm_client=litellm_client)
+        except Exception as e:
+            logger.warning(
+                f"[AgentService] Failed to get DB provider for title generation, "
+                f"falling back to injected LLM: {e}"
+            )
+            return self._llm
 
     async def get_conversation_messages(
         self,
