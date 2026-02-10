@@ -1,7 +1,8 @@
 """Tests for ContextCompressionEngine and AdaptiveStrategySelector."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.infrastructure.agent.context.compaction import ModelLimits
 from src.infrastructure.agent.context.compression_engine import (
@@ -352,12 +353,8 @@ class TestContextCompressionEngine:
         messages = []
         for i in range(20):
             messages.append({"role": "user", "content": f"Question {i}"})
-            messages.append(
-                {"role": "assistant", "content": f"Let me check.", "tool_calls": []}
-            )
-            messages.append(
-                {"role": "tool", "name": "search", "content": "x" * 20000}
-            )
+            messages.append({"role": "assistant", "content": "Let me check.", "tool_calls": []})
+            messages.append({"role": "tool", "name": "search", "content": "x" * 20000})
             messages.append({"role": "assistant", "content": f"Answer {i}."})
 
         limits = ModelLimits(context=200000, input=0, output=4096)
@@ -381,9 +378,7 @@ class TestContextCompressionEngine:
         # Mock LLM client
         mock_llm = AsyncMock()
         mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(message=MagicMock(content="Summary of conversation."))
-        ]
+        mock_response.choices = [MagicMock(message=MagicMock(content="Summary of conversation."))]
         mock_llm.chat_completion.return_value = mock_response
 
         result = await engine.compress(
@@ -447,3 +442,163 @@ class TestContextCompressionEngine:
         limits = ModelLimits(context=128000, input=0, output=4096)
         occupancy = engine.get_occupancy(messages, limits)
         assert 0.0 <= occupancy < 1.0
+
+
+# =============================================================================
+# Role-Aware Compression Tests
+# =============================================================================
+
+
+@pytest.mark.unit
+class TestRoleAwareCompression:
+    """Tests for role-aware message handling in compression."""
+
+    def _make_engine(self, **kwargs):
+        return ContextCompressionEngine(
+            estimate_tokens=simple_token_estimator,
+            estimate_message_tokens=simple_message_token_estimator,
+            **kwargs,
+        )
+
+    def test_format_messages_role_aware_truncation(self):
+        """User messages get more budget than assistant messages."""
+        engine = self._make_engine()
+        messages = [
+            {"role": "user", "content": "U" * 1000},
+            {"role": "assistant", "content": "A" * 1000},
+            {"role": "tool", "name": "grep", "content": "T" * 1000},
+        ]
+        text = engine._format_messages_for_summary(messages)
+        lines = text.strip().split("\n")
+
+        # User line should be longer than assistant line (800 vs 300 limit)
+        user_line = [l for l in lines if l.startswith("User:")][0]
+        assistant_line = [l for l in lines if l.startswith("Assistant:")][0]
+        tool_line = [l for l in lines if l.startswith("Tool:")][0]
+        assert len(user_line) > len(assistant_line)
+        assert len(assistant_line) > len(tool_line)
+
+    def test_format_messages_short_content_not_truncated(self):
+        """Short messages are not truncated regardless of role."""
+        engine = self._make_engine()
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there"},
+        ]
+        text = engine._format_messages_for_summary(messages)
+        assert "Hello" in text
+        assert "Hi there" in text
+        assert "..." not in text
+
+    def test_partition_messages_by_role(self):
+        """Messages are correctly partitioned into user and assistant/tool groups."""
+        engine = self._make_engine()
+        messages = [
+            {"role": "user", "content": "Find the bug"},
+            {"role": "assistant", "content": "Let me search"},
+            {"role": "tool", "name": "grep", "content": "found: line 42"},
+            {"role": "user", "content": "Fix it"},
+            {"role": "assistant", "content": "Done"},
+        ]
+        user_text, assistant_text = engine._partition_messages_by_role(messages)
+
+        assert "Find the bug" in user_text
+        assert "Fix it" in user_text
+        assert "Let me search" in assistant_text
+        assert "Tool[grep]" in assistant_text
+        assert "Done" in assistant_text
+        # User messages should NOT be in assistant text
+        assert "Find the bug" not in assistant_text
+
+    def test_partition_empty_messages(self):
+        """Empty message list returns empty strings."""
+        engine = self._make_engine()
+        user_text, assistant_text = engine._partition_messages_by_role([])
+        assert user_text == ""
+        assert assistant_text == ""
+
+    async def test_l1_prune_truncates_long_assistant_messages(self):
+        """L1 also truncates verbose assistant responses outside protection window."""
+        engine = self._make_engine()
+        messages = []
+        # Create enough messages to get past the 2-turn protection window
+        for i in range(10):
+            messages.append({"role": "user", "content": f"Question {i}"})
+            # Alternate between short and very long assistant responses
+            content = f"Answer {i}: " + "x" * 30000
+            messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "tool", "name": "search", "content": "y" * 20000})
+
+        pruned, count = engine._prune_tool_outputs(messages)
+        assert count > 0
+
+        # Check that old long assistant messages were truncated
+        truncated_assistants = [
+            m
+            for m in pruned
+            if m.get("role") == "assistant"
+            and "[... response truncated to save tokens]" in m.get("content", "")
+        ]
+        assert len(truncated_assistants) > 0
+
+    async def test_l1_prune_protects_recent_assistant_messages(self):
+        """L1 does not truncate assistant messages in the last 2 user turns."""
+        engine = self._make_engine()
+        messages = []
+        for i in range(10):
+            messages.append({"role": "user", "content": f"Q{i}"})
+            messages.append({"role": "assistant", "content": "A" * 30000})
+            messages.append({"role": "tool", "name": "search", "content": "T" * 20000})
+
+        pruned, _ = engine._prune_tool_outputs(messages)
+
+        # Last 2 turns (last 6 messages) should be untouched
+        for msg in pruned[-6:]:
+            assert "[... response truncated" not in msg.get("content", "")
+            assert "[Output compacted" not in msg.get("content", "")
+
+    async def test_l2_prompt_contains_partitioned_sections(self):
+        """L2 summarization prompt sends partitioned user/assistant sections."""
+        engine = self._make_engine(chunk_size=4, summary_max_tokens=200)
+        messages = [
+            {"role": "user", "content": f"User requirement {i}"}
+            if i % 2 == 0
+            else {"role": "assistant", "content": f"Assistant verbose response {i}"}
+            for i in range(20)
+        ]
+        limits = ModelLimits(context=128000, input=0, output=4096)
+
+        mock_llm = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(content="Summary"))]
+        mock_llm.chat_completion.return_value = mock_response
+
+        await engine.compress(
+            system_prompt="System",
+            messages=messages,
+            model_limits=limits,
+            llm_client=mock_llm,
+            level=CompressionLevel.L2_SUMMARIZE,
+        )
+
+        # Verify the prompt sent to LLM contains partitioned sections
+        call_args = mock_llm.chat_completion.call_args_list[0]
+        prompt_content = call_args.kwargs["messages"][1]["content"]
+        assert "USER MESSAGES" in prompt_content
+        assert "ASSISTANT & TOOL MESSAGES" in prompt_content
+
+    def test_system_prompt_never_compressed(self):
+        """System prompt is preserved as-is through compression output."""
+        engine = self._make_engine()
+        system = "You are a helpful assistant with special instructions."
+        messages = make_messages(5, content_len=100)
+
+        result_messages = engine._build_compressed_output(
+            system_prompt=system,
+            summary="Some summary",
+            messages=messages,
+        )
+        # First message should be system with original prompt + summary appended
+        assert result_messages[0]["role"] == "system"
+        assert system in result_messages[0]["content"]
+        assert "Some summary" in result_messages[0]["content"]

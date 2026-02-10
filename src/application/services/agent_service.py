@@ -197,7 +197,7 @@ class AgentService(AgentServicePort):
         Yields:
             Event dictionaries with type and data
         """
-        logger.warning(f"[AgentService] stream_chat_v2 invoked (file={__file__})")
+        logger.info("[AgentService] stream_chat_v2 invoked")
         try:
             # Get conversation and verify authorization
             conversation = await self._conversation_repo.find_by_id(conversation_id)
@@ -447,7 +447,7 @@ class AgentService(AgentServicePort):
             logger.error("Missing dependencies for chat stream")
             return
 
-        logger.warning(
+        logger.info(
             f"[AgentService] connect_chat_stream start: conversation_id={conversation_id}, "
             f"message_id={message_id}"
         )
@@ -491,10 +491,6 @@ class AgentService(AgentServicePort):
                 f"[AgentService] Replayed {len(events)} DB events for conversation {conversation_id}, "
                 f"last_event_time_us={last_event_time_us}"
             )
-            logger.warning(
-                f"[AgentService] DB replay done: events={len(events)}, "
-                f"last_event_time_us={last_event_time_us}"
-            )
 
         except Exception as e:
             logger.warning(f"[AgentService] Failed to replay events: {e}")
@@ -525,7 +521,7 @@ class AgentService(AgentServicePort):
         # When message_id is None: Read ALL new events for the conversation (HITL recovery mode)
         # When message_id is set: Filter events for that specific message
         stream_key = f"agent:events:{conversation_id}"
-        logger.warning(
+        logger.info(
             f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
             f"message_id={message_id or 'ALL'}, "
             f"last_event_time_us={last_event_time_us}"
@@ -545,7 +541,7 @@ class AgentService(AgentServicePort):
 
                 live_event_count += 1
                 if live_event_count <= 10:
-                    logger.warning(
+                    logger.debug(
                         f"[AgentService] Live stream event #{live_event_count}: "
                         f"type={event_type}, event_time_us={evt_time_us}, "
                         f"message_id={event_data.get('message_id')}"

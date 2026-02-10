@@ -368,6 +368,29 @@ class ProjectReActAgent:
             )
 
             # Create ReActAgent instance with cached components
+            # Build context window config from application settings
+            from src.configuration.config import get_settings
+            from src.infrastructure.agent.context.window_manager import ContextWindowConfig
+
+            app_settings = get_settings()
+            context_window_config = ContextWindowConfig(
+                max_context_tokens=128000,
+                max_output_tokens=self.config.max_tokens,
+                l1_trigger_pct=app_settings.compression_l1_trigger_pct,
+                l2_trigger_pct=app_settings.compression_l2_trigger_pct,
+                l3_trigger_pct=app_settings.compression_l3_trigger_pct,
+                chunk_size=app_settings.compression_chunk_size,
+                summary_max_tokens=app_settings.compression_summary_max_tokens,
+                prune_min_tokens=app_settings.compression_prune_min_tokens,
+                prune_protect_tokens=app_settings.compression_prune_protect_tokens,
+                prune_protected_tools=app_settings.compression_prune_protected_tools,
+                assistant_truncate_chars=app_settings.compression_assistant_truncate_chars,
+                truncate_user=app_settings.compression_truncate_user,
+                truncate_assistant=app_settings.compression_truncate_assistant,
+                truncate_tool=app_settings.compression_truncate_tool,
+                truncate_system=app_settings.compression_truncate_system,
+            )
+
             self._react_agent = ReActAgent(
                 model=provider_config.llm_model,
                 tools=self._tools,
@@ -377,6 +400,7 @@ class ProjectReActAgent:
                 max_tokens=self.config.max_tokens,
                 max_steps=self.config.max_steps,
                 agent_mode=self.config.agent_mode,
+                context_window_config=context_window_config,
                 skills=self._skills,
                 subagents=self._subagents,
                 artifact_service=self._artifact_service,  # Pass artifact service

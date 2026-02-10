@@ -71,6 +71,18 @@ class ContextWindowConfig:
     # Token estimation
     chars_per_token: float = 4.0  # Rough estimate for tokenization
 
+    # L1 pruning parameters
+    prune_min_tokens: int = 20000
+    prune_protect_tokens: int = 40000
+    prune_protected_tools: str = "skill"
+    assistant_truncate_chars: int = 2000
+
+    # Role-aware summary truncation limits (chars)
+    truncate_user: int = 800
+    truncate_assistant: int = 300
+    truncate_tool: int = 200
+    truncate_system: int = 1000
+
     def __post_init__(self):
         """Validate configuration."""
         total = (
@@ -163,6 +175,18 @@ class ContextWindowManager:
             ),
             chunk_size=self.config.chunk_size,
             summary_max_tokens=self.config.summary_max_tokens,
+            prune_min_tokens=self.config.prune_min_tokens,
+            prune_protect_tokens=self.config.prune_protect_tokens,
+            prune_protected_tools=set(
+                t.strip() for t in self.config.prune_protected_tools.split(",") if t.strip()
+            ),
+            assistant_truncate_chars=self.config.assistant_truncate_chars,
+            role_truncate_limits={
+                "user": self.config.truncate_user,
+                "assistant": self.config.truncate_assistant,
+                "tool": self.config.truncate_tool,
+                "system": self.config.truncate_system,
+            },
         )
 
     @property

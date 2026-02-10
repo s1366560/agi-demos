@@ -38,28 +38,44 @@ logger = logging.getLogger(__name__)
 # Default chunk size for incremental summarization
 DEFAULT_CHUNK_SIZE = 10
 
+# Default role-aware truncation limits (chars). User messages carry requirements
+# and constraints, so they get more budget than assistant responses.
+_DEFAULT_ROLE_TRUNCATE_LIMITS = {
+    "user": 800,
+    "assistant": 300,
+    "tool": 200,
+    "system": 1000,
+}
+_DEFAULT_TRUNCATE_LIMIT = 500
+
 # Summarization prompts
 CHUNK_SUMMARY_PROMPT = """Summarize the following conversation segment concisely.
-Preserve:
-1. Key decisions and conclusions
-2. Important constraints and requirements
-3. Tool results that affect later reasoning
+
+Priority rules (highest to lowest):
+1. User requirements, constraints, and questions - preserve verbatim when short
+2. Key decisions and conclusions reached
+3. Tool results that affect later reasoning (errors, important data)
 4. Entity names and relationships
+5. Assistant reasoning - compress aggressively, keep only conclusions
 
 {previous_summary_context}
 
-Conversation segment:
-{conversation_text}
+--- USER MESSAGES ---
+{user_text}
 
-Provide a concise summary (under {max_tokens} tokens):"""
+--- ASSISTANT & TOOL MESSAGES ---
+{assistant_text}
+
+Provide a concise summary (under {max_tokens} tokens). Start with user requirements,
+then decisions and outcomes:"""
 
 DEEP_COMPRESS_PROMPT = """Distill the following conversation context into an ultra-compact summary.
-You MUST preserve:
-1. The current task state and goal
-2. All critical decisions made
-3. Key constraints and requirements
-4. Important entities and their relationships
-5. Any pending actions or blockers
+
+Structure your summary in these sections:
+1. USER GOAL: The user's primary objective and constraints (MUST preserve)
+2. DECISIONS: All critical decisions made so far
+3. STATE: Current task state, what has been done, what remains
+4. CONTEXT: Important entities, relationships, and data
 
 Previous summaries:
 {summaries}
@@ -196,6 +212,11 @@ class ContextCompressionEngine:
         thresholds: Optional[AdaptiveThresholds] = None,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         summary_max_tokens: int = 500,
+        prune_min_tokens: Optional[int] = None,
+        prune_protect_tokens: Optional[int] = None,
+        prune_protected_tools: Optional[set] = None,
+        assistant_truncate_chars: int = 2000,
+        role_truncate_limits: Optional[Dict[str, int]] = None,
     ) -> None:
         self._estimate_tokens = estimate_tokens
         self._estimate_message_tokens = estimate_message_tokens
@@ -204,6 +225,13 @@ class ContextCompressionEngine:
         self._summary_max_tokens = summary_max_tokens
         self._state = CompressionState()
         self._history = CompressionHistory()
+
+        # L1 pruning config (fallback to compaction module defaults)
+        self._prune_min_tokens = prune_min_tokens
+        self._prune_protect_tokens = prune_protect_tokens
+        self._prune_protected_tools = prune_protected_tools
+        self._assistant_truncate_chars = assistant_truncate_chars
+        self._role_truncate_limits = role_truncate_limits or dict(_DEFAULT_ROLE_TRUNCATE_LIMITS)
 
     @property
     def state(self) -> CompressionState:
@@ -344,10 +372,11 @@ class ContextCompressionEngine:
         self,
         messages: List[Dict[str, Any]],
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """L1: Prune old tool outputs from messages.
+        """L1: Prune old tool outputs and long assistant messages.
 
         Replaces tool result content with placeholder for old tool calls,
-        protecting recent ones and critical tool types.
+        and truncates verbose assistant responses outside the protection window.
+        Protects recent turns and critical tool types.
         """
         from src.infrastructure.agent.context.compaction import (
             PRUNE_MINIMUM_TOKENS,
@@ -355,12 +384,28 @@ class ContextCompressionEngine:
             PRUNE_PROTECTED_TOOLS,
         )
 
+        # Use instance config, falling back to compaction module defaults
+        min_tokens = (
+            self._prune_min_tokens if self._prune_min_tokens is not None else PRUNE_MINIMUM_TOKENS
+        )
+        protect_tokens = (
+            self._prune_protect_tokens
+            if self._prune_protect_tokens is not None
+            else PRUNE_PROTECT_TOKENS
+        )
+        protected_tools = (
+            self._prune_protected_tools
+            if self._prune_protected_tools is not None
+            else PRUNE_PROTECTED_TOOLS
+        )
+        assistant_truncate = self._assistant_truncate_chars
+
         pruned_count = 0
         total_tool_tokens = 0
         prunable_tokens = 0
-        prune_candidates: List[Tuple[int, Dict[str, Any]]] = []
+        prune_candidates: List[Tuple[int, Dict[str, Any], str]] = []
 
-        # Scan backwards for tool result messages
+        # Scan backwards for tool result messages and long assistant messages
         turns = 0
         for i in range(len(messages) - 1, -1, -1):
             msg = messages[i]
@@ -372,35 +417,57 @@ class ContextCompressionEngine:
             if turns < 2:
                 continue
 
-            if msg.get("role") == "tool":
+            role = msg.get("role", "")
+
+            if role == "tool":
                 content = msg.get("content", "")
                 tool_name = msg.get("name", "")
                 tokens = self._estimate_tokens(content)
                 total_tool_tokens += tokens
 
                 # Skip protected tools
-                if tool_name in PRUNE_PROTECTED_TOOLS:
+                if tool_name in protected_tools:
                     continue
 
                 # Past protection window -> candidate for pruning
-                if total_tool_tokens > PRUNE_PROTECT_TOKENS:
+                if total_tool_tokens > protect_tokens:
                     prunable_tokens += tokens
-                    prune_candidates.append((i, msg))
+                    prune_candidates.append((i, msg, "tool"))
+
+            elif role == "assistant":
+                content = msg.get("content", "")
+                if isinstance(content, str) and len(content) > assistant_truncate:
+                    tokens = self._estimate_tokens(content)
+                    saved = tokens - self._estimate_tokens(content[:assistant_truncate])
+                    if saved > 0:
+                        prunable_tokens += saved
+                        prune_candidates.append((i, msg, "assistant"))
 
         # Only prune if worthwhile
-        if prunable_tokens < PRUNE_MINIMUM_TOKENS:
+        if prunable_tokens < min_tokens:
             return messages, 0
 
         # Apply pruning
         result = list(messages)
-        for idx, msg in prune_candidates:
-            result[idx] = {
-                **msg,
-                "content": "[Output compacted to save tokens]",
-            }
+        for idx, msg, msg_type in prune_candidates:
+            if msg_type == "tool":
+                result[idx] = {
+                    **msg,
+                    "content": "[Output compacted to save tokens]",
+                }
+            elif msg_type == "assistant":
+                content = msg.get("content", "")
+                result[idx] = {
+                    **msg,
+                    "content": content[:assistant_truncate]
+                    + "\n[... response truncated to save tokens]",
+                }
             pruned_count += 1
 
-        logger.info(f"L1 Prune: pruned {pruned_count} tool outputs, ~{prunable_tokens} tokens")
+        logger.info(
+            f"L1 Prune: pruned {pruned_count} messages "
+            f"(tool + assistant), ~{prunable_tokens} tokens"
+        )
         return result, pruned_count
 
     async def _incremental_summarize(
@@ -440,12 +507,13 @@ class ContextCompressionEngine:
             if prev_summary:
                 prev_context = f"Previous context summary:\n{prev_summary}\n\n"
 
-            # Format chunk for summarization
-            conversation_text = self._format_messages_for_summary(chunk)
+            # Format chunk with role-aware partitioning
+            user_text, assistant_text = self._partition_messages_by_role(chunk)
 
             prompt = CHUNK_SUMMARY_PROMPT.format(
                 previous_summary_context=prev_context,
-                conversation_text=conversation_text,
+                user_text=user_text or "(no user messages in this segment)",
+                assistant_text=assistant_text or "(no assistant messages in this segment)",
                 max_tokens=self._summary_max_tokens,
             )
 
@@ -581,10 +649,14 @@ class ContextCompressionEngine:
         self,
         messages: List[Dict[str, Any]],
     ) -> str:
-        """Format messages as text for LLM summarization."""
+        """Format messages as text for LLM summarization.
+
+        Applies role-aware truncation: user messages get more budget
+        than assistant/tool messages to preserve requirements.
+        """
         lines = []
         for msg in messages:
-            role = msg.get("role", "unknown").capitalize()
+            role = msg.get("role", "unknown")
             content = msg.get("content", "")
 
             if isinstance(content, list):
@@ -595,14 +667,58 @@ class ContextCompressionEngine:
                 ]
                 content = " ".join(text_parts)
 
-            # Truncate very long messages for summary input
-            if len(content) > 500:
-                content = content[:500] + "..."
+            # Role-aware truncation limits
+            limit = self._role_truncate_limits.get(role, _DEFAULT_TRUNCATE_LIMIT)
+            if len(content) > limit:
+                content = content[:limit] + "..."
 
             if content:
-                lines.append(f"{role}: {content}")
+                lines.append(f"{role.capitalize()}: {content}")
 
         return "\n".join(lines)
+
+    def _partition_messages_by_role(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> Tuple[str, str]:
+        """Partition messages into user text and assistant/tool text.
+
+        Returns (user_text, assistant_text) with role-aware truncation.
+        Used by L2 summarization to give the LLM structured input.
+        """
+        user_lines: List[str] = []
+        assistant_lines: List[str] = []
+
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+
+            if isinstance(content, list):
+                text_parts = [
+                    p.get("text", "")
+                    for p in content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                ]
+                content = " ".join(text_parts)
+
+            limit = self._role_truncate_limits.get(role, _DEFAULT_TRUNCATE_LIMIT)
+            if len(content) > limit:
+                content = content[:limit] + "..."
+
+            if not content:
+                continue
+
+            if role == "user":
+                user_lines.append(f"User: {content}")
+            elif role == "assistant":
+                assistant_lines.append(f"Assistant: {content}")
+            elif role == "tool":
+                tool_name = msg.get("name", "unknown")
+                assistant_lines.append(f"Tool[{tool_name}]: {content}")
+            else:
+                assistant_lines.append(f"{role.capitalize()}: {content}")
+
+        return "\n".join(user_lines), "\n".join(assistant_lines)
 
     @staticmethod
     def _extract_response_text(response: Any) -> str:

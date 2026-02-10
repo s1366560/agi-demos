@@ -631,13 +631,8 @@ class SessionProcessor:
         Yields:
             AgentDomainEvent objects
         """
-        # DEBUG: Force logging at start of _process_step
-        print(
-            f"[Processor] _process_step called: session={session_id}, step={self._step_count}",
-            flush=True,
-        )
-        logger.warning(
-            f"[Processor] _process_step called: session={session_id}, step={self._step_count}"
+        logger.debug(
+            f"[Processor] _process_step: session={session_id}, step={self._step_count}"
         )
 
         # Get step description from work plan if available
@@ -648,23 +643,18 @@ class SessionProcessor:
 
         # Emit step start with meaningful description
         yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
-        logger.warning(f"[Processor] After yield step_start, step={self._step_count}")
 
         # Create new assistant message
         self._current_message = Message(
             session_id=session_id,
             role=MessageRole.ASSISTANT,
         )
-        logger.warning(f"[Processor] Created assistant message, step={self._step_count}")
 
         # Reset pending tool calls
         self._pending_tool_calls = {}
 
         # Prepare tools for LLM
         tools_for_llm = [t.to_openai_format() for t in self.tools.values()]
-        logger.warning(
-            f"[Processor] Prepared {len(tools_for_llm)} tools for LLM, step={self._step_count}"
-        )
 
         # Create stream config
         stream_config = StreamConfig(
@@ -675,13 +665,9 @@ class SessionProcessor:
             max_tokens=self.config.max_tokens,
             tools=tools_for_llm if tools_for_llm else None,
         )
-        logger.warning(
-            f"[Processor] Created StreamConfig, model={self.config.model}, step={self._step_count}"
-        )
 
         # Create LLM stream with optional client (provides circuit breaker + rate limiter)
         llm_stream = LLMStream(stream_config, llm_client=self._llm_client)
-        logger.warning(f"[Processor] Created LLMStream, step={self._step_count}")
 
         # Track state for this step
         text_buffer = ""
@@ -693,7 +679,6 @@ class SessionProcessor:
 
         # Process LLM stream with retry
         attempt = 0
-        logger.warning(f"[Processor] Starting LLM stream retry loop, step={self._step_count}")
         while True:
             try:
                 # Build step-specific langfuse context
@@ -708,8 +693,8 @@ class SessionProcessor:
                         },
                     }
 
-                logger.warning(
-                    f"[Processor] About to call llm_stream.generate(), step={self._step_count}"
+                logger.debug(
+                    f"[Processor] Calling llm_stream.generate(), step={self._step_count}"
                 )
                 async for event in llm_stream.generate(
                     messages, langfuse_context=step_langfuse_context
@@ -718,31 +703,19 @@ class SessionProcessor:
                     if self._abort_event and self._abort_event.is_set():
                         raise asyncio.CancelledError("Aborted")
 
-                    # Debug: log all events from LLM stream
-                    logger.info(
-                        f"[Processor] LLM event: type={event.type}, data_keys={list(event.data.keys()) if event.data else []}"
-                    )
-
                     # Process stream events
                     if event.type == StreamEventType.TEXT_START:
-                        logger.info("[Processor] Yielding TEXT_START")
                         yield AgentTextStartEvent()
 
                     elif event.type == StreamEventType.TEXT_DELTA:
                         delta = event.data.get("delta", "")
                         text_buffer += delta
-                        logger.info(
-                            f"[Processor] Yielding TEXT_DELTA: {delta[:30]}..."
-                            if len(delta) > 30
-                            else f"[Processor] Yielding TEXT_DELTA: {delta}"
-                        )
                         yield AgentTextDeltaEvent(delta=delta)
 
                     elif event.type == StreamEventType.TEXT_END:
                         full_text = event.data.get("full_text", text_buffer)
-                        logger.info(
-                            f"[Processor] Yielding TEXT_END: full_text_len={len(full_text) if full_text else 0}, "
-                            f"preview={full_text[:50] if full_text else '(empty)'}..."
+                        logger.debug(
+                            f"[Processor] TEXT_END: len={len(full_text) if full_text else 0}"
                         )
                         self._current_message.add_text(full_text)
                         yield AgentTextEndEvent(full_text=full_text)
@@ -975,7 +948,10 @@ class SessionProcessor:
             trace_url=trace_url,
         )
 
-        # Emit context status update after each step.
+        # Emit step end
+        yield AgentStepEndEvent(step_index=self._step_count, status="completed")
+
+        # Emit context status update after step completes.
         # If LLM reported usage (via USAGE event), step_tokens.input is accurate.
         # Otherwise, estimate from message content length (~4 chars/token).
         context_limit = self.config.context_limit
@@ -990,9 +966,6 @@ class SessionProcessor:
             occupancy_pct=round(occupancy, 1),
             compression_level="none",
         )
-
-        # Emit step end
-        yield AgentStepEndEvent(step_index=self._step_count, status="completed")
 
     async def _execute_tool(
         self,

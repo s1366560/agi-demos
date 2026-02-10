@@ -232,8 +232,7 @@ async def stream_agent_to_websocket(
             event_type = event.get("type", "unknown")
             event_data = event.get("data", {})
 
-            # DEBUG: Log every event received from agent_service
-            logger.warning(
+            logger.debug(
                 f"[WS Bridge] Event #{event_count}: type={event_type}, conv={conversation_id}"
             )
 

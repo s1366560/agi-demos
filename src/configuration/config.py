@@ -319,6 +319,41 @@ class Settings(BaseSettings):
         default=300, alias="AGENT_SKILL_EXECUTION_TIMEOUT"
     )  # Increased from 60 to 300 (5 minutes)
 
+    # Context Compression Settings
+    # Adaptive compression trigger thresholds (0.0 - 1.0)
+    compression_l1_trigger_pct: float = Field(
+        default=0.60, alias="COMPRESSION_L1_TRIGGER_PCT"
+    )  # L1 prune at 60% occupancy
+    compression_l2_trigger_pct: float = Field(
+        default=0.80, alias="COMPRESSION_L2_TRIGGER_PCT"
+    )  # L2 summarize at 80% occupancy
+    compression_l3_trigger_pct: float = Field(
+        default=0.90, alias="COMPRESSION_L3_TRIGGER_PCT"
+    )  # L3 deep compress at 90% occupancy
+    # Summarization chunk size (messages per summary chunk)
+    compression_chunk_size: int = Field(default=10, alias="COMPRESSION_CHUNK_SIZE")
+    # Max tokens for generated summaries
+    compression_summary_max_tokens: int = Field(default=500, alias="COMPRESSION_SUMMARY_MAX_TOKENS")
+    # L1: Minimum prunable tokens before pruning is worthwhile
+    compression_prune_min_tokens: int = Field(default=20000, alias="COMPRESSION_PRUNE_MIN_TOKENS")
+    # L1: Protect recent N tokens of tool call outputs from pruning
+    compression_prune_protect_tokens: int = Field(
+        default=40000, alias="COMPRESSION_PRUNE_PROTECT_TOKENS"
+    )
+    # L1: Tool names whose output is never pruned (comma-separated)
+    compression_prune_protected_tools: str = Field(
+        default="skill", alias="COMPRESSION_PRUNE_PROTECTED_TOOLS"
+    )
+    # L1: Truncate assistant messages longer than this (chars)
+    compression_assistant_truncate_chars: int = Field(
+        default=2000, alias="COMPRESSION_ASSISTANT_TRUNCATE_CHARS"
+    )
+    # Role-aware summary truncation limits (chars)
+    compression_truncate_user: int = Field(default=800, alias="COMPRESSION_TRUNCATE_USER")
+    compression_truncate_assistant: int = Field(default=300, alias="COMPRESSION_TRUNCATE_ASSISTANT")
+    compression_truncate_tool: int = Field(default=200, alias="COMPRESSION_TRUNCATE_TOOL")
+    compression_truncate_system: int = Field(default=1000, alias="COMPRESSION_TRUNCATE_SYSTEM")
+
     # MCP (Model Context Protocol) Settings
     mcp_enabled: bool = Field(default=True, alias="MCP_ENABLED")
     mcp_config_path: Optional[str] = Field(default=None, alias="MCP_CONFIG_PATH")
