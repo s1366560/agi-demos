@@ -269,7 +269,7 @@ class SkillReverseSync:
                     read_result = await sandbox_adapter.call_tool(
                         sandbox_id=sandbox_id,
                         tool_name="read",
-                        arguments={"file_path": abs_path},
+                        arguments={"file_path": abs_path, "raw": True},
                     )
                     content = self._extract_content(read_result)
                     if content is not None:
@@ -475,7 +475,12 @@ class SkillReverseSync:
 
     @staticmethod
     def _extract_content(read_result: Any) -> Optional[str]:
-        """Extract text content from MCP read tool result."""
+        """Extract text content from MCP read tool result.
+
+        Handles line-number prefixes (e.g. '     1\\t...') that the MCP read
+        tool adds by default. Strips them so callers get raw file content.
+        """
+        raw: Optional[str] = None
         if isinstance(read_result, dict):
             if "content" in read_result:
                 content = read_result["content"]
@@ -484,12 +489,44 @@ class SkillReverseSync:
                         item.get("text", "") if isinstance(item, dict) else str(item)
                         for item in content
                     ]
-                    return "\n".join(texts)
-                return str(content)
-            if "text" in read_result:
-                return read_result["text"]
-            if "result" in read_result:
-                return str(read_result["result"])
-        if isinstance(read_result, str):
-            return read_result
-        return None
+                    raw = "\n".join(texts)
+                else:
+                    raw = str(content)
+            elif "text" in read_result:
+                raw = read_result["text"]
+            elif "result" in read_result:
+                raw = str(read_result["result"])
+        elif isinstance(read_result, str):
+            raw = read_result
+
+        if raw is None:
+            return None
+
+        return SkillReverseSync._strip_line_numbers(raw)
+
+    @staticmethod
+    def _strip_line_numbers(text: str) -> str:
+        """Strip line-number prefixes added by the MCP read tool.
+
+        The read tool formats lines as '     1\\tline content'. If every
+        non-empty line matches this pattern, strip the prefixes to recover
+        the original file content.
+        """
+        import re
+
+        lines = text.split("\n")
+        # Check if all non-empty lines have the line-number prefix pattern
+        pattern = re.compile(r"^\s*\d+\t")
+        non_empty = [ln for ln in lines if ln.strip()]
+        if not non_empty:
+            return text
+        if all(pattern.match(ln) for ln in non_empty):
+            stripped = []
+            for ln in lines:
+                if pattern.match(ln):
+                    # Split on first tab to remove line number prefix
+                    stripped.append(ln.split("\t", 1)[1])
+                else:
+                    stripped.append(ln)
+            return "\n".join(stripped)
+        return text

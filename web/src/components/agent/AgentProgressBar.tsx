@@ -26,6 +26,7 @@ interface AgentProgressBarProps {
     | 'thinking'
     | 'work_planning'
     | 'step_executing'
+    | 'preparing'
     | 'acting'
     | 'observing'
     | 'completed'
@@ -57,6 +58,12 @@ const statusConfig: Record<
     color: 'blue',
     icon: <LoadingOutlined />,
     label: 'Executing',
+    class: 'status-running',
+  },
+  preparing: {
+    color: 'blue',
+    icon: <LoadingOutlined />,
+    label: 'Preparing Tool',
     class: 'status-running',
   },
   acting: { color: 'orange', icon: <LoadingOutlined />, label: 'Acting', class: 'status-running' },

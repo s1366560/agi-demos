@@ -28,6 +28,7 @@ export type { CostUpdateEventData } from './agent';
 export type AgentState =
   | 'idle'
   | 'thinking'
+  | 'preparing'
   | 'acting'
   | 'observing'
   | 'awaiting_input'
@@ -117,8 +118,9 @@ export interface ConversationState {
   activeToolCalls: Map<
     string,
     ToolCall & {
-      status: 'running' | 'success' | 'failed';
+      status: 'preparing' | 'running' | 'success' | 'failed';
       startTime: number;
+      partialArguments?: string;
     }
   >;
   /** Stack of pending tool names */

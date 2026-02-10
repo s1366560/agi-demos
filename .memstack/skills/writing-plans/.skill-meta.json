@@ -1,0 +1,9 @@
+{
+  "source": "obra/superpowers",
+  "skill_name": "writing-plans",
+  "branch": "main",
+  "source_path": "skills/writing-plans/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

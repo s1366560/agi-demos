@@ -29,6 +29,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
 
 from src.domain.events.agent_events import (
+    AgentActDeltaEvent,
     AgentActEvent,
     AgentArtifactCreatedEvent,
     AgentArtifactErrorEvent,
@@ -243,6 +244,7 @@ class SessionProcessor:
         self._step_count = 0
         self._current_message: Optional[Message] = None
         self._pending_tool_calls: Dict[str, ToolPart] = {}
+        self._pending_tool_args: Dict[str, str] = {}  # call_id -> accumulated raw args
         self._abort_event: Optional[asyncio.Event] = None
 
         # Work plan tracking
@@ -631,9 +633,7 @@ class SessionProcessor:
         Yields:
             AgentDomainEvent objects
         """
-        logger.debug(
-            f"[Processor] _process_step: session={session_id}, step={self._step_count}"
-        )
+        logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
 
         # Get step description from work plan if available
         step_description = f"Step {self._step_count}"
@@ -652,6 +652,7 @@ class SessionProcessor:
 
         # Reset pending tool calls
         self._pending_tool_calls = {}
+        self._pending_tool_args = {}
 
         # Prepare tools for LLM
         tools_for_llm = [t.to_openai_format() for t in self.tools.values()]
@@ -693,9 +694,7 @@ class SessionProcessor:
                         },
                     }
 
-                logger.debug(
-                    f"[Processor] Calling llm_stream.generate(), step={self._step_count}"
-                )
+                logger.debug(f"[Processor] Calling llm_stream.generate(), step={self._step_count}")
                 async for event in llm_stream.generate(
                     messages, langfuse_context=step_langfuse_context
                 ):
@@ -747,7 +746,30 @@ class SessionProcessor:
                             input={},
                         )
                         self._pending_tool_calls[call_id] = tool_part
-                        # Note: Don't emit act event here - wait for TOOL_CALL_END with full args
+                        self._pending_tool_args[call_id] = ""
+
+                        # Emit act_delta so frontend can show tool skeleton immediately
+                        yield AgentActDeltaEvent(
+                            tool_name=tool_name,
+                            call_id=call_id,
+                            arguments_fragment="",
+                            accumulated_arguments="",
+                        )
+
+                    elif event.type == StreamEventType.TOOL_CALL_DELTA:
+                        call_id = event.data.get("call_id", "")
+                        args_delta = event.data.get("arguments_delta", "")
+                        if call_id in self._pending_tool_calls and args_delta:
+                            self._pending_tool_args[call_id] = (
+                                self._pending_tool_args.get(call_id, "") + args_delta
+                            )
+                            tool_part = self._pending_tool_calls[call_id]
+                            yield AgentActDeltaEvent(
+                                tool_name=tool_part.tool or "",
+                                call_id=call_id,
+                                arguments_fragment=args_delta,
+                                accumulated_arguments=self._pending_tool_args[call_id],
+                            )
 
                     elif event.type == StreamEventType.TOOL_CALL_END:
                         call_id = event.data.get("call_id", "")

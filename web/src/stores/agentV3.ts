@@ -353,13 +353,24 @@ interface AgentV3State {
   streamingAssistantContent: string; // Streaming content (used for real-time display)
 
   // Agent Execution State (for active conversation - backward compatibility)
-  agentState: 'idle' | 'thinking' | 'acting' | 'observing' | 'awaiting_input' | 'retrying';
+  agentState:
+    | 'idle'
+    | 'thinking'
+    | 'preparing'
+    | 'acting'
+    | 'observing'
+    | 'awaiting_input'
+    | 'retrying';
   currentThought: string;
   streamingThought: string; // For streaming thought_delta content
   isThinkingStreaming: boolean; // Whether thought is currently streaming
   activeToolCalls: Map<
     string,
-    ToolCall & { status: 'running' | 'success' | 'failed'; startTime: number }
+    ToolCall & {
+      status: 'preparing' | 'running' | 'success' | 'failed';
+      startTime: number;
+      partialArguments?: string;
+    }
   >;
   pendingToolsStack: string[]; // Track order of tool executions
 

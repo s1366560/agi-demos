@@ -223,6 +223,7 @@ export type AgentEventType =
   | 'step_end' // Step execution completed
   | 'step_finish' // Step finished (alias)
   | 'act' // Tool execution (tool name and input)
+  | 'act_delta' // Tool call streaming delta (partial arguments)
   | 'observe' // Tool results
   | 'tool_start' // Tool execution started
   | 'tool_result' // Tool execution result
@@ -373,6 +374,17 @@ export interface ActEventData {
   tool_input: Record<string, unknown>;
   step_number?: number;
   execution_id?: string; // New: unique ID for act/observe matching
+}
+
+/**
+ * Act delta event data (streaming tool call arguments)
+ */
+export interface ActDeltaEventData {
+  tool_name: string;
+  call_id?: string;
+  arguments_fragment: string;
+  accumulated_arguments: string;
+  status: 'preparing';
 }
 
 /**
@@ -867,6 +879,7 @@ export interface AgentStreamHandler {
   onStepStart?: (event: AgentEvent<StepStartEventData>) => void;
   onStepEnd?: (event: AgentEvent<StepEndEventData>) => void;
   onAct?: (event: AgentEvent<ActEventData>) => void;
+  onActDelta?: (event: AgentEvent<ActDeltaEventData>) => void;
   onObserve?: (event: AgentEvent<ObserveEventData>) => void;
   onTextStart?: () => void; // Typewriter effect
   onTextDelta?: (event: AgentEvent<TextDeltaEventData>) => void; // Typewriter effect

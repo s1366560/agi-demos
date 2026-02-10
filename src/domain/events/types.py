@@ -64,6 +64,7 @@ class AgentEventType(str, Enum):
     # Tool events
     # =========================================================================
     ACT = "act"
+    ACT_DELTA = "act_delta"
     OBSERVE = "observe"
 
     # =========================================================================
@@ -203,6 +204,7 @@ DELTA_EVENT_TYPES: Set[AgentEventType] = {
     AgentEventType.TEXT_DELTA,
     AgentEventType.TEXT_START,
     AgentEventType.TEXT_END,
+    AgentEventType.ACT_DELTA,
 }
 
 # Terminal events that indicate stream completion
@@ -230,6 +232,7 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.THOUGHT: EventCategory.AGENT,
     AgentEventType.THOUGHT_DELTA: EventCategory.AGENT,
     AgentEventType.ACT: EventCategory.AGENT,
+    AgentEventType.ACT_DELTA: EventCategory.AGENT,
     AgentEventType.OBSERVE: EventCategory.AGENT,
     AgentEventType.TEXT_START: EventCategory.AGENT,
     AgentEventType.TEXT_DELTA: EventCategory.AGENT,

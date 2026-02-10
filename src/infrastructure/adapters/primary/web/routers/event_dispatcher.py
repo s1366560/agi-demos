@@ -164,6 +164,17 @@ class EventDispatcher:
             self.stats["sent"] += 1
             return True
 
+        except RuntimeError as e:
+            # WebSocket already closed - no point retrying
+            if "websocket.close" in str(e) or "already completed" in str(e):
+                logger.debug(
+                    f"[Dispatcher] WebSocket closed for {self.session_id[:8]}..., "
+                    f"dropping event type={event.data.get('type')}"
+                )
+                self.stats["failed"] += 1
+                return False
+            raise
+
         except Exception as e:
             logger.warning(
                 f"[Dispatcher] Send failed for {self.session_id[:8]}...: "

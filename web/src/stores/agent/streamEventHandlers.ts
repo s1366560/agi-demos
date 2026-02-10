@@ -24,6 +24,7 @@ import type {
   WorkPlan,
   ExecutionPlan,
   ToolCall,
+  ActDeltaEventData,
   PlanExecutionStartEvent,
   PlanExecutionCompleteEvent,
   ReflectionCompleteEvent,
@@ -324,6 +325,45 @@ export function createStreamEventHandlers(
 
       if (handlerConversationId === activeConversationId) {
         setState({ timeline: updatedTimeline });
+      }
+    },
+
+    onActDelta: (event: AgentEvent<ActDeltaEventData>) => {
+      const { activeConversationId, updateConversationState, getConversationState } = get();
+
+      const convState = getConversationState(handlerConversationId);
+      const toolName = event.data.tool_name;
+
+      const newMap = new Map(convState.activeToolCalls);
+      const existing = newMap.get(toolName);
+
+      if (existing) {
+        // Update accumulated arguments on existing entry
+        newMap.set(toolName, {
+          ...existing,
+          partialArguments: event.data.accumulated_arguments,
+        });
+      } else {
+        // First delta - create skeleton entry with preparing status
+        newMap.set(toolName, {
+          name: toolName,
+          arguments: {},
+          status: 'preparing',
+          startTime: Date.now(),
+          partialArguments: event.data.accumulated_arguments,
+        });
+      }
+
+      updateConversationState(handlerConversationId, {
+        activeToolCalls: newMap,
+        agentState: 'preparing',
+      });
+
+      if (handlerConversationId === activeConversationId) {
+        setState({
+          activeToolCalls: newMap,
+          agentState: 'preparing',
+        });
       }
     },
 

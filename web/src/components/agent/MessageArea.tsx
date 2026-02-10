@@ -39,6 +39,8 @@ import ReactMarkdown from 'react-markdown';
 import { LoadingOutlined } from '@ant-design/icons';
 import remarkGfm from 'remark-gfm';
 
+import { useAgentV3Store } from '../../stores/agentV3';
+
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
 import { StreamingThoughtBubble } from './StreamingThoughtBubble';
@@ -265,6 +267,86 @@ const InternalEmpty: React.FC<_MessageAreaEmptyProps & { context: _MessageAreaCo
     </div>
   );
 };
+
+// ========================================
+// Streaming Tool Preparation Indicator
+// ========================================
+
+const StreamingToolPreparation: React.FC = memo(() => {
+  const agentState = useAgentV3Store((s) => s.agentState);
+  const activeToolCalls = useAgentV3Store((s) => s.activeToolCalls);
+
+  if (agentState !== 'preparing') return null;
+
+  const preparingTools = Array.from(activeToolCalls.entries()).filter(
+    ([, call]) => call.status === 'preparing'
+  );
+  if (preparingTools.length === 0) return null;
+
+  return (
+    <>
+      {preparingTools.map(([toolName, call]) => (
+        <StreamingToolCard
+          key={toolName}
+          toolName={toolName}
+          partialArguments={call.partialArguments}
+        />
+      ))}
+    </>
+  );
+});
+StreamingToolPreparation.displayName = 'StreamingToolPreparation';
+
+const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string }> = memo(
+  ({ toolName, partialArguments }) => {
+    const argsRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      if (argsRef.current) {
+        argsRef.current.scrollTop = argsRef.current.scrollHeight;
+      }
+    }, [partialArguments]);
+
+    return (
+      <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
+        <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+          <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-[18px]">
+            construction
+          </span>
+        </div>
+        <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+          <div className="bg-white dark:bg-slate-800/90 border border-blue-200/80 dark:border-blue-700/50 rounded-2xl rounded-tl-sm overflow-hidden shadow-sm">
+            <div className="px-4 py-3 bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-200/50 dark:border-blue-700/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {toolName}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                Preparing
+              </div>
+            </div>
+            {partialArguments && (
+              <div className="p-3">
+                <div
+                  ref={argsRef}
+                  className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200/50 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-slate-400 overflow-x-auto max-h-24 overflow-y-auto"
+                >
+                  <pre className="whitespace-pre-wrap break-words">
+                    {partialArguments}
+                    <span className="inline-block w-1.5 h-3.5 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+                  </pre>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+);
+StreamingToolCard.displayName = 'StreamingToolCard';
 
 // ========================================
 // Main Component
@@ -684,6 +766,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                     isStreaming={!!isThinkingStreaming}
                   />
                 )}
+
+                {/* Streaming tool preparation indicator */}
+                {includeStreamingContent && isStreaming && <StreamingToolPreparation />}
 
                 {/* Streaming content indicator - matches MessageBubble.Assistant style */}
                 {includeStreamingContent &&

@@ -131,6 +131,21 @@ class AgentActEvent(AgentDomainEvent):
     tool_execution_id: Optional[str] = None  # New field for act/observe matching
 
 
+class AgentActDeltaEvent(AgentDomainEvent):
+    """Event: Streaming tool call argument fragments.
+
+    Emitted progressively as tool call arguments are received from the LLM.
+    Allows frontend to show tool preparation state before execution begins.
+    """
+
+    event_type: AgentEventType = AgentEventType.ACT_DELTA
+    tool_name: str
+    call_id: Optional[str] = None
+    arguments_fragment: str = ""
+    accumulated_arguments: str = ""
+    status: str = "preparing"
+
+
 class AgentObserveEvent(AgentDomainEvent):
     """Event: Tool execution result.
 
@@ -734,6 +749,7 @@ def get_event_type_docstring() -> str:
         AgentStepEndEvent,
         AgentStepFinishEvent,
         AgentActEvent,
+        AgentActDeltaEvent,
         AgentObserveEvent,
         AgentTextStartEvent,
         AgentTextDeltaEvent,

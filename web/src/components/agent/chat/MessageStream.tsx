@@ -5,7 +5,7 @@
  * Matches the design from docs/statics/project workbench/agent/
  */
 
-import { ReactNode, memo, useState, useMemo } from 'react';
+import { ReactNode, memo, useState, useMemo, useRef, useEffect } from 'react';
 
 import { foldTextWithMetadata } from '../../../utils/toolResultUtils';
 
@@ -243,9 +243,11 @@ export interface ToolExecutionCardDisplayProps {
   /** Tool name */
   toolName: string;
   /** Execution status */
-  status: 'running' | 'success' | 'error';
+  status: 'preparing' | 'running' | 'success' | 'error';
   /** Query parameters (input) */
   parameters?: Record<string, unknown>;
+  /** Partial arguments string (streaming) */
+  partialArguments?: string;
   /** Execution mode */
   executionMode?: string;
   /** Execution duration in milliseconds */
@@ -262,12 +264,21 @@ export function ToolExecutionCardDisplay({
   toolName,
   status,
   parameters,
+  partialArguments,
   executionMode,
   duration,
   result,
   error,
   defaultExpanded = false,
 }: ToolExecutionCardDisplayProps) {
+  const streamingArgsRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll streaming arguments to bottom
+  useEffect(() => {
+    if (streamingArgsRef.current && status === 'preparing') {
+      streamingArgsRef.current.scrollTop = streamingArgsRef.current.scrollHeight;
+    }
+  }, [partialArguments, status]);
   // Use a generic tool icon instead of hardcoded category-based icons
   // This avoids maintenance burden when new tools are added
   const getIcon = () => {
@@ -285,6 +296,13 @@ export function ToolExecutionCardDisplay({
 
   const getStatusBadge = () => {
     switch (status) {
+      case 'preparing':
+        return (
+          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            Preparing
+          </div>
+        );
       case 'running':
         return (
           <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase tracking-wider">
@@ -315,7 +333,7 @@ export function ToolExecutionCardDisplay({
     }
   };
 
-  const hasDetails = parameters || executionMode || formattedResult || error;
+  const hasDetails = parameters || partialArguments || executionMode || formattedResult || error;
 
   return (
     <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm overflow-hidden">
@@ -328,7 +346,7 @@ export function ToolExecutionCardDisplay({
       </div>
 
       {hasDetails && (
-        <details className="group" open={defaultExpanded || status === 'running'}>
+        <details className="group" open={defaultExpanded || status === 'running' || status === 'preparing'}>
           <summary className="px-4 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-1 select-none">
             <span className="material-symbols-outlined text-sm group-open:rotate-90 transition-transform">
               chevron_right
@@ -336,8 +354,34 @@ export function ToolExecutionCardDisplay({
             <span>Details</span>
           </summary>
           <div className="p-4 pt-0 space-y-4">
+            {/* Preparing State - streaming arguments */}
+            {status === 'preparing' && partialArguments && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-text-muted flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">edit_note</span>
+                  Building Arguments
+                </label>
+                <div ref={streamingArgsRef} className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap break-words">
+                    {partialArguments}
+                    <span className="inline-block w-1.5 h-3.5 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* Preparing State - no arguments yet */}
+            {status === 'preparing' && !partialArguments && (
+              <div className="space-y-2">
+                <div className="border border-dashed border-blue-200 dark:border-blue-500/20 rounded-lg p-4 flex items-center justify-center gap-2 text-center bg-blue-50/50 dark:bg-blue-500/5">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <p className="text-xs text-blue-600 dark:text-blue-400 italic">Preparing tool call...</p>
+                </div>
+              </div>
+            )}
+
             {/* Input Parameters */}
-            {parameters && (
+            {parameters && status !== 'preparing' && (
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-text-muted flex items-center gap-1">
                   <span className="material-symbols-outlined text-[12px]">input</span>

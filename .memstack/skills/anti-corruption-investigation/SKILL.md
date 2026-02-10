@@ -1,17 +1,28 @@
 ---
 name: anti-corruption-investigation
-description: Anti-corruption investigation toolkit for analyzing chat logs and communications to detect suspicious patterns, corruption indicators, and generate investigation reports. Supports Chinese and English chat logs in JSON/TXT formats. Includes automated keyword detection, behavior analysis, risk assessment, and evidence preservation workflows.
+description: Anti-corruption investigation toolkit for analyzing chat logs and communications to detect suspicious patterns, corruption indicators, and generate investigation reports. Supports Chinese and English chat logs in JSON/TXT formats. Includes automated keyword detection, behavior analysis, risk assessment, social network analysis, person profiling, intermediary detection, and evidence preservation workflows.
 ---
 
-# Anti-Corruption Investigation v5.0
+# Anti-Corruption Investigation v6.0
 
 Advanced anti-corruption investigation system for analyzing chat logs and communications to detect suspicious patterns, corruption indicators, and relationship networks. Supports Chinese and English chat logs in JSON/TXT formats, handles million-scale datasets, and provides human-friendly relationship analysis with evidence-backed conclusions.
+
+## What's New in v6.0
+
+### Social Network Analysis (人物社会关系分析)
+
+- **Person Profile Analysis (人物画像)**: Comprehensive profiling of each individual including role detection, activity patterns, and risk assessment
+- **Intermediary Detection (中间人识别)**: Automatically identifies bridge persons who connect different corruption networks
+- **Community Detection (群体检测)**: Discovers corruption groups and circles based on communication patterns
+- **Influence Analysis (影响力分析)**: Ranks individuals by their network influence and centrality
+- **Connection Path Analysis (连接路径分析)**: Finds shortest paths between high-risk individuals and identifies key bridges
 
 ## When to Use This Skill
 
 Use when analyzing chat logs, messages, or communications for:
 - **Corruption detection**: Financial corruption, power abuse, secret meetings, collusion
 - **Relationship analysis**: Identifying key players, corruption networks, intermediaries
+- **Social network analysis**: Understanding person profiles, influence, and group structures
 - **Large-scale analysis**: Processing 100K+ messages efficiently
 - **Evidence gathering**: Extracting specific evidence for relationships
 - **Risk assessment**: Evaluating corruption risk levels
@@ -21,11 +32,12 @@ Use when analyzing chat logs, messages, or communications for:
 ### Basic Analysis
 
 ```python
-from anti_corruption_v5 import ChatAnalyzer
+from anti_corruption import ChatAnalyzer
 
 # Analyze chat data
-analyzer = ChatAnalyzer()
-results = analyzer.analyze('data/messages.jsonl')
+messages = [...]  # Load your messages
+analyzer = ChatAnalyzer(messages)
+results = analyzer.analyze()
 
 # View results
 print(f"Risk Level: {results['risk_level']}")
@@ -35,11 +47,11 @@ print(f"Suspicious Messages: {len(results['suspicious_messages'])}")
 ### Relationship Analysis
 
 ```python
-from anti_corruption_v5 import RelationshipAnalyzer
+from anti_corruption import RelationshipAnalyzer
 
 # Analyze relationships
-analyzer = RelationshipAnalyzer()
-relationships = analyzer.analyze_relationships('data/messages.jsonl')
+analyzer = RelationshipAnalyzer(messages)
+relationships = analyzer.analyze()
 
 # View top relationships
 for rel in relationships['top_relationships'][:10]:
@@ -49,85 +61,58 @@ for rel in relationships['top_relationships'][:10]:
     print(f"  Risk: {rel['risk_level']}")
 ```
 
+### Social Network Analysis (NEW in v6.0)
+
+```python
+from anti_corruption import SocialNetworkAnalyzer
+
+# Analyze social network
+analyzer = SocialNetworkAnalyzer(messages)
+results = analyzer.analyze()
+
+# View person profiles
+for name, profile in results['person_profiles'].items():
+    print(f"{name}: {profile['primary_role']} - {profile['risk_level']}")
+
+# View intermediaries
+for inter in results['intermediaries'][:5]:
+    print(f"Intermediary: {inter['name']} (Score: {inter['brokerage_score']})")
+
+# View communities
+for comm in results['communities']:
+    print(f"Community: {', '.join(comm['members'][:5])}")
+
+# View influence ranking
+for person in results['influence_ranking'][:10]:
+    print(f"{person['name']}: Influence {person['influence_score']:.2f}")
+```
+
 ## Core Scripts
 
-### `analyze_chat.py`
+### anti_corruption.py
 
-Main analysis engine for detecting corruption patterns.
-
-**Usage:**
-```bash
-python scripts/analyze_chat.py <input_file> <output_file>
-```
-
-**Features:**
-- Semantic pattern matching (not just keywords)
-- Time-based analysis (late night, weekends)
-- Behavioral anomaly detection
-- Evidence preservation
-
-**Output:**
-- Suspicious messages with evidence
-- Risk assessment (0-10 scale)
-- Key player identification
-- Analysis statistics
-
-### `relationship_analyzer.py`
-
-Build relationship networks from chat data.
+Unified analysis tool with all features.
 
 **Usage:**
 ```bash
-python scripts/relationship_analyzer.py <input_file> <output_file>
+# Basic corruption analysis
+python anti_corruption.py analyze input.jsonl report.json
+
+# Relationship analysis
+python anti_corruption.py relationships input.jsonl relationships.json --text-report report.txt
+
+# Social network analysis (NEW)
+python anti_corruption.py social-network input.jsonl social_network.json --text-report social_report.txt
+
+# Full analysis with all features
+python anti_corruption.py full input.jsonl output_dir/
 ```
 
-**Features:**
-- Relationship strength calculation
-- Evidence extraction per relationship
-- Risk level assessment
-- Human-friendly output format
-
-**Output:**
-```json
-{
-  "relationships": [
-    {
-      "person_a": "张三",
-      "person_b": "李四",
-      "relationship_type": ["频繁联系", "资金往来"],
-      "strength": 0.85,
-      "evidence": [
-        {
-          "timestamp": "2024-01-15T14:30:00",
-          "sender": "张三",
-          "content": "那笔钱准备好了吗？"
-        }
-      ],
-      "risk_level": "高风险"
-    }
-  ]
-}
-```
-
-### `scalable_analyzer.py`
-
-Process large-scale datasets (100K+ messages).
-
-**Usage:**
-```bash
-python scripts/scalable_analyzer.py <input_file> <output_file> [--batch-size 10000] [--workers 8]
-```
-
-**Features:**
-- Stream processing (low memory)
-- Parallel computation (fast)
-- Incremental analysis
-- Progress tracking
-
-**Performance:**
-- Speed: 60K+ messages/second
-- Memory: <2GB for 1M messages
-- Scalability: Tested up to 10M messages
+**Commands:**
+- `analyze`: Basic corruption pattern detection
+- `relationships`: Relationship network analysis
+- `social-network`: Social network and person profile analysis (v6.0)
+- `full`: Run all analyses
 
 ## Data Format
 
@@ -147,192 +132,99 @@ python scripts/scalable_analyzer.py <input_file> <output_file> [--batch-size 100
 
 ## Output Format
 
-### Human-Friendly Relationship Report
+### Social Network Analysis Output (v6.0)
 
-```
-=== 关系分析报告 ===
-
-Top 关键关系:
-
-1. 冯供应商 ↔ 陈总
-   关系类型: 频繁联系, 资金往来, 权力滥用
-   关系强度: 🔴 非常强 (1.00)
-   联系次数: 390次 | 异常时间: 3次
-   风险等级: 🔴 高风险 - 需要重点关注
-   
-   关键证据:
-   • [2024-01-01 00:00:00] 冯供应商 -> 陈总: 不留痕迹...
-   • [2024-01-02 08:15:00] 陈总 -> 冯供应商: 大家统一一下口径...
-   • [2024-01-03 22:30:00] 冯供应商 -> 陈总: 见面细说...
-```
-
-## Advanced Features
-
-### Semantic Pattern Matching
-
-Uses embedding-based similarity to detect隐晦表达:
-
-- "老地方" → 秘密会面
-- "那个东西" → 资金/贿赂
-- "按老规矩" → 权力滥用
-- "统一口径" → 串通勾结
-
-### Time-Based Analysis
-
-Detects anomalies in communication patterns:
-
-- Late night messages (22:00-06:00)
-- Weekend/holiday activity
-- Burst communication patterns
-- Timeline correlations
-
-### Relationship Network Analysis
-
-Calculates network metrics:
-
-- **Degree Centrality**: Who has most connections
-- **Betweenness Centrality**: Who are key intermediaries
-- **PageRank**: Who are most influential
-- **Community Detection**: Identifies corruption groups
-
-### Evidence Preservation
-
-Maintains chain of custody for investigations:
-
-- Original message content
-- Timestamps and metadata
-- Sender/receiver information
-- Pattern classification
-
-## Best Practices
-
-### 1. Data Preparation
-
-- Ensure consistent timestamp format
-- Normalize sender/receiver names
-- Handle missing fields gracefully
-- Remove duplicates before analysis
-
-### 2. Analysis Workflow
-
-```bash
-# Step 1: Basic analysis
-python scripts/analyze_chat.py input.jsonl basic_report.json
-
-# Step 2: Relationship analysis
-python scripts/relationship_analyzer.py input.jsonl relationships.json
-
-# Step 3: Large-scale processing (if needed)
-python scripts/scalable_analyzer.py input.jsonl full_report.json --batch-size 10000
-```
-
-### 3. Result Interpretation
-
-- **High risk (6-10)**: Prioritize for investigation
-- **Medium risk (3-5)**: Monitor closely
-- **Low risk (0-2)**: Normal surveillance
-- **Whistleblower detection**: Cross-reference with context
-
-### 4. Validation
-
-- Cross-check with other evidence sources
-- Verify relationship context
-- Consider legitimate explanations
-- Human review required for final decisions
-
-## Performance Optimization
-
-### For Large Datasets (1M+ messages)
-
-```bash
-# Use batch processing
-python scripts/scalable_analyzer.py large_data.jsonl report.json \
-    --batch-size 10000 \
-    --workers 8 \
-    --enable-cache
-```
-
-### Memory Optimization
-
-- Use JSONL format (not JSON array)
-- Process in batches
-- Enable caching for repeated analysis
-- Use incremental mode for new data
-
-### Speed Optimization
-
-- Increase workers for CPU-bound tasks
-- Use SSD for I/O operations
-- Disable unused features (e.g., visualization)
-- Pre-filter data by date range
-
-## Limitations and Considerations
-
-### False Positives
-
-- Legitimate business relationships may be flagged
-- Context matters for interpretation
-- Cultural differences in communication
-- Industry-specific patterns
-
-### False Negatives
-
-- Highly coded language may be missed
-- External communication channels not covered
-- Deleted messages not analyzed
-- Voice/video messages not supported
-
-### Ethical Considerations
-
-- Ensure legal authorization for analysis
-- Protect privacy of innocent parties
-- Follow data protection regulations
-- Maintain chain of custody for evidence
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: "Memory error with large files"
-- **Solution**: Use `scalable_analyzer.py` with smaller batch size
-
-**Issue**: "No suspicious patterns detected"
-- **Solution**: Check data quality, adjust sensitivity thresholds
-
-**Issue**: "Too many false positives"
-- **Solution**: Increase evidence threshold, add whitelist
-
-**Issue**: "Relationship strength seems wrong"
-- **Solution**: Verify time period, check for multiple channels
-
-## Dependencies
-
-```
-networkx>=3.0
-numpy>=1.21.0
-pandas>=1.3.0
-plotly>=5.0.0
-python-louvain>=0.16
-scipy>=1.7.0
-```
-
-Install with:
-```bash
-pip install -r requirements.txt
+```json
+{
+  "person_profiles": {
+    "张三": {
+      "name": "张三",
+      "message_count": 150,
+      "contact_count": 8,
+      "contacts": ["李四", "王五", ...],
+      "primary_role": "official",
+      "detected_roles": ["official", "business"],
+      "suspicious_message_count": 25,
+      "corruption_patterns": {
+        "financial_corruption": 15,
+        "power_abuse": 10
+      },
+      "risk_score": 7.5,
+      "risk_level": "🔴 高风险",
+      "activity_anomaly": {
+        "anomaly_score": 6.2,
+        "late_night_ratio": 0.31,
+        "peak_hours": [22, 23, 0]
+      },
+      "first_seen": "2024-01-01T00:00:00",
+      "last_seen": "2024-12-31T23:59:59",
+      "active_period_days": 365
+    }
+  },
+  "network_statistics": {
+    "total_persons": 50,
+    "total_relationships": 120,
+    "network_density": 0.098,
+    "avg_contacts_per_person": 4.8,
+    "risk_distribution": {
+      "high": 12,
+      "medium": 18,
+      "low": 20
+    },
+    "role_distribution": {
+      "official": 15,
+      "business": 20,
+      "intermediary": 8,
+      "family": 7
+    }
+  },
+  "intermediaries": [
+    {
+      "name": "王五",
+      "brokerage_score": 8,
+      "contact_count": 15,
+      "primary_role": "intermediary",
+      "risk_level": "🔴 高风险",
+      "evidence": [...]
+    }
+  ],
+  "communities": [
+    {
+      "id": 0,
+      "members": ["张三", "李四", "王五"],
+      "member_count": 3,
+      "average_risk_score": 7.2,
+      "risk_level": "🔴 高风险",
+      "dominant_patterns": {
+        "financial_corruption": 45
+      },
+      "internal_connections": 6
+    }
+  ],
+  "influence_ranking": [
+    {
+      "name": "张三",
+      "influence_score": 8.5,
+      "centrality": 0.85,
+      "activity_score": 0.92,
+      "contact_count": 12,
+      "message_count": 300
+    }
+  ],
+  "connection_paths": {
+    "shortest_paths": [...],
+    "key_bridges": [...],
+    "isolated_persons": [...]
+  },
+  "key_relationships": [...]
+}
 ```
 
 ## Version History
 
+- **v6.0**: Added social network analysis, person profiling, intermediary detection, community detection, influence analysis
 - **v5.0**: Refactored for clarity, human-friendly output, improved performance
 - **v4.0**: Added relationship network analysis
 - **v3.0**: Large-scale processing support
 - **v2.0**: Semantic pattern matching
 - **v1.0**: Initial release with keyword-based detection
-
-## Support
-
-For issues or questions:
-- Check examples in `examples/` directory
-- Review error messages carefully
-- Validate data format matches specifications
-- Ensure sufficient system resources for large datasets

@@ -1,0 +1,406 @@
+{
+  "person_profiles": {
+    "张三": {
+      "name": "张三",
+      "message_count": 8,
+      "contact_count": 5,
+      "contacts": [
+        "周九",
+        "王五",
+        "李四",
+        "赵六",
+        "孙八"
+      ],
+      "primary_role": "official",
+      "detected_roles": [
+        "official"
+      ],
+      "suspicious_message_count": 1,
+      "corruption_patterns": {
+        "financial_corruption": 1
+      },
+      "risk_score": 1.875,
+      "risk_level": "🟢 低风险",
+      "activity_anomaly": {
+        "anomaly_score": 3.75,
+        "late_night_ratio": 0.38,
+        "peak_hours": [
+          22,
+          9,
+          23
+        ]
+      },
+      "first_seen": "2024-01-15T09:00:00",
+      "last_seen": "2024-01-15T13:30:00",
+      "active_period_days": 1
+    },
+    "李四": {
+      "name": "李四",
+      "message_count": 2,
+      "contact_count": 1,
+      "contacts": [
+        "张三"
+      ],
+      "primary_role": "official",
+      "detected_roles": [
+        "official"
+      ],
+      "suspicious_message_count": 1,
+      "corruption_patterns": {
+        "secret_meeting": 1
+      },
+      "risk_score": 3.0,
+      "risk_level": "🟠 中风险",
+      "activity_anomaly": {
+        "anomaly_score": 0.0,
+        "late_night_ratio": 0.0,
+        "peak_hours": [
+          14,
+          8
+        ]
+      },
+      "first_seen": "2024-01-15T14:30:00",
+      "last_seen": "2024-01-17T08:00:00",
+      "active_period_days": 2
+    },
+    "王五": {
+      "name": "王五",
+      "message_count": 4,
+      "contact_count": 3,
+      "contacts": [
+        "赵六",
+        "张三",
+        "钱七"
+      ],
+      "primary_role": "intermediary",
+      "detected_roles": [
+        "intermediary",
+        "business"
+      ],
+      "suspicious_message_count": 2,
+      "corruption_patterns": {
+        "secret_meeting": 1,
+        "collusion": 1
+      },
+      "risk_score": 4.0,
+      "risk_level": "🟠 中风险",
+      "activity_anomaly": {
+        "anomaly_score": 2.5,
+        "late_night_ratio": 0.25,
+        "peak_hours": [
+          10,
+          11,
+          0
+        ]
+      },
+      "first_seen": "2024-01-15T10:00:00",
+      "last_seen": "2024-01-16T09:30:00",
+      "active_period_days": 1
+    },
+    "赵六": {
+      "name": "赵六",
+      "message_count": 3,
+      "contact_count": 2,
+      "contacts": [
+        "张三",
+        "王五"
+      ],
+      "primary_role": "official",
+      "detected_roles": [
+        "official",
+        "intermediary"
+      ],
+      "suspicious_message_count": 1,
+      "corruption_patterns": {
+        "power_abuse": 1,
+        "financial_corruption": 1
+      },
+      "risk_score": 2.6666666666666665,
+      "risk_level": "🟢 低风险",
+      "activity_anomaly": {
+        "anomaly_score": 0.0,
+        "late_night_ratio": 0.0,
+        "peak_hours": [
+          11,
+          15,
+          8
+        ]
+      },
+      "first_seen": "2024-01-15T11:30:00",
+      "last_seen": "2024-01-16T08:00:00",
+      "active_period_days": 1
+    },
+    "钱七": {
+      "name": "钱七",
+      "message_count": 2,
+      "contact_count": 1,
+      "contacts": [
+        "王五"
+      ],
+      "primary_role": "unknown",
+      "detected_roles": [],
+      "suspicious_message_count": 0,
+      "corruption_patterns": {},
+      "risk_score": 0.0,
+      "risk_level": "🟢 低风险",
+      "activity_anomaly": {
+        "anomaly_score": 0.0,
+        "late_night_ratio": 0.0,
+        "peak_hours": [
+          9,
+          10
+        ]
+      },
+      "first_seen": "2024-01-16T09:00:00",
+      "last_seen": "2024-01-16T10:00:00",
+      "active_period_days": 1
+    },
+    "孙八": {
+      "name": "孙八",
+      "message_count": 1,
+      "contact_count": 1,
+      "contacts": [
+        "张三"
+      ],
+      "primary_role": "business",
+      "detected_roles": [
+        "business"
+      ],
+      "suspicious_message_count": 1,
+      "corruption_patterns": {
+        "power_abuse": 1
+      },
+      "risk_score": 5.5,
+      "risk_level": "🟠 中风险",
+      "activity_anomaly": {
+        "anomaly_score": 0.0,
+        "late_night_ratio": 0.0,
+        "peak_hours": [
+          12
+        ]
+      },
+      "first_seen": "2024-01-15T12:00:00",
+      "last_seen": "2024-01-15T12:00:00",
+      "active_period_days": 1
+    },
+    "周九": {
+      "name": "周九",
+      "message_count": 1,
+      "contact_count": 1,
+      "contacts": [
+        "张三"
+      ],
+      "primary_role": "official",
+      "detected_roles": [
+        "official"
+      ],
+      "suspicious_message_count": 0,
+      "corruption_patterns": {},
+      "risk_score": 0.0,
+      "risk_level": "🟢 低风险",
+      "activity_anomaly": {
+        "anomaly_score": 0.0,
+        "late_night_ratio": 0.0,
+        "peak_hours": [
+          13
+        ]
+      },
+      "first_seen": "2024-01-15T13:00:00",
+      "last_seen": "2024-01-15T13:00:00",
+      "active_period_days": 1
+    }
+  },
+  "network_statistics": {
+    "total_persons": 7,
+    "total_relationships": 7,
+    "network_density": 0.3333,
+    "avg_contacts_per_person": 2.0,
+    "risk_distribution": {
+      "high": 0,
+      "medium": 3,
+      "low": 4
+    },
+    "role_distribution": {
+      "official": 4,
+      "intermediary": 1,
+      "unknown": 1,
+      "business": 1
+    }
+  },
+  "intermediaries": [
+    {
+      "name": "王五",
+      "brokerage_score": 6,
+      "contact_count": 3,
+      "primary_role": "intermediary",
+      "risk_level": "🟠 中风险",
+      "evidence": [
+        {
+          "timestamp": "2024-01-15T10:00:00",
+          "content": "张局，有个朋友想认识您，我帮您牵线一下？",
+          "receiver": "张三"
+        },
+        {
+          "timestamp": "2024-01-15T11:00:00",
+          "content": "赵总，我帮您联系到张局了，晚上一起吃饭？",
+          "receiver": "赵六"
+        },
+        {
+          "timestamp": "2024-01-16T00:15:00",
+          "content": "钱老板，有个项目可以合作，我帮你介绍个人。",
+          "receiver": "钱七"
+        }
+      ]
+    },
+    {
+      "name": "张三",
+      "brokerage_score": 3,
+      "contact_count": 5,
+      "primary_role": "official",
+      "risk_level": "🟢 低风险",
+      "evidence": [
+        {
+          "timestamp": "2024-01-15T10:30:00",
+          "content": "好，你安排吧。",
+          "receiver": "王五"
+        }
+      ]
+    },
+    {
+      "name": "赵六",
+      "brokerage_score": 3,
+      "contact_count": 2,
+      "primary_role": "official",
+      "risk_level": "🟢 低风险",
+      "evidence": [
+        {
+          "timestamp": "2024-01-15T11:30:00",
+          "content": "太好了，王中介，这次多亏你帮忙。",
+          "receiver": "王五"
+        },
+        {
+          "timestamp": "2024-01-15T15:00:00",
+          "content": "张局长，我是王五介绍来的，有个项目想请您关照。",
+          "receiver": "张三"
+        }
+      ]
+    }
+  ],
+  "communities": [
+    {
+      "id": 0,
+      "members": [
+        "周九",
+        "张三",
+        "王五",
+        "李四",
+        "赵六",
+        "孙八"
+      ],
+      "member_count": 6,
+      "average_risk_score": 2.84,
+      "risk_level": "🟢 低风险",
+      "dominant_patterns": {
+        "financial_corruption": 2,
+        "secret_meeting": 2,
+        "power_abuse": 2,
+        "collusion": 1
+      },
+      "internal_connections": 6
+    }
+  ],
+  "influence_ranking": [
+    {
+      "name": "张三",
+      "influence_score": 7.17,
+      "centrality": 1.0,
+      "activity_score": 1.0,
+      "contact_count": 5,
+      "message_count": 8,
+      "primary_role": "official",
+      "risk_level": "🟢 低风险"
+    },
+    {
+      "name": "王五",
+      "influence_score": 4.0,
+      "centrality": 0.6,
+      "activity_score": 0.5,
+      "contact_count": 3,
+      "message_count": 4,
+      "primary_role": "intermediary",
+      "risk_level": "🟠 中风险"
+    },
+    {
+      "name": "赵六",
+      "influence_score": 2.48,
+      "centrality": 0.4,
+      "activity_score": 0.38,
+      "contact_count": 2,
+      "message_count": 3,
+      "primary_role": "official",
+      "risk_level": "🟢 低风险"
+    },
+    {
+      "name": "孙八",
+      "influence_score": 1.95,
+      "centrality": 0.2,
+      "activity_score": 0.12,
+      "contact_count": 1,
+      "message_count": 1,
+      "primary_role": "business",
+      "risk_level": "🟠 中风险"
+    },
+    {
+      "name": "李四",
+      "influence_score": 1.7,
+      "centrality": 0.2,
+      "activity_score": 0.25,
+      "contact_count": 1,
+      "message_count": 2,
+      "primary_role": "official",
+      "risk_level": "🟠 中风险"
+    },
+    {
+      "name": "钱七",
+      "influence_score": 1.1,
+      "centrality": 0.2,
+      "activity_score": 0.25,
+      "contact_count": 1,
+      "message_count": 2,
+      "primary_role": "unknown",
+      "risk_level": "🟢 低风险"
+    },
+    {
+      "name": "周九",
+      "influence_score": 0.85,
+      "centrality": 0.2,
+      "activity_score": 0.12,
+      "contact_count": 1,
+      "message_count": 1,
+      "primary_role": "official",
+      "risk_level": "🟢 低风险"
+    }
+  ],
+  "connection_paths": {
+    "shortest_paths": [],
+    "key_bridges": [],
+    "isolated_persons": [
+      {
+        "name": "李四",
+        "contact_count": 1,
+        "suspicious_messages": 1
+      },
+      {
+        "name": "赵六",
+        "contact_count": 2,
+        "suspicious_messages": 1
+      },
+      {
+        "name": "孙八",
+        "contact_count": 1,
+        "suspicious_messages": 1
+      }
+    ]
+  },
+  "key_relationships": []
+}

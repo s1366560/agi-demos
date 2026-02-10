@@ -58,6 +58,7 @@ async def read_file(
     file_path: str,
     offset: int = 0,
     limit: int = 2000,
+    raw: bool = False,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -68,6 +69,7 @@ async def read_file(
         file_path: Path to the file (absolute or relative to workspace)
         offset: Line number to start reading from (0-based)
         limit: Maximum number of lines to read
+        raw: If True, return raw content without line numbers
         _workspace_dir: Workspace directory (injected by server)
 
     Returns:
@@ -94,15 +96,17 @@ async def read_file(
         total_lines = len(lines)
         selected_lines = lines[offset : offset + limit]
 
-        # Format with line numbers (1-based for display)
-        numbered_lines = []
-        for i, line in enumerate(selected_lines, start=offset + 1):
-            # Truncate long lines
-            if len(line) > 2000:
-                line = line[:2000] + "...(truncated)\n"
-            numbered_lines.append(f"{i:6}\t{line.rstrip()}")
-
-        content = "\n".join(numbered_lines)
+        if raw:
+            content = "".join(selected_lines)
+        else:
+            # Format with line numbers (1-based for display)
+            numbered_lines = []
+            for i, line in enumerate(selected_lines, start=offset + 1):
+                # Truncate long lines
+                if len(line) > 2000:
+                    line = line[:2000] + "...(truncated)\n"
+                numbered_lines.append(f"{i:6}\t{line.rstrip()}")
+            content = "\n".join(numbered_lines)
 
         return {
             "content": [{"type": "text", "text": content}],
@@ -126,7 +130,7 @@ def create_read_tool() -> MCPTool:
     """Create the read file tool."""
     return MCPTool(
         name="read",
-        description="Read contents of a file. Returns lines with line numbers.",
+        description="Read contents of a file. Returns lines with line numbers by default, or raw content with raw=true.",
         input_schema={
             "type": "object",
             "properties": {
@@ -143,6 +147,11 @@ def create_read_tool() -> MCPTool:
                     "type": "integer",
                     "description": "Maximum number of lines to read",
                     "default": 2000,
+                },
+                "raw": {
+                    "type": "boolean",
+                    "description": "If true, return raw file content without line numbers",
+                    "default": False,
                 },
             },
             "required": ["file_path"],

@@ -6,7 +6,7 @@
 
 import { MaterialIcon } from '../shared';
 
-export type ToolExecutionStatus = 'running' | 'completed' | 'failed';
+export type ToolExecutionStatus = 'preparing' | 'running' | 'completed' | 'failed';
 
 export interface ToolExecutionLiveProps {
   /** Name of the tool being executed */
@@ -43,6 +43,13 @@ export function ToolExecutionLive({
 }: ToolExecutionLiveProps) {
   const getStatusBadge = () => {
     switch (status) {
+      case 'preparing':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            Preparing
+          </span>
+        );
       case 'running':
         return (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">

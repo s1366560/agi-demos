@@ -1,0 +1,9 @@
+{
+  "source": "obra/superpowers",
+  "skill_name": "brainstorming",
+  "branch": "main",
+  "source_path": "skills/brainstorming/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

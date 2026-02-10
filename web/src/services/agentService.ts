@@ -64,6 +64,7 @@ import type {
   StepStartEventData,
   StepEndEventData,
   ActEventData,
+  ActDeltaEventData,
   ObserveEventData,
   TextDeltaEventData,
   TextEndEventData,
@@ -683,6 +684,9 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'act':
         handler.onAct?.(event as AgentEvent<ActEventData>);
+        break;
+      case 'act_delta':
+        handler.onActDelta?.(event as AgentEvent<ActDeltaEventData>);
         break;
       case 'observe':
         handler.onObserve?.(event as AgentEvent<ObserveEventData>);
