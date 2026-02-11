@@ -2,6 +2,7 @@
 
 import logging
 import re
+from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
@@ -25,8 +26,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation,
     Memory,
     Project,
+    ToolExecutionRecord,
     User,
     UserProject,
     UserTenant,
@@ -701,8 +704,17 @@ async def get_project_stats(
                 }
             )
 
+        # Get conversation count
+        conversation_count_result = await db.execute(
+            select(func.count())
+            .select_from(Conversation)
+            .where(Conversation.project_id == project_id)
+        )
+        conversation_count = conversation_count_result.scalar() or 0
+
         return ProjectStats(
             memory_count=memory_count,
+            conversation_count=conversation_count,
             storage_used=storage_used,
             storage_limit=storage_limit,
             member_count=member_count,
@@ -724,3 +736,149 @@ async def get_project_stats(
         raise HTTPException(
             status_code=500, detail="An error occurred while retrieving project statistics"
         )
+
+
+class TrendingEntity(BaseModel):
+    """A trending entity in the project's knowledge graph."""
+
+    name: str
+    entity_type: str
+    mention_count: int
+    summary: Optional[str] = None
+
+
+class TrendingResponse(BaseModel):
+    """Response for trending entities."""
+
+    entities: list[TrendingEntity]
+
+
+@router.get("/{project_id}/trending", response_model=TrendingResponse)
+async def get_trending_entities(
+    project_id: str,
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    graphiti_client=Depends(get_graphiti_client),
+) -> TrendingResponse:
+    """Get trending entities in a project's knowledge graph."""
+    try:
+        # Verify project access
+        access = await db.execute(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                )
+            )
+        )
+        if not access.scalar_one_or_none():
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        entities: list[TrendingEntity] = []
+        try:
+            query = """
+                MATCH (n:Entity)
+                WHERE n.project_id = $project_id
+                OPTIONAL MATCH (n)-[r]-()
+                WITH n, count(r) as rel_count
+                ORDER BY rel_count DESC
+                LIMIT $limit
+                RETURN n.name as name,
+                       coalesce(n.entity_type, 'unknown') as entity_type,
+                       rel_count as mention_count,
+                       n.summary as summary
+            """
+            result = await graphiti_client.driver.execute_query(
+                query, project_id=project_id, limit=limit
+            )
+            if hasattr(result, "records"):
+                for record in result.records:
+                    entities.append(
+                        TrendingEntity(
+                            name=record.get("name", ""),
+                            entity_type=record.get("entity_type", "unknown"),
+                            mention_count=record.get("mention_count", 0),
+                            summary=record.get("summary"),
+                        )
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to query trending entities: {e}")
+
+        return TrendingResponse(entities=entities)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(f"Error getting trending entities for {project_id}")
+        raise HTTPException(status_code=500, detail="Failed to get trending entities")
+
+
+class RecentSkillItem(BaseModel):
+    """A recently used skill/tool."""
+
+    name: str
+    last_used: datetime
+    usage_count: int
+
+
+class RecentSkillsResponse(BaseModel):
+    """Response for recently used skills."""
+
+    skills: list[RecentSkillItem]
+
+
+@router.get("/{project_id}/recent-skills", response_model=RecentSkillsResponse)
+async def get_recent_skills(
+    project_id: str,
+    limit: int = Query(default=5, ge=1, le=20),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RecentSkillsResponse:
+    """Get recently used skills/tools in a project."""
+    try:
+        # Verify project access
+        access = await db.execute(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                )
+            )
+        )
+        if not access.scalar_one_or_none():
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        skills: list[RecentSkillItem] = []
+        try:
+            result = await db.execute(
+                select(
+                    ToolExecutionRecord.tool_name,
+                    func.max(ToolExecutionRecord.started_at).label("last_used"),
+                    func.count(ToolExecutionRecord.id).label("usage_count"),
+                )
+                .join(
+                    Conversation,
+                    ToolExecutionRecord.conversation_id == Conversation.id,
+                )
+                .where(Conversation.project_id == project_id)
+                .group_by(ToolExecutionRecord.tool_name)
+                .order_by(func.max(ToolExecutionRecord.started_at).desc())
+                .limit(limit)
+            )
+            for row in result.fetchall():
+                skills.append(
+                    RecentSkillItem(
+                        name=row.tool_name,
+                        last_used=row.last_used,
+                        usage_count=row.usage_count,
+                    )
+                )
+        except Exception as e:
+            logger.warning(f"Failed to query recent skills: {e}")
+
+        return RecentSkillsResponse(skills=skills)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(f"Error getting recent skills for {project_id}")
+        raise HTTPException(status_code=500, detail="Failed to get recent skills")

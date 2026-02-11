@@ -102,6 +102,10 @@ export interface MessageAreaRootProps {
   preloadItemCount?: number;
   /** Current conversation ID for scroll reset */
   conversationId?: string | null;
+  /** Follow-up suggestions to show after assistant response */
+  suggestions?: string[];
+  /** Callback when user clicks a suggestion chip */
+  onSuggestionSelect?: (suggestion: string) => void;
   /** Children for compound component pattern */
   children?: React.ReactNode;
 }

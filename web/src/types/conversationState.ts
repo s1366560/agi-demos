@@ -151,6 +151,10 @@ export interface ConversationState {
   // ===== Cost Tracking =====
   /** Cost tracking state */
   costTracking: CostTrackingState | null;
+
+  // ===== Suggestions =====
+  /** Follow-up suggestions from the agent */
+  suggestions: string[];
 }
 
 /**
@@ -193,6 +197,9 @@ export function createDefaultConversationState(): ConversationState {
 
     // Cost tracking
     costTracking: null,
+
+    // Suggestions
+    suggestions: [],
   };
 }
 

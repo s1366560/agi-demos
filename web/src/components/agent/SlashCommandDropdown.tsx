@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
 
 import { Zap, Hash, Brain, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { skillAPI } from '@/services/skillService';
 
@@ -42,6 +43,7 @@ const triggerTypeIcon = (type: string) => {
 export const SlashCommandDropdown = memo(
   forwardRef<SlashCommandDropdownHandle, SlashCommandDropdownProps>(
     ({ query, visible, onSelect, selectedIndex, onSelectedIndexChange }, ref) => {
+    const { t } = useTranslation();
     const [skills, setSkills] = useState<SkillResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const [loaded, setLoaded] = useState(false);
@@ -88,7 +90,7 @@ export const SlashCommandDropdown = memo(
     const filteredSkills = skills.filter((skill) => {
       if (!query) return true;
       const q = query.toLowerCase();
-      return skill.name.toLowerCase().includes(q) || skill.description.toLowerCase().includes(q);
+      return skill.name.toLowerCase().includes(q) || (skill.description ?? '').toLowerCase().includes(q);
     });
 
     // Expose imperative handle for parent to get selected skill
@@ -135,16 +137,16 @@ export const SlashCommandDropdown = memo(
         {/* Header */}
         <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {loading ? 'Loading skills...' : `Skills${query ? ` matching "${query}"` : ''}`}
+            {loading ? t('agent.slashCommand.loading', 'Loading skills...') : query ? t('agent.slashCommand.matching', 'Skills matching "{{query}}"', { query }) : t('agent.slashCommand.title', 'Skills')}
           </span>
         </div>
 
         {/* Skills list */}
         {loading ? (
-          <div className="px-3 py-4 text-center text-sm text-slate-400">Loading...</div>
+          <div className="px-3 py-4 text-center text-sm text-slate-400">{t('agent.slashCommand.loading', 'Loading...')}</div>
         ) : filteredSkills.length === 0 ? (
           <div className="px-3 py-4 text-center text-sm text-slate-400">
-            {query ? `No skills matching "${query}"` : 'No active skills available'}
+            {query ? t('agent.slashCommand.noMatch', 'No skills matching "{{query}}"', { query }) : t('agent.slashCommand.noSkills', 'No active skills available')}
           </div>
         ) : (
           <div className="py-1">

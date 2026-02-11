@@ -7,7 +7,9 @@
 
 import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
+import { useCanvasStore } from '../canvasStore';
 import { useContextStore } from '../contextStore';
+import { useLayoutModeStore } from '../layoutMode';
 
 import type {
   AgentStreamHandler,
@@ -784,6 +786,51 @@ export function createStreamEventHandlers(
       }
     },
 
+    onArtifactOpen: (event) => {
+      const data = event.data as any;
+      if (!data.artifact_id || !data.content) return;
+
+      // Open the artifact in canvas
+      useCanvasStore.getState().openTab({
+        id: data.artifact_id,
+        title: data.title || 'Untitled',
+        type: data.content_type || 'code',
+        content: data.content,
+        language: data.language,
+      });
+
+      // Auto-switch to canvas layout if not already
+      const currentMode = useLayoutModeStore.getState().mode;
+      if (currentMode !== 'canvas') {
+        useLayoutModeStore.getState().setMode('canvas');
+      }
+    },
+
+    onArtifactUpdate: (event) => {
+      const data = event.data as any;
+      if (!data.artifact_id || data.content === undefined) return;
+
+      const store = useCanvasStore.getState();
+      const tab = store.tabs.find((t) => t.id === data.artifact_id);
+      if (tab) {
+        const newContent = data.append ? tab.content + data.content : data.content;
+        store.updateContent(data.artifact_id, newContent);
+      }
+    },
+
+    onArtifactClose: (event) => {
+      const data = event.data as any;
+      if (!data.artifact_id) return;
+
+      useCanvasStore.getState().closeTab(data.artifact_id);
+
+      // If no more tabs, switch back to chat mode
+      const remaining = useCanvasStore.getState().tabs;
+      if (remaining.length === 0) {
+        useLayoutModeStore.getState().setMode('chat');
+      }
+    },
+
     onTitleGenerated: (event) => {
       const data = event.data as {
         conversation_id: string;
@@ -802,6 +849,20 @@ export function createStreamEventHandlers(
         );
         return { conversations: updatedList };
       });
+    },
+
+    onSuggestions: (event) => {
+      const { activeConversationId, updateConversationState } = get();
+
+      const suggestions = (event.data as any)?.suggestions ?? [];
+
+      updateConversationState(handlerConversationId, {
+        suggestions,
+      });
+
+      if (handlerConversationId === activeConversationId) {
+        setState({ suggestions });
+      }
     },
 
     onComplete: (event) => {

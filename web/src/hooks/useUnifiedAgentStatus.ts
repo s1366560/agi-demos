@@ -67,7 +67,7 @@ export interface UnifiedAgentStatus {
   lifecycle: ProjectAgentLifecycleState;
 
   /** Execution state (from agentV3 store) */
-  agentState: 'idle' | 'thinking' | 'acting' | 'observing' | 'awaiting_input' | 'retrying';
+  agentState: 'idle' | 'thinking' | 'preparing' | 'acting' | 'observing' | 'awaiting_input' | 'retrying';
 
   /** Plan mode status */
   planMode: {

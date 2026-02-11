@@ -17,7 +17,7 @@ import { Button, Spin } from 'antd';
 
 import { MarkdownContent } from './chat/MarkdownContent';
 import { MessageStream } from './chat/MessageStream';
-import { StreamingThoughtBubble } from './StreamingThoughtBubble';
+import { ThinkingBlock } from './chat/ThinkingBlock';
 import {
   ASSISTANT_PROSE_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
@@ -550,7 +550,7 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                       {isSynthetic(item) ? (
                         item._synthetic === 'streaming_thought' ? (
                           <div className="my-3">
-                            <StreamingThoughtBubble
+                            <ThinkingBlock
                               content={item.content}
                               isStreaming={item.isStreaming}
                             />

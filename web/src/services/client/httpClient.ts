@@ -8,8 +8,9 @@
 import axios, { AxiosRequestConfig } from 'axios';
 
 import { getAuthToken } from '@/utils/tokenResolver';
+import { clearAuthState } from '@/utils/tokenResolver';
 
-import { ApiError, ApiErrorType } from './ApiError';
+import { parseAxiosError } from './ApiError';
 
 /**
  * HTTP request configuration interface
@@ -64,11 +65,8 @@ client.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      // No token - reject and redirect to login
-      if (window.location.pathname !== '/login') {
-        console.warn('[httpClient] No auth token, redirecting to login');
-        window.location.href = '/login';
-      }
+      // No token available for an authenticated endpoint - reject immediately.
+      // React Router will redirect to /login based on isAuthenticated state.
       return Promise.reject(new Error('No authentication token'));
     }
     return config;
@@ -82,29 +80,15 @@ client.interceptors.request.use(
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Convert to ApiError
-    if (error.response) {
-      const apiError = new ApiError(
-        error.response.status,
-        error.response.data?.code || 'UNKNOWN_ERROR',
-        error.response.data?.message || error.message
-      );
+    // Convert to properly typed ApiError using the parser
+    const apiError = parseAxiosError(error);
 
-      // Handle 401 - redirect to login
-      if (apiError.isAuthError()) {
-        localStorage.removeItem('memstack-auth-storage');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
-      }
-
-      return Promise.reject(apiError);
+    // Handle 401 - clear auth state; React routing will redirect to /login
+    if (apiError.isAuthError()) {
+      clearAuthState();
     }
 
-    // Network errors
-    return Promise.reject(new ApiError(ApiErrorType.NETWORK, 'NETWORK_ERROR', error.message));
+    return Promise.reject(apiError);
   }
 );
 

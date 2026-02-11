@@ -387,7 +387,7 @@ function getErrorTypeFromStatus(status: number): {
   type: ApiErrorType;
   statusCode: number;
 } {
-  if (status === 401 || status === 403) {
+  if (status === 401) {
     return { type: ApiErrorType.AUTHENTICATION, statusCode: status };
   }
   if (status === 403) {

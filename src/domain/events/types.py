@@ -175,12 +175,20 @@ class AgentEventType(str, Enum):
     TERMINAL_STATUS = "terminal_status"
 
     # =========================================================================
+    # Suggestion events (follow-up suggestions)
+    # =========================================================================
+    SUGGESTIONS = "suggestions"
+
+    # =========================================================================
     # Artifact events (rich output display)
     # =========================================================================
     ARTIFACT_CREATED = "artifact_created"
     ARTIFACT_READY = "artifact_ready"
     ARTIFACT_ERROR = "artifact_error"
     ARTIFACTS_BATCH = "artifacts_batch"
+    ARTIFACT_OPEN = "artifact_open"
+    ARTIFACT_UPDATE = "artifact_update"
+    ARTIFACT_CLOSE = "artifact_close"
 
     # =========================================================================
     # Control events (used by event bus)
@@ -272,6 +280,12 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.CONTEXT_SUMMARY_GENERATED: EventCategory.SYSTEM,
     AgentEventType.COST_UPDATE: EventCategory.SYSTEM,
     AgentEventType.RETRY: EventCategory.SYSTEM,
+    # Suggestion events
+    AgentEventType.SUGGESTIONS: EventCategory.AGENT,
+    # Artifact lifecycle events
+    AgentEventType.ARTIFACT_OPEN: EventCategory.AGENT,
+    AgentEventType.ARTIFACT_UPDATE: EventCategory.AGENT,
+    AgentEventType.ARTIFACT_CLOSE: EventCategory.AGENT,
 }
 
 

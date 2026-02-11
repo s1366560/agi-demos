@@ -12,6 +12,7 @@
  */
 
 import { parseResponseError } from './ApiError';
+import { getAuthToken, clearAuthState } from '@/utils/tokenResolver';
 
 /**
  * Retry configuration for apiFetch
@@ -150,7 +151,7 @@ function getDefaultHeaders(): Record<string, string> {
     'Content-Type': 'application/json',
   };
 
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -161,17 +162,13 @@ function getDefaultHeaders(): Record<string, string> {
 /**
  * Handle 401 unauthorized response
  *
- * Clears token and redirects to login page
+ * Clears auth state via centralized clearAuthState().
+ * React Router handles the redirect based on isAuthenticated becoming false.
  *
  * Exported for testing purposes
  */
 export function handleUnauthorized(): void {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-
-  if (window.location.pathname !== '/login') {
-    window.location.href = '/login';
-  }
+  clearAuthState();
 }
 
 /**

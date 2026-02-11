@@ -9,8 +9,6 @@ import React, { useState, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { useAuthStore } from '../../stores/auth';
-
 interface AppInitializerProps {
   children: React.ReactNode;
 }
@@ -48,19 +46,11 @@ const InitialLoadingScreen: React.FC = () => {
 export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
   const [isReady, setIsReady] = useState(false);
   const { i18n } = useTranslation();
-  const { isLoading: isAuthLoading } = useAuthStore();
 
   useEffect(() => {
-    // Check if i18n is initialized
     const checkReady = () => {
-      const i18nReady = i18n.isInitialized;
-      const authReady = !isAuthLoading;
-
-      if (i18nReady && authReady) {
-        // Add ready class to html for CSS transitions
+      if (i18n.isInitialized) {
         document.documentElement.classList.add('app-ready');
-
-        // Small delay to ensure smooth transition
         setTimeout(() => {
           setIsReady(true);
         }, 50);
@@ -69,14 +59,13 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
 
     checkReady();
 
-    // If not ready, check again after a short delay
     if (!isReady) {
       const timer = setInterval(checkReady, 50);
       return () => clearInterval(timer);
     }
 
     return undefined;
-  }, [i18n.isInitialized, isAuthLoading, isReady]);
+  }, [i18n.isInitialized, isReady]);
 
   if (!isReady) {
     return <InitialLoadingScreen />;

@@ -452,6 +452,8 @@ interface AgentV3State {
   pendingPermission: PermissionAskedEventData | null; // Pending permission request
   doomLoopDetected: DoomLoopDetectedEventData | null;
   costTracking: CostTrackingState | null; // Cost tracking state
+  suggestions: string[]; // Follow-up suggestions from agent
+  pinnedEventIds: Set<string>; // Pinned message event IDs (per-conversation, local only)
 
   // Multi-conversation state helpers
   getConversationState: (conversationId: string) => ConversationState;
@@ -486,6 +488,7 @@ interface AgentV3State {
   loadPendingHITL: (conversationId: string) => Promise<void>;
   togglePlanMode: () => Promise<void>;
   clearError: () => void;
+  togglePinEvent: (eventId: string) => void;
 }
 
 export const useAgentV3Store = create<AgentV3State>()(
@@ -538,6 +541,8 @@ export const useAgentV3Store = create<AgentV3State>()(
         pendingPermission: null,
         doomLoopDetected: null,
         costTracking: null,
+        suggestions: [],
+        pinnedEventIds: new Set(),
 
         // ===== Multi-conversation state helpers =====
 
@@ -635,6 +640,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                   doomLoopDetected: updates.doomLoopDetected,
                 }),
                 ...(updates.costTracking !== undefined && { costTracking: updates.costTracking }),
+                ...(updates.suggestions !== undefined && { suggestions: updates.suggestions }),
                 ...(updates.hasEarlier !== undefined && { hasEarlier: updates.hasEarlier }),
                 ...(updates.earliestTimeUs !== undefined && {
                   earliestTimeUs: updates.earliestTimeUs,
@@ -716,6 +722,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             pendingDecision: convState.pendingDecision,
             pendingEnvVarRequest: convState.pendingEnvVarRequest,
             doomLoopDetected: convState.doomLoopDetected,
+            suggestions: convState.suggestions,
           });
         },
 
@@ -844,6 +851,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 pendingDecision: newState.pendingDecision,
                 pendingEnvVarRequest: newState.pendingEnvVarRequest,
                 doomLoopDetected: newState.doomLoopDetected,
+                pinnedEventIds: new Set(),
               });
               return;
             }
@@ -875,6 +883,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             pendingDecision: null,
             pendingEnvVarRequest: null,
             doomLoopDetected: null,
+            pinnedEventIds: new Set(),
           });
         },
 
@@ -1431,6 +1440,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               activeToolCalls: new Map(),
               pendingToolsStack: [],
               agentState: 'thinking',
+              suggestions: [],
             });
 
             return {
@@ -1447,6 +1457,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               activeToolCalls: new Map(),
               pendingToolsStack: [],
               agentState: 'thinking',
+              suggestions: [],
             };
           });
 
@@ -1692,6 +1703,17 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
 
         clearError: () => set({ error: null }),
+
+        togglePinEvent: (eventId: string) => {
+          const { pinnedEventIds } = get();
+          const next = new Set(pinnedEventIds);
+          if (next.has(eventId)) {
+            next.delete(eventId);
+          } else {
+            next.add(eventId);
+          }
+          set({ pinnedEventIds: next });
+        },
       }),
       {
         name: 'agent-v3-storage',

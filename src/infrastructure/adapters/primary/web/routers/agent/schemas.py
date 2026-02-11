@@ -39,6 +39,7 @@ class ConversationResponse(BaseModel):
     message_count: int
     created_at: str
     updated_at: Optional[str] = None
+    summary: Optional[str] = None
 
     @classmethod
     def from_domain(cls, conversation: Conversation) -> "ConversationResponse":
@@ -52,7 +53,10 @@ class ConversationResponse(BaseModel):
             status=conversation.status.value,
             message_count=conversation.message_count,
             created_at=conversation.created_at.isoformat(),
-            updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
+            updated_at=conversation.updated_at.isoformat()
+            if conversation.updated_at
+            else None,
+            summary=conversation.summary,
         )
 
 
@@ -71,6 +75,7 @@ class ChatRequest(BaseModel):
 
     conversation_id: str
     message: str
+    reply_to_id: Optional[str] = None
 
 
 # === Tool Schemas ===

@@ -194,6 +194,7 @@ class ProjectStats(BaseModel):
     """Project statistics."""
 
     memory_count: int = Field(default=0, description="Number of memories")
+    conversation_count: int = Field(default=0, description="Number of conversations")
     storage_used: int = Field(default=0, description="Storage used in bytes")
     storage_limit: int = Field(
         default=1073741824, description="Storage limit in bytes (default 1GB)"

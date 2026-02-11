@@ -45,6 +45,8 @@ class Conversation(Entity):
     current_mode: AgentMode = AgentMode.BUILD  # Current agent mode (BUILD/PLAN/EXPLORE)
     current_plan_id: Optional[str] = None  # Reference to active Plan in Plan Mode
     parent_conversation_id: Optional[str] = None  # Parent conversation for SubAgent sessions
+    branch_point_message_id: Optional[str] = None  # Message ID where branch was forked
+    summary: Optional[str] = None  # Auto-generated conversation summary
 
     def archive(self) -> None:
         """Archive this conversation."""
@@ -155,6 +157,7 @@ class Conversation(Entity):
             "message_count": self.message_count,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "summary": self.summary,
         }
 
     @classmethod
@@ -172,4 +175,5 @@ class Conversation(Entity):
             updated_at=(
                 datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else None
             ),
+            summary=data.get("summary"),
         )

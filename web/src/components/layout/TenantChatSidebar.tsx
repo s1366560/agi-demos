@@ -522,7 +522,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     <aside
       ref={sidebarRef}
       className={`
-        flex flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark 
+        hidden md:flex
+        flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark 
         flex-none z-20 h-full relative
         ${isDragging ? '' : 'transition-all duration-300 ease-in-out'}
       `}

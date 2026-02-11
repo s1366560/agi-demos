@@ -1589,6 +1589,297 @@
         "title": "退出计划模式失败",
         "description": "请重试"
       }
+    },
+    "actions": {
+      "copy": "复制",
+      "copied": "已复制！",
+      "copyCode": "复制代码",
+      "retry": "重试",
+      "edit": "编辑",
+      "bookmark": "收藏",
+      "share": "分享",
+      "exportMarkdown": "导出为 Markdown",
+      "exportPdf": "导出为 PDF",
+      "pin": "固定",
+      "unpin": "取消固定",
+      "reply": "回复"
+    },
+    "branch": {
+      "fork": "从此处分叉",
+      "forkedFrom": "分叉自",
+      "navigateToParent": "查看原始对话"
+    },
+    "version": {
+      "edited": "已编辑",
+      "original": "查看原始内容",
+      "history": "版本历史"
+    },
+    "thread": {
+      "reply": "回复",
+      "replies": "{{count}} 条回复",
+      "replyPlaceholder": "写回复..."
+    },
+    "thinking": {
+      "title": "思考中",
+      "analyzing": "正在分析您的请求...",
+      "duration": "{{seconds}}秒"
+    },
+    "suggestions": {
+      "label": "推荐的后续问题"
+    },
+    "emptyState": {
+      "greeting": "我能帮您做什么？",
+      "subtitle": "您的智能 AI 助手已准备好协助您进行分析、编程、写作等工作。",
+      "newConversation": "开始新对话",
+      "naturalLanguage": "自然语言对话",
+      "forCommands": "输入命令",
+      "cards": {
+        "analyzeTrends": "分析项目趋势",
+        "analyzeTrendsDesc": "识别数据流中的关键模式和洞见",
+        "synthesizeReports": "综合报告",
+        "synthesizeReportsDesc": "将复杂的发现转化为执行摘要",
+        "generateCode": "生成代码",
+        "generateCodeDesc": "使用 AI 辅助编写、审查和优化代码",
+        "quickAutomation": "快速自动化",
+        "quickAutomationDesc": "构建工作流并自动化重复性任务",
+        "analyzeTrendsPrompt": "分析我的项目数据中的趋势和模式，找出关键洞察和异常。",
+        "synthesizeReportsPrompt": "帮我从最近的发现中综合一份报告，生成一份清晰的执行摘要。",
+        "generateCodePrompt": "帮我编写代码。你需要什么编程语言和任务方面的帮助？",
+        "quickAutomationPrompt": "帮我自动化一个重复性任务。描述你想要简化的工作流程。"
+      },
+      "cmdKey": "Cmd",
+      "layoutModes": "布局模式",
+      "continueTitle": "继续上次的对话",
+      "continueAction": "继续"
+    },
+    "projectContext": {
+      "conversations": "对话",
+      "memories": "记忆",
+      "entities": "实体",
+      "members": "成员",
+      "trending": "热门",
+      "recentSkills": "最近使用"
+    },
+    "sidebar": {
+      "title": "智能对话",
+      "newChat": "新建对话",
+      "rename": "重命名",
+      "delete": "删除",
+      "untitled": "未命名",
+      "needsInput": "等待输入",
+      "processing": "处理中",
+      "active": "活跃",
+      "online": "在线",
+      "aiAssistant": "AI 助手",
+      "noConversations": "暂无对话",
+      "startNewChat": "开始一个新的对话吧",
+      "expandSidebar": "展开侧栏",
+      "collapseSidebar": "收起侧栏",
+      "conversations": "个对话",
+      "renameTitle": "重命名对话",
+      "renameLabel": "对话标题",
+      "addLabel": "添加标签",
+      "newLabel": "新建标签",
+      "labels": "标签",
+      "removeLabel": "移除",
+      "menu": "菜单"
+    },
+    "summary": {
+      "title": "对话摘要",
+      "showSummary": "显示摘要",
+      "regenerate": "重新生成摘要",
+      "generating": "正在生成摘要..."
+    },
+    "messageBubble": {
+      "reasoning": "推理",
+      "thinking": "思考中...",
+      "running": "运行中",
+      "success": "成功",
+      "failed": "失败",
+      "input": "输入",
+      "output": "输出",
+      "noOutput": "无输出",
+      "workPlan": "工作计划",
+      "steps": "{{count}} 个步骤",
+      "noDescription": "无描述",
+      "fileGenerated": "文件已生成",
+      "download": "下载",
+      "uploading": "上传中...",
+      "uploadFailed": "上传失败",
+      "openInCanvas": "画布"
+    },
+    "inputBar": {
+      "placeholder": "输入任何问题，或输入 / 使用命令...",
+      "planPlaceholder": "详细描述你想规划的内容...",
+      "planModeActive": "规划模式已激活",
+      "attachFiles": "附加文件（或拖放）",
+      "enterPlanMode": "进入规划模式",
+      "exitPlanMode": "退出规划模式",
+      "plan": "规划",
+      "stop": "停止",
+      "send": "发送",
+      "dropToUpload": "拖放文件到此处上传",
+      "templates": "提示词模板",
+      "startVoice": "语音输入",
+      "stopVoice": "停止语音输入",
+      "modeToggle": "切换输入模式",
+      "chatMode": "对话",
+      "commandMode": "命令",
+      "commandPlaceholder": "输入命令..."
+    },
+    "mentions": {
+      "title": "提及实体或记忆",
+      "noResults": "未找到结果",
+      "typeToSearch": "输入以搜索..."
+    },
+    "slashCommand": {
+      "title": "技能",
+      "loading": "加载技能中...",
+      "matching": "匹配 \"{{query}}\" 的技能",
+      "noMatch": "没有匹配 \"{{query}}\" 的技能",
+      "noSkills": "没有可用的活动技能"
+    },
+    "shortcuts": {
+      "title": "键盘快捷键",
+      "layout": "布局",
+      "chat": "聊天",
+      "general": "通用",
+      "chatMode": "聊天模式",
+      "codeMode": "代码模式（分屏）",
+      "desktopMode": "桌面模式（分屏）",
+      "focusMode": "专注模式",
+      "sendMessage": "发送消息",
+      "newLine": "消息中换行",
+      "cancelCommand": "取消/关闭",
+      "showShortcuts": "显示此面板",
+      "pasteFiles": "从剪贴板粘贴文件",
+      "footer": "按 {{key}} 切换此面板",
+      "canvasMode": "画布模式 (分屏)",
+      "searchChat": "搜索对话",
+      "focusInput": "聚焦输入 / 斜杠命令",
+      "navMessages": "浏览消息"
+    },
+    "canvas": {
+      "emptyTitle": "画布",
+      "emptyDescription": "代理生成的代码、文档和预览将显示在此处。请让代理生成或编辑内容。",
+      "copy": "复制",
+      "download": "下载",
+      "backToChat": "返回聊天",
+      "loadingContent": "加载内容中...",
+      "selectionExplain": "解释",
+      "selectionSimplify": "简化",
+      "selectionExpand": "展开",
+      "selectionAsk": "提问",
+      "undo": "撤销 (Ctrl+Z)",
+      "redo": "重做 (Ctrl+Shift+Z)",
+      "editMode": "编辑模式",
+      "viewMode": "查看模式",
+      "askRefine": "让 Agent 优化",
+      "actions": {
+        "explain": "解释",
+        "optimize": "优化",
+        "addTests": "添加测试",
+        "addComments": "添加注释",
+        "improve": "改进",
+        "shorten": "精简",
+        "translate": "翻译",
+        "summarize": "总结"
+      }
+    },
+    "timeline": {
+      "input": "输入",
+      "output": "输出",
+      "running": "正在执行 {{count}} 个工具...",
+      "completed": "{{completed}}/{{total}} 步已完成",
+      "failed": "失败"
+    },
+    "undo": {
+      "title": "撤销操作",
+      "description": "这将要求 Agent 撤销此操作。Agent 将尝试还原所做的更改。",
+      "confirm": "撤销",
+      "requested": "已请求撤销",
+      "button": "撤销此操作"
+    },
+    "templates": {
+      "title": "提示词模板",
+      "search": "搜索模板...",
+      "noResults": "未找到模板",
+      "all": "全部",
+      "analysis": "分析",
+      "code": "代码",
+      "writing": "写作",
+      "general": "通用",
+      "analyzeCodebase": "分析代码库",
+      "analyzeCodebasePrompt": "分析代码库结构，提供高层概览，包括架构模式、关键依赖和改进建议。",
+      "findBugs": "查找缺陷",
+      "findBugsPrompt": "搜索项目中的潜在缺陷、安全漏洞和代码质量问题。优先关注关键问题。",
+      "performanceAudit": "性能审计",
+      "performanceAuditPrompt": "分析应用性能瓶颈，包括数据库查询、API 响应时间、内存使用和前端渲染。",
+      "writeTests": "编写测试",
+      "writeTestsPrompt": "为最关键的模块编写全面的单元测试。目标覆盖率 80% 以上，用有意义的测试用例。",
+      "refactorCode": "重构代码",
+      "refactorCodePrompt": "识别并重构违反 DRY、SOLID 原则或复杂度过高的代码，提出更简洁的替代方案。",
+      "addFeature": "添加功能",
+      "addFeaturePrompt": "我想添加一个新功能：[描述功能]。规划实现方案，确定需要修改的文件，并逐步实现。",
+      "fixError": "修复错误",
+      "fixErrorPrompt": "我遇到了这个错误：[粘贴错误]。诊断根本原因并修复它。",
+      "writeDocs": "编写文档",
+      "writeDocsPrompt": "生成全面的项目文档，包括 API 参考、安装指南和架构概述。",
+      "writeReadme": "编写 README",
+      "writeReadmePrompt": "创建或改进项目 README，包含以下部分：概述、快速开始、安装、配置、使用示例和贡献指南。",
+      "explainCode": "解释代码",
+      "explainCodePrompt": "解释核心系统的工作原理，从入口点到关键输出逐步讲解主要执行流程。",
+      "brainstorm": "头脑风暴",
+      "brainstormPrompt": "帮我为改进这个项目进行头脑风暴。考虑用户体验改进、新功能、技术债务减少和可扩展性。",
+      "saveTitle": "保存为模板",
+      "titlePlaceholder": "模板名称",
+      "fillVariables": "填写模板变量",
+      "useTemplate": "使用模板",
+      "myTemplates": "我的模板",
+      "builtIn": "内置",
+      "noCustom": "暂无自定义模板",
+      "saveSuccess": "模板已保存"
+    },
+    "search": {
+      "placeholder": "搜索对话...",
+      "noResults": "0 条结果"
+    },
+    "state": {
+      "thinking": "思考中",
+      "preparing": "准备中",
+      "acting": "执行中",
+      "observing": "分析中",
+      "awaitingInput": "等待输入",
+      "retrying": "重试中",
+      "idle": "就绪"
+    },
+    "plan": {
+      "step": "步骤",
+      "inProgress": "执行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "planning": "规划中"
+    },
+    "pinnedMessages": "已固定",
+    "onboarding": {
+      "welcome": "欢迎使用 MemStack",
+      "welcomeDesc": "AI 驱动的分析、编码和自动化工作空间。",
+      "inputTip": "与 AI 助手对话",
+      "inputDesc": "输入消息，或使用 / 访问命令和工具。",
+      "layoutTip": "多种布局模式",
+      "layoutDesc": "使用 Cmd+1-5 在聊天、代码、桌面、专注和画布模式间切换。",
+      "templateTip": "快速启动模板",
+      "templateDesc": "浏览预设的常用提示模板。",
+      "searchTip": "搜索对话",
+      "searchDesc": "使用 Cmd+F 在对话中搜索。",
+      "next": "下一步",
+      "skip": "跳过引导",
+      "done": "开始使用",
+      "stepOf": "/"
+    },
+    "theme": {
+      "highContrast": "高对比度",
+      "highContrastDescription": "增强可见性，使用更强烈的颜色和边框"
     }
   },
   "user_profile": {
@@ -1635,5 +1926,13 @@
       "success_title": "保存成功！",
       "success_desc": "您的个人资料已更新。"
     }
+  },
+  "comparison": {
+    "title": "对话对比",
+    "selectConversation": "选择要对比的对话",
+    "search": "搜索对话...",
+    "noResults": "未找到对话",
+    "exitCompare": "退出对比",
+    "compare": "对比"
   }
 }

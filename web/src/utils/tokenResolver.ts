@@ -1,77 +1,61 @@
 /**
  * Token Resolver Utility
  *
- * Provides centralized token resolution from Zustand persist storage.
- * This ensures consistent token reading across httpClient, agentService, and other services.
- *
- * @packageDocumentation
- *
- * @example
- * ```typescript
- * import { getAuthToken } from '@/utils/tokenResolver';
- *
- * const token = getAuthToken();
- * if (token) {
- *   // Use token for authentication
- * }
- * ```
+ * Provides centralized token resolution and auth state clearing.
+ * Single source of truth for auth token access across httpClient, apiFetch, and services.
  */
 
-/**
- * Zustand persist storage key
- *
- * The key used by Zustand persist middleware to store auth state.
- */
 const ZUSTAND_AUTH_STORAGE_KEY = 'memstack-auth-storage';
 
 /**
- * Legacy token storage key
+ * Get the authentication token from Zustand persist storage.
  *
- * Direct localStorage key for token (backward compatibility).
- */
-const LEGACY_TOKEN_KEY = 'token';
-
-/**
- * Get the authentication token from Zustand persist storage
- *
- * Reads token from 'memstack-auth-storage' with the following priority:
- * 1. `state.token` - Current Zustand persist structure
- * 2. `token` - Direct property for backward compatibility
- * 3. Falls back to legacy 'token' key in localStorage
+ * Reads from `memstack-auth-storage` localStorage key (Zustand persist format).
  *
  * @returns The auth token string, or null if not found
- *
- * @example
- * ```typescript
- * const token = getAuthToken();
- * if (!token) {
- *   redirect('/login');
- * }
- * ```
  */
 export function getAuthToken(): string | null {
-  // Try reading from Zustand persist storage first
   const authStorage = localStorage.getItem(ZUSTAND_AUTH_STORAGE_KEY);
 
   if (authStorage) {
     try {
       const parsed = JSON.parse(authStorage);
 
-      // Priority 1: state.token (current Zustand persist structure)
-      // Use 'in' operator to check property existence, allowing empty string
+      // Zustand persist structure: { state: { token: "..." }, version: 0 }
       if (parsed.state && 'token' in parsed.state) {
         return parsed.state.token;
       }
 
-      // Priority 2: direct token property (backward compatibility)
+      // Backward compatibility: direct property
       if ('token' in parsed) {
         return parsed.token;
       }
     } catch {
-      // Invalid JSON, fall through to legacy storage
+      // Invalid JSON
     }
   }
 
-  // Priority 3: Legacy direct token key
-  return localStorage.getItem(LEGACY_TOKEN_KEY);
+  return null;
+}
+
+/**
+ * Clear all authentication state.
+ *
+ * Clears both the Zustand in-memory store AND persisted localStorage.
+ * Uses dynamic import to avoid circular dependencies (stores -> services -> tokenResolver).
+ * This is the ONLY function that should clear auth state across the app.
+ */
+export function clearAuthState(): void {
+  // Clear Zustand in-memory state (triggers React re-render -> redirect to /login)
+  import('@/stores/auth').then(({ useAuthStore }) => {
+    useAuthStore.setState({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  }).catch(() => {
+    // If dynamic import fails, clear localStorage directly as fallback
+    localStorage.removeItem(ZUSTAND_AUTH_STORAGE_KEY);
+  });
 }

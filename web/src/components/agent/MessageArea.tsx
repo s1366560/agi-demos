@@ -32,19 +32,28 @@
  * - Scroll to bottom button when user scrolls up
  */
 
-import { useRef, useEffect, useCallback, useState, memo, Children, createContext } from 'react';
+import { useRef, useEffect, useCallback, useState, memo, Children, createContext, useMemo } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 
 import { LoadingOutlined } from '@ant-design/icons';
+import { Pin, PinOff, ChevronDown, ChevronUp } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
+import { useTranslation } from 'react-i18next';
 
 import { useAgentV3Store } from '../../stores/agentV3';
+import { useConversationsStore } from '../../stores/agent/conversationsStore';
 
+import { AgentStatePill } from './chat/AgentStatePill';
+import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
+import { PlanProgressBar } from './chat/PlanProgressBar';
+import { SuggestionChips } from './chat/SuggestionChips';
+import { ThinkingBlock } from './chat/ThinkingBlock';
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
-import { StreamingThoughtBubble } from './StreamingThoughtBubble';
+import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 
+import type { TimelineStep } from './timeline/ExecutionTimeline';
 import type { TimelineEvent, PlanModeStatus } from '../../types/agent';
 
 // Import and re-export types from separate file
@@ -60,6 +69,74 @@ export type {
   MessageAreaStreamingContentProps,
   MessageAreaCompound,
 } from './message/types';
+
+/**
+ * Groups consecutive act/observe timeline events into ExecutionTimeline groups.
+ * Non-tool events pass through as individual items.
+ */
+type GroupedItem =
+  | { kind: 'event'; event: TimelineEvent; index: number }
+  | { kind: 'timeline'; steps: TimelineStep[]; startIndex: number };
+
+function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
+  const result: GroupedItem[] = [];
+  let currentSteps: TimelineStep[] = [];
+  let groupStartIndex = 0;
+  const observeMap = new Map<string, TimelineEvent>();
+
+  // Build observe lookup by execution_id
+  for (const ev of timeline) {
+    if (ev.type === 'observe' && (ev as any).execution_id) {
+      observeMap.set((ev as any).execution_id, ev);
+    }
+  }
+
+  const flushGroup = () => {
+    if (currentSteps.length >= 2) {
+      result.push({ kind: 'timeline', steps: currentSteps, startIndex: groupStartIndex });
+    } else if (currentSteps.length === 1) {
+      // Single tool event doesn't need timeline grouping
+      const idx = groupStartIndex;
+      result.push({ kind: 'event', event: timeline[idx], index: idx });
+    }
+    currentSteps = [];
+  };
+
+  for (let i = 0; i < timeline.length; i++) {
+    const event = timeline[i];
+
+    if (event.type === 'act') {
+      if (currentSteps.length === 0) groupStartIndex = i;
+
+      const act = event as any;
+      const observe = act.execution_id ? observeMap.get(act.execution_id) : undefined;
+      const obs = observe as any;
+
+      const step: TimelineStep = {
+        id: act.execution_id || act.id || `step-${i}`,
+        toolName: act.toolName || 'unknown',
+        status: obs ? (obs.isError ? 'error' : 'success') : 'running',
+        input: act.toolInput,
+        output: obs?.toolOutput,
+        isError: obs?.isError,
+        duration:
+          obs && act.timestamp && obs.timestamp
+            ? (obs.timestamp - act.timestamp)
+            : undefined,
+      };
+      currentSteps.push(step);
+    } else if (event.type === 'observe') {
+      // Skip - handled as part of act
+      continue;
+    } else {
+      flushGroup();
+      result.push({ kind: 'event', event, index: i });
+    }
+  }
+  flushGroup();
+
+  return result;
+}
 
 // Define local type aliases to avoid TS6192 (unused imports)
 // These reference the same types as exported above
@@ -78,6 +155,8 @@ interface _MessageAreaRootProps {
   isLoadingEarlier?: boolean;
   preloadItemCount?: number;
   conversationId?: string | null;
+  suggestions?: string[];
+  onSuggestionSelect?: (suggestion: string) => void;
   children?: React.ReactNode;
 }
 
@@ -349,6 +428,32 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
 StreamingToolCard.displayName = 'StreamingToolCard';
 
 // ========================================
+// Conversation Summary Wrapper
+// ========================================
+
+const ConversationSummaryCardWrapper: React.FC<{
+  conversationId?: string | null;
+}> = memo(({ conversationId }) => {
+  const currentConversation = useConversationsStore((s) => s.currentConversation);
+  const generateConversationSummary = useConversationsStore(
+    (s) => s.generateConversationSummary
+  );
+
+  if (!conversationId || !currentConversation || currentConversation.id !== conversationId) {
+    return null;
+  }
+
+  return (
+    <ConversationSummaryCard
+      summary={currentConversation.summary ?? null}
+      conversationId={conversationId}
+      onRegenerate={generateConversationSummary}
+    />
+  );
+});
+ConversationSummaryCardWrapper.displayName = 'ConversationSummaryCardWrapper';
+
+// ========================================
 // Main Component
 // ========================================
 
@@ -368,11 +473,23 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     isLoadingEarlier: propIsLoadingEarlier = false,
     preloadItemCount = 10,
     conversationId,
+    suggestions,
+    onSuggestionSelect,
     children,
   }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+    const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
+    const { t } = useTranslation();
+
+    const pinnedEventIds = useAgentV3Store((s) => s.pinnedEventIds);
+    const togglePinEvent = useAgentV3Store((s) => s.togglePinEvent);
+
+    const pinnedEvents = useMemo(
+      () => timeline.filter((e) => e.id && pinnedEventIds.has(e.id)),
+      [timeline, pinnedEventIds]
+    );
 
     // Parse children to detect sub-components
     const childrenArray = Children.toArray(children);
@@ -698,6 +815,86 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const showLoadingState = isLoading && timeline.length === 0;
     const showEmptyState = !isLoading && timeline.length === 0;
 
+    // j/k keyboard navigation for messages
+    const focusedMsgRef = useRef<number>(-1);
+    const [focusedMsgIndex, setFocusedMsgIndex] = useState(-1);
+
+    // Build navigable indices (user_message and assistant_message only)
+    const navigableIndices = useCallback(() => {
+      const indices: number[] = [];
+      const items = groupTimelineEvents(timeline);
+      items.forEach((item, idx) => {
+        if (item.kind === 'event') {
+          const t = item.event.type;
+          if (t === 'user_message' || t === 'assistant_message') {
+            indices.push(idx);
+          }
+        }
+      });
+      return indices;
+    }, [timeline]);
+
+    useEffect(() => {
+      focusedMsgRef.current = focusedMsgIndex;
+    }, [focusedMsgIndex]);
+
+    useEffect(() => {
+      const handleNav = (e: KeyboardEvent) => {
+        const target = e.target as HTMLElement;
+        const isInput =
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable;
+        if (isInput) return;
+
+        if (e.key === 'j' || e.key === 'k') {
+          e.preventDefault();
+          const indices = navigableIndices();
+          if (indices.length === 0) return;
+
+          const current = focusedMsgRef.current;
+          let currentPos = indices.indexOf(current);
+
+          if (e.key === 'j') {
+            currentPos = currentPos < indices.length - 1 ? currentPos + 1 : currentPos;
+          } else {
+            currentPos = currentPos > 0 ? currentPos - 1 : 0;
+          }
+
+          const nextIndex = indices[currentPos];
+          setFocusedMsgIndex(nextIndex);
+
+          // Scroll to the focused message
+          const el = containerRef.current?.querySelector(
+            `[data-msg-index="${nextIndex}"]`
+          );
+          if (el) {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+        }
+
+        // c to copy focused message content
+        if (e.key === 'c' && focusedMsgRef.current >= 0) {
+          const items = groupTimelineEvents(timeline);
+          const item = items[focusedMsgRef.current];
+          if (item?.kind === 'event') {
+            const ev = item.event;
+            if (ev.type === 'user_message' || ev.type === 'assistant_message') {
+              navigator.clipboard.writeText(ev.content).catch(() => {});
+            }
+          }
+        }
+
+        // Escape to clear focus
+        if (e.key === 'Escape' && focusedMsgRef.current >= 0) {
+          setFocusedMsgIndex(-1);
+        }
+      };
+
+      window.addEventListener('keydown', handleNav);
+      return () => window.removeEventListener('keydown', handleNav);
+    }, [navigableIndices, timeline]);
+
     return (
       <MessageAreaContext.Provider value={contextValue}>
         <div className="h-full w-full relative flex flex-col overflow-hidden">
@@ -737,6 +934,62 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             </div>
           )}
 
+          {/* Pinned Messages Section */}
+          {pinnedEvents.length > 0 && (
+            <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50">
+              <button
+                type="button"
+                onClick={() => setPinnedCollapsed(!pinnedCollapsed)}
+                className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+              >
+                <Pin size={12} />
+                <span>{t('agent.pinnedMessages', 'Pinned')}</span>
+                <span className="text-slate-400">({pinnedEvents.length})</span>
+                <span className="ml-auto">
+                  {pinnedCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                </span>
+              </button>
+              {!pinnedCollapsed && (
+                <div className="px-4 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
+                  {pinnedEvents.map((event) => {
+                    const content =
+                      ('content' in event ? (event as any).content : '') ||
+                      ('fullText' in event ? (event as any).fullText : '');
+                    return (
+                      <div
+                        key={`pinned-${event.id}`}
+                        className="flex items-start gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/80 dark:border-slate-700/50 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors group/pin"
+                        onClick={() => {
+                          const el = containerRef.current?.querySelector(
+                            `[data-msg-id="${event.id}"]`
+                          );
+                          if (el) {
+                            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                          }
+                        }}
+                      >
+                        <p className="flex-1 text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
+                          {content || '...'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (event.id) togglePinEvent(event.id);
+                          }}
+                          className="flex-shrink-0 p-1 rounded text-slate-400 hover:text-red-500 opacity-0 group-hover/pin:opacity-100 transition-opacity"
+                          aria-label={t('agent.actions.unpin', 'Unpin')}
+                        >
+                          <PinOff size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Message Container with Content */}
           {includeContent && !showLoadingState && !showEmptyState && (
             <div
@@ -744,24 +997,60 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               onScroll={handleScroll}
               className="flex-1 overflow-y-auto chat-scrollbar p-4 md:p-6 pb-24 min-h-0"
               data-testid="message-container"
+              role="log"
+              aria-live="polite"
             >
               <div className="w-full space-y-3">
-                {timeline.map((event, index) => (
-                  <div
-                    key={event.id || `event-${index}`}
-                    style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
-                  >
-                    <MessageBubble
-                      event={event}
-                      isStreaming={isStreaming && index === timeline.length - 1}
-                      allEvents={timeline}
-                    />
-                  </div>
-                ))}
+                <ConversationSummaryCardWrapper conversationId={conversationId} />
+                {groupTimelineEvents(timeline).map((item, mapIndex) => {
+                  if (item.kind === 'timeline') {
+                    return (
+                      <div key={`timeline-group-${item.startIndex}`} data-msg-index={mapIndex}>
+                        <ExecutionTimeline
+                          steps={item.steps}
+                          isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
+                        />
+                      </div>
+                    );
+                  }
+                  const { event, index } = item;
+                  const isFocused = focusedMsgIndex === mapIndex;
+                  return (
+                    <div
+                      key={event.id || `event-${index}`}
+                      data-msg-index={mapIndex}
+                      data-msg-id={event.id}
+                      style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+                      className={isFocused ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-xl transition-shadow duration-200' : ''}
+                    >
+                      <MessageBubble
+                        event={event}
+                        isStreaming={isStreaming && index === timeline.length - 1}
+                        allEvents={timeline}
+                        isPinned={!!event.id && pinnedEventIds.has(event.id)}
+                        onPin={event.id ? () => togglePinEvent(event.id!) : undefined}
+                      />
+                    </div>
+                  );
+                })}
 
-                {/* Streaming thought indicator */}
+                {/* Suggestion chips - shown when not streaming and suggestions available */}
+                {!isStreaming && suggestions && suggestions.length > 0 && onSuggestionSelect && (
+                  <SuggestionChips
+                    suggestions={suggestions}
+                    onSelect={onSuggestionSelect}
+                  />
+                )}
+
+                {/* Plan progress bar for multi-step plans */}
+                {isStreaming && <PlanProgressBar className="mb-4" />}
+
+                {/* Agent state transition pill */}
+                {isStreaming && <AgentStatePill className="mb-4" />}
+
+                {/* Streaming thought indicator - ThinkingBlock (new design) */}
                 {includeStreamingContent && (isThinkingStreaming || streamingThought) && (
-                  <StreamingThoughtBubble
+                  <ThinkingBlock
                     content={streamingThought || ''}
                     isStreaming={!!isThinkingStreaming}
                   />
@@ -775,7 +1064,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   isStreaming &&
                   streamingContent &&
                   !isThinkingStreaming && (
-                    <div className="flex items-start gap-3 mb-6 animate-fade-in-up">
+                    <div className="flex items-start gap-3 mb-6 animate-fade-in-up" aria-live="assertive">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
                         <svg
                           className="w-[18px] h-[18px] text-white"
@@ -812,6 +1101,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               onClick={contextValue.scroll.scrollToBottom}
               className="absolute bottom-6 right-6 z-10 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:shadow-lg transition-all animate-fade-in"
               title={scrollButtonChild?.props?.title || 'Scroll to bottom'}
+              aria-label="Scroll to bottom"
               data-testid="scroll-button"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

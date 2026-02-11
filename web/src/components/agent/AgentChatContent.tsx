@@ -1,15 +1,16 @@
 /**
  * AgentChatContent - Agent Chat content with multi-mode layout
  *
- * Supports four layout modes:
+ * Supports five layout modes:
  * - chat: Full chat view with optional right panel (Plan/Terminal/Desktop tabs)
  * - code: Split view — chat (left) + terminal (right), resizable
  * - desktop: Split view — chat (left, compact) + remote desktop (right, wide)
  * - focus: Fullscreen desktop with floating chat bubble
+ * - canvas: Split view — chat (left) + artifact canvas (right, 35/65)
  *
  * Features:
- * - Cmd+1/2/3/4 to switch modes
- * - Draggable split ratio in code/desktop modes
+ * - Cmd+1/2/3/4/5 to switch modes
+ * - Draggable split ratio in code/desktop/canvas modes
  * - Flat right panel tabs (Plan | Terminal | Desktop)
  */
 
@@ -19,7 +20,7 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { GripHorizontal } from 'lucide-react';
+import { GripHorizontal, Download, ChevronDown, GitCompareArrows } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { usePlanModeStore } from '@/stores/agent/planModeStore';
@@ -36,6 +37,17 @@ import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
+import {
+  downloadConversationMarkdown,
+  downloadConversationPdf,
+} from '../../utils/exportConversation';
+
+import { ConversationCompareView } from './comparison/ConversationCompareView';
+import { ConversationPickerModal } from './comparison/ConversationPickerModal';
+import { CanvasPanel } from './canvas/CanvasPanel';
+import { ChatSearch } from './chat/ChatSearch';
+import { OnboardingTour } from './chat/OnboardingTour';
+import { ShortcutOverlay } from './chat/ShortcutOverlay';
 import { EmptyState } from './EmptyState';
 import { FocusDesktopOverlay } from './layout/FocusDesktopOverlay';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
@@ -43,6 +55,7 @@ import { Resizer } from './Resizer';
 import { SandboxSection } from './SandboxSection';
 
 import { MessageArea, InputBar, RightPanel, ProjectAgentStatusBar } from './index';
+
 
 interface AgentChatContentProps {
   /** Optional className for styling */
@@ -122,6 +135,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     streamingAssistantContent,
     streamingThought,
     isThinkingStreaming,
+    suggestions,
+    conversations,
   } = useAgentV3Store(
     useShallow((state) => ({
       activeConversationId: state.activeConversationId,
@@ -149,11 +164,33 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       streamingAssistantContent: state.streamingAssistantContent,
       streamingThought: state.streamingThought,
       isThinkingStreaming: state.isThinkingStreaming,
+      suggestions: state.suggestions,
+      conversations: state.conversations,
     }))
   );
 
   // Derive streaming content - only show when actively streaming
   const streamingContent = isStreaming ? streamingAssistantContent : '';
+
+  // Derive last conversation for resume card
+  const lastConversation = useMemo(() => {
+    if (conversations.length > 0 && !activeConversationId) {
+      const conv = conversations[0];
+      return { id: conv.id, title: conv.title, updated_at: conv.updated_at };
+    }
+    return undefined;
+  }, [conversations, activeConversationId]);
+
+  const handleResumeConversation = useCallback(
+    (id: string) => {
+      if (customBasePath) {
+        navigate(`${basePath}/${id}${queryProjectId ? `?projectId=${queryProjectId}` : ''}`);
+      } else {
+        navigate(`${basePath}/${id}`);
+      }
+    },
+    [navigate, basePath, customBasePath, queryProjectId]
+  );
 
   const { planModeStatus, exitPlanMode } = usePlanModeStore();
   const {
@@ -206,6 +243,39 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Local UI state
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
   const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
+  const [chatSearchVisible, setChatSearchVisible] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem('memstack_onboarding_complete'),
+  );
+
+  // Cmd+F to open chat search, / to focus input
+  useEffect(() => {
+    const handleKeyShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setChatSearchVisible((v) => !v);
+        return;
+      }
+
+      // / to focus input (when not already in an input)
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        const isInput =
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable;
+        if (!isInput) {
+          e.preventDefault();
+          const textarea = document.querySelector<HTMLTextAreaElement>(
+            '[data-testid="chat-input"], textarea[placeholder]'
+          );
+          textarea?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyShortcut);
+    return () => window.removeEventListener('keydown', handleKeyShortcut);
+  }, []);
 
   // In chat mode, right panel visibility is controlled by chatPanelVisible
   const panelCollapsed = layoutMode === 'chat' ? !chatPanelVisible : true;
@@ -240,6 +310,30 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       setActiveConversation(null);
     }
   }, [conversationId, projectId, setActiveConversation, loadMessages, loadPendingHITL]);
+
+  // Auto-focus input when conversation finishes loading
+  useEffect(() => {
+    if (!isLoadingHistory && activeConversationId) {
+      const timer = setTimeout(() => {
+        const textarea = document.querySelector<HTMLTextAreaElement>('textarea[data-testid="chat-input"]');
+        textarea?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [isLoadingHistory, activeConversationId]);
+
+  // Return focus to input when agent finishes responding
+  useEffect(() => {
+    if (!isStreaming && activeConversationId) {
+      const timer = setTimeout(() => {
+        const textarea = document.querySelector<HTMLTextAreaElement>('textarea[data-testid="chat-input"]');
+        textarea?.focus();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [isStreaming, activeConversationId]);
 
   // Handle errors
   useEffect(() => {
@@ -334,7 +428,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   const messageArea = useMemo(
     () =>
       timeline.length === 0 && !activeConversationId ? (
-        <EmptyState onNewConversation={handleNewConversation} />
+        <EmptyState
+          onNewConversation={handleNewConversation}
+          onSendPrompt={handleSend}
+          lastConversation={lastConversation}
+          onResumeConversation={handleResumeConversation}
+          projectId={projectId}
+        />
       ) : (
         <MessageArea
           timeline={timeline}
@@ -354,6 +454,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           }}
           isLoadingEarlier={isLoadingEarlier}
           conversationId={activeConversationId}
+          suggestions={suggestions}
+          onSuggestionSelect={handleSend}
         />
       ),
     [
@@ -369,7 +471,11 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       handleViewPlan,
       handleExitPlanMode,
       handleNewConversation,
+      handleSend,
+      handleResumeConversation,
+      lastConversation,
       hasEarlier,
+      suggestions,
       loadEarlierMessages,
       projectId,
       conversationId,
@@ -434,7 +540,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
   // Split mode drag handler
   const handleSplitDrag = useCallback(
     (e: React.MouseEvent) => {
-      if (layoutMode !== 'code' && layoutMode !== 'desktop') return;
+      if (layoutMode !== 'code' && layoutMode !== 'desktop' && layoutMode !== 'canvas') return;
       e.preventDefault();
       const startX = e.clientX;
       const startRatio = splitRatio;
@@ -467,7 +573,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           {headerExtra}
         </div>
       )}
-      <div className="flex-1 overflow-hidden relative min-h-0">{messageArea}</div>
+      <div className="flex-1 overflow-hidden relative min-h-0">
+        {messageArea}
+        <ChatSearch
+          timeline={timeline}
+          visible={chatSearchVisible}
+          onClose={() => setChatSearchVisible(false)}
+        />
+      </div>
       <div
         className="flex-shrink-0 border-t border-slate-200/60 dark:border-slate-700/50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md relative flex flex-col shadow-[0_-4px_20px_rgba(0,0,0,0.03)]"
         style={{ height: inputHeight }}
@@ -498,15 +611,111 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     </div>
   );
 
+  // Export conversation as Markdown
+  const handleExportMarkdown = useCallback(() => {
+    if (timeline.length === 0) return;
+    downloadConversationMarkdown(timeline, undefined, `conversation-${activeConversationId || 'export'}.md`);
+  }, [timeline, activeConversationId]);
+
+  // Export conversation as PDF
+  const handleExportPdf = useCallback(() => {
+    if (timeline.length === 0) return;
+    downloadConversationPdf(timeline, undefined, `conversation-${activeConversationId || 'export'}.pdf`);
+  }, [timeline, activeConversationId]);
+
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareConversationId, setCompareConversationId] = useState<string | null>(null);
+  const [showComparePicker, setShowComparePicker] = useState(false);
+
+  const handleOnboardingComplete = useCallback(() => {
+    localStorage.setItem('memstack_onboarding_complete', 'true');
+    setShowOnboarding(false);
+  }, []);
+
   // Status bar with layout mode selector
   const statusBarWithLayout = (
     <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
       <div className="flex-1">{statusBar}</div>
       <div className="flex items-center gap-2 pr-3">
+        {activeConversationId && timeline.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setCompareMode(true);
+              setShowComparePicker(true);
+            }}
+            className="flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            title={t('comparison.compare', 'Compare')}
+            aria-label={t('comparison.compare', 'Compare')}
+          >
+            <GitCompareArrows size={14} />
+          </button>
+        )}
+        {timeline.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowExportMenu((v) => !v)}
+              onBlur={() => setTimeout(() => setShowExportMenu(false), 150)}
+              className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              title={t('agent.actions.export', 'Export')}
+              aria-label={t('agent.actions.export', 'Export')}
+            >
+              <Download size={14} />
+              <ChevronDown size={10} />
+            </button>
+            {showExportMenu && (
+              <div className="absolute bottom-full right-0 mb-1 w-48 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg z-50 py-1">
+                <button
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); handleExportMarkdown(); setShowExportMenu(false); }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                >
+                  {t('agent.actions.exportMarkdown', 'Export as Markdown')}
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); handleExportPdf(); setShowExportMenu(false); }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
+                >
+                  {t('agent.actions.exportPdf', 'Export as PDF')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <LayoutModeSelector />
       </div>
     </div>
   );
+
+  // Comparison mode: side-by-side conversation view
+  if (compareMode && activeConversationId) {
+    return (
+      <div className={`flex flex-col h-full w-full overflow-hidden ${className}`}>
+        <ConversationCompareView
+          projectId={projectId || ''}
+          leftConversationId={activeConversationId}
+          rightConversationId={compareConversationId}
+          conversations={conversations}
+          onClose={() => {
+            setCompareMode(false);
+            setCompareConversationId(null);
+          }}
+          onSelectRight={() => setShowComparePicker(true)}
+        />
+        <ConversationPickerModal
+          visible={showComparePicker}
+          currentConversationId={activeConversationId}
+          conversations={conversations}
+          onSelect={(id) => setCompareConversationId(id)}
+          onClose={() => setShowComparePicker(false)}
+        />
+        {statusBarWithLayout}
+      </div>
+    );
+  }
 
   // Focus mode: fullscreen desktop with floating chat
   if (layoutMode === 'focus') {
@@ -532,16 +741,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       <div
         className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
       >
-        <div className="flex-1 flex min-h-0 overflow-hidden">
+        <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
           {/* Left: Chat */}
-          <div className="h-full overflow-hidden flex flex-col" style={{ width: leftPercent }}>
+          <div className="h-full overflow-hidden flex flex-col mobile-full" style={{ width: leftPercent }}>
             {chatColumn}
           </div>
 
           {/* Drag handle */}
           <div
             className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
-              hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors z-10"
+              hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors z-10 mobile-hidden"
             onMouseDown={handleSplitDrag}
           >
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-blue-500/70 transition-colors" />
@@ -549,10 +758,48 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
 
           {/* Right: Sandbox (Terminal or Desktop depending on mode) */}
           <div
-            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900"
+            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900 mobile-full"
             style={{ width: rightPercent }}
           >
             {sandboxContent}
+          </div>
+        </div>
+
+        {statusBarWithLayout}
+      </div>
+    );
+  }
+
+  // Canvas mode: chat + artifact canvas split
+  if (layoutMode === 'canvas') {
+    const leftPercent = `${splitRatio * 100}%`;
+    const rightPercent = `${(1 - splitRatio) * 100}%`;
+
+    return (
+      <div
+        className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+      >
+        <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
+          {/* Left: Chat */}
+          <div className="h-full overflow-hidden flex flex-col mobile-full" style={{ width: leftPercent }}>
+            {chatColumn}
+          </div>
+
+          {/* Drag handle */}
+          <div
+            className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
+              hover:bg-violet-500/20 active:bg-violet-500/30 transition-colors z-10 mobile-hidden"
+            onMouseDown={handleSplitDrag}
+          >
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-violet-500/70 transition-colors" />
+          </div>
+
+          {/* Right: Canvas Panel */}
+          <div
+            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
+            style={{ width: rightPercent }}
+          >
+            <CanvasPanel onSendPrompt={(prompt) => handleSend(prompt)} />
           </div>
         </div>
 
@@ -566,8 +813,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
     <div
       className={`flex h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
     >
+      {/* Keyboard shortcut overlay (Cmd+/) */}
+      <ShortcutOverlay />
+
+      {/* First-time user onboarding tour */}
+      {showOnboarding && !activeConversationId && (
+        <OnboardingTour onComplete={handleOnboardingComplete} />
+      )}
+
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative" aria-label="Chat">
         {chatColumn}
         {statusBarWithLayout}
       </main>
@@ -579,6 +834,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
           border-l border-slate-200/60 dark:border-slate-700/50
           bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm
           transition-all duration-300 ease-out overflow-hidden
+          mobile-hidden
           ${panelCollapsed ? 'w-0 opacity-0' : 'opacity-100'}
         `}
         style={{ width: panelCollapsed ? 0 : clampedPanelWidth }}

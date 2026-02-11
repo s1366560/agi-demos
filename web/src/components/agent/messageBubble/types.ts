@@ -40,6 +40,10 @@ export interface MessageBubbleProps {
   isStreaming?: boolean;
   /** All timeline events (for finding related events like observe for act) */
   allEvents?: TimelineEvent[];
+  /** Whether this message is pinned */
+  isPinned?: boolean;
+  /** Callback to toggle pin state */
+  onPin?: () => void;
 }
 
 /**
@@ -48,6 +52,8 @@ export interface MessageBubbleProps {
 export interface MessageBubbleRootProps extends MessageBubbleProps {
   /** Children for compound component pattern */
   children?: React.ReactNode;
+  /** Callback when user clicks Reply on a message */
+  onReply?: () => void;
 }
 
 /**
@@ -55,6 +61,7 @@ export interface MessageBubbleRootProps extends MessageBubbleProps {
  */
 export interface UserMessageProps {
   content: string;
+  onReply?: () => void;
 }
 
 /**
@@ -63,6 +70,9 @@ export interface UserMessageProps {
 export interface AssistantMessageProps {
   content: string;
   isStreaming?: boolean;
+  isPinned?: boolean;
+  onPin?: () => void;
+  onReply?: () => void;
 }
 
 /**
@@ -106,6 +116,9 @@ export interface StepStartProps {
  */
 export interface TextEndProps {
   event: TextEndEvent;
+  isPinned?: boolean;
+  onPin?: () => void;
+  onReply?: () => void;
 }
 
 /**

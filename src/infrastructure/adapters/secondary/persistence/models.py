@@ -481,8 +481,12 @@ class Conversation(Base):
         String, ForeignKey("plan_documents.id", use_alter=True), nullable=True
     )
     parent_conversation_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("conversations.id"), nullable=True
+        String, ForeignKey("conversations.id"), nullable=True, index=True
     )
+    branch_point_message_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     project: Mapped["Project"] = relationship(foreign_keys=[project_id])
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
@@ -523,9 +527,34 @@ class Message(Base):
     task_step_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     thought_level: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
+    # Threading support
+    reply_to_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("messages.id"), nullable=True, index=True
+    )
+
+    # Message versioning
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False
+    )
+    original_content: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    edited_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
     executions: Mapped[List["AgentExecution"]] = relationship(
         back_populates="message", cascade="all, delete-orphan"
+    )
+    replies: Mapped[List["Message"]] = relationship(
+        back_populates="parent_message",
+        foreign_keys="Message.reply_to_id",
+    )
+    parent_message: Mapped[Optional["Message"]] = relationship(
+        back_populates="replies",
+        remote_side=[id],
+        foreign_keys="Message.reply_to_id",
     )
 
     __table_args__ = (Index("ix_messages_conv_created", "conversation_id", "created_at"),)
@@ -1453,4 +1482,46 @@ class MessageExecutionStatus(Base):
     __table_args__ = (
         Index("ix_msg_exec_status_conv_status", "conversation_id", "status"),
         Index("ix_msg_exec_status_tenant_project", "tenant_id", "project_id", "status"),
+    )
+
+
+# ===== PROMPT TEMPLATE MODEL =====
+
+
+class PromptTemplateModel(IdGeneratorMixin, Base):
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    project_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=True, index=True
+    )
+    created_by: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id"), nullable=False
+    )
+
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="general", index=True
+    )
+    variables: Mapped[dict] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    usage_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "title", name="uq_tenant_template_title"
+        ),
     )

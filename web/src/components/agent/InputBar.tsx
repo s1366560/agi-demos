@@ -11,6 +11,8 @@
 
 import { useState, useRef, useCallback, memo } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import {
   Send,
   Square,
@@ -25,18 +27,29 @@ import {
   AlertCircle,
   RotateCw,
   Zap,
+  BookOpen,
+  Mic,
+  MicOff,
+  MessageSquare,
+  Terminal,
 } from 'lucide-react';
 
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
 
+import { MentionPopover } from './chat/MentionPopover';
+import { PromptTemplateLibrary } from './chat/PromptTemplateLibrary';
+import { VoiceWaveform } from './chat/VoiceWaveform';
 import { useFileUpload, type PendingAttachment } from './FileUploader';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
+
+import type { MentionItem } from '@/services/mentionService';
 
 import type { SkillResponse } from '@/types/agent';
 
 import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
+import type { MentionPopoverHandle } from './chat/MentionPopover';
 
 interface InputBarProps {
   onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => void;
@@ -63,17 +76,26 @@ const formatSize = (bytes: number) => {
 
 export const InputBar = memo<InputBarProps>(
   ({ onSend, onAbort, isStreaming, isPlanMode, onTogglePlanMode, disabled, projectId }) => {
+    const { t } = useTranslation();
     const [content, setContent] = useState('');
+    const [inputMode, setInputMode] = useState<'chat' | 'command'>('chat');
     const [isFocused, setIsFocused] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null);
     const [slashDropdownVisible, setSlashDropdownVisible] = useState(false);
     const [slashQuery, setSlashQuery] = useState('');
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+    const [templateLibraryVisible, setTemplateLibraryVisible] = useState(false);
+    const [isListening, setIsListening] = useState(false);
+    const [mentionVisible, setMentionVisible] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const mentionPopoverRef = useRef<MentionPopoverHandle>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const slashDropdownRef = useRef<SlashCommandDropdownHandle>(null);
     const dragCounter = useRef(0);
+    const recognitionRef = useRef<any>(null);
 
     const { attachments, addFiles, removeAttachment, retryAttachment, clearAll } = useFileUpload({
       projectId,
@@ -103,14 +125,19 @@ export const InputBar = memo<InputBarProps>(
       const fileMetadataList = uploadedAttachments
         .filter((a) => a.fileMetadata !== undefined)
         .map((a) => a.fileMetadata!);
+      const messageContent = inputMode === 'command'
+        ? `[command] ${content.trim()}`
+        : content.trim();
       onSend(
-        content.trim(),
+        messageContent,
         fileMetadataList.length > 0 ? fileMetadataList : undefined,
         selectedSkill?.name
       );
       setContent('');
       setSelectedSkill(null);
       setSlashDropdownVisible(false);
+      setMentionVisible(false);
+      setMentionQuery('');
       clearAll();
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -124,10 +151,133 @@ export const InputBar = memo<InputBarProps>(
       onSend,
       clearAll,
       selectedSkill,
+      inputMode,
     ]);
+
+    const handleTemplateSelect = useCallback(
+      (prompt: string) => {
+        setContent(prompt);
+        setTemplateLibraryVisible(false);
+        setTimeout(() => textareaRef.current?.focus(), 50);
+      },
+      []
+    );
+
+    const handleMentionSelect = useCallback(
+      (item: MentionItem) => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const cursorPos = textarea.selectionStart;
+        const textBefore = content.slice(0, cursorPos);
+        const textAfter = content.slice(cursorPos);
+
+        // Find the "@" trigger position before cursor
+        const atIndex = textBefore.lastIndexOf('@');
+        if (atIndex === -1) return;
+
+        const before = content.slice(0, atIndex);
+        const replacement = `@${item.name} `;
+        const newContent = before + replacement + textAfter;
+
+        setContent(newContent);
+        setMentionVisible(false);
+        setMentionQuery('');
+
+        // Restore cursor position after the inserted mention
+        const newCursor = atIndex + replacement.length;
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(newCursor, newCursor);
+        }, 0);
+      },
+      [content]
+    );
+
+    // Voice input via Web Speech API
+    const speechSupported =
+      typeof window !== 'undefined' &&
+      ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+
+    const toggleVoiceInput = useCallback(() => {
+      if (isListening) {
+        recognitionRef.current?.stop();
+        setIsListening(false);
+        return;
+      }
+
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = document.documentElement.lang || 'en-US';
+
+      let finalTranscript = '';
+
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+        setContent((prev) => {
+          const base = prev.endsWith(finalTranscript) ? prev : prev + finalTranscript;
+          return interim ? base + interim : base;
+        });
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        recognitionRef.current = null;
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+        recognitionRef.current = null;
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsListening(true);
+    }, [isListening]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
+        // Mention dropdown keyboard navigation
+        if (mentionVisible) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setMentionSelectedIndex((prev) => prev + 1);
+            return;
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setMentionSelectedIndex((prev) => Math.max(0, prev - 1));
+            return;
+          }
+          if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            const item = mentionPopoverRef.current?.getSelectedItem();
+            if (item) {
+              handleMentionSelect(item);
+            }
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setMentionVisible(false);
+            setMentionQuery('');
+            return;
+          }
+        }
+
         // Slash-command keyboard navigation
         if (slashDropdownVisible) {
           if (e.key === 'ArrowDown') {
@@ -167,7 +317,7 @@ export const InputBar = memo<InputBarProps>(
           handleSend();
         }
       },
-      [handleSend, disabled, isStreaming, slashDropdownVisible]
+      [handleSend, handleMentionSelect, disabled, isStreaming, slashDropdownVisible, mentionVisible]
     );
 
     const handleInput = useCallback(
@@ -192,12 +342,25 @@ export const InputBar = memo<InputBarProps>(
           }
         }
 
-        // Close dropdown if conditions no longer met
+        // Close slash dropdown if conditions no longer met
         if (slashDropdownVisible) {
           setSlashDropdownVisible(false);
         }
+
+        // @-mention detection: find "@" before cursor followed by non-space chars
+        const cursorPos = target.selectionStart;
+        const textBefore = value.slice(0, cursorPos);
+        const mentionMatch = textBefore.match(/@([^\s@]*)$/);
+        if (mentionMatch) {
+          setMentionQuery(mentionMatch[1]);
+          setMentionVisible(true);
+          setMentionSelectedIndex(0);
+        } else if (mentionVisible) {
+          setMentionVisible(false);
+          setMentionQuery('');
+        }
       },
-      [selectedSkill, slashDropdownVisible]
+      [selectedSkill, slashDropdownVisible, mentionVisible]
     );
 
     const handleSkillSelect = useCallback((skill: SkillResponse) => {
@@ -305,6 +468,7 @@ export const InputBar = memo<InputBarProps>(
 
         {/* Main input card */}
         <div
+          data-tour="input-bar"
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -328,7 +492,7 @@ export const InputBar = memo<InputBarProps>(
             <div className="absolute inset-0 z-20 rounded-2xl bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
               <div className="flex flex-col items-center gap-2 text-primary">
                 <Upload size={28} strokeWidth={1.5} />
-                <span className="text-sm font-medium">Drop files to upload</span>
+                <span className="text-sm font-medium">{t('agent.inputBar.dropToUpload', 'Drop files to upload')}</span>
               </div>
             </div>
           )}
@@ -338,7 +502,7 @@ export const InputBar = memo<InputBarProps>(
             <div className="px-4 pt-3 flex-shrink-0">
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 rounded-full text-xs font-medium">
                 <Sparkles size={12} />
-                Plan Mode Active
+                {t('agent.inputBar.planModeActive', 'Plan Mode Active')}
               </div>
             </div>
           )}
@@ -387,6 +551,21 @@ export const InputBar = memo<InputBarProps>(
               selectedIndex={slashSelectedIndex}
               onSelectedIndexChange={setSlashSelectedIndex}
             />
+            {projectId && (
+              <MentionPopover
+                ref={mentionPopoverRef}
+                query={mentionQuery}
+                projectId={projectId}
+                visible={mentionVisible}
+                onSelect={handleMentionSelect}
+                onClose={() => {
+                  setMentionVisible(false);
+                  setMentionQuery('');
+                }}
+                selectedIndex={mentionSelectedIndex}
+                onSelectedIndexChange={setMentionSelectedIndex}
+              />
+            )}
             <textarea
               ref={textareaRef}
               value={content}
@@ -395,18 +574,29 @@ export const InputBar = memo<InputBarProps>(
               onPaste={handlePaste}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
+              aria-label={
+                isPlanMode
+                  ? t('agent.inputBar.planPlaceholder', 'Describe what you want to plan in detail...')
+                  : inputMode === 'command'
+                    ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
+                    : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
+              }
               placeholder={
                 isPlanMode
-                  ? 'Describe what you want to plan in detail...'
-                  : "Ask me anything, or type '/' for commands..."
+                  ? t('agent.inputBar.planPlaceholder', 'Describe what you want to plan in detail...')
+                  : inputMode === 'command'
+                    ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
+                    : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
               rows={3}
-              className="
+              data-testid="chat-input"
+              className={`
                 w-full h-full resize-none bg-transparent
                 text-slate-800 dark:text-slate-100
                 placeholder:text-slate-400 dark:placeholder:text-slate-500
                 focus:outline-none text-[15px] leading-relaxed min-h-[72px]
-              "
+                ${inputMode === 'command' ? 'font-mono' : ''}
+              `}
             />
           </div>
 
@@ -414,7 +604,7 @@ export const InputBar = memo<InputBarProps>(
           <div className="flex-shrink-0 px-3 pb-3 flex items-center justify-between">
             {/* Left Actions */}
             <div className="flex items-center gap-1">
-              <LazyTooltip title="Attach files (or drag & drop)">
+              <LazyTooltip title={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}>
                 <LazyButton
                   type="text"
                   size="small"
@@ -429,9 +619,79 @@ export const InputBar = memo<InputBarProps>(
                 />
               </LazyTooltip>
 
+              <LazyTooltip title={t('agent.inputBar.templates', 'Prompt templates')}>
+                <LazyButton
+                  data-tour="prompt-templates"
+                  type="text"
+                  size="small"
+                  icon={<BookOpen size={18} />}
+                  onClick={() => setTemplateLibraryVisible((v) => !v)}
+                  className={`
+                    text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
+                    hover:bg-slate-100 dark:hover:bg-slate-700/50
+                    rounded-lg h-9 w-9 flex items-center justify-center
+                    ${templateLibraryVisible ? 'text-primary bg-primary/5' : ''}
+                  `}
+                />
+              </LazyTooltip>
+
+              {speechSupported && (
+                <>
+                  <LazyTooltip
+                    title={
+                      isListening
+                        ? t('agent.inputBar.stopVoice', 'Stop voice input')
+                        : t('agent.inputBar.startVoice', 'Voice input')
+                    }
+                  >
+                    <LazyButton
+                      type="text"
+                      size="small"
+                      icon={isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                      onClick={toggleVoiceInput}
+                      className={`
+                        rounded-lg h-9 w-9 flex items-center justify-center transition-all
+                        ${
+                          isListening
+                            ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                        }
+                      `}
+                    />
+                  </LazyTooltip>
+                  <VoiceWaveform active={isListening} />
+                </>
+              )}
+
               <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
 
-              <LazyTooltip title={isPlanMode ? 'Exit Plan Mode' : 'Enter Plan Mode'}>
+              <LazyTooltip
+                title={
+                  inputMode === 'command'
+                    ? t('agent.inputBar.commandMode', 'Command')
+                    : t('agent.inputBar.chatMode', 'Chat')
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => setInputMode(inputMode === 'chat' ? 'command' : 'chat')}
+                  className={`
+                    flex items-center justify-center h-9 w-9 rounded-lg transition-all
+                    ${
+                      inputMode === 'command'
+                        ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                    }
+                  `}
+                  title={t('agent.inputBar.modeToggle', 'Toggle input mode')}
+                >
+                  {inputMode === 'chat'
+                    ? <MessageSquare size={16} />
+                    : <Terminal size={16} />}
+                </button>
+              </LazyTooltip>
+
+              <LazyTooltip title={isPlanMode ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode') : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode')}>
                 <LazyButton
                   type="text"
                   size="small"
@@ -446,7 +706,7 @@ export const InputBar = memo<InputBarProps>(
                   `}
                 >
                   <Wand2 size={16} />
-                  <span className="text-sm font-medium">Plan</span>
+                  <span className="text-sm font-medium">{t('agent.inputBar.plan', 'Plan')}</span>
                 </LazyButton>
               </LazyTooltip>
             </div>
@@ -470,7 +730,7 @@ export const InputBar = memo<InputBarProps>(
                   onClick={onAbort}
                   className="rounded-xl flex items-center gap-2 h-9 px-4 shadow-md"
                 >
-                  Stop
+                  {t('agent.inputBar.stop', 'Stop')}
                 </LazyButton>
               ) : (
                 <LazyButton
@@ -488,11 +748,18 @@ export const InputBar = memo<InputBarProps>(
                     transition-all duration-200
                   `}
                 >
-                  Send
+                  {t('agent.inputBar.send', 'Send')}
                 </LazyButton>
               )}
             </div>
           </div>
+
+          {/* Prompt Template Library popover */}
+          <PromptTemplateLibrary
+            visible={templateLibraryVisible}
+            onSelect={handleTemplateSelect}
+            onClose={() => setTemplateLibraryVisible(false)}
+          />
         </div>
       </div>
     );

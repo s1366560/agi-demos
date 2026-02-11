@@ -161,6 +161,9 @@ export interface Message {
   metadata?: Record<string, unknown>;
   created_at: string;
   traceUrl?: string; // Langfuse trace URL for observability
+  version?: number;
+  original_content?: string;
+  edited_at?: string;
 }
 
 /**
@@ -178,6 +181,9 @@ export interface Conversation {
   message_count: number;
   created_at: string;
   updated_at?: string;
+  summary?: string | null;
+  parent_conversation_id?: string | null;
+  branch_point_message_id?: string | null;
 }
 
 /**
@@ -280,6 +286,12 @@ export type AgentEventType =
   | 'artifact_ready' // Artifact ready for download
   | 'artifact_error' // Artifact processing error
   | 'artifacts_batch' // Batch of artifacts
+  // Suggestion events
+  | 'suggestions' // Follow-up suggestions from agent
+  // Artifact lifecycle events
+  | 'artifact_open' // Agent opens content in canvas
+  | 'artifact_update' // Agent updates canvas content
+  | 'artifact_close' // Agent closes canvas tab
   // Plan step events
   | 'plan_step_ready' // Plan step ready for execution
   | 'plan_step_skipped' // Plan step skipped
@@ -904,6 +916,12 @@ export interface AgentStreamHandler {
   onArtifactCreated?: (event: AgentEvent<ArtifactCreatedEventData>) => void;
   onArtifactReady?: (event: AgentEvent<ArtifactReadyEventData>) => void;
   onArtifactError?: (event: AgentEvent<ArtifactErrorEventData>) => void;
+  // Suggestion handlers
+  onSuggestions?: (event: AgentEvent<SuggestionsEventData>) => void;
+  // Artifact lifecycle handlers
+  onArtifactOpen?: (event: AgentEvent<ArtifactOpenEventData>) => void;
+  onArtifactUpdate?: (event: AgentEvent<ArtifactUpdateEventData>) => void;
+  onArtifactClose?: (event: AgentEvent<ArtifactCloseEventData>) => void;
   // Context management handlers
   onContextCompressed?: (event: AgentEvent<ContextCompressedEventData>) => void;
   onContextStatus?: (event: AgentEvent<ContextStatusEventData>) => void;
@@ -2536,6 +2554,40 @@ export interface ArtifactsBatchEventData {
   tool_execution_id?: string;
   artifacts: ArtifactInfo[];
   source_tool?: string;
+}
+
+/**
+ * Suggestions event data - follow-up suggestions from the agent
+ */
+export interface SuggestionsEventData {
+  suggestions: string[];
+}
+
+/**
+ * Artifact open event data - agent opens content in canvas
+ */
+export interface ArtifactOpenEventData {
+  artifact_id: string;
+  title: string;
+  content: string;
+  content_type: 'code' | 'markdown' | 'preview' | 'data';
+  language?: string;
+}
+
+/**
+ * Artifact update event data - agent updates canvas content
+ */
+export interface ArtifactUpdateEventData {
+  artifact_id: string;
+  content: string;
+  append: boolean;
+}
+
+/**
+ * Artifact close event data - agent closes canvas tab
+ */
+export interface ArtifactCloseEventData {
+  artifact_id: string;
 }
 
 /**

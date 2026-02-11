@@ -157,7 +157,7 @@ const PageLoader: React.FC = () => (
 );
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   return (
     <ErrorBoundary>

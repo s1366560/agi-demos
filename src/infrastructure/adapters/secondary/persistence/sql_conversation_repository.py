@@ -89,6 +89,7 @@ class SqlConversationRepository(
             "current_mode": conversation.current_mode.value,
             "current_plan_id": conversation.current_plan_id,
             "parent_conversation_id": conversation.parent_conversation_id,
+            "summary": conversation.summary,
         }
 
         # Use PostgreSQL ON CONFLICT for upsert
@@ -107,6 +108,7 @@ class SqlConversationRepository(
                     "current_mode": conversation.current_mode.value,
                     "current_plan_id": conversation.current_plan_id,
                     "parent_conversation_id": conversation.parent_conversation_id,
+                    "summary": conversation.summary,
                 },
             )
         )
@@ -266,6 +268,7 @@ class SqlConversationRepository(
             else AgentMode.BUILD,
             current_plan_id=db_conversation.current_plan_id,
             parent_conversation_id=db_conversation.parent_conversation_id,
+            summary=db_conversation.summary,
         )
 
     def _to_db(self, domain_entity: Conversation) -> DBConversation:
@@ -296,4 +299,5 @@ class SqlConversationRepository(
             current_mode=domain_entity.current_mode.value,
             current_plan_id=domain_entity.current_plan_id,
             parent_conversation_id=domain_entity.parent_conversation_id,
+            summary=domain_entity.summary,
         )

@@ -62,6 +62,7 @@ interface ConversationsState {
   renameConversation: (conversationId: string, projectId: string, title: string) => Promise<void>;
   setCurrentConversation: (conversation: Conversation | null) => void;
   generateConversationTitle: () => Promise<void>;
+  generateConversationSummary: () => Promise<void>;
   updateCurrentConversation: (conversation: Conversation) => void;
   clearPendingFlag: () => void;
   reset: () => void;
@@ -287,6 +288,37 @@ export const useConversationsStore = create<ConversationsState>()(
         } catch (error) {
           // Log error but don't throw - title generation is best-effort
           console.error('[ConversationsStore] Failed to generate conversation title:', error);
+        }
+      },
+
+      /**
+       * Generate a summary for the current conversation
+       *
+       * Auto-generates a summary based on the conversation content.
+       */
+      generateConversationSummary: async () => {
+        const { currentConversation, conversations } = get();
+
+        if (!currentConversation) {
+          return;
+        }
+
+        try {
+          const updatedConversation = await agentService.generateConversationSummary(
+            currentConversation.id,
+            currentConversation.project_id
+          );
+
+          const updatedList = conversations.map((conv) =>
+            conv.id === updatedConversation.id ? updatedConversation : conv
+          );
+
+          set({
+            currentConversation: updatedConversation,
+            conversations: updatedList,
+          });
+        } catch (error) {
+          console.error('[ConversationsStore] Failed to generate conversation summary:', error);
         }
       },
 

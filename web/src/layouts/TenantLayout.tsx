@@ -22,12 +22,15 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
+import { Menu } from 'lucide-react';
+
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
+import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
@@ -63,6 +66,7 @@ export const TenantLayout: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [noTenants, setNoTenants] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -232,7 +236,18 @@ export const TenantLayout: React.FC = () => {
 
   const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
 
-  // Sidebar toggle button
+  // Determine if the current page is an agent workspace (needs full-height, no scroll)
+  // Non-agent pages: overview, projects, users, providers, analytics, etc.
+  const NON_AGENT_SUBPATHS = [
+    'overview', 'tasks', 'agents', 'projects', 'users', 'providers',
+    'analytics', 'billing', 'settings', 'patterns', 'subagents', 'skills',
+    'profile',
+  ];
+  const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
+  const isAgentWorkspacePath =
+    pathSegments.length === 0 ||
+    pathSegments[0] === 'agent-workspace' ||
+    !NON_AGENT_SUBPATHS.includes(pathSegments[0]);
 
   return (
     <>
@@ -244,10 +259,28 @@ export const TenantLayout: React.FC = () => {
           onCollapsedChange={setSidebarCollapsed}
         />
 
+        {/* Mobile sidebar drawer */}
+        <MobileSidebarDrawer
+          open={mobileSidebarOpen}
+          onClose={() => setMobileSidebarOpen(false)}
+        >
+          <TenantChatSidebar tenantId={tenantId} />
+        </MobileSidebarDrawer>
+
         {/* Main Content */}
         <main className="flex flex-col flex-1 h-full overflow-hidden relative">
           {/* Header - with Tenant Navigation Menu and Sidebar Toggle */}
           <AppHeader context="tenant" basePath={basePath}>
+            {/* Mobile menu button */}
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors md:hidden"
+              aria-label="Menu"
+            >
+              <Menu size={18} className="text-slate-600 dark:text-slate-300" />
+            </button>
+            {/* Desktop sidebar toggle */}
             <AppHeader.SidebarToggle
               collapsed={sidebarCollapsed}
               onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -266,13 +299,13 @@ export const TenantLayout: React.FC = () => {
           {/* Page Content */}
           <div
             className={`flex-1 relative ${
-              location.pathname.includes('/agent-workspace')
+              isAgentWorkspacePath
                 ? 'overflow-hidden h-full'
                 : 'overflow-y-auto p-4'
             }`}
           >
             <div
-              className={`${location.pathname.includes('/agent-workspace') ? 'h-full' : 'max-w-full'}`}
+              className={`${isAgentWorkspacePath ? 'h-full' : 'max-w-full'}`}
             >
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                 <Outlet />

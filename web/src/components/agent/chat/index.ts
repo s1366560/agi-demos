@@ -2,6 +2,28 @@ export { IdleState } from './IdleState';
 export { FloatingInputBar } from './FloatingInputBar';
 export { MarkdownContent } from './MarkdownContent';
 export { TimelineEventRenderer } from './TimelineEventRenderer';
+export { MessageActionBar, CodeBlockCopyButton } from './MessageActionBar';
+export { ThinkingBlock } from './ThinkingBlock';
+export { SuggestionChips } from './SuggestionChips';
+export { ShortcutOverlay } from './ShortcutOverlay';
+export { PromptTemplateLibrary } from './PromptTemplateLibrary';
+export { ChatSearch } from './ChatSearch';
+export { PlanProgressBar } from './PlanProgressBar';
+export { VoiceWaveform } from './VoiceWaveform';
+export { AgentStatePill } from './AgentStatePill';
+export { BranchIndicator } from './BranchIndicator';
+export { ConversationSummaryCard } from './ConversationSummaryCard';
+export { EditIndicator } from './EditIndicator';
+export { MobileSidebarDrawer } from './MobileSidebarDrawer';
+export { ThreadView } from './ThreadView';
+export { UndoConfirmation } from './UndoConfirmation';
+export { OnboardingTour } from './OnboardingTour';
+export { ProjectContextCard } from './ProjectContextCard';
+export { TrendingEntities } from './TrendingEntities';
+export { RecentSkills } from './RecentSkills';
+export { MentionPopover } from './MentionPopover';
+export { SaveTemplateModal } from './SaveTemplateModal';
+export { VariableInputModal } from './VariableInputModal';
 export type { StarterTile, IdleStateProps } from './IdleState';
 export type {
   FloatingInputBarProps,
@@ -9,3 +31,4 @@ export type {
   FloatingInputBarPlanModeConfig,
 } from './FloatingInputBar';
 export type { MarkdownContentProps } from './MarkdownContent';
+export type { MessageRole, MessageAction } from './MessageActionBar';

@@ -113,6 +113,10 @@ import type {
   ArtifactCreatedEventData,
   ArtifactReadyEventData,
   ArtifactErrorEventData,
+  SuggestionsEventData,
+  ArtifactOpenEventData,
+  ArtifactUpdateEventData,
+  ArtifactCloseEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -761,6 +765,20 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'artifact_error':
         handler.onArtifactError?.(event as AgentEvent<ArtifactErrorEventData>);
+        break;
+      // Suggestion events
+      case 'suggestions':
+        handler.onSuggestions?.(event as AgentEvent<SuggestionsEventData>);
+        break;
+      // Artifact lifecycle events
+      case 'artifact_open':
+        handler.onArtifactOpen?.(event as AgentEvent<ArtifactOpenEventData>);
+        break;
+      case 'artifact_update':
+        handler.onArtifactUpdate?.(event as AgentEvent<ArtifactUpdateEventData>);
+        break;
+      case 'artifact_close':
+        handler.onArtifactClose?.(event as AgentEvent<ArtifactCloseEventData>);
         break;
       // Context management events
       case 'context_compressed':
@@ -1411,6 +1429,50 @@ class AgentServiceImpl implements AgentService {
       {
         params: { project_id: projectId },
       }
+    );
+    return response;
+  }
+
+  /**
+   * Generate a summary for a conversation
+   *
+   * Uses LLM to generate a 1-2 sentence summary of the conversation.
+   *
+   * @param conversationId - The conversation ID
+   * @param projectId - The project ID for scoping
+   * @returns Promise resolving to the updated conversation with summary
+   */
+  async generateConversationSummary(
+    conversationId: string,
+    projectId: string
+  ): Promise<Conversation> {
+    const response = await api.post<Conversation>(
+      `/agent/conversations/${conversationId}/summary`,
+      {},
+      {
+        params: { project_id: projectId },
+      }
+    );
+    return response;
+  }
+
+  /**
+   * Request undo of a tool execution
+   *
+   * Creates a follow-up user message asking the agent to undo
+   * the specified tool execution.
+   *
+   * @param conversationId - The conversation ID
+   * @param executionId - The tool execution record ID
+   * @returns Promise resolving to undo request status
+   */
+  async requestToolUndo(
+    conversationId: string,
+    executionId: string
+  ): Promise<{ status: string; message_id: string; tool_name: string }> {
+    const response = await api.post<{ status: string; message_id: string; tool_name: string }>(
+      `/agent/conversations/${conversationId}/tools/${executionId}/undo`,
+      {}
     );
     return response;
   }

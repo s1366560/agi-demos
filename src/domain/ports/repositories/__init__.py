@@ -27,6 +27,7 @@ from src.domain.ports.repositories.tool_environment_variable_repository import (
 from src.domain.ports.repositories.user_repository import UserRepository
 from src.domain.ports.repositories.work_plan_repository import WorkPlanRepositoryPort
 from src.domain.ports.repositories.workflow_pattern_repository import WorkflowPatternRepositoryPort
+from src.domain.ports.repositories.prompt_template_repository import PromptTemplateRepository
 
 __all__ = [
     "MemoryRepository",
@@ -50,4 +51,5 @@ __all__ = [
     "ReadRepositoryPort",
     "WriteRepositoryPort",
     "ListableReadRepositoryPort",
+    "PromptTemplateRepository",
 ]

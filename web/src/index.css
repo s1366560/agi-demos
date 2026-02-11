@@ -1347,6 +1347,46 @@ body {
   }
 }
 
+/* Touch device: show hover-revealed actions by default */
+@media (hover: none), (pointer: coarse) {
+  .touch-show {
+    opacity: 1 !important;
+  }
+
+  /* Larger tap targets on touch devices */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Mobile layout: stack split views vertically */
+@media (max-width: 768px) {
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+
+  .mobile-full {
+    width: 100% !important;
+  }
+
+  .mobile-hidden {
+    display: none !important;
+  }
+}
+
+/* Chat search match highlight */
+.chat-search-highlight {
+  outline: 2px solid #3b82f6;
+  outline-offset: 4px;
+  border-radius: 12px;
+  transition: outline-color 0.3s ease;
+}
+
+.dark .chat-search-highlight {
+  outline-color: #60a5fa;
+}
+
 /* Performance optimization for long lists
  * Combine content-visibility with containment for best results
  */
@@ -1556,4 +1596,60 @@ img[loading='lazy'] {
 
 .animation-delay-500 {
   animation-delay: 500ms;
+}
+
+/* Mobile sidebar drawer animations */
+.drawer-slide-in {
+  animation: slideInLeft 0.3s ease-out;
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+/* High Contrast Mode */
+.high-contrast {
+  --color-primary: #5b8def;
+  --hc-bg: #000000;
+  --hc-surface: #1a1a1a;
+  --hc-border: #ffffff;
+  --hc-text: #ffffff;
+  --hc-text-secondary: #e0e0e0;
+  --hc-focus-ring: #ffdd00;
+}
+
+.high-contrast body {
+  background-color: var(--hc-bg);
+  color: var(--hc-text);
+}
+
+.high-contrast * {
+  border-color: var(--hc-border) !important;
+}
+
+.high-contrast *:focus-visible {
+  outline: 3px solid var(--hc-focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+.high-contrast .bg-white,
+.high-contrast .bg-slate-50,
+.high-contrast [class*="bg-slate-"] {
+  background-color: var(--hc-surface) !important;
+}
+
+.high-contrast .text-slate-400,
+.high-contrast .text-slate-500,
+.high-contrast .text-slate-600 {
+  color: var(--hc-text-secondary) !important;
+}
+
+.high-contrast button,
+.high-contrast a {
+  text-decoration: underline;
+}
+
+.high-contrast button:hover,
+.high-contrast a:hover {
+  outline: 2px solid var(--hc-focus-ring);
 }

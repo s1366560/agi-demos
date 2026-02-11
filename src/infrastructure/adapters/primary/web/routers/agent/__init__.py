@@ -6,7 +6,7 @@ All endpoints have been fully migrated from agent_legacy.py.
 
 from fastapi import APIRouter
 
-from . import config, conversations, events, hitl, messages, patterns, plans, tools
+from . import config, conversations, events, hitl, messages, patterns, plans, templates, tools
 from .schemas import (
     ChatRequest,
     ClarificationResponseRequest,
@@ -54,6 +54,7 @@ router.include_router(config.router)
 router.include_router(hitl.router, prefix="/hitl")
 router.include_router(plans.router)
 router.include_router(events.router)
+router.include_router(templates.router)
 
 __all__ = [
     "router",

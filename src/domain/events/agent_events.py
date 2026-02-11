@@ -15,7 +15,15 @@ from pydantic import BaseModel, Field
 from src.domain.events.types import AgentEventType, get_frontend_event_types
 
 # Re-export for backward compatibility
-__all__ = ["AgentEventType", "AgentDomainEvent", "get_frontend_event_types"]
+__all__ = [
+    "AgentEventType",
+    "AgentDomainEvent",
+    "AgentSuggestionsEvent",
+    "AgentArtifactOpenEvent",
+    "AgentArtifactUpdateEvent",
+    "AgentArtifactCloseEvent",
+    "get_frontend_event_types",
+]
 
 
 class AgentDomainEvent(BaseModel):
@@ -643,6 +651,13 @@ class AgentTerminalStatusEvent(AgentDomainEvent):
 # === Artifact Events ===
 
 
+class AgentSuggestionsEvent(AgentDomainEvent):
+    """Event: Agent provides follow-up suggestions after completing a response."""
+
+    event_type: AgentEventType = AgentEventType.SUGGESTIONS
+    suggestions: List[str]
+
+
 class ArtifactInfo(BaseModel):
     """Artifact information for event payloads."""
 
@@ -723,6 +738,33 @@ class AgentArtifactsBatchEvent(AgentDomainEvent):
     source_tool: Optional[str] = None
 
 
+class AgentArtifactOpenEvent(AgentDomainEvent):
+    """Event: Agent opens content in the canvas panel."""
+
+    event_type: AgentEventType = AgentEventType.ARTIFACT_OPEN
+    artifact_id: str
+    title: str
+    content: str
+    content_type: str = "code"  # code, markdown, preview, data
+    language: Optional[str] = None
+
+
+class AgentArtifactUpdateEvent(AgentDomainEvent):
+    """Event: Agent updates content in an open canvas tab."""
+
+    event_type: AgentEventType = AgentEventType.ARTIFACT_UPDATE
+    artifact_id: str
+    content: str
+    append: bool = False  # True to append, False to replace
+
+
+class AgentArtifactCloseEvent(AgentDomainEvent):
+    """Event: Agent closes a canvas tab."""
+
+    event_type: AgentEventType = AgentEventType.ARTIFACT_CLOSE
+    artifact_id: str
+
+
 # =========================================================================
 # Event Type Utilities
 # =========================================================================
@@ -796,6 +838,10 @@ def get_event_type_docstring() -> str:
         AgentArtifactReadyEvent,
         AgentArtifactErrorEvent,
         AgentArtifactsBatchEvent,
+        AgentSuggestionsEvent,
+        AgentArtifactOpenEvent,
+        AgentArtifactUpdateEvent,
+        AgentArtifactCloseEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
 

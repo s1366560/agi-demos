@@ -33,6 +33,7 @@ from src.domain.events.agent_events import (
     AgentActEvent,
     AgentArtifactCreatedEvent,
     AgentArtifactErrorEvent,
+    AgentArtifactOpenEvent,
     AgentArtifactReadyEvent,
     AgentCompactNeededEvent,
     AgentCompleteEvent,
@@ -50,6 +51,7 @@ from src.domain.events.agent_events import (
     AgentStepEndEvent,
     AgentStepFinishEvent,
     AgentStepStartEvent,
+    AgentSuggestionsEvent,
     AgentTextDeltaEvent,
     AgentTextEndEvent,
     AgentTextStartEvent,
@@ -106,6 +108,52 @@ def _strip_artifact_binary_data(result: Dict[str, Any]) -> Dict[str, Any]:
             stripped_content.append(item)
         cleaned["content"] = stripped_content
     return cleaned
+
+
+# Canvas-displayable MIME type mapping
+_CANVAS_MIME_MAP: Dict[str, str] = {
+    "text/html": "preview",
+    "text/markdown": "markdown",
+    "text/csv": "data",
+    "application/json": "data",
+    "application/xml": "data",
+    "text/xml": "data",
+}
+
+
+def _get_canvas_content_type(mime_type: str, filename: str) -> Optional[str]:
+    """Determine canvas content type for a given MIME type and filename."""
+    if mime_type in _CANVAS_MIME_MAP:
+        return _CANVAS_MIME_MAP[mime_type]
+    if mime_type.startswith("text/"):
+        return "code"
+    # Check common code extensions
+    code_exts = {
+        ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".cpp", ".h",
+        ".go", ".rs", ".rb", ".php", ".sh", ".bash", ".yaml", ".yml",
+        ".toml", ".ini", ".cfg", ".sql", ".css", ".scss", ".less",
+        ".vue", ".svelte",
+    }
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext in code_exts:
+        return "code"
+    return None
+
+
+_LANG_EXT_MAP: Dict[str, str] = {
+    ".py": "python", ".js": "javascript", ".ts": "typescript",
+    ".tsx": "tsx", ".jsx": "jsx", ".java": "java", ".c": "c",
+    ".cpp": "cpp", ".go": "go", ".rs": "rust", ".rb": "ruby",
+    ".php": "php", ".sh": "bash", ".yaml": "yaml", ".yml": "yaml",
+    ".json": "json", ".html": "html", ".css": "css", ".sql": "sql",
+    ".md": "markdown", ".xml": "xml", ".toml": "toml",
+}
+
+
+def _get_language_from_filename(filename: str) -> Optional[str]:
+    """Get language identifier from filename extension."""
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return _LANG_EXT_MAP.get(ext)
 
 
 class ProcessorState(str, Enum):
@@ -406,6 +454,11 @@ class SessionProcessor:
 
             # Emit completion
             if result == ProcessorResult.COMPLETE:
+                # Generate follow-up suggestions
+                suggestions_event = await self._generate_suggestions(messages)
+                if suggestions_event:
+                    yield suggestions_event
+
                 # Build trace URL if Langfuse context is available
                 trace_url = None
                 if self._langfuse_context:
@@ -428,6 +481,71 @@ class SessionProcessor:
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the latest user query from messages."""
         return extract_user_query(messages)
+
+    async def _generate_suggestions(
+        self, messages: List[Dict[str, Any]]
+    ) -> Optional[AgentSuggestionsEvent]:
+        """Generate follow-up suggestions based on conversation context.
+
+        Uses a lightweight LLM call to produce 2-3 contextually relevant
+        follow-up prompts that the user might want to ask next.
+
+        Args:
+            messages: Full conversation messages in OpenAI format
+
+        Returns:
+            AgentSuggestionsEvent if suggestions were generated, None otherwise
+        """
+        if not self._llm_client:
+            return None
+
+        try:
+            # Extract recent context (last few messages for efficiency)
+            recent = messages[-6:] if len(messages) > 6 else messages
+            context_summary = []
+            for msg in recent:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    context_summary.append(f"{role}: {content[:200]}")
+
+            if not context_summary:
+                return None
+
+            suggestion_prompt = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Based on the conversation below, generate exactly 3 short follow-up "
+                        "questions or actions the user might want to take next. "
+                        "Each suggestion should be concise (under 60 characters), actionable, "
+                        "and contextually relevant. Return ONLY a JSON array of strings, "
+                        "no other text. Example: "
+                        '["Explain the error in detail", "Show me the code fix", '
+                        '"Run the tests again"]'
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": "\n".join(context_summary),
+                },
+            ]
+
+            response = await self._llm_client.generate(
+                messages=suggestion_prompt,
+                temperature=0.7,
+                max_tokens=200,
+            )
+
+            content = response.get("content", "")
+            # Parse JSON array from response
+            suggestions = json.loads(content)
+            if isinstance(suggestions, list) and all(isinstance(s, str) for s in suggestions):
+                return AgentSuggestionsEvent(suggestions=suggestions[:3])
+        except Exception as e:
+            logger.debug(f"Failed to generate suggestions: {e}")
+
+        return None
 
     def _classify_tool_by_description(self, tool_name: str, tool_def: ToolDefinition) -> str:
         """Classify tool into a category based on its description."""
@@ -1520,6 +1638,21 @@ class SessionProcessor:
                     source_tool=tool_name,
                     source_path=artifact_info.get("path"),
                 )
+
+                # Emit artifact_open for canvas-displayable content
+                canvas_type = _get_canvas_content_type(mime_type, filename)
+                if canvas_type and len(file_content) < 500_000:
+                    try:
+                        text_content = file_content.decode("utf-8")
+                        yield AgentArtifactOpenEvent(
+                            artifact_id=artifact_id,
+                            title=filename,
+                            content=text_content,
+                            content_type=canvas_type,
+                            language=_get_language_from_filename(filename),
+                        )
+                    except (UnicodeDecodeError, ValueError):
+                        pass  # Binary content, skip canvas open
 
                 # Upload artifact in a background thread to avoid event loop
                 # contention. aioboto3 upload hangs when the event loop is busy

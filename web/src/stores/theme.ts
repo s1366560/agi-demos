@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-type Theme = 'light' | 'dark' | 'system';
+type Theme = 'light' | 'dark' | 'system' | 'high-contrast';
 
 interface ThemeState {
   theme: Theme;
@@ -38,6 +38,14 @@ export const useThemeStore = create<ThemeState>()(
 
 const updateDocumentClass = (theme: Theme) => {
   const root = window.document.documentElement;
+
+  if (theme === 'high-contrast') {
+    root.classList.add('dark', 'high-contrast');
+    useThemeStore.setState({ computedTheme: 'dark' });
+    return;
+  }
+
+  root.classList.remove('high-contrast');
   const isDark =
     theme === 'dark' ||
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);

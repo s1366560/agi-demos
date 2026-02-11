@@ -7,6 +7,7 @@
 
 import React, { memo, useState, useEffect } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
 import {
@@ -22,12 +23,16 @@ import {
   Bot,
   Lightbulb,
   FileOutput,
+  PanelRight,
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 
+import { useCanvasStore } from '@/stores/canvasStore';
+import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
-import { LazyAvatar, LazyTag } from '@/components/ui/lazyAntd';
+import { MessageActionBar, CodeBlockCopyButton } from '../chat/MessageActionBar';
+import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
 // Import types without type qualifier
 import { InlineHITLCard } from '../InlineHITLCard';
@@ -201,7 +206,35 @@ const useSyntaxHighlighter = () => {
   return { SyntaxHighlighter, vscDarkPlus, isLoading };
 };
 
-// Code block component with lazy loading
+// Code block component with lazy loading and copy button
+const CodeBlockCanvasButton: React.FC<{ code: string; language: string }> = memo(
+  ({ code, language }) => {
+    const openTab = useCanvasStore((s) => s.openTab);
+    const setMode = useLayoutModeStore((s) => s.setMode);
+
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          openTab({
+            id: `code-${Date.now()}`,
+            title: `snippet.${language || 'txt'}`,
+            type: 'code',
+            content: code,
+            language: language || undefined,
+          });
+          setMode('canvas');
+        }}
+        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-violet-500 dark:hover:text-violet-400 transition-colors"
+        title="Open in Canvas"
+      >
+        <PanelRight size={14} />
+      </button>
+    );
+  }
+);
+CodeBlockCanvasButton.displayName = 'CodeBlockCanvasButton';
+
 const CodeBlock: React.FC<{ language: string; children: string }> = ({ language, children }) => {
   const { SyntaxHighlighter, vscDarkPlus } = useSyntaxHighlighter();
 
@@ -210,7 +243,9 @@ const CodeBlock: React.FC<{ language: string; children: string }> = ({ language,
       <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-2">
         <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-          {language || 'code'}
+          <span className="flex-1">{language || 'code'}</span>
+          <CodeBlockCopyButton code={children} />
+          <CodeBlockCanvasButton code={children} language={language} />
         </div>
         <code className="font-mono text-sm bg-slate-50 dark:bg-slate-900 p-4 block overflow-x-auto text-slate-800 dark:text-slate-200">
           {children}
@@ -223,7 +258,9 @@ const CodeBlock: React.FC<{ language: string; children: string }> = ({ language,
     <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-2">
       <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-        {language || 'code'}
+        <span className="flex-1">{language || 'code'}</span>
+        <CodeBlockCopyButton code={String(children).replace(/\n$/, '')} />
+        <CodeBlockCanvasButton code={String(children).replace(/\n$/, '')} language={language} />
       </div>
       <SyntaxHighlighter
         style={vscDarkPlus}
@@ -293,11 +330,11 @@ const findMatchingObserve = (
 // Sub-Components - Modern Design
 // ========================================
 
-// User Message Component - Modern floating style
-const UserMessage: React.FC<UserMessageProps> = memo(({ content }) => {
+// User Message Component - Modern floating style with action bar
+const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply }) => {
   if (!content) return null;
   return (
-    <div className="flex items-end justify-end gap-3 mb-6 animate-fade-in-up">
+    <div className="group flex items-end justify-end gap-3 mb-6 animate-fade-in-up">
       <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
           {/* Subtle gradient background */}
@@ -306,6 +343,10 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content }) => {
             <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
               {content}
             </p>
+          </div>
+          {/* Action bar - appears on hover */}
+          <div className="absolute -bottom-8 right-0 z-10">
+            <MessageActionBar role="user" content={content} onReply={onReply} />
           </div>
         </div>
       </div>
@@ -317,17 +358,19 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content }) => {
 });
 UserMessage.displayName = 'MessageBubble.User';
 
-// Assistant Message Component - Modern card style
-const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStreaming }) => {
+// Assistant Message Component - Modern card style with action bar
+const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStreaming, isPinned, onPin, onReply }) => {
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   if (!content && !isStreaming) return null;
   return (
-    <div className="flex items-start gap-3 mb-6 animate-fade-in-up">
+    <div className="group flex items-start gap-3 mb-6 animate-fade-in-up">
       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
         <Bot size={18} className="text-white" />
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm hover:shadow-md transition-all duration-200">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+        <div className="relative">
+          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="prose prose-sm dark:prose-invert max-w-none">
             {content ? (
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -409,7 +452,29 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
             ) : null}
           </div>
         </div>
+          {/* Action bar - appears on hover */}
+          {!isStreaming && content && (
+            <div className="absolute -bottom-8 left-0 z-10">
+              <MessageActionBar
+                role="assistant"
+                content={content}
+                isPinned={isPinned}
+                onPin={onPin}
+                onReply={onReply}
+                onSaveAsTemplate={() => setShowSaveTemplate(true)}
+              />
+            </div>
+          )}
+        </div>
       </div>
+      {showSaveTemplate && (
+        <SaveTemplateModal
+          content={content || ''}
+          visible={showSaveTemplate}
+          onClose={() => setShowSaveTemplate(false)}
+          onSave={() => setShowSaveTemplate(false)}
+        />
+      )}
     </div>
   );
 });
@@ -437,8 +502,10 @@ TextDelta.displayName = 'MessageBubble.TextDelta';
 
 // Thought/Reasoning Component - Modern pill style
 const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
-  if (!content) return null;
   const [expanded, setExpanded] = useState(true);
+  const { t } = useTranslation();
+
+  if (!content) return null;
 
   return (
     <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
@@ -452,7 +519,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
             className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors"
           >
             <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
-              Reasoning
+              {t('agent.messageBubble.reasoning', 'Reasoning')}
             </span>
             {expanded ? (
               <ChevronUp size={14} className="text-amber-500" />
@@ -477,6 +544,7 @@ Thought.displayName = 'MessageBubble.Thought';
 // Tool Execution Component - Modern collapsible card
 const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent }) => {
   const [expanded, setExpanded] = useState(!observeEvent);
+  const { t } = useTranslation();
   if (!event) return null;
 
   const hasError = observeEvent?.isError;
@@ -493,7 +561,11 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
     <Loader2 size={16} className="text-blue-500 animate-spin" />
   );
 
-  const statusText = observeEvent ? (hasError ? 'Failed' : 'Success') : 'Running';
+  const statusText = observeEvent
+    ? hasError
+      ? t('agent.messageBubble.failed', 'Failed')
+      : t('agent.messageBubble.success', 'Success')
+    : t('agent.messageBubble.running', 'Running');
 
   const statusColor = observeEvent
     ? hasError
@@ -561,7 +633,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
               {/* Input */}
               <div className="mt-3">
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                  Input
+                  {t('agent.messageBubble.input', 'Input')}
                 </p>
                 <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                   <div className="bg-slate-50 dark:bg-slate-900/50 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
@@ -580,7 +652,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
               {observeEvent && (
                 <div className="mt-3">
                   <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
-                    Output
+                    {t('agent.messageBubble.output', 'Output')}
                   </p>
                   {(() => {
                     const formatted = formatToolOutput(observeEvent.toolOutput);
@@ -631,6 +703,7 @@ ToolExecution.displayName = 'MessageBubble.ToolExecution';
 // Work Plan Component - Modern timeline style
 const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
   const [expanded, setExpanded] = useState(true);
+  const { t } = useTranslation();
   const steps = event?.steps || [];
 
   if (!steps.length) return null;
@@ -648,10 +721,10 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
           >
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-purple-800 dark:text-purple-300">
-                Work Plan
+                {t('agent.messageBubble.workPlan', 'Work Plan')}
               </span>
               <span className="text-xs text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/40 px-2 py-0.5 rounded-full">
-                {steps.length} steps
+                {t('agent.messageBubble.steps', '{{count}} steps', { count: steps.length })}
               </span>
             </div>
             {expanded ? (
@@ -672,7 +745,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
                       {index + 1}
                     </span>
                     <span className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                      {step.description || 'No description'}
+                      {step.description || t('agent.messageBubble.noDescription', 'No description')}
                     </span>
                   </div>
                 ))}
@@ -710,22 +783,44 @@ const StepStart: React.FC<StepStartProps> = memo(({ event }) => {
 });
 StepStart.displayName = 'MessageBubble.StepStart';
 
-// Text End Component
-const TextEnd: React.FC<TextEndProps> = memo(({ event }) => {
+// Text End Component with action bar
+const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply }) => {
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const fullText = 'fullText' in event ? (event.fullText as string) : '';
   if (!fullText || !fullText.trim()) return null;
 
   return (
-    <div className="flex items-start gap-3 mb-6 animate-fade-in-up">
+    <div className="group flex items-start gap-3 mb-6 animate-fade-in-up">
       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
         <Bot size={18} className="text-white" />
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullText}</ReactMarkdown>
+        <div className="relative">
+          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullText}</ReactMarkdown>
+            </div>
+          </div>
+          {/* Action bar - appears on hover */}
+          <div className="absolute -bottom-8 left-0 z-10">
+            <MessageActionBar
+              role="assistant"
+              content={fullText}
+              isPinned={isPinned}
+              onPin={onPin}
+              onReply={onReply}
+              onSaveAsTemplate={() => setShowSaveTemplate(true)}
+            />
           </div>
         </div>
+        {showSaveTemplate && (
+          <SaveTemplateModal
+            content={fullText}
+            visible={showSaveTemplate}
+            onClose={() => setShowSaveTemplate(false)}
+            onSave={() => setShowSaveTemplate(false)}
+          />
+        )}
       </div>
     </div>
   );
@@ -736,6 +831,7 @@ TextEnd.displayName = 'MessageBubble.TextEnd';
 const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const { t } = useTranslation();
 
   // Subscribe to sandbox store for live URL updates (artifact_ready event)
   const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
@@ -743,6 +839,26 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
   const artifactError = storeArtifact?.errorMessage || event.error;
   const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
+
+  const canvasOpenTab = useCanvasStore((s) => s.openTab);
+  const setLayoutMode = useLayoutModeStore((s) => s.setMode);
+
+  const canOpenInCanvas = ['code', 'document', 'data'].includes(event.category);
+
+  const handleOpenInCanvas = () => {
+    const ext = event.filename.split('.').pop() || '';
+    const type = event.category === 'code' ? 'code' as const
+      : event.category === 'data' ? 'data' as const
+      : 'markdown' as const;
+    canvasOpenTab({
+      id: event.artifactId,
+      title: event.filename,
+      type,
+      content: t('agent.canvas.loadingContent', 'Loading content...'),
+      language: ext,
+    });
+    setLayoutMode('canvas');
+  };
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -787,7 +903,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
               {getCategoryIcon(event.category)}
             </span>
             <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-              File Generated
+              {t('agent.messageBubble.fileGenerated', 'File Generated')}
             </span>
             {event.sourceTool && (
               <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded-full">
@@ -838,19 +954,29 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 download={event.filename}
               >
                 <span className="material-symbols-outlined text-base">download</span>
-                Download
+                {t('agent.messageBubble.download', 'Download')}
               </a>
+            )}
+            {canOpenInCanvas && (
+              <button
+                type="button"
+                onClick={handleOpenInCanvas}
+                className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors font-medium"
+              >
+                <PanelRight size={14} />
+                {t('agent.messageBubble.openInCanvas', 'Canvas')}
+              </button>
             )}
             {!url && artifactStatus === 'uploading' && (
               <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                 <Loader2 size={14} className="animate-spin" />
-                Uploading...
+                {t('agent.messageBubble.uploading', 'Uploading...')}
               </span>
             )}
             {!url && artifactStatus === 'error' && (
               <span className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400">
                 <XCircle size={14} />
-                {artifactError || 'Upload failed'}
+                {artifactError || t('agent.messageBubble.uploadFailed', 'Upload failed')}
               </span>
             )}
           </div>
@@ -882,15 +1008,15 @@ const getContent = (event: any): string => {
 };
 
 const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
-  ({ event, isStreaming, allEvents }) => {
+  ({ event, isStreaming, allEvents, isPinned, onPin, onReply }) => {
     if (!event) return null;
 
     switch (event.type) {
       case 'user_message':
-        return <UserMessage content={getContent(event)} />;
+        return <UserMessage content={getContent(event)} onReply={onReply} />;
 
       case 'assistant_message':
-        return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} />;
+        return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} isPinned={isPinned} onPin={onPin} onReply={onReply} />;
 
       case 'text_delta':
         // Skip text_delta when a text_end exists (it contains the full text)
@@ -920,7 +1046,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return <StepStart event={event} />;
 
       case 'text_end':
-        return <TextEnd event={event} />;
+        return <TextEnd event={event} isPinned={isPinned} onPin={onPin} onReply={onReply} />;
 
       case 'step_end':
       case 'text_start':

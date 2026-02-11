@@ -7,6 +7,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.factories import create_llm_client
@@ -15,7 +16,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Message as DBMessage,
+    User,
+)
 
 from .schemas import ExecutionStatsResponse
 from .utils import get_container_with_db
@@ -715,3 +719,39 @@ async def get_execution_stats(
     except Exception as e:
         logger.error(f"Error getting execution statistics: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get execution statistics: {str(e)}")
+
+
+@router.get("/conversations/{conversation_id}/messages/{message_id}/replies")
+async def get_message_replies(
+    conversation_id: str,
+    message_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Get replies to a specific message."""
+    try:
+        query = (
+            select(DBMessage)
+            .where(
+                DBMessage.conversation_id == conversation_id,
+                DBMessage.reply_to_id == message_id,
+            )
+            .order_by(DBMessage.created_at)
+        )
+        result = await db.execute(query)
+        messages = result.scalars().all()
+        return [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "created_at": str(m.created_at),
+                "reply_to_id": m.reply_to_id,
+            }
+            for m in messages
+        ]
+    except Exception as e:
+        logger.error(f"Error getting message replies: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get message replies: {e!s}"
+        )

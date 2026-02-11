@@ -8,7 +8,7 @@
 import type { FC } from 'react';
 import { useEffect, useCallback } from 'react';
 
-import { MessageSquareText, TerminalSquare, Monitor, Maximize } from 'lucide-react';
+import { MessageSquareText, TerminalSquare, Monitor, Maximize, PanelRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useLayoutModeStore, type LayoutMode } from '@/stores/layoutMode';
@@ -50,6 +50,13 @@ const modes: Array<{
     shortcut: '4',
     description: 'Fullscreen desktop with floating chat',
   },
+  {
+    key: 'canvas',
+    icon: PanelRight,
+    label: 'Canvas',
+    shortcut: '5',
+    description: 'Split view: chat + artifact canvas (35/65)',
+  },
 ];
 
 export const LayoutModeSelector: FC = () => {
@@ -76,7 +83,7 @@ export const LayoutModeSelector: FC = () => {
   }, [handleKeyDown]);
 
   return (
-    <div className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5">
+    <div data-tour="layout-selector" className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5">
       {modes.map((m) => {
         const Icon = m.icon;
         const isActive = mode === m.key;
