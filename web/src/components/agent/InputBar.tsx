@@ -474,7 +474,7 @@ export const InputBar = memo<InputBarProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            flex-1 flex flex-col min-h-0 rounded-2xl border relative
+            flex-1 flex flex-col min-h-0 rounded-xl border relative
             bg-white/90 dark:bg-slate-800/90
             backdrop-blur-sm transition-all duration-300 ease-out shadow-lg
             ${
@@ -489,7 +489,7 @@ export const InputBar = memo<InputBarProps>(
         >
           {/* Drag overlay */}
           {isDragging && (
-            <div className="absolute inset-0 z-20 rounded-2xl bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 z-20 rounded-xl bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
               <div className="flex flex-col items-center gap-2 text-primary">
                 <Upload size={28} strokeWidth={1.5} />
                 <span className="text-sm font-medium">{t('agent.inputBar.dropToUpload', 'Drop files to upload')}</span>
@@ -601,9 +601,9 @@ export const InputBar = memo<InputBarProps>(
           </div>
 
           {/* Toolbar */}
-          <div className="flex-shrink-0 px-3 pb-3 flex items-center gap-2">
+          <div className="flex-shrink-0 px-3 pt-2 pb-2.5 flex items-center gap-1">
             {/* Left Actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center">
               <LazyTooltip title={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}>
                 <LazyButton
                   type="text"
@@ -613,7 +613,7 @@ export const InputBar = memo<InputBarProps>(
                   className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
-                    rounded-lg h-9 w-9 flex items-center justify-center
+                    rounded-lg h-8 w-8 flex items-center justify-center
                     ${attachments.length > 0 ? 'text-primary' : ''}
                   `}
                 />
@@ -629,7 +629,7 @@ export const InputBar = memo<InputBarProps>(
                   className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
-                    rounded-lg h-9 w-9 flex items-center justify-center
+                    rounded-lg h-8 w-8 flex items-center justify-center
                     ${templateLibraryVisible ? 'text-primary bg-primary/5' : ''}
                   `}
                 />
@@ -650,7 +650,7 @@ export const InputBar = memo<InputBarProps>(
                       icon={isListening ? <MicOff size={18} /> : <Mic size={18} />}
                       onClick={toggleVoiceInput}
                       className={`
-                        rounded-lg h-9 w-9 flex items-center justify-center transition-all
+                        rounded-lg h-8 w-8 flex items-center justify-center transition-all
                         ${
                           isListening
                             ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
@@ -663,7 +663,7 @@ export const InputBar = memo<InputBarProps>(
                 </>
               )}
 
-              <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+              <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1.5" />
 
               <LazyTooltip
                 title={
@@ -676,7 +676,7 @@ export const InputBar = memo<InputBarProps>(
                   type="button"
                   onClick={() => setInputMode(inputMode === 'chat' ? 'command' : 'chat')}
                   className={`
-                    flex items-center justify-center h-9 w-9 rounded-lg transition-all
+                    flex items-center justify-center h-8 w-8 rounded-lg transition-all
                     ${
                       inputMode === 'command'
                         ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
@@ -697,7 +697,7 @@ export const InputBar = memo<InputBarProps>(
                   size="small"
                   onClick={onTogglePlanMode}
                   className={`
-                    flex items-center gap-1.5 h-9 px-3 rounded-lg transition-all
+                    flex items-center gap-1.5 h-8 px-2.5 rounded-lg transition-all
                     ${
                       isPlanMode
                         ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'

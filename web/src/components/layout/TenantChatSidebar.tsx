@@ -231,7 +231,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const sidebarRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const savedScrollTopRef = useRef<number | null>(null);
 
   // Internal state for uncontrolled mode
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -341,10 +340,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const handleSelectConversation = useCallback(
     (id: string, projectId: string) => {
-      // Save scroll position before navigation triggers re-render
-      if (scrollContainerRef.current) {
-        savedScrollTopRef.current = scrollContainerRef.current.scrollTop;
-      }
       if (tenantId) {
         navigate(`/tenant/${tenantId}/agent-workspace/${id}?projectId=${projectId}`);
       } else {
@@ -354,13 +349,27 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     [navigate, tenantId]
   );
 
-  // Restore scroll position after conversation switch re-render
-  useLayoutEffect(() => {
-    if (savedScrollTopRef.current !== null && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = savedScrollTopRef.current;
-      savedScrollTopRef.current = null;
+  // Preserve sidebar scroll position across re-renders triggered by conversation switch.
+  // The conversation list DOM stays the same — only the active highlight changes —
+  // so we pin the scroll position to prevent any visual jump.
+  const pinnedScrollTopRef = useRef<number | null>(null);
+  const prevActiveIdRef = useRef(activeConversationId);
+
+  // Capture scroll position BEFORE React commits DOM changes for the new activeConversationId
+  if (prevActiveIdRef.current !== activeConversationId) {
+    prevActiveIdRef.current = activeConversationId;
+    if (scrollContainerRef.current) {
+      pinnedScrollTopRef.current = scrollContainerRef.current.scrollTop;
     }
-  }, [activeConversationId]);
+  }
+
+  // Restore immediately after DOM commit
+  useLayoutEffect(() => {
+    if (pinnedScrollTopRef.current !== null && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = pinnedScrollTopRef.current;
+      pinnedScrollTopRef.current = null;
+    }
+  });
 
   // Auto-load more conversations when content doesn't fill the container
   useEffect(() => {

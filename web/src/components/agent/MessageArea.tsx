@@ -775,17 +775,22 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       const hasNewMessages = currentTimelineLength > previousTimelineLength;
       const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
 
-      // Handle initial load (skip if conversation switch is in progress — handled separately)
-      if (isInitialLoad && !hasScrolledInitiallyRef.current && !isSwitchingConversationRef.current) {
+      // Handle initial load — also covers data arriving after conversation switch
+      if (isInitialLoad && !hasScrolledInitiallyRef.current) {
         hasScrolledInitiallyRef.current = true;
         isInitialLoadRef.current = false;
-
-        requestAnimationFrame(() => {
-          if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight;
-          }
-        });
         prevTimelineLengthRef.current = currentTimelineLength;
+
+        // Double-rAF: first frame for virtualizer layout, second for scroll
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (groupedItems.length > 0) {
+              virtualizer.scrollToIndex(groupedItems.length - 1, { align: 'end' });
+            } else if (containerRef.current) {
+              containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            }
+          });
+        });
         return;
       }
 
@@ -911,10 +916,12 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         const rafId2 = requestAnimationFrame(() => {
           if (groupedItems.length > 0) {
             virtualizer.scrollToIndex(groupedItems.length - 1, { align: 'end' });
+            isInitialLoadRef.current = false;
+            hasScrolledInitiallyRef.current = true;
+            prevTimelineLengthRef.current = timeline.length;
           }
-          isInitialLoadRef.current = false;
-          hasScrolledInitiallyRef.current = true;
-          prevTimelineLengthRef.current = timeline.length;
+          // Always clear switching flag so timeline-change effect can handle
+          // the scroll if data arrives later.
           isSwitchingConversationRef.current = false;
         });
         cleanupRef.current = rafId2;

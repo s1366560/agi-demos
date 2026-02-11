@@ -235,14 +235,14 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply }) => {
       <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
           {/* Subtle gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl rounded-br-sm blur-sm -z-10" />
-          <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl rounded-br-sm px-5 py-3.5 shadow-sm hover:shadow-md transition-shadow duration-200">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
+          <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-5 py-3.5 shadow-sm hover:shadow-md transition-shadow duration-200">
             <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
               {content}
             </p>
           </div>
-          {/* Action bar - appears on hover */}
-          <div className="absolute -bottom-8 right-0 z-10">
+          {/* Action bar - appears on hover at top-right */}
+          <div className="absolute -top-3 right-2 z-10">
             <MessageActionBar role="user" content={content} onReply={onReply} />
           </div>
         </div>
@@ -267,7 +267,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
-          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm hover:shadow-md transition-all duration-200">
             <div className={MARKDOWN_PROSE_CLASSES}>
             {content ? (
               <ReactMarkdown
@@ -283,9 +283,9 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
             ) : null}
           </div>
         </div>
-          {/* Action bar - appears on hover */}
+          {/* Action bar - appears on hover at top-right */}
           {!isStreaming && content && (
-            <div className="absolute -bottom-8 left-0 z-10">
+            <div className="absolute -top-3 right-2 z-10">
               <MessageActionBar
                 role="assistant"
                 content={content}
@@ -321,7 +321,7 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
         <Bot size={18} className="text-white" />
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm">
           <div className={MARKDOWN_PROSE_CLASSES}>
             <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{content}</ReactMarkdown>
           </div>
@@ -616,13 +616,13 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
-          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm">
             <div className={MARKDOWN_PROSE_CLASSES}>
               <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{fullText}</ReactMarkdown>
             </div>
           </div>
-          {/* Action bar - appears on hover */}
-          <div className="absolute -bottom-8 left-0 z-10">
+          {/* Action bar - appears on hover at top-right */}
+          <div className="absolute -top-3 right-2 z-10">
             <MessageActionBar
               role="assistant"
               content={fullText}
