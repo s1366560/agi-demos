@@ -6,12 +6,12 @@
  *
  * Design Reference:
  * - Primary: #1e3fae (Deep Blue)
- * - Background Light: #f6f6f8
- * - Background Dark: #121520
+ * - Background Light: #f8f9fb
+ * - Background Dark: #141416
  * - Surface Light: #ffffff
- * - Surface Dark: #1a1f2e
- * - Border Dark: #252d46
- * - Text Muted: #95a0c6
+ * - Surface Dark: #1c1c1f
+ * - Border Dark: #2c2c31
+ * - Text Muted: #7d8599
  */
 
 import type { ThemeConfig } from 'antd';
@@ -25,23 +25,23 @@ export const colors = {
   primaryGlow: '#4b6fd9',
 
   // Background
-  bgLight: '#f6f6f8',
-  bgDark: '#0a0a0b',
+  bgLight: '#f8f9fb',
+  bgDark: '#141416',
 
   // Surface
   surfaceLight: '#ffffff',
-  surfaceDark: '#161618',
-  surfaceDarkAlt: '#1a1f2e',
+  surfaceDark: '#1c1c1f',
+  surfaceDarkAlt: '#242428',
 
   // Border
   borderLight: '#e2e8f0',
-  borderDark: '#252d46',
+  borderDark: '#2c2c31',
 
   // Text
-  textPrimary: '#0f172a',
-  textSecondary: '#475569',
-  textMuted: '#95a0c6',
-  textMutedLight: '#64748b',
+  textPrimary: '#1a2332',
+  textSecondary: '#5a6577',
+  textMuted: '#7d8599',
+  textMutedLight: '#6b7280',
 
   // Status
   success: '#10b981',
@@ -93,10 +93,10 @@ export const lightTheme: ThemeConfig = {
     colorText: colors.textPrimary,
     colorTextSecondary: colors.textSecondary,
     colorTextTertiary: colors.textMutedLight,
-    colorTextQuaternary: '#94a3b8',
+    colorTextQuaternary: '#9ca3af',
     colorTextDescription: colors.textMutedLight,
-    colorTextDisabled: '#94a3b8',
-    colorTextPlaceholder: '#94a3b8',
+    colorTextDisabled: '#9ca3af',
+    colorTextPlaceholder: '#9ca3af',
 
     // Status Colors
     colorSuccess: colors.success,
@@ -260,16 +260,16 @@ export const darkTheme: ThemeConfig = {
 
     // Border Colors
     colorBorder: colors.borderDark,
-    colorBorderSecondary: '#1e293b',
+    colorBorderSecondary: '#222226',
 
     // Text Colors
-    colorText: '#f8fafc',
-    colorTextSecondary: '#cbd5e1',
+    colorText: '#e8eaed',
+    colorTextSecondary: '#b0b8c4',
     colorTextTertiary: colors.textMuted,
-    colorTextQuaternary: '#64748b',
+    colorTextQuaternary: '#5a6270',
     colorTextDescription: colors.textMuted,
-    colorTextDisabled: '#475569',
-    colorTextPlaceholder: '#64748b',
+    colorTextDisabled: '#4a4f5a',
+    colorTextPlaceholder: '#5a6270',
 
     // Status Colors
     colorSuccess: '#34d399',
@@ -318,7 +318,7 @@ export const darkTheme: ThemeConfig = {
   components: {
     Layout: {
       headerBg: colors.surfaceDark,
-      headerColor: '#f8fafc',
+      headerColor: '#e8eaed',
       siderBg: colors.surfaceDark,
       bodyBg: colors.bgDark,
       triggerBg: colors.surfaceDarkAlt,
@@ -327,21 +327,21 @@ export const darkTheme: ThemeConfig = {
       itemBg: 'transparent',
       itemColor: colors.textMuted,
       itemHoverBg: colors.borderDark,
-      itemHoverColor: '#f8fafc',
+      itemHoverColor: '#e8eaed',
       itemSelectedBg: 'rgba(59, 95, 201, 0.15)',
       itemSelectedColor: colors.primaryLight,
       itemActiveBg: 'rgba(59, 95, 201, 0.2)',
       darkItemBg: 'transparent',
       darkItemColor: colors.textMuted,
       darkItemHoverBg: colors.borderDark,
-      darkItemHoverColor: '#f8fafc',
+      darkItemHoverColor: '#e8eaed',
       darkItemSelectedBg: 'rgba(59, 95, 201, 0.15)',
       darkItemSelectedColor: colors.primaryLight,
     },
     Button: {
       primaryShadow: '0 2px 8px rgba(59, 95, 201, 0.3)',
       defaultBg: colors.surfaceDarkAlt,
-      defaultColor: '#f8fafc',
+      defaultColor: '#e8eaed',
       defaultBorderColor: colors.borderDark,
       fontWeight: 500,
     },
@@ -353,7 +353,7 @@ export const darkTheme: ThemeConfig = {
     Table: {
       headerBg: colors.surfaceDarkAlt,
       headerColor: colors.textMuted,
-      rowHoverBg: 'rgba(37, 45, 70, 0.5)',
+      rowHoverBg: 'rgba(255, 255, 255, 0.04)',
       borderColor: colors.borderDark,
       colorBgContainer: colors.surfaceDark,
     },
@@ -389,10 +389,10 @@ export const darkTheme: ThemeConfig = {
     },
     Breadcrumb: {
       itemColor: colors.textMuted,
-      lastItemColor: '#f8fafc',
+      lastItemColor: '#e8eaed',
       linkColor: colors.textMuted,
       linkHoverColor: colors.primaryLight,
-      separatorColor: '#475569',
+      separatorColor: '#3a3a40',
     },
     Statistic: {
       titleFontSize: 12,
