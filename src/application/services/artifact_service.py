@@ -355,6 +355,43 @@ class ArtifactService:
             logger.error(f"Failed to delete artifact {artifact_id}: {e}")
             return False
 
+    async def update_artifact_content(
+        self, artifact_id: str, content: str
+    ) -> Optional[Artifact]:
+        """Update the text content of an artifact (canvas save-back).
+
+        Overwrites the file in storage and refreshes the presigned URL.
+        Only works for READY artifacts.
+        """
+        artifact = self._artifacts.get(artifact_id)
+        if not artifact or artifact.status != ArtifactStatus.READY:
+            return None
+
+        try:
+            content_bytes = content.encode("utf-8")
+            await self._storage.upload_file(
+                file_content=content_bytes,
+                object_key=artifact.object_key,
+                content_type=artifact.mime_type,
+            )
+            artifact.size_bytes = len(content_bytes)
+
+            # Refresh presigned URL
+            url = await self._storage.generate_presigned_url(
+                object_key=artifact.object_key,
+                expiration_seconds=self._url_expiration,
+            )
+            artifact.url = url
+
+            logger.info(
+                f"Updated artifact content: {artifact_id}, "
+                f"new_size={len(content_bytes)}"
+            )
+            return artifact
+        except Exception as e:
+            logger.error(f"Failed to update artifact {artifact_id}: {e}")
+            return None
+
     # === Event Publishing ===
 
     async def _publish_artifact_created(self, artifact: Artifact, sandbox_id: str) -> None:

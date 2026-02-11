@@ -566,6 +566,7 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                               <MarkdownContent
                                 content={item.content}
                                 className={ASSISTANT_PROSE_CLASSES}
+                                codeActions
                               />
                             </div>
                           </div>

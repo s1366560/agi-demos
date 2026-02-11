@@ -31,6 +31,10 @@ import {
   Sparkles,
   Undo2,
   Redo2,
+  Plus,
+  StickyNote,
+  Save,
+  Loader2,
 } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 
@@ -42,6 +46,7 @@ import {
   type CanvasContentType,
 } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
+import { artifactService } from '@/services/artifactService';
 
 import { SelectionToolbar } from './SelectionToolbar';
 
@@ -62,9 +67,14 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
 const CanvasTabBar = memo(() => {
   const tabs = useCanvasStore((s) => s.tabs);
   const activeTabId = useCanvasStore((s) => s.activeTabId);
-  const { setActiveTab, closeTab } = useCanvasActions();
+  const { setActiveTab, closeTab, openTab } = useCanvasActions();
   const { t } = useTranslation();
   const setMode = useLayoutModeStore((s) => s.setMode);
+
+  const handleNewTab = useCallback(() => {
+    const id = `new-${Date.now()}`;
+    openTab({ id, title: 'untitled.py', type: 'code', content: '', language: undefined });
+  }, [openTab]);
 
   if (tabs.length === 0) return null;
 
@@ -105,6 +115,14 @@ const CanvasTabBar = memo(() => {
             </button>
           </button>
         ))}
+        <button
+          type="button"
+          onClick={handleNewTab}
+          className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title={t('agent.canvas.newTab', 'New tab')}
+        >
+          <Plus size={14} />
+        </button>
       </div>
       <button
         type="button"
@@ -188,6 +206,7 @@ const CanvasToolbar = memo<{
 }>(({ tab, editMode, onToggleEdit }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
   const { undo, redo, canUndo, canRedo } = useCanvasActions();
 
   const handleCopy = useCallback(async () => {
@@ -209,6 +228,15 @@ const CanvasToolbar = memo<{
   }, [tab.content]);
 
   const handleDownload = useCallback(() => {
+    if (tab.artifactUrl) {
+      const a = document.createElement('a');
+      a.href = tab.artifactUrl;
+      a.download = tab.title;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.click();
+      return;
+    }
     const ext = tab.type === 'code' ? (tab.language || 'txt') : tab.type === 'markdown' ? 'md' : 'txt';
     const blob = new Blob([tab.content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -219,7 +247,25 @@ const CanvasToolbar = memo<{
     URL.revokeObjectURL(url);
   }, [tab]);
 
+  const handleSave = useCallback(async () => {
+    if (!tab.artifactId || saving) return;
+    setSaving(true);
+    try {
+      const result = await artifactService.updateContent(tab.artifactId, tab.content);
+      // Update artifact URL in canvas store and clear dirty flag
+      useCanvasStore.getState().openTab({
+        ...tab,
+        artifactUrl: result.url || tab.artifactUrl,
+      });
+    } catch {
+      // silent fail — user can retry
+    } finally {
+      setSaving(false);
+    }
+  }, [tab, saving]);
+
   const canEdit = tab.type !== 'preview';
+  const canSave = tab.artifactId && tab.dirty;
 
   return (
     <div className="flex items-center gap-1 px-3 py-1.5 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
@@ -232,6 +278,17 @@ const CanvasToolbar = memo<{
           </span>
         )}
       </div>
+      {canSave && (
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="p-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+          title={t('agent.canvas.save', 'Save (Ctrl+S)')}
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+        </button>
+      )}
       <button
         type="button"
         onClick={() => undo(tab.id)}
@@ -363,6 +420,15 @@ QuickActions.displayName = 'QuickActions';
 // Empty state when no tabs
 const CanvasEmptyState = memo(() => {
   const { t } = useTranslation();
+  const { openTab } = useCanvasActions();
+
+  const handleNew = useCallback(
+    (type: CanvasContentType, title: string) => {
+      const id = `new-${Date.now()}`;
+      openTab({ id, title, type, content: '', language: undefined });
+    },
+    [openTab]
+  );
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center">
@@ -372,12 +438,38 @@ const CanvasEmptyState = memo(() => {
       <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-2">
         {t('agent.canvas.emptyTitle', 'Canvas')}
       </h3>
-      <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
+      <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed mb-6">
         {t(
           'agent.canvas.emptyDescription',
           'Code, documents, and previews from the agent will appear here. Ask the agent to generate or edit content.'
         )}
       </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => handleNew('code', 'untitled.py')}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        >
+          <FileCode2 size={14} />
+          {t('agent.canvas.newCode', 'New Code')}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleNew('markdown', 'untitled.md')}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        >
+          <FileText size={14} />
+          {t('agent.canvas.newMarkdown', 'New Markdown')}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleNew('data', 'notes.txt')}
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+        >
+          <StickyNote size={14} />
+          {t('agent.canvas.newNote', 'New Note')}
+        </button>
+      </div>
     </div>
   );
 });

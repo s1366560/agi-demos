@@ -1538,9 +1538,14 @@
       "selectionAsk": "Ask about",
       "undo": "Undo (Ctrl+Z)",
       "redo": "Redo (Ctrl+Shift+Z)",
+      "save": "Save (Ctrl+S)",
       "editMode": "Edit mode",
       "viewMode": "View mode",
       "askRefine": "Ask Agent to Refine",
+      "newTab": "New tab",
+      "newCode": "New Code",
+      "newMarkdown": "New Markdown",
+      "newNote": "New Note",
       "actions": {
         "explain": "Explain",
         "optimize": "Optimize",
@@ -1551,6 +1556,12 @@
         "translate": "Translate",
         "summarize": "Summarize"
       }
+    },
+    "artifact": {
+      "fileGenerated": "File generated",
+      "download": "Download",
+      "uploading": "Uploading...",
+      "openInCanvas": "Open in Canvas"
     },
     "timeline": {
       "input": "Input",

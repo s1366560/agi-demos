@@ -12,12 +12,15 @@
  * @module components/agent/TimelineEventItem
  */
 
-import { memo, lazy, Suspense, useState } from 'react';
+import { memo, lazy, Suspense, useState, useCallback } from 'react';
 
-import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Loader2, PanelRight } from 'lucide-react';
 
 import { useAgentV3Store } from '../../stores/agentV3';
 import { useSandboxStore } from '../../stores/sandbox';
+import { useCanvasStore, type CanvasContentType } from '../../stores/canvasStore';
+import { useLayoutModeStore } from '../../stores/layoutMode';
 import { formatDistanceToNowCN, formatReadableTime, formatDateTime } from '../../utils/date';
 
 import { AssistantMessage } from './chat/AssistantMessage';
@@ -698,6 +701,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
  * 显示工具生成的文件（图片、视频、文档等）
  */
 function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?: string } }) {
+  const { t } = useTranslation();
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
@@ -707,6 +711,57 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
   const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
   const artifactError = storeArtifact?.errorMessage || event.error;
   const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
+
+  // Check if this artifact can be opened in canvas (text-decodable content)
+  const isCanvasCompatible = ['code', 'document', 'data'].includes(event.category)
+    || event.mimeType.startsWith('text/')
+    || ['application/json', 'application/xml', 'application/yaml', 'application/javascript',
+        'application/typescript', 'application/x-python'].includes(event.mimeType);
+
+  const handleOpenInCanvas = useCallback(async () => {
+    const url = artifactUrl || artifactPreviewUrl;
+    if (!url) return;
+
+    try {
+      const response = await fetch(url);
+      const content = await response.text();
+
+      // Determine canvas content type from artifact category
+      const typeMap: Record<string, CanvasContentType> = {
+        code: 'code',
+        document: 'markdown',
+        data: 'data',
+      };
+      const contentType: CanvasContentType = typeMap[event.category] || 'code';
+
+      // Extract language from filename extension
+      const ext = event.filename.split('.').pop()?.toLowerCase();
+      const langMap: Record<string, string> = {
+        py: 'python', js: 'javascript', ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
+        rs: 'rust', go: 'go', java: 'java', cpp: 'cpp', c: 'c', rb: 'ruby',
+        php: 'php', sh: 'bash', sql: 'sql', html: 'html', css: 'css',
+        json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', md: 'markdown',
+        toml: 'toml', ini: 'ini', csv: 'csv',
+      };
+
+      useCanvasStore.getState().openTab({
+        id: event.artifactId,
+        title: event.filename,
+        type: contentType,
+        content,
+        language: ext ? langMap[ext] : undefined,
+        artifactId: event.artifactId,
+        artifactUrl: url,
+      });
+
+      const currentMode = useLayoutModeStore.getState().mode;
+      if (currentMode !== 'canvas') {
+        useLayoutModeStore.getState().setMode('canvas');
+      }
+    } catch {
+      // Silently fail — user can still download
+    }
+  }, [artifactUrl, artifactPreviewUrl, event.artifactId, event.filename, event.category]);
 
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
@@ -758,7 +813,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                 {getCategoryIcon(event.category)}
               </span>
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                文件已生成
+                {t('agent.artifact.fileGenerated', 'File generated')}
               </span>
               {event.sourceTool && (
                 <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded">
@@ -823,13 +878,23 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                   download={event.filename}
                 >
                   <span className="material-symbols-outlined text-base">download</span>
-                  下载
+                  {t('agent.artifact.download', 'Download')}
                 </a>
+              )}
+              {isCanvasCompatible && url && (
+                <button
+                  type="button"
+                  onClick={handleOpenInCanvas}
+                  className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors"
+                >
+                  <PanelRight size={14} />
+                  {t('agent.artifact.openInCanvas', 'Open in Canvas')}
+                </button>
               )}
               {!url && artifactStatus === 'uploading' && (
                 <span className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
                   <Loader2 size={14} className="animate-spin" />
-                  上传中...
+                  {t('agent.artifact.uploading', 'Uploading...')}
                 </span>
               )}
             </div>

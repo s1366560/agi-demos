@@ -85,6 +85,20 @@ class RefreshUrlResponse(BaseModel):
     url: str
 
 
+class UpdateContentRequest(BaseModel):
+    """Request model for updating artifact content from canvas."""
+
+    content: str = Field(..., description="Updated text content")
+
+
+class UpdateContentResponse(BaseModel):
+    """Response model for content update."""
+
+    artifact_id: str
+    size_bytes: int
+    url: Optional[str] = None
+
+
 # === API Endpoints ===
 
 
@@ -254,6 +268,41 @@ async def refresh_artifact_url(
         raise HTTPException(status_code=500, detail="Failed to refresh URL")
 
     return RefreshUrlResponse(artifact_id=artifact_id, url=url)
+
+
+@router.put("/{artifact_id}/content", response_model=UpdateContentResponse)
+async def update_artifact_content(
+    artifact_id: str,
+    request: UpdateContentRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update the text content of an artifact (canvas save-back).
+
+    Overwrites the file in object storage with the provided text content.
+    Only works for READY artifacts with text-decodable content.
+    """
+    service = get_artifact_service()
+    artifact = await service.get_artifact(artifact_id)
+
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    if artifact.status != ArtifactStatus.READY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot update artifact with status: {artifact.status.value}",
+        )
+
+    updated = await service.update_artifact_content(artifact_id, request.content)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update artifact content")
+
+    return UpdateContentResponse(
+        artifact_id=artifact_id,
+        size_bytes=updated.size_bytes,
+        url=updated.url,
+    )
 
 
 @router.delete("/{artifact_id}")

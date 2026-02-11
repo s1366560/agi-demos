@@ -21,6 +21,10 @@ export interface CanvasTab {
   createdAt: number;
   history: string[];
   historyIndex: number;
+  /** Links this canvas tab to a stored artifact for download/save */
+  artifactId?: string;
+  /** Presigned URL for downloading the original artifact */
+  artifactUrl?: string;
 }
 
 const MAX_HISTORY = 50;

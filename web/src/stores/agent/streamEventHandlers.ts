@@ -790,13 +790,15 @@ export function createStreamEventHandlers(
       const data = event.data as any;
       if (!data.artifact_id || !data.content) return;
 
-      // Open the artifact in canvas
+      // Open the artifact in canvas with artifact link
       useCanvasStore.getState().openTab({
         id: data.artifact_id,
         title: data.title || 'Untitled',
         type: data.content_type || 'code',
         content: data.content,
         language: data.language,
+        artifactId: data.artifact_id,
+        artifactUrl: data.url,
       });
 
       // Auto-switch to canvas layout if not already

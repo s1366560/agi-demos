@@ -126,6 +126,25 @@ export async function listCategories(): Promise<
   return response.categories;
 }
 
+/**
+ * Update artifact content (canvas save-back)
+ */
+export async function updateArtifactContent(
+  artifactId: string,
+  content: string
+): Promise<{ artifactId: string; sizeBytes: number; url?: string }> {
+  const response = await httpClient.put<{
+    artifact_id: string;
+    size_bytes: number;
+    url?: string;
+  }>(`/artifacts/${artifactId}/content`, { content });
+  return {
+    artifactId: response.artifact_id,
+    sizeBytes: response.size_bytes,
+    url: response.url,
+  };
+}
+
 export const artifactService = {
   list: listArtifacts,
   get: getArtifact,
@@ -133,6 +152,7 @@ export const artifactService = {
   delete: deleteArtifact,
   getDownloadUrl: getArtifactDownloadUrl,
   listCategories,
+  updateContent: updateArtifactContent,
 };
 
 export default artifactService;

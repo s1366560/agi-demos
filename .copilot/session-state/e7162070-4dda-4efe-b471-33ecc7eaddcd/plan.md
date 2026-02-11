@@ -1,63 +1,131 @@
-# Merge Duplicate Conversation Sidebars
+# Artifact + Canvas Architecture Analysis
 
-## Problem
-The `/tenant` page renders **two** conversation list sidebars simultaneously:
-1. **TenantChatSidebar** — rendered by `TenantLayout.tsx` as the layout-level left sidebar
-2. **ConversationSidebar** — rendered by `AgentChatContent.tsx` inside the page content area
+## Current Architecture (How It Actually Works)
 
-Both show the same conversation list from the same store, creating visual duplication.
-
-## Architecture (Current)
+### The Complete Artifact Flow
 
 ```
-TenantLayout
-├── TenantChatSidebar (LEFT SIDEBAR #1) ← project selector + conversations
-├── <main>
-│   ├── AppHeader
-│   └── <Outlet> → AgentWorkspace
-│       └── AgentChatContent
-│           ├── ConversationSidebar (LEFT SIDEBAR #2) ← labels + HITL + conversations
-│           ├── Chat area
-│           └── Right panel
+┌─────────────────────────────────────────────────────────────┐
+│  SANDBOX (Docker Container)                                  │
+│  ┌─────────────────────────────────────┐                     │
+│  │ sandbox-mcp-server (MCP Server)     │                     │
+│  │ ├─ read_file tool (text, paginated) │                     │
+│  │ └─ export_artifact tool             │                     │
+│  │    - Reads file from /workspace     │                     │
+│  │    - Base64 encodes binary files    │                     │
+│  │    - Returns full content + metadata│                     │
+│  └─────────────┬───────────────────────┘                     │
+└────────────────┼────────────────────────────────────────────┘
+                 │ MCP JSON-RPC (HTTP/SSE/WebSocket)
+                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│  BACKEND (Python)                                            │
+│  ┌─────────────────────────────────────────┐                 │
+│  │ SandboxMCPToolWrapper                   │                 │
+│  │ - Receives full file content in result  │                 │
+│  │ - Returns {content, artifact} dict      │                 │
+│  └──────────────┬──────────────────────────┘                 │
+│                 ▼                                             │
+│  ┌─────────────────────────────────────────┐                 │
+│  │ Processor._process_tool_artifacts()     │                 │
+│  │ ① Decodes base64/utf-8 → bytes          │                 │
+│  │ ② Emits artifact_created (no URL yet)   │                 │
+│  │ ③ IF text < 500KB: emits artifact_open  │─── Canvas SSE   │
+│  │    (includes full text content)          │                 │
+│  │ ④ Background thread → S3/MinIO upload   │                 │
+│  │ ⑤ Emits artifact_ready (presigned URL)  │                 │
+│  └─────────────────────────────────────────┘                 │
+└─────────────────────────────────────────────────────────────┘
+                 │ SSE Events
+                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│  FRONTEND (React)                                            │
+│                                                              │
+│  artifact_created → ArtifactCreatedItem (inline card)        │
+│                     - Shows filename, size, category          │
+│                     - No URL yet → "Uploading..."            │
+│                                                              │
+│  artifact_open   → canvasStore.openTab() → CanvasPanel       │
+│                     - Content already in SSE event            │
+│                     - Auto-switches to canvas layout          │
+│                                                              │
+│  artifact_ready  → sandboxStore updates URL                   │
+│                     - Card shows "Download" link              │
+│                     - "Open in Canvas" button appears         │
+│                                                              │
+│  User clicks "Open in Canvas" → fetch(presignedURL)          │
+│                                → canvasStore.openTab()        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Analysis
+### Key Insight: The Current System Already Works
 
-| Feature | TenantChatSidebar | ConversationSidebar |
-|---------|-------------------|---------------------|
-| Project selector | Yes | No |
-| Conversations list | Yes | Yes |
-| Labels/colors | No | Yes |
-| HITL status indicators | No | Yes |
-| Draggable resize | Yes (complex) | No (fixed width) |
-| Pagination/infinite scroll | Yes | No |
-| New chat | Yes | Yes |
-| Rename/Delete | Yes | Yes |
-| Mobile drawer | No | Yes (MobileSidebarDrawer) |
-| Lines of code | ~663 | ~644 |
+The artifact flow is **already correct**:
 
-## Approach: Remove ConversationSidebar from AgentChatContent
+1. **Auto-open (< 500KB text)**: Backend reads content from sandbox via MCP, 
+   decodes it, emits `artifact_open` SSE with inline content → canvas opens 
+   immediately. No URL fetch needed.
 
-**Rationale:**
-- `TenantChatSidebar` is the **layout-level** sidebar, rendered once for ALL /tenant routes
-- `ConversationSidebar` only appears inside AgentChatContent, creating duplication
-- Keeping the layout-level sidebar is architecturally correct
-- Labels + HITL can be added to TenantChatSidebar later if needed
+2. **Manual open (user clicks "Open in Canvas")**: After `artifact_ready` fires,
+   the presigned S3/MinIO URL is available. Frontend fetches content from this URL
+   and opens in canvas. This works because the file was uploaded to S3 in step ④.
 
-## Workplan
+3. **Download**: Same presigned URL.
 
-### AgentChatContent.tsx
-- [ ] 1. Remove ConversationSidebar import
-- [ ] 2. Remove `sidebarContent` useMemo
-- [ ] 3. Remove MobileSidebarDrawer rendering
-- [ ] 4. Remove desktop `<aside>` sidebar wrapper
-- [ ] 5. Remove `sidebarCollapsed` state and related code
-- [ ] 6. Clean up unused imports
-- [ ] 7. Remove mobile sidebar toggle button from chat header
+### What's Already Implemented (This Session)
 
-### TenantLayout.tsx
-- [ ] 8. Add MobileSidebarDrawer for mobile (if not present)
+| Feature | Status | How It Works |
+|---------|--------|--------------|
+| Auto-open in canvas (text < 500KB) | Was working | `artifact_open` SSE → canvasStore |
+| "Open in Canvas" button on artifact card | NEW | Fetches from presigned S3 URL |
+| Canvas tabs link to artifact ID | NEW | `artifactId` + `artifactUrl` on CanvasTab |
+| Save canvas edits back to S3 | NEW | `PUT /artifacts/{id}/content` |
+| Code blocks "Open in Canvas" | NEW | CodeBlock component on all `<pre>` |
+| New empty canvas tabs | NEW | Empty state + tab bar "+" button |
 
-### Verify
-- [ ] 9. TypeScript build passes
-- [ ] 10. No unused imports/variables
+### Potential Issues & Edge Cases
+
+#### 1. Presigned URL Expiration
+- **Problem**: Presigned URLs expire (default 7 days). If user returns to an old 
+  conversation, clicking "Open in Canvas" will fail.
+- **Current mitigation**: `POST /artifacts/{id}/refresh-url` endpoint exists
+- **Future**: The "Open in Canvas" handler should catch 403 errors and auto-refresh
+
+#### 2. Large Files (> 500KB)
+- **Problem**: Backend skips `artifact_open` for files > 500KB. User must click 
+  "Open in Canvas" manually, which fetches from S3. This works but large files 
+  in canvas could cause performance issues.
+- **Current mitigation**: Only text-decodable categories show the button
+- **Future**: Consider warning or truncating for very large files
+
+#### 3. Binary Artifacts (images, PDFs)
+- **Problem**: These can't be opened in a text canvas. The "Open in Canvas" button 
+  correctly filters them out (`isCanvasCompatible` check).
+- **Future**: Image preview tab, PDF viewer tab in canvas
+
+#### 4. Sandbox Lifecycle
+- **Problem**: Sandbox containers are ephemeral. Once destroyed, files are gone.
+  But this is fine because files are uploaded to S3 before the sandbox is destroyed.
+- **Non-issue**: S3 is the permanent store.
+
+## Conclusion
+
+**The architecture is sound. No changes needed.**
+
+The "Open in Canvas" button fetches from S3 presigned URLs, not from the sandbox 
+directly. The file content flows:
+
+```
+Sandbox filesystem → export_artifact (MCP) → Processor → S3 upload → Presigned URL
+                                                        → artifact_open SSE (inline content)
+```
+
+Both paths (auto-open via SSE and manual open via URL fetch) provide content 
+independently of the sandbox lifecycle.
+
+## Previous Session Work (Completed)
+
+- [x] Phase 1: Connect artifacts to canvas (Open in Canvas button, artifactId linkage, i18n)
+- [x] Phase 2: User-initiated canvas (New tabs, code block actions)
+- [x] Phase 3: Backend save endpoint (PUT /artifacts/{id}/content)
+- [x] Phase 4: Verified (TypeScript + Python builds pass)

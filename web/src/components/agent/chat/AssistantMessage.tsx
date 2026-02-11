@@ -20,7 +20,14 @@ import {
   ASSISTANT_AVATAR_CLASSES,
 } from '../styles';
 
+import { CodeBlock } from './CodeBlock';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
+
+import type { Components } from 'react-markdown';
+
+const MARKDOWN_COMPONENTS: Components = {
+  pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
+};
 
 export interface AssistantMessageProps {
   /** Message content (markdown) */
@@ -71,7 +78,9 @@ export function AssistantMessage({
 
       {/* Message content bubble */}
       <div className={`${ASSISTANT_BUBBLE_CLASSES} p-5 ${ASSISTANT_PROSE_CLASSES}`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+          {content}
+        </ReactMarkdown>
       </div>
     </div>
   );

@@ -1772,9 +1772,14 @@
       "selectionAsk": "提问",
       "undo": "撤销 (Ctrl+Z)",
       "redo": "重做 (Ctrl+Shift+Z)",
+      "save": "保存 (Ctrl+S)",
       "editMode": "编辑模式",
       "viewMode": "查看模式",
       "askRefine": "让 Agent 优化",
+      "newTab": "新建标签",
+      "newCode": "新建代码",
+      "newMarkdown": "新建文档",
+      "newNote": "新建笔记",
       "actions": {
         "explain": "解释",
         "optimize": "优化",
@@ -1785,6 +1790,12 @@
         "translate": "翻译",
         "summarize": "总结"
       }
+    },
+    "artifact": {
+      "fileGenerated": "文件已生成",
+      "download": "下载",
+      "uploading": "上传中...",
+      "openInCanvas": "在画布中打开"
     },
     "timeline": {
       "input": "输入",

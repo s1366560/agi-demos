@@ -14,6 +14,14 @@ import remarkGfm from 'remark-gfm';
 
 import { formatDateOnly } from '@/utils/date';
 
+import { CodeBlock } from './CodeBlock';
+
+import type { Components } from 'react-markdown';
+
+const MARKDOWN_COMPONENTS: Components = {
+  pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
+};
+
 export interface FinalResponseDisplayProps {
   /** Report content (markdown) */
   content: string;
@@ -89,7 +97,9 @@ export function FinalResponseDisplay({
         </div>
 
         {/* Content with ReactMarkdown */}
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+          {content}
+        </ReactMarkdown>
       </div>
 
       {/* Action Sidebar */}
