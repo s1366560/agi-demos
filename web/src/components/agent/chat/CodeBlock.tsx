@@ -151,7 +151,7 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
 
       {/* Code content — highlighted or plain */}
       {highlighter && language ? (
-        <div className="not-prose">
+        <div className="syntax-highlighted">
           <highlighter.Prism
             style={highlighter.theme}
             language={language}

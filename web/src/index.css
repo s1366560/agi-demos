@@ -1660,8 +1660,8 @@ img[loading='lazy'] {
  * Paired with MARKDOWN_PROSE_CLASSES Tailwind utilities in styles.ts.
  * ============================================================================ */
 
-/* --- Inline code --- */
-.memstack-prose :not(pre) > code {
+/* --- Inline code (exclude syntax-highlighted blocks) --- */
+.memstack-prose :not(pre, .syntax-highlighted, .syntax-highlighted *) > code {
   padding: 0.15em 0.4em;
   border-radius: 0.25rem;
   font-size: 0.85em;
@@ -1669,9 +1669,16 @@ img[loading='lazy'] {
   background-color: var(--color-primary-50);
 }
 
-:is(.dark .memstack-prose) :not(pre) > code {
+:is(.dark .memstack-prose) :not(pre, .syntax-highlighted, .syntax-highlighted *) > code {
   color: var(--color-primary-300);
   background-color: rgba(99, 102, 241, 0.15);
+}
+
+/* --- Syntax-highlighted code blocks: reset inherited colors --- */
+.memstack-prose .syntax-highlighted code {
+  color: inherit;
+  background-color: transparent;
+  padding: 0;
 }
 
 /* --- Code blocks (fenced) --- */

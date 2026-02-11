@@ -257,7 +257,7 @@ const CodeBlock: React.FC<{ language: string; children: string }> = ({ language,
   }
 
   return (
-    <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-2">
+    <div className="syntax-highlighted rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-2">
       <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
         <span className="flex-1">{language || 'code'}</span>
