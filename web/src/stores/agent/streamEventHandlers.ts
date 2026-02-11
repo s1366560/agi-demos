@@ -113,7 +113,7 @@ export function createStreamEventHandlers(
           buffer.thoughtDeltaFlushTimer = null;
 
           if (bufferedContent) {
-            const { activeConversationId, updateConversationState, getConversationState } = get();
+            const { updateConversationState, getConversationState } = get();
 
             const convState = getConversationState(handlerConversationId);
             const newThought = convState.streamingThought + bufferedContent;
@@ -122,14 +122,6 @@ export function createStreamEventHandlers(
               isThinkingStreaming: true,
               agentState: 'thinking',
             });
-
-            if (handlerConversationId === activeConversationId) {
-              setState({
-                streamingThought: newThought,
-                isThinkingStreaming: true,
-                agentState: 'thinking',
-              });
-            }
           }
         }, thoughtBatchIntervalMs);
       }
@@ -137,7 +129,7 @@ export function createStreamEventHandlers(
 
     onThought: (event) => {
       const newThought = event.data.thought;
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
       const convState = getConversationState(handlerConversationId);
@@ -155,30 +147,10 @@ export function createStreamEventHandlers(
       }
 
       updateConversationState(handlerConversationId, stateUpdates);
-
-      if (handlerConversationId === activeConversationId) {
-        setState((state: any) => {
-          if (!newThought || newThought.trim() === '') {
-            return {
-              agentState: 'thinking',
-              timeline: updatedTimeline,
-              streamingThought: '',
-              isThinkingStreaming: false,
-            };
-          }
-          return {
-            currentThought: state.currentThought + '\n' + newThought,
-            streamingThought: '',
-            isThinkingStreaming: false,
-            agentState: 'thinking',
-            timeline: updatedTimeline,
-          };
-        });
-      }
     },
 
     onWorkPlan: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const workPlanEvent: AgentEvent<WorkPlanEventData> = event as AgentEvent<WorkPlanEventData>;
       const convState = getConversationState(handlerConversationId);
@@ -204,17 +176,10 @@ export function createStreamEventHandlers(
         workPlan: newWorkPlan,
         timeline: updatedTimeline,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          workPlan: newWorkPlan,
-          timeline: updatedTimeline,
-        });
-      }
     },
 
     onStepStart: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const stepStartEvent: AgentEvent<StepStartEventData> =
         event as AgentEvent<StepStartEventData>;
@@ -230,23 +195,12 @@ export function createStreamEventHandlers(
         updates.agentState = 'acting';
       }
       updateConversationState(handlerConversationId, updates);
-
-      if (handlerConversationId === activeConversationId) {
-        setState((state: any) => {
-          if (!state.workPlan) {
-            return { timeline: updatedTimeline };
-          }
-          const newPlan = { ...state.workPlan };
-          newPlan.current_step_index = event.data.current_step;
-          return { workPlan: newPlan, agentState: 'acting', timeline: updatedTimeline };
-        });
-      }
     },
 
     onStepEnd: (_event) => {},
 
     onPlanExecutionStart: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const executionPlanEvent: AgentEvent<PlanExecutionStartEvent> = event;
       const convState = getConversationState(handlerConversationId);
@@ -271,17 +225,10 @@ export function createStreamEventHandlers(
         executionPlan: newExecutionPlan,
         timeline: updatedTimeline,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          executionPlan: newExecutionPlan,
-          timeline: updatedTimeline,
-        });
-      }
     },
 
     onPlanExecutionComplete: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const executionPlanEvent: AgentEvent<PlanExecutionCompleteEvent> = event;
       const convState = getConversationState(handlerConversationId);
@@ -305,17 +252,10 @@ export function createStreamEventHandlers(
         executionPlan: updatedExecutionPlan,
         timeline: updatedTimeline,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          executionPlan: updatedExecutionPlan,
-          timeline: updatedTimeline,
-        });
-      }
     },
 
     onReflectionComplete: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const reflectionEvent: AgentEvent<ReflectionCompleteEvent> = event;
       const convState = getConversationState(handlerConversationId);
@@ -324,14 +264,10 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({ timeline: updatedTimeline });
-      }
     },
 
     onActDelta: (event: AgentEvent<ActDeltaEventData>) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
       const toolName = event.data.tool_name;
@@ -360,17 +296,10 @@ export function createStreamEventHandlers(
         activeToolCalls: newMap,
         agentState: 'preparing',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          activeToolCalls: newMap,
-          agentState: 'preparing',
-        });
-      }
     },
 
     onAct: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
@@ -397,20 +326,11 @@ export function createStreamEventHandlers(
         timeline: updatedTimeline,
       });
 
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          activeToolCalls: newMap,
-          pendingToolsStack: newStack,
-          agentState: 'acting',
-          timeline: updatedTimeline,
-        });
-      }
-
       additionalHandlers?.onAct?.(event);
     },
 
     onObserve: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
@@ -424,28 +344,16 @@ export function createStreamEventHandlers(
         timeline: updatedTimeline,
       });
 
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          pendingToolsStack: stack,
-          agentState: 'observing',
-          timeline: updatedTimeline,
-        });
-      }
-
       additionalHandlers?.onObserve?.(event);
     },
 
     onTextStart: () => {
-      const { activeConversationId, updateConversationState } = get();
+      const { updateConversationState } = get();
 
       updateConversationState(handlerConversationId, {
         streamStatus: 'streaming',
         streamingAssistantContent: '',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({ streamStatus: 'streaming', streamingAssistantContent: '' });
-      }
     },
 
     onTextDelta: (event) => {
@@ -467,7 +375,7 @@ export function createStreamEventHandlers(
           buffer.textDeltaFlushTimer = null;
 
           if (bufferedContent) {
-            const { activeConversationId, updateConversationState, getConversationState } = get();
+            const { updateConversationState, getConversationState } = get();
 
             const convState = getConversationState(handlerConversationId);
             const newContent = convState.streamingAssistantContent + bufferedContent;
@@ -475,20 +383,13 @@ export function createStreamEventHandlers(
               streamingAssistantContent: newContent,
               streamStatus: 'streaming',
             });
-
-            if (handlerConversationId === activeConversationId) {
-              setState({
-                streamingAssistantContent: newContent,
-                streamStatus: 'streaming',
-              });
-            }
           }
         }, tokenBatchIntervalMs);
       }
     },
 
     onTextEnd: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const buffer = getDeltaBuffer(handlerConversationId);
       if (buffer.textDeltaFlushTimer) {
@@ -515,17 +416,10 @@ export function createStreamEventHandlers(
         streamingAssistantContent: '',
         timeline: updatedTimeline,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          streamingAssistantContent: '',
-          timeline: updatedTimeline,
-        });
-      }
     },
 
     onClarificationAsked: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const clarificationEvent: AgentEvent<ClarificationAskedEventData> = {
         type: 'clarification_asked',
@@ -539,18 +433,10 @@ export function createStreamEventHandlers(
         pendingClarification: event.data,
         agentState: 'awaiting_input',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          timeline: updatedTimeline,
-          pendingClarification: event.data,
-          agentState: 'awaiting_input',
-        });
-      }
     },
 
     onDecisionAsked: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const decisionEvent: AgentEvent<DecisionAskedEventData> = {
         type: 'decision_asked',
@@ -564,30 +450,18 @@ export function createStreamEventHandlers(
         pendingDecision: event.data,
         agentState: 'awaiting_input',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          timeline: updatedTimeline,
-          pendingDecision: event.data,
-          agentState: 'awaiting_input',
-        });
-      }
     },
 
     onDoomLoopDetected: (event) => {
-      const { activeConversationId, updateConversationState } = get();
+      const { updateConversationState } = get();
 
       updateConversationState(handlerConversationId, {
         doomLoopDetected: event.data,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({ doomLoopDetected: event.data });
-      }
     },
 
     onEnvVarRequested: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const envVarEvent: AgentEvent<EnvVarRequestedEventData> = {
         type: 'env_var_requested',
@@ -601,18 +475,10 @@ export function createStreamEventHandlers(
         pendingEnvVarRequest: event.data,
         agentState: 'awaiting_input',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          timeline: updatedTimeline,
-          pendingEnvVarRequest: event.data,
-          agentState: 'awaiting_input',
-        });
-      }
     },
 
     onPermissionAsked: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const permissionEvent: AgentEvent<PermissionAskedEventData> = {
         type: 'permission_asked',
@@ -626,18 +492,10 @@ export function createStreamEventHandlers(
         pendingPermission: event.data,
         agentState: 'awaiting_input',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          timeline: updatedTimeline,
-          pendingPermission: event.data,
-          agentState: 'awaiting_input',
-        });
-      }
     },
 
     onPermissionReplied: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
@@ -647,18 +505,10 @@ export function createStreamEventHandlers(
         pendingPermission: null,
         agentState: event.data.granted ? 'thinking' : 'idle',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          timeline: updatedTimeline,
-          pendingPermission: null,
-          agentState: event.data.granted ? 'thinking' : 'idle',
-        });
-      }
     },
 
     onDoomLoopIntervened: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
@@ -667,17 +517,10 @@ export function createStreamEventHandlers(
         timeline: updatedTimeline,
         doomLoopDetected: null,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          timeline: updatedTimeline,
-          doomLoopDetected: null,
-        });
-      }
     },
 
     onCostUpdate: (event) => {
-      const { activeConversationId, updateConversationState } = get();
+      const { updateConversationState } = get();
 
       const costData = event.data as CostUpdateEventData;
       const costTracking: CostTrackingState = {
@@ -693,10 +536,6 @@ export function createStreamEventHandlers(
         costTracking,
       });
 
-      if (handlerConversationId === activeConversationId) {
-        setState({ costTracking });
-      }
-
       // Forward to context store
       useContextStore.getState().handleCostUpdate(costData as unknown as Record<string, unknown>);
     },
@@ -710,7 +549,7 @@ export function createStreamEventHandlers(
     },
 
     onArtifactCreated: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       if (import.meta.env.DEV) {
         console.log('[AgentV3] Artifact created event:', event.data);
@@ -721,14 +560,10 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({ timeline: updatedTimeline });
-      }
     },
 
     onArtifactReady: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
       const data = event.data as ArtifactReadyEventData;
 
       if (import.meta.env.DEV) {
@@ -752,13 +587,10 @@ export function createStreamEventHandlers(
       });
 
       updateConversationState(handlerConversationId, { timeline: updatedTimeline });
-      if (handlerConversationId === activeConversationId) {
-        setState({ timeline: updatedTimeline });
-      }
     },
 
     onArtifactError: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
       const data = event.data as ArtifactErrorEventData;
 
       if (import.meta.env.DEV) {
@@ -781,9 +613,6 @@ export function createStreamEventHandlers(
       });
 
       updateConversationState(handlerConversationId, { timeline: updatedTimeline });
-      if (handlerConversationId === activeConversationId) {
-        setState({ timeline: updatedTimeline });
-      }
     },
 
     onArtifactOpen: (event) => {
@@ -854,17 +683,13 @@ export function createStreamEventHandlers(
     },
 
     onSuggestions: (event) => {
-      const { activeConversationId, updateConversationState } = get();
+      const { updateConversationState } = get();
 
       const suggestions = (event.data as any)?.suggestions ?? [];
 
       updateConversationState(handlerConversationId, {
         suggestions,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({ suggestions });
-      }
     },
 
     onComplete: (event) => {
@@ -873,7 +698,7 @@ export function createStreamEventHandlers(
           `[AgentV3] onComplete: handler=${handlerConversationId}, content preview="${(event.data as any)?.content?.substring(0, 50)}..."`
         );
       }
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       clearAllDeltaBuffers();
 
@@ -907,17 +732,10 @@ export function createStreamEventHandlers(
         pendingToolsStack: [],
       });
 
+      // Update top-level messages (not part of ConversationState)
+      const { activeConversationId } = get();
       if (handlerConversationId === activeConversationId) {
-        setState({
-          messages: newMessages,
-          timeline: updatedTimeline,
-          streamingAssistantContent: '',
-          isStreaming: false,
-          streamStatus: 'idle',
-          agentState: 'idle',
-          activeToolCalls: new Map(),
-          pendingToolsStack: [],
-        });
+        setState({ messages: newMessages });
       }
 
       tabSync.broadcastConversationCompleted(handlerConversationId);
@@ -925,7 +743,7 @@ export function createStreamEventHandlers(
     },
 
     onError: (event) => {
-      const { activeConversationId, updateConversationState, getConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
 
       clearDeltaBuffers(handlerConversationId);
 
@@ -940,21 +758,10 @@ export function createStreamEventHandlers(
         streamingThought: '',
         isThinkingStreaming: false,
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({
-          error: event.data.message,
-          isStreaming: false,
-          streamStatus: 'error',
-          pendingToolsStack: [],
-          streamingThought: '',
-          isThinkingStreaming: false,
-        });
-      }
     },
 
     onClose: () => {
-      const { activeConversationId, updateConversationState } = get();
+      const { updateConversationState } = get();
 
       clearDeltaBuffers(handlerConversationId);
 
@@ -962,10 +769,6 @@ export function createStreamEventHandlers(
         isStreaming: false,
         streamStatus: 'idle',
       });
-
-      if (handlerConversationId === activeConversationId) {
-        setState({ isStreaming: false, streamStatus: 'idle' });
-      }
     },
   };
 }
