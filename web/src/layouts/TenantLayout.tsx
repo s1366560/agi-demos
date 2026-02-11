@@ -22,8 +22,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
-import { Menu } from 'lucide-react';
-
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
@@ -32,9 +30,8 @@ import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
 import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
-import { AppHeader } from '@/components/layout/AppHeader';
+import TenantHeader from '@/components/layout/TenantHeader';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
-import { TenantNavMenu } from '@/components/layout/TenantNavMenu';
 
 // HTTP status codes for error handling
 const HTTP_STATUS = {
@@ -269,32 +266,13 @@ export const TenantLayout: React.FC = () => {
 
         {/* Main Content */}
         <main className="flex flex-col flex-1 h-full overflow-hidden relative">
-          {/* Header - with Tenant Navigation Menu and Sidebar Toggle */}
-          <AppHeader context="tenant" basePath={basePath}>
-            {/* Mobile menu button */}
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen(true)}
-              className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors md:hidden"
-              aria-label="Menu"
-            >
-              <Menu size={18} className="text-slate-600 dark:text-slate-300" />
-            </button>
-            {/* Desktop sidebar toggle */}
-            <AppHeader.SidebarToggle
-              collapsed={sidebarCollapsed}
-              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-            />
-            <AppHeader.Search />
-            <AppHeader.Tools>
-              <TenantNavMenu tenantId={tenantId} mode="dropdown" />
-              <AppHeader.ThemeToggle />
-              <AppHeader.LanguageSwitcher />
-            </AppHeader.Tools>
-            <AppHeader.Notifications />
-            <AppHeader.WorkspaceSwitcher mode="tenant" />
-            <AppHeader.UserMenu />
-          </AppHeader>
+          {/* Header */}
+          <TenantHeader
+            tenantId={tenantId || ''}
+            sidebarCollapsed={sidebarCollapsed}
+            onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onMobileMenuOpen={() => setMobileSidebarOpen(true)}
+          />
 
           {/* Page Content */}
           <div
