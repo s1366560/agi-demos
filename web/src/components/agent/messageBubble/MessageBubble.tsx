@@ -32,7 +32,7 @@ import { useSandboxStore } from '@/stores/sandbox';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
-import { remarkPlugins, rehypePlugins } from '../chat/markdownPlugins';
+import { remarkPlugins, rehypePlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
@@ -274,6 +274,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
                 rehypePlugins={rehypePlugins}
                 components={{
                   pre: SharedCodeBlock,
+                  ...safeMarkdownComponents,
                 }}
               >
                 {content}
@@ -320,7 +321,7 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
           <div className={MARKDOWN_PROSE_CLASSES}>
-            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{content}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -614,7 +615,7 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
         <div className="relative">
           <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
             <div className={MARKDOWN_PROSE_CLASSES}>
-              <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{fullText}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{fullText}</ReactMarkdown>
             </div>
           </div>
           {/* Action bar - appears on hover */}

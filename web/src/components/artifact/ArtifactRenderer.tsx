@@ -204,9 +204,10 @@ interface ContentRendererProps {
 }
 
 function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
+  if (!artifact.url) return null;
   return (
     <ImageViewer
-      src={artifact.url || ''}
+      src={artifact.url}
       alt={artifact.filename}
       previewSrc={artifact.previewUrl}
       maxHeight={maxHeight}
@@ -218,9 +219,10 @@ function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: Content
 }
 
 function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
+  if (!artifact.url) return null;
   return (
     <VideoPlayer
-      src={artifact.url || ''}
+      src={artifact.url}
       mimeType={artifact.mimeType}
       maxHeight={maxHeight}
       compact={compact}
@@ -231,9 +233,10 @@ function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: Content
 }
 
 function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererProps) {
+  if (!artifact.url) return null;
   return (
     <AudioPlayer
-      src={artifact.url || ''}
+      src={artifact.url}
       filename={artifact.filename}
       compact={compact}
       onLoad={onLoad}
@@ -243,9 +246,10 @@ function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererPro
 }
 
 function CodeContent({ artifact, maxHeight, compact, onLoad, onError }: ContentRendererProps) {
+  if (!artifact.url) return null;
   return (
     <CodeViewer
-      url={artifact.url || ''}
+      url={artifact.url}
       filename={artifact.filename}
       mimeType={artifact.mimeType}
       maxHeight={maxHeight}
@@ -257,11 +261,12 @@ function CodeContent({ artifact, maxHeight, compact, onLoad, onError }: ContentR
 }
 
 function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
+  if (!artifact.url) return null;
   // For PDFs, try to embed
   if (artifact.mimeType === 'application/pdf') {
     return (
       <iframe
-        src={artifact.url || ''}
+        src={artifact.url}
         style={{
           width: '100%',
           height: typeof onError === 'number' ? onError : 400,
@@ -277,7 +282,7 @@ function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
   onLoad();
   return (
     <FileDownloader
-      url={artifact.url || ''}
+      url={artifact.url}
       filename={artifact.filename}
       mimeType={artifact.mimeType}
       sizeBytes={artifact.sizeBytes}
@@ -287,9 +292,10 @@ function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
 }
 
 function DownloadContent({ artifact }: ContentRendererProps) {
+  if (!artifact.url) return null;
   return (
     <FileDownloader
-      url={artifact.url || ''}
+      url={artifact.url}
       filename={artifact.filename}
       mimeType={artifact.mimeType}
       sizeBytes={artifact.sizeBytes}
