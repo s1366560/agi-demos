@@ -37,6 +37,7 @@ import { useRef, useEffect, useCallback, useState, memo, Children, createContext
 import ReactMarkdown from 'react-markdown';
 
 import { LoadingOutlined } from '@ant-design/icons';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pin, PinOff, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -156,6 +157,29 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   flushGroup();
 
   return result;
+}
+
+/**
+ * Estimate item height for the virtualizer based on item type.
+ * These are rough estimates refined by measureElement at runtime.
+ */
+function estimateGroupedItemHeight(item: GroupedItem): number {
+  if (item.kind === 'timeline') {
+    // Tool execution groups: ~80px base + 40px per step
+    return 80 + item.steps.length * 40;
+  }
+  const { event } = item;
+  switch (event.type) {
+    case 'user_message':
+      return 100;
+    case 'assistant_message': {
+      const content = ('content' in event ? (event as any).content : '') || '';
+      // Rough estimate: 80px base + 20px per 100 chars
+      return 80 + Math.ceil(content.length / 100) * 20;
+    }
+    default:
+      return 80;
+  }
 }
 
 // Define local type aliases to avoid TS6192 (unused imports)
@@ -504,6 +528,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const { t } = useTranslation();
     const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(streamingContent);
 
+    // Memoize grouped timeline items to avoid re-grouping on every render
+    const groupedItems = useMemo(() => groupTimelineEvents(timeline), [timeline]);
+
     const pinnedEventIds = useAgentV3Store((s) => s.pinnedEventIds);
     const togglePinEvent = useAgentV3Store((s) => s.togglePinEvent);
 
@@ -836,6 +863,19 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const showLoadingState = isLoading && timeline.length === 0;
     const showEmptyState = !isLoading && timeline.length === 0;
 
+    // Virtualizer setup
+    const estimateSize = useCallback(
+      (index: number) => estimateGroupedItemHeight(groupedItems[index]),
+      [groupedItems]
+    );
+
+    const virtualizer = useVirtualizer({
+      count: groupedItems.length,
+      getScrollElement: () => containerRef.current,
+      estimateSize,
+      overscan: 5,
+    });
+
     // j/k keyboard navigation for messages
     const focusedMsgRef = useRef<number>(-1);
     const [focusedMsgIndex, setFocusedMsgIndex] = useState(-1);
@@ -843,8 +883,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // Build navigable indices (user_message and assistant_message only)
     const navigableIndices = useCallback(() => {
       const indices: number[] = [];
-      const items = groupTimelineEvents(timeline);
-      items.forEach((item, idx) => {
+      groupedItems.forEach((item, idx) => {
         if (item.kind === 'event') {
           const t = item.event.type;
           if (t === 'user_message' || t === 'assistant_message') {
@@ -853,7 +892,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         }
       });
       return indices;
-    }, [timeline]);
+    }, [groupedItems]);
 
     useEffect(() => {
       focusedMsgRef.current = focusedMsgIndex;
@@ -896,8 +935,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
         // c to copy focused message content
         if (e.key === 'c' && focusedMsgRef.current >= 0) {
-          const items = groupTimelineEvents(timeline);
-          const item = items[focusedMsgRef.current];
+          const item = groupedItems[focusedMsgRef.current];
           if (item?.kind === 'event') {
             const ev = item.event;
             if (ev.type === 'user_message' || ev.type === 'assistant_message') {
@@ -914,7 +952,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
       window.addEventListener('keydown', handleNav);
       return () => window.removeEventListener('keydown', handleNav);
-    }, [navigableIndices, timeline]);
+    }, [navigableIndices, groupedItems]);
 
     return (
       <MessageAreaContext.Provider value={contextValue}>
@@ -1021,43 +1059,78 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               role="log"
               aria-live="polite"
             >
-              <div className="w-full space-y-3">
-                <ConversationSummaryCardWrapper conversationId={conversationId} />
-                {groupTimelineEvents(timeline).map((item, mapIndex) => {
+              <ConversationSummaryCardWrapper conversationId={conversationId} />
+              {/* Virtualized message list */}
+              <div
+                style={{
+                  height: virtualizer.getTotalSize(),
+                  width: '100%',
+                  position: 'relative',
+                }}
+              >
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = groupedItems[virtualRow.index];
                   if (item.kind === 'timeline') {
                     return (
-                      <div key={`timeline-group-${item.startIndex}`} data-msg-index={mapIndex} className="flex items-start gap-3 mb-4">
-                        <div className="w-8 shrink-0" />
-                        <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-                          <ExecutionTimeline
-                            steps={item.steps}
-                            isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
-                          />
+                      <div
+                        key={`timeline-group-${item.startIndex}`}
+                        data-index={virtualRow.index}
+                        data-msg-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="w-8 shrink-0" />
+                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                            <ExecutionTimeline
+                              steps={item.steps}
+                              isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
+                            />
+                          </div>
                         </div>
                       </div>
                     );
                   }
                   const { event, index } = item;
-                  const isFocused = focusedMsgIndex === mapIndex;
+                  const isFocused = focusedMsgIndex === virtualRow.index;
                   return (
                     <div
                       key={event.id || `event-${index}`}
-                      data-msg-index={mapIndex}
+                      data-index={virtualRow.index}
+                      data-msg-index={virtualRow.index}
                       data-msg-id={event.id}
-                      style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
+                      ref={virtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
                       className={isFocused ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-xl transition-shadow duration-200' : ''}
                     >
-                      <MessageBubble
-                        event={event}
-                        isStreaming={isStreaming && index === timeline.length - 1}
-                        allEvents={timeline}
-                        isPinned={!!event.id && pinnedEventIds.has(event.id)}
-                        onPin={event.id ? () => togglePinEvent(event.id!) : undefined}
-                      />
+                      <div className="pb-3">
+                        <MessageBubble
+                          event={event}
+                          isStreaming={isStreaming && index === timeline.length - 1}
+                          allEvents={timeline}
+                          isPinned={!!event.id && pinnedEventIds.has(event.id)}
+                          onPin={event.id ? () => togglePinEvent(event.id!) : undefined}
+                        />
+                      </div>
                     </div>
                   );
                 })}
+              </div>
 
+              {/* Non-virtualized streaming/footer content */}
+              <div className="space-y-3">
                 {/* Suggestion chips - shown when not streaming and suggestions available */}
                 {!isStreaming && suggestions && suggestions.length > 0 && onSuggestionSelect && (
                   <SuggestionChips

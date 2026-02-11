@@ -48,7 +48,6 @@ export { SkillExecutionCard } from './SkillExecutionCard';
 // Layout & Chat Components
 export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
 export { IdleState, FloatingInputBar } from './chat';
-export { VirtualTimelineEventList } from './VirtualTimelineEventList';
 export { TimelineEventItem } from './TimelineEventItem';
 export {
   WorkPlanProgress,

@@ -16,9 +16,29 @@ import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 
+/**
+ * Rehype plugin that strips empty `data` attributes from elements.
+ * Prevents React warning: "An empty string was passed to the data attribute."
+ */
+function rehypeStripEmptyData() {
+  return (tree: any) => {
+    const visit = (node: any) => {
+      if (node.type === 'element' && node.properties && 'data' in node.properties) {
+        if (node.properties.data === '') {
+          delete node.properties.data;
+        }
+      }
+      if (node.children) {
+        for (const child of node.children) visit(child);
+      }
+    };
+    visit(tree);
+  };
+}
+
 // Base plugins (always loaded)
 const baseRemarkPlugins = [remarkGfm];
-const baseRehypePlugins = [rehypeRaw];
+const baseRehypePlugins = [rehypeRaw, rehypeStripEmptyData];
 
 // Cached math plugins after lazy load
 let cachedMathPlugins: { remarkMath: any; rehypeKatex: any } | null = null;
