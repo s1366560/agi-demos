@@ -601,7 +601,7 @@ export const InputBar = memo<InputBarProps>(
           </div>
 
           {/* Toolbar */}
-          <div className="flex-shrink-0 px-3 pb-3 flex items-center justify-between">
+          <div className="flex-shrink-0 px-3 pb-3 flex items-center gap-2">
             {/* Left Actions */}
             <div className="flex items-center gap-1">
               <LazyTooltip title={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}>
@@ -711,8 +711,11 @@ export const InputBar = memo<InputBarProps>(
               </LazyTooltip>
             </div>
 
+            {/* Spacer */}
+            <div className="flex-1" />
+
             {/* Right Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {charCount > 0 && (
                 <span
                   className={`text-xs font-medium transition-colors ${charCount > 4000 ? 'text-amber-500' : 'text-slate-400'}`}
@@ -725,25 +728,25 @@ export const InputBar = memo<InputBarProps>(
                 <LazyButton
                   type="primary"
                   danger
-                  size="middle"
+                  size="small"
                   icon={<Square size={14} className="fill-current" />}
                   onClick={onAbort}
-                  className="rounded-xl flex items-center gap-2 h-9 px-4 shadow-md"
+                  className="rounded-xl flex items-center gap-1.5 h-8 px-3 shadow-sm"
                 >
                   {t('agent.inputBar.stop', 'Stop')}
                 </LazyButton>
               ) : (
                 <LazyButton
                   type="primary"
-                  size="middle"
+                  size="small"
                   icon={<Send size={14} />}
                   onClick={handleSend}
                   disabled={!canSend}
                   className={`
-                    rounded-xl flex items-center gap-2 h-9 px-4
+                    rounded-xl flex items-center gap-1.5 h-8 px-3
                     bg-gradient-to-r from-primary to-primary-600
                     hover:from-primary-600 hover:to-primary-700
-                    shadow-lg shadow-primary/25
+                    shadow-md shadow-primary/20
                     disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
                     transition-all duration-200
                   `}
