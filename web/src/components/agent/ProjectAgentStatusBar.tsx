@@ -577,7 +577,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         </LazyTooltip>
 
         {/* Context Window Status */}
-        <div className="hidden sm:block">
+        <div className="hidden sm:flex items-center">
           <ContextStatusIndicator />
         </div>
 
