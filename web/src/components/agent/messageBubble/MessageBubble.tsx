@@ -5,7 +5,7 @@
  * Features modern glass-morphism design, smooth animations, and improved UX.
  */
 
-import React, { memo, useState, useEffect } from 'react';
+import React, { memo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
@@ -31,9 +31,9 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
-import { MermaidBlock } from '../chat/MermaidBlock';
+import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { remarkPlugins, rehypePlugins } from '../chat/markdownPlugins';
-import { MessageActionBar, CodeBlockCopyButton } from '../chat/MessageActionBar';
+import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
 // Import types without type qualifier
@@ -171,111 +171,6 @@ const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | unde
 // Utilities
 // ========================================
 
-// Dynamic import hook for syntax highlighter
-const useSyntaxHighlighter = () => {
-  const [SyntaxHighlighter, setSyntaxHighlighter] = useState<any>(null);
-  const [vscDarkPlus, setVscDarkPlus] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadHighlighter = async () => {
-      if (isLoading || SyntaxHighlighter) return;
-
-      setIsLoading(true);
-      try {
-        const [{ Prism }, { vscDarkPlus: styles }] = await Promise.all([
-          import('react-syntax-highlighter'),
-          import('react-syntax-highlighter/dist/esm/styles/prism'),
-        ]);
-        if (mounted) {
-          setSyntaxHighlighter(() => Prism);
-          setVscDarkPlus(() => styles);
-        }
-      } catch (error) {
-        console.warn('Failed to load syntax highlighter:', error);
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    };
-
-    loadHighlighter();
-    return () => {
-      mounted = false;
-    };
-  }, [isLoading, SyntaxHighlighter]);
-
-  return { SyntaxHighlighter, vscDarkPlus, isLoading };
-};
-
-// Code block component with lazy loading and copy button
-const CodeBlockCanvasButton: React.FC<{ code: string; language: string }> = memo(
-  ({ code, language }) => {
-    const openTab = useCanvasStore((s) => s.openTab);
-    const setMode = useLayoutModeStore((s) => s.setMode);
-
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          openTab({
-            id: `code-${Date.now()}`,
-            title: `snippet.${language || 'txt'}`,
-            type: 'code',
-            content: code,
-            language: language || undefined,
-          });
-          setMode('canvas');
-        }}
-        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-400 hover:text-primary transition-colors"
-        title="Open in Canvas"
-      >
-        <PanelRight size={14} />
-      </button>
-    );
-  }
-);
-CodeBlockCanvasButton.displayName = 'CodeBlockCanvasButton';
-
-const CodeBlock: React.FC<{ language: string; children: string }> = ({ language, children }) => {
-  const { SyntaxHighlighter, vscDarkPlus } = useSyntaxHighlighter();
-
-  if (!SyntaxHighlighter || !vscDarkPlus) {
-    return (
-      <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-2">
-        <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-slate-400"></span>
-          <span className="flex-1">{language || 'code'}</span>
-          <CodeBlockCopyButton code={children} />
-          <CodeBlockCanvasButton code={children} language={language} />
-        </div>
-        <code className="font-mono text-sm bg-slate-50 dark:bg-slate-900 p-4 block overflow-x-auto text-slate-800 dark:text-slate-200">
-          {children}
-        </code>
-      </div>
-    );
-  }
-
-  return (
-    <div className="syntax-highlighted rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-2">
-      <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-        <span className="flex-1">{language || 'code'}</span>
-        <CodeBlockCopyButton code={String(children).replace(/\n$/, '')} />
-        <CodeBlockCanvasButton code={String(children).replace(/\n$/, '')} language={language} />
-      </div>
-      <SyntaxHighlighter
-        style={vscDarkPlus}
-        language={language}
-        PreTag="div"
-        customStyle={{ margin: 0, borderRadius: 0 }}
-      >
-        {String(children).replace(/\n$/, '')}
-      </SyntaxHighlighter>
-    </div>
-  );
-};
-
 // Format tool output for display
 const formatToolOutput = (output: any): { type: 'text' | 'json' | 'error'; content: string } => {
   if (!output) return { type: 'text', content: 'No output' };
@@ -378,31 +273,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
                 remarkPlugins={remarkPlugins}
                 rehypePlugins={rehypePlugins}
                 components={{
-                  code({ inline, className, children, ...props }: any) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    if (!inline && match) {
-                      if (match[1] === 'mermaid') {
-                        return <MermaidBlock chart={String(children).replace(/\n$/, '')} />;
-                      }
-                      return (
-                        <CodeBlock language={match[1]}>
-                          {String(children).replace(/\n$/, '')}
-                        </CodeBlock>
-                      );
-                    }
-                    return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                  blockquote({ children }) {
-                    return (
-                      <blockquote>
-                        {children}
-                      </blockquote>
-                    );
-                  },
+                  pre: SharedCodeBlock,
                 }}
               >
                 {content}

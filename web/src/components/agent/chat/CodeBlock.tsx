@@ -1,7 +1,7 @@
 /**
  * CodeBlock - Custom code block renderer for ReactMarkdown
  *
- * Adds syntax highlighting (lazy-loaded Prism), language label header,
+ * Adds syntax highlighting (lazy-loaded hljs), language label header,
  * copy/canvas action buttons, and mermaid diagram rendering.
  * Used as a `components.pre` override in ReactMarkdown instances.
  */
@@ -36,21 +36,21 @@ function extractCodeContent(children: ReactNode): { text: string; language?: str
   return { text: String(children) };
 }
 
-// Lazy-loaded syntax highlighter singleton
-let _Prism: any = null;
+// Lazy-loaded syntax highlighter singleton (hljs — more reliable than Prism with Vite)
+let _SyntaxHighlighter: any = null;
 let _theme: any = null;
 let _loadingPromise: Promise<void> | null = null;
 
 function loadHighlighter(): Promise<void> {
-  if (_Prism && _theme) return Promise.resolve();
+  if (_SyntaxHighlighter && _theme) return Promise.resolve();
   if (_loadingPromise) return _loadingPromise;
   _loadingPromise = Promise.all([
     import('react-syntax-highlighter'),
-    import('react-syntax-highlighter/dist/esm/styles/prism'),
+    import('react-syntax-highlighter/dist/esm/styles/hljs'),
   ])
-    .then(([{ Prism }, { vscDarkPlus }]) => {
-      _Prism = Prism;
-      _theme = vscDarkPlus;
+    .then(([mod, { vs2015 }]) => {
+      _SyntaxHighlighter = mod.default;
+      _theme = vs2015;
     })
     .catch(() => {
       _loadingPromise = null;
@@ -59,16 +59,16 @@ function loadHighlighter(): Promise<void> {
 }
 
 function useSyntaxHighlighter() {
-  const [ready, setReady] = useState(_Prism !== null);
+  const [ready, setReady] = useState(_SyntaxHighlighter !== null);
 
   useEffect(() => {
     if (ready) return;
     loadHighlighter().then(() => {
-      if (_Prism) setReady(true);
+      if (_SyntaxHighlighter) setReady(true);
     });
   }, [ready]);
 
-  return ready ? { Prism: _Prism, theme: _theme } : null;
+  return ready ? { SyntaxHighlighter: _SyntaxHighlighter, theme: _theme } : null;
 }
 
 export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props }) => {
@@ -152,14 +152,14 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
       {/* Code content — highlighted or plain */}
       {highlighter && language ? (
         <div className="syntax-highlighted">
-          <highlighter.Prism
+          <highlighter.SyntaxHighlighter
             style={highlighter.theme}
             language={language}
             PreTag="div"
             customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem', lineHeight: 1.6 }}
           >
             {text}
-          </highlighter.Prism>
+          </highlighter.SyntaxHighlighter>
         </div>
       ) : (
         <pre {...props} className="rounded-none! border-none!">

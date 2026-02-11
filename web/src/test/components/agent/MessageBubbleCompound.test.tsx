@@ -17,11 +17,16 @@ vi.mock('remark-gfm', () => ({
 }));
 
 vi.mock('react-syntax-highlighter', () => ({
+  default: ({ children }: any) => <div data-testid="syntax-highlighter">{children}</div>,
   Prism: ({ children }: any) => <div data-testid="syntax-highlighter">{children}</div>,
 }));
 
 vi.mock('react-syntax-highlighter/dist/esm/styles/prism', () => ({
   vscDarkPlus: {},
+}));
+
+vi.mock('react-syntax-highlighter/dist/esm/styles/hljs', () => ({
+  vs2015: {},
 }));
 
 // Mock lazy antd components
