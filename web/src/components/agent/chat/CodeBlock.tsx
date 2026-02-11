@@ -151,14 +151,16 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
 
       {/* Code content — highlighted or plain */}
       {highlighter && language ? (
-        <highlighter.Prism
-          style={highlighter.theme}
-          language={language}
-          PreTag="div"
-          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem' }}
-        >
-          {text}
-        </highlighter.Prism>
+        <div className="not-prose">
+          <highlighter.Prism
+            style={highlighter.theme}
+            language={language}
+            PreTag="div"
+            customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem', lineHeight: 1.6 }}
+          >
+            {text}
+          </highlighter.Prism>
+        </div>
       ) : (
         <pre {...props} className="rounded-none! border-none!">
           {children}
