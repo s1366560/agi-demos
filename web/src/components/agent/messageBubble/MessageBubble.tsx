@@ -10,6 +10,7 @@ import React, { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
+import type { Components } from 'react-markdown';
 import {
   User,
   Sparkles,
@@ -255,6 +256,12 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply }) => {
 });
 UserMessage.displayName = 'MessageBubble.User';
 
+// Stable component references hoisted to module scope to prevent ReactMarkdown re-parsing
+const ASSISTANT_COMPONENTS: Components = {
+  pre: SharedCodeBlock,
+  ...safeMarkdownComponents,
+};
+
 // Assistant Message Component - Modern card style with action bar
 const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStreaming, isPinned, onPin, onReply }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -273,10 +280,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
               <ReactMarkdown
                 remarkPlugins={remarkPlugins}
                 rehypePlugins={rehypePlugins}
-                components={{
-                  pre: SharedCodeBlock,
-                  ...safeMarkdownComponents,
-                }}
+                components={ASSISTANT_COMPONENTS}
               >
                 {content}
               </ReactMarkdown>

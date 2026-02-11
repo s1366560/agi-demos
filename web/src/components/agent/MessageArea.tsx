@@ -183,6 +183,7 @@ function estimateGroupedItemHeight(item: GroupedItem): number {
 /**
  * Estimate rendered height of markdown content by analyzing structure.
  * Counts code blocks, line breaks, and text density for better accuracy.
+ * More accurate estimates reduce virtualizer scroll jumping.
  */
 function estimateMarkdownHeight(content: string): number {
   if (!content) return 80;
@@ -216,13 +217,20 @@ function estimateMarkdownHeight(content: string): number {
       height += 32; // table row
     } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\./.test(trimmed)) {
       height += LINE_HEIGHT; // list item
+    } else if (trimmed.startsWith('![')) {
+      height += 200; // image placeholder
+    } else if (trimmed.startsWith('> ')) {
+      // Blockquote: estimate wrapped text + border/padding
+      const quoteText = trimmed.slice(2);
+      height += Math.max(1, Math.ceil(quoteText.length / 70)) * LINE_HEIGHT + 16;
     } else {
       // Regular text: wrap estimate (~80 chars per visual line)
       height += Math.max(1, Math.ceil(trimmed.length / 80)) * LINE_HEIGHT;
     }
   }
 
-  return Math.max(80, height);
+  // Add margin for markdown elements that expand (e.g. nested lists, tables with wide content)
+  return Math.max(80, Math.round(height * 1.05));
 }
 
 // Define local type aliases to avoid TS6192 (unused imports)
@@ -639,6 +647,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const hasScrolledInitiallyRef = useRef(false);
     const loadingIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastLoadTimeRef = useRef(0);
+    // Suppress scroll events during initial positioning to prevent scrollbar jitter
+    const isPositioningRef = useRef(false);
 
     // Track if user has manually scrolled up during streaming
     const userScrolledUpRef = useRef(false);
@@ -694,6 +704,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       const container = containerRef.current;
       if (!container) return;
 
+      isPositioningRef.current = true;
       const newScrollHeight = container.scrollHeight;
       const heightDifference = newScrollHeight - previousScrollHeightRef.current;
 
@@ -703,6 +714,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
       previousScrollHeightRef.current = 0;
       previousScrollTopRef.current = 0;
+      // Release guard after layout settles
+      requestAnimationFrame(() => {
+        isPositioningRef.current = false;
+      });
     }, []);
 
     // Aggressive preload logic with screen height adaptation
@@ -761,7 +776,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // Handle scroll events
     const handleScroll = useCallback(() => {
       const container = containerRef.current;
-      if (!container || isLoading || isSwitchingConversationRef.current) return;
+      if (!container || isLoading || isSwitchingConversationRef.current || isPositioningRef.current) return;
 
       checkAndPreload();
 
@@ -790,6 +805,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         hasScrolledInitiallyRef.current = true;
         isInitialLoadRef.current = false;
         prevTimelineLengthRef.current = currentTimelineLength;
+        isPositioningRef.current = true;
 
         // Double-rAF: first frame for virtualizer layout, second for scroll
         requestAnimationFrame(() => {
@@ -799,6 +815,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             } else if (containerRef.current) {
               containerRef.current.scrollTop = containerRef.current.scrollHeight;
             }
+            // Allow scroll events after positioning settles
+            requestAnimationFrame(() => {
+              isPositioningRef.current = false;
+            });
           });
         });
         return;
@@ -899,7 +919,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       count: groupedItems.length,
       getScrollElement: () => containerRef.current,
       estimateSize,
-      overscan: 10,
+      overscan: 15,
+      paddingEnd: isStreaming ? 200 : 0,
     });
 
     // Reset scroll state and virtualizer when conversation changes
@@ -908,6 +929,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       lastConversationIdRef.current = conversationId;
 
       isSwitchingConversationRef.current = true;
+      isPositioningRef.current = true;
 
       isInitialLoadRef.current = true;
       hasScrolledInitiallyRef.current = false;
@@ -933,6 +955,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           // Always clear switching flag so timeline-change effect can handle
           // the scroll if data arrives later.
           isSwitchingConversationRef.current = false;
+          // Release positioning guard after one more frame for layout to settle
+          requestAnimationFrame(() => {
+            isPositioningRef.current = false;
+          });
         });
         cleanupRef.current = rafId2;
       });
