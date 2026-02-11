@@ -561,15 +561,6 @@ class AgentServiceImpl implements AgentService {
     // Route conversation-specific messages to handlers
     if (conversation_id) {
       const handler = this.handlers.get(conversation_id);
-      // DEBUG: Enhanced logging for recovery troubleshooting
-      const isRecovery = (message as { is_recovery?: boolean }).is_recovery;
-      console.log('[AgentWS] Looking for handler:', {
-        conversation_id,
-        hasHandler: !!handler,
-        handlersSize: this.handlers.size,
-        type,
-        isRecovery,
-      });
       if (handler) {
         this.routeToHandler(type as AgentEventType, data, handler);
       } else {

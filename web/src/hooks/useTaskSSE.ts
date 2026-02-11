@@ -76,7 +76,6 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
 
   const unsubscribe = useCallback(() => {
     if (eventSourceRef.current) {
-      console.log('🔌 Closing SSE connection');
       eventSourceRef.current.close();
       eventSourceRef.current = null;
       isConnectedRef.current = false;
@@ -88,16 +87,12 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
       // Close existing connection if any
       unsubscribe();
 
-      console.log(`📡 Connecting to SSE stream for task: ${taskId}`);
-
       const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
-      console.log(`📡 SSE URL: ${streamUrl}`);
 
       const eventSource = new EventSource(streamUrl);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
-        console.log('✅ SSE connection opened');
         isConnectedRef.current = true;
       };
 
@@ -105,8 +100,6 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
       eventSource.addEventListener('progress', (e: MessageEvent) => {
         const data = safeParseJSON(e.data);
         if (!data) return;
-
-        console.log('📊 Progress event:', data);
 
         const task: TaskStatus = {
           task_id: String(data.id || ''),
@@ -122,8 +115,6 @@ export function useTaskSSE(options: UseTaskSSEOptions = {}) {
       eventSource.addEventListener('completed', (e: MessageEvent) => {
         const data = safeParseJSON(e.data);
         if (!data) return;
-
-        console.log('✅ Completed event:', data);
 
         const task: TaskStatus = {
           task_id: String(data.id || ''),

@@ -405,10 +405,6 @@ export class EventBusClient {
       this.options.maxReconnectDelay
     );
 
-    console.log(
-      `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts})`
-    );
-
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();

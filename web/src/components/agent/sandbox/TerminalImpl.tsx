@@ -160,7 +160,6 @@ export function TerminalImpl({
     const ws = new WebSocket(getWsUrl());
 
     ws.onopen = () => {
-      console.log('[Terminal] WebSocket connected');
     };
 
     ws.onmessage = (event) => {
@@ -202,13 +201,11 @@ export function TerminalImpl({
     };
 
     ws.onclose = (event) => {
-      console.log('[Terminal] WebSocket closed:', event.code, event.reason);
       onDisconnect();
 
       // Auto-reconnect on abnormal close
       if (event.code !== 1000 && event.code !== 1001) {
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('[Terminal] Attempting reconnect...');
           connectRef.current();
         }, 3000);
       }

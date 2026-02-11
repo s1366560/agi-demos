@@ -103,9 +103,6 @@ export const useConversationsStore = create<ConversationsState>()(
         // Skip if already loading for the same project
         const state = get();
         if (state.conversationsLoading) {
-          console.log(
-            '[conversationsStore] Already loading conversations, skipping duplicate call'
-          );
           return;
         }
 
@@ -246,8 +243,6 @@ export const useConversationsStore = create<ConversationsState>()(
        * @param conversation - The conversation to set as current
        */
       setCurrentConversation: (conversation: Conversation | null) => {
-        console.log('[ConversationsStore] setCurrentConversation called:', conversation?.id);
-
         set((state) => {
           // Clear pending flag when setting a conversation
           const updates = {

@@ -71,9 +71,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       });
 
       if (updatedMemory.task_id) {
-        // You might want to use a toast notification here instead of alert
-        // For now using console log as alert might be intrusive on close
-        console.log('Graph re-processing started with task:', updatedMemory.task_id);
+        // Graph re-processing started - task_id available for tracking
       }
 
       // Call the update callback to refresh the list

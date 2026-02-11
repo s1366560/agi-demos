@@ -144,8 +144,7 @@ export function WorkflowPatterns() {
     setAdminNotes('');
   };
 
-  const handleSavePattern = (updatedPattern: Record<string, unknown>) => {
-    console.log('Saving pattern:', updatedPattern);
+  const handleSavePattern = (_updatedPattern: Record<string, unknown>) => {
     message?.info('Pattern update is not yet implemented');
   };
 

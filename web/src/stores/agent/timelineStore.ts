@@ -94,9 +94,6 @@ export const useTimelineStore = create<TimelineState>()(
        * @param projectId - The project ID
        */
       getTimeline: async (conversationId: string, projectId: string) => {
-        if (import.meta.env.DEV) {
-          console.log('[TimelineStore] getTimeline called:', conversationId, projectId);
-        }
         set({ timelineLoading: true, timelineError: null });
 
         try {
@@ -105,9 +102,6 @@ export const useTimelineStore = create<TimelineState>()(
             projectId,
             50 // Changed from 100 to 50
           )) as any; // Type cast to access pagination metadata
-          if (import.meta.env.DEV) {
-            console.log('[TimelineStore] getTimeline response:', response.timeline.length, 'events');
-          }
 
           // Extract pagination metadata from response
           const firstTimeUs = response.first_time_us ?? null;
@@ -145,16 +139,6 @@ export const useTimelineStore = create<TimelineState>()(
       addTimelineEvent: (event: TimelineEvent) => {
         const { timeline } = get();
 
-        if (import.meta.env.DEV) {
-          console.log(
-            '[TimelineStore] Adding timeline event:',
-            event.type,
-            'timeUs:',
-            event.eventTimeUs,
-            'counter:',
-            event.eventCounter
-          );
-        }
         let newTimeline = [...timeline, event];
         if (newTimeline.length > MAX_TIMELINE_EVENTS) {
           newTimeline = newTimeline.slice(newTimeline.length - MAX_TIMELINE_EVENTS);
@@ -203,22 +187,9 @@ export const useTimelineStore = create<TimelineState>()(
 
         // Guard: Don't load if already loading or no pagination point exists
         if (!earliestTimeUs || isLoadingEarlier) {
-          if (import.meta.env.DEV) {
-            console.log(
-              '[TimelineStore] Cannot load earlier messages: no pagination point or already loading'
-            );
-          }
           return false;
         }
 
-        if (import.meta.env.DEV) {
-          console.log(
-            '[TimelineStore] Loading earlier messages before timeUs:',
-            earliestTimeUs,
-            'counter:',
-            earliestCounter
-          );
-        }
         set({ isLoadingEarlier: true, timelineError: null });
 
         try {

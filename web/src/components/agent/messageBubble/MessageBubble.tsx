@@ -871,7 +871,6 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return null;
 
       case 'artifact_created':
-        console.log('[MessageBubble] Rendering artifact_created event:', event);
         return <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string }} />;
 
       // HITL Events - Render inline cards

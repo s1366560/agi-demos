@@ -78,7 +78,6 @@ async function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'conversationId' });
         store.createIndex('lastUpdated', 'lastUpdated', { unique: false });
-        console.log('[ConversationDB] Created object store:', STORE_NAME);
       }
     };
   });
@@ -262,7 +261,6 @@ export async function clearAllConversationStates(): Promise<void> {
       };
 
       request.onsuccess = () => {
-        console.log('[ConversationDB] Cleared all conversation states');
         resolve();
       };
     });
@@ -329,7 +327,6 @@ export async function cleanupOldStates(daysOld: number = 30): Promise<number> {
           deletedCount++;
           cursor.continue();
         } else {
-          console.log(`[ConversationDB] Cleaned up ${deletedCount} old states`);
           resolve(deletedCount);
         }
       };

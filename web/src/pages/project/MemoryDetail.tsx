@@ -45,8 +45,6 @@ export const MemoryDetail: React.FC = () => {
       sseCleanupRef.current = null;
     }
 
-    console.log(`📡 Subscribing to SSE for task ${taskId}`);
-
     const cleanup = subscribeToTask(taskId, {
       onProgress: (task: TaskStatus) => {
         setProcessingProgress({
@@ -56,13 +54,11 @@ export const MemoryDetail: React.FC = () => {
         });
       },
       onCompleted: () => {
-        console.log('✅ Memory processing completed');
         setProcessingProgress(null);
         setMemory((prev) => (prev ? { ...prev, processing_status: 'COMPLETED' } : null));
         sseCleanupRef.current = null;
       },
       onFailed: () => {
-        console.log('❌ Memory processing failed');
         setProcessingProgress(null);
         setMemory((prev) => (prev ? { ...prev, processing_status: 'FAILED' } : null));
         sseCleanupRef.current = null;

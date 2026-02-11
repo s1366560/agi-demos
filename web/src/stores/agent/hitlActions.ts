@@ -53,7 +53,6 @@ async function ensureConnectedAndSubscribe(
   deps: HITLActionDeps
 ): Promise<void> {
   if (!agentService.isConnected()) {
-    console.log('[agentV3] Connecting WebSocket before HITL response...');
     await agentService.connect();
   }
 
@@ -73,7 +72,6 @@ async function ensureConnectedAndSubscribe(
   );
 
   agentService.subscribe(conversationId, handler);
-  console.log('[agentV3] Subscribed to conversation with full handler:', conversationId);
 }
 
 /**
@@ -85,7 +83,6 @@ export function createHITLActions(deps: HITLActionDeps) {
 
   return {
     respondToClarification: async (requestId: string, answer: string): Promise<void> => {
-      console.log('Responding to clarification', requestId, answer);
       const { activeConversationId } = get();
       if (!activeConversationId) return;
 
@@ -118,7 +115,6 @@ export function createHITLActions(deps: HITLActionDeps) {
     },
 
     respondToDecision: async (requestId: string, decision: string): Promise<void> => {
-      console.log('Responding to decision', requestId, decision);
       const { activeConversationId } = get();
       if (!activeConversationId) return;
 
@@ -149,7 +145,6 @@ export function createHITLActions(deps: HITLActionDeps) {
     },
 
     respondToEnvVar: async (requestId: string, values: Record<string, string>): Promise<void> => {
-      console.log('Responding to env var request', requestId, values);
       const { activeConversationId } = get();
       if (!activeConversationId) return;
 
@@ -182,7 +177,6 @@ export function createHITLActions(deps: HITLActionDeps) {
     },
 
     respondToPermission: async (requestId: string, granted: boolean): Promise<void> => {
-      console.log('Responding to permission request', requestId, granted);
       const { activeConversationId } = get();
       if (!activeConversationId) return;
 

@@ -380,11 +380,6 @@ export function createStreamEventHandlers(
 
     onTextDelta: (event) => {
       const delta = event.data.delta;
-      if (import.meta.env.DEV) {
-        console.log(
-          `[AgentV3] onTextDelta: delta="${delta?.substring(0, 30)}...", conv=${handlerConversationId}`
-        );
-      }
       if (!delta) return;
 
       const buffer = getDeltaBuffer(handlerConversationId);
@@ -573,9 +568,6 @@ export function createStreamEventHandlers(
     onArtifactCreated: (event) => {
       const { updateConversationState, getConversationState } = get();
 
-      if (import.meta.env.DEV) {
-        console.log('[AgentV3] Artifact created event:', event.data);
-      }
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
 
@@ -588,9 +580,6 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState } = get();
       const data = event.data as ArtifactReadyEventData;
 
-      if (import.meta.env.DEV) {
-        console.log('[AgentV3] Artifact ready event:', data.artifact_id);
-      }
       const convState = getConversationState(handlerConversationId);
 
       // Update the existing artifact_created timeline entry with URL
@@ -692,9 +681,6 @@ export function createStreamEventHandlers(
         message_id?: string;
         generated_by?: string;
       };
-      if (import.meta.env.DEV) {
-        console.log('[AgentV3] Title generated event:', data);
-      }
 
       setState((state: any) => {
         const updatedList = state.conversations.map((c: any) =>
@@ -715,11 +701,6 @@ export function createStreamEventHandlers(
     },
 
     onComplete: (event) => {
-      if (import.meta.env.DEV) {
-        console.log(
-          `[AgentV3] onComplete: handler=${handlerConversationId}, content preview="${(event.data as any)?.content?.substring(0, 50)}..."`
-        );
-      }
       const { updateConversationState, getConversationState } = get();
 
       clearAllDeltaBuffers();

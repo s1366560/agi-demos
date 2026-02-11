@@ -126,21 +126,7 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
           (state) => {
             // Skip if already exists
             if (state.pendingRequests.has(request.requestId)) {
-              if (process.env.NODE_ENV === 'development') {
-                console.log('[HITL Debug] Request already exists:', request.requestId);
-              }
               return state;
-            }
-
-            if (process.env.NODE_ENV === 'development') {
-              console.log(
-                '[HITL Debug] Adding request:',
-                request.requestId,
-                'Type:',
-                request.hitlType,
-                'Total pending:',
-                state.pendingRequests.size + 1
-              );
             }
 
             const newPending = new Map(state.pendingRequests);
@@ -192,10 +178,6 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
       updateRequestStatus: (requestId: string, status: HITLStatus) => {
         set(
           (state) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[HITL Debug] Updating request status:', requestId, '->', status);
-            }
-
             // Always update the status map (even if request not in pendingRequests)
             const newStatuses = new Map(state.requestStatuses);
             newStatuses.set(requestId, status);
@@ -253,24 +235,11 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
         data: Record<string, unknown>,
         conversationId: string
       ) => {
-        // 调试日志：记录接收到的 SSE 事件
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[HITL Debug] Received SSE event:', {
-            eventType,
-            conversationId,
-            requestId: data.request_id,
-            hitlType: SSE_EVENT_TO_HITL_TYPE[eventType],
-          });
-        }
-
         // Handle "asked" events
         const hitlType = SSE_EVENT_TO_HITL_TYPE[eventType];
         if (hitlType) {
           const request = createRequestFromSSE(eventType, data, conversationId);
           if (request) {
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[HITL Debug] Created request:', request.requestId, request.hitlType);
-            }
             get().addRequest(request);
           }
           return;

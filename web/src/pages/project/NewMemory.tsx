@@ -31,22 +31,17 @@ export const NewMemory: React.FC = () => {
 
   const streamTaskStatus = useCallback(
     (taskId: string) => {
-      console.log(`📡 Connecting to SSE stream for task: ${taskId}`);
-
       // Use centralized URL utility for consistent API URL construction
       const streamUrl = createApiUrl(`/tasks/${taskId}/stream`);
-      console.log(`📡 SSE URL: ${streamUrl}`);
 
       const eventSource = new EventSource(streamUrl);
 
       eventSource.onopen = () => {
-        console.log('✅ SSE connection opened - waiting for events...');
       };
 
       // Listen for progress events
       eventSource.addEventListener('progress', (e: MessageEvent) => {
         const data = JSON.parse(e.data);
-        console.log('📊 Progress event:', data);
 
         // Map status: processing -> running
         const statusMap: { [key: string]: string } = {
@@ -69,7 +64,6 @@ export const NewMemory: React.FC = () => {
       // Listen for completion
       eventSource.addEventListener('completed', (e: MessageEvent) => {
         const task = JSON.parse(e.data);
-        console.log('✅ Completed event:', task);
         setCurrentTask({
           task_id: task.id,
           status: 'completed',
@@ -182,11 +176,9 @@ export const NewMemory: React.FC = () => {
 
       // If response contains task_id, start SSE streaming
       if (response.task_id) {
-        console.log('✅ Memory created with task:', response.task_id);
         streamTaskStatus(response.task_id);
       } else {
         // Fallback: no task ID, navigate directly
-        console.log('⚠️ No task_id returned, navigating directly');
         navigate(`/project/${projectId}/memories`);
         setIsSaving(false);
       }

@@ -74,12 +74,10 @@ export function FinalResponseDisplay({
 
   const handleExportPDF = () => {
     // TODO: Implement PDF export
-    console.log('Export PDF');
   };
 
   const handleShare = () => {
     // TODO: Implement share
-    console.log('Share');
   };
 
   return (
