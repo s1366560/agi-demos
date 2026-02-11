@@ -11,7 +11,7 @@ export interface StarterTile {
   id: string;
   title: string;
   description: string;
-  color: 'blue' | 'purple' | 'emerald' | 'amber';
+  color: 'blue' | 'slate' | 'emerald' | 'primary';
   icon: string;
 }
 
@@ -38,7 +38,7 @@ const DEFAULT_STARTER_TILES: StarterTile[] = [
     id: 'reports',
     title: 'Synthesize Q4 reports',
     description: 'Aggregate complex findings into an executive summary',
-    color: 'purple',
+    color: 'slate',
     icon: 'summarize',
   },
   {
@@ -52,7 +52,7 @@ const DEFAULT_STARTER_TILES: StarterTile[] = [
     id: 'compare',
     title: 'Cross-project comparison',
     description: 'Compare performance metrics between active projects',
-    color: 'amber',
+    color: 'primary',
     icon: 'compare_arrows',
   },
 ];
@@ -63,9 +63,9 @@ const TILE_COLORS = {
     text: 'text-primary',
     hoverText: 'group-hover:text-primary',
   },
-  purple: {
-    bg: 'bg-purple-50 dark:bg-purple-500/10',
-    text: 'text-purple-600',
+  slate: {
+    bg: 'bg-slate-50 dark:bg-slate-500/10',
+    text: 'text-slate-600',
     hoverText: 'group-hover:text-primary',
   },
   emerald: {
@@ -73,9 +73,9 @@ const TILE_COLORS = {
     text: 'text-emerald-600',
     hoverText: 'group-hover:text-primary',
   },
-  amber: {
-    bg: 'bg-amber-50 dark:bg-amber-500/10',
-    text: 'text-amber-600',
+  primary: {
+    bg: 'bg-blue-50 dark:bg-primary/10',
+    text: 'text-primary',
     hoverText: 'group-hover:text-primary',
   },
 };

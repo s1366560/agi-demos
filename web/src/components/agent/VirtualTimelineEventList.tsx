@@ -18,6 +18,7 @@ import { Button, Spin } from 'antd';
 import { MarkdownContent } from './chat/MarkdownContent';
 import { MessageStream } from './chat/MessageStream';
 import { ThinkingBlock } from './chat/ThinkingBlock';
+import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import {
   ASSISTANT_PROSE_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
@@ -25,7 +26,8 @@ import {
 } from './styles';
 import { TimelineEventItem } from './TimelineEventItem';
 
-import type { TimelineEvent } from '../../types/agent';
+import type { TimelineEvent, ActEvent, ObserveEvent } from '../../types/agent';
+import type { TimelineStep } from './timeline/ExecutionTimeline';
 
 interface VirtualTimelineEventListProps {
   timeline: TimelineEvent[];
@@ -55,15 +57,127 @@ type SyntheticStreamingItem =
   | { _synthetic: 'streaming_thought'; content: string; isStreaming: boolean }
   | { _synthetic: 'streaming_text'; content: string };
 
-type DisplayItem = TimelineEvent | SyntheticStreamingItem;
+/** A grouped set of consecutive tool execution steps */
+type ToolGroupItem = {
+  _toolGroup: true;
+  steps: TimelineStep[];
+  isStreamingGroup: boolean;
+};
+
+type DisplayItem = TimelineEvent | SyntheticStreamingItem | ToolGroupItem;
 
 function isSynthetic(item: DisplayItem): item is SyntheticStreamingItem {
   return '_synthetic' in item;
 }
 
+function isToolGroup(item: DisplayItem): item is ToolGroupItem {
+  return '_toolGroup' in item;
+}
+
+/**
+ * Groups consecutive act/observe timeline events into ToolGroupItems.
+ * Non-tool events pass through as individual TimelineEvents.
+ */
+function groupTimelineForDisplay(
+  timeline: TimelineEvent[],
+  isStreaming: boolean,
+): (TimelineEvent | ToolGroupItem)[] {
+  const result: (TimelineEvent | ToolGroupItem)[] = [];
+  let currentSteps: TimelineStep[] = [];
+
+  // Build observe lookup by execution_id
+  const observeByExecId = new Map<string, ObserveEvent>();
+  // Fallback: build observe lookup by toolName for events without execution_id
+  const observeByToolName = new Map<string, ObserveEvent[]>();
+  for (const ev of timeline) {
+    if (ev.type === 'observe') {
+      const obs = ev as ObserveEvent;
+      if (obs.execution_id) {
+        observeByExecId.set(obs.execution_id, obs);
+      }
+      const list = observeByToolName.get(obs.toolName) || [];
+      list.push(obs);
+      observeByToolName.set(obs.toolName, list);
+    }
+  }
+
+  // Track which observe events have been consumed by fallback matching
+  const consumedObserves = new Set<string>();
+
+  const flushGroup = (endIndex: number) => {
+    if (currentSteps.length >= 2) {
+      const atEnd = endIndex >= timeline.length;
+      result.push({
+        _toolGroup: true,
+        steps: currentSteps,
+        isStreamingGroup: isStreaming && atEnd,
+      });
+    } else if (currentSteps.length === 1) {
+      // Single tool — still use group style for consistency
+      const atEnd = endIndex >= timeline.length;
+      result.push({
+        _toolGroup: true,
+        steps: currentSteps,
+        isStreamingGroup: isStreaming && atEnd,
+      });
+    }
+    currentSteps = [];
+  };
+
+  for (let i = 0; i < timeline.length; i++) {
+    const event = timeline[i];
+
+    if (event.type === 'act') {
+      const act = event as ActEvent;
+      // Priority 1: match by execution_id
+      let observe: ObserveEvent | undefined = act.execution_id
+        ? observeByExecId.get(act.execution_id)
+        : undefined;
+      // Priority 2: fallback to toolName matching (for data without execution_id)
+      if (!observe) {
+        const candidates = observeByToolName.get(act.toolName) || [];
+        for (const cand of candidates) {
+          if (!consumedObserves.has(cand.id) && cand.timestamp >= act.timestamp) {
+            observe = cand;
+            consumedObserves.add(cand.id);
+            break;
+          }
+        }
+      }
+
+      const step: TimelineStep = {
+        id: act.execution_id || act.id || `step-${i}`,
+        toolName: act.toolName || 'unknown',
+        status: observe ? (observe.isError ? 'error' : 'success') : 'running',
+        input: act.toolInput,
+        output: observe?.toolOutput,
+        isError: observe?.isError,
+        duration:
+          observe && act.timestamp && observe.timestamp
+            ? observe.timestamp - act.timestamp
+            : undefined,
+      };
+      currentSteps.push(step);
+    } else if (event.type === 'observe') {
+      // Skip — handled as part of act
+      continue;
+    } else {
+      flushGroup(i);
+      result.push(event);
+    }
+  }
+  flushGroup(timeline.length);
+
+  return result;
+}
+
 function estimateDisplayItemHeight(item: DisplayItem): number {
   if (isSynthetic(item)) {
     return item._synthetic === 'streaming_thought' ? 120 : 100;
+  }
+  if (isToolGroup(item)) {
+    // Header (~40px) + steps (~60px each)
+    return 40 + item.steps.length * 60;
   }
   return estimateEventHeight(item);
 }
@@ -166,9 +280,10 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
   const isSwitchingConversationRef = useRef(false);
   const lastConversationIdRef = useRef(conversationId);
 
-  // Build display list: real timeline + synthetic streaming items at the end
+  // Build display list: group tool events + synthetic streaming items at the end
   const displayTimeline: DisplayItem[] = useMemo(() => {
-    const items: DisplayItem[] = [...timeline];
+    const grouped = groupTimelineForDisplay(timeline, isStreaming);
+    const items: DisplayItem[] = [...grouped];
 
     if (isThinkingStreaming || streamingThought) {
       items.push({
@@ -571,6 +686,16 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                             </div>
                           </div>
                         )
+                      ) : isToolGroup(item) ? (
+                        <div className="my-3 flex items-start gap-3">
+                          <div className="w-8 shrink-0" />
+                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                            <ExecutionTimeline
+                              steps={item.steps}
+                              isStreaming={item.isStreamingGroup}
+                            />
+                          </div>
+                        </div>
                       ) : (
                         <TimelineEventItem
                           event={item}

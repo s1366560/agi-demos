@@ -56,11 +56,11 @@ const categoryConfig: Record<TemplateCategory, { icon: React.ReactNode; colorCla
   },
   writing: {
     icon: <FileText size={14} />,
-    colorClass: 'text-amber-500 bg-amber-50 dark:bg-amber-950/30',
+    colorClass: 'text-slate-500 bg-slate-50 dark:bg-slate-800/30',
   },
   general: {
     icon: <Lightbulb size={14} />,
-    colorClass: 'text-violet-500 bg-violet-50 dark:bg-violet-950/30',
+    colorClass: 'text-slate-500 bg-slate-50 dark:bg-slate-800/30',
   },
 };
 

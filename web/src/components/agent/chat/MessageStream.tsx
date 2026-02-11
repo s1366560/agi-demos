@@ -305,7 +305,7 @@ export function ToolExecutionCardDisplay({
         );
       case 'running':
         return (
-          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-600 text-[10px] font-bold uppercase tracking-wider">
+          <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
             <span className="material-symbols-outlined text-[12px] spinner">autorenew</span>
             Running
           </div>

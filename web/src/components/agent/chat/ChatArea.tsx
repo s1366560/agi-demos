@@ -39,7 +39,7 @@ const DEFAULT_STARTER_TILES: StarterTile[] = [
     id: 'reports',
     title: 'Synthesize Q4 reports',
     description: 'Aggregate complex findings into an executive summary',
-    color: 'purple',
+    color: 'slate',
     icon: 'summarize',
   },
   {
@@ -53,7 +53,7 @@ const DEFAULT_STARTER_TILES: StarterTile[] = [
     id: 'compare',
     title: 'Cross-project comparison',
     description: 'Compare performance metrics between active projects',
-    color: 'amber',
+    color: 'primary',
     icon: 'compare_arrows',
   },
 ];

@@ -49,9 +49,9 @@ function getStateConfig(
       return {
         icon: <Brain size={14} className="animate-pulse" />,
         label: t('agent.state.thinking', 'Thinking'),
-        color: 'text-violet-600 dark:text-violet-400',
-        bgColor: 'bg-violet-50 dark:bg-violet-900/20',
-        borderColor: 'border-violet-200 dark:border-violet-800',
+        color: 'text-slate-600 dark:text-slate-400',
+        bgColor: 'bg-slate-50 dark:bg-slate-800/50',
+        borderColor: 'border-slate-200 dark:border-slate-700',
       };
     case 'preparing':
       return {
@@ -65,9 +65,9 @@ function getStateConfig(
       return {
         icon: <Zap size={14} />,
         label: t('agent.state.acting', 'Executing'),
-        color: 'text-amber-600 dark:text-amber-400',
-        bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-        borderColor: 'border-amber-200 dark:border-amber-800',
+        color: 'text-blue-600 dark:text-blue-400',
+        bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+        borderColor: 'border-blue-200 dark:border-blue-800',
       };
     case 'observing':
       return {
@@ -81,9 +81,9 @@ function getStateConfig(
       return {
         icon: <MessageCircle size={14} className="animate-pulse" />,
         label: t('agent.state.awaitingInput', 'Waiting for input'),
-        color: 'text-orange-600 dark:text-orange-400',
-        bgColor: 'bg-orange-50 dark:bg-orange-900/20',
-        borderColor: 'border-orange-200 dark:border-orange-800',
+        color: 'text-slate-600 dark:text-slate-400',
+        bgColor: 'bg-slate-50 dark:bg-slate-800/50',
+        borderColor: 'border-slate-200 dark:border-slate-700',
       };
     case 'retrying':
       return {

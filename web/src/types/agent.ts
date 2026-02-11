@@ -385,7 +385,8 @@ export interface ActEventData {
   tool_name: string;
   tool_input: Record<string, unknown>;
   step_number?: number;
-  execution_id?: string; // New: unique ID for act/observe matching
+  execution_id?: string; // Legacy alias
+  tool_execution_id?: string; // Backend field name for act/observe matching
 }
 
 /**
@@ -405,7 +406,8 @@ export interface ActDeltaEventData {
 export interface ObserveEventData {
   observation?: string; // Legacy field for observation text
   tool_name?: string; // New: tool name
-  execution_id?: string; // New: matches act event's execution_id
+  execution_id?: string; // Legacy alias
+  tool_execution_id?: string; // Backend field name for act/observe matching
   error?: string; // Error message if tool execution failed
   result?: unknown; // Raw result from tool execution (may be string or object)
 }

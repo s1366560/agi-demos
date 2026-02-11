@@ -264,8 +264,8 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-3 opacity-70">
-        <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-amber-600 text-xs">play_arrow</span>
+        <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-xs">play_arrow</span>
         </div>
         <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1">
           {stepIndex !== undefined ? `Step ${stepIndex}: ` : ''}
@@ -408,14 +408,14 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-3">
-        <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg">
+        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
             help_outline
           </span>
         </div>
-        <div className="flex-1 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/50 rounded-xl p-4">
+        <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               需要澄清
             </span>
             {isAnswered && (
@@ -616,14 +616,14 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-3">
-        <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-purple-600 dark:text-purple-400 text-lg">
+        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">
             key
           </span>
         </div>
-        <div className="flex-1 bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
+        <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-purple-700 dark:text-purple-400 uppercase tracking-wider">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               需要配置
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">{event.toolName}</span>
@@ -885,7 +885,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                 <button
                   type="button"
                   onClick={handleOpenInCanvas}
-                  className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors"
+                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
                 >
                   <PanelRight size={14} />
                   {t('agent.artifact.openInCanvas', 'Open in Canvas')}

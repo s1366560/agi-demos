@@ -82,22 +82,29 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   const result: GroupedItem[] = [];
   let currentSteps: TimelineStep[] = [];
   let groupStartIndex = 0;
-  const observeMap = new Map<string, TimelineEvent>();
 
   // Build observe lookup by execution_id
+  const observeByExecId = new Map<string, TimelineEvent>();
+  // Fallback: build observe lookup by toolName for events without execution_id
+  const observeByToolName = new Map<string, TimelineEvent[]>();
   for (const ev of timeline) {
-    if (ev.type === 'observe' && (ev as any).execution_id) {
-      observeMap.set((ev as any).execution_id, ev);
+    if (ev.type === 'observe') {
+      if ((ev as any).execution_id) {
+        observeByExecId.set((ev as any).execution_id, ev);
+      }
+      const name = (ev as any).toolName || 'unknown';
+      const list = observeByToolName.get(name) || [];
+      list.push(ev);
+      observeByToolName.set(name, list);
     }
   }
 
+  // Track which observe events have been consumed by fallback matching
+  const consumedObserves = new Set<string>();
+
   const flushGroup = () => {
-    if (currentSteps.length >= 2) {
+    if (currentSteps.length >= 1) {
       result.push({ kind: 'timeline', steps: currentSteps, startIndex: groupStartIndex });
-    } else if (currentSteps.length === 1) {
-      // Single tool event doesn't need timeline grouping
-      const idx = groupStartIndex;
-      result.push({ kind: 'event', event: timeline[idx], index: idx });
     }
     currentSteps = [];
   };
@@ -109,19 +116,31 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
       if (currentSteps.length === 0) groupStartIndex = i;
 
       const act = event as any;
-      const observe = act.execution_id ? observeMap.get(act.execution_id) : undefined;
-      const obs = observe as any;
+      // Priority 1: match by execution_id
+      let obs = act.execution_id ? observeByExecId.get(act.execution_id) : undefined;
+      // Priority 2: fallback to toolName matching
+      if (!obs) {
+        const candidates = observeByToolName.get(act.toolName) || [];
+        for (const cand of candidates) {
+          if (!consumedObserves.has(cand.id) && (cand as any).timestamp >= act.timestamp) {
+            obs = cand;
+            consumedObserves.add(cand.id);
+            break;
+          }
+        }
+      }
+      const o = obs as any;
 
       const step: TimelineStep = {
         id: act.execution_id || act.id || `step-${i}`,
         toolName: act.toolName || 'unknown',
-        status: obs ? (obs.isError ? 'error' : 'success') : 'running',
+        status: o ? (o.isError ? 'error' : 'success') : 'running',
         input: act.toolInput,
-        output: obs?.toolOutput,
-        isError: obs?.isError,
+        output: o?.toolOutput,
+        isError: o?.isError,
         duration:
-          obs && act.timestamp && obs.timestamp
-            ? (obs.timestamp - act.timestamp)
+          o && act.timestamp && o.timestamp
+            ? (o.timestamp - act.timestamp)
             : undefined,
       };
       currentSteps.push(step);
@@ -1005,11 +1024,14 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 {groupTimelineEvents(timeline).map((item, mapIndex) => {
                   if (item.kind === 'timeline') {
                     return (
-                      <div key={`timeline-group-${item.startIndex}`} data-msg-index={mapIndex}>
-                        <ExecutionTimeline
-                          steps={item.steps}
-                          isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
-                        />
+                      <div key={`timeline-group-${item.startIndex}`} data-msg-index={mapIndex} className="flex items-start gap-3 mb-4">
+                        <div className="w-8 shrink-0" />
+                        <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                          <ExecutionTimeline
+                            steps={item.steps}
+                            isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
+                          />
+                        </div>
                       </div>
                     );
                   }

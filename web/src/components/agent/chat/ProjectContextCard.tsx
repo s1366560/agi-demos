@@ -40,7 +40,7 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
       value: stats.conversation_count,
     },
     {
-      icon: <Brain size={16} className="text-purple-500" />,
+      icon: <Brain size={16} className="text-primary" />,
       label: t('agent.projectContext.memories', 'Memories'),
       value: stats.memory_count,
     },
@@ -50,7 +50,7 @@ export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) 
       value: stats.node_count,
     },
     {
-      icon: <Users size={16} className="text-amber-500" />,
+      icon: <Users size={16} className="text-slate-500" />,
       label: t('agent.projectContext.members', 'Members'),
       value: stats.member_count,
     },

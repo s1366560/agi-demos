@@ -319,7 +319,7 @@ export function FloatingInputBar({
                     type="button"
                     onClick={planMode.onPlanMode}
                     disabled={planMode.disabled || disabled}
-                    className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 transition-colors uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1.5 text-[10px] font-semibold text-primary hover:text-primary/80 transition-colors uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Enter Plan Mode to create and refine implementation plans"
                   >
                     <span className="material-symbols-outlined text-sm">architecture</span>
@@ -330,7 +330,7 @@ export function FloatingInputBar({
               {planMode?.isInPlanMode && (
                 <>
                   <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-primary uppercase tracking-wider">
                     <span className="material-symbols-outlined text-sm">architecture</span>
                     In Plan Mode
                   </span>

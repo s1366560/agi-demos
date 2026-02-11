@@ -179,7 +179,7 @@ export function sseEventToTimeline(
         timestamp,
         toolName: data.tool_name,
         toolInput: data.tool_input,
-        execution_id: data.execution_id, // Unique ID for act/observe matching
+        execution_id: data.tool_execution_id ?? data.execution_id,
         execution: {
           startTime: timestamp,
           endTime: 0, // Will be set when observe arrives
@@ -225,7 +225,7 @@ export function sseEventToTimeline(
         eventCounter,
         timestamp,
         toolName: data.tool_name ?? 'unknown', // Use tool_name from event
-        execution_id: data.execution_id, // Unique ID for act/observe matching
+        execution_id: data.tool_execution_id ?? data.execution_id,
         toolOutput: observationValue,
         isError,
       };

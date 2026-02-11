@@ -15,7 +15,7 @@ export const BranchIndicator = memo<BranchIndicatorProps>(
     if (!parentTitle) return null;
 
     return (
-      <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-50/50 dark:bg-amber-900/10 border-b border-amber-200/30 dark:border-amber-800/20 text-xs text-amber-700 dark:text-amber-400">
+      <div className="flex items-center gap-1.5 px-4 py-2 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200/30 dark:border-slate-700/20 text-xs text-slate-600 dark:text-slate-400">
         <GitBranch size={12} />
         <span>{t('agent.branch.forkedFrom', 'Forked from')}</span>
         {onNavigateToParent ? (

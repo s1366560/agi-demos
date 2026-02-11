@@ -89,7 +89,7 @@ export const MentionPopover = memo(
       const typeIcon = (item: MentionItem) => {
         if (item.type === 'entity')
           return <Hash size={14} className="text-primary" />;
-        return <FileText size={14} className="text-amber-500" />;
+        return <FileText size={14} className="text-slate-500" />;
       };
 
       return (
