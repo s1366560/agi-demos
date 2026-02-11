@@ -79,8 +79,39 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
 
   return (
     <div className="group/code relative">
-      <pre {...props}>{children}</pre>
-      {!isShort && (
+      {/* Language label */}
+      {!isShort && language && (
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-200/80 dark:bg-slate-700/80 rounded-t-lg border border-b-0 border-slate-200 dark:border-slate-600">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 select-none">
+            {language}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleOpenInCanvas}
+              className="p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-600/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              title={t('agent.artifact.openInCanvas', 'Open in Canvas')}
+            >
+              <PanelRight size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-600/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              title={copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copyCode', 'Copy code')}
+            >
+              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+            </button>
+          </div>
+        </div>
+      )}
+      <pre
+        {...props}
+        className={language && !isShort ? 'rounded-t-none! border-t-0!' : undefined}
+      >
+        {children}
+      </pre>
+      {!isShort && !language && (
         <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity">
           <button
             type="button"

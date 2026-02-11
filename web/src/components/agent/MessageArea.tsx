@@ -51,6 +51,7 @@ import { SuggestionChips } from './chat/SuggestionChips';
 import { ThinkingBlock } from './chat/ThinkingBlock';
 import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
+import { MARKDOWN_PROSE_CLASSES } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 
 import type { TimelineStep } from './timeline/ExecutionTimeline';
@@ -1104,7 +1105,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       </div>
                       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
+                          <div className={MARKDOWN_PROSE_CLASSES}>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {streamingContent}
                             </ReactMarkdown>

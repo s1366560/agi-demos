@@ -31,7 +31,7 @@ import {
   ReasoningLogCard,
 } from './chat/MessageStream';
 import {
-  ASSISTANT_PROSE_CLASSES,
+  MARKDOWN_PROSE_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
   ASSISTANT_AVATAR_CLASSES,
 } from './styles';
@@ -292,7 +292,7 @@ function TextDeltaItem({ event }: { event: TimelineEvent }) {
         <div className={ASSISTANT_AVATAR_CLASSES}>
           <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${ASSISTANT_PROSE_CLASSES}`}>
+        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES}`}>
           <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
             <MarkdownRenderer>{event.content}</MarkdownRenderer>
           </Suspense>
@@ -321,7 +321,7 @@ function TextEndItem({ event }: { event: TimelineEvent }) {
         <div className={ASSISTANT_AVATAR_CLASSES}>
           <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
         </div>
-        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${ASSISTANT_PROSE_CLASSES}`}>
+        <div className={`${ASSISTANT_BUBBLE_CLASSES} ${MARKDOWN_PROSE_CLASSES}`}>
           <Suspense fallback={<div className="text-slate-400">Loading...</div>}>
             <MarkdownRenderer>{fullText}</MarkdownRenderer>
           </Suspense>

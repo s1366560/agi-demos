@@ -19,6 +19,7 @@ import ReactMarkdown from 'react-markdown';
 
 import remarkGfm from 'remark-gfm';
 
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock } from './CodeBlock';
 
 import type { Components } from 'react-markdown';
@@ -33,10 +34,6 @@ export interface MarkdownContentProps {
   /** Whether to show code block actions (copy, open in canvas) */
   codeActions?: boolean;
 }
-
-// Hoist prose classes outside component to avoid recreation on each render
-const PROSE_CLASSES =
-  'prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:mt-4 prose-headings:mb-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md';
 
 const CODE_COMPONENTS: Components = {
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
@@ -56,7 +53,7 @@ const CODE_COMPONENTS: Components = {
  */
 export const MarkdownContent = memo<MarkdownContentProps>(
   ({ content, className = '', prose = true, codeActions = false }) => {
-    const combinedClassName = prose ? `${PROSE_CLASSES} ${className}`.trim() : className;
+    const combinedClassName = prose ? `${MARKDOWN_PROSE_CLASSES} ${className}`.trim() : className;
     const components = useMemo(
       () => (codeActions ? CODE_COMPONENTS : undefined),
       [codeActions]

@@ -31,6 +31,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { MessageActionBar, CodeBlockCopyButton } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
@@ -370,7 +371,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
           <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className={MARKDOWN_PROSE_CLASSES}>
             {content ? (
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -382,65 +383,14 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
                         {String(children).replace(/\n$/, '')}
                       </CodeBlock>
                     ) : (
-                      <code
-                        className={`${className} font-mono text-sm bg-slate-100 dark:bg-slate-700/50 px-1.5 py-0.5 rounded text-primary dark:text-primary-300`}
-                        {...props}
-                      >
+                      <code className={className} {...props}>
                         {children}
                       </code>
                     );
                   },
-                  p({ children }) {
-                    return (
-                      <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300 mb-3 last:mb-0">
-                        {children}
-                      </p>
-                    );
-                  },
-                  pre({ children }) {
-                    return <pre className="overflow-x-auto max-w-full my-2">{children}</pre>;
-                  },
-                  h1({ children }) {
-                    return (
-                      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-3 mt-4">
-                        {children}
-                      </h1>
-                    );
-                  },
-                  h2({ children }) {
-                    return (
-                      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2 mt-4">
-                        {children}
-                      </h2>
-                    );
-                  },
-                  h3({ children }) {
-                    return (
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-2 mt-3">
-                        {children}
-                      </h3>
-                    );
-                  },
-                  ul({ children }) {
-                    return (
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300 mb-3">
-                        {children}
-                      </ul>
-                    );
-                  },
-                  ol({ children }) {
-                    return (
-                      <ol className="list-decimal list-inside space-y-1 text-slate-700 dark:text-slate-300 mb-3">
-                        {children}
-                      </ol>
-                    );
-                  },
-                  li({ children }) {
-                    return <li className="text-[15px] leading-7">{children}</li>;
-                  },
                   blockquote({ children }) {
                     return (
-                      <blockquote className="border-l-4 border-primary/30 pl-4 italic text-slate-600 dark:text-slate-400 my-3">
+                      <blockquote>
                         {children}
                       </blockquote>
                     );
@@ -490,7 +440,7 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className={MARKDOWN_PROSE_CLASSES}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           </div>
         </div>
@@ -784,7 +734,7 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
           <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className={MARKDOWN_PROSE_CLASSES}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullText}</ReactMarkdown>
             </div>
           </div>

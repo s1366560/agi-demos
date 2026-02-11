@@ -1653,3 +1653,138 @@ img[loading='lazy'] {
 .high-contrast a:hover {
   outline: 2px solid var(--hc-focus-ring);
 }
+
+/* ============================================================================
+ * MARKDOWN PROSE OVERRIDES
+ * Scoped to .memstack-prose for chat markdown rendering.
+ * Paired with MARKDOWN_PROSE_CLASSES Tailwind utilities in styles.ts.
+ * ============================================================================ */
+
+/* --- Inline code --- */
+.memstack-prose :not(pre) > code {
+  padding: 0.15em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  color: var(--color-primary);
+  background-color: var(--color-primary-50);
+}
+
+:is(.dark .memstack-prose) :not(pre) > code {
+  color: var(--color-primary-300);
+  background-color: rgba(99, 102, 241, 0.15);
+}
+
+/* --- Code blocks (fenced) --- */
+.memstack-prose pre {
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border-light);
+  overflow: hidden;
+}
+
+:is(.dark .memstack-prose) pre {
+  border-color: var(--color-border-dark);
+}
+
+.memstack-prose pre > code {
+  display: block;
+  padding: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  background-color: #f8fafc;
+  overflow-x: auto;
+}
+
+:is(.dark .memstack-prose) pre > code {
+  background-color: #1e293b;
+}
+
+/* --- Tables --- */
+.memstack-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.memstack-prose th {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--color-border-light);
+  color: var(--color-text-primary);
+  background-color: var(--color-background-light);
+}
+
+:is(.dark .memstack-prose) th {
+  border-bottom-color: var(--color-border-dark);
+  color: var(--color-text-inverse);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.memstack-prose td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+:is(.dark .memstack-prose) td {
+  border-bottom-color: var(--color-border-dark);
+}
+
+.memstack-prose tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+:is(.dark .memstack-prose) tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* --- Blockquotes --- */
+.memstack-prose blockquote {
+  border-left: 3px solid var(--color-primary-200);
+  padding-left: 1rem;
+  margin-left: 0;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+:is(.dark .memstack-prose) blockquote {
+  border-left-color: var(--color-primary-400);
+  color: var(--color-text-muted);
+}
+
+/* --- Horizontal rules --- */
+.memstack-prose hr {
+  border: none;
+  height: 1px;
+  background-color: var(--color-border-light);
+  margin: 1.5rem 0;
+}
+
+:is(.dark .memstack-prose) hr {
+  background-color: var(--color-border-dark);
+}
+
+/* --- Links --- */
+.memstack-prose a:hover {
+  text-decoration: underline;
+}
+
+/* --- Lists --- */
+.memstack-prose ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+}
+
+.memstack-prose ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+}
+
+.memstack-prose li::marker {
+  color: var(--color-text-muted-light);
+}
+
+:is(.dark .memstack-prose) li::marker {
+  color: var(--color-text-muted);
+}

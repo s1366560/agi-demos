@@ -20,7 +20,7 @@ import { MessageStream } from './chat/MessageStream';
 import { ThinkingBlock } from './chat/ThinkingBlock';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import {
-  ASSISTANT_PROSE_CLASSES,
+  MARKDOWN_PROSE_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
   ASSISTANT_AVATAR_CLASSES,
 } from './styles';
@@ -680,7 +680,7 @@ export const VirtualTimelineEventList: React.FC<VirtualTimelineEventListProps> =
                             <div className={ASSISTANT_BUBBLE_CLASSES}>
                               <MarkdownContent
                                 content={item.content}
-                                className={ASSISTANT_PROSE_CLASSES}
+                                className={MARKDOWN_PROSE_CLASSES}
                                 codeActions
                               />
                             </div>

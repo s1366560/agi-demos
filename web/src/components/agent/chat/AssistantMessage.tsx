@@ -15,7 +15,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import {
-  ASSISTANT_PROSE_CLASSES,
+  MARKDOWN_PROSE_CLASSES,
   ASSISTANT_BUBBLE_CLASSES,
   ASSISTANT_AVATAR_CLASSES,
 } from '../styles';
@@ -77,7 +77,7 @@ export function AssistantMessage({
       </div>
 
       {/* Message content bubble */}
-      <div className={`${ASSISTANT_BUBBLE_CLASSES} p-5 ${ASSISTANT_PROSE_CLASSES}`}>
+      <div className={`${ASSISTANT_BUBBLE_CLASSES} p-5 ${MARKDOWN_PROSE_CLASSES}`}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
           {content}
         </ReactMarkdown>

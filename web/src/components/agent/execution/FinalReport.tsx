@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 
 import { formatDateTime } from '@/utils/date';
 
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { MaterialIcon } from '../shared';
 
 export interface FinalReportProps {
@@ -166,7 +167,7 @@ export function FinalReport({
       {/* Content Area with Export Sidebar */}
       <div className="flex">
         {/* Main Content */}
-        <div className="flex-1 p-4 prose prose-sm max-w-none dark:prose-invert">
+        <div className={`flex-1 p-4 ${MARKDOWN_PROSE_CLASSES}`}>
           {format === 'markdown' ? (
             renderContent(content || '')
           ) : (

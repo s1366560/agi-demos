@@ -5,11 +5,17 @@
  */
 
 /**
- * Prose classes for assistant message content (markdown rendering).
- * Used by: AssistantMessage, TextDeltaItem, TextEndItem, streaming content display.
+ * Unified prose classes for all markdown rendering across the chat UI.
+ * Single source of truth -- used everywhere markdown content is displayed.
+ *
+ * Pair with `.memstack-prose` CSS class in index.css for element-level overrides
+ * (tables, blockquotes, hr, inline code backgrounds).
  */
-export const ASSISTANT_PROSE_CLASSES =
-  'prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:bg-slate-100 prose-pre:dark:bg-slate-800 prose-code:text-primary prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-th:text-left prose-img:rounded-lg prose-img:shadow-md leading-relaxed';
+export const MARKDOWN_PROSE_CLASSES =
+  'memstack-prose prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1.5 prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0 prose-code:before:content-none prose-code:after:content-none prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg prose-img:shadow-md';
+
+/** @deprecated Use MARKDOWN_PROSE_CLASSES instead */
+export const ASSISTANT_PROSE_CLASSES = MARKDOWN_PROSE_CLASSES;
 
 /**
  * Container classes for assistant message bubble.

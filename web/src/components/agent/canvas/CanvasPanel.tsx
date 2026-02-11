@@ -48,6 +48,8 @@ import {
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { artifactService } from '@/services/artifactService';
 
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
+
 import { SelectionToolbar } from './SelectionToolbar';
 
 const typeIcon = (type: CanvasContentType, size = 14) => {
@@ -171,11 +173,9 @@ const CanvasContent = memo<{
       );
     case 'markdown':
       return (
-        <div className="h-full overflow-auto p-6">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+          <div className={`h-full overflow-auto p-6 ${MARKDOWN_PROSE_CLASSES}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{tab.content}</ReactMarkdown>
           </div>
-        </div>
       );
     case 'preview':
       return (
