@@ -14,7 +14,7 @@
  * - Theme/language toggle
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, memo } from 'react';
 
 import { Outlet, useParams } from 'react-router-dom';
 
@@ -30,7 +30,7 @@ import { ProjectSidebar } from '@/components/layout/AppSidebar';
 /**
  * ProjectLayout component
  */
-export const ProjectLayout: React.FC = () => {
+export const ProjectLayout: React.FC = memo(() => {
   const { projectId } = useParams();
   const currentProject = useProjectStore((state) => state.currentProject);
   const setCurrentProject = useProjectStore((state) => state.setCurrentProject);
@@ -108,6 +108,8 @@ export const ProjectLayout: React.FC = () => {
       </main>
     </div>
   );
-};
+});
+
+ProjectLayout.displayName = 'ProjectLayout';
 
 export default ProjectLayout;

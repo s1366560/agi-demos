@@ -32,7 +32,7 @@ import { useSandboxStore } from '@/stores/sandbox';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
-import { remarkPlugins, rehypePlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
+import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
@@ -258,6 +258,7 @@ UserMessage.displayName = 'MessageBubble.User';
 // Assistant Message Component - Modern card style with action bar
 const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStreaming, isPinned, onPin, onReply }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
   if (!content && !isStreaming) return null;
   return (
     <div className="group flex items-start gap-3 mb-6 animate-fade-in-up">
@@ -312,6 +313,7 @@ AssistantMessage.displayName = 'MessageBubble.Assistant';
 
 // Text Delta Component (for streaming content)
 const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
   if (!content) return null;
   return (
     <div className="flex items-start gap-3 mb-6 animate-fade-in-up">
@@ -604,6 +606,7 @@ StepStart.displayName = 'MessageBubble.StepStart';
 const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const fullText = 'fullText' in event ? (event.fullText as string) : '';
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(fullText);
   if (!fullText || !fullText.trim()) return null;
 
   return (

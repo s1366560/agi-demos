@@ -20,7 +20,7 @@ import {
 
 import { CodeBlock } from './CodeBlock';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
-import { remarkPlugins, rehypePlugins } from './markdownPlugins';
+import { useMarkdownPlugins } from './markdownPlugins';
 
 import type { Components } from 'react-markdown';
 
@@ -60,6 +60,8 @@ export function AssistantMessage({
   generatedAt,
   isStreaming = false,
 }: AssistantMessageProps) {
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
+
   // Report mode: Use FinalResponseDisplay
   if (isReport) {
     return (

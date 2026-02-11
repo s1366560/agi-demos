@@ -78,7 +78,7 @@ const PANEL_MIN_WIDTH = 280;
 const PANEL_DEFAULT_WIDTH = 360;
 const PANEL_MAX_WIDTH = 600;
 
-export const AgentChatContent: React.FC<AgentChatContentProps> = ({
+export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   className = '',
   externalProjectId,
   basePath: customBasePath,
@@ -843,6 +843,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = ({
       </aside>
     </div>
   );
-};
+});
+
+AgentChatContent.displayName = 'AgentChatContent';
 
 export default AgentChatContent;

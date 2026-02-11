@@ -45,6 +45,10 @@ export default defineConfig({
         manualChunks: (id) => {
           // Vendor chunks for better caching
           if (id.includes("node_modules")) {
+            // KaTeX & math plugins - separate async chunk for lazy loading
+            if (id.includes("katex") || id.includes("remark-math") || id.includes("rehype-katex")) {
+              return "vendor-math";
+            }
             // Ant Design - large UI library
             if (id.includes("antd") || id.includes("@ant-design")) {
               return "vendor-antd";

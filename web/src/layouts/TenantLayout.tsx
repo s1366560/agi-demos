@@ -17,7 +17,7 @@
  * - Workspace switcher
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -42,7 +42,7 @@ const HTTP_STATUS = {
 /**
  * TenantLayout component
  */
-export const TenantLayout: React.FC = () => {
+export const TenantLayout: React.FC = memo(() => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -301,4 +301,6 @@ export const TenantLayout: React.FC = () => {
       />
     </>
   );
-};
+});
+
+TenantLayout.displayName = 'TenantLayout';

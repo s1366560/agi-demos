@@ -14,7 +14,7 @@ import { formatDateOnly } from '@/utils/date';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock } from './CodeBlock';
-import { remarkPlugins, rehypePlugins } from './markdownPlugins';
+import { useMarkdownPlugins } from './markdownPlugins';
 
 import type { Components } from 'react-markdown';
 
@@ -49,6 +49,7 @@ export function FinalResponseDisplay({
   generatedAt,
 }: FinalResponseDisplayProps) {
   const [copied, setCopied] = useState(false);
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
 
   // Format timestamp
   const formatTimeAgo = (isoString: string) => {

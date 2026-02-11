@@ -19,7 +19,7 @@ import ReactMarkdown from 'react-markdown';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock } from './CodeBlock';
-import { remarkPlugins, rehypePlugins } from './markdownPlugins';
+import { useMarkdownPlugins } from './markdownPlugins';
 
 import type { Components } from 'react-markdown';
 
@@ -57,6 +57,7 @@ export const MarkdownContent = memo<MarkdownContentProps>(
       () => (codeActions ? CODE_COMPONENTS : undefined),
       [codeActions]
     );
+    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
 
     return (
       <div className={combinedClassName}>

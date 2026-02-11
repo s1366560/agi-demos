@@ -48,7 +48,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { artifactService } from '@/services/artifactService';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
-import { remarkPlugins, rehypePlugins } from '../chat/markdownPlugins';
+import { useMarkdownPlugins } from '../chat/markdownPlugins';
 
 import { SelectionToolbar } from './SelectionToolbar';
 
@@ -145,6 +145,7 @@ const CanvasContent = memo<{
   editMode: boolean;
   onContentChange: (content: string) => void;
 }>(({ tab, editMode, onContentChange }) => {
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(tab.type === 'markdown' ? tab.content : undefined);
   if (editMode && (tab.type === 'code' || tab.type === 'markdown' || tab.type === 'data')) {
     const bgClass =
       tab.type === 'code'

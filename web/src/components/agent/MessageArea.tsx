@@ -45,7 +45,7 @@ import { useConversationsStore } from '../../stores/agent/conversationsStore';
 
 import { AgentStatePill } from './chat/AgentStatePill';
 import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
-import { remarkPlugins, rehypePlugins } from './chat/markdownPlugins';
+import { useMarkdownPlugins } from './chat/markdownPlugins';
 import { PlanProgressBar } from './chat/PlanProgressBar';
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ThinkingBlock } from './chat/ThinkingBlock';
@@ -502,6 +502,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
     const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
     const { t } = useTranslation();
+    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(streamingContent);
 
     const pinnedEventIds = useAgentV3Store((s) => s.pinnedEventIds);
     const togglePinEvent = useAgentV3Store((s) => s.togglePinEvent);
