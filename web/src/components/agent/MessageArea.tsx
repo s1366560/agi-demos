@@ -161,11 +161,10 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 
 /**
  * Estimate item height for the virtualizer based on item type.
- * These are rough estimates refined by measureElement at runtime.
+ * Better estimates reduce scroll jumping when items are measured for real.
  */
 function estimateGroupedItemHeight(item: GroupedItem): number {
   if (item.kind === 'timeline') {
-    // Tool execution groups: ~80px base + 40px per step
     return 80 + item.steps.length * 40;
   }
   const { event } = item;
@@ -174,12 +173,56 @@ function estimateGroupedItemHeight(item: GroupedItem): number {
       return 100;
     case 'assistant_message': {
       const content = ('content' in event ? (event as any).content : '') || '';
-      // Rough estimate: 80px base + 20px per 100 chars
-      return 80 + Math.ceil(content.length / 100) * 20;
+      return estimateMarkdownHeight(content);
     }
     default:
       return 80;
   }
+}
+
+/**
+ * Estimate rendered height of markdown content by analyzing structure.
+ * Counts code blocks, line breaks, and text density for better accuracy.
+ */
+function estimateMarkdownHeight(content: string): number {
+  if (!content) return 80;
+
+  const LINE_HEIGHT = 24;
+  const CODE_LINE_HEIGHT = 20;
+  const BASE_PADDING = 60; // bubble chrome (avatar, margins, padding)
+  let height = BASE_PADDING;
+
+  // Count fenced code blocks and estimate their height
+  const codeBlockRegex = /```[\s\S]*?```/g;
+  let remaining = content;
+  let match: RegExpExecArray | null;
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    const block = match[0];
+    const lines = block.split('\n').length;
+    // Code block: header(32) + lines + padding(24)
+    height += 32 + lines * CODE_LINE_HEIGHT + 24;
+    remaining = remaining.replace(block, '');
+  }
+
+  // Count lines in remaining non-code text
+  const textLines = remaining.split('\n');
+  for (const line of textLines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      height += 8; // empty line spacing
+    } else if (trimmed.startsWith('#')) {
+      height += 36; // heading
+    } else if (trimmed.startsWith('|')) {
+      height += 32; // table row
+    } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\./.test(trimmed)) {
+      height += LINE_HEIGHT; // list item
+    } else {
+      // Regular text: wrap estimate (~80 chars per visual line)
+      height += Math.max(1, Math.ceil(trimmed.length / 80)) * LINE_HEIGHT;
+    }
+  }
+
+  return Math.max(80, height);
 }
 
 // Define local type aliases to avoid TS6192 (unused imports)
@@ -841,7 +884,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       count: groupedItems.length,
       getScrollElement: () => containerRef.current,
       estimateSize,
-      overscan: 5,
+      overscan: 10,
     });
 
     // Reset scroll state and virtualizer when conversation changes
@@ -859,24 +902,30 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       isLoadingEarlierRef.current = false;
       userScrolledUpRef.current = false;
 
-      // Reset virtualizer measurements so stale sizes from the previous
-      // conversation don't cause the scroll container to jump.
+      // Reset virtualizer measurements so stale sizes don't cause jumps.
       virtualizer.measure();
 
-      // Use rAF to wait for the virtualizer to lay out the new items,
-      // then scroll to the bottom in a single, jitter-free pass.
+      // Double-rAF: first frame lets virtualizer re-measure visible items,
+      // second frame scrolls after layout has settled.
       const rafId = requestAnimationFrame(() => {
-        const container = containerRef.current;
-        if (container && timeline.length > 0) {
-          container.scrollTop = container.scrollHeight;
+        const rafId2 = requestAnimationFrame(() => {
+          if (groupedItems.length > 0) {
+            virtualizer.scrollToIndex(groupedItems.length - 1, { align: 'end' });
+          }
           isInitialLoadRef.current = false;
           hasScrolledInitiallyRef.current = true;
           prevTimelineLengthRef.current = timeline.length;
-        }
-        isSwitchingConversationRef.current = false;
+          isSwitchingConversationRef.current = false;
+        });
+        cleanupRef.current = rafId2;
       });
+      // Store inner rAF id for cleanup
+      const cleanupRef = { current: 0 as number };
 
-      return () => cancelAnimationFrame(rafId);
+      return () => {
+        cancelAnimationFrame(rafId);
+        if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current);
+      };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversationId]);
 
