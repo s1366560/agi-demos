@@ -32,7 +32,7 @@ export interface TimelineStep {
   toolName: string;
   status: 'running' | 'success' | 'error';
   input?: Record<string, unknown>;
-  output?: string;
+  output?: string | Record<string, unknown>;
   isError?: boolean;
   duration?: number;
   timestamp?: number;
@@ -229,7 +229,9 @@ const TimelineStepItem = memo<{
                       : 'text-slate-600 dark:text-slate-300'
                   }`}
                 >
-                  {step.output}
+                  {typeof step.output === 'string'
+                    ? step.output
+                    : JSON.stringify(step.output, null, 2)}
                 </pre>
               </div>
             )}
