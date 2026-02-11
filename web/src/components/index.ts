@@ -11,25 +11,23 @@
  * Direct imports from here may cause larger bundle sizes due to tree-shaking limitations.
  *
  * Available sub-barrels:
- *   - @/components/common - ErrorBoundary, SkeletonLoader, EmptyState
+ *   - @/components/common - ErrorBoundary, SkeletonLoader
  *   - @/components/agent - ConversationSidebar, MessageArea
  *   - @/components/shared - Modal components, UI components
  *   - @/components/graph - GraphVisualization, EntityCard
  *   - @/components/agent/layout - WorkspaceSidebar, ResizablePanels
  *   - @/components/agent/chat - MessageBubble, InputBar, IdleState
- *   - @/components/agent/execution - WorkPlanProgress, ToolExecutionCard
+ *   - @/components/agent/execution - WorkPlanProgress, ToolExecutionLive
  *   - @/components/agent/sandbox - SandboxTerminal, SandboxPanel
  *   - @/components/agent/patterns - PatternList, ThinkingChain
  */
 
 // Re-exports for IDE support - prefer sub-barrel imports in production code
 
-// Common components (ErrorBoundary, SkeletonLoader, EmptyState)
+// Common components (ErrorBoundary, SkeletonLoader)
 export {
   ErrorBoundary,
   SkeletonLoader,
-  EmptyState,
-  type EmptyStateProps,
   type SkeletonLoaderProps,
 } from './common';
 

@@ -18,7 +18,6 @@ import { describe, it, expect } from 'vitest';
 import {
   ErrorBoundary as RootErrorBoundary,
   SkeletonLoader as RootSkeletonLoader,
-  EmptyState as RootEmptyState,
   ConversationSidebar as RootConversationSidebar,
   MessageArea as RootMessageArea,
   MessageBubble as RootMessageBubble,
@@ -75,9 +74,7 @@ import { MaterialIcon } from '../../components/agent/shared';
 // - ExecutionDetailsPanel exists but is not exported from barrel
 
 // Test 9: Individual component imports (not through barrel) to verify components exist
-import { ToolExecutionCard } from '../../components/agent/ToolExecutionCard';
-import { WorkPlanCard } from '../../components/agent/WorkPlanCard';
-import { ErrorBoundary, SkeletonLoader, EmptyState } from '../../components/common';
+import { ErrorBoundary, SkeletonLoader } from '../../components/common';
 
 // Test 10: Root components barrel export
 
@@ -91,17 +88,6 @@ describe('Barrel Exports', () => {
     it('exports SkeletonLoader component', () => {
       expect(SkeletonLoader).toBeDefined();
       expect(typeof SkeletonLoader).toBe('function');
-    });
-
-    it('exports EmptyState component', () => {
-      expect(EmptyState).toBeDefined();
-      expect(typeof EmptyState).toBe('function');
-    });
-
-    it('exports EmptyStateProps type', () => {
-      // Type-only exports are validated at compile time
-      // If this file compiles, the type exports work
-      expect(true).toBe(true);
     });
   });
 
@@ -266,14 +252,6 @@ describe('Barrel Exports', () => {
   });
 
   describe('Direct Component Imports (not through barrel)', () => {
-    it('can import WorkPlanCard directly', () => {
-      expect(WorkPlanCard).toBeDefined();
-    });
-
-    it('can import ToolExecutionCard directly', () => {
-      expect(ToolExecutionCard).toBeDefined();
-    });
-
     it('can import ProjectSelector directly', () => {
       expect(ProjectSelector).toBeDefined();
     });
@@ -291,7 +269,6 @@ describe('Barrel Exports', () => {
     it('exports common components from root barrel', () => {
       expect(RootErrorBoundary).toBeDefined();
       expect(RootSkeletonLoader).toBeDefined();
-      expect(RootEmptyState).toBeDefined();
     });
 
     it('exports Agent components from root barrel', () => {
