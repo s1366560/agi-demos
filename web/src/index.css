@@ -1797,3 +1797,42 @@ img[loading='lazy'] {
 :is(.dark .memstack-prose) li::marker {
   color: var(--color-text-muted);
 }
+
+/* --- Keyboard keys --- */
+.memstack-prose kbd {
+  display: inline-block;
+  padding: 0.15em 0.4em;
+  font-size: 0.8em;
+  font-family: var(--default-mono-font-family, ui-monospace, monospace);
+  line-height: 1;
+  color: var(--color-text-primary-light);
+  background-color: #f0f0f0;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 0 #d1d5db;
+}
+
+:is(.dark .memstack-prose) kbd {
+  color: var(--color-text-primary-dark);
+  background-color: #374151;
+  border-color: #4b5563;
+  box-shadow: 0 1px 0 #4b5563;
+}
+
+/* --- Details/summary --- */
+.memstack-prose details {
+  border: 1px solid var(--color-border-light);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  margin: 0.75rem 0;
+}
+
+:is(.dark .memstack-prose) details {
+  border-color: var(--color-border-dark);
+}
+
+.memstack-prose summary {
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+}
