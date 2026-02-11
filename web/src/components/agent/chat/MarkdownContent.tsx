@@ -17,10 +17,9 @@ import { memo, useMemo } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 
-import remarkGfm from 'remark-gfm';
-
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock } from './CodeBlock';
+import { remarkPlugins, rehypePlugins } from './markdownPlugins';
 
 import type { Components } from 'react-markdown';
 
@@ -61,7 +60,7 @@ export const MarkdownContent = memo<MarkdownContentProps>(
 
     return (
       <div className={combinedClassName}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
           {content}
         </ReactMarkdown>
       </div>

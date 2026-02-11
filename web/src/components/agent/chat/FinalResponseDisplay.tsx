@@ -10,12 +10,11 @@ import { useState } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 
-import remarkGfm from 'remark-gfm';
-
 import { formatDateOnly } from '@/utils/date';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock } from './CodeBlock';
+import { remarkPlugins, rehypePlugins } from './markdownPlugins';
 
 import type { Components } from 'react-markdown';
 
@@ -98,7 +97,7 @@ export function FinalResponseDisplay({
         </div>
 
         {/* Content with ReactMarkdown */}
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={MARKDOWN_COMPONENTS}>
           {content}
         </ReactMarkdown>
       </div>

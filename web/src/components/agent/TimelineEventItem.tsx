@@ -50,14 +50,27 @@ import type {
 } from '../../types/agent';
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
-// Using dynamic import with a wrapper to handle type issues
 const MarkdownRenderer = lazy(async () => {
-  const { default: ReactMarkdown } = await import('react-markdown');
-  const { default: remarkGfm } = await import('remark-gfm');
+  const [
+    { default: ReactMarkdown },
+    { default: remarkGfm },
+    { default: remarkMath },
+    { default: rehypeKatex },
+  ] = await Promise.all([
+    import('react-markdown'),
+    import('remark-gfm'),
+    import('remark-math'),
+    import('rehype-katex'),
+  ]);
+  await import('katex/dist/katex.min.css');
 
-  // Create a wrapper component that uses the plugins
   const MarkdownWrapper = ({ children }: { children: string }) => (
-    <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+    >
+      {children}
+    </ReactMarkdown>
   );
 
   return { default: MarkdownWrapper };

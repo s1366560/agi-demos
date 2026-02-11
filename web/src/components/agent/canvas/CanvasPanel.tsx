@@ -36,7 +36,6 @@ import {
   Save,
   Loader2,
 } from 'lucide-react';
-import remarkGfm from 'remark-gfm';
 
 import {
   useCanvasStore,
@@ -49,6 +48,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { artifactService } from '@/services/artifactService';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
+import { remarkPlugins, rehypePlugins } from '../chat/markdownPlugins';
 
 import { SelectionToolbar } from './SelectionToolbar';
 
@@ -174,7 +174,7 @@ const CanvasContent = memo<{
     case 'markdown':
       return (
           <div className={`h-full overflow-auto p-6 ${MARKDOWN_PROSE_CLASSES}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{tab.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{tab.content}</ReactMarkdown>
           </div>
       );
     case 'preview':

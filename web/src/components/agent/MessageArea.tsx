@@ -38,7 +38,6 @@ import ReactMarkdown from 'react-markdown';
 
 import { LoadingOutlined } from '@ant-design/icons';
 import { Pin, PinOff, ChevronDown, ChevronUp } from 'lucide-react';
-import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 
 import { useAgentV3Store } from '../../stores/agentV3';
@@ -46,6 +45,7 @@ import { useConversationsStore } from '../../stores/agent/conversationsStore';
 
 import { AgentStatePill } from './chat/AgentStatePill';
 import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
+import { remarkPlugins, rehypePlugins } from './chat/markdownPlugins';
 import { PlanProgressBar } from './chat/PlanProgressBar';
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ThinkingBlock } from './chat/ThinkingBlock';
@@ -1106,7 +1106,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
                           <div className={MARKDOWN_PROSE_CLASSES}>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
                               {streamingContent}
                             </ReactMarkdown>
                           </div>

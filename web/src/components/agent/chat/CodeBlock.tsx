@@ -1,8 +1,8 @@
 /**
  * CodeBlock - Custom code block renderer for ReactMarkdown
  *
- * Adds "Copy" and "Open in Canvas" action buttons to fenced code blocks.
- * Detects mermaid language and renders diagrams via MermaidBlock.
+ * Adds syntax highlighting (lazy-loaded Prism), language label header,
+ * copy/canvas action buttons, and mermaid diagram rendering.
  * Used as a `components.pre` override in ReactMarkdown instances.
  */
 
@@ -21,7 +21,6 @@ import type { ReactElement, ReactNode, HTMLAttributes } from 'react';
 function extractCodeContent(children: ReactNode): { text: string; language?: string } {
   if (!children) return { text: '' };
 
-  // ReactMarkdown wraps code in <pre><code className="language-xxx">...</code></pre>
   const child = Array.isArray(children) ? children[0] : children;
   if (child && typeof child === 'object' && 'props' in (child as ReactElement)) {
     const codeEl = child as ReactElement<HTMLAttributes<HTMLElement> & { children?: ReactNode }>;
@@ -37,10 +36,46 @@ function extractCodeContent(children: ReactNode): { text: string; language?: str
   return { text: String(children) };
 }
 
+// Lazy-loaded syntax highlighter singleton
+let _Prism: any = null;
+let _theme: any = null;
+let _loadingPromise: Promise<void> | null = null;
+
+function loadHighlighter(): Promise<void> {
+  if (_Prism && _theme) return Promise.resolve();
+  if (_loadingPromise) return _loadingPromise;
+  _loadingPromise = Promise.all([
+    import('react-syntax-highlighter'),
+    import('react-syntax-highlighter/dist/esm/styles/prism'),
+  ])
+    .then(([{ Prism }, { vscDarkPlus }]) => {
+      _Prism = Prism;
+      _theme = vscDarkPlus;
+    })
+    .catch(() => {
+      _loadingPromise = null;
+    });
+  return _loadingPromise;
+}
+
+function useSyntaxHighlighter() {
+  const [ready, setReady] = useState(_Prism !== null);
+
+  useEffect(() => {
+    if (ready) return;
+    loadHighlighter().then(() => {
+      if (_Prism) setReady(true);
+    });
+  }, [ready]);
+
+  return ready ? { Prism: _Prism, theme: _theme } : null;
+}
+
 export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const highlighter = useSyntaxHighlighter();
 
   useEffect(() => {
     return () => clearTimeout(timerRef.current);
@@ -113,9 +148,24 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
           </div>
         </div>
       )}
-      <pre {...props} className="rounded-none! border-none!">
-        {children}
-      </pre>
+
+      {/* Code content — highlighted or plain */}
+      {highlighter && language ? (
+        <highlighter.Prism
+          style={highlighter.theme}
+          language={language}
+          PreTag="div"
+          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem' }}
+        >
+          {text}
+        </highlighter.Prism>
+      ) : (
+        <pre {...props} className="rounded-none! border-none!">
+          {children}
+        </pre>
+      )}
+
+      {/* Hover actions for blocks without language header */}
       {!isShort && !language && (
         <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity">
           <button

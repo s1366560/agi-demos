@@ -25,7 +25,6 @@ import {
   FileOutput,
   PanelRight,
 } from 'lucide-react';
-import remarkGfm from 'remark-gfm';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
@@ -33,6 +32,7 @@ import { useSandboxStore } from '@/stores/sandbox';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { MermaidBlock } from '../chat/MermaidBlock';
+import { remarkPlugins, rehypePlugins } from '../chat/markdownPlugins';
 import { MessageActionBar, CodeBlockCopyButton } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
@@ -375,7 +375,8 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
             <div className={MARKDOWN_PROSE_CLASSES}>
             {content ? (
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={remarkPlugins}
+                rehypePlugins={rehypePlugins}
                 components={{
                   code({ inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
@@ -448,7 +449,7 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
           <div className={MARKDOWN_PROSE_CLASSES}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{content}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -742,7 +743,7 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
         <div className="relative">
           <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
             <div className={MARKDOWN_PROSE_CLASSES}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{fullText}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{fullText}</ReactMarkdown>
             </div>
           </div>
           {/* Action bar - appears on hover */}
