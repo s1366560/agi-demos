@@ -54,7 +54,7 @@ import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { Resizer } from './Resizer';
 import { SandboxSection } from './SandboxSection';
 
-import { MessageArea, InputBar, RightPanel, ProjectAgentStatusBar } from './index';
+import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
 
 
 interface AgentChatContentProps {
@@ -73,10 +73,7 @@ const INPUT_MIN_HEIGHT = 140;
 const INPUT_MAX_HEIGHT = 400;
 const INPUT_DEFAULT_HEIGHT = 180;
 
-// Right panel width constraints (chat mode only)
-const PANEL_MIN_WIDTH = 280;
-const PANEL_DEFAULT_WIDTH = 360;
-const PANEL_MAX_WIDTH = 600;
+
 
 export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   className = '',
@@ -114,8 +111,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     isLoadingHistory,
     isLoadingEarlier,
     isStreaming,
-    workPlan,
-    executionPlan,
     isPlanMode,
     // HITL state now rendered inline in timeline via InlineHITLCard
     // pendingClarification, pendingDecision, pendingEnvVarRequest removed
@@ -129,7 +124,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     sendMessage,
     abortStream,
     togglePlanMode,
-    togglePlanPanel,
     // HITL response methods still available but not used directly
     // respondToClarification, respondToDecision, respondToEnvVar
     loadPendingHITL,
@@ -144,8 +138,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       isLoadingHistory: state.isLoadingHistory,
       isLoadingEarlier: state.isLoadingEarlier,
       isStreaming: state.isStreaming,
-      workPlan: state.workPlan,
-      executionPlan: state.executionPlan,
       isPlanMode: state.isPlanMode,
       doomLoopDetected: state.doomLoopDetected,
       hasEarlier: state.hasEarlier,
@@ -157,7 +149,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       sendMessage: state.sendMessage,
       abortStream: state.abortStream,
       togglePlanMode: state.togglePlanMode,
-      togglePlanPanel: state.togglePlanPanel,
       loadPendingHITL: state.loadPendingHITL,
       clearError: state.clearError,
       error: state.error,
@@ -225,17 +216,15 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   // The useUnifiedHITL hook and modal rendering have been removed.
 
   // Layout mode state
-  const { mode: layoutMode, splitRatio, setSplitRatio, chatPanelVisible } = useLayoutModeStore(
+  const { mode: layoutMode, splitRatio, setSplitRatio } = useLayoutModeStore(
     useShallow((state) => ({
       mode: state.mode,
       splitRatio: state.splitRatio,
       setSplitRatio: state.setSplitRatio,
-      chatPanelVisible: state.chatPanelVisible,
     }))
   );
 
   // Local UI state
-  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
   const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
   const [chatSearchVisible, setChatSearchVisible] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
@@ -270,14 +259,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     window.addEventListener('keydown', handleKeyShortcut);
     return () => window.removeEventListener('keydown', handleKeyShortcut);
   }, []);
-
-  // In chat mode, right panel visibility is controlled by chatPanelVisible
-  const panelCollapsed = layoutMode === 'chat' ? !chatPanelVisible : true;
-
-  // Clamp panel width (chat mode only)
-  const clampedPanelWidth = useMemo(() => {
-    return Math.min(panelWidth, PANEL_MAX_WIDTH);
-  }, [panelWidth]);
 
   // Load conversations
   useEffect(() => {
@@ -397,13 +378,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   );
 
   const handleViewPlan = useCallback(() => {
-    if (layoutMode === 'chat') {
-      const store = useLayoutModeStore.getState();
-      if (!store.chatPanelVisible) store.toggleChatPanel();
-      store.setRightPanelTab('plan');
-    }
-    togglePlanPanel();
-  }, [togglePlanPanel, layoutMode]);
+    // No-op: right panel removed
+  }, []);
 
   const handleExitPlanMode = useCallback(async () => {
     if (!activeConversationId || !planModeStatus?.current_plan_id) return;
@@ -467,37 +443,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       loadEarlierMessages,
       projectId,
       conversationId,
-    ]
-  );
-
-  const rightPanel = useMemo(
-    () => (
-      <RightPanel
-        workPlan={workPlan}
-        executionPlan={executionPlan}
-        sandboxId={activeSandboxId}
-        toolExecutions={toolExecutions}
-        currentTool={currentTool}
-        onClose={() => {
-          useLayoutModeStore.getState().toggleChatPanel();
-          togglePlanPanel();
-        }}
-        collapsed={panelCollapsed}
-        width={clampedPanelWidth}
-        onWidthChange={setPanelWidth}
-        minWidth={PANEL_MIN_WIDTH}
-        maxWidth={PANEL_MAX_WIDTH}
-      />
-    ),
-    [
-      workPlan,
-      executionPlan,
-      activeSandboxId,
-      toolExecutions,
-      currentTool,
-      panelCollapsed,
-      clampedPanelWidth,
-      togglePlanPanel,
     ]
   );
 
@@ -814,21 +759,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
         {chatColumn}
         {statusBarWithLayout}
       </main>
-
-      {/* Right Panel with built-in resize handle (Plan / Sandbox tabs) */}
-      <aside
-        className={`
-          flex-shrink-0 h-full
-          border-l border-slate-200/60 dark:border-slate-700/50
-          bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm
-          transition-all duration-300 ease-out overflow-hidden
-          mobile-hidden
-          ${panelCollapsed ? 'w-0 opacity-0' : 'opacity-100'}
-        `}
-        style={{ width: panelCollapsed ? 0 : clampedPanelWidth }}
-      >
-        {!panelCollapsed && rightPanel}
-      </aside>
     </div>
   );
 });
