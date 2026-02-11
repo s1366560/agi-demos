@@ -32,6 +32,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
+import { MermaidBlock } from '../chat/MermaidBlock';
 import { MessageActionBar, CodeBlockCopyButton } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
@@ -378,11 +379,17 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
                 components={{
                   code({ inline, className, children, ...props }: any) {
                     const match = /language-(\w+)/.exec(className || '');
-                    return !inline && match ? (
-                      <CodeBlock language={match[1]}>
-                        {String(children).replace(/\n$/, '')}
-                      </CodeBlock>
-                    ) : (
+                    if (!inline && match) {
+                      if (match[1] === 'mermaid') {
+                        return <MermaidBlock chart={String(children).replace(/\n$/, '')} />;
+                      }
+                      return (
+                        <CodeBlock language={match[1]}>
+                          {String(children).replace(/\n$/, '')}
+                        </CodeBlock>
+                      );
+                    }
+                    return (
                       <code className={className} {...props}>
                         {children}
                       </code>

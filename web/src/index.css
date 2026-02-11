@@ -1677,12 +1677,11 @@ img[loading='lazy'] {
 /* --- Code blocks (fenced) --- */
 .memstack-prose pre {
   border-radius: 0.5rem;
-  border: 1px solid var(--color-border-light);
   overflow: hidden;
 }
 
-:is(.dark .memstack-prose) pre {
-  border-color: var(--color-border-dark);
+.memstack-prose .group\/code > pre {
+  border: none;
 }
 
 .memstack-prose pre > code {

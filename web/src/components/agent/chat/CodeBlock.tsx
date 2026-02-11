@@ -2,6 +2,7 @@
  * CodeBlock - Custom code block renderer for ReactMarkdown
  *
  * Adds "Copy" and "Open in Canvas" action buttons to fenced code blocks.
+ * Detects mermaid language and renders diagrams via MermaidBlock.
  * Used as a `components.pre` override in ReactMarkdown instances.
  */
 
@@ -12,6 +13,8 @@ import { Copy, Check, PanelRight } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
+
+import { MermaidBlock } from './MermaidBlock';
 
 import type { ReactElement, ReactNode, HTMLAttributes } from 'react';
 
@@ -44,6 +47,11 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
   }, []);
 
   const { text, language } = extractCodeContent(children);
+
+  // Mermaid diagrams get special rendering
+  if (language === 'mermaid') {
+    return <MermaidBlock chart={text} />;
+  }
 
   const handleCopy = useCallback(async () => {
     try {
@@ -78,10 +86,10 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
   const isShort = !text.includes('\n') && text.length < 80;
 
   return (
-    <div className="group/code relative">
-      {/* Language label */}
+    <div className="group/code relative rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
+      {/* Language label header */}
       {!isShort && language && (
-        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-200/80 dark:bg-slate-700/80 rounded-t-lg border border-b-0 border-slate-200 dark:border-slate-600">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-200/80 dark:bg-slate-700/80">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400 select-none">
             {language}
           </span>
@@ -105,10 +113,7 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
           </div>
         </div>
       )}
-      <pre
-        {...props}
-        className={language && !isShort ? 'rounded-t-none! border-t-0!' : undefined}
-      >
+      <pre {...props} className="rounded-none! border-none!">
         {children}
       </pre>
       {!isShort && !language && (
