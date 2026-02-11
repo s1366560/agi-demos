@@ -708,7 +708,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // Handle scroll events
     const handleScroll = useCallback(() => {
       const container = containerRef.current;
-      if (!container || isLoading) return;
+      if (!container || isLoading || isSwitchingConversationRef.current) return;
 
       checkAndPreload();
 
@@ -732,8 +732,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       const hasNewMessages = currentTimelineLength > previousTimelineLength;
       const isInitialLoad = isInitialLoadRef.current && currentTimelineLength > 0;
 
-      // Handle initial load (skip only scroll restoration if switching)
-      if (isInitialLoad && !hasScrolledInitiallyRef.current) {
+      // Handle initial load (skip if conversation switch is in progress — handled separately)
+      if (isInitialLoad && !hasScrolledInitiallyRef.current && !isSwitchingConversationRef.current) {
         hasScrolledInitiallyRef.current = true;
         isInitialLoadRef.current = false;
 
@@ -798,38 +798,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       }
     }, [streamingContent, streamingThought, isStreaming]);
 
-    // Reset scroll state when conversation changes
-    useEffect(() => {
-      // Only handle actual conversation changes, not initial mount
-      if (lastConversationIdRef.current === conversationId) return;
-      lastConversationIdRef.current = conversationId;
-      
-      // Set switching flag to prevent other effects from interfering
-      isSwitchingConversationRef.current = true;
-      
-      isInitialLoadRef.current = true;
-      hasScrolledInitiallyRef.current = false;
-      prevTimelineLengthRef.current = 0;
-      previousScrollHeightRef.current = 0;
-      previousScrollTopRef.current = 0;
-      isLoadingEarlierRef.current = false;
-      userScrolledUpRef.current = false;
-
-      const timeoutId = setTimeout(() => {
-        const container = containerRef.current;
-        if (container && timeline.length > 0) {
-          container.scrollTop = container.scrollHeight;
-          isInitialLoadRef.current = false;
-          hasScrolledInitiallyRef.current = true;
-          prevTimelineLengthRef.current = timeline.length;
-        }
-        // Clear switching flag after scroll is complete
-        isSwitchingConversationRef.current = false;
-      }, 150);
-
-      return () => clearTimeout(timeoutId);
-    }, [conversationId, timeline.length]);
-
     // Cleanup timeout on unmount
     useEffect(() => {
       return () => {
@@ -875,6 +843,42 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       estimateSize,
       overscan: 5,
     });
+
+    // Reset scroll state and virtualizer when conversation changes
+    useEffect(() => {
+      if (lastConversationIdRef.current === conversationId) return;
+      lastConversationIdRef.current = conversationId;
+
+      isSwitchingConversationRef.current = true;
+
+      isInitialLoadRef.current = true;
+      hasScrolledInitiallyRef.current = false;
+      prevTimelineLengthRef.current = 0;
+      previousScrollHeightRef.current = 0;
+      previousScrollTopRef.current = 0;
+      isLoadingEarlierRef.current = false;
+      userScrolledUpRef.current = false;
+
+      // Reset virtualizer measurements so stale sizes from the previous
+      // conversation don't cause the scroll container to jump.
+      virtualizer.measure();
+
+      // Use rAF to wait for the virtualizer to lay out the new items,
+      // then scroll to the bottom in a single, jitter-free pass.
+      const rafId = requestAnimationFrame(() => {
+        const container = containerRef.current;
+        if (container && timeline.length > 0) {
+          container.scrollTop = container.scrollHeight;
+          isInitialLoadRef.current = false;
+          hasScrolledInitiallyRef.current = true;
+          prevTimelineLengthRef.current = timeline.length;
+        }
+        isSwitchingConversationRef.current = false;
+      });
+
+      return () => cancelAnimationFrame(rafId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [conversationId]);
 
     // j/k keyboard navigation for messages
     const focusedMsgRef = useRef<number>(-1);
