@@ -762,6 +762,10 @@ export const useAgentV3Store = create<AgentV3State>()(
             earliestCounter,
           } = get();
 
+          // Skip if already on this conversation — avoids clearing delta buffers
+          // and re-triggering state updates during active streaming.
+          if (activeConversationId === id) return;
+
           // CRITICAL: Clear delta buffers when switching conversations
           // Prevents stale streaming content from previous conversation
           clearAllDeltaBuffers();
@@ -1076,10 +1080,16 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Try to load from IndexedDB first
           const cachedState = await loadConversationState(conversationId);
 
-          set({
-            isLoadingHistory: true,
-            timeline: cachedState?.timeline || [], // Use cached if available
-            messages: cachedState?.timeline ? timelineToMessages(cachedState.timeline) : [],
+          // Only replace timeline/messages if current state is empty —
+          // setActiveConversation already restores from in-memory cache,
+          // so overwriting with IndexedDB data causes a visible flash.
+          const currentTimeline = get().timeline;
+          const hasExistingData = currentTimeline.length > 0;
+
+          const stateUpdate: Record<string, any> = {
+            // Only show loading state when there's no cached data to display —
+            // when data exists, keep UI interactive during background refresh.
+            isLoadingHistory: !hasExistingData,
             currentThought: cachedState?.currentThought || '',
             streamingThought: '',
             isThinkingStreaming: false,
@@ -1093,7 +1103,16 @@ export const useAgentV3Store = create<AgentV3State>()(
             pendingClarification: cachedState?.pendingClarification || null,
             pendingDecision: cachedState?.pendingDecision || null,
             pendingEnvVarRequest: cachedState?.pendingEnvVarRequest || null,
-          });
+          };
+
+          if (!hasExistingData) {
+            stateUpdate.timeline = cachedState?.timeline || [];
+            stateUpdate.messages = cachedState?.timeline
+              ? timelineToMessages(cachedState.timeline)
+              : [];
+          }
+
+          set(stateUpdate);
 
           try {
             // Parallelize independent API calls (async-parallel)
@@ -1213,10 +1232,23 @@ export const useAgentV3Store = create<AgentV3State>()(
                 ...newConvState,
               } as ConversationState);
 
+              // Skip timeline replacement if streaming is active — sendMessage
+              // may have already appended a user message that the API response
+              // doesn't include, so overwriting would cause it to disappear.
+              // Also skip if data hasn't changed to avoid unnecessary re-renders.
+              const isCurrentlyStreaming = state.isStreaming;
+              const timelineChanged =
+                !isCurrentlyStreaming &&
+                (state.timeline.length !== mergedTimeline.length ||
+                  (mergedTimeline.length > 0 &&
+                    state.timeline[state.timeline.length - 1]?.id !==
+                      mergedTimeline[mergedTimeline.length - 1]?.id));
+
               return {
                 conversationStates: newStates,
-                timeline: mergedTimeline,
-                messages: messages,
+                ...(timelineChanged
+                  ? { timeline: mergedTimeline, messages: messages }
+                  : {}),
                 isLoadingHistory: false,
                 hasEarlier: response.has_more ?? false,
                 earliestTimeUs: firstTimeUs,
@@ -1280,8 +1312,6 @@ export const useAgentV3Store = create<AgentV3State>()(
               agentService.subscribe(conversationId, streamHandler);
               logger.debug(`[AgentV3] Subscribed to conversation ${conversationId}`);
             }
-
-            set({ isLoadingHistory: false });
           } catch (error) {
             if (get().activeConversationId !== conversationId) return;
             console.error('Failed to load messages', error);

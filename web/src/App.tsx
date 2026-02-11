@@ -389,15 +389,7 @@ function App() {
                 }
               />
               <Route
-                path=":tenantId/agent-workspace"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <AgentWorkspace />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/agent-workspace/:conversation"
+                path=":tenantId/agent-workspace/:conversation?"
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <AgentWorkspace />
