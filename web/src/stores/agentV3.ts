@@ -65,6 +65,8 @@ interface DeltaBufferState {
   textDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
   thoughtDeltaBuffer: string;
   thoughtDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
+  actDeltaBuffer: import('../types/agent').ActDeltaEventData | null;
+  actDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const deltaBuffers = new Map<string, DeltaBufferState>();
@@ -80,6 +82,8 @@ function getDeltaBuffer(conversationId: string): DeltaBufferState {
       textDeltaFlushTimer: null,
       thoughtDeltaBuffer: '',
       thoughtDeltaFlushTimer: null,
+      actDeltaBuffer: null,
+      actDeltaFlushTimer: null,
     };
     deltaBuffers.set(conversationId, buffer);
   }
@@ -102,8 +106,13 @@ function clearDeltaBuffers(conversationId: string): void {
       clearTimeout(buffer.thoughtDeltaFlushTimer);
       buffer.thoughtDeltaFlushTimer = null;
     }
+    if (buffer.actDeltaFlushTimer) {
+      clearTimeout(buffer.actDeltaFlushTimer);
+      buffer.actDeltaFlushTimer = null;
+    }
     buffer.textDeltaBuffer = '';
     buffer.thoughtDeltaBuffer = '';
+    buffer.actDeltaBuffer = null;
   }
 }
 

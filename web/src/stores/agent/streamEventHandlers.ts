@@ -45,6 +45,8 @@ export interface DeltaBufferState {
   textDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
   thoughtDeltaBuffer: string;
   thoughtDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
+  actDeltaBuffer: ActDeltaEventData | null;
+  actDeltaFlushTimer: ReturnType<typeof setTimeout> | null;
 }
 
 /**
@@ -267,39 +269,59 @@ export function createStreamEventHandlers(
     },
 
     onActDelta: (event: AgentEvent<ActDeltaEventData>) => {
-      const { updateConversationState, getConversationState } = get();
+      const buffer = getDeltaBuffer(handlerConversationId);
 
-      const convState = getConversationState(handlerConversationId);
-      const toolName = event.data.tool_name;
+      // Buffer the latest act delta (only keep the most recent accumulated_arguments)
+      buffer.actDeltaBuffer = event.data;
 
-      const newMap = new Map(convState.activeToolCalls);
-      const existing = newMap.get(toolName);
+      if (!buffer.actDeltaFlushTimer) {
+        buffer.actDeltaFlushTimer = setTimeout(() => {
+          const bufferedData = buffer.actDeltaBuffer;
+          buffer.actDeltaBuffer = null;
+          buffer.actDeltaFlushTimer = null;
 
-      if (existing) {
-        // Update accumulated arguments on existing entry
-        newMap.set(toolName, {
-          ...existing,
-          partialArguments: event.data.accumulated_arguments,
-        });
-      } else {
-        // First delta - create skeleton entry with preparing status
-        newMap.set(toolName, {
-          name: toolName,
-          arguments: {},
-          status: 'preparing',
-          startTime: Date.now(),
-          partialArguments: event.data.accumulated_arguments,
-        });
+          if (bufferedData) {
+            const { updateConversationState, getConversationState } = get();
+            const convState = getConversationState(handlerConversationId);
+            const toolName = bufferedData.tool_name;
+
+            const newMap = new Map(convState.activeToolCalls);
+            const existing = newMap.get(toolName);
+
+            if (existing) {
+              newMap.set(toolName, {
+                ...existing,
+                partialArguments: bufferedData.accumulated_arguments,
+              });
+            } else {
+              newMap.set(toolName, {
+                name: toolName,
+                arguments: {},
+                status: 'preparing',
+                startTime: Date.now(),
+                partialArguments: bufferedData.accumulated_arguments,
+              });
+            }
+
+            updateConversationState(handlerConversationId, {
+              activeToolCalls: newMap,
+              agentState: 'preparing',
+            });
+          }
+        }, tokenBatchIntervalMs);
       }
-
-      updateConversationState(handlerConversationId, {
-        activeToolCalls: newMap,
-        agentState: 'preparing',
-      });
     },
 
     onAct: (event) => {
       const { updateConversationState, getConversationState } = get();
+
+      // Flush any pending act delta buffer since the full act event supersedes it
+      const buffer = getDeltaBuffer(handlerConversationId);
+      if (buffer.actDeltaFlushTimer) {
+        clearTimeout(buffer.actDeltaFlushTimer);
+        buffer.actDeltaFlushTimer = null;
+        buffer.actDeltaBuffer = null;
+      }
 
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
