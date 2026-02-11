@@ -635,9 +635,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
 
   // Status bar with layout mode selector
   const statusBarWithLayout = (
-    <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm">
-      <div className="flex-1">{statusBar}</div>
-      <div className="flex items-center gap-2 pr-3">
+    <div className="flex-shrink-0 flex items-center border-t border-slate-200/60 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm min-w-0">
+      <div className="flex-1 min-w-0 overflow-hidden">{statusBar}</div>
+      <div className="flex items-center gap-1 sm:gap-2 pr-2 sm:pr-3 flex-shrink-0">
         {activeConversationId && timeline.length > 0 && (
           <button
             type="button"

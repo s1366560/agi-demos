@@ -261,7 +261,7 @@ export const TenantLayout: React.FC = memo(() => {
           open={mobileSidebarOpen}
           onClose={() => setMobileSidebarOpen(false)}
         >
-          <TenantChatSidebar tenantId={tenantId} />
+          <TenantChatSidebar tenantId={tenantId} mobile />
         </MobileSidebarDrawer>
 
         {/* Main Content */}

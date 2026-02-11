@@ -401,9 +401,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const TierIcon = poolTierConfig?.icon ?? Layers;
 
   return (
-    <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+    <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 min-w-0">
       {/* Left: Pool Tier, Sandbox Status, Lifecycle Status & Resources */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 overflow-hidden">
         {/* Pool Tier Indicator (shown when pool management is enabled) */}
         {enablePoolManagement && poolEnabled && (
           <>
@@ -473,14 +473,14 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 ) : (
                   <TierIcon size={12} />
                 )}
-                <span>{poolInstance ? (poolTierConfig?.label ?? 'POOL') : '待分配'}</span>
+                <span className="hidden sm:inline">{poolInstance ? (poolTierConfig?.label ?? 'POOL') : '待分配'}</span>
                 {poolInstance?.health_status === 'healthy' && (
                   <Heart size={10} className="text-emerald-500 fill-emerald-500" />
                 )}
               </div>
             </LazyTooltip>
             {/* Separator */}
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
           </>
         )}
 
@@ -488,7 +488,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         <SandboxStatusIndicator projectId={projectId} tenantId={tenantId} />
 
         {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
 
         {/* Agent Lifecycle Status */}
         <LazyTooltip
@@ -512,7 +512,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             `}
           >
             <StatusIcon size={12} className={config.animate ? 'animate-spin' : ''} />
-            <span>{config.label}</span>
+            <span className="hidden sm:inline">{config.label}</span>
             {status.resources.activeCalls > 0 ? (
               <span className="ml-0.5">({status.resources.activeCalls})</span>
             ) : null}
@@ -520,7 +520,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         </LazyTooltip>
 
         {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
 
         {/* Resources: Tools with detailed breakdown */}
         {status.toolStats.total > 0 && (
@@ -534,7 +534,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               </div>
             }
           >
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
               <Wrench size={11} />
               <span>{status.toolStats.builtin}</span>
               {status.toolStats.mcp > 0 && (
@@ -559,7 +559,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               </div>
             }
           >
-            <div className="flex items-center gap-1 text-xs text-slate-500">
+            <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
               <BrainCircuit size={11} />
               <span>
                 {status.skillStats.loaded}/{status.skillStats.total}
@@ -570,25 +570,27 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
         {/* Message Count */}
         <LazyTooltip title="对话消息数">
-          <div className="flex items-center gap-1 text-xs text-slate-500">
+          <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
             <MessageSquare size={11} />
             <span>{messageCount}</span>
           </div>
         </LazyTooltip>
 
         {/* Context Window Status */}
-        <ContextStatusIndicator />
+        <div className="hidden sm:block">
+          <ContextStatusIndicator />
+        </div>
 
         {/* Plan Mode */}
         {status.planMode.isActive && (
           <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
             <LazyTooltip
               title={`${status.planMode.currentMode?.toUpperCase() || 'PLAN'} 模式 - Agent 正在创建详细计划`}
             >
               <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
                 <Zap size={11} />
-                <span>
+                <span className="hidden sm:inline">
                   {status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}
                 </span>
               </div>
@@ -599,10 +601,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {/* Streaming Indicator */}
         {isStreaming && (
           <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
             <div className="flex items-center gap-1 text-xs text-amber-600">
               <Activity size={11} className="animate-pulse" />
-              <span>流式响应中</span>
+              <span className="hidden sm:inline">流式响应中</span>
             </div>
           </>
         )}
@@ -610,11 +612,11 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {/* Error Indicator */}
         {isError && (
           <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
             <LazyTooltip title={error || 'Agent 错误'}>
               <div className="flex items-center gap-1 text-xs text-red-500">
                 <AlertTriangle size={11} />
-                <span>错误</span>
+                <span className="hidden sm:inline">错误</span>
               </div>
             </LazyTooltip>
           </>
@@ -622,7 +624,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       </div>
 
       {/* Right: Lifecycle Controls & Connection */}
-      <div className="flex items-center gap-3 text-xs">
+      <div className="flex items-center gap-2 sm:gap-3 text-xs flex-shrink-0">
         {/* Lifecycle Control Buttons */}
         <div className="flex items-center gap-1.5">
           {/* Pause Button - pool mode only, shown when agent is ready */}
@@ -746,7 +748,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         </div>
 
         {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
 
         {/* Connection & Activity Status - Combined */}
         <LazyTooltip
@@ -771,17 +773,17 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             ) : status.resources.activeCalls > 0 ? (
               <>
                 <Activity size={12} className="text-blue-500 animate-pulse" />
-                <span className="text-blue-500">{status.resources.activeCalls} active</span>
+                <span className="hidden sm:inline text-blue-500">{status.resources.activeCalls} active</span>
               </>
             ) : status.connection.websocket ? (
               <>
                 <Wifi size={12} className="text-emerald-500" />
-                <span className="text-emerald-500">Online</span>
+                <span className="hidden sm:inline text-emerald-500">Online</span>
               </>
             ) : (
               <>
                 <Wifi size={12} />
-                <span>Ready</span>
+                <span className="hidden sm:inline">Ready</span>
               </>
             )}
           </div>

@@ -13,9 +13,10 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, memo } from 'react';
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 
 import { Modal } from 'antd';
+import { useTranslation } from 'react-i18next';
 import {
   Plus,
   MessageSquare,
@@ -25,6 +26,12 @@ import {
   Bot,
   FolderOpen,
   ChevronDown,
+  LayoutDashboard,
+  Folder,
+  Headphones,
+  Brain,
+  BarChart3,
+  Settings,
 } from 'lucide-react';
 
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -207,14 +214,18 @@ export interface TenantChatSidebarProps {
   collapsed?: boolean;
   /** Callback when collapsed state changes */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** When true, always visible (used inside mobile drawer) */
+  mobile?: boolean;
 }
 
 export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   tenantId,
   collapsed: controlledCollapsed,
   onCollapsedChange,
+  mobile = false,
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // Use ref for width during drag to avoid re-renders
   const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
@@ -522,12 +533,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     <aside
       ref={sidebarRef}
       className={`
-        hidden md:flex
+        ${mobile ? 'flex' : 'hidden md:flex'}
         flex-col bg-surface-light dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark 
         flex-none z-20 h-full relative
         ${isDragging ? '' : 'transition-all duration-300 ease-in-out'}
       `}
-      style={{ width: currentWidth }}
+      style={{ width: mobile ? '100%' : currentWidth }}
     >
       {/* Resize Handle - only show when not collapsed */}
       {!collapsed && (
@@ -682,6 +693,38 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Mobile Navigation Links - shown only in mobile drawer */}
+      {mobile && tenantId && (
+        <div className="border-t border-slate-100 dark:border-slate-800/50 px-3 py-2">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1">
+            {t('nav.navigation', 'Navigation')}
+          </p>
+          {[
+            { path: `/tenant/${tenantId}/overview`, icon: <LayoutDashboard size={16} />, label: t('nav.overview', 'Overview') },
+            { path: `/tenant/${tenantId}/projects`, icon: <Folder size={16} />, label: t('nav.projects', 'Projects') },
+            { path: `/tenant/${tenantId}/agents`, icon: <Headphones size={16} />, label: t('nav.agents', 'Agents') },
+            { path: `/tenant/${tenantId}/skills`, icon: <Brain size={16} />, label: t('nav.skills', 'Skills') },
+            { path: `/tenant/${tenantId}/analytics`, icon: <BarChart3 size={16} />, label: t('nav.analytics', 'Analytics') },
+            { path: `/tenant/${tenantId}/settings`, icon: <Settings size={16} />, label: t('nav.settings', 'Settings') },
+          ].map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`
+              }
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
 
       {/* Footer - AI Status */}
       {!collapsed && (
