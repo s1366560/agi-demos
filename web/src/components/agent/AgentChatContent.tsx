@@ -180,8 +180,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   const { planModeStatus, exitPlanMode } = usePlanModeStore();
   const {
     activeSandboxId,
-    toolExecutions,
-    currentTool,
     setProjectId,
     subscribeSSE,
     unsubscribeSSE,
@@ -451,11 +449,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     () => (
       <SandboxSection
         sandboxId={activeSandboxId || null}
-        toolExecutions={toolExecutions}
-        currentTool={currentTool || null}
       />
     ),
-    [activeSandboxId, toolExecutions, currentTool]
+    [activeSandboxId]
   );
 
   const statusBar = useMemo(

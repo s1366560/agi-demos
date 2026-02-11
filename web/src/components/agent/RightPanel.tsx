@@ -22,7 +22,6 @@ import { LazyTabs, LazyButton, LazyBadge } from '@/components/ui/lazyAntd';
 import { ResizeHandle, PlanContent } from './RightPanelComponents';
 import { SandboxSection } from './SandboxSection';
 
-import type { ToolExecution } from './sandbox/SandboxOutputViewer';
 import type { WorkPlan, ExecutionPlan } from '../../types/agent';
 
 export type RightPanelTab = 'plan' | 'sandbox';
@@ -31,8 +30,6 @@ export interface RightPanelProps {
   workPlan: WorkPlan | null;
   executionPlan: ExecutionPlan | null;
   sandboxId?: string | null;
-  toolExecutions?: ToolExecution[];
-  currentTool?: { name: string; input: Record<string, unknown> } | null;
   onClose?: () => void;
   onFileClick?: (filePath: string) => void;
   collapsed?: boolean;
@@ -52,8 +49,6 @@ export const RightPanel = memo<RightPanelProps>(
     workPlan,
     executionPlan,
     sandboxId,
-    toolExecutions = [],
-    currentTool,
     onClose,
     collapsed,
     width = 360,
@@ -100,8 +95,6 @@ export const RightPanel = memo<RightPanelProps>(
         children: (
           <SandboxSection
             sandboxId={sandboxId || null}
-            toolExecutions={toolExecutions}
-            currentTool={currentTool || null}
           />
         ),
       },
