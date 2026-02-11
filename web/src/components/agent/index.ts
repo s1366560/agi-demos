@@ -5,7 +5,6 @@
  */
 
 // Primary Agent Chat Components (Modern Design)
-export { ChatLayout } from './ChatLayout';
 export { ConversationSidebar } from './ConversationSidebar';
 export { MessageArea } from './MessageArea';
 export { MessageBubble } from './MessageBubble';

@@ -19,14 +19,12 @@ import {
   ErrorBoundary as RootErrorBoundary,
   SkeletonLoader as RootSkeletonLoader,
   EmptyState as RootEmptyState,
-  ChatLayout as RootChatLayout,
   ConversationSidebar as RootConversationSidebar,
   MessageArea as RootMessageArea,
   MessageBubble as RootMessageBubble,
   InputBar as RootInputBar,
 } from '../../components';
 import {
-  ChatLayout,
   ConversationSidebar as AgentConversationSidebar,
   MessageArea,
   MessageBubble as AgentMessageBubble,
@@ -229,10 +227,6 @@ describe('Barrel Exports', () => {
   });
 
   describe('Agent Components Barrel', () => {
-    it('exports ChatLayout component', () => {
-      expect(ChatLayout).toBeDefined();
-    });
-
     it('exports ConversationSidebar component', () => {
       expect(AgentConversationSidebar).toBeDefined();
     });
@@ -301,7 +295,6 @@ describe('Barrel Exports', () => {
     });
 
     it('exports Agent components from root barrel', () => {
-      expect(RootChatLayout).toBeDefined();
       expect(RootConversationSidebar).toBeDefined();
       expect(RootMessageArea).toBeDefined();
       expect(RootMessageBubble).toBeDefined();

@@ -4,7 +4,7 @@
  * PERFORMANCE NOTE: For optimal tree-shaking, import from sub-barrels instead:
  *
  *   GOOD: import { ErrorBoundary } from '@/components/common'
- *   GOOD: import { ChatLayout } from '@/components/agent'
+ *   GOOD: import { ConversationSidebar } from '@/components/agent'
  *   BAD:  import { ErrorBoundary } from '@/components'
  *
  * This file exists primarily for TypeScript IDE support and documentation.
@@ -12,8 +12,8 @@
  *
  * Available sub-barrels:
  *   - @/components/common - ErrorBoundary, SkeletonLoader, EmptyState
- *   - @/components/agent - ChatLayout, ConversationSidebar, MessageArea
- *   - @/components/shared - AppLayout, Layout, Modal components
+ *   - @/components/agent - ConversationSidebar, MessageArea
+ *   - @/components/shared - Modal components, UI components
  *   - @/components/graph - GraphVisualization, EntityCard
  *   - @/components/agent/layout - WorkspaceSidebar, ResizablePanels
  *   - @/components/agent/chat - MessageBubble, InputBar, IdleState
@@ -35,7 +35,6 @@ export {
 
 // Agent components (modern agent chat UI)
 export {
-  ChatLayout,
   ConversationSidebar,
   MessageArea,
   MessageBubble,
@@ -45,11 +44,8 @@ export {
   SandboxSection,
 } from './agent';
 
-// Shared components (layouts, modals, UI components)
+// Shared components (modals, UI components)
 export {
-  AppLayout,
-  ResponsiveLayout,
-  Layout,
   DeleteConfirmationModal,
   LanguageSwitcher,
   NotificationPanel,
