@@ -547,10 +547,10 @@ ConversationSummaryCardWrapper.displayName = 'ConversationSummaryCardWrapper';
 const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
   ({
     timeline,
-    streamingContent,
-    streamingThought,
+    streamingContent: _propStreamingContent,
+    streamingThought: _propStreamingThought,
     isStreaming,
-    isThinkingStreaming,
+    isThinkingStreaming: _propIsThinkingStreaming,
     isLoading,
     planModeStatus,
     onViewPlan,
@@ -564,6 +564,16 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     onSuggestionSelect,
     children,
   }) => {
+    // Subscribe to fast-changing streaming values directly from the store
+    // to avoid re-rendering the parent AgentChatContent on every token.
+    const storeStreamingContent = useAgentV3Store((s) => s.streamingAssistantContent);
+    const storeStreamingThought = useAgentV3Store((s) => s.streamingThought);
+    const storeIsThinkingStreaming = useAgentV3Store((s) => s.isThinkingStreaming);
+
+    const streamingContent = isStreaming ? storeStreamingContent : '';
+    const streamingThought = storeStreamingThought;
+    const isThinkingStreaming = storeIsThinkingStreaming;
+
     const containerRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);

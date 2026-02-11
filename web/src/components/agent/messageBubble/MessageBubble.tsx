@@ -1082,7 +1082,16 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         console.warn('Unknown event type in MessageBubble:', (event as any).type);
         return null;
     }
-  }
+  },
+  // Custom comparator: skip re-render if only allEvents reference changed
+  // (allEvents changes on every timeline update, but most bubbles don't use it)
+  (prev, next) =>
+    prev.event === next.event &&
+    prev.isStreaming === next.isStreaming &&
+    prev.isPinned === next.isPinned &&
+    prev.onPin === next.onPin &&
+    prev.onReply === next.onReply &&
+    prev.allEvents?.length === next.allEvents?.length
 );
 
 MessageBubbleRoot.displayName = 'MessageBubble';

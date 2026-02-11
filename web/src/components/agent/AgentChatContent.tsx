@@ -105,6 +105,9 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   }, [customBasePath, urlProjectId, projectId]);
 
   // Store state - single useShallow selector to avoid infinite re-renders
+  // NOTE: streamingAssistantContent, streamingThought, isThinkingStreaming are
+  // subscribed directly inside MessageArea to avoid re-rendering this entire
+  // component on every streaming token.
   const {
     activeConversationId,
     timeline,
@@ -132,9 +135,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     loadPendingHITL,
     clearError,
     error,
-    streamingAssistantContent,
-    streamingThought,
-    isThinkingStreaming,
     suggestions,
     conversations,
   } = useAgentV3Store(
@@ -161,16 +161,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       loadPendingHITL: state.loadPendingHITL,
       clearError: state.clearError,
       error: state.error,
-      streamingAssistantContent: state.streamingAssistantContent,
-      streamingThought: state.streamingThought,
-      isThinkingStreaming: state.isThinkingStreaming,
       suggestions: state.suggestions,
       conversations: state.conversations,
     }))
   );
-
-  // Derive streaming content - only show when actively streaming
-  const streamingContent = isStreaming ? streamingAssistantContent : '';
 
   // Derive last conversation for resume card
   const lastConversation = useMemo(() => {
@@ -438,10 +432,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       ) : (
         <MessageArea
           timeline={timeline}
-          streamingContent={streamingContent}
-          streamingThought={streamingThought}
           isStreaming={isStreaming}
-          isThinkingStreaming={isThinkingStreaming}
           isLoading={isLoadingHistory}
           planModeStatus={planModeStatus}
           onViewPlan={handleViewPlan}
@@ -460,10 +451,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       ),
     [
       timeline,
-      streamingContent,
-      streamingThought,
       isStreaming,
-      isThinkingStreaming,
       isLoadingHistory,
       isLoadingEarlier,
       activeConversationId,
