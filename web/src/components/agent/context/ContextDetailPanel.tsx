@@ -104,9 +104,9 @@ const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) 
     const time = new Date(record.timestamp).toLocaleTimeString();
     return {
       key: record.timestamp,
-      dot: <CompressOutlined style={{ fontSize: 14 }} />,
+      icon: <CompressOutlined style={{ fontSize: 14 }} />,
       color: record.level.includes('l3') ? 'red' : record.level.includes('l2') ? 'orange' : 'blue',
-      children: (
+      content: (
         <div style={{ fontSize: 12, lineHeight: 1.6 }}>
           <div>
             <Text strong>{record.level.toUpperCase()}</Text>
@@ -152,7 +152,7 @@ export const ContextDetailPanel: FC = () => {
         </Space>
       }
       placement="right"
-      width={400}
+      size="default"
       open={expanded}
       onClose={() => setDetailExpanded(false)}
       styles={{ body: { padding: '16px 20px' } }}

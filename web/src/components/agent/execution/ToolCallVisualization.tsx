@@ -339,7 +339,7 @@ const DetailDrawer: React.FC<DetailDrawerProps> = ({ execution, visible, onClose
       }
       open={visible}
       onClose={onClose}
-      width={480}
+      size="large"
     >
       <div className="space-y-4">
         {/* Status and timing */}
