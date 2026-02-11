@@ -66,7 +66,7 @@ export const AgentChatInputArea = ({
   return (
     <div
       className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 relative flex flex-col"
-      style={{ height: inputHeight }}
+      style={{ minHeight: inputHeight, maxHeight: maxHeight }}
       data-testid="agent-chat-input-area"
     >
       {/* Resize handle for input area (at top) */}

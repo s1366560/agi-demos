@@ -324,7 +324,7 @@ export const InputBar = memo<InputBarProps>(
       (e: React.FormEvent<HTMLTextAreaElement>) => {
         const target = e.currentTarget;
         target.style.height = 'auto';
-        const minHeight = 72;
+        const minHeight = 48;
         const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 400));
         target.style.height = `${newHeight}px`;
         const value = target.value;
@@ -541,7 +541,7 @@ export const InputBar = memo<InputBarProps>(
           )}
 
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3 relative">
+          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-hidden">
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -588,13 +588,13 @@ export const InputBar = memo<InputBarProps>(
                     ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
                     : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
-              rows={3}
+              rows={2}
               data-testid="chat-input"
               className={`
                 w-full h-full resize-none bg-transparent
                 text-slate-800 dark:text-slate-100
                 placeholder:text-slate-400 dark:placeholder:text-slate-500
-                focus:outline-none text-[15px] leading-relaxed min-h-[72px]
+                focus:outline-none text-[15px] leading-relaxed min-h-[48px]
                 ${inputMode === 'command' ? 'font-mono' : ''}
               `}
             />
