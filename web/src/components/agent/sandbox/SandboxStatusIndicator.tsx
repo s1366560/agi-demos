@@ -9,9 +9,9 @@
  * @module components/agent/sandbox/SandboxStatusIndicator
  */
 
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 
-import { Popover, Spin, Progress, message, Button } from 'antd';
+import { Popover, message } from 'antd';
 import {
   Terminal,
   Power,
@@ -148,6 +148,46 @@ function formatDuration(seconds: number): string {
 }
 
 /**
+ * Lightweight progress bar with CSS transitions (replaces Ant Design Progress)
+ */
+const SmoothProgressBar: FC<{
+  percent: number;
+  color: string;
+  highColor?: string;
+  threshold?: number;
+}> = memo(({ percent, color, highColor, threshold = 80 }) => {
+  const barColor = highColor && percent > threshold ? highColor : color;
+  return (
+    <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+      <div
+        className="h-full rounded-full"
+        style={{
+          width: `${Math.min(percent, 100)}%`,
+          backgroundColor: barColor,
+          transition: 'width 600ms ease-out, background-color 400ms ease',
+        }}
+      />
+    </div>
+  );
+});
+SmoothProgressBar.displayName = 'SmoothProgressBar';
+
+/**
+ * Animated numeric display that transitions smoothly
+ */
+const AnimatedValue: FC<{ children: React.ReactNode; className?: string }> = memo(
+  ({ children, className }) => (
+    <span
+      className={className}
+      style={{ transition: 'opacity 200ms ease' }}
+    >
+      {children}
+    </span>
+  )
+);
+AnimatedValue.displayName = 'AnimatedValue';
+
+/**
  * Sandbox metrics popover content
  */
 const MetricsPopover: FC<{
@@ -157,7 +197,7 @@ const MetricsPopover: FC<{
   onRefresh: () => void;
   onRestart: () => void;
   onStop: () => void;
-}> = ({ sandbox, stats, loading, onRefresh, onRestart, onStop }) => {
+}> = memo(({ sandbox, stats, loading, onRefresh, onRestart, onStop }) => {
   if (!sandbox) {
     return (
       <div className="p-3 text-sm text-slate-500">
@@ -187,15 +227,15 @@ const MetricsPopover: FC<{
       </div>
 
       {/* Loading state */}
-      {loading && (
+      {loading && !stats && (
         <div className="flex items-center justify-center py-4">
-          <Spin size="small" />
+          <Loader2 size={16} className="animate-spin text-slate-400" />
           <span className="ml-2 text-sm text-slate-500">Loading...</span>
         </div>
       )}
 
       {/* Metrics */}
-      {!loading && stats && (
+      {stats && (
         <div className="space-y-3">
           {/* CPU */}
           <div className="flex items-center gap-3">
@@ -203,15 +243,14 @@ const MetricsPopover: FC<{
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-slate-600 dark:text-slate-400">CPU</span>
-                <span className="text-slate-800 dark:text-slate-200">
+                <AnimatedValue className="text-slate-800 dark:text-slate-200 font-mono tabular-nums">
                   {stats.cpu_percent.toFixed(1)}%
-                </span>
+                </AnimatedValue>
               </div>
-              <Progress
+              <SmoothProgressBar
                 percent={stats.cpu_percent}
-                size="small"
-                showInfo={false}
-                strokeColor={stats.cpu_percent > 80 ? '#ef4444' : '#3b82f6'}
+                color="#3b82f6"
+                highColor="#ef4444"
               />
             </div>
           </div>
@@ -222,15 +261,14 @@ const MetricsPopover: FC<{
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-slate-600 dark:text-slate-400">内存</span>
-                <span className="text-slate-800 dark:text-slate-200">
+                <AnimatedValue className="text-slate-800 dark:text-slate-200 font-mono tabular-nums">
                   {formatBytes(stats.memory_usage)} / {formatBytes(stats.memory_limit)}
-                </span>
+                </AnimatedValue>
               </div>
-              <Progress
+              <SmoothProgressBar
                 percent={stats.memory_percent}
-                size="small"
-                showInfo={false}
-                strokeColor={stats.memory_percent > 80 ? '#ef4444' : '#8b5cf6'}
+                color="#8b5cf6"
+                highColor="#ef4444"
               />
             </div>
           </div>
@@ -270,23 +308,38 @@ const MetricsPopover: FC<{
 
       {/* Actions */}
       <div className="flex gap-2 mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
-        <Button size="small" icon={<RefreshCw size={12} />} onClick={onRefresh} loading={loading}>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           刷新
-        </Button>
+        </button>
         {sandbox.status === 'running' && (
           <>
-            <Button size="small" onClick={onRestart}>
+            <button
+              type="button"
+              onClick={onRestart}
+              className="px-2.5 py-1 text-xs rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            >
               重启
-            </Button>
-            <Button size="small" danger onClick={onStop}>
+            </button>
+            <button
+              type="button"
+              onClick={onStop}
+              className="px-2.5 py-1 text-xs rounded-md border border-red-200 dark:border-red-800 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer"
+            >
               停止
-            </Button>
+            </button>
           </>
         )}
       </div>
     </div>
   );
-};
+});
+MetricsPopover.displayName = 'MetricsPopover';
 
 /**
  * SandboxStatusIndicator Component
@@ -302,6 +355,10 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   const [statsLoading, setStatsLoading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
+
+  // Track sandbox status in ref to avoid recreating fetchStats on every status change
+  const sandboxStatusRef = useRef<ProjectSandboxStatus | null>(null);
+  sandboxStatusRef.current = sandbox?.status ?? null;
 
   // Determine current status
   const currentStatus: ProjectSandboxStatus | 'none' = sandbox?.status || 'none';
@@ -330,10 +387,10 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
   }, [projectId]);
 
   /**
-   * Fetch sandbox stats
+   * Fetch sandbox stats (stable callback - uses ref for status check)
    */
   const fetchStats = useCallback(async () => {
-    if (!projectId || !sandbox || sandbox.status !== 'running') {
+    if (!projectId || sandboxStatusRef.current !== 'running') {
       setStats(null);
       return;
     }
@@ -348,7 +405,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     } finally {
       setStatsLoading(false);
     }
-  }, [projectId, sandbox]);
+  }, [projectId]);
 
   /**
    * Start sandbox
@@ -526,13 +583,13 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     };
   }, [projectId, fetchSandbox]);
 
-  // Auto-refresh stats while popover is open
+  // Auto-refresh stats while popover is open (stable interval, no recreation on sandbox change)
   useEffect(() => {
-    if (!popoverOpen || !sandbox || sandbox.status !== 'running') return;
+    if (!popoverOpen || sandbox?.status !== 'running') return;
 
-    const interval = setInterval(fetchStats, 5000); // Refresh every 5 seconds
+    const interval = setInterval(fetchStats, 5000);
     return () => clearInterval(interval);
-  }, [popoverOpen, sandbox, fetchStats]);
+  }, [popoverOpen, sandbox?.status, fetchStats]);
 
   const StatusIcon = useMemo(() => {
     if (starting) return Loader2;
