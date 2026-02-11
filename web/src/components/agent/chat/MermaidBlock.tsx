@@ -26,6 +26,7 @@ export const MermaidBlock = memo<{ chart: string }>(({ chart }) => {
           theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
           securityLevel: 'strict',
           fontFamily: 'Inter, system-ui, sans-serif',
+          suppressErrorRendering: true,
         });
 
         const { svg } = await mermaid.render(uniqueId, chart);
@@ -34,6 +35,11 @@ export const MermaidBlock = memo<{ chart: string }>(({ chart }) => {
           setError(null);
         }
       } catch (e) {
+        // Clean up any error elements mermaid may have injected into the DOM
+        const errElement = document.getElementById('d' + uniqueId);
+        if (errElement) {
+          errElement.remove();
+        }
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Mermaid render failed');
         }
