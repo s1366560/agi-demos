@@ -241,6 +241,84 @@ web/src/
 DIRECT_SKILL → SUBAGENT → PLAN_MODE → REACT_LOOP
 ```
 
+## Tool-to-Event 管道 / Tool-to-Event Pipeline
+
+### ToolDefinition 包装机制 / ToolDefinition Wrapping
+
+Tool instances (e.g. `TodoWriteTool`, `TerminalTool`) are **NOT** used directly by the
+SessionProcessor. They are converted to `ToolDefinition` dataclass wrappers by
+`tool_converter.py`:
+
+```
+TodoWriteTool instance
+    ↓ convert_tools()
+ToolDefinition(
+    name="todowrite",
+    execute=closure_wrapper(tool.execute),   # Only the execute() method is wrapped
+    _tool_instance=TodoWriteTool,            # Original instance stored here
+)
+    ↓ SessionProcessor.tools dict
+processor.tools["todowrite"] → ToolDefinition (NOT TodoWriteTool)
+```
+
+**CRITICAL**: To access tool-specific methods (e.g. `consume_pending_events()`),
+use `tool_def._tool_instance`, NOT `tool_def` directly. `tool_def` is a
+`ToolDefinition` with only `name/description/parameters/execute/permission` fields.
+
+### SSE 事件发射流程 / SSE Event Emission Flow
+
+Tools emit side-effect events (e.g. task updates) through a **pending events pattern**:
+
+```
+1. Tool.execute()       → appends events to self._pending_events
+2. Processor            → after execute, calls tool_instance.consume_pending_events()
+3. Processor            → yields domain events (AgentTaskListUpdatedEvent, etc.)
+4. ReActAgent.stream()  → EventConverter.convert() → event dict
+5. execution.py         → publishes to Redis Stream (agent:events:{conversation_id})
+6. agent_service.py     → connect_chat_stream() reads from Redis, yields to WS bridge
+7. chat_handler.py      → broadcasts via WebSocket to frontend
+8. Frontend             → routeToHandler() dispatches to Zustand store handlers
+```
+
+### Event 类型参考 / Event Type Reference
+
+| Event Type | Source | Purpose |
+|------------|--------|---------|
+| `task_list_updated` | todowrite (replace/add) | Full task list sync to frontend |
+| `task_updated` | todowrite (update) | Single task status change |
+| `task_start` | Processor (from task_list_updated) | Timeline: task execution started |
+| `task_complete` | Processor (from task_updated) | Timeline: task execution finished |
+| `artifact_created` | Processor (_process_tool_artifacts) | Artifact upload initiated |
+| `artifact_ready` | Processor (threaded upload complete) | Artifact available for download |
+
+### 添加新工具事件的检查清单 / Checklist for Adding New Tool Events
+
+When a tool needs to emit custom SSE events to the frontend:
+
+1. **Tool class**: Add `_pending_events` list and `consume_pending_events()` method
+2. **Tool.execute()**: Append event dicts to `self._pending_events` after DB commit
+3. **tool_converter.py**: Already handled -- `_tool_instance` is set automatically
+4. **processor.py**: Add a post-execute block (like the todowrite block) that:
+   - Gets `tool_instance` via `getattr(tool_def, "_tool_instance", None)`
+   - Calls `tool_instance.consume_pending_events()`
+   - Yields appropriate `AgentDomainEvent` subclasses
+5. **agent_events.py**: Define new `AgentDomainEvent` subclass with `to_event_dict()`
+6. **types.py**: Add new `AgentEventType` enum value
+7. **converter.py**: Add transformation in `_apply_transformations()` if needed
+   (events without explicit handling pass through via `to_event_dict()` unchanged)
+8. **Frontend agentService.ts**: Add case in `routeToHandler()` switch
+9. **Frontend streamEventHandlers.ts**: Add handler (e.g. `onMyEvent`)
+10. **Frontend types**: Add event data type and handler interface member
+
+### Logging 注意事项 / Logging Notes
+
+- `main.py` has `logging.basicConfig()` at module level for application-wide logging
+- All `src.*` module loggers write to stderr, captured by uvicorn's output redirect
+- `LOG_LEVEL` env var controls the level (default: INFO)
+- Ray Actor code runs in Docker containers with their own code copy -- local code
+  changes are NOT reflected until the actor image is rebuilt
+- Use `docker logs memstack-ray-worker` or Ray worker log files for actor-side debugging
+
 ## MCP & Sandbox 系统 / MCP & Sandbox System
 
 ### Two Sandbox Adapters
@@ -680,10 +758,16 @@ class TestUserService:
 | File | Purpose |
 |------|---------|
 | `src/infrastructure/agent/core/react_agent.py` | ReAct Agent |
-| `src/infrastructure/agent/processor/processor.py` | Session Processor |
-| `src/infrastructure/agent/tools/` | L1 Tools |
+| `src/infrastructure/agent/processor/processor.py` | Session Processor (tool exec + event emission) |
+| `src/infrastructure/agent/core/tool_converter.py` | Tool instance -> ToolDefinition conversion |
+| `src/infrastructure/agent/tools/` | L1 Tools (todo_tools, terminal, etc.) |
+| `src/infrastructure/agent/tools/todo_tools.py` | TodoRead/TodoWrite with pending events pattern |
 | `src/infrastructure/agent/skill/orchestrator.py` | Skill Orchestrator |
 | `src/infrastructure/agent/routing/router.py` | SubAgent Router |
+| `src/infrastructure/agent/events/converter.py` | Domain event -> SSE dict conversion |
+| `src/infrastructure/agent/actor/execution.py` | Actor event loop + Redis publication |
+| `src/domain/events/agent_events.py` | Domain event classes |
+| `src/domain/events/types.py` | AgentEventType enum |
 
 ### Knowledge Graph
 | File | Purpose |
@@ -770,3 +854,7 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | **Never modify DB directly** | Always use Alembic migrations |
 | **Alembic autogenerate** | Always use `--autogenerate`, then review generated migration |
 | **DB session in endpoints** | Never use global container (`request.app.state.container`) for DB-dependent services. Use `get_container_with_db(request, db)` or `Depends(get_db)` for per-request sessions |
+| **ToolDefinition wrapping** | `processor.tools[name]` is a `ToolDefinition`, NOT the original tool. Use `tool_def._tool_instance` to access tool-specific methods like `consume_pending_events()` |
+| **Tool event pattern** | Tools emit side-effect events via `_pending_events` list + `consume_pending_events()`. The processor must explicitly consume and yield them after `tool_def.execute()` |
+| **Logging** | `main.py` has `logging.basicConfig()`. Without it, all `src.*` loggers silently discard output. `LOG_LEVEL` env var controls level |
+| **Ray Actor code** | Runs in Docker containers with baked-in images. Local code changes require image rebuild to take effect in actors |
