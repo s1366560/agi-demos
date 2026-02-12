@@ -187,6 +187,10 @@ export function createStreamEventHandlers(
     // Task list handlers
     onTaskListUpdated: (event) => {
       const data = event.data as { conversation_id: string; tasks: unknown[] };
+      console.log('[TaskSync] task_list_updated received:', {
+        conversationId: handlerConversationId,
+        taskCount: data.tasks?.length ?? 0,
+      });
       const { updateConversationState } = get();
       updateConversationState(handlerConversationId, {
         tasks: data.tasks as import('../../types/agent').AgentTask[],
@@ -200,6 +204,10 @@ export function createStreamEventHandlers(
         status: string;
         content?: string;
       };
+      console.log('[TaskSync] task_updated received:', {
+        taskId: data.task_id,
+        status: data.status,
+      });
       const { getConversationState, updateConversationState } = get();
       const state = getConversationState(handlerConversationId);
       const tasks = (state?.tasks ?? []).map((t: import('../../types/agent').AgentTask) =>

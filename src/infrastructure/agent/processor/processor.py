@@ -1244,7 +1244,11 @@ class SessionProcessor:
             # Emit pending task SSE events from todowrite tool
             if tool_name == "todowrite" and hasattr(tool_def, "consume_pending_events"):
                 try:
-                    for task_event in tool_def.consume_pending_events():
+                    pending = tool_def.consume_pending_events()
+                    logger.info(
+                        f"[Processor] todowrite pending events: count={len(pending)}"
+                    )
+                    for task_event in pending:
                         from src.domain.events.agent_events import (
                             AgentTaskCompleteEvent,
                             AgentTaskListUpdatedEvent,

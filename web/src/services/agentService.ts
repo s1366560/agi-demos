@@ -926,9 +926,11 @@ class AgentServiceImpl implements AgentService {
         break;
       // Task list events
       case 'task_list_updated':
+        console.log('[TaskSync] routeToHandler: task_list_updated, hasHandler:', !!handler.onTaskListUpdated);
         handler.onTaskListUpdated?.(event as AgentEvent<TaskListUpdatedEventData>);
         break;
       case 'task_updated':
+        console.log('[TaskSync] routeToHandler: task_updated, hasHandler:', !!handler.onTaskUpdated);
         handler.onTaskUpdated?.(event as AgentEvent<TaskUpdatedEventData>);
         break;
       // Task timeline events
