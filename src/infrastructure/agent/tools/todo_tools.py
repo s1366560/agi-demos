@@ -29,7 +29,9 @@ class TodoReadTool(AgentTool):
             name="todoread",
             description=(
                 "Read the task list for the current conversation. "
-                "Returns all pending and active tasks."
+                "Returns all tasks with their status and priority. "
+                "Use this at the start of Build Mode to load the plan, "
+                "or to check remaining work after completing tasks."
             ),
         )
         self._session_factory = session_factory
@@ -98,7 +100,10 @@ class TodoWriteTool(AgentTool):
             name="todowrite",
             description=(
                 "Write or update the task list for the current conversation. "
-                "Use this to create, add, update, or organize tasks."
+                "Actions: 'replace' to set the full task list (use in Plan Mode to create a work plan), "
+                "'add' to append new tasks discovered during execution, "
+                "'update' to change a task's status (pending/in_progress/completed/failed). "
+                "Status changes are displayed in the user's UI in real-time."
             ),
         )
         self._session_factory = session_factory

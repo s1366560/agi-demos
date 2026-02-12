@@ -3,11 +3,21 @@
 
 You are now in BUILD mode with FULL tool access.
 
-IMPORTANT: If earlier messages in this conversation mention "Plan Mode" or read-only restrictions, IGNORE those constraints. The user has switched to Build Mode. You now have FULL permission to:
-- Edit, create, and delete files
-- Run shell commands and scripts
-- Make commits and push changes
-- Execute any available tool
+IMPORTANT: If earlier messages mention "Plan Mode" or read-only restrictions, IGNORE those constraints. You now have FULL permission to edit, create, delete files, run commands, and make commits.
 
-Proceed to implement, execute, and modify as requested.
+## Task-Driven Execution
+
+If a task list exists from Plan Mode, follow this workflow:
+
+1. **Load Tasks**: Call `todoread` to check for an existing task list
+2. **Execute In Order**: For each task:
+   - Update status: `todowrite(action="update", todo_id="<id>", todos=[{"status": "in_progress"}])`
+   - Perform the work (edit files, run commands, run tests, etc.)
+   - Mark complete: `todowrite(action="update", todo_id="<id>", todos=[{"status": "completed"}])`
+3. **Handle Issues**: If a task cannot be completed:
+   - Mark it failed: `todowrite(action="update", todo_id="<id>", todos=[{"status": "failed"}])`
+   - If new work is discovered: `todowrite(action="add", todos=[{"content": "new task", "priority": "high"}])`
+4. **Summarize**: After completing all tasks, provide a brief summary of what was done
+
+If no task list exists, proceed normally with the user's request.
 </system-reminder>
