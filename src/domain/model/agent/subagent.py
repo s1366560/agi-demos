@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.domain.model.agent.subagent_source import SubAgentSource
+
 
 class AgentModel(str, Enum):
     """Model configuration for subagent."""
@@ -141,6 +143,8 @@ class SubAgent:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Optional[Dict[str, Any]] = None
+    source: SubAgentSource = SubAgentSource.DATABASE
+    file_path: Optional[str] = None
 
     def __post_init__(self):
         """Validate the subagent."""
@@ -276,6 +280,8 @@ class SubAgent:
             created_at=self.created_at,
             updated_at=datetime.now(timezone.utc),
             metadata=self.metadata,
+            source=self.source,
+            file_path=self.file_path,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -303,6 +309,8 @@ class SubAgent:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "metadata": self.metadata,
+            "source": self.source.value if isinstance(self.source, SubAgentSource) else self.source,
+            "file_path": self.file_path,
         }
 
     @classmethod
@@ -341,6 +349,8 @@ class SubAgent:
             if "updated_at" in data
             else datetime.now(timezone.utc),
             metadata=data.get("metadata"),
+            source=SubAgentSource(data["source"]) if "source" in data else SubAgentSource.DATABASE,
+            file_path=data.get("file_path"),
         )
 
     @classmethod

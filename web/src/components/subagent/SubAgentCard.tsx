@@ -19,6 +19,9 @@ import {
   Brain,
   Cable,
   RotateCw,
+  HardDrive,
+  Database,
+  Download,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -57,12 +60,16 @@ interface SubAgentCardProps {
   onEdit: (subagent: SubAgentResponse) => void;
   onDelete: (id: string) => void;
   onExport?: (subagent: SubAgentResponse) => void;
+  onImport?: (name: string) => void;
 }
 
 export const SubAgentCard = memo<SubAgentCardProps>(
-  ({ subagent, onToggle, onEdit, onDelete, onExport }) => {
+  ({ subagent, onToggle, onEdit, onDelete, onExport, onImport }) => {
     const { t } = useTranslation();
     const [menuOpen, setMenuOpen] = useState(false);
+
+    const isFilesystem = subagent.source === 'filesystem';
+    const isReadonly = isFilesystem;
 
     const handleToggle = useCallback(
       (checked: boolean) => onToggle(subagent.id, checked),
@@ -110,12 +117,25 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                       ? t('tenant.subagents.card.inherit', 'Inherit')
                       : subagent.model}
                   </span>
+                  {isFilesystem ? (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                      <HardDrive size={9} />
+                      {t('tenant.subagents.card.filesystem', 'File')}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                      <Database size={9} />
+                      {t('tenant.subagents.card.database', 'DB')}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Switch checked={subagent.enabled} onChange={handleToggle} size="small" />
+              {!isReadonly && (
+                <Switch checked={subagent.enabled} onChange={handleToggle} size="small" />
+              )}
               {/* More menu */}
               <div className="relative">
                 <button
@@ -129,6 +149,31 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                     <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-20">
+                      {isReadonly ? (
+                        <>
+                          {onImport && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onImport(subagent.name);
+                                setMenuOpen(false);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            >
+                              <Download size={14} className="text-slate-400" />
+                              {t('tenant.subagents.card.importToDb', 'Import to Database')}
+                            </button>
+                          )}
+                          {subagent.file_path && (
+                            <Tooltip title={subagent.file_path}>
+                              <div className="px-3 py-2 text-[11px] text-slate-400 dark:text-slate-500 truncate">
+                                {subagent.file_path}
+                              </div>
+                            </Tooltip>
+                          )}
+                        </>
+                      ) : (
+                        <>
                       <button
                         type="button"
                         onClick={handleEdit}
@@ -166,6 +211,8 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                           {t('common.delete', 'Delete')}
                         </button>
                       </Popconfirm>
+                        </>
+                      )}
                     </div>
                   </>
                 )}

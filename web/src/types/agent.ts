@@ -1251,6 +1251,8 @@ export interface SubAgentResponse {
   created_at: string;
   updated_at: string;
   metadata?: Record<string, unknown>;
+  source?: 'filesystem' | 'database';
+  file_path?: string | null;
 }
 
 /**

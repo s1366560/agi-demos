@@ -105,6 +105,8 @@ class SubAgentResponse(BaseModel):
     created_at: str
     updated_at: str
     metadata: Optional[Dict[str, Any]]
+    source: str = "database"
+    file_path: Optional[str] = None
 
 
 class SubAgentListResponse(BaseModel):
@@ -249,6 +251,8 @@ def subagent_to_response(subagent: SubAgent) -> SubAgentResponse:
         created_at=subagent.created_at.isoformat(),
         updated_at=subagent.updated_at.isoformat(),
         metadata=subagent.metadata,
+        source=subagent.source.value,
+        file_path=subagent.file_path,
     )
 
 
@@ -317,6 +321,10 @@ async def create_subagent(
 async def list_subagents(
     request: Request,
     enabled_only: bool = Query(False, description="Only return enabled subagents"),
+    source: Optional[str] = Query(
+        None, description="Filter by source: 'filesystem', 'database', or None for all"
+    ),
+    include_filesystem: bool = Query(True, description="Include filesystem SubAgents in results"),
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -324,18 +332,199 @@ async def list_subagents(
 ):
     """
     List all subagents for the current tenant.
+
+    By default includes both database and filesystem SubAgents (merged, DB wins by name).
+    Use `source` filter to show only one source, or `include_filesystem=false` to skip FS.
     """
+    from pathlib import Path
+
     container = get_container_with_db(request, db)
     repo = container.subagent_repository()
-    subagents = await repo.list_by_tenant(
-        tenant_id, enabled_only=enabled_only, limit=limit, offset=offset
-    )
-    total = await repo.count_by_tenant(tenant_id, enabled_only=enabled_only)
+
+    if source == "filesystem":
+        # Only filesystem SubAgents
+        from src.infrastructure.agent.subagent.filesystem_loader import FileSystemSubAgentLoader
+
+        loader = FileSystemSubAgentLoader(base_path=Path.cwd(), tenant_id=tenant_id)
+        result = await loader.load_all()
+        all_subagents = [loaded.subagent for loaded in result.subagents]
+        if enabled_only:
+            all_subagents = [s for s in all_subagents if s.enabled]
+        total = len(all_subagents)
+        page = all_subagents[offset : offset + limit]
+    elif source == "database" or not include_filesystem:
+        # Only database SubAgents
+        page = await repo.list_by_tenant(
+            tenant_id, enabled_only=enabled_only, limit=limit, offset=offset
+        )
+        total = await repo.count_by_tenant(tenant_id, enabled_only=enabled_only)
+    else:
+        # Merged: DB + FS (default)
+        from src.application.services.subagent_service import SubAgentService
+        from src.infrastructure.agent.subagent.filesystem_loader import FileSystemSubAgentLoader
+
+        loader = FileSystemSubAgentLoader(base_path=Path.cwd(), tenant_id=tenant_id)
+        service = SubAgentService(filesystem_loader=loader)
+        db_subagents = await repo.list_by_tenant(tenant_id, enabled_only=False)
+        fs_subagents = await service.load_filesystem_subagents()
+        all_subagents = service.merge(db_subagents, fs_subagents)
+        if enabled_only:
+            all_subagents = [s for s in all_subagents if s.enabled]
+        total = len(all_subagents)
+        page = all_subagents[offset : offset + limit]
 
     return SubAgentListResponse(
-        subagents=[subagent_to_response(s) for s in subagents],
+        subagents=[subagent_to_response(s) for s in page],
         total=total,
     )
+
+
+class FilesystemSubAgentResponse(BaseModel):
+    """Schema for filesystem subagent summary."""
+
+    name: str
+    display_name: str
+    description: str
+    model: str
+    tools: List[str]
+    file_path: str
+    source_type: str
+    enabled: bool = True
+
+
+class FilesystemSubAgentListResponse(BaseModel):
+    """Schema for filesystem subagent list response."""
+
+    subagents: List[FilesystemSubAgentResponse]
+    total: int
+    scanned_dirs: List[str]
+    errors: List[str]
+
+
+@router.get("/filesystem", response_model=FilesystemSubAgentListResponse)
+async def list_filesystem_subagents(
+    request: Request,
+    tenant_id: str = Depends(get_current_user_tenant),
+):
+    """
+    List SubAgents available from the filesystem (.memstack/agents/*.md).
+
+    These are pre-defined agent definitions that can be imported to the database
+    for customization.
+    """
+    from pathlib import Path
+
+    from src.infrastructure.agent.subagent.filesystem_loader import FileSystemSubAgentLoader
+
+    loader = FileSystemSubAgentLoader(
+        base_path=Path.cwd(),
+        tenant_id=tenant_id,
+    )
+    result = await loader.load_all()
+
+    subagents = []
+    for loaded in result.subagents:
+        sa = loaded.subagent
+        subagents.append(
+            FilesystemSubAgentResponse(
+                name=sa.name,
+                display_name=sa.display_name,
+                description=sa.trigger.description,
+                model=sa.model.value,
+                tools=list(sa.allowed_tools),
+                file_path=sa.file_path or str(loaded.file_info.file_path),
+                source_type=loaded.file_info.source_type,
+                enabled=sa.enabled,
+            )
+        )
+
+    return FilesystemSubAgentListResponse(
+        subagents=subagents,
+        total=len(subagents),
+        scanned_dirs=[str(d) for d in result.scanned_dirs]
+        if hasattr(result, "scanned_dirs")
+        else [],
+        errors=result.errors,
+    )
+
+
+@router.post(
+    "/filesystem/{name}/import",
+    response_model=SubAgentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_filesystem_subagent(
+    request: Request,
+    name: str,
+    project_id: Optional[str] = Query(None, description="Optional project to scope to"),
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Import a filesystem SubAgent into the database for customization.
+
+    This copies the filesystem definition into the database, allowing the user
+    to modify it. The database version will take precedence over the filesystem
+    version in future loads.
+    """
+    from pathlib import Path
+
+    from src.infrastructure.agent.subagent.filesystem_loader import FileSystemSubAgentLoader
+
+    loader = FileSystemSubAgentLoader(
+        base_path=Path.cwd(),
+        tenant_id=tenant_id,
+    )
+    result = await loader.load_all()
+    target = None
+    for loaded in result.subagents:
+        if loaded.subagent.name == name:
+            target = loaded
+            break
+
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Filesystem SubAgent '{name}' not found",
+        )
+
+    container = get_container_with_db(request, db)
+    repo = container.subagent_repository()
+
+    # Check if DB version already exists
+    existing = await repo.get_by_name(tenant_id, name)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"SubAgent '{name}' already exists in database",
+        )
+
+    # Create a DB copy from the filesystem SubAgent
+    fs_agent = target.subagent
+
+    db_agent = SubAgent.create(
+        tenant_id=tenant_id,
+        name=fs_agent.name,
+        display_name=fs_agent.display_name,
+        system_prompt=fs_agent.system_prompt,
+        trigger_description=fs_agent.trigger.description,
+        trigger_keywords=list(fs_agent.trigger.keywords),
+        trigger_examples=list(fs_agent.trigger.examples),
+        model=fs_agent.model,
+        color=fs_agent.color,
+        allowed_tools=list(fs_agent.allowed_tools),
+        max_tokens=fs_agent.max_tokens,
+        temperature=fs_agent.temperature,
+        max_iterations=fs_agent.max_iterations,
+        project_id=project_id,
+        metadata={"imported_from": str(target.file_info.file_path)},
+    )
+
+    created = await repo.create(db_agent)
+    await db.commit()
+
+    logger.info(f"Imported filesystem SubAgent to DB: {created.id} ({name})")
+    return subagent_to_response(created)
 
 
 @router.get("/templates/list", response_model=TemplateListResponse)

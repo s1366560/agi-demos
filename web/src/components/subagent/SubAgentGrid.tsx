@@ -14,10 +14,11 @@ interface SubAgentGridProps {
   onEdit: (subagent: SubAgentResponse) => void;
   onDelete: (id: string) => void;
   onExport?: (subagent: SubAgentResponse) => void;
+  onImport?: (name: string) => void;
 }
 
 export const SubAgentGrid = memo<SubAgentGridProps>(
-  ({ subagents, onToggle, onEdit, onDelete, onExport }) => (
+  ({ subagents, onToggle, onEdit, onDelete, onExport, onImport }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {subagents.map((subagent) => (
         <SubAgentCard
@@ -27,6 +28,7 @@ export const SubAgentGrid = memo<SubAgentGridProps>(
           onEdit={onEdit}
           onDelete={onDelete}
           onExport={onExport}
+          onImport={onImport}
         />
       ))}
     </div>

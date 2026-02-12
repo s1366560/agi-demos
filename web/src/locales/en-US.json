@@ -381,7 +381,10 @@
         "runs": "runs",
         "noDescription": "No trigger description",
         "exportTemplate": "Export as Template",
-        "deleteConfirm": "Delete this SubAgent?"
+        "deleteConfirm": "Delete this SubAgent?",
+        "filesystem": "File",
+        "database": "DB",
+        "importToDb": "Import to Database"
       },
       "empty": {
         "title": "No subagents yet",
@@ -393,7 +396,8 @@
         "enableSuccess": "SubAgent enabled",
         "disableSuccess": "SubAgent disabled",
         "deleteSuccess": "SubAgent deleted",
-        "createFromTemplateSuccess": "SubAgent created from template"
+        "createFromTemplateSuccess": "SubAgent created from template",
+        "importSuccess": "SubAgent imported to database"
       },
       "createSuccess": "SubAgent created successfully",
       "updateSuccess": "SubAgent updated successfully",

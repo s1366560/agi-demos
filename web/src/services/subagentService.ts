@@ -22,16 +22,57 @@ const api = httpClient;
 
 export interface SubAgentListParams {
   enabled_only?: boolean;
+  source?: 'filesystem' | 'database';
+  include_filesystem?: boolean;
   skip?: number;
   limit?: number;
 }
 
+export interface FilesystemSubAgent {
+  name: string;
+  display_name: string;
+  description: string;
+  model: string;
+  tools: string[];
+  file_path: string;
+  source_type: string;
+  enabled: boolean;
+}
+
+export interface FilesystemSubAgentListResponse {
+  subagents: FilesystemSubAgent[];
+  total: number;
+  scanned_dirs: string[];
+  errors: string[];
+}
+
 export const subagentAPI = {
   /**
-   * List all SubAgents
+   * List all SubAgents (merged: DB + filesystem by default)
    */
   list: async (params: SubAgentListParams = {}): Promise<SubAgentsListResponse> => {
     return await api.get<SubAgentsListResponse>('/subagents/', { params });
+  },
+
+  /**
+   * List filesystem-only SubAgents
+   */
+  listFilesystem: async (): Promise<FilesystemSubAgentListResponse> => {
+    return await api.get<FilesystemSubAgentListResponse>('/subagents/filesystem');
+  },
+
+  /**
+   * Import a filesystem SubAgent into the database for customization
+   */
+  importFilesystem: async (
+    name: string,
+    projectId?: string,
+  ): Promise<SubAgentResponse> => {
+    return await api.post<SubAgentResponse>(
+      `/subagents/filesystem/${encodeURIComponent(name)}/import`,
+      null,
+      { params: projectId ? { project_id: projectId } : undefined },
+    );
   },
 
   /**

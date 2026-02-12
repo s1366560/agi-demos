@@ -21,6 +21,7 @@ import {
   useCreateFromTemplate,
   useDeleteSubAgent,
   useEnabledSubAgentsCount,
+  useImportFilesystem,
   useListSubAgents,
   useListTemplates,
   useSetSubAgentFilters,
@@ -71,6 +72,7 @@ export const SubAgentList: React.FC = () => {
   const toggleSubAgent = useToggleSubAgent();
   const deleteSubAgent = useDeleteSubAgent();
   const createFromTemplate = useCreateFromTemplate();
+  const importFilesystem = useImportFilesystem();
   const setFilters = useSetSubAgentFilters();
   const clearError = useClearSubAgentError();
 
@@ -164,6 +166,20 @@ export const SubAgentList: React.FC = () => {
   );
 
   const handleRefresh = useCallback(() => listSubAgents(), [listSubAgents]);
+
+  const handleImportFilesystem = useCallback(
+    async (name: string) => {
+      try {
+        await importFilesystem(name);
+        message.success(
+          t('tenant.subagents.messages.importSuccess', 'SubAgent imported to database'),
+        );
+      } catch {
+        // Error handled by store
+      }
+    },
+    [importFilesystem, t],
+  );
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -261,6 +277,7 @@ export const SubAgentList: React.FC = () => {
           onToggle={handleToggle}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onImport={handleImportFilesystem}
         />
       )}
 

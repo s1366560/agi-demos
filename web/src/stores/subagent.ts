@@ -81,6 +81,9 @@ interface SubAgentState {
   listTemplates: () => Promise<void>;
   createFromTemplate: (templateName: string) => Promise<SubAgentResponse>;
 
+  // Actions - Filesystem
+  importFilesystem: (name: string) => Promise<SubAgentResponse>;
+
   // Actions - Filters
   setFilters: (filters: Partial<SubAgentFilters>) => void;
   resetFilters: () => void;
@@ -277,6 +280,23 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
+      // ========== Filesystem Import ==========
+
+      importFilesystem: async (name: string) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await subagentAPI.importFilesystem(name);
+          // Refresh the full list to get merged view
+          await get().listSubAgents();
+          set({ isSubmitting: false });
+          return response;
+        } catch (error: unknown) {
+          const errorMessage = getErrorMessage(error, 'Failed to import filesystem SubAgent');
+          set({ error: errorMessage, isSubmitting: false });
+          throw error;
+        }
+      },
+
       // ========== Filters ==========
 
       setFilters: (filters: Partial<SubAgentFilters>) => {
@@ -372,6 +392,7 @@ export const useToggleSubAgent = () => useSubAgentStore((state) => state.toggleS
 export const useSetCurrentSubAgent = () => useSubAgentStore((state) => state.setCurrentSubAgent);
 export const useListTemplates = () => useSubAgentStore((state) => state.listTemplates);
 export const useCreateFromTemplate = () => useSubAgentStore((state) => state.createFromTemplate);
+export const useImportFilesystem = () => useSubAgentStore((state) => state.importFilesystem);
 export const useSetSubAgentFilters = () => useSubAgentStore((state) => state.setFilters);
 export const useResetSubAgentFilters = () => useSubAgentStore((state) => state.resetFilters);
 export const useClearSubAgentError = () => useSubAgentStore((state) => state.clearError);

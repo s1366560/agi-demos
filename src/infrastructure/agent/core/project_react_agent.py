@@ -953,39 +953,68 @@ class ProjectReActAgent:
 
     async def _load_subagents(self) -> List[SubAgent]:
         """
-        Load subagents for the project.
+        Load subagents for the project from both filesystem and database.
 
-        Loads enabled subagents from the repository scoped to the project.
-        Subagents are used for specialized agent routing (L3 layer).
+        Merges SubAgents from .memstack/agents/*.md (filesystem) with
+        database SubAgents. DB SubAgents override filesystem ones by name.
 
         Returns:
             List of enabled SubAgent instances for the project
         """
+        from pathlib import Path
+
+        from src.application.services.subagent_service import SubAgentService
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
         from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
             SqlSubAgentRepository,
         )
+        from src.infrastructure.agent.subagent.filesystem_loader import (
+            FileSystemSubAgentLoader,
+        )
 
+        db_subagents: List[SubAgent] = []
+        fs_subagents: List[SubAgent] = []
+
+        # Load from database
         try:
             async with async_session_factory() as session:
                 repository = SqlSubAgentRepository(session)
-
-                # Load enabled subagents for the project (including tenant-wide ones)
-                subagents = await repository.list_by_project(
+                db_subagents = await repository.list_by_project(
                     project_id=self.config.project_id,
                     tenant_id=self.config.tenant_id,
                     enabled_only=True,
                 )
-
-                logger.debug(
-                    f"ProjectReActAgent[{self.project_key}]: Loaded {len(subagents)} subagents"
-                )
-                return subagents
-
         except Exception as e:
-            logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to load subagents: {e}")
-            # Return empty list on error - subagents are optional
-            return []
+            logger.warning(
+                f"ProjectReActAgent[{self.project_key}]: Failed to load DB subagents: {e}"
+            )
+
+        # Load from filesystem
+        try:
+            fs_loader = FileSystemSubAgentLoader(
+                base_path=Path.cwd(),
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+            )
+            service = SubAgentService(filesystem_loader=fs_loader)
+            fs_subagents = await service.load_filesystem_subagents()
+        except Exception as e:
+            logger.warning(
+                f"ProjectReActAgent[{self.project_key}]: Failed to load FS subagents: {e}"
+            )
+
+        # Merge: DB overrides FS by name
+        service = SubAgentService()
+        merged = service.merge(db_subagents, fs_subagents)
+
+        # Filter to enabled only (FS agents respect their enabled field)
+        enabled = [sa for sa in merged if sa.enabled]
+
+        logger.debug(
+            f"ProjectReActAgent[{self.project_key}]: "
+            f"Loaded {len(enabled)} subagents (DB={len(db_subagents)}, FS={len(fs_subagents)})"
+        )
+        return enabled
 
     def _update_metrics(self, execution_time_ms: float, is_error: bool) -> None:
         """Update metrics after execution."""
