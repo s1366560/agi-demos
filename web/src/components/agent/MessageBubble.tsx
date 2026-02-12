@@ -25,7 +25,6 @@ export type {
   ThoughtProps,
   ToolExecutionProps,
   WorkPlanProps,
-  StepStartProps,
   TextEndProps,
   ArtifactCreatedProps,
   MessageBubbleCompound,

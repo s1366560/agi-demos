@@ -837,7 +837,7 @@ class TestToolCallEndHandling:
         ):
             events.append(e)
 
-        # Should have: AgentActEvent, AgentStepStartEvent, tool event
+        # Should have: AgentActEvent, tool event
         assert len(events) >= 2
         assert "call-001" in result.tool_calls_completed
 

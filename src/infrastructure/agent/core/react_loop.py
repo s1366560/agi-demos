@@ -31,8 +31,7 @@ from src.domain.events.agent_events import (
     AgentEventType,
     AgentStartEvent,
     AgentStatusEvent,
-    AgentStepEndEvent,
-    AgentStepStartEvent,
+
 )
 
 logger = logging.getLogger(__name__)
@@ -299,6 +298,7 @@ class ReActLoop:
 
                 # Process one step
                 step_result = StepResult(result=LoopResult.CONTINUE)
+                had_tool_calls = False
 
                 async for event in self._process_step(messages, tools, context):
                     yield event
@@ -307,17 +307,18 @@ class ReActLoop:
                     if event.event_type == AgentEventType.ERROR:
                         step_result.result = LoopResult.STOP
                         break
-                    elif event.event_type == AgentEventType.STEP_FINISH:
-                        finish_reason = getattr(event, "finish_reason", "stop")
-                        if finish_reason == "stop":
-                            step_result.result = LoopResult.COMPLETE
-                        elif finish_reason == "tool_calls":
-                            step_result.result = LoopResult.CONTINUE
-                        else:
-                            step_result.result = LoopResult.COMPLETE
+                    elif event.event_type == AgentEventType.ACT:
+                        had_tool_calls = True
                     elif event.event_type == AgentEventType.COMPACT_NEEDED:
                         step_result.result = LoopResult.COMPACT
                         break
+
+                # If no stop/compact, determine result from tool calls
+                if step_result.result == LoopResult.CONTINUE:
+                    if had_tool_calls:
+                        step_result.result = LoopResult.CONTINUE
+                    else:
+                        step_result.result = LoopResult.COMPLETE
 
                 result = step_result.result
 
@@ -353,19 +354,8 @@ class ReActLoop:
         Yields:
             AgentDomainEvent objects
         """
-        # Get step description from work plan
-        step_description = f"Step {self._step_count}"
-        if self._work_plan and self._current_plan_step < len(
-            self._work_plan.get("steps", [])
-        ):
-            step_info = self._work_plan["steps"][self._current_plan_step]
-            step_description = step_info.get("description", step_description)
-
-        # Emit step start
-        yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
-
         if self._debug_logging:
-            logger.debug(f"[ReActLoop] Starting step {self._step_count}: {step_description}")
+            logger.debug(f"[ReActLoop] Starting step {self._step_count}")
 
         # Invoke LLM
         self._state = LoopState.THINKING
@@ -421,11 +411,6 @@ class ReActLoop:
             self._state = LoopState.OBSERVING
             self._current_plan_step += 1
 
-        # Emit step end
-        yield AgentStepEndEvent(
-            step_index=self._step_count,
-            tool_calls_count=len(tool_calls_to_execute),
-        )
 
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """Extract user query from messages."""

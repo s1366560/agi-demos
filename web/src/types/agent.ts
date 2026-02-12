@@ -7,7 +7,7 @@
  * Multi-Level Thinking Support:
  * - Work-level planning for complex queries
  * - Task-level execution with detailed thinking
- * - SSE events for work_plan, step_start, step_end
+ * - SSE events for work_plan, task_start, task_complete
  */
 
 /**
@@ -64,9 +64,7 @@ export type MessageType =
   | 'tool_call'
   | 'tool_result'
   | 'error'
-  | 'work_plan'
-  | 'step_start'
-  | 'step_end';
+  | 'work_plan';
 
 /**
  * Agent execution status (extended for multi-level thinking)
@@ -271,9 +269,6 @@ export type AgentEventType =
   | 'thought_delta' // Incremental thought update
   | 'work_plan' // Work-level plan generated
   | 'pattern_match' // Pattern matched from workflow memory (T079)
-  | 'step_start' // Step execution started
-  | 'step_end' // Step execution completed
-  | 'step_finish' // Step finished (alias)
   | 'act' // Tool execution (tool name and input)
   | 'act_delta' // Tool call streaming delta (partial arguments)
   | 'observe' // Tool results
@@ -431,31 +426,6 @@ export interface WorkPlanEventData {
   status: PlanStatus;
   workflow_pattern_id?: string;
   thought_level: ThoughtLevel;
-}
-
-/**
- * Step start event data
- */
-export interface StepStartEventData {
-  plan_id: string;
-  step_number: number;
-  description: string;
-  required_tools: string[];
-  current_step: number;
-  total_steps: number;
-}
-
-/**
- * Step end event data
- */
-export interface StepEndEventData {
-  plan_id: string;
-  step_number: number;
-  description: string;
-  success: boolean;
-  is_plan_complete: boolean;
-  current_step: number;
-  total_steps: number;
 }
 
 /**
@@ -970,8 +940,6 @@ export interface AgentStreamHandler {
   onThoughtDelta?: (event: AgentEvent<ThoughtDeltaEventData>) => void; // Streaming thought
   onWorkPlan?: (event: AgentEvent<WorkPlanEventData>) => void;
   onPatternMatch?: (event: AgentEvent<PatternMatchEventData>) => void; // T079
-  onStepStart?: (event: AgentEvent<StepStartEventData>) => void;
-  onStepEnd?: (event: AgentEvent<StepEndEventData>) => void;
   onAct?: (event: AgentEvent<ActEventData>) => void;
   onActDelta?: (event: AgentEvent<ActDeltaEventData>) => void;
   onObserve?: (event: AgentEvent<ObserveEventData>) => void;
@@ -1987,8 +1955,6 @@ export type TimelineEventType =
   | 'act'
   | 'observe'
   | 'work_plan'
-  | 'step_start'
-  | 'step_end'
   | 'text_delta'
   | 'text_start'
   | 'text_end'
@@ -2110,24 +2076,6 @@ export interface WorkPlanTimelineEvent extends BaseTimelineEvent {
     description: string;
     expected_output: string;
   }>;
-  status: string;
-}
-
-/**
- * Step start event
- */
-export interface StepStartEvent extends BaseTimelineEvent {
-  type: 'step_start';
-  stepIndex: number;
-  stepDescription: string;
-}
-
-/**
- * Step end event
- */
-export interface StepEndEvent extends BaseTimelineEvent {
-  type: 'step_end';
-  stepIndex: number;
   status: string;
 }
 
@@ -2311,8 +2259,6 @@ export type TimelineEvent =
   | ActEvent
   | ObserveEvent
   | WorkPlanTimelineEvent
-  | StepStartEvent
-  | StepEndEvent
   | TextDeltaEvent
   | TextStartEvent
   | TextEndEvent

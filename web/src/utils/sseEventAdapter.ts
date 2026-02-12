@@ -27,8 +27,6 @@ import type {
   ActEventData,
   ObserveEventData,
   WorkPlanEventData,
-  StepStartEventData,
-  StepEndEventData,
   CompleteEventData,
   TextDeltaEventData,
   TextEndEventData,
@@ -258,33 +256,6 @@ export function sseEventToTimeline(
           expected_output: s.expected_output,
         })),
         status: data.status,
-      };
-    }
-
-    case 'step_start': {
-      const data = event.data as unknown as StepStartEventData;
-      return {
-        id: generateTimelineEventId('step_start'),
-        type: 'step_start',
-        eventTimeUs,
-        eventCounter,
-        timestamp,
-        stepIndex: data.step_number,
-        stepDescription: data.description,
-      };
-    }
-
-    case 'step_end':
-    case 'step_finish': {
-      const data = event.data as unknown as StepEndEventData;
-      return {
-        id: generateTimelineEventId('step_end'),
-        type: 'step_end',
-        eventTimeUs,
-        eventCounter,
-        timestamp,
-        stepIndex: data.step_number,
-        status: data.success ? 'completed' : 'failed',
       };
     }
 
@@ -888,9 +859,6 @@ export function isSupportedEventType(eventType: string): boolean {
     'observe',
     'tool_result',
     'work_plan',
-    'step_start',
-    'step_end',
-    'step_finish',
     'complete',
     'text_start',
     'text_delta',

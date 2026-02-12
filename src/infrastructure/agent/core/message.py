@@ -101,41 +101,8 @@ class ReasoningPart:
         }
 
 
-@dataclass
-class StepStartPart:
-    """Step start marker part."""
-
-    snapshot: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "type": "step_start",
-            "snapshot": self.snapshot,
-        }
-
-
-@dataclass
-class StepFinishPart:
-    """Step finish marker part."""
-
-    reason: str
-    snapshot: Optional[str] = None
-    cost: float = 0.0
-    tokens: Dict[str, int] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "type": "step_finish",
-            "reason": self.reason,
-            "cost": self.cost,
-            "tokens": self.tokens,
-        }
-
-
 # Union type for all message parts
-MessagePart = Union[ToolPart, TextPart, ReasoningPart, StepStartPart, StepFinishPart]
+MessagePart = Union[ToolPart, TextPart, ReasoningPart]
 
 
 @dataclass

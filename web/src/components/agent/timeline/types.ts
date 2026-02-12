@@ -19,7 +19,6 @@ export type ThoughtEvent = Extract<TimelineEvent, { type: 'thought' }>;
 export type ActEvent = Extract<TimelineEvent, { type: 'act' }>;
 export type ObserveEvent = Extract<TimelineEvent, { type: 'observe' }>;
 export type WorkPlanEvent = Extract<TimelineEvent, { type: 'work_plan' }>;
-export type StepStartEvent = Extract<TimelineEvent, { type: 'step_start' }>;
 export type TextDeltaEvent = Extract<TimelineEvent, { type: 'text_delta' }>;
 export type TextEndEvent = Extract<TimelineEvent, { type: 'text_end' }>;
 export type ClarificationAskedEvent = Extract<TimelineEvent, { type: 'clarification_asked' }>;
@@ -94,13 +93,6 @@ export interface WorkPlanProps extends EventItemProps {
 }
 
 /**
- * Props for StepStart sub-component
- */
-export interface StepStartProps extends EventItemProps {
-  event: StepStartEvent;
-}
-
-/**
  * Props for TextDelta sub-component
  */
 export interface TextDeltaProps extends EventItemProps {
@@ -158,8 +150,6 @@ export interface TimelineEventItemCompound extends React.FC<TimelineEventItemRoo
   Observe: React.FC<ObserveProps>;
   /** WorkPlan renderer */
   WorkPlan: React.FC<WorkPlanProps>;
-  /** StepStart renderer */
-  StepStart: React.FC<StepStartProps>;
   /** TextDelta renderer */
   TextDelta: React.FC<TextDeltaProps>;
   /** TextEnd renderer */

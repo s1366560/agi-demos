@@ -48,9 +48,7 @@ from src.domain.events.agent_events import (
     AgentRetryEvent,
     AgentStartEvent,
     AgentStatusEvent,
-    AgentStepEndEvent,
-    AgentStepFinishEvent,
-    AgentStepStartEvent,
+
     AgentSuggestionsEvent,
     AgentTextDeltaEvent,
     AgentTextEndEvent,
@@ -430,6 +428,7 @@ class SessionProcessor:
                     return
 
                 # Process one step
+                had_tool_calls = False
                 async for event in self._process_step(session_id, messages):
                     yield event
 
@@ -437,18 +436,18 @@ class SessionProcessor:
                     if event.event_type == AgentEventType.ERROR:
                         result = ProcessorResult.STOP
                         break
-                    elif event.event_type == AgentEventType.STEP_FINISH:
-                        # Check finish reason
-                        finish_reason = event.finish_reason
-                        if finish_reason == "stop":
-                            result = ProcessorResult.COMPLETE
-                        elif finish_reason == "tool_calls":
-                            result = ProcessorResult.CONTINUE
-                        else:
-                            result = ProcessorResult.COMPLETE
+                    elif event.event_type == AgentEventType.ACT:
+                        had_tool_calls = True
                     elif event.event_type == AgentEventType.COMPACT_NEEDED:
                         result = ProcessorResult.COMPACT
                         break
+
+                # If no stop/compact, determine result from tool calls
+                if result == ProcessorResult.CONTINUE:
+                    if had_tool_calls:
+                        result = ProcessorResult.CONTINUE
+                    else:
+                        result = ProcessorResult.COMPLETE
 
                 # If we have pending tool results, add them to messages
                 if result == ProcessorResult.CONTINUE and self._current_message:
@@ -589,16 +588,6 @@ class SessionProcessor:
             AgentDomainEvent objects
         """
         logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
-
-        # Enrich step description with current task context if available
-        if self._current_task:
-            ct = self._current_task
-            step_description = f"Task {ct['order_index'] + 1}/{ct['total_tasks']}: {ct['content']}"
-        else:
-            step_description = f"Step {self._step_count}"
-
-        # Emit step start with meaningful description
-        yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
 
         # Create new assistant message
         self._current_message = Message(
@@ -900,17 +889,6 @@ class SessionProcessor:
             if settings.langfuse_enabled and settings.langfuse_host:
                 trace_id = self._langfuse_context.get("conversation_id", session_id)
                 trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
-
-        # Emit step finish
-        yield AgentStepFinishEvent(
-            tokens=self._current_message.tokens,
-            cost=step_cost,
-            finish_reason=finish_reason,
-            trace_url=trace_url,
-        )
-
-        # Emit step end
-        yield AgentStepEndEvent(step_index=self._step_count, status="completed")
 
         # Emit context status update after step completes.
         # If LLM reported usage (via USAGE event), step_tokens.input is accurate.

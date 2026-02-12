@@ -108,14 +108,6 @@ const mockWorkPlanEvent: any = {
   timestamp: Date.now(),
 };
 
-const mockStepStartEvent: any = {
-  id: '9',
-  type: 'step_start',
-  stepDescription: 'Executing step 1',
-  stepIndex: 0,
-  timestamp: Date.now(),
-};
-
 const mockArtifactEvent: any = {
   id: '10',
   type: 'artifact_created',
@@ -190,12 +182,6 @@ describe('MessageBubble Compound Component', () => {
       expect(screen.getByText('Step 2')).toBeInTheDocument();
     });
 
-    it('should render step start event', () => {
-      render(<MessageBubble event={mockStepStartEvent} />);
-
-      expect(screen.getByText('Executing step 1')).toBeInTheDocument();
-    });
-
     it('should render artifact created event', () => {
       render(<MessageBubble event={mockArtifactEvent} />);
 
@@ -205,7 +191,7 @@ describe('MessageBubble Compound Component', () => {
 
     it('should return null for control events', () => {
       const { container } = render(
-        <MessageBubble event={{ type: 'step_end' as any, id: '11', timestamp: Date.now() }} />
+        <MessageBubble event={{ type: 'text_start' as any, id: '11', timestamp: Date.now() }} />
       );
 
       expect(container.firstChild).toBe(null);
@@ -307,21 +293,6 @@ describe('MessageBubble Compound Component', () => {
     });
   });
 
-  describe('Step Start Sub-Component', () => {
-    it('should render StepStart sub-component', () => {
-      render(<MessageBubble.StepStart event={mockStepStartEvent} />);
-
-      expect(screen.getByText('Executing step 1')).toBeInTheDocument();
-    });
-
-    it('should return null when no step description', () => {
-      const emptyEvent = { ...mockStepStartEvent, stepDescription: undefined };
-      const { container } = render(<MessageBubble.StepStart event={emptyEvent} />);
-
-      expect(container.firstChild).toBe(null);
-    });
-  });
-
   describe('Text End Sub-Component', () => {
     it('should render TextEnd sub-component', () => {
       render(<MessageBubble.TextEnd event={mockTextEndEvent} />);
@@ -374,7 +345,6 @@ describe('MessageBubble Compound Component', () => {
       expect(MessageBubble.Thought).toBeDefined();
       expect(MessageBubble.ToolExecution).toBeDefined();
       expect(MessageBubble.WorkPlan).toBeDefined();
-      expect(MessageBubble.StepStart).toBeDefined();
       expect(MessageBubble.TextEnd).toBeDefined();
       expect(MessageBubble.ArtifactCreated).toBeDefined();
       expect(MessageBubble.Root).toBeDefined();

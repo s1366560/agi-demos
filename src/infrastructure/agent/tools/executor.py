@@ -27,7 +27,6 @@ from src.domain.events.agent_events import (
     AgentDoomLoopDetectedEvent,
     AgentObserveEvent,
     AgentPermissionAskedEvent,
-    AgentStepEndEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -545,7 +544,6 @@ class ToolExecutor:
             step_number = tool_to_step_mapping.get(tool_name)
             if step_number is not None and step_number < len(work_plan_steps):
                 work_plan_steps[step_number]["status"] = "completed"
-                yield AgentStepEndEvent(step_index=step_number, status="completed")
 
             # Emit observe event
             yield AgentObserveEvent(
@@ -574,7 +572,6 @@ class ToolExecutor:
             step_number = tool_to_step_mapping.get(tool_name)
             if step_number is not None and step_number < len(work_plan_steps):
                 work_plan_steps[step_number]["status"] = "failed"
-                yield AgentStepEndEvent(step_index=step_number, status="failed")
 
             yield AgentObserveEvent(
                 tool_name=tool_name,

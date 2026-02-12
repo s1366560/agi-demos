@@ -79,11 +79,12 @@ async def get_conversation_messages(
             "act",
             "observe",
             "work_plan",
-            "step_start",
-            "step_end",
             "artifact_created",
             "artifact_ready",
             "artifact_error",
+            # Task timeline events
+            "task_start",
+            "task_complete",
             # HITL (Human-in-the-Loop) events
             "clarification_asked",
             "clarification_answered",
@@ -226,13 +227,17 @@ async def get_conversation_messages(
                 item["steps"] = data.get("steps", [])
                 item["status"] = data.get("status", "planning")
 
-            elif event_type == "step_start":
-                item["stepIndex"] = data.get("step_index", 0)
-                item["stepDescription"] = data.get("description", "")
+            elif event_type == "task_start":
+                item["taskId"] = data.get("task_id", "")
+                item["content"] = data.get("content", "")
+                item["orderIndex"] = data.get("order_index", 0)
+                item["totalTasks"] = data.get("total_tasks", 0)
 
-            elif event_type == "step_end":
-                item["stepIndex"] = data.get("step_index", 0)
+            elif event_type == "task_complete":
+                item["taskId"] = data.get("task_id", "")
                 item["status"] = data.get("status", "completed")
+                item["orderIndex"] = data.get("order_index", 0)
+                item["totalTasks"] = data.get("total_tasks", 0)
 
             elif event_type == "artifact_created":
                 artifact_id = data.get("artifact_id", "")

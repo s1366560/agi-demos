@@ -22,7 +22,7 @@ from src.domain.events.agent_events import (
     AgentDomainEvent,
     AgentEventType,
     AgentObserveEvent,
-    AgentStepFinishEvent,
+    AgentThoughtEvent,
 )
 from src.infrastructure.agent.core.react_loop import (
     LoopConfig,
@@ -37,14 +37,9 @@ from src.infrastructure.agent.core.react_loop import (
 )
 
 
-# Helper to create step finish events with required fields
-def make_step_finish(step_index: int, finish_reason: str) -> AgentStepFinishEvent:
-    return AgentStepFinishEvent(
-        step_index=step_index,
-        finish_reason=finish_reason,
-        tokens={"input": 100, "output": 50},
-        cost=0.001,
-    )
+# Helper to create a thought event (signals LLM responded without tool calls → COMPLETE)
+def make_thought(content: str = "Thinking...") -> AgentThoughtEvent:
+    return AgentThoughtEvent(content=content)
 
 
 # ============================================================================
@@ -377,9 +372,9 @@ class TestLoopExecution:
 
     async def test_run_emits_start_event(self, loop, sample_messages, sample_tools, context):
         """Test that run emits start event."""
-        # Set up LLM to return completion
+        # Set up LLM to return completion (no tool calls → COMPLETE)
         loop._llm_invoker.set_events([
-            make_step_finish(1, "stop")
+            make_thought("Done")
         ])
 
         events = []
@@ -391,7 +386,7 @@ class TestLoopExecution:
     async def test_run_emits_complete_event(self, loop, sample_messages, sample_tools, context):
         """Test that run emits complete event on success."""
         loop._llm_invoker.set_events([
-            make_step_finish(1, "stop")
+            make_thought("Done")
         ])
 
         events = []
@@ -408,7 +403,6 @@ class TestLoopExecution:
         invoker = MockLLMInvoker()
         invoker.set_events([
             AgentActEvent(tool_name="search", tool_input={}, call_id="1"),
-            make_step_finish(1, "tool_calls"),
         ])
 
         executor = MockToolExecutor()
@@ -438,7 +432,7 @@ class TestLoopExecution:
 
         loop.set_abort_event(abort_event)
         loop._llm_invoker.set_events([
-            make_step_finish(1, "tool_calls")
+            make_thought("should not run")
         ])
 
         events = []
@@ -471,7 +465,6 @@ class TestToolExecution:
         """Test that tool calls are executed."""
         loop._llm_invoker.set_events([
             AgentActEvent(tool_name="search", tool_input={"query": "test"}, call_id="call-1"),
-            make_step_finish(1, "tool_calls"),
         ])
         mock_tool_executor.set_events([
             AgentObserveEvent(tool_name="search", result="found", call_id="call-1"),
@@ -480,7 +473,6 @@ class TestToolExecution:
         # Make loop complete after one tool execution
         loop._llm_invoker._events_to_yield = [
             AgentActEvent(tool_name="search", tool_input={"query": "test"}, call_id="call-1"),
-            make_step_finish(1, "stop"),
         ]
 
         events = []
@@ -509,7 +501,6 @@ class TestDoomLoopDetection:
         invoker = MockLLMInvoker()
         invoker.set_events([
             AgentActEvent(tool_name="search", tool_input={}, call_id="1"),
-            make_step_finish(1, "tool_calls"),
         ])
 
         executor = MockToolExecutor()

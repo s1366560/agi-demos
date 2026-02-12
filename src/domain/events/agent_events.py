@@ -93,29 +93,6 @@ class AgentThoughtDeltaEvent(AgentDomainEvent):
     delta: str
 
 
-# === Step Events ===
-
-
-class AgentStepStartEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.STEP_START
-    step_index: int
-    description: str
-
-
-class AgentStepEndEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.STEP_END
-    step_index: int
-    status: str = "completed"
-
-
-class AgentStepFinishEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.STEP_FINISH
-    tokens: Dict[str, int]
-    cost: float
-    finish_reason: str
-    trace_url: Optional[str] = None
-
-
 # === Tool Events ===
 
 
@@ -693,9 +670,6 @@ def get_event_type_docstring() -> str:
         AgentErrorEvent,
         AgentThoughtEvent,
         AgentThoughtDeltaEvent,
-        AgentStepStartEvent,
-        AgentStepEndEvent,
-        AgentStepFinishEvent,
         AgentActEvent,
         AgentActDeltaEvent,
         AgentObserveEvent,

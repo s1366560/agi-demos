@@ -24,8 +24,6 @@ from src.domain.events.agent_events import (
     AgentErrorEvent,
     AgentEventType,
     AgentObserveEvent,
-    AgentStepEndEvent,
-    AgentStepStartEvent,
     AgentTaskCompleteEvent,
     AgentTaskStartEvent,
     AgentThoughtEvent,
@@ -137,24 +135,6 @@ class EventConverter:
         # DOOM_LOOP_DETECTED: rename to 'doom_loop' for frontend
         if event_type == AgentEventType.DOOM_LOOP_DETECTED:
             event_dict["type"] = "doom_loop"
-
-        # STEP_START: rename step_index to step_number
-        if event_type == AgentEventType.STEP_START and isinstance(
-            domain_event, AgentStepStartEvent
-        ):
-            event_dict["data"] = {
-                "step_number": domain_event.step_index,
-                "description": domain_event.description,
-            }
-
-        # STEP_END: rename step_index to step_number, add success flag
-        if event_type == AgentEventType.STEP_END and isinstance(
-            domain_event, AgentStepEndEvent
-        ):
-            event_dict["data"] = {
-                "step_number": domain_event.step_index,
-                "success": domain_event.status == "completed",
-            }
 
         # THOUGHT: rename content to thought
         if event_type == AgentEventType.THOUGHT and isinstance(

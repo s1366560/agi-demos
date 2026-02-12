@@ -25,9 +25,6 @@ from src.domain.events.agent_events import (
     AgentDomainEvent,
     AgentErrorEvent,
     AgentRetryEvent,
-    AgentStepEndEvent,
-    AgentStepFinishEvent,
-    AgentStepStartEvent,
     AgentTextDeltaEvent,
     AgentTextEndEvent,
     AgentTextStartEvent,
@@ -359,17 +356,6 @@ class LLMInvoker:
         # Build trace URL if Langfuse context is available
         trace_url = self._build_trace_url(context)
 
-        # Emit step finish
-        yield AgentStepFinishEvent(
-            tokens=result.tokens.to_dict(),
-            cost=result.cost,
-            finish_reason=result.finish_reason,
-            trace_url=trace_url,
-        )
-
-        # Emit step end
-        yield AgentStepEndEvent(step_index=context.step_count, status="completed")
-
         self._state = InvokerState.COMPLETE
 
     async def _process_stream_event(
@@ -518,13 +504,6 @@ class LLMInvoker:
                 status="running",
                 tool_execution_id=tool_part.tool_execution_id,
             )
-
-            # Add step_number event
-            if step_number is not None and step_number < len(work_plan_steps):
-                yield AgentStepStartEvent(
-                    step_index=step_number,
-                    description=work_plan_steps[step_number].get("description", ""),
-                )
 
             # Execute tool via callback
             session_id = ""  # Will be provided by processor

@@ -264,37 +264,6 @@ function WorkPlanItem({ event }: { event: TimelineEvent }) {
 }
 
 /**
- * Render step_start event
- */
-function StepStartItem({ event }: { event: TimelineEvent }) {
-  if (event.type !== 'step_start') return null;
-
-  const stepDesc = event.stepDescription;
-  if (!stepDesc || stepDesc.trim() === '') {
-    return null;
-  }
-
-  const stepIndex = event.stepIndex;
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-3 my-3 opacity-70">
-        <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700/50 flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-xs">play_arrow</span>
-        </div>
-        <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 pt-1">
-          {stepIndex !== undefined ? `Step ${stepIndex}: ` : ''}
-          {stepDesc}
-        </div>
-      </div>
-      <div className="pl-10">
-        <TimeBadge timestamp={event.timestamp} />
-      </div>
-    </div>
-  );
-}
-
-/**
  * Render task_start event (timeline marker when agent begins working on a task)
  */
 function TaskStartItem({ event }: { event: TimelineEvent }) {
@@ -1061,19 +1030,6 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
             <WorkPlanItem event={event} />
           </div>
         );
-
-      case 'step_start':
-        if (!event.stepDescription || event.stepDescription.trim() === '') {
-          return null;
-        }
-        return (
-          <div className="animate-slide-up">
-            <StepStartItem event={event} />
-          </div>
-        );
-
-      case 'step_end':
-        return null;
 
       case 'text_delta':
         // Skip text_delta when a text_end exists (it contains the full text)

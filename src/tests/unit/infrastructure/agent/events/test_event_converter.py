@@ -19,8 +19,6 @@ from src.domain.events.agent_events import (
     AgentErrorEvent,
     AgentEventType,
     AgentObserveEvent,
-    AgentStepEndEvent,
-    AgentStepStartEvent,
     AgentThoughtEvent,
 )
 from src.infrastructure.agent.events.converter import (
@@ -208,54 +206,6 @@ class TestEventConverterBasic:
 # Test Work Plan and Step Events
 # ============================================================
 
-
-@pytest.mark.unit
-class TestEventConverterWorkPlan:
-    """Test work plan and step event conversion."""
-
-    def test_convert_step_start_event(self, converter):
-        """Test converting AgentStepStartEvent."""
-        event = AgentStepStartEvent(
-            step_index=1,
-            description="Analyzing search results",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert(event)
-
-        assert result is not None
-        assert result["type"] == AgentEventType.STEP_START.value
-        # step_index renamed to step_number
-        assert result["data"]["step_number"] == 1
-        assert result["data"]["description"] == "Analyzing search results"
-
-    def test_convert_step_end_event_completed(self, converter):
-        """Test converting AgentStepEndEvent with completed status."""
-        event = AgentStepEndEvent(
-            step_index=1,
-            status="completed",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert(event)
-
-        assert result is not None
-        assert result["type"] == AgentEventType.STEP_END.value
-        assert result["data"]["step_number"] == 1
-        assert result["data"]["success"] is True
-
-    def test_convert_step_end_event_failed(self, converter):
-        """Test converting AgentStepEndEvent with failed status."""
-        event = AgentStepEndEvent(
-            step_index=2,
-            status="failed",
-            timestamp=time.time(),
-        )
-
-        result = converter.convert(event)
-
-        assert result is not None
-        assert result["data"]["success"] is False
 
 
 # ============================================================

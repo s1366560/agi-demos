@@ -150,10 +150,6 @@ export function createStreamEventHandlers(
       // Legacy work_plan events - no-op
     },
 
-    onStepStart: (_event) => {},
-
-    onStepEnd: (_event) => {},
-
     onPlanExecutionStart: (_event) => {},
 
     onPlanExecutionComplete: (_event) => {},

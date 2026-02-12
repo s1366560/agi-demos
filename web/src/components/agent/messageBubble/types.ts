@@ -24,7 +24,6 @@ export type TextDeltaEvent = Extract<TimelineEvent, { type: 'text_delta' }>;
 export type TextEndEvent = Extract<TimelineEvent, { type: 'text_end' }>;
 export type ThoughtEvent = Extract<TimelineEvent, { type: 'thought' }>;
 export type WorkPlanEvent = Extract<TimelineEvent, { type: 'work_plan' }>;
-export type StepStartEvent = Extract<TimelineEvent, { type: 'step_start' }>;
 
 // ========================================
 // Component Props
@@ -105,13 +104,6 @@ export interface WorkPlanProps {
 }
 
 /**
- * Props for Step Start sub-component
- */
-export interface StepStartProps {
-  event: StepStartEvent;
-}
-
-/**
  * Props for Text End sub-component
  */
 export interface TextEndProps {
@@ -144,8 +136,6 @@ export interface MessageBubbleCompound extends React.FC<MessageBubbleRootProps> 
   ToolExecution: React.FC<ToolExecutionProps>;
   /** Work plan renderer */
   WorkPlan: React.FC<WorkPlanProps>;
-  /** Step start renderer */
-  StepStart: React.FC<StepStartProps>;
   /** Text end renderer */
   TextEnd: React.FC<TextEndProps>;
   /** Artifact created renderer */

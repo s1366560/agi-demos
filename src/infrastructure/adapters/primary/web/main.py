@@ -189,7 +189,7 @@ The API uses standard HTTP status codes and returns error responses in the follo
 ### SSE Streaming
 
 Chat endpoints use Server-Sent Events (SSE) for real-time agent responses:
-- Event types: `thought`, `act`, `observe`, `step_start`, `step_end`, `complete`, `error`
+- Event types: `thought`, `act`, `observe`, `task_start`, `task_complete`, `complete`, `error`
 - Clients should handle reconnects gracefully
 - Use `EventSource` or similar SSE client libraries
 

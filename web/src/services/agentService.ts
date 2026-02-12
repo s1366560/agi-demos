@@ -61,8 +61,6 @@ import type {
   ThoughtDeltaEventData,
   WorkPlanEventData,
   PatternMatchEventData,
-  StepStartEventData,
-  StepEndEventData,
   ActEventData,
   ActDeltaEventData,
   ObserveEventData,
@@ -674,12 +672,6 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'pattern_match':
         handler.onPatternMatch?.(event as AgentEvent<PatternMatchEventData>);
-        break;
-      case 'step_start':
-        handler.onStepStart?.(event as AgentEvent<StepStartEventData>);
-        break;
-      case 'step_end':
-        handler.onStepEnd?.(event as AgentEvent<StepEndEventData>);
         break;
       case 'act':
         handler.onAct?.(event as AgentEvent<ActEventData>);

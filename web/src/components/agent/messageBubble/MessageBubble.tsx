@@ -47,7 +47,6 @@ import type {
   ThoughtProps,
   ToolExecutionProps,
   WorkPlanProps,
-  StepStartProps,
   TextEndProps,
   ArtifactCreatedProps,
   MessageBubbleRootProps,
@@ -582,30 +581,6 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
 });
 WorkPlan.displayName = 'MessageBubble.WorkPlan';
 
-// Step Start Component - Modern step indicator
-const StepStart: React.FC<StepStartProps> = memo(({ event }) => {
-  const stepDesc = event?.stepDescription;
-  const stepIndex = event?.stepIndex;
-
-  if (!stepDesc) return null;
-
-  return (
-    <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
-      <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-        <span className="text-primary text-xs font-semibold">
-          {stepIndex !== undefined ? stepIndex + 1 : '•'}
-        </span>
-      </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="text-sm text-slate-600 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 px-3 py-2 rounded-lg border border-slate-200/40 dark:border-slate-700/30">
-          {stepDesc}
-        </div>
-      </div>
-    </div>
-  );
-});
-StepStart.displayName = 'MessageBubble.StepStart';
-
 // Text End Component with action bar
 const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
@@ -866,15 +841,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       case 'work_plan':
         return <WorkPlan event={event} />;
 
-      case 'step_start':
-        return <StepStart event={event} />;
-
       case 'text_end':
         return <TextEnd event={event} isPinned={isPinned} onPin={onPin} onReply={onReply} />;
 
-      case 'step_end':
       case 'text_start':
-        // These are control events, no visual output needed
+        // Control event, no visual output needed
         return null;
 
       case 'artifact_created':
@@ -1117,7 +1088,6 @@ MessageBubble.TextDelta = TextDelta;
 MessageBubble.Thought = Thought;
 MessageBubble.ToolExecution = ToolExecution;
 MessageBubble.WorkPlan = WorkPlan;
-MessageBubble.StepStart = StepStart;
 MessageBubble.TextEnd = TextEnd;
 MessageBubble.ArtifactCreated = ArtifactCreated;
 MessageBubble.Root = MessageBubbleRoot;
@@ -1131,7 +1101,6 @@ export type {
   ThoughtProps,
   ToolExecutionProps,
   WorkPlanProps,
-  StepStartProps,
   TextEndProps,
   ArtifactCreatedProps,
   MessageBubbleCompound,

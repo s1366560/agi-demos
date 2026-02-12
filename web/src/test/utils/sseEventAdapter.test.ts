@@ -27,8 +27,6 @@ import type {
   ActEventData,
   ObserveEventData,
   WorkPlanEventData,
-  StepStartEventData,
-  StepEndEventData,
   CompleteEventData,
   TextDeltaEventData,
   TextEndEventData,
@@ -335,55 +333,6 @@ describe('SSE Event Adapter', () => {
       }
     });
 
-    it('should convert step_start event', () => {
-      const sseEvent: AgentEvent<StepStartEventData> = {
-        type: 'step_start',
-        data: {
-          plan_id: 'plan-1',
-          step_number: 1,
-          description: 'Search for information',
-          required_tools: ['web_search'],
-          current_step: 1,
-          total_steps: 3,
-        },
-      };
-
-      const timelineEvent = sseEventToTimeline(sseEvent, 7);
-
-      expect(timelineEvent).not.toBeNull();
-      expect(timelineEvent?.type).toBe('step_start');
-      expect(timelineEvent?.sequenceNumber).toBe(7);
-      if (timelineEvent?.type === 'step_start') {
-        expect(timelineEvent.stepIndex).toBe(1);
-        expect(timelineEvent.stepDescription).toBe('Search for information');
-      }
-    });
-
-    it('should convert step_end event', () => {
-      const sseEvent: AgentEvent<StepEndEventData> = {
-        type: 'step_end',
-        data: {
-          plan_id: 'plan-1',
-          step_number: 1,
-          description: 'Search for information',
-          success: true,
-          is_plan_complete: false,
-          current_step: 1,
-          total_steps: 3,
-        },
-      };
-
-      const timelineEvent = sseEventToTimeline(sseEvent, 8);
-
-      expect(timelineEvent).not.toBeNull();
-      expect(timelineEvent?.type).toBe('step_end');
-      expect(timelineEvent?.sequenceNumber).toBe(8);
-      if (timelineEvent?.type === 'step_end') {
-        expect(timelineEvent.stepIndex).toBe(1);
-        expect(timelineEvent.status).toBe('completed');
-      }
-    });
-
     it('should convert complete event to assistant_message', () => {
       const sseEvent: AgentEvent<CompleteEventData> = {
         type: 'complete',
@@ -603,9 +552,6 @@ describe('SSE Event Adapter', () => {
  * observe → observe
  * tool_result → observe (merged)
  * work_plan → work_plan
- * step_start → step_start
- * step_end → step_end
- * step_finish → step_end (merged)
  * complete → assistant_message
  * text_start → text_start (typewriter effect)
  * text_delta → text_delta (typewriter effect)

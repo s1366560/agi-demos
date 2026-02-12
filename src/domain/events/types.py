@@ -53,13 +53,6 @@ class AgentEventType(str, Enum):
     THOUGHT_DELTA = "thought_delta"
 
     # =========================================================================
-    # Plan & WorkPlan progress events
-    # =========================================================================
-    STEP_START = "step_start"
-    STEP_END = "step_end"
-    STEP_FINISH = "step_finish"
-
-    # =========================================================================
     # Tool events
     # =========================================================================
     ACT = "act"
@@ -242,9 +235,6 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.TEXT_START: EventCategory.AGENT,
     AgentEventType.TEXT_DELTA: EventCategory.AGENT,
     AgentEventType.TEXT_END: EventCategory.AGENT,
-    AgentEventType.STEP_START: EventCategory.AGENT,
-    AgentEventType.STEP_END: EventCategory.AGENT,
-    AgentEventType.STEP_FINISH: EventCategory.AGENT,
     AgentEventType.CANCELLED: EventCategory.AGENT,
     # HITL events
     AgentEventType.CLARIFICATION_ASKED: EventCategory.HITL,

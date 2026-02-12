@@ -28,8 +28,6 @@ class MessageType(str, Enum):
 
     # Multi-level thinking message types
     WORK_PLAN = "work_plan"  # Work-level plan
-    STEP_START = "step_start"  # Step beginning
-    STEP_END = "step_end"  # Step completion
     PATTERN_MATCH = "pattern_match"  # Workflow pattern matched
 
 
