@@ -20,7 +20,7 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { GripHorizontal, Download, ChevronDown, GitCompareArrows } from 'lucide-react';
+import { GripHorizontal, Download, ChevronDown, GitCompareArrows, ListTodo } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -51,9 +51,12 @@ import { EmptyState } from './EmptyState';
 import { FocusDesktopOverlay } from './layout/FocusDesktopOverlay';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { Resizer } from './Resizer';
+import { RightPanel } from './RightPanel';
 import { SandboxSection } from './SandboxSection';
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
+
+import type { AgentTask } from '../../types/agent';
 
 
 interface AgentChatContentProps {
@@ -216,12 +219,37 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     }))
   );
 
+  // Tasks from active conversation state (separate selector to avoid re-renders)
+  const tasks: AgentTask[] = useAgentV3Store((state) => {
+    const convId = state.activeConversationId;
+    if (!convId) return [];
+    const convState = state.conversationStates.get(convId);
+    return convState?.tasks ?? [];
+  });
+  const { rightPanelWidth, setRightPanelWidth } = useAgentV3Store(
+    useShallow((state) => ({
+      rightPanelWidth: state.rightPanelWidth,
+      setRightPanelWidth: state.setRightPanelWidth,
+    }))
+  );
+
   // Local UI state
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(true);
   const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
   const [chatSearchVisible, setChatSearchVisible] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => !localStorage.getItem('memstack_onboarding_complete'),
   );
+
+  // Auto-show right panel when tasks appear
+  useEffect(() => {
+    if (tasks.length > 0) setRightPanelCollapsed(false);
+  }, [tasks.length]);
+
+  // Reset panel when switching conversations
+  useEffect(() => {
+    setRightPanelCollapsed(true);
+  }, [activeConversationId]);
 
   // Cmd+F to open chat search, / to focus input, Shift+Tab to toggle plan mode
   useEffect(() => {
@@ -621,6 +649,24 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
             )}
           </div>
         )}
+        {tasks.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setRightPanelCollapsed((v) => !v)}
+            className={`flex items-center gap-1 p-1.5 rounded-md transition-colors ${
+              rightPanelCollapsed
+                ? 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                : 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20'
+            }`}
+            title="Tasks"
+            aria-label="Toggle tasks panel"
+          >
+            <ListTodo size={14} />
+            <span className="text-xs tabular-nums">
+              {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
+            </span>
+          </button>
+        )}
         <LayoutModeSelector />
       </div>
     </div>
@@ -765,6 +811,20 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
         {chatColumn}
         {statusBarWithLayout}
       </main>
+
+      {/* Right Panel: Tasks */}
+      {!rightPanelCollapsed && tasks.length > 0 && (
+        <aside className="flex-shrink-0 h-full border-l border-slate-200/60 dark:border-slate-700/50">
+          <RightPanel
+            tasks={tasks}
+            sandboxId={activeSandboxId}
+            onClose={() => setRightPanelCollapsed(true)}
+            collapsed={false}
+            width={rightPanelWidth}
+            onWidthChange={setRightPanelWidth}
+          />
+        </aside>
+      )}
     </div>
   );
 });
