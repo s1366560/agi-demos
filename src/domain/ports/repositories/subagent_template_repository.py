@@ -1,0 +1,73 @@
+"""
+SubAgentTemplateRepository port for template marketplace persistence.
+
+Repository interface for persisting and retrieving SubAgent templates.
+"""
+
+from abc import ABC, abstractmethod
+from typing import List, Optional
+
+
+class SubAgentTemplateRepositoryPort(ABC):
+    """Repository port for SubAgent template persistence."""
+
+    @abstractmethod
+    async def create(self, template: dict) -> dict:
+        """Create a new template. Returns the created template as dict."""
+        pass
+
+    @abstractmethod
+    async def get_by_id(self, template_id: str) -> Optional[dict]:
+        """Get a template by ID."""
+        pass
+
+    @abstractmethod
+    async def get_by_name(
+        self, tenant_id: str, name: str, version: Optional[str] = None
+    ) -> Optional[dict]:
+        """Get a template by name within a tenant, optionally by version."""
+        pass
+
+    @abstractmethod
+    async def update(self, template_id: str, data: dict) -> Optional[dict]:
+        """Update a template. Returns updated template or None."""
+        pass
+
+    @abstractmethod
+    async def delete(self, template_id: str) -> bool:
+        """Delete a template. Returns True if deleted."""
+        pass
+
+    @abstractmethod
+    async def list_templates(
+        self,
+        tenant_id: str,
+        category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        query: Optional[str] = None,
+        published_only: bool = True,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[dict]:
+        """List templates with filtering."""
+        pass
+
+    @abstractmethod
+    async def count_templates(
+        self,
+        tenant_id: str,
+        category: Optional[str] = None,
+        published_only: bool = True,
+    ) -> int:
+        """Count templates matching filters."""
+        pass
+
+    @abstractmethod
+    async def list_categories(self, tenant_id: str) -> List[str]:
+        """List distinct categories for a tenant."""
+        pass
+
+    @abstractmethod
+    async def increment_install_count(self, template_id: str) -> None:
+        """Increment the install count for a template."""
+        pass

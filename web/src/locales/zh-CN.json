@@ -159,6 +159,7 @@
     "agents": "智能体管理",
     "subagents": "子智能体",
     "skills": "技能管理",
+    "templates": "模板市场",
     "providers": "LLM 提供商",
     "platform": "平台",
     "administration": "管理",
@@ -589,6 +590,88 @@
         "name": "工具名称",
         "description": "描述",
         "parameters": "参数"
+      }
+    },
+    "subagents": {
+      "title": "子智能体",
+      "subtitle": "管理专用 AI 智能体以处理不同任务",
+      "createNew": "创建子智能体",
+      "fromTemplate": "从模板创建",
+      "noTemplates": "暂无可用模板",
+      "stats": {
+        "total": "子智能体总数",
+        "enabled": "已启用",
+        "successRate": "成功率",
+        "invocations": "总运行次数"
+      },
+      "filter": {
+        "searchPlaceholder": "搜索子智能体...",
+        "all": "全部",
+        "enabled": "已启用",
+        "disabled": "已禁用"
+      },
+      "sort": {
+        "name": "名称",
+        "invocations": "运行次数最多",
+        "successRate": "成功率",
+        "recent": "最近使用"
+      },
+      "card": {
+        "inherit": "继承",
+        "allTools": "全部",
+        "runs": "次运行",
+        "noDescription": "暂无触发描述",
+        "exportTemplate": "导出为模板",
+        "deleteConfirm": "确定要删除此子智能体吗？"
+      },
+      "empty": {
+        "title": "暂无子智能体",
+        "hint": "创建您的第一个子智能体以专门化 AI 任务。",
+        "noResults": "没有匹配的子智能体",
+        "noResultsHint": "请尝试调整搜索条件或过滤器。"
+      },
+      "messages": {
+        "enableSuccess": "子智能体已启用",
+        "disableSuccess": "子智能体已禁用",
+        "deleteSuccess": "子智能体已删除",
+        "createFromTemplateSuccess": "已从模板创建子智能体"
+      },
+      "createSuccess": "子智能体创建成功",
+      "updateSuccess": "子智能体更新成功",
+      "modal": {
+        "createTitle": "创建子智能体",
+        "editTitle": "编辑子智能体",
+        "basicInfo": "基本信息",
+        "triggerConfig": "触发配置",
+        "permissions": "权限设置",
+        "name": "名称",
+        "nameRequired": "名称不能为空",
+        "namePattern": "必须以小写字母开头，仅允许 a-z、0-9、下划线",
+        "displayName": "显示名称",
+        "displayNameRequired": "显示名称不能为空",
+        "systemPrompt": "系统提示词",
+        "systemPromptRequired": "系统提示词不能为空",
+        "systemPromptPlaceholder": "输入此子智能体的系统提示词...",
+        "model": "模型",
+        "color": "颜色",
+        "triggerDescription": "触发描述",
+        "triggerDescriptionRequired": "触发描述不能为空",
+        "triggerDescriptionPlaceholder": "描述此子智能体应何时被激活...",
+        "triggerKeywords": "触发关键词",
+        "addKeyword": "添加关键词...",
+        "noKeywords": "暂无关键词",
+        "triggerExamples": "触发示例",
+        "addExample": "添加示例消息...",
+        "noExamples": "暂无示例",
+        "allowedTools": "允许的工具",
+        "allowedToolsTooltip": "逗号分隔的工具名称，或 * 表示全部工具",
+        "allowedSkills": "允许的技能",
+        "allowedSkillsTooltip": "逗号分隔的技能名称",
+        "allowedMcpServers": "MCP 服务器",
+        "allowedMcpServersTooltip": "逗号分隔的 MCP 服务器名称",
+        "maxTokens": "最大 Token 数",
+        "temperature": "温度",
+        "maxIterations": "最大迭代次数"
       }
     }
   },
@@ -1804,6 +1887,21 @@
       "completed": "{{completed}}/{{total}} 步已完成",
       "failed": "失败"
     },
+    "subagent": {
+      "single": "子代理: {{name}}",
+      "parallel": "并行子代理",
+      "chain": "链式: {{name}}",
+      "background": "后台: {{name}}",
+      "parallel_tasks": "并行执行: {{count}} 个任务",
+      "chain_steps": "链式: {{name}} ({{count}} 步)",
+      "executing": "执行中..."
+    },
+    "background": {
+      "title": "后台任务",
+      "empty": "暂无后台任务",
+      "clear": "清除",
+      "clearAll": "全部清除"
+    },
     "undo": {
       "title": "撤销操作",
       "description": "这将要求 Agent 撤销此操作。Agent 将尝试还原所做的更改。",
@@ -1849,7 +1947,16 @@
       "myTemplates": "我的模板",
       "builtIn": "内置",
       "noCustom": "暂无自定义模板",
-      "saveSuccess": "模板已保存"
+      "saveSuccess": "模板已保存",
+      "marketplace": "模板市场",
+      "marketplaceDesc": "浏览并安装子智能体模板，扩展智能体能力。",
+      "seedBuiltin": "初始化内置模板",
+      "install": "安装",
+      "installed": "已安装子智能体: {{name}}",
+      "installError": "安装模板失败",
+      "loadError": "加载模板失败",
+      "seeded": "已初始化 {{count}} 个模板",
+      "seedError": "初始化模板失败"
     },
     "search": {
       "placeholder": "搜索对话...",

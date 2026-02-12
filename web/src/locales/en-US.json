@@ -159,6 +159,7 @@
     "agents": "Agent Management",
     "subagents": "SubAgents",
     "skills": "Skills",
+    "templates": "Templates",
     "providers": "LLM Providers",
     "platform": "Platform",
     "administration": "Administration",
@@ -348,6 +349,88 @@
         "name": "Tool Name",
         "description": "Description",
         "parameters": "Parameters"
+      }
+    },
+    "subagents": {
+      "title": "SubAgents",
+      "subtitle": "Manage specialized AI agents for different tasks",
+      "createNew": "Create SubAgent",
+      "fromTemplate": "From Template",
+      "noTemplates": "No templates available",
+      "stats": {
+        "total": "Total SubAgents",
+        "enabled": "Active",
+        "successRate": "Success Rate",
+        "invocations": "Total Runs"
+      },
+      "filter": {
+        "searchPlaceholder": "Search subagents...",
+        "all": "All",
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      },
+      "sort": {
+        "name": "Name",
+        "invocations": "Most Runs",
+        "successRate": "Success Rate",
+        "recent": "Recently Used"
+      },
+      "card": {
+        "inherit": "Inherit",
+        "allTools": "All",
+        "runs": "runs",
+        "noDescription": "No trigger description",
+        "exportTemplate": "Export as Template",
+        "deleteConfirm": "Delete this SubAgent?"
+      },
+      "empty": {
+        "title": "No subagents yet",
+        "hint": "Create your first SubAgent to specialize AI tasks.",
+        "noResults": "No matching subagents",
+        "noResultsHint": "Try adjusting your search or filters."
+      },
+      "messages": {
+        "enableSuccess": "SubAgent enabled",
+        "disableSuccess": "SubAgent disabled",
+        "deleteSuccess": "SubAgent deleted",
+        "createFromTemplateSuccess": "SubAgent created from template"
+      },
+      "createSuccess": "SubAgent created successfully",
+      "updateSuccess": "SubAgent updated successfully",
+      "modal": {
+        "createTitle": "Create SubAgent",
+        "editTitle": "Edit SubAgent",
+        "basicInfo": "Basic Info",
+        "triggerConfig": "Trigger Config",
+        "permissions": "Permissions",
+        "name": "Name",
+        "nameRequired": "Name is required",
+        "namePattern": "Must start with lowercase letter, only a-z, 0-9, underscore",
+        "displayName": "Display Name",
+        "displayNameRequired": "Display name is required",
+        "systemPrompt": "System Prompt",
+        "systemPromptRequired": "System prompt is required",
+        "systemPromptPlaceholder": "Enter the system prompt for this SubAgent...",
+        "model": "Model",
+        "color": "Color",
+        "triggerDescription": "Trigger Description",
+        "triggerDescriptionRequired": "Trigger description is required",
+        "triggerDescriptionPlaceholder": "Describe when this SubAgent should be activated...",
+        "triggerKeywords": "Trigger Keywords",
+        "addKeyword": "Add keyword...",
+        "noKeywords": "No keywords added",
+        "triggerExamples": "Trigger Examples",
+        "addExample": "Add example message...",
+        "noExamples": "No examples added",
+        "allowedTools": "Allowed Tools",
+        "allowedToolsTooltip": "Comma-separated tool names, or * for all tools",
+        "allowedSkills": "Allowed Skills",
+        "allowedSkillsTooltip": "Comma-separated skill names this SubAgent can use",
+        "allowedMcpServers": "MCP Servers",
+        "allowedMcpServersTooltip": "Comma-separated MCP server names this SubAgent can access",
+        "maxTokens": "Max Tokens",
+        "temperature": "Temperature",
+        "maxIterations": "Max Iterations"
       }
     }
   },
@@ -1570,6 +1653,21 @@
       "completed": "{{completed}}/{{total}} steps completed",
       "failed": "failed"
     },
+    "subagent": {
+      "single": "SubAgent: {{name}}",
+      "parallel": "Parallel SubAgents",
+      "chain": "Chain: {{name}}",
+      "background": "Background: {{name}}",
+      "parallel_tasks": "Parallel execution: {{count}} tasks",
+      "chain_steps": "Chain: {{name}} ({{count}} steps)",
+      "executing": "Executing..."
+    },
+    "background": {
+      "title": "Background Tasks",
+      "empty": "No background tasks",
+      "clear": "Clear",
+      "clearAll": "Clear all"
+    },
     "undo": {
       "title": "Undo Action",
       "description": "This will ask the agent to undo the action. The agent will attempt to revert any changes made.",
@@ -1615,7 +1713,16 @@
       "myTemplates": "My Templates",
       "builtIn": "Built-in",
       "noCustom": "No custom templates yet",
-      "saveSuccess": "Template saved"
+      "saveSuccess": "Template saved",
+      "marketplace": "Template Marketplace",
+      "marketplaceDesc": "Browse and install SubAgent templates to extend your agent capabilities.",
+      "seedBuiltin": "Seed Built-in",
+      "install": "Install",
+      "installed": "Installed SubAgent: {{name}}",
+      "installError": "Failed to install template",
+      "loadError": "Failed to load templates",
+      "seeded": "Seeded {{count}} templates",
+      "seedError": "Failed to seed templates"
     },
     "search": {
       "placeholder": "Search in conversation...",

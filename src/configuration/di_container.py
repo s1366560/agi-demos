@@ -98,6 +98,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_skill_repository impo
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
     SqlSubAgentRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
+    SqlSubAgentTemplateRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
     SqlTenantAgentConfigRepository,
 )
@@ -364,6 +367,9 @@ class DIContainer:
 
     def subagent_repository(self) -> SqlSubAgentRepository:
         return self._agent.subagent_repository()
+
+    def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
+        return self._agent.subagent_template_repository()
 
     def plan_repository(self) -> SqlPlanRepository:
         return self._agent.plan_repository()

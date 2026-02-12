@@ -236,6 +236,56 @@ class SubAgentOrchestrator:
                 routed=False,
             )
 
+    async def match_async(
+        self,
+        query: str,
+        confidence_threshold: Optional[float] = None,
+        conversation_context: Optional[str] = None,
+    ) -> SubAgentRoutingResult:
+        """Async match with hybrid routing support (keyword + LLM).
+
+        If the router supports async matching (e.g. HybridRouter),
+        uses the full hybrid flow. Otherwise falls back to sync match.
+
+        Args:
+            query: User query to match.
+            confidence_threshold: Optional custom threshold.
+            conversation_context: Recent conversation for LLM context.
+
+        Returns:
+            SubAgentRoutingResult with matched SubAgent and confidence.
+        """
+        if not self._router:
+            return SubAgentRoutingResult(match_reason="No router configured")
+
+        threshold = confidence_threshold or self._config.default_confidence_threshold
+
+        # Check if router supports async matching (HybridRouter)
+        if hasattr(self._router, "match_async"):
+            match = await self._router.match_async(
+                query, threshold, conversation_context
+            )
+        else:
+            match = self._router.match(query, threshold)
+
+        if match.subagent:
+            logger.info(
+                f"[SubAgentOrchestrator] Matched SubAgent (async): {match.subagent.name} "
+                f"(confidence={match.confidence:.3f})"
+            )
+            return SubAgentRoutingResult(
+                subagent=match.subagent,
+                confidence=match.confidence,
+                match_reason=match.match_reason,
+                routed=True,
+            )
+        else:
+            return SubAgentRoutingResult(
+                confidence=match.confidence,
+                match_reason=match.match_reason,
+                routed=False,
+            )
+
     def filter_tools(
         self,
         subagent: SubAgentProtocol,

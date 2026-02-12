@@ -51,6 +51,17 @@ import type {
   EnvVarProvidedEventData,
   ArtifactCreatedEventData,
   ArtifactCategory,
+  SubAgentRoutedEventData,
+  SubAgentStartedEventData,
+  SubAgentCompletedEventData,
+  SubAgentFailedEventData,
+  ParallelStartedEventData,
+  ParallelCompletedEventData,
+  ChainStartedEventData,
+  ChainStepStartedEventData,
+  ChainStepCompletedEventData,
+  ChainCompletedEventData,
+  BackgroundLaunchedEventData,
 } from '../types/agent';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
@@ -583,6 +594,162 @@ export function sseEventToTimeline(
         previewUrl: data.preview_url,
         toolExecutionId: data.tool_execution_id,
         sourceTool: data.source_tool,
+      };
+    }
+
+    // SubAgent events (L3 layer)
+    case 'subagent_routed': {
+      const data = event.data as unknown as SubAgentRoutedEventData;
+      return {
+        id: generateTimelineEventId('subagent_routed'),
+        type: 'subagent_routed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        confidence: data.confidence,
+        reason: data.reason || '',
+      };
+    }
+
+    case 'subagent_started': {
+      const data = event.data as unknown as SubAgentStartedEventData;
+      return {
+        id: generateTimelineEventId('subagent_started'),
+        type: 'subagent_started' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        task: data.task,
+      };
+    }
+
+    case 'subagent_completed': {
+      const data = event.data as unknown as SubAgentCompletedEventData;
+      return {
+        id: generateTimelineEventId('subagent_completed'),
+        type: 'subagent_completed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        summary: data.summary,
+        tokensUsed: data.tokens_used ?? 0,
+        executionTimeMs: data.execution_time_ms ?? 0,
+        success: data.success,
+      };
+    }
+
+    case 'subagent_failed': {
+      const data = event.data as unknown as SubAgentFailedEventData;
+      return {
+        id: generateTimelineEventId('subagent_failed'),
+        type: 'subagent_failed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        error: data.error,
+      };
+    }
+
+    case 'parallel_started': {
+      const data = event.data as unknown as ParallelStartedEventData;
+      return {
+        id: generateTimelineEventId('parallel_started'),
+        type: 'parallel_started' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        taskCount: data.task_count,
+        subtasks: data.subtasks,
+      };
+    }
+
+    case 'parallel_completed': {
+      const data = event.data as unknown as ParallelCompletedEventData;
+      return {
+        id: generateTimelineEventId('parallel_completed'),
+        type: 'parallel_completed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        results: data.results,
+        totalTimeMs: data.total_time_ms ?? 0,
+      };
+    }
+
+    case 'chain_started': {
+      const data = event.data as unknown as ChainStartedEventData;
+      return {
+        id: generateTimelineEventId('chain_started'),
+        type: 'chain_started' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        stepCount: data.step_count,
+        chainName: data.chain_name || '',
+      };
+    }
+
+    case 'chain_step_started': {
+      const data = event.data as unknown as ChainStepStartedEventData;
+      return {
+        id: generateTimelineEventId('chain_step_started'),
+        type: 'chain_step_started' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        stepIndex: data.step_index,
+        stepName: data.step_name || '',
+        subagentName: data.subagent_name,
+      };
+    }
+
+    case 'chain_step_completed': {
+      const data = event.data as unknown as ChainStepCompletedEventData;
+      return {
+        id: generateTimelineEventId('chain_step_completed'),
+        type: 'chain_step_completed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        stepIndex: data.step_index,
+        summary: data.summary,
+        success: data.success,
+      };
+    }
+
+    case 'chain_completed': {
+      const data = event.data as unknown as ChainCompletedEventData;
+      return {
+        id: generateTimelineEventId('chain_completed'),
+        type: 'chain_completed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        totalSteps: data.total_steps,
+        totalTimeMs: data.total_time_ms ?? 0,
+        success: data.success,
+      };
+    }
+
+    case 'background_launched': {
+      const data = event.data as unknown as BackgroundLaunchedEventData;
+      return {
+        id: generateTimelineEventId('background_launched'),
+        type: 'background_launched' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        executionId: data.execution_id,
+        subagentName: data.subagent_name,
+        task: data.task,
       };
     }
 

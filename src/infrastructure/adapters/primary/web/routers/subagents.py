@@ -127,6 +127,88 @@ class SubAgentMatchResponse(BaseModel):
     confidence: float
 
 
+class TemplateCreate(BaseModel):
+    """Schema for creating a template."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    version: str = Field("1.0.0", max_length=20)
+    display_name: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = None
+    category: str = Field("general", max_length=100)
+    tags: List[str] = Field(default_factory=list)
+    system_prompt: str = Field(..., min_length=1)
+    trigger_description: Optional[str] = None
+    trigger_keywords: List[str] = Field(default_factory=list)
+    trigger_examples: List[str] = Field(default_factory=list)
+    model: str = Field("inherit")
+    max_tokens: int = Field(4096, ge=1, le=32768)
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    max_iterations: int = Field(10, ge=1, le=50)
+    allowed_tools: List[str] = Field(default_factory=lambda: ["*"])
+    author: Optional[str] = None
+    is_published: bool = True
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class TemplateUpdate(BaseModel):
+    """Schema for updating a template."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    display_name: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = None
+    category: Optional[str] = Field(None, max_length=100)
+    tags: Optional[List[str]] = None
+    system_prompt: Optional[str] = None
+    trigger_description: Optional[str] = None
+    trigger_keywords: Optional[List[str]] = None
+    trigger_examples: Optional[List[str]] = None
+    model: Optional[str] = None
+    max_tokens: Optional[int] = Field(None, ge=1, le=32768)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    max_iterations: Optional[int] = Field(None, ge=1, le=50)
+    allowed_tools: Optional[List[str]] = None
+    author: Optional[str] = None
+    is_published: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class TemplateResponse(BaseModel):
+    """Schema for template response."""
+
+    id: str
+    tenant_id: str
+    name: str
+    version: str
+    display_name: Optional[str]
+    description: Optional[str]
+    category: str
+    tags: List[str]
+    system_prompt: str
+    trigger_description: Optional[str]
+    trigger_keywords: List[str]
+    trigger_examples: List[str]
+    model: str
+    max_tokens: int
+    temperature: float
+    max_iterations: int
+    allowed_tools: List[str]
+    author: Optional[str]
+    is_builtin: bool
+    is_published: bool
+    install_count: int
+    rating: float
+    metadata: Optional[Dict[str, Any]]
+    created_at: Optional[str]
+    updated_at: Optional[str]
+
+
+class TemplateListResponse(BaseModel):
+    """Schema for template list response."""
+
+    templates: List[TemplateResponse]
+    total: int
+
+
 class SubAgentStatsResponse(BaseModel):
     """Schema for subagent statistics response."""
 
@@ -256,100 +338,281 @@ async def list_subagents(
     )
 
 
-@router.get("/templates/list")
+@router.get("/templates/list", response_model=TemplateListResponse)
 async def list_subagent_templates(
-    tenant_id: str = Depends(get_current_user_tenant),
-):
-    """
-    List predefined subagent templates.
-    """
-    from src.domain.model.agent.subagent import (
-        CODER_SUBAGENT_TEMPLATE,
-        RESEARCHER_SUBAGENT_TEMPLATE,
-        WRITER_SUBAGENT_TEMPLATE,
-    )
-
-    return {
-        "templates": [
-            {
-                "name": RESEARCHER_SUBAGENT_TEMPLATE["name"],
-                "display_name": RESEARCHER_SUBAGENT_TEMPLATE["display_name"],
-                "description": RESEARCHER_SUBAGENT_TEMPLATE["trigger_description"],
-            },
-            {
-                "name": CODER_SUBAGENT_TEMPLATE["name"],
-                "display_name": CODER_SUBAGENT_TEMPLATE["display_name"],
-                "description": CODER_SUBAGENT_TEMPLATE["trigger_description"],
-            },
-            {
-                "name": WRITER_SUBAGENT_TEMPLATE["name"],
-                "display_name": WRITER_SUBAGENT_TEMPLATE["display_name"],
-                "description": WRITER_SUBAGENT_TEMPLATE["trigger_description"],
-            },
-        ]
-    }
-
-
-@router.post(
-    "/templates/{template_name}",
-    response_model=SubAgentResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_from_template(
     request: Request,
-    template_name: str,
+    category: Optional[str] = Query(None, description="Filter by category"),
+    query: Optional[str] = Query(None, description="Search query"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Create a subagent from a predefined template.
+    List published subagent templates with optional filtering.
     """
-    from src.domain.model.agent.subagent import (
-        CODER_SUBAGENT_TEMPLATE,
-        RESEARCHER_SUBAGENT_TEMPLATE,
-        WRITER_SUBAGENT_TEMPLATE,
+    container = get_container_with_db(request, db)
+    repo = container.subagent_template_repository()
+    templates = await repo.list_templates(
+        tenant_id=tenant_id,
+        category=category,
+        query=query,
+        published_only=True,
+        limit=limit,
+        offset=offset,
+    )
+    total = await repo.count_templates(tenant_id=tenant_id, category=category)
+
+    return TemplateListResponse(
+        templates=[TemplateResponse(**t) for t in templates],
+        total=total,
     )
 
-    templates = {
-        "researcher": RESEARCHER_SUBAGENT_TEMPLATE,
-        "coder": CODER_SUBAGENT_TEMPLATE,
-        "writer": WRITER_SUBAGENT_TEMPLATE,
-    }
 
-    if template_name not in templates:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Template '{template_name}' not found. Available templates: {list(templates.keys())}",
-        )
-
-    template = templates[template_name]
+@router.post(
+    "/templates/",
+    response_model=TemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_template(
+    request: Request,
+    data: TemplateCreate,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a new subagent template.
+    """
     container = get_container_with_db(request, db)
-    repo = container.subagent_repository()
+    repo = container.subagent_template_repository()
 
-    # Check if already exists
-    existing = await repo.get_by_name(tenant_id, template["name"])
+    # Check uniqueness
+    existing = await repo.get_by_name(tenant_id, data.name, data.version)
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"SubAgent with name '{template['name']}' already exists",
+            detail=f"Template '{data.name}' v{data.version} already exists",
+        )
+
+    template_data = data.model_dump()
+    template_data["tenant_id"] = tenant_id
+    created = await repo.create(template_data)
+    await db.commit()
+
+    logger.info(f"Template created: {created['id']} ({data.name})")
+    return TemplateResponse(**created)
+
+
+@router.get("/templates/categories")
+async def list_template_categories(
+    request: Request,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List all available template categories.
+    """
+    container = get_container_with_db(request, db)
+    repo = container.subagent_template_repository()
+    categories = await repo.list_categories(tenant_id)
+    return {"categories": categories}
+
+
+@router.get("/templates/{template_id}", response_model=TemplateResponse)
+async def get_template(
+    request: Request,
+    template_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get a specific template by ID.
+    """
+    container = get_container_with_db(request, db)
+    repo = container.subagent_template_repository()
+    template = await repo.get_by_id(template_id)
+
+    if not template or template["tenant_id"] != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found",
+        )
+
+    return TemplateResponse(**template)
+
+
+@router.put("/templates/{template_id}", response_model=TemplateResponse)
+async def update_template(
+    request: Request,
+    template_id: str,
+    data: TemplateUpdate,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update an existing template.
+    """
+    container = get_container_with_db(request, db)
+    repo = container.subagent_template_repository()
+    template = await repo.get_by_id(template_id)
+
+    if not template or template["tenant_id"] != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found",
+        )
+
+    if template["is_builtin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify builtin templates",
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+    updated = await repo.update(template_id, update_data)
+    await db.commit()
+
+    logger.info(f"Template updated: {template_id}")
+    return TemplateResponse(**updated)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_template(
+    request: Request,
+    template_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete a template.
+    """
+    container = get_container_with_db(request, db)
+    repo = container.subagent_template_repository()
+    template = await repo.get_by_id(template_id)
+
+    if not template or template["tenant_id"] != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found",
+        )
+
+    if template["is_builtin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete builtin templates",
+        )
+
+    await repo.delete(template_id)
+    await db.commit()
+    logger.info(f"Template deleted: {template_id}")
+
+
+@router.post(
+    "/templates/{template_id}/install",
+    response_model=SubAgentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def install_template(
+    request: Request,
+    template_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a SubAgent from a template (install).
+    """
+    container = get_container_with_db(request, db)
+    template_repo = container.subagent_template_repository()
+    template = await template_repo.get_by_id(template_id)
+
+    if not template or template["tenant_id"] != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found",
+        )
+
+    subagent_repo = container.subagent_repository()
+
+    # Check if SubAgent already exists
+    existing = await subagent_repo.get_by_name(tenant_id, template["name"])
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"SubAgent '{template['name']}' already exists",
         )
 
     subagent = SubAgent.create(
         tenant_id=tenant_id,
         name=template["name"],
-        display_name=template["display_name"],
+        display_name=template.get("display_name") or template["name"],
         system_prompt=template["system_prompt"],
-        trigger_description=template["trigger_description"],
+        trigger_description=template.get("trigger_description") or template["name"],
         trigger_keywords=template.get("trigger_keywords", []),
+        trigger_examples=template.get("trigger_examples", []),
+        model=AgentModel(template.get("model", "inherit")),
+        max_tokens=template.get("max_tokens", 4096),
+        temperature=template.get("temperature", 0.7),
+        max_iterations=template.get("max_iterations", 10),
         allowed_tools=template.get("allowed_tools", ["*"]),
-        color=template.get("color", "blue"),
     )
 
-    created = await repo.create(subagent)
+    created = await subagent_repo.create(subagent)
+    await template_repo.increment_install_count(template_id)
     await db.commit()
 
-    logger.info(f"SubAgent created from template: {created.id} ({template_name})")
+    logger.info(f"SubAgent installed from template: {created.id} ({template['name']})")
     return subagent_to_response(created)
+
+
+@router.post(
+    "/templates/from-subagent/{subagent_id}",
+    response_model=TemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def export_subagent_as_template(
+    request: Request,
+    subagent_id: str,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Export an existing SubAgent as a reusable template.
+    """
+    container = get_container_with_db(request, db)
+    subagent_repo = container.subagent_repository()
+    subagent = await subagent_repo.get_by_id(subagent_id)
+
+    if not subagent or subagent.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SubAgent not found",
+        )
+
+    template_repo = container.subagent_template_repository()
+
+    template_data = {
+        "tenant_id": tenant_id,
+        "name": subagent.name,
+        "display_name": subagent.display_name,
+        "description": f"Exported from SubAgent: {subagent.display_name}",
+        "category": "custom",
+        "system_prompt": subagent.system_prompt,
+        "trigger_description": subagent.trigger.description,
+        "trigger_keywords": list(subagent.trigger.keywords),
+        "trigger_examples": list(subagent.trigger.examples),
+        "model": subagent.model.value,
+        "max_tokens": subagent.max_tokens,
+        "temperature": subagent.temperature,
+        "max_iterations": subagent.max_iterations,
+        "allowed_tools": list(subagent.allowed_tools),
+        "is_published": True,
+    }
+
+    created = await template_repo.create(template_data)
+    await db.commit()
+
+    logger.info(f"SubAgent exported as template: {created['id']} from {subagent_id}")
+    return TemplateResponse(**created)
 
 
 @router.get("/{subagent_id}", response_model=SubAgentResponse)
@@ -610,3 +873,26 @@ async def match_subagent(
         subagent=None,
         confidence=0.0,
     )
+
+
+@router.post("/templates/seed")
+async def seed_templates(
+    request: Request,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Seed builtin templates for the current tenant.
+
+    Idempotent: skips templates that already exist.
+    """
+    from src.infrastructure.adapters.secondary.persistence.seed_templates import (
+        seed_builtin_templates,
+    )
+
+    container = get_container_with_db(request, db)
+    repo = container.subagent_template_repository()
+    created = await seed_builtin_templates(repo, tenant_id)
+    await db.commit()
+
+    return {"created": created, "message": f"Seeded {created} builtin templates"}

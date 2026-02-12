@@ -75,7 +75,19 @@ export type AgentEventType =
   | 'artifact_ready'
   | 'artifact_error'
   | 'artifacts_batch'
-  | 'cancelled';
+  | 'cancelled'
+  // SubAgent event types (L3 layer)
+  | 'subagent_routed'
+  | 'subagent_started'
+  | 'subagent_completed'
+  | 'subagent_failed'
+  | 'parallel_started'
+  | 'parallel_completed'
+  | 'chain_started'
+  | 'chain_step_started'
+  | 'chain_step_completed'
+  | 'chain_completed'
+  | 'background_launched';
 
 // Delta events (not persisted)
 export const DELTA_EVENT_TYPES: AgentEventType[] = [
@@ -177,6 +189,18 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   artifact_error: 'agent',
   artifacts_batch: 'agent',
   cancelled: 'agent',
+  // SubAgent event types (L3 layer)
+  subagent_routed: 'agent',
+  subagent_started: 'agent',
+  subagent_completed: 'agent',
+  subagent_failed: 'agent',
+  parallel_started: 'agent',
+  parallel_completed: 'agent',
+  chain_started: 'agent',
+  chain_step_started: 'agent',
+  chain_step_completed: 'agent',
+  chain_completed: 'agent',
+  background_launched: 'agent',
 };
 
 export function getEventCategory(eventType: AgentEventType): EventCategory {
@@ -251,4 +275,16 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'artifact_error',
   'artifacts_batch',
   'cancelled',
+  // SubAgent event types (L3 layer)
+  'subagent_routed',
+  'subagent_started',
+  'subagent_completed',
+  'subagent_failed',
+  'parallel_started',
+  'parallel_completed',
+  'chain_started',
+  'chain_step_started',
+  'chain_step_completed',
+  'chain_completed',
+  'background_launched',
 ];

@@ -185,6 +185,12 @@ class SystemPromptManager:
             if skill_section:
                 sections.append(skill_section)
 
+        # 6.5. SubAgents section (available specialized agents for delegation)
+        if context.subagents:
+            subagent_section = self._build_subagent_section(context)
+            if subagent_section:
+                sections.append(subagent_section)
+
         # 7. Non-forced skill recommendation (confidence-based match)
         if context.matched_skill and not is_forced_skill:
             skill_recommendation = self._build_skill_recommendation(context.matched_skill)
@@ -193,6 +199,11 @@ class SystemPromptManager:
         # 7. Environment context
         env_context = self._build_environment_context(context)
         sections.append(env_context)
+
+        # 7.5. Workspace filesystem guidelines
+        workspace_guidelines = await self._load_file("sections/workspace.txt")
+        if workspace_guidelines:
+            sections.append(workspace_guidelines)
 
         # 8. Mode reminder
         mode_reminder = await self._load_mode_reminder(context.mode)
@@ -321,6 +332,50 @@ Use these tools to search memories, query the knowledge graph, create memories, 
 {skill_descs}
 
 When a skill matches the user's request, you can use its tools in sequence for optimal results."""
+
+    def _build_subagent_section(self, context: PromptContext) -> str:
+        """
+        Build the available SubAgents section.
+
+        Lists SubAgents with descriptions so the LLM can decide
+        when to delegate via the delegate_to_subagent tool.
+        Includes parallel delegation guidance when 2+ SubAgents exist.
+
+        Args:
+            context: The prompt context.
+
+        Returns:
+            SubAgents section string or empty if no subagents.
+        """
+        if not context.subagents:
+            return ""
+
+        subagent_descs = "\n".join(
+            [
+                f"- **{sa.get('name', 'unknown')}** ({sa.get('display_name', '')}): "
+                f"{sa.get('trigger_description', sa.get('description', 'general tasks'))}"
+                for sa in context.subagents
+            ]
+        )
+
+        # Add parallel delegation guidance when multiple SubAgents available
+        parallel_guidance = ""
+        if len(context.subagents) >= 2:
+            parallel_guidance = """
+
+**Parallel execution**: When you have 2+ independent tasks for different SubAgents,
+use `parallel_delegate_subagents` to run them simultaneously instead of calling
+`delegate_to_subagent` multiple times sequentially."""
+
+        return f"""## Available SubAgents (Specialized Autonomous Agents)
+
+You have access to specialized SubAgents via the `delegate_to_subagent` tool.
+Each SubAgent runs independently with its own context and tools.
+
+{subagent_descs}
+
+**When to delegate**: The task clearly matches a SubAgent's specialty and can be described as a self-contained unit.
+**When NOT to delegate**: Simple questions, tasks requiring your current context, or tasks where you need intermediate results.{parallel_guidance}"""
 
     def _build_skill_recommendation(self, skill: Dict[str, Any]) -> str:
         """

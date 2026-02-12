@@ -39,9 +39,11 @@ import {
   Moon,
   Monitor,
   Languages,
+  Activity,
 } from 'lucide-react';
 
 import { useUser, useAuthActions } from '@/stores/auth';
+import { useRunningCount, useBackgroundStore } from '@/stores/backgroundStore';
 import { useThemeStore } from '@/stores/theme';
 
 interface TenantHeaderProps {
@@ -142,6 +144,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
         {/* Right: Actions */}
         <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-shrink-0">
           <SearchButton />
+          <BackgroundTasksButton />
           <NotificationButton />
           <HeaderUserMenu tenantId={tenantId} />
         </div>
@@ -210,6 +213,30 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Background SubAgent tasks indicator
+ */
+function BackgroundTasksButton() {
+  const runningCount = useRunningCount();
+  const togglePanel = useBackgroundStore((s) => s.togglePanel);
+
+  return (
+    <button
+      type="button"
+      onClick={togglePanel}
+      className="relative p-1.5 sm:p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+      aria-label="Background tasks"
+    >
+      <Activity size={18} />
+      {runningCount > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+          {runningCount}
+        </span>
+      )}
+    </button>
   );
 }
 

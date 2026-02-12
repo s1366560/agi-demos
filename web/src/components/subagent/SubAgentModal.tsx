@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
 
 import {
   Modal,
@@ -106,6 +107,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           max_iterations: subagent.max_iterations,
           allowed_tools: subagent.allowed_tools.join(', '),
           allowed_skills: subagent.allowed_skills.join(', '),
+          allowed_mcp_servers: subagent.allowed_mcp_servers?.join(', ') || '',
         });
       } else {
         // Create mode - reset form
@@ -169,6 +171,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         max_iterations: values.max_iterations || 10,
         allowed_tools: parseList(values.allowed_tools) || ['*'],
         allowed_skills: parseList(values.allowed_skills),
+        allowed_mcp_servers: parseList(values.allowed_mcp_servers),
       };
 
       if (isEditMode && subagent) {
@@ -417,7 +420,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                     onClick={() => handleRemoveExample(example)}
                     className="text-slate-400 hover:text-red-500 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-lg">close</span>
+                    <X size={16} />
                   </button>
                 </div>
               ))}
@@ -451,6 +454,14 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             tooltip={t('tenant.subagents.modal.allowedSkillsTooltip')}
           >
             <Input placeholder="skill1, skill2 (leave empty for none)" />
+          </Form.Item>
+
+          <Form.Item
+            name="allowed_mcp_servers"
+            label={t('tenant.subagents.modal.allowedMcpServers', 'MCP Servers')}
+            tooltip={t('tenant.subagents.modal.allowedMcpServersTooltip', 'Comma-separated MCP server names this SubAgent can access')}
+          >
+            <Input placeholder="server1, server2 (leave empty for none)" />
           </Form.Item>
 
           <div className="grid grid-cols-3 gap-4">

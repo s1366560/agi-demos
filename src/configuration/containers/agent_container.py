@@ -57,6 +57,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_skill_version_reposit
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
     SqlSubAgentRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
+    SqlSubAgentTemplateRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_agent_config_repository import (
     SqlTenantAgentConfigRepository,
 )
@@ -185,6 +188,10 @@ class AgentContainer:
     def subagent_repository(self) -> SqlSubAgentRepository:
         """Get SqlSubAgentRepository for subagent persistence."""
         return SqlSubAgentRepository(self._db)
+
+    def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
+        """Get SqlSubAgentTemplateRepository for template marketplace."""
+        return SqlSubAgentTemplateRepository(self._db)
 
     def plan_repository(self) -> SqlPlanRepository:
         """Get SqlPlanRepository for plan document persistence."""

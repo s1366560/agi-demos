@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
@@ -165,12 +165,26 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
     async def list_by_project(
         self,
         project_id: str,
+        tenant_id: Optional[str] = None,
         enabled_only: bool = False,
     ) -> List[SubAgent]:
-        """List all subagents for a specific project."""
+        """List subagents for a project, including tenant-wide ones (project_id IS NULL).
+
+        When tenant_id is provided, tenant-wide SubAgents are scoped to that tenant.
+        """
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
-        query = select(DBSubAgent).where(DBSubAgent.project_id == project_id)
+        if tenant_id:
+            query = select(DBSubAgent).where(
+                or_(
+                    DBSubAgent.project_id == project_id,
+                    (DBSubAgent.project_id.is_(None)) & (DBSubAgent.tenant_id == tenant_id),
+                )
+            )
+        else:
+            query = select(DBSubAgent).where(
+                or_(DBSubAgent.project_id == project_id, DBSubAgent.project_id.is_(None))
+            )
 
         if enabled_only:
             query = query.where(DBSubAgent.enabled.is_(True))

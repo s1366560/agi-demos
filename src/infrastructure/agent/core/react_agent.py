@@ -31,6 +31,7 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.model.agent.subagent_result import SubAgentResult
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
@@ -38,6 +39,7 @@ from ..events import EventConverter
 from ..permission import PermissionManager
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
 from ..routing import SubAgentOrchestrator, SubAgentOrchestratorConfig
+from ..routing.hybrid_router import HybridRouter
 from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
 from .plan_mode_executor import PlanModeExecutor
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
@@ -107,6 +109,8 @@ class ReActAgent:
         skill_fallback_on_error: bool = True,
         skill_execution_timeout: int = 300,  # Increased from 60 to 300 (5 minutes)
         subagent_match_threshold: float = 0.5,
+        # SubAgent-as-Tool: let LLM autonomously decide delegation
+        enable_subagent_as_tool: bool = True,
         # Context window management
         context_window_config: Optional[ContextWindowConfig] = None,
         max_context_tokens: int = 128000,
@@ -122,6 +126,8 @@ class ReActAgent:
         llm_client: Optional[Any] = None,
         # Skill resource sync service for sandbox resource injection
         resource_sync_service: Optional[Any] = None,
+        # Graph service for SubAgent memory sharing (Phase 5.1)
+        graph_service: Optional[Any] = None,
         # ====================================================================
         # Hot-plug support: Optional tool provider function for dynamic tools
         # When provided, tools are fetched at each stream() call instead of
@@ -158,6 +164,10 @@ class ReActAgent:
             skill_fallback_on_error: Whether to fallback to LLM on skill error (default: True)
             skill_execution_timeout: Timeout for skill execution in seconds (default: 300)
             subagent_match_threshold: Threshold for subagent routing (default: 0.5)
+            enable_subagent_as_tool: When True, SubAgents are exposed as a
+                delegate_to_subagent tool in the ReAct loop, letting the LLM
+                decide when to delegate. When False, uses pre-routing keyword
+                matching (legacy behavior). Default: True.
             context_window_config: Optional context window configuration
             max_context_tokens: Maximum context tokens (default: 128000)
             agent_mode: Agent mode for skill filtering (default: "default")
@@ -196,6 +206,7 @@ class ReActAgent:
         self.artifact_service = artifact_service  # Artifact service for rich outputs
         self._llm_client = llm_client  # LLM client for unified resilience
         self._resource_sync_service = resource_sync_service  # Skill resource sync
+        self._graph_service = graph_service  # Graph service for SubAgent memory sharing
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -227,16 +238,26 @@ class ReActAgent:
         self.skill_executor = SkillExecutor(tools) if skills else None
 
         # SubAgent System (L3) - use cached router if provided
+        # When LLM client is available, use HybridRouter for keyword + LLM routing
         self.subagents = subagents or []
         self.subagent_match_threshold = subagent_match_threshold
+        self._enable_subagent_as_tool = enable_subagent_as_tool
         if _cached_subagent_router is not None:
             self.subagent_router = _cached_subagent_router
             logger.debug("ReActAgent: Using cached SubAgentRouter")
         elif subagents:
-            self.subagent_router = SubAgentRouter(
-                subagents=subagents or [],
-                default_confidence_threshold=subagent_match_threshold,
-            )
+            if llm_client:
+                self.subagent_router = HybridRouter(
+                    subagents=subagents,
+                    llm_client=llm_client,
+                    default_confidence_threshold=subagent_match_threshold,
+                )
+                logger.info("ReActAgent: Using HybridRouter (keyword + LLM)")
+            else:
+                self.subagent_router = SubAgentRouter(
+                    subagents=subagents,
+                    default_confidence_threshold=subagent_match_threshold,
+                )
         else:
             self.subagent_router = None
 
@@ -274,6 +295,30 @@ class ReActAgent:
             base_url=base_url,
             debug_logging=False,
         )
+
+        # Background SubAgent executor for non-blocking execution
+        from ..subagent.background_executor import BackgroundExecutor
+
+        self._background_executor = BackgroundExecutor()
+
+        # SubAgent template registry for marketplace
+        from ..subagent.template_registry import TemplateRegistry
+
+        self._template_registry = TemplateRegistry()
+
+        # Task decomposer for multi-SubAgent orchestration (Phase 7.1)
+        from ..subagent.task_decomposer import TaskDecomposer
+
+        agent_names = [sa.name for sa in self.subagents] if self.subagents else []
+        self._task_decomposer = TaskDecomposer(
+            llm_client=llm_client,
+            available_agent_names=agent_names,
+        ) if llm_client and self.subagents else None
+
+        # Result aggregator for multi-SubAgent result merging
+        from ..subagent.result_aggregator import ResultAggregator
+
+        self._result_aggregator = ResultAggregator(llm_client=llm_client)
 
         # Convert tools to ToolDefinition - use cached definitions if provided
         # Hot-plug mode: tool_definitions will be set to None, and fetched dynamically in _get_current_tools()
@@ -383,6 +428,51 @@ class ReActAgent:
         else:
             return SubAgentMatch(subagent=None, confidence=0.0, match_reason=result.match_reason)
 
+    async def _match_subagent_async(
+        self,
+        query: str,
+        conversation_context: Optional[List[Dict[str, str]]] = None,
+    ) -> SubAgentMatch:
+        """Async match with hybrid routing (keyword + LLM semantic).
+
+        Uses SubAgentOrchestrator.match_async() which delegates to
+        HybridRouter.match_async() when available, enabling LLM-based
+        semantic routing as a fallback when keyword matching is uncertain.
+
+        Args:
+            query: User query.
+            conversation_context: Recent conversation for LLM context.
+
+        Returns:
+            SubAgentMatch result.
+        """
+        # Build a brief context string for the LLM router
+        context_str = None
+        if conversation_context:
+            recent = conversation_context[-3:]
+            context_str = "\n".join(
+                f"{m.get('role', 'user')}: {m.get('content', '')[:200]}"
+                for m in recent
+            )
+
+        result = await self._subagent_orchestrator.match_async(
+            query,
+            conversation_context=context_str,
+        )
+
+        if result.matched:
+            logger.info(
+                f"[ReActAgent] Matched subagent (async): {result.subagent.name} "
+                f"with confidence {result.confidence:.2f} ({result.match_reason})"
+            )
+            return SubAgentMatch(
+                subagent=result.subagent,
+                confidence=result.confidence,
+                match_reason=result.match_reason,
+            )
+        else:
+            return SubAgentMatch(subagent=None, confidence=0.0, match_reason=result.match_reason)
+
     async def _build_system_prompt(
         self,
         user_query: str,
@@ -446,12 +536,29 @@ class ReActAgent:
             {"name": t.name, "description": t.description} for t in current_tool_definitions
         ]
 
+        # Convert SubAgents to dict format for PromptContext (SubAgent-as-Tool mode)
+        subagents_data = None
+        if self.subagents and self._enable_subagent_as_tool:
+            subagents_data = [
+                {
+                    "name": sa.name,
+                    "display_name": sa.display_name,
+                    "description": sa.system_prompt[:200] if sa.system_prompt else "",
+                    "trigger_description": (
+                        sa.trigger.description if sa.trigger else "general tasks"
+                    ),
+                }
+                for sa in self.subagents
+                if sa.enabled
+            ]
+
         # Build prompt context
         context = PromptContext(
             model_provider=model_provider,
             mode=PromptMode(mode),
             tool_definitions=tool_defs,
             skills=skills_data,
+            subagents=subagents_data,
             matched_skill=matched_skill_data,
             project_id=project_id,
             tenant_id=tenant_id,
@@ -573,20 +680,92 @@ class ReActAgent:
                 }
 
         # Check for SubAgent routing (L3)
-        subagent_match = self._match_subagent(user_message)
-        active_subagent = subagent_match.subagent
+        # When enable_subagent_as_tool is True, skip pre-routing and let the LLM
+        # decide via the delegate_to_subagent tool in the ReAct loop.
+        # When False, use legacy pre-routing with keyword/LLM hybrid matching.
+        if not self._enable_subagent_as_tool:
+            subagent_match = await self._match_subagent_async(
+                user_message, conversation_context
+            )
+            active_subagent = subagent_match.subagent
 
-        if active_subagent:
-            yield {
-                "type": "subagent_routed",
-                "data": {
-                    "subagent_id": active_subagent.id,
-                    "subagent_name": active_subagent.display_name,
-                    "confidence": subagent_match.confidence,
-                    "reason": subagent_match.match_reason,
-                },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+            if active_subagent:
+                yield {
+                    "type": "subagent_routed",
+                    "data": {
+                        "subagent_id": active_subagent.id,
+                        "subagent_name": active_subagent.display_name,
+                        "confidence": subagent_match.confidence,
+                        "reason": subagent_match.match_reason,
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
+                # Multi-SubAgent orchestration: decompose task if possible
+                if self._task_decomposer and len(self.subagents) > 1:
+                    try:
+                        context_str = None
+                        if conversation_context:
+                            recent = conversation_context[-3:]
+                            context_str = "\n".join(
+                                f"{m.get('role', 'user')}: {m.get('content', '')[:200]}"
+                                for m in recent
+                            )
+                        decomposition = await self._task_decomposer.decompose(
+                            user_message, conversation_context=context_str
+                        )
+
+                        if decomposition.is_decomposed:
+                            # Check if tasks form a chain (linear dependencies)
+                            has_chain = any(
+                                st.dependencies for st in decomposition.subtasks
+                            )
+                            all_linear = has_chain and all(
+                                len(st.dependencies) <= 1
+                                for st in decomposition.subtasks
+                            )
+
+                            if all_linear and has_chain:
+                                # Chain execution (sequential pipeline)
+                                async for event in self._execute_chain(
+                                    subtasks=list(decomposition.subtasks),
+                                    user_message=user_message,
+                                    conversation_context=conversation_context,
+                                    project_id=project_id,
+                                    tenant_id=tenant_id,
+                                    abort_signal=abort_signal,
+                                ):
+                                    yield event
+                                return
+                            else:
+                                # Parallel execution
+                                async for event in self._execute_parallel(
+                                    subtasks=list(decomposition.subtasks),
+                                    user_message=user_message,
+                                    conversation_context=conversation_context,
+                                    project_id=project_id,
+                                    tenant_id=tenant_id,
+                                    abort_signal=abort_signal,
+                                ):
+                                    yield event
+                                return
+                    except Exception as e:
+                        logger.warning(
+                            f"[ReActAgent] Task decomposition failed: {e}, "
+                            "falling back to single SubAgent"
+                        )
+
+                # Single SubAgent delegation (default path)
+                async for event in self._execute_subagent(
+                    subagent=active_subagent,
+                    user_message=user_message,
+                    conversation_context=conversation_context,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    abort_signal=abort_signal,
+                ):
+                    yield event
+                return  # SubAgent completed, exit early
 
         # Check for Skill matching (L2) - forced or confidence-based
         is_forced = False
@@ -659,13 +838,13 @@ class ReActAgent:
                         f"(skill={matched_skill.name}): {e}"
                     )
 
-        # Build system prompt (uses SubAgent prompt if routed)
+        # Build system prompt
         # Inject skill into prompt: mandatory for forced, recommendation for matched
         system_prompt = await self._build_system_prompt(
             user_message,
             conversation_context,
             matched_skill=matched_skill if should_inject_prompt else None,
-            subagent=active_subagent,
+            subagent=None,
             mode=self.agent_mode if self.agent_mode in ["build", "plan"] else "build",
             current_step=1,  # Initial step
             project_id=project_id,
@@ -756,37 +935,101 @@ class ReActAgent:
 
         # Determine tools to use - hot-plug support: fetch current tools
         current_raw_tools, current_tool_definitions = self._get_current_tools()
-        tools_to_use = current_tool_definitions
+        tools_to_use = list(current_tool_definitions)
 
-        if active_subagent and self.subagent_router:
-            # Filter tools based on SubAgent permissions
-            filtered_tools = self.subagent_router.filter_tools(
-                active_subagent,
-                current_raw_tools,
-            )
-            tools_to_use = convert_tools(filtered_tools)
+        # Inject delegate_to_subagent tool when SubAgent-as-Tool mode is enabled
+        if self.subagents and self._enable_subagent_as_tool:
+            from ..tools.delegate_subagent import DelegateSubAgentTool
 
-        # Determine config (may be overridden by SubAgent)
+            enabled_subagents = [sa for sa in self.subagents if sa.enabled]
+            if enabled_subagents:
+                subagent_map = {sa.name: sa for sa in enabled_subagents}
+                subagent_descriptions = {
+                    sa.name: (
+                        sa.trigger.description if sa.trigger else sa.display_name
+                    )
+                    for sa in enabled_subagents
+                }
+
+                # Create delegation callback that captures stream-scoped context
+                async def _delegate_callback(
+                    subagent_name: str, task: str
+                ) -> str:
+                    target = subagent_map.get(subagent_name)
+                    if not target:
+                        return f"SubAgent '{subagent_name}' not found"
+
+                    events = []
+                    async for evt in self._execute_subagent(
+                        subagent=target,
+                        user_message=task,
+                        conversation_context=conversation_context,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        abort_signal=abort_signal,
+                    ):
+                        events.append(evt)
+
+                    # Extract result from the complete event
+                    complete_evt = next(
+                        (e for e in events if e.get("type") == "complete"),
+                        None,
+                    )
+                    if complete_evt:
+                        data = complete_evt.get("data", {})
+                        content = data.get("content", "")
+                        sa_result = data.get("subagent_result")
+                        if sa_result:
+                            summary = sa_result.get("summary", content)
+                            tokens = sa_result.get("tokens_used", 0)
+                            return (
+                                f"[SubAgent '{subagent_name}' completed]\n"
+                                f"Result: {summary}\n"
+                                f"Tokens used: {tokens}"
+                            )
+                        return content or "SubAgent completed with no output"
+
+                    return "SubAgent execution completed but no result returned"
+
+                delegate_tool = DelegateSubAgentTool(
+                    subagent_names=list(subagent_map.keys()),
+                    subagent_descriptions=subagent_descriptions,
+                    execute_callback=_delegate_callback,
+                )
+                # Convert to ToolDefinition for SessionProcessor
+                delegate_td = ToolDefinition(
+                    name=delegate_tool.name,
+                    description=delegate_tool.description,
+                    parameters=delegate_tool.get_parameters_schema(),
+                    execute=delegate_tool.execute,
+                )
+                tools_to_use.append(delegate_td)
+
+                # Inject parallel delegation tool when 2+ SubAgents available
+                if len(enabled_subagents) >= 2:
+                    from ..tools.delegate_subagent import ParallelDelegateSubAgentTool
+
+                    parallel_tool = ParallelDelegateSubAgentTool(
+                        subagent_names=list(subagent_map.keys()),
+                        subagent_descriptions=subagent_descriptions,
+                        execute_callback=_delegate_callback,
+                    )
+                    parallel_td = ToolDefinition(
+                        name=parallel_tool.name,
+                        description=parallel_tool.description,
+                        parameters=parallel_tool.get_parameters_schema(),
+                        execute=parallel_tool.execute,
+                    )
+                    tools_to_use.append(parallel_td)
+
+                logger.info(
+                    f"[ReActAgent] Injected SubAgent delegation tools "
+                    f"({len(enabled_subagents)} SubAgents, "
+                    f"parallel={'yes' if len(enabled_subagents) >= 2 else 'no'})"
+                )
+
+        # Use main agent config (SubAgent path returns early above)
         config = self.config
-
-        if active_subagent:
-            executor = SubAgentExecutor(
-                subagent=active_subagent,
-                base_model=self.model,
-                base_api_key=self.api_key,
-                base_url=self.base_url,
-            )
-            subagent_config = executor.get_config()
-
-            config = ProcessorConfig(
-                model=subagent_config.get("model") or self.model,
-                api_key=self.api_key,
-                base_url=self.base_url,
-                temperature=subagent_config.get("temperature", self.temperature),
-                max_tokens=subagent_config.get("max_tokens", self.max_tokens),
-                max_steps=subagent_config.get("max_iterations", self.max_steps),
-                llm_client=self._llm_client,  # Pass client to subagent processor
-            )
 
         # Create processor with artifact service for rich output handling
         processor = SessionProcessor(
@@ -838,7 +1081,6 @@ class ReActAgent:
                 "type": "complete",
                 "data": {
                     "content": final_content,
-                    "subagent_used": active_subagent.name if active_subagent else None,
                     "skill_used": matched_skill.name if matched_skill else None,
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -861,18 +1103,375 @@ class ReActAgent:
             end_time = time.time()
             execution_time_ms = int((end_time - start_time) * 1000)
 
-            if active_subagent:
-                active_subagent.record_execution(execution_time_ms, success)
-                logger.info(
-                    f"[ReActAgent] SubAgent {active_subagent.name} execution: "
-                    f"{execution_time_ms}ms, success={success}"
-                )
-
             if matched_skill:
                 matched_skill.record_usage(success)
                 logger.info(
                     f"[ReActAgent] Skill {matched_skill.name} usage recorded: success={success}"
                 )
+
+    async def _execute_subagent(
+        self,
+        subagent: SubAgent,
+        user_message: str,
+        conversation_context: List[Dict[str, str]],
+        project_id: str,
+        tenant_id: str,
+        abort_signal: Optional[asyncio.Event] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Execute a SubAgent in an independent ReAct loop.
+
+        Creates a SubAgentProcess with its own context window and processor,
+        forwards SSE events, and yields a final complete event with the result.
+
+        Optionally injects relevant memories from the knowledge graph when
+        graph_service is available (Phase 5.1 Memory Sharing).
+
+        Args:
+            subagent: The matched SubAgent to execute.
+            user_message: The user's original message.
+            conversation_context: Recent conversation for context bridging.
+            project_id: Project ID for scoping.
+            tenant_id: Tenant ID for scoping.
+            abort_signal: Optional signal to abort execution.
+
+        Yields:
+            SSE event dicts including subagent lifecycle and tool events.
+        """
+        from ..subagent.context_bridge import ContextBridge
+        from ..subagent.process import SubAgentProcess
+
+        start_time = time.time()
+
+        # Search for relevant memories if graph service is available
+        memory_context = ""
+        if self._graph_service and project_id:
+            try:
+                from ..subagent.memory_accessor import MemoryAccessor
+
+                accessor = MemoryAccessor(
+                    graph_service=self._graph_service,
+                    project_id=project_id,
+                    writable=False,
+                )
+                items = await accessor.search(user_message)
+                memory_context = accessor.format_for_context(items)
+                if memory_context:
+                    logger.debug(
+                        f"[ReActAgent] Injecting {len(items)} memory items into SubAgent context"
+                    )
+            except Exception as e:
+                logger.warning(f"[ReActAgent] Memory search failed: {e}")
+
+        # Build condensed context for the SubAgent
+        bridge = ContextBridge()
+        subagent_context = bridge.build_subagent_context(
+            user_message=user_message,
+            subagent_system_prompt=subagent.system_prompt,
+            conversation_context=conversation_context,
+            main_token_budget=self.config.context_limit,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            memory_context=memory_context,
+        )
+
+        # Filter tools for SubAgent permissions
+        current_raw_tools, current_tool_definitions = self._get_current_tools()
+        if self.subagent_router:
+            filtered_raw = self.subagent_router.filter_tools(subagent, current_raw_tools)
+            filtered_tools = convert_tools(filtered_raw)
+        else:
+            filtered_tools = current_tool_definitions
+
+        # Create independent SubAgent process
+        process = SubAgentProcess(
+            subagent=subagent,
+            context=subagent_context,
+            tools=filtered_tools,
+            base_model=self.model,
+            base_api_key=self.api_key,
+            base_url=self.base_url,
+            llm_client=self._llm_client,
+            permission_manager=self.permission_manager,
+            artifact_service=self.artifact_service,
+            abort_signal=abort_signal,
+        )
+
+        # Execute and relay all events
+        async for event in process.execute():
+            yield event
+
+        # Get structured result
+        result = process.result
+
+        # Yield final complete event with SubAgent result
+        yield {
+            "type": "complete",
+            "data": {
+                "content": result.final_content if result else "",
+                "subagent_used": subagent.name,
+                "subagent_result": result.to_event_data() if result else None,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def _execute_parallel(
+        self,
+        subtasks: List[Any],
+        user_message: str,
+        conversation_context: List[Dict[str, str]],
+        project_id: str,
+        tenant_id: str,
+        abort_signal: Optional[asyncio.Event] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Execute multiple SubAgents in parallel via ParallelScheduler.
+
+        Args:
+            subtasks: Decomposed sub-tasks from TaskDecomposer.
+            user_message: Original user message.
+            conversation_context: Recent conversation history.
+            project_id: Project ID for scoping.
+            tenant_id: Tenant ID for scoping.
+            abort_signal: Optional abort signal.
+
+        Yields:
+            SSE event dicts including parallel lifecycle events.
+        """
+        from ..subagent.parallel_scheduler import ParallelScheduler
+
+        yield {
+            "type": "parallel_started",
+            "data": {
+                "task_count": len(subtasks),
+                "subtasks": [
+                    {"id": st.id, "description": st.description, "agent": st.target_subagent}
+                    for st in subtasks
+                ],
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Build subagent name -> SubAgent mapping
+        subagent_map = {sa.name: sa for sa in self.subagents}
+
+        # Get current tools
+        _, current_tool_definitions = self._get_current_tools()
+
+        scheduler = ParallelScheduler()
+        results: List[SubAgentResult] = []
+
+        async for event in scheduler.execute(
+            subtasks=subtasks,
+            subagent_map=subagent_map,
+            tools=current_tool_definitions,
+            base_model=self.model,
+            base_api_key=self.api_key,
+            base_url=self.base_url,
+            llm_client=self._llm_client,
+            conversation_context=conversation_context,
+            main_token_budget=self.config.context_limit,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            abort_signal=abort_signal,
+        ):
+            yield event
+            # Collect results from completed subtask events
+            if event.get("type") == "subtask_completed" and event.get("data", {}).get("result"):
+                result_data = event["data"]["result"]
+                if isinstance(result_data, SubAgentResult):
+                    results.append(result_data)
+
+        # Aggregate results
+        aggregated = await self._result_aggregator.aggregate_with_llm(results)
+
+        yield {
+            "type": "parallel_completed",
+            "data": {
+                "total_tasks": len(subtasks),
+                "completed": len(results),
+                "all_succeeded": aggregated.all_succeeded,
+                "total_tokens": aggregated.total_tokens,
+                "failed_agents": list(aggregated.failed_agents),
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        yield {
+            "type": "complete",
+            "data": {
+                "content": aggregated.summary,
+                "orchestration_mode": "parallel",
+                "subtask_count": len(subtasks),
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def _execute_chain(
+        self,
+        subtasks: List[Any],
+        user_message: str,
+        conversation_context: List[Dict[str, str]],
+        project_id: str,
+        tenant_id: str,
+        abort_signal: Optional[asyncio.Event] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Execute SubAgents as a sequential chain (pipeline).
+
+        Converts decomposed subtasks with linear dependencies into a
+        SubAgentChain and executes them sequentially.
+
+        Args:
+            subtasks: Decomposed sub-tasks with linear dependencies.
+            user_message: Original user message.
+            conversation_context: Recent conversation history.
+            project_id: Project ID for scoping.
+            tenant_id: Tenant ID for scoping.
+            abort_signal: Optional abort signal.
+
+        Yields:
+            SSE event dicts including chain lifecycle events.
+        """
+        from ..subagent.chain import ChainStep, SubAgentChain
+
+        # Build subagent name -> SubAgent mapping
+        subagent_map = {sa.name: sa for sa in self.subagents}
+
+        # Convert subtasks to ChainSteps, respecting dependency order
+        # Sort by dependency: tasks with no deps first, then those depending on them
+        ordered = self._topological_sort_subtasks(subtasks)
+        chain_steps = []
+        for i, st in enumerate(ordered):
+            agent = subagent_map.get(st.target_subagent)
+            if not agent:
+                # Use first available subagent as fallback
+                agent = self.subagents[0] if self.subagents else None
+            if agent:
+                template = "{input}" if i == 0 else "{input}\n\nPrevious result:\n{prev}"
+                chain_steps.append(
+                    ChainStep(
+                        subagent=agent,
+                        task_template=st.description + "\n\n" + template,
+                        name=st.id,
+                    )
+                )
+
+        if not chain_steps:
+            return
+
+        chain = SubAgentChain(steps=chain_steps)
+        _, current_tool_definitions = self._get_current_tools()
+
+        async for event in chain.execute(
+            user_message=user_message,
+            tools=current_tool_definitions,
+            base_model=self.model,
+            base_api_key=self.api_key,
+            base_url=self.base_url,
+            llm_client=self._llm_client,
+            conversation_context=conversation_context,
+            main_token_budget=self.config.context_limit,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            abort_signal=abort_signal,
+        ):
+            yield event
+
+        chain_result = chain.result
+        yield {
+            "type": "complete",
+            "data": {
+                "content": chain_result.final_summary if chain_result else "",
+                "orchestration_mode": "chain",
+                "step_count": len(chain_steps),
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    async def _execute_background(
+        self,
+        subagent: SubAgent,
+        user_message: str,
+        conversation_id: str,
+        conversation_context: List[Dict[str, str]],
+        project_id: str,
+        tenant_id: str,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Launch a SubAgent for background execution (non-blocking).
+
+        The SubAgent starts running asynchronously and results are
+        delivered via the BackgroundExecutor callback.
+
+        Args:
+            subagent: SubAgent to run in background.
+            user_message: Task description.
+            conversation_id: Parent conversation ID.
+            conversation_context: Recent conversation history.
+            project_id: Project ID.
+            tenant_id: Tenant ID.
+
+        Yields:
+            SSE event confirming background launch.
+        """
+        _, current_tool_definitions = self._get_current_tools()
+
+        execution_id = self._background_executor.launch(
+            subagent=subagent,
+            user_message=user_message,
+            conversation_id=conversation_id,
+            tools=current_tool_definitions,
+            base_model=self.model,
+            conversation_context=conversation_context,
+            main_token_budget=self.config.context_limit,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            base_api_key=self.api_key,
+            base_url=self.base_url,
+            llm_client=self._llm_client,
+        )
+
+        yield {
+            "type": "background_launched",
+            "data": {
+                "execution_id": execution_id,
+                "subagent_id": subagent.id,
+                "subagent_name": subagent.display_name,
+                "task": user_message[:200],
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        yield {
+            "type": "complete",
+            "data": {
+                "content": (
+                    f"Task delegated to {subagent.display_name} in background "
+                    f"(ID: {execution_id}). You will be notified when it completes."
+                ),
+                "orchestration_mode": "background",
+                "execution_id": execution_id,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    @staticmethod
+    def _topological_sort_subtasks(subtasks: List[Any]) -> List[Any]:
+        """Sort subtasks by dependency order (topological sort)."""
+        id_to_task = {st.id: st for st in subtasks}
+        visited = set()
+        result = []
+
+        def visit(task_id: str) -> None:
+            if task_id in visited:
+                return
+            visited.add(task_id)
+            task = id_to_task.get(task_id)
+            if task:
+                for dep in task.dependencies:
+                    visit(dep)
+                result.append(task)
+
+        for st in subtasks:
+            visit(st.id)
+        return result
 
     async def _execute_skill_directly(
         self,

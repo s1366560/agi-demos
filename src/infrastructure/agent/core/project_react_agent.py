@@ -406,6 +406,7 @@ class ProjectReActAgent:
                 artifact_service=self._artifact_service,  # Pass artifact service
                 llm_client=llm_client,  # Pass cached LiteLLMClient
                 resource_sync_service=self._session_context.resource_sync_service,
+                graph_service=graph_service,  # Pass graph service for SubAgent memory sharing
                 # Use cached components from session pool
                 _cached_tool_definitions=self._session_context.tool_definitions,
                 _cached_system_prompt_manager=self._session_context.system_prompt_manager,
@@ -969,9 +970,10 @@ class ProjectReActAgent:
             async with async_session_factory() as session:
                 repository = SqlSubAgentRepository(session)
 
-                # Load enabled subagents for the project
+                # Load enabled subagents for the project (including tenant-wide ones)
                 subagents = await repository.list_by_project(
                     project_id=self.config.project_id,
+                    tenant_id=self.config.tenant_id,
                     enabled_only=True,
                 )
 

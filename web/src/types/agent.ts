@@ -305,7 +305,19 @@ export type AgentEventType =
   | 'compact_needed' // Context compaction needed
   | 'complete' // Final assistant response
   | 'title_generated' // Conversation title generated
-  | 'error'; // Error messages
+  | 'error' // Error messages
+  // SubAgent events (L3 layer)
+  | 'subagent_routed' // SubAgent routing decision
+  | 'subagent_started' // SubAgent execution started
+  | 'subagent_completed' // SubAgent execution completed
+  | 'subagent_failed' // SubAgent execution failed
+  | 'parallel_started' // Parallel SubAgent group started
+  | 'parallel_completed' // Parallel SubAgent group completed
+  | 'chain_started' // Chain execution started
+  | 'chain_step_started' // Chain step started
+  | 'chain_step_completed' // Chain step completed
+  | 'chain_completed' // Chain execution completed
+  | 'background_launched'; // Background SubAgent launched
 
 /**
  * Base SSE event from agent
@@ -959,6 +971,18 @@ export interface AgentStreamHandler {
   onDesktopStopped?: (event: AgentEvent<SandboxEventData>) => void;
   onTerminalStarted?: (event: AgentEvent<SandboxEventData>) => void;
   onTerminalStopped?: (event: AgentEvent<SandboxEventData>) => void;
+  // SubAgent handlers (L3 layer)
+  onSubAgentRouted?: (event: AgentEvent<SubAgentRoutedEventData>) => void;
+  onSubAgentStarted?: (event: AgentEvent<SubAgentStartedEventData>) => void;
+  onSubAgentCompleted?: (event: AgentEvent<SubAgentCompletedEventData>) => void;
+  onSubAgentFailed?: (event: AgentEvent<SubAgentFailedEventData>) => void;
+  onParallelStarted?: (event: AgentEvent<ParallelStartedEventData>) => void;
+  onParallelCompleted?: (event: AgentEvent<ParallelCompletedEventData>) => void;
+  onChainStarted?: (event: AgentEvent<ChainStartedEventData>) => void;
+  onChainStepStarted?: (event: AgentEvent<ChainStepStartedEventData>) => void;
+  onChainStepCompleted?: (event: AgentEvent<ChainStepCompletedEventData>) => void;
+  onChainCompleted?: (event: AgentEvent<ChainCompletedEventData>) => void;
+  onBackgroundLaunched?: (event: AgentEvent<BackgroundLaunchedEventData>) => void;
   // Terminal handlers
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;
@@ -1915,7 +1939,19 @@ export type TimelineEventType =
   | 'artifact_created'
   | 'artifact_ready'
   | 'artifact_error'
-  | 'artifacts_batch';
+  | 'artifacts_batch'
+  // SubAgent event types (L3 layer)
+  | 'subagent_routed'
+  | 'subagent_started'
+  | 'subagent_completed'
+  | 'subagent_failed'
+  | 'parallel_started'
+  | 'parallel_completed'
+  | 'chain_started'
+  | 'chain_step_started'
+  | 'chain_step_completed'
+  | 'chain_completed'
+  | 'background_launched';
 
 /**
  * Base timeline event (all events share these fields)
@@ -2202,7 +2238,101 @@ export type TimelineEvent =
   | ArtifactCreatedEvent
   | ArtifactReadyEvent
   | ArtifactErrorEvent
-  | ArtifactsBatchEvent;
+  | ArtifactsBatchEvent
+  // SubAgent events (L3 layer)
+  | SubAgentRoutedTimelineEvent
+  | SubAgentStartedTimelineEvent
+  | SubAgentCompletedTimelineEvent
+  | SubAgentFailedTimelineEvent
+  | ParallelStartedTimelineEvent
+  | ParallelCompletedTimelineEvent
+  | ChainStartedTimelineEvent
+  | ChainStepStartedTimelineEvent
+  | ChainStepCompletedTimelineEvent
+  | ChainCompletedTimelineEvent
+  | BackgroundLaunchedTimelineEvent;
+
+// ============================================
+// SubAgent Timeline Event Interfaces (L3 layer)
+// ============================================
+
+export interface SubAgentRoutedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_routed';
+  subagentId: string;
+  subagentName: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface SubAgentStartedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_started';
+  subagentId: string;
+  subagentName: string;
+  task: string;
+}
+
+export interface SubAgentCompletedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_completed';
+  subagentId: string;
+  subagentName?: string;
+  summary: string;
+  tokensUsed: number;
+  executionTimeMs: number;
+  success?: boolean;
+}
+
+export interface SubAgentFailedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_failed';
+  subagentId: string;
+  subagentName?: string;
+  error: string;
+}
+
+export interface ParallelStartedTimelineEvent extends BaseTimelineEvent {
+  type: 'parallel_started';
+  taskCount: number;
+  subtasks: Array<{ subagent_name: string; task: string }>;
+}
+
+export interface ParallelCompletedTimelineEvent extends BaseTimelineEvent {
+  type: 'parallel_completed';
+  results: Array<{ subagent_name: string; summary: string; success: boolean }>;
+  totalTimeMs: number;
+}
+
+export interface ChainStartedTimelineEvent extends BaseTimelineEvent {
+  type: 'chain_started';
+  stepCount: number;
+  chainName: string;
+}
+
+export interface ChainStepStartedTimelineEvent extends BaseTimelineEvent {
+  type: 'chain_step_started';
+  stepIndex: number;
+  stepName: string;
+  subagentName: string;
+}
+
+export interface ChainStepCompletedTimelineEvent extends BaseTimelineEvent {
+  type: 'chain_step_completed';
+  stepIndex: number;
+  summary: string;
+  success?: boolean;
+}
+
+export interface ChainCompletedTimelineEvent extends BaseTimelineEvent {
+  type: 'chain_completed';
+  totalSteps: number;
+  totalTimeMs: number;
+  success?: boolean;
+}
+
+export interface BackgroundLaunchedTimelineEvent extends BaseTimelineEvent {
+  type: 'background_launched';
+  executionId: string;
+  subagentName: string;
+  task: string;
+}
 
 /**
  * Timeline response from API (unified event stream)
@@ -3017,4 +3147,75 @@ export interface LifecycleStatus {
   color: string;
   icon: string;
   description: string;
+}
+
+// ============================================
+// SubAgent Event Data Types (L3 layer)
+// ============================================
+
+export interface SubAgentRoutedEventData {
+  subagent_id: string;
+  subagent_name: string;
+  confidence: number;
+  reason?: string;
+}
+
+export interface SubAgentStartedEventData {
+  subagent_id: string;
+  subagent_name: string;
+  task: string;
+}
+
+export interface SubAgentCompletedEventData {
+  subagent_id: string;
+  subagent_name: string;
+  summary: string;
+  tokens_used?: number;
+  execution_time_ms?: number;
+  success: boolean;
+}
+
+export interface SubAgentFailedEventData {
+  subagent_id: string;
+  subagent_name: string;
+  error: string;
+}
+
+export interface ParallelStartedEventData {
+  task_count: number;
+  subtasks: Array<{ subagent_name: string; task: string }>;
+}
+
+export interface ParallelCompletedEventData {
+  results: Array<{ subagent_name: string; summary: string; success: boolean }>;
+  total_time_ms?: number;
+}
+
+export interface ChainStartedEventData {
+  step_count: number;
+  chain_name?: string;
+}
+
+export interface ChainStepStartedEventData {
+  step_index: number;
+  step_name?: string;
+  subagent_name: string;
+}
+
+export interface ChainStepCompletedEventData {
+  step_index: number;
+  summary: string;
+  success: boolean;
+}
+
+export interface ChainCompletedEventData {
+  total_steps: number;
+  total_time_ms?: number;
+  success: boolean;
+}
+
+export interface BackgroundLaunchedEventData {
+  execution_id: string;
+  subagent_name: string;
+  task: string;
 }

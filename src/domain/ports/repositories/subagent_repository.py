@@ -122,13 +122,15 @@ class SubAgentRepositoryPort(ABC):
     async def list_by_project(
         self,
         project_id: str,
+        tenant_id: Optional[str] = None,
         enabled_only: bool = False,
     ) -> List[SubAgent]:
         """
-        List all subagents for a specific project.
+        List subagents for a project, including tenant-wide ones (project_id IS NULL).
 
         Args:
             project_id: Project ID
+            tenant_id: If provided, includes tenant-wide SubAgents scoped to this tenant
             enabled_only: If True, only return enabled subagents
 
         Returns:

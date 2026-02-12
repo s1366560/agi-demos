@@ -9,6 +9,15 @@ from src.infrastructure.agent.routing.execution_router import (
     SubAgentMatcher,
     create_default_router,
 )
+from src.infrastructure.agent.routing.hybrid_router import (
+    HybridRouter,
+    HybridRouterConfig,
+)
+from src.infrastructure.agent.routing.intent_router import IntentRouter
+from src.infrastructure.agent.routing.schemas import (
+    LLMRoutingDecision,
+    RoutingCandidate,
+)
 from src.infrastructure.agent.routing.subagent_orchestrator import (
     SubAgentExecutionConfig,
     SubAgentOrchestrator,
@@ -36,4 +45,10 @@ __all__ = [
     "get_subagent_orchestrator",
     "set_subagent_orchestrator",
     "create_subagent_orchestrator",
+    # Hybrid routing
+    "HybridRouter",
+    "HybridRouterConfig",
+    "IntentRouter",
+    "LLMRoutingDecision",
+    "RoutingCandidate",
 ]

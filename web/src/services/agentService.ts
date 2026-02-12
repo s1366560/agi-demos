@@ -117,6 +117,17 @@ import type {
   ArtifactOpenEventData,
   ArtifactUpdateEventData,
   ArtifactCloseEventData,
+  SubAgentRoutedEventData,
+  SubAgentStartedEventData,
+  SubAgentCompletedEventData,
+  SubAgentFailedEventData,
+  ParallelStartedEventData,
+  ParallelCompletedEventData,
+  ChainStartedEventData,
+  ChainStepStartedEventData,
+  ChainStepCompletedEventData,
+  ChainCompletedEventData,
+  BackgroundLaunchedEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -862,6 +873,40 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'terminal_stopped':
         handler.onTerminalStopped?.(event as AgentEvent<SandboxEventData>);
+        break;
+      // SubAgent events (L3 layer)
+      case 'subagent_routed':
+        handler.onSubAgentRouted?.(event as AgentEvent<SubAgentRoutedEventData>);
+        break;
+      case 'subagent_started':
+        handler.onSubAgentStarted?.(event as AgentEvent<SubAgentStartedEventData>);
+        break;
+      case 'subagent_completed':
+        handler.onSubAgentCompleted?.(event as AgentEvent<SubAgentCompletedEventData>);
+        break;
+      case 'subagent_failed':
+        handler.onSubAgentFailed?.(event as AgentEvent<SubAgentFailedEventData>);
+        break;
+      case 'parallel_started':
+        handler.onParallelStarted?.(event as AgentEvent<ParallelStartedEventData>);
+        break;
+      case 'parallel_completed':
+        handler.onParallelCompleted?.(event as AgentEvent<ParallelCompletedEventData>);
+        break;
+      case 'chain_started':
+        handler.onChainStarted?.(event as AgentEvent<ChainStartedEventData>);
+        break;
+      case 'chain_step_started':
+        handler.onChainStepStarted?.(event as AgentEvent<ChainStepStartedEventData>);
+        break;
+      case 'chain_step_completed':
+        handler.onChainStepCompleted?.(event as AgentEvent<ChainStepCompletedEventData>);
+        break;
+      case 'chain_completed':
+        handler.onChainCompleted?.(event as AgentEvent<ChainCompletedEventData>);
+        break;
+      case 'background_launched':
+        handler.onBackgroundLaunched?.(event as AgentEvent<BackgroundLaunchedEventData>);
         break;
     }
   }

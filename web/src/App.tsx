@@ -78,6 +78,11 @@ const SubAgentList = lazy(() =>
 const SkillList = lazy(() =>
   import('./pages/tenant/SkillList').then((m) => ({ default: m.SkillList }))
 );
+const TemplateMarketplace = lazy(() =>
+  import('./pages/tenant/TemplateMarketplace').then((m) => ({
+    default: m.TemplateMarketplace,
+  }))
+);
 const McpServerList = lazy(() =>
   import('./pages/tenant/McpServerList').then((m) => ({
     default: m.McpServerList,
@@ -339,6 +344,14 @@ function App() {
                 }
               />
               <Route
+                path="templates"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <TemplateMarketplace />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="mcp-servers"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -481,6 +494,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <SkillList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/templates"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <TemplateMarketplace />
                   </Suspense>
                 }
               />

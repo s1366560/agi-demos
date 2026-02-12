@@ -29,6 +29,7 @@ import { useTenantStore } from '@/stores/tenant';
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
 import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
+import { BackgroundSubAgentPanel } from '@/components/agent/BackgroundSubAgentPanel';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import TenantHeader from '@/components/layout/TenantHeader';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
@@ -299,6 +300,9 @@ export const TenantLayout: React.FC = memo(() => {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleCreateTenant}
       />
+
+      {/* Background SubAgent Panel */}
+      <BackgroundSubAgentPanel />
     </>
   );
 });

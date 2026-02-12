@@ -1,0 +1,49 @@
+# Workspace Filesystem Guidelines
+
+Your working environment is a sandbox container with `/workspace` as the root directory. All file operations are confined to this directory. Follow these guidelines to maintain a clean, organized filesystem.
+
+## Standard Directory Structure
+
+When creating files, use the following directory conventions:
+
+| Directory | Purpose | Examples |
+|-----------|---------|---------|
+| `/workspace/input/` | User-uploaded files and imported data | CSV, Excel, PDF, images from user |
+| `/workspace/output/` | Generated artifacts and deliverables | Reports, charts, processed files |
+| `/workspace/src/` | Source code you write or modify | Python scripts, JS modules |
+| `/workspace/tests/` | Test files | test_*.py, *.test.js |
+| `/workspace/data/` | Intermediate data and datasets | Processed CSVs, JSON, databases |
+| `/workspace/docs/` | Documentation and notes | Markdown, text files |
+| `/workspace/temp/` | Temporary/scratch files | Must be cleaned up when done |
+
+Do NOT scatter files in the workspace root (`/workspace/`). Always place files in the appropriate subdirectory.
+
+## Project-Aware Behavior
+
+Before creating any files:
+
+1. **Explore first**: Use `list` or `glob` to understand the existing directory structure.
+2. **Respect existing layout**: If the workspace already contains a project (e.g., has `package.json`, `pyproject.toml`, `Makefile`, or an established `src/` tree), follow that project's conventions instead of imposing the standard structure above.
+3. **Match naming patterns**: If existing files use a naming convention (e.g., `snake_case`, `kebab-case`), follow it for new files.
+4. **Preserve structure**: Never reorganize or move existing project files unless explicitly asked.
+
+## File Operation Best Practices
+
+1. **Read before write**: Before creating a file, check if it already exists to avoid unintended overwrites.
+2. **Create parent directories**: When writing to a nested path, the `write` tool auto-creates parent directories. Leverage this to maintain clean hierarchy.
+3. **Use meaningful paths**: `output/analysis_report.pdf` is better than `report.pdf` in the root.
+4. **Avoid workspace root clutter**: The only files acceptable at `/workspace/` root level are project configuration files (e.g., `README.md`, `requirements.txt`, `package.json`).
+5. **Batch related files**: Group related outputs together (e.g., `output/charts/` for multiple chart images).
+
+## Artifact and Output Management
+
+1. **All generated deliverables go in `output/`**: Charts, reports, processed files, exports - anything the user needs to download.
+2. **Use `export_artifact`**: After generating a file the user needs, call `export_artifact` to make it available for download.
+3. **Use `list_artifacts`**: Check `output/` directory with `list_artifacts` to see what has been generated.
+4. **Organize by type**: For multiple outputs, create subdirectories: `output/charts/`, `output/reports/`, `output/data/`.
+
+## Cleanup
+
+1. **Remove temporary files**: Delete files in `temp/` and any scratch files once they are no longer needed.
+2. **Clean build artifacts**: Remove intermediate build outputs (e.g., `__pycache__/`, `node_modules/` caches) if disk space is a concern.
+3. **Do NOT delete user input files**: Never remove files from `input/` unless explicitly asked.

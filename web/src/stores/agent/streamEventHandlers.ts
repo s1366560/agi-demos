@@ -7,6 +7,7 @@
 
 import { appendSSEEventToTimeline } from '../../utils/sseEventAdapter';
 import { tabSync } from '../../utils/tabSync';
+import { useBackgroundStore } from '../backgroundStore';
 import { useCanvasStore } from '../canvasStore';
 import { useContextStore } from '../contextStore';
 import { useLayoutModeStore } from '../layoutMode';
@@ -698,6 +699,134 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, {
         suggestions,
       });
+    },
+
+    // SubAgent handlers (L3 layer)
+    onSubAgentRouted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentState: 'acting',
+      });
+    },
+
+    onSubAgentStarted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentState: 'acting',
+      });
+    },
+
+    onSubAgentCompleted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+      // Update background store if this was a background execution
+      const bgStore = useBackgroundStore.getState();
+      const execId = event.data.subagent_id || '';
+      if (bgStore.executions.has(execId)) {
+        bgStore.complete(
+          execId,
+          event.data.summary || '',
+          event.data.tokens_used,
+          event.data.execution_time_ms,
+        );
+      }
+    },
+
+    onSubAgentFailed: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+      // Update background store if this was a background execution
+      const bgStore = useBackgroundStore.getState();
+      const execId = event.data.subagent_id || '';
+      if (bgStore.executions.has(execId)) {
+        bgStore.fail(execId, event.data.error || 'Unknown error');
+      }
+    },
+
+    onParallelStarted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentState: 'acting',
+      });
+    },
+
+    onParallelCompleted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onChainStarted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        agentState: 'acting',
+      });
+    },
+
+    onChainStepStarted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onChainStepCompleted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onChainCompleted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+    },
+
+    onBackgroundLaunched: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+      });
+      // Track in background store for the panel
+      const bgStore = useBackgroundStore.getState();
+      bgStore.launch(
+        event.data.execution_id || '',
+        event.data.subagent_name || '',
+        event.data.task || '',
+      );
     },
 
     onComplete: (event) => {

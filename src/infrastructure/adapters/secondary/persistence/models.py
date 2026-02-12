@@ -1047,6 +1047,54 @@ class SubAgent(Base):
     project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
 
 
+class SubAgentTemplate(Base):
+    """
+    SubAgent Template for the Template Marketplace.
+
+    Stores reusable SubAgent configurations that can be installed
+    (instantiated as SubAgents) by tenants. Supports versioning,
+    categorization, and search.
+    """
+
+    __tablename__ = "subagent_templates"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")
+    display_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    category: Mapped[str] = mapped_column(String(100), nullable=False, default="general")
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    trigger_keywords: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    trigger_examples: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=True)
+    model: Mapped[str] = mapped_column(String(50), default="inherit", nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
+    temperature: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
+    max_iterations: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    allowed_tools: Mapped[list[str]] = mapped_column(
+        JSON, default=lambda: ["*"], nullable=False
+    )
+    author: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    install_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", "version", name="uq_template_tenant_name_version"),
+    )
+
+
 class MCPServer(Base):
     """
     MCP Server configuration for the MCP Ecosystem Integration.

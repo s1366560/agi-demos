@@ -54,8 +54,10 @@ import { MessageBubble } from './MessageBubble';
 import { PlanModeBanner } from './PlanModeBanner';
 import { MARKDOWN_PROSE_CLASSES } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
+import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
 import type { TimelineStep } from './timeline/ExecutionTimeline';
+import type { SubAgentGroup } from './timeline/SubAgentTimeline';
 import type { TimelineEvent, PlanModeStatus } from '../../types/agent';
 
 // Import and re-export types from separate file
@@ -78,12 +80,21 @@ export type {
  */
 type GroupedItem =
   | { kind: 'event'; event: TimelineEvent; index: number }
-  | { kind: 'timeline'; steps: TimelineStep[]; startIndex: number };
+  | { kind: 'timeline'; steps: TimelineStep[]; startIndex: number }
+  | { kind: 'subagent'; group: SubAgentGroup; startIndex: number };
 
 function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   const result: GroupedItem[] = [];
   let currentSteps: TimelineStep[] = [];
   let groupStartIndex = 0;
+
+  // SubAgent event types that should be grouped
+  const SUBAGENT_EVENT_TYPES = new Set([
+    'subagent_routed', 'subagent_started', 'subagent_completed', 'subagent_failed',
+    'parallel_started', 'parallel_completed',
+    'chain_started', 'chain_step_started', 'chain_step_completed', 'chain_completed',
+    'background_launched',
+  ]);
 
   // Build observe lookup by execution_id
   const observeByExecId = new Map<string, TimelineEvent>();
@@ -113,6 +124,15 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 
   for (let i = 0; i < timeline.length; i++) {
     const event = timeline[i];
+
+    // SubAgent event grouping
+    if (SUBAGENT_EVENT_TYPES.has(event.type)) {
+      flushGroup();
+      const subGroup = buildSubAgentGroup(timeline, i);
+      result.push({ kind: 'subagent', group: subGroup.group, startIndex: i });
+      i = subGroup.endIndex;
+      continue;
+    }
 
     if (event.type === 'act') {
       if (currentSteps.length === 0) groupStartIndex = i;
@@ -160,12 +180,151 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 }
 
 /**
+ * Build a SubAgentGroup from consecutive SubAgent events starting at index.
+ * Returns the group and the last consumed event index.
+ */
+function buildSubAgentGroup(
+  timeline: TimelineEvent[],
+  startIdx: number,
+): { group: SubAgentGroup; endIndex: number } {
+  const SUBAGENT_EVENT_TYPES = new Set([
+    'subagent_routed', 'subagent_started', 'subagent_completed', 'subagent_failed',
+    'parallel_started', 'parallel_completed',
+    'chain_started', 'chain_step_started', 'chain_step_completed', 'chain_completed',
+    'background_launched',
+  ]);
+
+  const events: TimelineEvent[] = [];
+  let endIndex = startIdx;
+
+  // Collect consecutive SubAgent events
+  for (let i = startIdx; i < timeline.length; i++) {
+    if (SUBAGENT_EVENT_TYPES.has(timeline[i].type)) {
+      events.push(timeline[i]);
+      endIndex = i;
+      // Stop after terminal events
+      const t = timeline[i].type;
+      if (t === 'subagent_completed' || t === 'subagent_failed'
+        || t === 'parallel_completed' || t === 'chain_completed'
+        || t === 'background_launched') {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  // Build group from events
+  const group: SubAgentGroup = {
+    kind: 'subagent',
+    subagentId: '',
+    subagentName: '',
+    status: 'running',
+    events,
+    startIndex: startIdx,
+    mode: 'single',
+  };
+
+  for (const ev of events) {
+    const d = ev as any;
+    switch (ev.type) {
+      case 'subagent_routed':
+        group.subagentId = d.subagentId || d.subagent_id || '';
+        group.subagentName = d.subagentName || d.subagent_name || '';
+        group.confidence = d.confidence;
+        group.reason = d.reason;
+        break;
+      case 'subagent_started':
+        group.subagentId = group.subagentId || d.subagentId || d.subagent_id || '';
+        group.subagentName = group.subagentName || d.subagentName || d.subagent_name || '';
+        group.task = d.task;
+        break;
+      case 'subagent_completed':
+        group.status = 'success';
+        group.summary = d.summary;
+        group.tokensUsed = d.tokensUsed || d.tokens_used;
+        group.executionTimeMs = d.executionTimeMs || d.execution_time_ms;
+        break;
+      case 'subagent_failed':
+        group.status = 'error';
+        group.error = d.error;
+        break;
+      case 'parallel_started':
+        group.mode = 'parallel';
+        group.parallelInfo = {
+          taskCount: d.taskCount || d.task_count || 0,
+          subtasks: d.subtasks || [],
+        };
+        break;
+      case 'parallel_completed':
+        group.status = 'success';
+        if (group.parallelInfo) {
+          group.parallelInfo.results = d.results || [];
+          group.parallelInfo.totalTimeMs = d.totalTimeMs || d.total_time_ms;
+        }
+        group.executionTimeMs = d.totalTimeMs || d.total_time_ms;
+        break;
+      case 'chain_started':
+        group.mode = 'chain';
+        group.chainInfo = {
+          stepCount: d.stepCount || d.step_count || 0,
+          chainName: d.chainName || d.chain_name || '',
+          steps: [],
+        };
+        break;
+      case 'chain_step_started':
+        if (group.chainInfo) {
+          group.chainInfo.steps.push({
+            index: d.stepIndex ?? d.step_index ?? 0,
+            name: d.stepName || d.step_name || '',
+            subagentName: d.subagentName || d.subagent_name || '',
+            status: 'running',
+          });
+        }
+        break;
+      case 'chain_step_completed':
+        if (group.chainInfo) {
+          const idx = d.stepIndex ?? d.step_index ?? 0;
+          const step = group.chainInfo.steps.find((s) => s.index === idx);
+          if (step) {
+            step.summary = d.summary;
+            step.success = d.success;
+            step.status = d.success !== false ? 'success' : 'error';
+          }
+        }
+        break;
+      case 'chain_completed':
+        group.status = d.success !== false ? 'success' : 'error';
+        if (group.chainInfo) {
+          group.chainInfo.totalTimeMs = d.totalTimeMs || d.total_time_ms;
+        }
+        group.executionTimeMs = d.totalTimeMs || d.total_time_ms;
+        break;
+      case 'background_launched':
+        group.status = 'background';
+        group.subagentName = group.subagentName || d.subagentName || d.subagent_name || '';
+        group.task = d.task;
+        break;
+    }
+  }
+
+  return { group, endIndex };
+}
+
+/**
  * Estimate item height for the virtualizer based on item type.
  * Better estimates reduce scroll jumping when items are measured for real.
  */
 function estimateGroupedItemHeight(item: GroupedItem): number {
   if (item.kind === 'timeline') {
     return 80 + item.steps.length * 40;
+  }
+  if (item.kind === 'subagent') {
+    const base = 60;
+    const g = item.group;
+    if (g.mode === 'parallel' && g.parallelInfo) return base + g.parallelInfo.taskCount * 36;
+    if (g.mode === 'chain' && g.chainInfo) return base + g.chainInfo.steps.length * 40;
+    return base + (g.summary ? 60 : 0);
   }
   const { event } = item;
   switch (event.type) {
@@ -1187,6 +1346,33 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                             <ExecutionTimeline
                               steps={item.steps}
                               isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (item.kind === 'subagent') {
+                    return (
+                      <div
+                        key={`subagent-group-${item.startIndex}`}
+                        data-index={virtualRow.index}
+                        data-msg-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="w-8 shrink-0" />
+                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                            <SubAgentTimeline
+                              group={item.group}
+                              isStreaming={isStreaming && item.startIndex + item.group.events.length >= timeline.length}
                             />
                           </div>
                         </div>

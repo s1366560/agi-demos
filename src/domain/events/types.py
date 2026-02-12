@@ -191,6 +191,14 @@ class AgentEventType(str, Enum):
     ARTIFACT_CLOSE = "artifact_close"
 
     # =========================================================================
+    # SubAgent events (L3 layer independent execution)
+    # =========================================================================
+    SUBAGENT_ROUTED = "subagent_routed"
+    SUBAGENT_STARTED = "subagent_started"
+    SUBAGENT_COMPLETED = "subagent_completed"
+    SUBAGENT_FAILED = "subagent_failed"
+
+    # =========================================================================
     # Control events (used by event bus)
     # =========================================================================
     CANCELLED = "cancelled"
