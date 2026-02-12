@@ -62,6 +62,8 @@ import type {
   ChainStepCompletedEventData,
   ChainCompletedEventData,
   BackgroundLaunchedEventData,
+  TaskStartEventData,
+  TaskCompleteEventData,
 } from '../types/agent';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
@@ -753,6 +755,37 @@ export function sseEventToTimeline(
       };
     }
 
+    // Task timeline events
+    case 'task_start': {
+      const data = event.data as unknown as TaskStartEventData;
+      return {
+        id: generateTimelineEventId('task_start'),
+        type: 'task_start' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        taskId: data.task_id,
+        content: data.content,
+        orderIndex: data.order_index,
+        totalTasks: data.total_tasks,
+      };
+    }
+
+    case 'task_complete': {
+      const data = event.data as unknown as TaskCompleteEventData;
+      return {
+        id: generateTimelineEventId('task_complete'),
+        type: 'task_complete' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        taskId: data.task_id,
+        status: data.status,
+        orderIndex: data.order_index,
+        totalTasks: data.total_tasks,
+      };
+    }
+
     // Unsupported event types - return null
     case 'start':
     case 'status':
@@ -874,6 +907,9 @@ export function isSupportedEventType(eventType: string): boolean {
     'sandbox_created',
     'sandbox_terminated',
     'sandbox_status',
+    // Task timeline events
+    'task_start',
+    'task_complete',
   ];
 
   return supportedTypes.includes(eventType);

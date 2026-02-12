@@ -47,6 +47,8 @@ import type {
   DecisionOption,
   EnvVarField,
   ArtifactCreatedEvent,
+  TaskStartTimelineEvent,
+  TaskCompleteTimelineEvent,
 } from '../../types/agent';
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
@@ -287,6 +289,69 @@ function StepStartItem({ event }: { event: TimelineEvent }) {
       </div>
       <div className="pl-10">
         <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Render task_start event (timeline marker when agent begins working on a task)
+ */
+function TaskStartItem({ event }: { event: TimelineEvent }) {
+  if (event.type !== 'task_start') return null;
+  const e = event as TaskStartTimelineEvent;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-3 my-3">
+        <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-xs">
+            task_alt
+          </span>
+        </div>
+        <div className="flex-1 pt-1">
+          <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            Task {e.orderIndex + 1}/{e.totalTasks}
+          </div>
+          <div className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+            {e.content}
+          </div>
+        </div>
+      </div>
+      <div className="pl-10">
+        <TimeBadge timestamp={event.timestamp} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Render task_complete event (compact completion badge)
+ */
+function TaskCompleteItem({ event }: { event: TimelineEvent }) {
+  if (event.type !== 'task_complete') return null;
+  const e = event as TaskCompleteTimelineEvent;
+  const isSuccess = e.status === 'completed';
+  return (
+    <div className="flex items-start gap-3 my-2 opacity-70">
+      <div
+        className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+          isSuccess
+            ? 'bg-green-100 dark:bg-green-900/30'
+            : 'bg-red-100 dark:bg-red-900/30'
+        }`}
+      >
+        <span
+          className={`material-symbols-outlined text-xs ${
+            isSuccess
+              ? 'text-green-600 dark:text-green-400'
+              : 'text-red-600 dark:text-red-400'
+          }`}
+        >
+          {isSuccess ? 'check_circle' : 'cancel'}
+        </span>
+      </div>
+      <div className="flex-1 text-sm text-slate-500 dark:text-slate-400 pt-1">
+        Task {e.orderIndex + 1}/{e.totalTasks} {isSuccess ? 'completed' : e.status}
       </div>
     </div>
   );
@@ -1077,6 +1142,20 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       case 'artifacts_batch':
         // artifact_ready/artifact_error update existing artifact_created entries via store
         return null;
+
+      case 'task_start':
+        return (
+          <div className="animate-slide-up">
+            <TaskStartItem event={event} />
+          </div>
+        );
+
+      case 'task_complete':
+        return (
+          <div className="animate-slide-up">
+            <TaskCompleteItem event={event} />
+          </div>
+        );
 
       default:
         console.warn('Unknown event type in TimelineEventItem:', (event as { type: string }).type);

@@ -26,6 +26,8 @@ from src.domain.events.agent_events import (
     AgentObserveEvent,
     AgentStepEndEvent,
     AgentStepStartEvent,
+    AgentTaskCompleteEvent,
+    AgentTaskStartEvent,
     AgentThoughtEvent,
 )
 
@@ -194,6 +196,28 @@ class EventConverter:
                 "preview_url": domain_event.preview_url,
                 "tool_execution_id": domain_event.tool_execution_id,
                 "source_tool": domain_event.source_tool,
+            }
+
+        # TASK_START: normalize for timeline rendering
+        if event_type == AgentEventType.TASK_START and isinstance(
+            domain_event, AgentTaskStartEvent
+        ):
+            event_dict["data"] = {
+                "task_id": domain_event.task_id,
+                "content": domain_event.content,
+                "order_index": domain_event.order_index,
+                "total_tasks": domain_event.total_tasks,
+            }
+
+        # TASK_COMPLETE: normalize for timeline rendering
+        if event_type == AgentEventType.TASK_COMPLETE and isinstance(
+            domain_event, AgentTaskCompleteEvent
+        ):
+            event_dict["data"] = {
+                "task_id": domain_event.task_id,
+                "status": domain_event.status,
+                "order_index": domain_event.order_index,
+                "total_tasks": domain_event.total_tasks,
             }
 
         return event_dict

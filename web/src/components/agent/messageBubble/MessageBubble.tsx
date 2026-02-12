@@ -1082,6 +1082,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         // artifact_ready/artifact_error update existing artifact_created entries via store
         return null;
 
+      case 'task_start':
+      case 'task_complete':
+        // Rendered in timeline view only, not in chat bubble view
+        return null;
+
       default:
         console.warn('Unknown event type in MessageBubble:', (event as any).type);
         return null;

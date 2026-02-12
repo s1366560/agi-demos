@@ -294,6 +294,9 @@ class SessionProcessor:
         self._pending_tool_args: Dict[str, str] = {}  # call_id -> accumulated raw args
         self._abort_event: Optional[asyncio.Event] = None
 
+        # Task tracking for timeline integration
+        self._current_task: Optional[Dict[str, Any]] = None
+
         # Langfuse observability context
         self._langfuse_context: Optional[Dict[str, Any]] = None
 
@@ -548,7 +551,14 @@ class SessionProcessor:
         """
         logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
 
-        step_description = f"Step {self._step_count}"
+        # Enrich step description with current task context if available
+        if self._current_task:
+            ct = self._current_task
+            step_description = (
+                f"Task {ct['order_index'] + 1}/{ct['total_tasks']}: {ct['content']}"
+            )
+        else:
+            step_description = f"Step {self._step_count}"
 
         # Emit step start with meaningful description
         yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
@@ -1236,23 +1246,85 @@ class SessionProcessor:
                 try:
                     for task_event in tool_def.consume_pending_events():
                         from src.domain.events.agent_events import (
+                            AgentTaskCompleteEvent,
                             AgentTaskListUpdatedEvent,
+                            AgentTaskStartEvent,
                             AgentTaskUpdatedEvent,
                         )
 
                         event_type = task_event.get("type")
                         if event_type == "task_list_updated":
+                            tasks = task_event["tasks"]
                             yield AgentTaskListUpdatedEvent(
                                 conversation_id=task_event["conversation_id"],
-                                tasks=task_event["tasks"],
+                                tasks=tasks,
                             )
+                            # Track total tasks for timeline progress
+                            total = len(tasks)
+                            for t in tasks:
+                                if t.get("status") == "in_progress":
+                                    self._current_task = {
+                                        "task_id": t["id"],
+                                        "content": t["content"],
+                                        "order_index": t.get("order_index", 0),
+                                        "total_tasks": total,
+                                    }
+                                    yield AgentTaskStartEvent(
+                                        task_id=t["id"],
+                                        content=t["content"],
+                                        order_index=t.get("order_index", 0),
+                                        total_tasks=total,
+                                    )
                         elif event_type == "task_updated":
+                            task_status = task_event["status"]
                             yield AgentTaskUpdatedEvent(
                                 conversation_id=task_event["conversation_id"],
                                 task_id=task_event["task_id"],
-                                status=task_event["status"],
+                                status=task_status,
                                 content=task_event.get("content"),
                             )
+                            # Detect task transitions for timeline events
+                            if task_status == "in_progress":
+                                total = (
+                                    self._current_task["total_tasks"]
+                                    if self._current_task
+                                    else 1
+                                )
+                                self._current_task = {
+                                    "task_id": task_event["task_id"],
+                                    "content": task_event.get(
+                                        "content", ""
+                                    ),
+                                    "order_index": task_event.get(
+                                        "order_index", 0
+                                    ),
+                                    "total_tasks": total,
+                                }
+                                yield AgentTaskStartEvent(
+                                    task_id=task_event["task_id"],
+                                    content=task_event.get("content", ""),
+                                    order_index=task_event.get(
+                                        "order_index", 0
+                                    ),
+                                    total_tasks=total,
+                                )
+                            elif task_status in (
+                                "completed",
+                                "failed",
+                                "cancelled",
+                            ):
+                                ct = self._current_task
+                                if (
+                                    ct
+                                    and ct["task_id"] == task_event["task_id"]
+                                ):
+                                    yield AgentTaskCompleteEvent(
+                                        task_id=ct["task_id"],
+                                        status=task_status,
+                                        order_index=ct["order_index"],
+                                        total_tasks=ct["total_tasks"],
+                                    )
+                                    self._current_task = None
                 except Exception as task_err:
                     logger.error(f"Task event emission failed: {task_err}", exc_info=True)
 

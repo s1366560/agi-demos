@@ -149,6 +149,20 @@ export interface TaskUpdatedEventData {
   content?: string;
 }
 
+export interface TaskStartEventData {
+  task_id: string;
+  content: string;
+  order_index: number;
+  total_tasks: number;
+}
+
+export interface TaskCompleteEventData {
+  task_id: string;
+  status: string;
+  order_index: number;
+  total_tasks: number;
+}
+
 /**
  * Tool call information
  */
@@ -368,7 +382,10 @@ export type AgentEventType =
   | 'background_launched' // Background SubAgent launched
   // Task list events (DB-persistent task tracking)
   | 'task_list_updated' // Full task list replacement
-  | 'task_updated'; // Single task status change
+  | 'task_updated' // Single task status change
+  // Task timeline events (plan execution tracking)
+  | 'task_start' // Agent started working on a task
+  | 'task_complete'; // Agent finished a task
 
 /**
  * Base SSE event from agent
@@ -1040,6 +1057,9 @@ export interface AgentStreamHandler {
   // Task list handlers
   onTaskListUpdated?: (event: AgentEvent<TaskListUpdatedEventData>) => void;
   onTaskUpdated?: (event: AgentEvent<TaskUpdatedEventData>) => void;
+  // Task timeline handlers
+  onTaskStart?: (event: AgentEvent<TaskStartEventData>) => void;
+  onTaskComplete?: (event: AgentEvent<TaskCompleteEventData>) => void;
   // Terminal handlers
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;
@@ -2010,7 +2030,10 @@ export type TimelineEventType =
   | 'chain_step_started'
   | 'chain_step_completed'
   | 'chain_completed'
-  | 'background_launched';
+  | 'background_launched'
+  // Task timeline event types
+  | 'task_start'
+  | 'task_complete';
 
 /**
  * Base timeline event (all events share these fields)
@@ -2106,6 +2129,28 @@ export interface StepEndEvent extends BaseTimelineEvent {
   type: 'step_end';
   stepIndex: number;
   status: string;
+}
+
+/**
+ * Task start event (timeline marker when agent begins a task)
+ */
+export interface TaskStartTimelineEvent extends BaseTimelineEvent {
+  type: 'task_start';
+  taskId: string;
+  content: string;
+  orderIndex: number;
+  totalTasks: number;
+}
+
+/**
+ * Task complete event (timeline marker when agent finishes a task)
+ */
+export interface TaskCompleteTimelineEvent extends BaseTimelineEvent {
+  type: 'task_complete';
+  taskId: string;
+  status: string;
+  orderIndex: number;
+  totalTasks: number;
 }
 
 /**
@@ -2309,7 +2354,10 @@ export type TimelineEvent =
   | ChainStepStartedTimelineEvent
   | ChainStepCompletedTimelineEvent
   | ChainCompletedTimelineEvent
-  | BackgroundLaunchedTimelineEvent;
+  | BackgroundLaunchedTimelineEvent
+  // Task timeline events
+  | TaskStartTimelineEvent
+  | TaskCompleteTimelineEvent;
 
 // ============================================
 // SubAgent Timeline Event Interfaces (L3 layer)

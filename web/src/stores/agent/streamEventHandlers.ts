@@ -210,6 +210,21 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, { tasks });
     },
 
+    // Task timeline handlers (add events to timeline for plan execution tracking)
+    onTaskStart: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onTaskComplete: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
     onReflectionComplete: (event) => {
       const { updateConversationState, getConversationState } = get();
 

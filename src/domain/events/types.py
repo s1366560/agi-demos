@@ -189,6 +189,8 @@ class AgentEventType(str, Enum):
     # =========================================================================
     TASK_LIST_UPDATED = "task_list_updated"
     TASK_UPDATED = "task_updated"
+    TASK_START = "task_start"
+    TASK_COMPLETE = "task_complete"
 
 
 # =============================================================================
@@ -283,6 +285,8 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     # Task list events
     AgentEventType.TASK_LIST_UPDATED: EventCategory.AGENT,
     AgentEventType.TASK_UPDATED: EventCategory.AGENT,
+    AgentEventType.TASK_START: EventCategory.AGENT,
+    AgentEventType.TASK_COMPLETE: EventCategory.AGENT,
 }
 
 

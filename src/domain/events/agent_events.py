@@ -652,6 +652,26 @@ class AgentTaskUpdatedEvent(AgentDomainEvent):
     content: Optional[str] = None
 
 
+class AgentTaskStartEvent(AgentDomainEvent):
+    """Event: Agent started working on a task (timeline event)."""
+
+    event_type: AgentEventType = AgentEventType.TASK_START
+    task_id: str
+    content: str
+    order_index: int
+    total_tasks: int
+
+
+class AgentTaskCompleteEvent(AgentDomainEvent):
+    """Event: Agent completed a task (timeline event)."""
+
+    event_type: AgentEventType = AgentEventType.TASK_COMPLETE
+    task_id: str
+    status: str
+    order_index: int
+    total_tasks: int
+
+
 # =========================================================================
 # Event Type Utilities
 # =========================================================================
