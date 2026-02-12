@@ -220,12 +220,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   );
 
   // Tasks from active conversation state (separate selector to avoid re-renders)
-  const tasks: AgentTask[] = useAgentV3Store((state) => {
+  const EMPTY_TASKS: AgentTask[] = useMemo(() => [], []);
+  const rawTasks = useAgentV3Store((state) => {
     const convId = state.activeConversationId;
-    if (!convId) return [];
-    const convState = state.conversationStates.get(convId);
-    return convState?.tasks ?? [];
+    if (!convId) return undefined;
+    return state.conversationStates.get(convId)?.tasks;
   });
+  const tasks = rawTasks ?? EMPTY_TASKS;
   const { rightPanelWidth, setRightPanelWidth } = useAgentV3Store(
     useShallow((state) => ({
       rightPanelWidth: state.rightPanelWidth,
