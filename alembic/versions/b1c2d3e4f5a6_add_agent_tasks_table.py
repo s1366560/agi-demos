@@ -35,11 +35,6 @@ def upgrade() -> None:
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["conversation_id"],
-            ["conversations.id"],
-            ondelete="CASCADE",
-        ),
     )
     op.create_index(
         "ix_agent_tasks_conversation_id",

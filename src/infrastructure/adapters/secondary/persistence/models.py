@@ -1406,8 +1406,7 @@ class AgentTaskModel(IdGeneratorMixin, Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     conversation_id: Mapped[str] = mapped_column(
-        String, ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        String, nullable=False, index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
