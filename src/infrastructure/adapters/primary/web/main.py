@@ -1,14 +1,28 @@
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+# Configure application-wide logging before any other imports.
+# Uvicorn only configures its own loggers; without this, all src.* loggers
+# have no handlers and their output is silently discarded.
+logging.basicConfig(
+    level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stderr,
+    force=True,
+)
 
-from src.configuration.config import get_settings
-from src.infrastructure.adapters.primary.web.middleware import configure_exception_handlers
-from src.infrastructure.adapters.primary.web.routers import (
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
+from src.configuration.config import get_settings  # noqa: E402
+from src.infrastructure.adapters.primary.web.middleware import (  # noqa: E402
+    configure_exception_handlers,
+)
+from src.infrastructure.adapters.primary.web.routers import (  # noqa: E402
     ai_tools,
     artifacts,
     attachments_upload,
@@ -38,8 +52,10 @@ from src.infrastructure.adapters.primary.web.routers import (
     tenants,
     terminal,
 )
-from src.infrastructure.adapters.primary.web.routers.agent import router as agent_router
-from src.infrastructure.adapters.primary.web.startup import (
+from src.infrastructure.adapters.primary.web.routers.agent import (  # noqa: E402
+    router as agent_router,
+)
+from src.infrastructure.adapters.primary.web.startup import (  # noqa: E402
     initialize_container,
     initialize_database_schema,
     initialize_docker_services,
@@ -47,14 +63,18 @@ from src.infrastructure.adapters.primary.web.startup import (
     initialize_llm_providers,
     initialize_redis_client,
     initialize_telemetry,
-    initialize_workflow_engine,
     initialize_websocket_manager,
+    initialize_workflow_engine,
     shutdown_docker_services,
     shutdown_telemetry_services,
 )
-from src.infrastructure.adapters.primary.web.startup.graph import shutdown_graph_service
-from src.infrastructure.adapters.primary.web.websocket import router as websocket_router
-from src.infrastructure.middleware.rate_limit import limiter
+from src.infrastructure.adapters.primary.web.startup.graph import (  # noqa: E402
+    shutdown_graph_service,
+)
+from src.infrastructure.adapters.primary.web.websocket import (  # noqa: E402
+    router as websocket_router,
+)
+from src.infrastructure.middleware.rate_limit import limiter  # noqa: E402
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
