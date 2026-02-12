@@ -19,17 +19,11 @@ import {
   Bell,
   Search,
   ChevronDown,
-  LayoutDashboard,
   Folder,
-  Headphones,
   Brain,
-  BarChart3,
-  CheckSquare,
   Bot,
   Cable,
-  GitBranch,
   ToyBrick,
-  Users,
   MoreHorizontal,
   User,
   Settings,
@@ -69,28 +63,20 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   const { t } = useTranslation();
   const basePath = `/tenant/${tenantId}`;
 
-  const primaryNav: NavItem[] = useMemo(
+  const allNav: NavItem[] = useMemo(
     () => [
-      { id: 'overview', label: t('nav.overview', 'Overview'), path: `${basePath}/overview`, icon: <LayoutDashboard size={16} /> },
       { id: 'projects', label: t('nav.projects', 'Projects'), path: `${basePath}/projects`, icon: <Folder size={16} /> },
-      { id: 'agents', label: t('nav.agents', 'Agents'), path: `${basePath}/agents`, icon: <Headphones size={16} /> },
       { id: 'skills', label: t('nav.skills', 'Skills'), path: `${basePath}/skills`, icon: <Brain size={16} /> },
-      { id: 'analytics', label: t('nav.analytics', 'Analytics'), path: `${basePath}/analytics`, icon: <BarChart3 size={16} /> },
+      { id: 'subagents', label: t('nav.subagents', 'Agents'), path: `${basePath}/subagents`, icon: <Bot size={16} /> },
+      { id: 'mcp-servers', label: t('nav.mcpServers', 'MCP'), path: `${basePath}/mcp-servers`, icon: <Cable size={16} /> },
+      { id: 'providers', label: t('nav.providers', 'Model Services'), path: `${basePath}/providers`, icon: <ToyBrick size={16} /> },
     ],
     [basePath, t],
   );
 
-  const overflowNav: NavItem[] = useMemo(
-    () => [
-      { id: 'tasks', label: t('nav.tasks', 'Tasks'), path: `${basePath}/tasks`, icon: <CheckSquare size={16} /> },
-      { id: 'subagents', label: t('nav.subAgents', 'Sub Agents'), path: `${basePath}/subagents`, icon: <Bot size={16} /> },
-      { id: 'mcp-servers', label: t('nav.mcpServers', 'MCP Servers'), path: `${basePath}/mcp-servers`, icon: <Cable size={16} /> },
-      { id: 'patterns', label: t('nav.patterns', 'Patterns'), path: `${basePath}/patterns`, icon: <GitBranch size={16} /> },
-      { id: 'providers', label: t('nav.providers', 'Providers'), path: `${basePath}/providers`, icon: <ToyBrick size={16} /> },
-      { id: 'users', label: t('nav.users', 'Users'), path: `${basePath}/users`, icon: <Users size={16} /> },
-    ],
-    [basePath, t],
-  );
+  // With 5 items, all fit on md+ screens; overflow only if needed
+  const visibleNav = allNav;
+  const overflowNav: NavItem[] = [];
 
   return (
     <header className="h-14 px-3 sm:px-4 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex items-center flex-none shrink-0">
@@ -123,7 +109,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 
         {/* Center: Nav tabs */}
         <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0 ml-4">
-          {primaryNav.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink
               key={item.id}
               to={item.path}
@@ -138,7 +124,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
               {item.label}
             </NavLink>
           ))}
-          <OverflowMenu items={overflowNav} />
+          {overflowNav.length > 0 && <OverflowMenu items={overflowNav} />}
         </nav>
 
         {/* Right: Actions */}

@@ -12,7 +12,7 @@
  * (tables, blockquotes, hr, inline code backgrounds).
  */
 export const MARKDOWN_PROSE_CLASSES =
-  'memstack-prose max-w-none leading-[1.7] [&_p]:my-1.5 [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:mt-4 [&_h3]:mb-2 [&_h4]:mt-4 [&_h4]:mb-2 [&_h5]:mt-4 [&_h5]:mb-2 [&_h6]:mt-4 [&_h6]:mb-2 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_h4]:font-semibold [&_h5]:font-semibold [&_h6]:font-semibold [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_pre]:my-3 [&_pre]:bg-transparent [&_pre]:p-0 [&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline [&_img]:rounded-lg [&_img]:shadow-md';
+  'memstack-prose max-w-none leading-[1.6] [&_p]:my-1 [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:mt-4 [&_h3]:mb-2 [&_h4]:mt-4 [&_h4]:mb-2 [&_h5]:mt-4 [&_h5]:mb-2 [&_h6]:mt-4 [&_h6]:mb-2 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_h4]:font-semibold [&_h5]:font-semibold [&_h6]:font-semibold [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_pre]:bg-transparent [&_pre]:p-0 [&_a]:text-primary [&_a]:no-underline hover:[&_a]:underline [&_img]:rounded-lg [&_img]:shadow-md [&>p:first-child]:mt-0 [&>p:last-child]:mb-0';
 
 /** @deprecated Use MARKDOWN_PROSE_CLASSES instead */
 export const ASSISTANT_PROSE_CLASSES = MARKDOWN_PROSE_CLASSES;

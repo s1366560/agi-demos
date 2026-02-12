@@ -2,13 +2,13 @@
  * LayoutModeSelector - Quick-switch buttons for layout modes
  *
  * Renders in the status bar area. Provides visual indication of current mode
- * and one-click switching between Chat, Code, Desktop, and Focus modes.
+ * and one-click switching between Chat, Task, Code, and Canvas modes.
  */
 
 import type { FC } from 'react';
 import { useEffect, useCallback } from 'react';
 
-import { MessageSquareText, TerminalSquare, Monitor, Maximize, PanelRight } from 'lucide-react';
+import { MessageSquareText, ListTodo, TerminalSquare, PanelRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useLayoutModeStore, type LayoutMode } from '@/stores/layoutMode';
@@ -30,31 +30,24 @@ const modes: Array<{
     description: 'Full chat view with optional plan panel',
   },
   {
+    key: 'task',
+    icon: ListTodo,
+    label: 'Task',
+    shortcut: '2',
+    description: 'Split view: chat + task panel (50/50)',
+  },
+  {
     key: 'code',
     icon: TerminalSquare,
     label: 'Code',
-    shortcut: '2',
-    description: 'Split view: chat + terminal (50/50)',
-  },
-  {
-    key: 'desktop',
-    icon: Monitor,
-    label: 'Desktop',
     shortcut: '3',
-    description: 'Split view: chat + remote desktop (30/70)',
-  },
-  {
-    key: 'focus',
-    icon: Maximize,
-    label: 'Focus',
-    shortcut: '4',
-    description: 'Fullscreen desktop with floating chat',
+    description: 'Split view: chat + terminal (50/50)',
   },
   {
     key: 'canvas',
     icon: PanelRight,
     label: 'Canvas',
-    shortcut: '5',
+    shortcut: '4',
     description: 'Split view: chat + artifact canvas (35/65)',
   },
 ];

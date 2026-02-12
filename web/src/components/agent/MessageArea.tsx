@@ -34,13 +34,12 @@ import ReactMarkdown from 'react-markdown';
 
 import { LoadingOutlined } from '@ant-design/icons';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Pin, PinOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { Pin, PinOff, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAgentV3Store } from '../../stores/agentV3';
 import { useConversationsStore } from '../../stores/agent/conversationsStore';
 
-import { AgentStatePill } from './chat/AgentStatePill';
 import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
 import { useMarkdownPlugins } from './chat/markdownPlugins';
 import { SuggestionChips } from './chat/SuggestionChips';
@@ -617,36 +616,32 @@ const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string 
     }, [partialArguments]);
 
     return (
-      <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
-        <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-          <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-[18px]">
-            construction
-          </span>
+      <div className="flex items-start gap-2 mb-2 animate-fade-in-up">
+        <div className="flex flex-col items-center flex-shrink-0">
+          <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-blue-400 bg-blue-50 dark:bg-blue-950/50">
+            <Loader2 size={11} className="text-blue-500 animate-spin" />
+          </div>
         </div>
-        <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-          <div className="bg-white dark:bg-slate-800/90 border border-blue-200/80 dark:border-blue-700/50 rounded-2xl rounded-tl-sm overflow-hidden shadow-sm">
-            <div className="px-4 py-3 bg-blue-50/50 dark:bg-blue-900/10 border-b border-blue-200/50 dark:border-blue-700/30 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  {toolName}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+        <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+          <div className="rounded-md border px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/40">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">
+                {toolName}
+              </span>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 text-[10px] font-bold uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                 Preparing
               </div>
             </div>
             {partialArguments && (
-              <div className="p-3">
-                <div
-                  ref={argsRef}
-                  className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200/50 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-slate-400 overflow-x-auto max-h-24 overflow-y-auto"
-                >
-                  <pre className="whitespace-pre-wrap break-words">
-                    {partialArguments}
-                    <span className="inline-block w-1.5 h-3.5 bg-blue-500 animate-pulse ml-0.5 align-middle" />
-                  </pre>
-                </div>
+              <div
+                ref={argsRef}
+                className="mt-1.5 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-200/50 dark:border-blue-500/20 rounded text-[11px] font-mono text-slate-600 dark:text-slate-400 overflow-x-auto max-h-24 overflow-y-auto"
+              >
+                <pre className="whitespace-pre-wrap break-words">
+                  {partialArguments}
+                  <span className="inline-block w-1.5 h-3 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+                </pre>
               </div>
             )}
           </div>
@@ -1044,7 +1039,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       getScrollElement: () => containerRef.current,
       estimateSize,
       overscan: 15,
-      paddingEnd: isStreaming ? 200 : 0,
+      paddingEnd: isStreaming ? 16 : 0,
     });
 
     // Reset scroll state and virtualizer when conversation changes
@@ -1294,7 +1289,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
                       >
-                        <div className="flex items-start gap-3 mb-3">
+                        <div className="flex items-start gap-3 mb-1.5">
                           <div className="w-8 shrink-0" />
                           <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                             <ExecutionTimeline
@@ -1321,7 +1316,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           transform: `translateY(${virtualRow.start}px)`,
                         }}
                       >
-                        <div className="flex items-start gap-3 mb-3">
+                        <div className="flex items-start gap-3 mb-1.5">
                           <div className="w-8 shrink-0" />
                           <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                             <SubAgentTimeline
@@ -1351,7 +1346,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       }}
                       className={isFocused ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-xl transition-shadow duration-200' : ''}
                     >
-                      <div className="pb-3">
+                      <div className="pb-1.5">
                         <MessageBubble
                           event={event}
                           isStreaming={isStreaming && index === timeline.length - 1}
@@ -1366,7 +1361,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               </div>
 
               {/* Non-virtualized streaming/footer content */}
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 {/* Suggestion chips - shown when not streaming and suggestions available */}
                 {!isStreaming && suggestions && suggestions.length > 0 && onSuggestionSelect && (
                   <SuggestionChips
@@ -1374,9 +1369,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                     onSelect={onSuggestionSelect}
                   />
                 )}
-
-                {/* Agent state transition pill */}
-                {isStreaming && <AgentStatePill className="mb-4" />}
 
                 {/* Streaming thought indicator - ThinkingBlock (new design) */}
                 {includeStreamingContent && (isThinkingStreaming || streamingThought) && (
@@ -1394,7 +1386,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   isStreaming &&
                   streamingContent &&
                   !isThinkingStreaming && (
-                    <div className="flex items-start gap-3 mb-6 animate-fade-in-up" aria-live="assertive">
+                    <div className="flex items-start gap-3 mb-2 animate-fade-in-up" aria-live="assertive">
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
                         <svg
                           className="w-[18px] h-[18px] text-white"
@@ -1411,7 +1403,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         </svg>
                       </div>
                       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-                        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-5 py-4 shadow-sm">
+                        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm">
                           <div className={MARKDOWN_PROSE_CLASSES}>
                             <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
                               {streamingContent}

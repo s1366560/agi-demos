@@ -157,16 +157,17 @@
     "analytics": "Analytics",
     "tasks": "Tasks",
     "agents": "Agent Management",
-    "subagents": "SubAgents",
+    "subagents": "Agents",
     "skills": "Skills",
     "templates": "Templates",
-    "providers": "LLM Providers",
+    "providers": "Model Services",
     "platform": "Platform",
     "administration": "Administration",
     "billing": "Billing",
     "profile": "Profile",
-    "mcpServers": "MCP Servers",
-    "pool": "Agent Pool"
+    "mcpServers": "MCP",
+    "pool": "Agent Pool",
+    "more": "More"
   },
   "user": {
     "profile": "Profile",

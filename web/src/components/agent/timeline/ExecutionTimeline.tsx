@@ -79,16 +79,55 @@ const formatDuration = (ms: number): string => {
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 };
 
-const getInputPreview = (input?: Record<string, unknown>): string | null => {
+const getInputPreview = (input?: Record<string, unknown>, toolName?: string): string | null => {
   if (!input) return null;
-  if (input.command && typeof input.command === 'string') {
-    return input.command.length > 60 ? input.command.slice(0, 57) + '...' : input.command;
+  const name = (toolName ?? '').toLowerCase();
+
+  // Write/Edit tools: show file path + line count
+  if (name.includes('write') || name.includes('edit') || name.includes('patch')) {
+    const filePath = (input.path ?? input.file_path ?? '') as string;
+    const content = (input.content ?? input.new_content ?? input.text ?? '') as string;
+    if (filePath) {
+      const lineCount = content ? content.split('\n').length : 0;
+      return lineCount > 0 ? `${filePath} (${lineCount} lines)` : filePath;
+    }
   }
+
+  // Read tools: show file path
+  if (name.includes('read')) {
+    const filePath = (input.path ?? input.file_path ?? '') as string;
+    if (filePath) return filePath;
+  }
+
+  // command: Bash/terminal tools
+  if (input.command && typeof input.command === 'string') {
+    return input.command.length > 80 ? input.command.slice(0, 77) + '...' : input.command;
+  }
+  // path: List/Glob tools
   if (input.path && typeof input.path === 'string') {
     return input.path;
   }
+  // pattern: Glob/Grep tools
+  if (input.pattern && typeof input.pattern === 'string') {
+    return input.pattern.length > 80 ? input.pattern.slice(0, 77) + '...' : input.pattern;
+  }
+  // query: search tools
   if (input.query && typeof input.query === 'string') {
-    return input.query.length > 60 ? input.query.slice(0, 57) + '...' : input.query;
+    return input.query.length > 80 ? input.query.slice(0, 77) + '...' : input.query;
+  }
+  // file_path: alternative path field
+  if (input.file_path && typeof input.file_path === 'string') {
+    return input.file_path;
+  }
+  // url: web tools
+  if (input.url && typeof input.url === 'string') {
+    return input.url.length > 80 ? input.url.slice(0, 77) + '...' : input.url;
+  }
+  // Fallback: show first string value from input
+  for (const value of Object.values(input)) {
+    if (typeof value === 'string' && value.length > 0) {
+      return value.length > 80 ? value.slice(0, 77) + '...' : value;
+    }
   }
   return null;
 };
@@ -102,7 +141,7 @@ const TimelineStepItem = memo<{
 }>(({ step, isLast, defaultExpanded = false, onUndoRequest }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const { t } = useTranslation();
-  const preview = getInputPreview(step.input);
+  const preview = getInputPreview(step.input, step.toolName);
 
   const statusColor =
     step.status === 'running'
@@ -126,12 +165,12 @@ const TimelineStepItem = memo<{
         : <XCircle size={14} className={statusColor} />;
 
   return (
-    <div className="relative flex gap-3">
+    <div className="relative flex gap-2">
       {/* Timeline line + dot */}
       <div className="flex flex-col items-center flex-shrink-0">
         <div
           className={`
-            w-7 h-7 rounded-full flex items-center justify-center border-2
+            w-6 h-6 rounded-full flex items-center justify-center border-2
             ${step.status === 'running'
               ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
               : step.status === 'success'
@@ -141,23 +180,23 @@ const TimelineStepItem = memo<{
           `}
         >
           {step.status === 'running' ? (
-            <Loader2 size={13} className="text-blue-500 animate-spin" />
+            <Loader2 size={11} className="text-blue-500 animate-spin" />
           ) : (
-            getToolIcon(step.toolName, 13, statusColor)
+            getToolIcon(step.toolName, 11, statusColor)
           )}
         </div>
         {!isLast && (
-          <div className="w-px flex-1 min-h-[16px] bg-slate-200 dark:bg-slate-700" />
+          <div className="w-px flex-1 min-h-[8px] bg-slate-200 dark:bg-slate-700" />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 pb-3 min-w-0">
+      <div className="flex-1 pb-1.5 min-w-0">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className={`
-            w-full text-left rounded-lg border px-3 py-2 transition-colors
+            w-full text-left rounded-md border px-2.5 py-1.5 transition-colors
             ${statusBg}
             hover:shadow-sm cursor-pointer
           `}
@@ -200,9 +239,9 @@ const TimelineStepItem = memo<{
         </button>
 
         {expanded && (
-          <div className="mt-2 space-y-2 text-xs">
+          <div className="mt-1.5 space-y-1.5 text-xs">
             {step.input && Object.keys(step.input).length > 0 && (
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-2.5 border border-slate-200/60 dark:border-slate-700/40">
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-2 border border-slate-200/60 dark:border-slate-700/40">
                 <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-1">
                   {t('agent.timeline.input', 'Input')}
                 </div>
@@ -213,7 +252,7 @@ const TimelineStepItem = memo<{
             )}
             {step.output && (
               <div
-                className={`rounded-md p-2.5 border ${
+                className={`rounded-md p-2 border ${
                   step.isError
                     ? 'bg-red-50 dark:bg-red-950/30 border-red-200/60 dark:border-red-800/30'
                     : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/40'
@@ -260,12 +299,12 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
   if (steps.length === 0) return null;
 
   return (
-    <div className="mb-4">
+    <div className="mb-2">
       {/* Summary header */}
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
-        className="flex items-center gap-2 w-full text-left mb-2 group cursor-pointer"
+        className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer"
       >
         {collapsed ? (
           <ChevronRight size={14} className="text-slate-400" />

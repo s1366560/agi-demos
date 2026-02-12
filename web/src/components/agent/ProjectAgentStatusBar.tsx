@@ -17,7 +17,9 @@
  */
 
 import type { FC } from 'react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import {
   Zap,
@@ -42,9 +44,16 @@ import {
   Snowflake,
   Layers,
   Heart,
+  Brain,
+  Eye,
+  MessageCircle,
+  RotateCcw,
+  ListTodo,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
+import { useAgentV3Store } from '@/stores/agentV3';
 
 import {
   useUnifiedAgentStatus,
@@ -206,6 +215,92 @@ const tierConfig: Record<
 };
 
 /**
+ * Agent execution state configuration (from AgentStatePill)
+ */
+type AgentExecState =
+  | 'idle'
+  | 'thinking'
+  | 'preparing'
+  | 'acting'
+  | 'observing'
+  | 'awaiting_input'
+  | 'retrying';
+
+interface ExecStateConfig {
+  icon: React.ElementType;
+  iconAnimate: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
+const execStateConfig: Record<AgentExecState, ExecStateConfig> = {
+  thinking: {
+    icon: Brain,
+    iconAnimate: 'animate-pulse',
+    color: 'text-slate-600 dark:text-slate-400',
+    bgColor: 'bg-slate-100 dark:bg-slate-800/50',
+    borderColor: 'border-slate-200 dark:border-slate-700',
+  },
+  preparing: {
+    icon: Loader2,
+    iconAnimate: 'animate-spin',
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    borderColor: 'border-blue-200 dark:border-blue-800',
+  },
+  acting: {
+    icon: Zap,
+    iconAnimate: '',
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    borderColor: 'border-blue-200 dark:border-blue-800',
+  },
+  observing: {
+    icon: Eye,
+    iconAnimate: '',
+    color: 'text-emerald-600 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    borderColor: 'border-emerald-200 dark:border-emerald-800',
+  },
+  awaiting_input: {
+    icon: MessageCircle,
+    iconAnimate: 'animate-pulse',
+    color: 'text-slate-600 dark:text-slate-400',
+    bgColor: 'bg-slate-100 dark:bg-slate-800/50',
+    borderColor: 'border-slate-200 dark:border-slate-700',
+  },
+  retrying: {
+    icon: RotateCcw,
+    iconAnimate: 'animate-spin',
+    color: 'text-red-600 dark:text-red-400',
+    bgColor: 'bg-red-50 dark:bg-red-900/20',
+    borderColor: 'border-red-200 dark:border-red-800',
+  },
+  idle: {
+    icon: CheckCircle2,
+    iconAnimate: '',
+    color: 'text-slate-400 dark:text-slate-500',
+    bgColor: 'bg-slate-100 dark:bg-slate-800/50',
+    borderColor: 'border-slate-200 dark:border-slate-700',
+  },
+};
+
+/**
+ * Status bar phase dot
+ */
+const StatusPhaseDot: FC<{ active: boolean; completed: boolean }> = ({ active, completed }) => (
+  <span
+    className={`
+      w-1.5 h-1.5 rounded-full transition-all duration-300
+      ${active ? 'bg-current scale-125' : completed ? 'bg-current opacity-40' : 'bg-slate-300 dark:bg-slate-600'}
+    `}
+  />
+);
+
+const EMPTY_TASKS: never[] = [];
+
+/**
  * ProjectAgentStatusBar - Refactored to use unified status hook
  *
  * This component now uses the useUnifiedAgentStatus hook which consolidates:
@@ -225,6 +320,22 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   messageCount = 0,
   enablePoolManagement = false,
 }) => {
+  const { t } = useTranslation();
+
+  // Agent execution state from store (for real-time thinking/acting/observing)
+  const { agentState, storeIsStreaming, pendingToolsStack, tasks } = useAgentV3Store(
+    useShallow((s) => {
+      const convId = s.activeConversationId;
+      const convTasks = convId ? s.conversationStates.get(convId)?.tasks : undefined;
+      return {
+        agentState: s.agentState as AgentExecState,
+        storeIsStreaming: s.isStreaming,
+        pendingToolsStack: s.pendingToolsStack,
+        tasks: convTasks ?? EMPTY_TASKS,
+      };
+    }),
+  );
+
   // Use the unified status hook for consolidated state
   // Always enable WebSocket for sandbox state sync, even when pool management is enabled
   const {
@@ -238,6 +349,14 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     // Always enabled for WebSocket connection (needed for sandbox lifecycle events)
     enabled: !!projectId,
   });
+
+  // Determine if we should show agent execution state (pill) vs lifecycle state
+  const showExecState = (isStreaming || storeIsStreaming) && agentState !== 'idle';
+  const execConfig = useMemo(() => execStateConfig[agentState] || execStateConfig.idle, [agentState]);
+  const currentTool =
+    pendingToolsStack.length > 0 ? pendingToolsStack[pendingToolsStack.length - 1] : null;
+  const isActingPhase = agentState === 'acting' || agentState === 'preparing';
+  const isPostThinking = agentState === 'acting' || agentState === 'observing';
 
   // Pool instance state (primary when pool management is enabled)
   const [poolInstance, setPoolInstance] = useState<PoolInstance | null>(null);
@@ -403,7 +522,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   return (
     <div className="px-4 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 min-w-0">
       {/* Left: Pool Tier, Sandbox Status, Lifecycle Status & Resources */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         {/* Pool Tier Indicator (shown when pool management is enabled) */}
         {enablePoolManagement && poolEnabled && (
           <>
@@ -490,85 +609,115 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         {/* Separator */}
         <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
 
-        {/* Agent Lifecycle Status */}
-        <LazyTooltip
-          title={
-            <div className="space-y-2 max-w-xs">
-              <div className="font-medium">{config.label}</div>
-              <div className="text-xs opacity-80">{config.description}</div>
-              {error && (
-                <div className="text-xs text-red-400 pt-1 border-t border-gray-600 mt-1">
-                  错误: {error}
-                </div>
-              )}
-            </div>
-          }
-        >
+        {/* Agent Status - Shows execution state when streaming, lifecycle state otherwise */}
+        {showExecState ? (
           <div
             className={`
               flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
-              ${config.bgColor} ${config.color}
-              transition-all duration-300 cursor-help
+              ${execConfig.bgColor} ${execConfig.color} border ${execConfig.borderColor}
+              transition-all duration-300
             `}
           >
-            <StatusIcon size={12} className={config.animate ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">{config.label}</span>
-            {status.resources.activeCalls > 0 ? (
-              <span className="ml-0.5">({status.resources.activeCalls})</span>
-            ) : null}
+            <execConfig.icon size={12} className={execConfig.iconAnimate} />
+            <span className="hidden sm:inline">
+              {t(`agent.state.${agentState}`, agentState)}
+            </span>
+            {currentTool && agentState === 'acting' && (
+              <span className="text-xs opacity-60 truncate max-w-[80px] hidden sm:inline">
+                {currentTool}
+              </span>
+            )}
+            {/* Phase progress dots */}
+            <div className="flex items-center gap-0.5 ml-0.5">
+              <StatusPhaseDot active={agentState === 'thinking'} completed={isPostThinking} />
+              <StatusPhaseDot active={isActingPhase} completed={agentState === 'observing'} />
+              <StatusPhaseDot active={agentState === 'observing'} completed={false} />
+            </div>
           </div>
-        </LazyTooltip>
-
-        {/* Separator */}
-        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
-
-        {/* Resources: Tools with detailed breakdown */}
-        {status.toolStats.total > 0 && (
+        ) : (
           <LazyTooltip
             title={
-              <div className="space-y-1">
-                <div className="font-medium">工具统计</div>
-                <div>总工具: {status.toolStats.total}</div>
-                <div>内置工具: {status.toolStats.builtin}</div>
-                <div>MCP 工具: {status.toolStats.mcp}</div>
+              <div className="space-y-2 max-w-xs">
+                <div className="font-medium">{config.label}</div>
+                <div className="text-xs opacity-80">{config.description}</div>
+                {error && (
+                  <div className="text-xs text-red-400 pt-1 border-t border-gray-600 mt-1">
+                    错误: {error}
+                  </div>
+                )}
               </div>
             }
           >
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
-              <Wrench size={11} />
-              <span>{status.toolStats.builtin}</span>
-              {status.toolStats.mcp > 0 && (
-                <>
-                  <span className="text-slate-400">+</span>
-                  <Plug size={10} className="text-blue-500" />
-                  <span className="text-blue-500">{status.toolStats.mcp}</span>
-                </>
-              )}
+            <div
+              className={`
+                flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+                ${config.bgColor} ${config.color}
+                transition-all duration-300 cursor-help
+              `}
+            >
+              <StatusIcon size={12} className={config.animate ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{config.label}</span>
+              {status.resources.activeCalls > 0 ? (
+                <span className="ml-0.5">({status.resources.activeCalls})</span>
+              ) : null}
             </div>
           </LazyTooltip>
+        )}
+
+        {/* Resources: Tools with detailed breakdown */}
+        {status.toolStats.total > 0 && (
+          <>
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+            <LazyTooltip
+              title={
+                <div className="space-y-1">
+                  <div className="font-medium">工具统计</div>
+                  <div>总工具: {status.toolStats.total}</div>
+                  <div>内置工具: {status.toolStats.builtin}</div>
+                  <div>MCP 工具: {status.toolStats.mcp}</div>
+                </div>
+              }
+            >
+              <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
+                <Wrench size={11} />
+                <span>{status.toolStats.builtin}</span>
+                {status.toolStats.mcp > 0 && (
+                  <>
+                    <span className="text-slate-400">+</span>
+                    <Plug size={10} className="text-blue-500" />
+                    <span className="text-blue-500">{status.toolStats.mcp}</span>
+                  </>
+                )}
+              </div>
+            </LazyTooltip>
+          </>
         )}
 
         {/* Resources: Skills with detailed breakdown */}
         {status.skillStats.total > 0 && (
-          <LazyTooltip
-            title={
-              <div className="space-y-1">
-                <div className="font-medium">技能统计</div>
-                <div>总技能: {status.skillStats.total}</div>
-                <div>已加载: {status.skillStats.loaded}</div>
+          <>
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+            <LazyTooltip
+              title={
+                <div className="space-y-1">
+                  <div className="font-medium">技能统计</div>
+                  <div>总技能: {status.skillStats.total}</div>
+                  <div>已加载: {status.skillStats.loaded}</div>
+                </div>
+              }
+            >
+              <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
+                <BrainCircuit size={11} />
+                <span>
+                  {status.skillStats.loaded}/{status.skillStats.total}
+                </span>
               </div>
-            }
-          >
-            <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
-              <BrainCircuit size={11} />
-              <span>
-                {status.skillStats.loaded}/{status.skillStats.total}
-              </span>
-            </div>
-          </LazyTooltip>
+            </LazyTooltip>
+          </>
         )}
 
         {/* Message Count */}
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
         <LazyTooltip title="对话消息数">
           <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
             <MessageSquare size={11} />
@@ -576,7 +725,32 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           </div>
         </LazyTooltip>
 
+        {/* Task Progress */}
+        {tasks.length > 0 && (
+          <>
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+            <LazyTooltip
+              title={
+                <div className="space-y-1">
+                  <div className="font-medium">任务进度</div>
+                  <div>已完成: {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}</div>
+                  <div>进行中: {tasks.filter((t) => t.status === 'in_progress').length}</div>
+                  <div>待处理: {tasks.filter((t) => t.status === 'pending').length}</div>
+                </div>
+              }
+            >
+              <div className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
+                <ListTodo size={11} />
+                <span className="tabular-nums">
+                  {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
+                </span>
+              </div>
+            </LazyTooltip>
+          </>
+        )}
+
         {/* Context Window Status */}
+        <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
         <div className="hidden sm:flex items-center">
           <ContextStatusIndicator />
         </div>
@@ -598,17 +772,6 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
           </>
         )}
 
-        {/* Streaming Indicator */}
-        {isStreaming && (
-          <>
-            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
-            <div className="flex items-center gap-1 text-xs text-amber-600">
-              <Activity size={11} className="animate-pulse" />
-              <span className="hidden sm:inline">流式响应中</span>
-            </div>
-          </>
-        )}
-
         {/* Error Indicator */}
         {isError && (
           <>
@@ -624,7 +787,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       </div>
 
       {/* Right: Lifecycle Controls & Connection */}
-      <div className="flex items-center gap-2 sm:gap-3 text-xs flex-shrink-0">
+      <div className="flex items-center gap-2 text-xs flex-shrink-0">
         {/* Lifecycle Control Buttons */}
         <div className="flex items-center gap-1.5">
           {/* Pause Button - pool mode only, shown when agent is ready */}

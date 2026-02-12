@@ -61,7 +61,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
       : t('agent.thinking.analyzing', 'Analyzing your request...');
 
     return (
-      <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
+      <div className="flex items-start gap-3 mb-2 animate-fade-in-up">
         {/* Icon */}
         <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
           <Brain

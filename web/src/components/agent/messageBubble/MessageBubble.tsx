@@ -231,12 +231,12 @@ const findMatchingObserve = (
 const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply }) => {
   if (!content) return null;
   return (
-    <div className="group flex items-end justify-end gap-3 mb-6 animate-fade-in-up">
+    <div className="group flex items-end justify-end gap-3 mb-2 animate-fade-in-up">
       <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
           {/* Subtle gradient background */}
           <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
-          <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-5 py-3.5 shadow-sm hover:shadow-md transition-shadow duration-200">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200">
             <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
               {content}
             </p>
@@ -267,13 +267,13 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStr
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
   if (!content && !isStreaming) return null;
   return (
-    <div className="group flex items-start gap-3 mb-6 animate-fade-in-up">
+    <div className="group flex items-start gap-3 mb-2 animate-fade-in-up">
       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
         <Bot size={18} className="text-white" />
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="relative">
-          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-all duration-200">
             <div className={MARKDOWN_PROSE_CLASSES}>
             {content ? (
               <ReactMarkdown
@@ -319,12 +319,12 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
   if (!content) return null;
   return (
-    <div className="flex items-start gap-3 mb-6 animate-fade-in-up">
+    <div className="flex items-start gap-3 mb-2 animate-fade-in-up">
       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
         <Bot size={18} className="text-white" />
       </div>
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
           <div className={MARKDOWN_PROSE_CLASSES}>
             <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{content}</ReactMarkdown>
           </div>
@@ -343,7 +343,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
   if (!content) return null;
 
   return (
-    <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
+    <div className="flex items-start gap-3 mb-2 animate-fade-in-up">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Lightbulb size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
@@ -409,7 +409,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
     : 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50';
 
   return (
-    <div className="flex items-start gap-3 mb-4 animate-fade-in-up">
+    <div className="flex items-start gap-3 mb-2 animate-fade-in-up">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
         <Wrench
           size={16}

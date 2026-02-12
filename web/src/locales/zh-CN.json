@@ -136,7 +136,7 @@
   },
   "nav": {
     "dashboard": "仪表盘",
-    "projects": "项目列表",
+    "projects": "项目",
     "users": "用户管理",
     "settings": "设置",
     "memories": "记忆列表",
@@ -157,16 +157,17 @@
     "analytics": "分析",
     "tasks": "任务",
     "agents": "智能体管理",
-    "subagents": "子智能体",
-    "skills": "技能管理",
+    "subagents": "Agents",
+    "skills": "技能",
     "templates": "模板市场",
-    "providers": "LLM 提供商",
+    "providers": "模型服务",
     "platform": "平台",
     "administration": "管理",
     "billing": "账单",
     "profile": "个人资料",
-    "mcpServers": "MCP 服务器",
-    "pool": "智能体池"
+    "mcpServers": "MCP",
+    "pool": "智能体池",
+    "more": "更多"
   },
   "user": {
     "profile": "个人资料",

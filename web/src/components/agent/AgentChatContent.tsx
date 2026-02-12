@@ -1,16 +1,15 @@
 /**
  * AgentChatContent - Agent Chat content with multi-mode layout
  *
- * Supports five layout modes:
+ * Supports four layout modes:
  * - chat: Full chat view with optional right panel (Plan/Terminal/Desktop tabs)
+ * - task: Split view — chat (left) + task panel (right, 50/50)
  * - code: Split view — chat (left) + terminal (right), resizable
- * - desktop: Split view — chat (left, compact) + remote desktop (right, wide)
- * - focus: Fullscreen desktop with floating chat bubble
  * - canvas: Split view — chat (left) + artifact canvas (right, 35/65)
  *
  * Features:
- * - Cmd+1/2/3/4/5 to switch modes
- * - Draggable split ratio in code/desktop/canvas modes
+ * - Cmd+1/2/3/4 to switch modes
+ * - Draggable split ratio in task/code/canvas modes
  * - Flat right panel tabs (Plan | Terminal | Desktop)
  */
 
@@ -20,7 +19,7 @@ import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { GripHorizontal, Download, ChevronDown, GitCompareArrows, ListTodo } from 'lucide-react';
+import { GripHorizontal, Download, ChevronDown, GitCompareArrows } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAgentV3Store } from '@/stores/agentV3';
@@ -48,7 +47,6 @@ import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
 import { ShortcutOverlay } from './chat/ShortcutOverlay';
 import { EmptyState } from './EmptyState';
-import { FocusDesktopOverlay } from './layout/FocusDesktopOverlay';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { Resizer } from './Resizer';
 import { RightPanel } from './RightPanel';
@@ -227,30 +225,20 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     return state.conversationStates.get(convId)?.tasks;
   });
   const tasks = rawTasks ?? EMPTY_TASKS;
-  const { rightPanelWidth, setRightPanelWidth } = useAgentV3Store(
-    useShallow((state) => ({
-      rightPanelWidth: state.rightPanelWidth,
-      setRightPanelWidth: state.setRightPanelWidth,
-    }))
-  );
 
   // Local UI state
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(true);
   const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
   const [chatSearchVisible, setChatSearchVisible] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => !localStorage.getItem('memstack_onboarding_complete'),
   );
 
-  // Auto-show right panel when tasks appear
+  // Auto-switch to task mode when tasks appear
   useEffect(() => {
-    if (tasks.length > 0) setRightPanelCollapsed(false);
-  }, [tasks.length]);
-
-  // Reset panel when switching conversations
-  useEffect(() => {
-    setRightPanelCollapsed(true);
-  }, [activeConversationId]);
+    if (tasks.length > 0 && layoutMode === 'chat') {
+      // Don't auto-switch, just let the user know via the layout selector
+    }
+  }, [tasks.length, layoutMode]);
 
   // Cmd+F to open chat search, / to focus input, Shift+Tab to toggle plan mode
   useEffect(() => {
@@ -488,7 +476,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   // Split mode drag handler
   const handleSplitDrag = useCallback(
     (e: React.MouseEvent) => {
-      if (layoutMode !== 'code' && layoutMode !== 'desktop' && layoutMode !== 'canvas') return;
+      if (layoutMode !== 'task' && layoutMode !== 'code' && layoutMode !== 'canvas') return;
       e.preventDefault();
       const startX = e.clientX;
       const startRatio = splitRatio;
@@ -650,24 +638,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
             )}
           </div>
         )}
-        {tasks.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setRightPanelCollapsed((v) => !v)}
-            className={`flex items-center gap-1 p-1.5 rounded-md transition-colors ${
-              rightPanelCollapsed
-                ? 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                : 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20'
-            }`}
-            title="Tasks"
-            aria-label="Toggle tasks panel"
-          >
-            <ListTodo size={14} />
-            <span className="text-xs tabular-nums">
-              {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
-            </span>
-          </button>
-        )}
         <LayoutModeSelector />
       </div>
     </div>
@@ -700,23 +670,50 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     );
   }
 
-  // Focus mode: fullscreen desktop with floating chat
-  if (layoutMode === 'focus') {
+  // Task mode: chat + task panel split
+  if (layoutMode === 'task') {
+    const leftPercent = `${splitRatio * 100}%`;
+    const rightPercent = `${(1 - splitRatio) * 100}%`;
+
     return (
-      <div className={`flex flex-col h-full w-full overflow-hidden ${className}`}>
-        <FocusDesktopOverlay
-          desktopContent={sandboxContent}
-          chatContent={messageArea}
-          onSend={(content) => handleSend(content)}
-          isStreaming={isStreaming}
-        />
+      <div
+        className={`flex flex-col h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
+      >
+        <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
+          {/* Left: Chat */}
+          <div className="h-full overflow-hidden flex flex-col mobile-full" style={{ width: leftPercent }}>
+            {chatColumn}
+          </div>
+
+          {/* Drag handle */}
+          <div
+            className="flex-shrink-0 w-1.5 h-full cursor-col-resize relative group
+              hover:bg-purple-500/20 active:bg-purple-500/30 transition-colors z-10 mobile-hidden"
+            onMouseDown={handleSplitDrag}
+          >
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-purple-500/70 transition-colors" />
+          </div>
+
+          {/* Right: Task Panel */}
+          <div
+            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
+            style={{ width: rightPercent }}
+          >
+            <RightPanel
+              tasks={tasks}
+              sandboxId={activeSandboxId}
+              collapsed={false}
+            />
+          </div>
+        </div>
+
         {statusBarWithLayout}
       </div>
     );
   }
 
-  // Code/Desktop split modes
-  if (layoutMode === 'code' || layoutMode === 'desktop') {
+  // Code split mode
+  if (layoutMode === 'code') {
     const leftPercent = `${splitRatio * 100}%`;
     const rightPercent = `${(1 - splitRatio) * 100}%`;
 
@@ -739,7 +736,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-slate-400/50 group-hover:bg-blue-500/70 transition-colors" />
           </div>
 
-          {/* Right: Sandbox (Terminal or Desktop depending on mode) */}
+          {/* Right: Sandbox Terminal */}
           <div
             className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 bg-slate-900 mobile-full"
             style={{ width: rightPercent }}
@@ -812,20 +809,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
         {chatColumn}
         {statusBarWithLayout}
       </main>
-
-      {/* Right Panel: Tasks */}
-      {!rightPanelCollapsed && tasks.length > 0 && (
-        <aside className="flex-shrink-0 h-full border-l border-slate-200/60 dark:border-slate-700/50">
-          <RightPanel
-            tasks={tasks}
-            sandboxId={activeSandboxId}
-            onClose={() => setRightPanelCollapsed(true)}
-            collapsed={false}
-            width={rightPanelWidth}
-            onWidthChange={setRightPanelWidth}
-          />
-        </aside>
-      )}
     </div>
   );
 });

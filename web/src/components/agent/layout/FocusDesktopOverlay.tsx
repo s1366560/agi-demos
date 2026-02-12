@@ -31,10 +31,10 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
   onSend,
   isStreaming,
 }) => {
-  const { focusChatExpanded, toggleFocusChat, setMode } = useLayoutModeStore(
+  const [focusChatExpanded, setFocusChatExpanded] = useState(false);
+  const toggleFocusChat = useCallback(() => setFocusChatExpanded((v) => !v), []);
+  const { setMode } = useLayoutModeStore(
     useShallow((state) => ({
-      focusChatExpanded: state.focusChatExpanded,
-      toggleFocusChat: state.toggleFocusChat,
       setMode: state.setMode,
     }))
   );

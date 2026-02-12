@@ -2,30 +2,27 @@
  * Layout Mode Store
  *
  * Manages the workspace layout mode for the agent chat page.
- * Five modes optimize for different workflows:
+ * Four modes optimize for different workflows:
  * - chat: Full chat view, optional plan panel
+ * - task: Split view with task/plan panel (50/50)
  * - code: Split view with terminal (50/50)
- * - desktop: Split view with remote desktop (30/70)
- * - focus: Fullscreen desktop with floating chat bubble
  * - canvas: Split view with canvas/artifact editor (35/65)
  */
 
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
-export type LayoutMode = 'chat' | 'code' | 'desktop' | 'focus' | 'canvas';
+export type LayoutMode = 'chat' | 'task' | 'code' | 'canvas';
 
 interface LayoutModeState {
   /** Current layout mode */
   mode: LayoutMode;
-  /** Split ratio for code/desktop/canvas modes (0-1, represents left panel proportion) */
+  /** Split ratio for task/code/canvas modes (0-1, represents left panel proportion) */
   splitRatio: number;
   /** Whether the right panel is visible in chat mode */
   chatPanelVisible: boolean;
   /** Active tab in right panel: plan, terminal, or desktop */
   rightPanelTab: 'plan' | 'terminal' | 'desktop';
-  /** Whether floating chat is expanded in focus mode */
-  focusChatExpanded: boolean;
 
   /** Set layout mode */
   setMode: (mode: LayoutMode) => void;
@@ -35,16 +32,13 @@ interface LayoutModeState {
   toggleChatPanel: () => void;
   /** Set right panel tab */
   setRightPanelTab: (tab: 'plan' | 'terminal' | 'desktop') => void;
-  /** Toggle floating chat in focus mode */
-  toggleFocusChat: () => void;
 }
 
 const MODE_DEFAULTS: Record<LayoutMode, { splitRatio: number; rightPanelTab: 'plan' | 'terminal' | 'desktop' }> = {
   chat: { splitRatio: 1, rightPanelTab: 'plan' },
+  task: { splitRatio: 0.5, rightPanelTab: 'plan' },
   code: { splitRatio: 0.5, rightPanelTab: 'terminal' },
-  desktop: { splitRatio: 0.3, rightPanelTab: 'desktop' },
-  focus: { splitRatio: 0, rightPanelTab: 'desktop' },
-  canvas: { splitRatio: 0.35, rightPanelTab: 'plan' },
+  canvas: { splitRatio: 0.5, rightPanelTab: 'plan' },
 };
 
 export const useLayoutModeStore = create<LayoutModeState>()(
@@ -55,14 +49,12 @@ export const useLayoutModeStore = create<LayoutModeState>()(
         splitRatio: 1,
         chatPanelVisible: true,
         rightPanelTab: 'plan',
-        focusChatExpanded: false,
 
         setMode: (mode) =>
           set({
             mode,
             splitRatio: MODE_DEFAULTS[mode].splitRatio,
             rightPanelTab: MODE_DEFAULTS[mode].rightPanelTab,
-            focusChatExpanded: false,
           }),
 
         setSplitRatio: (ratio) =>
@@ -72,9 +64,6 @@ export const useLayoutModeStore = create<LayoutModeState>()(
           set((state) => ({ chatPanelVisible: !state.chatPanelVisible })),
 
         setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
-
-        toggleFocusChat: () =>
-          set((state) => ({ focusChatExpanded: !state.focusChatExpanded })),
       }),
       { name: 'layout-mode-store' }
     ),
