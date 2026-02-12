@@ -365,6 +365,7 @@ def _convert_tools_to_definitions(tools: Dict[str, Any]) -> List[Any]:
                 description=description,
                 parameters=parameters,
                 execute=make_execute_wrapper(tool, name),
+                _tool_instance=tool,
             )
         )
 
