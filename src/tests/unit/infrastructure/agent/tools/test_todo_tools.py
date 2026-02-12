@@ -2,6 +2,9 @@
 
 Tests for todoread and todowrite tools. Without a real DB session factory,
 the tools return graceful errors. We test validation and argument handling.
+
+Note: session_id is injected by the processor at execution time, not by the LLM.
+The tool schemas do not expose session_id to the LLM.
 """
 
 import json
@@ -31,22 +34,19 @@ class TestTodoReadTool:
         assert data["todos"] == []
 
     def test_validate_args_valid(self, tool):
-        assert tool.validate_args(session_id="test-session") is True
-        assert tool.validate_args(session_id="test", status="pending") is True
-
-    def test_validate_args_invalid_session_id(self, tool):
-        assert tool.validate_args(session_id="") is False
-        assert tool.validate_args(session_id=None) is False
+        assert tool.validate_args() is True
+        assert tool.validate_args(status="pending") is True
 
     def test_validate_args_invalid_status(self, tool):
-        assert tool.validate_args(session_id="test", status="invalid") is False
+        assert tool.validate_args(status="invalid") is False
 
     def test_tool_name(self, tool):
         assert tool.name == "todoread"
 
-    def test_parameters_schema(self, tool):
+    def test_parameters_schema_no_session_id(self, tool):
+        """session_id is injected by processor, not exposed in LLM schema."""
         schema = tool.get_parameters_schema()
-        assert "session_id" in schema["properties"]
+        assert "session_id" not in schema["properties"]
         assert "status" in schema["properties"]
 
 
@@ -66,25 +66,23 @@ class TestTodoWriteTool:
         assert "error" in data
 
     def test_validate_args_valid(self, tool):
-        assert tool.validate_args(session_id="test", action="replace") is True
-        assert tool.validate_args(session_id="test", action="add") is True
-        assert tool.validate_args(session_id="test", action="update", todo_id="1") is True
-
-    def test_validate_args_invalid_session_id(self, tool):
-        assert tool.validate_args(session_id="", action="replace") is False
+        assert tool.validate_args(action="replace") is True
+        assert tool.validate_args(action="add") is True
+        assert tool.validate_args(action="update", todo_id="1") is True
 
     def test_validate_args_invalid_action(self, tool):
-        assert tool.validate_args(session_id="test", action="invalid") is False
+        assert tool.validate_args(action="invalid") is False
 
     def test_validate_args_update_without_todo_id(self, tool):
-        assert tool.validate_args(session_id="test", action="update") is False
+        assert tool.validate_args(action="update") is False
 
     def test_tool_name(self, tool):
         assert tool.name == "todowrite"
 
-    def test_parameters_schema(self, tool):
+    def test_parameters_schema_no_session_id(self, tool):
+        """session_id is injected by processor, not exposed in LLM schema."""
         schema = tool.get_parameters_schema()
-        assert "session_id" in schema["properties"]
+        assert "session_id" not in schema["properties"]
         assert "action" in schema["properties"]
         assert "todos" in schema["properties"]
 

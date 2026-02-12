@@ -1166,6 +1166,11 @@ class SessionProcessor:
                     )
                     return
 
+            # Inject session_id for tools that need conversation context
+            # (todoread/todowrite) so LLM doesn't have to guess it
+            if tool_name in ("todoread", "todowrite") and "session_id" not in arguments:
+                arguments["session_id"] = session_id
+
             # Call tool execute function
             start_time = time.time()
             result = await tool_def.execute(**arguments)

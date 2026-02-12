@@ -38,23 +38,16 @@ class TodoReadTool(AgentTool):
         return {
             "type": "object",
             "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The conversation ID",
-                },
                 "status": {
                     "type": "string",
                     "description": "Filter by status",
                     "enum": ["pending", "in_progress", "completed", "failed", "cancelled"],
                 },
             },
-            "required": ["session_id"],
+            "required": [],
         }
 
     def validate_args(self, **kwargs: Any) -> bool:
-        session_id = kwargs.get("session_id")
-        if not session_id or not isinstance(session_id, str):
-            return False
         status = kwargs.get("status")
         valid = {"pending", "in_progress", "completed", "failed", "cancelled"}
         if status and status not in valid:
@@ -115,10 +108,6 @@ class TodoWriteTool(AgentTool):
         return {
             "type": "object",
             "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The conversation ID",
-                },
                 "action": {
                     "type": "string",
                     "description": "replace (replace entire list), add (append), update (modify one)",
@@ -146,13 +135,10 @@ class TodoWriteTool(AgentTool):
                     "description": "For update: the task ID to update",
                 },
             },
-            "required": ["session_id", "action"],
+            "required": ["action"],
         }
 
     def validate_args(self, **kwargs: Any) -> bool:
-        session_id = kwargs.get("session_id")
-        if not session_id or not isinstance(session_id, str):
-            return False
         action = kwargs.get("action")
         if action not in {"replace", "add", "update"}:
             return False
