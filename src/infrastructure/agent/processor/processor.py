@@ -24,7 +24,7 @@ import logging
 import re
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
 
@@ -258,6 +258,7 @@ class ToolDefinition:
     parameters: Dict[str, Any]
     execute: Callable[..., Any]  # Async callable
     permission: Optional[str] = None  # Permission required
+    _tool_instance: Any = field(default=None, repr=False)  # Original tool object
 
     def to_openai_format(self) -> Dict[str, Any]:
         """Convert to OpenAI tool format."""
@@ -1278,9 +1279,14 @@ class SessionProcessor:
                 )
 
             # Emit pending task SSE events from todowrite tool
-            if tool_name == "todowrite" and hasattr(tool_def, "consume_pending_events"):
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            if (
+                tool_name == "todowrite"
+                and tool_instance
+                and hasattr(tool_instance, "consume_pending_events")
+            ):
                 try:
-                    pending = tool_def.consume_pending_events()
+                    pending = tool_instance.consume_pending_events()
                     logger.info(
                         f"[Processor] todowrite pending events: count={len(pending)}, "
                         f"conversation_id={session_id}"

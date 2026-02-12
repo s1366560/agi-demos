@@ -71,6 +71,7 @@ def convert_tools(tools: Dict[str, Any]) -> List[ToolDefinition]:
                 parameters=parameters,
                 execute=make_execute_wrapper(tool, name),
                 permission=permission,
+                _tool_instance=tool,
             )
         )
 
