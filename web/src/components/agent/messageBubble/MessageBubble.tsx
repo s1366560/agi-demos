@@ -227,29 +227,105 @@ const findMatchingObserve = (
 // Sub-Components - Modern Design
 // ========================================
 
+function formatBytesSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileIconForMime(mimeType: string): string {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'movie';
+  if (mimeType.startsWith('audio/')) return 'audio_file';
+  if (mimeType === 'application/pdf') return 'picture_as_pdf';
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'table_chart';
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'slideshow';
+  if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compress'))
+    return 'folder_zip';
+  if (
+    mimeType.startsWith('text/') ||
+    mimeType.includes('json') ||
+    mimeType.includes('xml') ||
+    mimeType.includes('javascript') ||
+    mimeType.includes('typescript')
+  )
+    return 'code';
+  return 'description';
+}
+
 // User Message Component - Modern floating style with action bar
-const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply }) => {
+const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forcedSkillName, fileMetadata }) => {
   if (!content) return null;
+  const hasFiles = fileMetadata && fileMetadata.length > 0;
   return (
-    <div className="group flex items-end justify-end gap-3 mb-2 animate-fade-in-up">
-      <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="relative">
-          {/* Subtle gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
-          <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200">
-            <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
-              {content}
-            </p>
-          </div>
-          {/* Action bar - appears on hover at top-right */}
-          <div className="absolute -top-3 right-2 z-10">
-            <MessageActionBar role="user" content={content} onReply={onReply} />
+    <div className="group flex flex-col items-end gap-1 mb-2 animate-fade-in-up">
+      {/* Main row: bubble + avatar */}
+      <div className="flex items-end justify-end gap-3 w-full">
+        <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+          <div
+            className={
+              forcedSkillName
+                ? 'relative bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400 rounded-xl rounded-br-sm p-px'
+                : 'relative'
+            }
+          >
+            {!forcedSkillName && (
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
+            )}
+            {forcedSkillName && (
+              <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-primary/90 flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10">
+                <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
+                </svg>
+              </div>
+            )}
+            <div
+              className={
+                forcedSkillName
+                  ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2.5'
+                  : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200'
+              }
+            >
+              <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
+                {content}
+              </p>
+            </div>
+            {/* Action bar - appears on hover at top-right */}
+            <div className="absolute -top-3 right-2 z-10">
+              <MessageActionBar role="user" content={content} onReply={onReply} />
+            </div>
+            {forcedSkillName && (
+              <div className="absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[10px] text-primary/70 font-medium leading-none tracking-wide">
+                {forcedSkillName}
+              </div>
+            )}
           </div>
         </div>
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <User size={16} className="text-slate-500 dark:text-slate-400" />
+        </div>
       </div>
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0 shadow-sm">
-        <User size={16} className="text-slate-500 dark:text-slate-400" />
-      </div>
+      {/* Attachment row: below bubble, aligned under bubble (offset by avatar width) */}
+      {hasFiles && (
+        <div className={`flex flex-col items-end gap-1 mr-11 ${forcedSkillName ? 'mt-2' : 'mt-0.5'}`}>
+          {fileMetadata.map((file, idx) => (
+            <div
+              key={idx}
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg"
+            >
+              <span className="material-symbols-outlined text-[16px] text-slate-500 dark:text-slate-400">
+                {getFileIconForMime(file.mime_type)}
+              </span>
+              <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                {file.filename}
+              </span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                {formatBytesSize(file.size_bytes)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
@@ -812,7 +888,23 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
     switch (event.type) {
       case 'user_message':
-        return <UserMessage content={getContent(event)} onReply={onReply} />;
+        return (
+          <UserMessage
+            content={getContent(event)}
+            onReply={onReply}
+            forcedSkillName={event.metadata?.forcedSkillName as string | undefined}
+            fileMetadata={
+              event.metadata?.fileMetadata as
+                | Array<{
+                    filename: string;
+                    sandbox_path?: string;
+                    mime_type: string;
+                    size_bytes: number;
+                  }>
+                | undefined
+            }
+          />
+        );
 
       case 'assistant_message':
         return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} isPinned={isPinned} onPin={onPin} onReply={onReply} />;

@@ -1448,6 +1448,13 @@ export const useAgentV3Store = create<AgentV3State>()(
           };
 
           // Create user message TimelineEvent and append to timeline
+          const userMessageMetadata: Record<string, unknown> = {};
+          if (additionalHandlers?.forcedSkillName) {
+            userMessageMetadata.forcedSkillName = additionalHandlers.forcedSkillName;
+          }
+          if (additionalHandlers?.fileMetadata && additionalHandlers.fileMetadata.length > 0) {
+            userMessageMetadata.fileMetadata = additionalHandlers.fileMetadata;
+          }
           const userMessageEvent: UserMessageEvent = {
             id: userMsgId,
             type: 'user_message',
@@ -1456,6 +1463,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             timestamp: Date.now(),
             content,
             role: 'user',
+            ...(Object.keys(userMessageMetadata).length > 0 && { metadata: userMessageMetadata }),
           };
 
           // Update both global state and conversation-specific state

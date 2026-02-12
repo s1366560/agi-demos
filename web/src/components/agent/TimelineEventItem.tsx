@@ -978,7 +978,20 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
           <div className="my-4 animate-slide-up">
             <div className="flex items-start justify-end gap-3">
               <div className="flex flex-col items-end gap-1 max-w-[80%]">
-                <UserMessage content={event.content} />
+                <UserMessage
+                  content={event.content}
+                  forcedSkillName={event.metadata?.forcedSkillName as string | undefined}
+                  fileMetadata={
+                    event.metadata?.fileMetadata as
+                      | Array<{
+                          filename: string;
+                          sandbox_path?: string;
+                          mime_type: string;
+                          size_bytes: number;
+                        }>
+                      | undefined
+                  }
+                />
                 <TimeBadge timestamp={event.timestamp} />
               </div>
             </div>

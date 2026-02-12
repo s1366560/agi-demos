@@ -43,16 +43,109 @@ export const MessageStream = memo(function MessageStream({
 /**
  * UserMessage - User's message bubble (right-aligned, primary color)
  */
+export interface UserMessageFileMetadata {
+  filename: string;
+  sandbox_path?: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export interface UserMessageProps {
   /** Message content */
   content: string;
+  /** Skill name if triggered via /skill */
+  forcedSkillName?: string;
+  /** Attached files metadata */
+  fileMetadata?: UserMessageFileMetadata[];
 }
 
-export function UserMessage({ content }: UserMessageProps) {
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileIcon(mimeType: string): string {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'movie';
+  if (mimeType.startsWith('audio/')) return 'audio_file';
+  if (mimeType === 'application/pdf') return 'picture_as_pdf';
+  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return 'table_chart';
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'slideshow';
+  if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compress'))
+    return 'folder_zip';
+  if (
+    mimeType.startsWith('text/') ||
+    mimeType.includes('json') ||
+    mimeType.includes('xml') ||
+    mimeType.includes('javascript') ||
+    mimeType.includes('typescript')
+  )
+    return 'code';
+  return 'description';
+}
+
+export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMessageProps) {
   return (
     <div className="flex items-start gap-3 justify-end">
-      <div className="bg-primary text-white rounded-2xl rounded-tr-none px-5 py-[18px] max-w-[80%] shadow-md">
-        <p className="text-sm leading-relaxed">{content}</p>
+      <div className="flex flex-col items-end gap-1.5 max-w-[80%]">
+        <div
+          className={
+            forcedSkillName
+              ? 'relative bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400 rounded-2xl rounded-tr-none p-px'
+              : ''
+          }
+        >
+          {forcedSkillName && (
+            <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-primary/90 flex items-center justify-center ring-2 ring-white dark:ring-slate-900 z-10">
+              <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
+              </svg>
+            </div>
+          )}
+          <div
+            className={
+              forcedSkillName
+                ? 'bg-white dark:bg-slate-900 rounded-2xl rounded-tr-none px-5 py-[18px]'
+                : 'bg-primary text-white rounded-2xl rounded-tr-none px-5 py-[18px] shadow-md'
+            }
+          >
+            <p
+              className={
+                forcedSkillName
+                  ? 'text-sm leading-relaxed text-slate-800 dark:text-slate-100'
+                  : 'text-sm leading-relaxed'
+              }
+            >
+              {content}
+            </p>
+          </div>
+          {forcedSkillName && (
+            <div className="absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-900 text-[10px] text-primary/70 font-medium leading-none tracking-wide">
+              {forcedSkillName}
+            </div>
+          )}
+        </div>
+        {fileMetadata && fileMetadata.length > 0 && (
+          <div className={`flex flex-col gap-1 ${forcedSkillName ? 'mt-2' : 'mt-0.5'}`}>
+            {fileMetadata.map((file, idx) => (
+              <div
+                key={idx}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-lg"
+              >
+                <span className="material-symbols-outlined text-[16px] text-slate-500 dark:text-slate-400">
+                  {getFileIcon(file.mime_type)}
+                </span>
+                <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                  {file.filename}
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                  {formatFileSize(file.size_bytes)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

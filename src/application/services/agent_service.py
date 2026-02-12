@@ -225,6 +225,7 @@ class AgentService(AgentServicePort):
                 content=user_message,
                 attachment_ids=attachment_ids if attachment_ids else None,
                 file_metadata=file_metadata if file_metadata else None,
+                forced_skill_name=forced_skill_name if forced_skill_name else None,
             )
 
             # Get next event time
@@ -275,6 +276,8 @@ class AgentService(AgentServicePort):
                 user_event_data["attachment_ids"] = attachment_ids
             if file_metadata:
                 user_event_data["file_metadata"] = file_metadata
+            if forced_skill_name:
+                user_event_data["forced_skill_name"] = forced_skill_name
 
             yield {
                 "type": "message",

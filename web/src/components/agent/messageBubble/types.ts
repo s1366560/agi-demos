@@ -58,9 +58,18 @@ export interface MessageBubbleRootProps extends MessageBubbleProps {
 /**
  * Props for User Message sub-component
  */
+export interface UserMessageFileMetadata {
+  filename: string;
+  sandbox_path?: string;
+  mime_type: string;
+  size_bytes: number;
+}
+
 export interface UserMessageProps {
   content: string;
   onReply?: () => void;
+  forcedSkillName?: string;
+  fileMetadata?: UserMessageFileMetadata[];
 }
 
 /**

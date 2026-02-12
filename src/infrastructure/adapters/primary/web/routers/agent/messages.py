@@ -4,7 +4,7 @@ Endpoints for conversation messages, execution history, and status.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -199,6 +199,14 @@ async def get_conversation_messages(
                 item["message_id"] = data.get("message_id")
                 item["content"] = data.get("content", "")
                 item["role"] = "user"
+                # Include file and skill metadata for UI rendering
+                metadata: Dict[str, Any] = {}
+                if data.get("file_metadata"):
+                    metadata["fileMetadata"] = data["file_metadata"]
+                if data.get("forced_skill_name"):
+                    metadata["forcedSkillName"] = data["forced_skill_name"]
+                if metadata:
+                    item["metadata"] = metadata
 
             elif event_type == "assistant_message":
                 item["message_id"] = data.get("message_id")

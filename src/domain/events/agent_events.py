@@ -169,6 +169,7 @@ class AgentMessageEvent(AgentDomainEvent):
     content: str
     attachment_ids: Optional[List[str]] = None
     file_metadata: Optional[List[Dict[str, Any]]] = None
+    forced_skill_name: Optional[str] = None
 
     def __init__(self, **data):
         # Set event_type based on role
