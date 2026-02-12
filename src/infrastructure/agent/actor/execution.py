@@ -597,6 +597,12 @@ async def _publish_event_to_stream(
     try:
         stream_key = f"agent:events:{conversation_id}"
         await redis_client.xadd(stream_key, redis_message, maxlen=1000)
+        if event_type in ("task_list_updated", "task_updated"):
+            task_count = len(event_data.get("tasks", []))
+            logger.info(
+                f"[ActorExecution] Published {event_type} to Redis: "
+                f"conversation={conversation_id}, tasks={task_count}"
+            )
     except Exception as e:
         logger.warning(f"[ActorExecution] Failed to publish event to Redis: {e}")
 

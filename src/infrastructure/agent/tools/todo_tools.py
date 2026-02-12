@@ -196,12 +196,18 @@ class TodoWriteTool(AgentTool):
 
                 await repo.save_all(session_id, task_items)
                 await session.commit()
+                logger.info(
+                    f"[TodoWrite] replace: committed {len(task_items)} tasks "
+                    f"for conversation={session_id}"
+                )
 
-                self._pending_events.append({
-                    "type": "task_list_updated",
-                    "conversation_id": session_id,
-                    "tasks": [t.to_dict() for t in task_items],
-                })
+                self._pending_events.append(
+                    {
+                        "type": "task_list_updated",
+                        "conversation_id": session_id,
+                        "tasks": [t.to_dict() for t in task_items],
+                    }
+                )
                 result = {
                     "success": True,
                     "action": "replace",
@@ -228,11 +234,13 @@ class TodoWriteTool(AgentTool):
                 await session.commit()
 
                 all_tasks = await repo.find_by_conversation(session_id)
-                self._pending_events.append({
-                    "type": "task_list_updated",
-                    "conversation_id": session_id,
-                    "tasks": [t.to_dict() for t in all_tasks],
-                })
+                self._pending_events.append(
+                    {
+                        "type": "task_list_updated",
+                        "conversation_id": session_id,
+                        "tasks": [t.to_dict() for t in all_tasks],
+                    }
+                )
                 result = {
                     "success": True,
                     "action": "add",
@@ -252,13 +260,15 @@ class TodoWriteTool(AgentTool):
                     await session.commit()
 
                     if updated:
-                        self._pending_events.append({
-                            "type": "task_updated",
-                            "conversation_id": session_id,
-                            "task_id": todo_id,
-                            "status": updated.status.value,
-                            "content": updated.content,
-                        })
+                        self._pending_events.append(
+                            {
+                                "type": "task_updated",
+                                "conversation_id": session_id,
+                                "task_id": todo_id,
+                                "status": updated.status.value,
+                                "content": updated.content,
+                            }
+                        )
                         result = {
                             "success": True,
                             "action": "update",

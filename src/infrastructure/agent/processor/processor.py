@@ -128,10 +128,32 @@ def _get_canvas_content_type(mime_type: str, filename: str) -> Optional[str]:
         return "code"
     # Check common code extensions
     code_exts = {
-        ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".cpp", ".h",
-        ".go", ".rs", ".rb", ".php", ".sh", ".bash", ".yaml", ".yml",
-        ".toml", ".ini", ".cfg", ".sql", ".css", ".scss", ".less",
-        ".vue", ".svelte",
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".go",
+        ".rs",
+        ".rb",
+        ".php",
+        ".sh",
+        ".bash",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".sql",
+        ".css",
+        ".scss",
+        ".less",
+        ".vue",
+        ".svelte",
     }
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext in code_exts:
@@ -140,12 +162,28 @@ def _get_canvas_content_type(mime_type: str, filename: str) -> Optional[str]:
 
 
 _LANG_EXT_MAP: Dict[str, str] = {
-    ".py": "python", ".js": "javascript", ".ts": "typescript",
-    ".tsx": "tsx", ".jsx": "jsx", ".java": "java", ".c": "c",
-    ".cpp": "cpp", ".go": "go", ".rs": "rust", ".rb": "ruby",
-    ".php": "php", ".sh": "bash", ".yaml": "yaml", ".yml": "yaml",
-    ".json": "json", ".html": "html", ".css": "css", ".sql": "sql",
-    ".md": "markdown", ".xml": "xml", ".toml": "toml",
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".jsx": "jsx",
+    ".java": "java",
+    ".c": "c",
+    ".cpp": "cpp",
+    ".go": "go",
+    ".rs": "rust",
+    ".rb": "ruby",
+    ".php": "php",
+    ".sh": "bash",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".json": "json",
+    ".html": "html",
+    ".css": "css",
+    ".sql": "sql",
+    ".md": "markdown",
+    ".xml": "xml",
+    ".toml": "toml",
 }
 
 
@@ -554,9 +592,7 @@ class SessionProcessor:
         # Enrich step description with current task context if available
         if self._current_task:
             ct = self._current_task
-            step_description = (
-                f"Task {ct['order_index'] + 1}/{ct['total_tasks']}: {ct['content']}"
-            )
+            step_description = f"Task {ct['order_index'] + 1}/{ct['total_tasks']}: {ct['content']}"
         else:
             step_description = f"Step {self._step_count}"
 
@@ -1246,8 +1282,14 @@ class SessionProcessor:
                 try:
                     pending = tool_def.consume_pending_events()
                     logger.info(
-                        f"[Processor] todowrite pending events: count={len(pending)}"
+                        f"[Processor] todowrite pending events: count={len(pending)}, "
+                        f"conversation_id={session_id}"
                     )
+                    if not pending:
+                        logger.warning(
+                            "[Processor] todowrite produced no pending events - "
+                            "tool may have failed silently"
+                        )
                     for task_event in pending:
                         from src.domain.events.agent_events import (
                             AgentTaskCompleteEvent,
@@ -1259,6 +1301,10 @@ class SessionProcessor:
                         event_type = task_event.get("type")
                         if event_type == "task_list_updated":
                             tasks = task_event["tasks"]
+                            logger.info(
+                                f"[Processor] Emitting task_list_updated: "
+                                f"{len(tasks)} tasks for {task_event['conversation_id']}"
+                            )
                             yield AgentTaskListUpdatedEvent(
                                 conversation_id=task_event["conversation_id"],
                                 tasks=tasks,
@@ -1290,26 +1336,18 @@ class SessionProcessor:
                             # Detect task transitions for timeline events
                             if task_status == "in_progress":
                                 total = (
-                                    self._current_task["total_tasks"]
-                                    if self._current_task
-                                    else 1
+                                    self._current_task["total_tasks"] if self._current_task else 1
                                 )
                                 self._current_task = {
                                     "task_id": task_event["task_id"],
-                                    "content": task_event.get(
-                                        "content", ""
-                                    ),
-                                    "order_index": task_event.get(
-                                        "order_index", 0
-                                    ),
+                                    "content": task_event.get("content", ""),
+                                    "order_index": task_event.get("order_index", 0),
                                     "total_tasks": total,
                                 }
                                 yield AgentTaskStartEvent(
                                     task_id=task_event["task_id"],
                                     content=task_event.get("content", ""),
-                                    order_index=task_event.get(
-                                        "order_index", 0
-                                    ),
+                                    order_index=task_event.get("order_index", 0),
                                     total_tasks=total,
                                 )
                             elif task_status in (
@@ -1318,10 +1356,7 @@ class SessionProcessor:
                                 "cancelled",
                             ):
                                 ct = self._current_task
-                                if (
-                                    ct
-                                    and ct["task_id"] == task_event["task_id"]
-                                ):
+                                if ct and ct["task_id"] == task_event["task_id"]:
                                     yield AgentTaskCompleteEvent(
                                         task_id=ct["task_id"],
                                         status=task_status,

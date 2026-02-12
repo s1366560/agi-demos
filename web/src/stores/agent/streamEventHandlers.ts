@@ -848,6 +848,31 @@ export function createStreamEventHandlers(
 
       tabSync.broadcastConversationCompleted(handlerConversationId);
       tabSync.broadcastStreamingStateChanged(handlerConversationId, false, 'idle');
+
+      // Fallback: fetch tasks from REST API after stream completes.
+      // SSE task events may be lost due to timing/Redis issues, so always
+      // reconcile with the DB as the source of truth.
+      (async () => {
+        try {
+          const { httpClient } = await import('../../services/client/httpClient');
+          const res = (await httpClient.get(
+            `/agent/plan/tasks/${handlerConversationId}`,
+          )) as any;
+          if (res && Array.isArray(res.tasks) && res.tasks.length > 0) {
+            const { updateConversationState } = get();
+            updateConversationState(handlerConversationId, {
+              tasks: res.tasks as import('../../types/agent').AgentTask[],
+            });
+            console.log(
+              '[TaskSync] onComplete fallback: fetched',
+              res.tasks.length,
+              'tasks from API',
+            );
+          }
+        } catch {
+          // Task fetch is best-effort; conversation may have no tasks
+        }
+      })();
     },
 
     onError: (event) => {

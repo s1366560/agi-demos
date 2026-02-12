@@ -543,6 +543,12 @@ class AgentService(AgentServicePort):
                 if message_id and event_data.get("message_id") != message_id:
                     continue
 
+                if event_type in ("task_list_updated", "task_updated"):
+                    logger.info(
+                        f"[AgentService] Task event from Redis: type={event_type}, "
+                        f"conversation_id={conversation_id}"
+                    )
+
                 # CRITICAL: Use last_event_time_us/counter (from DB replay) for filtering
                 # This prevents re-yielding events that were already replayed from DB
                 if evt_time_us < last_event_time_us or (
