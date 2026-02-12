@@ -184,6 +184,32 @@ export function createStreamEventHandlers(
     onWorkPlanCompleted: (_event) => {},
     onWorkPlanFailed: (_event) => {},
 
+    // Task list handlers
+    onTaskListUpdated: (event) => {
+      const data = event.data as { conversation_id: string; tasks: unknown[] };
+      const { updateConversationState } = get();
+      updateConversationState(handlerConversationId, {
+        tasks: data.tasks as import('../../types/agent').AgentTask[],
+      });
+    },
+
+    onTaskUpdated: (event) => {
+      const data = event.data as {
+        conversation_id: string;
+        task_id: string;
+        status: string;
+        content?: string;
+      };
+      const { getConversationState, updateConversationState } = get();
+      const state = getConversationState(handlerConversationId);
+      const tasks = (state?.tasks ?? []).map((t: import('../../types/agent').AgentTask) =>
+        t.id === data.task_id
+          ? { ...t, status: data.status as import('../../types/agent').TaskStatus, ...(data.content ? { content: data.content } : {}) }
+          : t
+      );
+      updateConversationState(handlerConversationId, { tasks });
+    },
+
     onReflectionComplete: (event) => {
       const { updateConversationState, getConversationState } = get();
 

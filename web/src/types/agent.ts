@@ -93,6 +93,7 @@ export type PlanStatus = 'planning' | 'in_progress' | 'completed' | 'failed';
 
 /**
  * Plan step in a work plan
+ * @deprecated Use AgentTask instead
  */
 export interface PlanStep {
   step_number: number;
@@ -105,6 +106,7 @@ export interface PlanStep {
 
 /**
  * Work plan for multi-level thinking
+ * @deprecated Use AgentTask[] instead
  */
 export interface WorkPlan {
   id: string;
@@ -115,6 +117,36 @@ export interface WorkPlan {
   workflow_pattern_id?: string;
   created_at: string;
   updated_at?: string;
+}
+
+// =============================================================================
+// Agent Task System (DB-persistent, SSE-streamed)
+// =============================================================================
+
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+export type TaskPriority = 'high' | 'medium' | 'low';
+
+export interface AgentTask {
+  id: string;
+  conversation_id: string;
+  content: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskListUpdatedEventData {
+  conversation_id: string;
+  tasks: AgentTask[];
+}
+
+export interface TaskUpdatedEventData {
+  conversation_id: string;
+  task_id: string;
+  status: string;
+  content?: string;
 }
 
 /**
@@ -333,7 +365,10 @@ export type AgentEventType =
   | 'chain_step_started' // Chain step started
   | 'chain_step_completed' // Chain step completed
   | 'chain_completed' // Chain execution completed
-  | 'background_launched'; // Background SubAgent launched
+  | 'background_launched' // Background SubAgent launched
+  // Task list events (DB-persistent task tracking)
+  | 'task_list_updated' // Full task list replacement
+  | 'task_updated'; // Single task status change
 
 /**
  * Base SSE event from agent
@@ -1002,6 +1037,9 @@ export interface AgentStreamHandler {
   onChainStepCompleted?: (event: AgentEvent<ChainStepCompletedEventData>) => void;
   onChainCompleted?: (event: AgentEvent<ChainCompletedEventData>) => void;
   onBackgroundLaunched?: (event: AgentEvent<BackgroundLaunchedEventData>) => void;
+  // Task list handlers
+  onTaskListUpdated?: (event: AgentEvent<TaskListUpdatedEventData>) => void;
+  onTaskUpdated?: (event: AgentEvent<TaskUpdatedEventData>) => void;
   // Terminal handlers
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;

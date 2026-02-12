@@ -1,206 +1,19 @@
 """Todo tools for ReAct agent.
 
-Implements todoread and todowrite tools per OpenCode specification.
-These tools allow the agent to manage a session-scoped todo list.
+DB-persistent task management. The agent uses todoread/todowrite to create,
+update, and track a task checklist per conversation. Tasks are stored in
+PostgreSQL and streamed to the frontend via SSE events.
 """
 
 import json
 import logging
 import uuid
-from dataclasses import asdict, dataclass
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
+from src.domain.model.agent.task import AgentTask, TaskPriority, TaskStatus
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# TODO DATA MODELS
-# =============================================================================
-
-
-@dataclass
-class TodoItem:
-    """
-    Represents a single todo item.
-
-    Attributes:
-        id: Unique identifier for the todo item
-        content: Brief description of the task
-        status: Current status (pending, in_progress, completed, cancelled)
-        priority: Priority level (high, medium, low)
-        created_at: Timestamp when the todo was created
-        updated_at: Timestamp when the todo was last updated
-    """
-
-    id: str
-    content: str
-    status: str = "pending"  # pending, in_progress, completed, cancelled
-    priority: str = "medium"  # high, medium, low
-    created_at: str = ""
-    updated_at: str = ""
-
-    def __post_init__(self):
-        """Set timestamps if not provided."""
-        if not self.created_at:
-            self.created_at = datetime.now().isoformat()
-        if not self.updated_at:
-            self.updated_at = datetime.now().isoformat()
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TodoItem":
-        """Create from dictionary."""
-        return cls(**data)
-
-    def validate(self) -> bool:
-        """Validate todo item data."""
-        valid_statuses = {"pending", "in_progress", "completed", "cancelled"}
-        valid_priorities = {"high", "medium", "low"}
-
-        if not self.content or not self.content.strip():
-            return False
-        if self.status not in valid_statuses:
-            return False
-        if self.priority not in valid_priorities:
-            return False
-        return True
-
-
-# =============================================================================
-# TODO STORAGE
-# =============================================================================
-
-
-class TodoStorage:
-    """
-    In-memory storage for session-scoped todo lists.
-
-    This is a simple in-memory implementation that stores todos
-    per session. In production, this could be backed by Redis
-    or a database.
-    """
-
-    def __init__(self):
-        """Initialize empty storage."""
-        self._storage: Dict[str, List[TodoItem]] = {}
-
-    def get(self, session_id: str) -> List[TodoItem]:
-        """
-        Get all todos for a session.
-
-        Args:
-            session_id: The session identifier
-
-        Returns:
-            List of TodoItem objects (empty list if none found)
-        """
-        return self._storage.get(session_id, []).copy()
-
-    def set(self, session_id: str, todos: List[TodoItem]) -> None:
-        """
-        Set todos for a session (replaces existing).
-
-        Args:
-            session_id: The session identifier
-            todos: List of TodoItem objects to store
-        """
-        # Validate all todos before storing
-        valid_todos = [t for t in todos if t.validate()]
-        self._storage[session_id] = valid_todos
-        logger.debug(f"Stored {len(valid_todos)} todos for session {session_id}")
-
-    def add(self, session_id: str, todo: TodoItem) -> None:
-        """
-        Add a single todo to a session.
-
-        Args:
-            session_id: The session identifier
-            todo: TodoItem to add
-        """
-        if not todo.validate():
-            logger.warning(f"Invalid todo item, skipping: {todo}")
-            return
-
-        if session_id not in self._storage:
-            self._storage[session_id] = []
-
-        self._storage[session_id].append(todo)
-        logger.debug(f"Added todo {todo.id} to session {session_id}")
-
-    def update(self, session_id: str, todo_id: str, updates: Dict[str, Any]) -> bool:
-        """
-        Update a specific todo in a session.
-
-        Args:
-            session_id: The session identifier
-            todo_id: The ID of the todo to update
-            updates: Dictionary of fields to update
-
-        Returns:
-            True if updated, False if not found
-        """
-        if session_id not in self._storage:
-            return False
-
-        for i, todo in enumerate(self._storage[session_id]):
-            if todo.id == todo_id:
-                # Update fields
-                for key, value in updates.items():
-                    if hasattr(todo, key):
-                        setattr(todo, key, value)
-                        # Update timestamp
-                        if key != "updated_at":
-                            todo.updated_at = datetime.now().isoformat()
-                return True
-
-        return False
-
-    def delete(self, session_id: str, todo_id: str) -> bool:
-        """
-        Delete a specific todo from a session.
-
-        Args:
-            session_id: The session identifier
-            todo_id: The ID of the todo to delete
-
-        Returns:
-            True if deleted, False if not found
-        """
-        if session_id not in self._storage:
-            return False
-
-        for i, todo in enumerate(self._storage[session_id]):
-            if todo.id == todo_id:
-                del self._storage[session_id][i]
-                return True
-
-        return False
-
-    def clear(self, session_id: str) -> None:
-        """
-        Clear all todos for a session.
-
-        Args:
-            session_id: The session identifier
-        """
-        if session_id in self._storage:
-            del self._storage[session_id]
-            logger.debug(f"Cleared todos for session {session_id}")
-
-
-# Global storage instance
-_todo_storage = TodoStorage()
-
-
-def get_todo_storage() -> TodoStorage:
-    """Get the global todo storage instance."""
-    return _todo_storage
 
 
 # =============================================================================
@@ -209,93 +22,73 @@ def get_todo_storage() -> TodoStorage:
 
 
 class TodoReadTool(AgentTool):
-    """
-    Tool for reading the todo list for a session.
+    """Read the task list for a conversation from DB."""
 
-    Returns all todos in the current session, optionally filtered
-    by status or priority.
-    """
-
-    def __init__(self):
-        """Initialize the todoread tool."""
+    def __init__(self, session_factory: Optional[Callable] = None):
         super().__init__(
             name="todoread",
-            description="Read the todo list for the current session. Returns all pending and active tasks.",
+            description=(
+                "Read the task list for the current conversation. "
+                "Returns all pending and active tasks."
+            ),
         )
+        self._session_factory = session_factory
 
     def get_parameters_schema(self) -> Dict[str, Any]:
-        """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
             "properties": {
                 "session_id": {
                     "type": "string",
-                    "description": "The session identifier (conversation ID)",
+                    "description": "The conversation ID",
                 },
                 "status": {
                     "type": "string",
-                    "description": "Optional: Filter by status (pending, in_progress, completed, cancelled)",
-                    "enum": ["pending", "in_progress", "completed", "cancelled"],
-                },
-                "priority": {
-                    "type": "string",
-                    "description": "Optional: Filter by priority (high, medium, low)",
-                    "enum": ["high", "medium", "low"],
+                    "description": "Filter by status",
+                    "enum": ["pending", "in_progress", "completed", "failed", "cancelled"],
                 },
             },
             "required": ["session_id"],
         }
 
     def validate_args(self, **kwargs: Any) -> bool:
-        """Validate tool arguments."""
         session_id = kwargs.get("session_id")
         if not session_id or not isinstance(session_id, str):
             return False
-
         status = kwargs.get("status")
-        if status and status not in {"pending", "in_progress", "completed", "cancelled"}:
+        valid = {"pending", "in_progress", "completed", "failed", "cancelled"}
+        if status and status not in valid:
             return False
-
-        priority = kwargs.get("priority")
-        if priority and priority not in {"high", "medium", "low"}:
-            return False
-
         return True
 
-    async def execute(self, session_id: str, status: Optional[str] = None, priority: Optional[str] = None, **kwargs: Any) -> str:
-        """
-        Execute the todoread tool.
+    async def execute(
+        self,
+        session_id: str,
+        status: Optional[str] = None,
+        **kwargs: Any,
+    ) -> str:
+        if not self._session_factory:
+            return json.dumps({"error": "Task storage not configured", "todos": []})
 
-        Args:
-            session_id: The session identifier
-            status: Optional status filter
-            priority: Optional priority filter
-            **kwargs: Additional arguments
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository import (
+            SqlAgentTaskRepository,
+        )
 
-        Returns:
-            JSON string containing the todo list
-        """
-        storage = get_todo_storage()
-        todos = storage.get(session_id)
+        async with self._session_factory() as session:
+            repo = SqlAgentTaskRepository(session)
+            tasks = await repo.find_by_conversation(session_id, status=status)
+            await session.commit()
 
-        # Apply filters
-        if status:
-            todos = [t for t in todos if t.status == status]
-        if priority:
-            todos = [t for t in todos if t.priority == priority]
-
-        # Sort by priority (high first) and then by created_at
+        # Sort: priority (high first), then order_index
         priority_order = {"high": 0, "medium": 1, "low": 2}
-        todos.sort(key=lambda t: (priority_order.get(t.priority, 1), t.created_at))
+        tasks.sort(key=lambda t: (priority_order.get(t.priority.value, 1), t.order_index))
 
-        # Convert to dict for JSON serialization
         result = {
             "session_id": session_id,
-            "total_count": len(todos),
-            "todos": [t.to_dict() for t in todos],
+            "total_count": len(tasks),
+            "todos": [t.to_dict() for t in tasks],
         }
-
-        logger.info(f"todoread: returning {len(todos)} todos for session {session_id}")
+        logger.info(f"todoread: returning {len(tasks)} tasks for {session_id}")
         return json.dumps(result, indent=2)
 
 
@@ -305,71 +98,73 @@ class TodoReadTool(AgentTool):
 
 
 class TodoWriteTool(AgentTool):
-    """
-    Tool for writing/updating the todo list for a session.
+    """Write/update the task list for a conversation. Persists to DB."""
 
-    Can replace the entire list, add new todos, or update existing todos.
-    """
-
-    def __init__(self):
-        """Initialize the todowrite tool."""
+    def __init__(self, session_factory: Optional[Callable] = None):
         super().__init__(
             name="todowrite",
-            description="Write or update the todo list for the current session. Use this to add, update, or organize tasks.",
+            description=(
+                "Write or update the task list for the current conversation. "
+                "Use this to create, add, update, or organize tasks."
+            ),
         )
+        self._session_factory = session_factory
+        self._pending_events: List[Dict[str, Any]] = []
 
     def get_parameters_schema(self) -> Dict[str, Any]:
-        """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
             "properties": {
                 "session_id": {
                     "type": "string",
-                    "description": "The session identifier (conversation ID)",
+                    "description": "The conversation ID",
                 },
                 "action": {
                     "type": "string",
-                    "description": "Action to perform: replace (replace entire list), add (add new todos), update (update existing todo)",
+                    "description": "replace (replace entire list), add (append), update (modify one)",
                     "enum": ["replace", "add", "update"],
                 },
                 "todos": {
                     "type": "array",
-                    "description": "List of todo items (each with content, status, priority)",
+                    "description": "List of task items",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "id": {"type": "string", "description": "Todo ID (required for update, optional for add)"},
+                            "id": {"type": "string", "description": "Task ID (for update)"},
                             "content": {"type": "string", "description": "Task description"},
-                            "status": {"type": "string", "description": "Status: pending, in_progress, completed, cancelled"},
-                            "priority": {"type": "string", "description": "Priority: high, medium, low"},
+                            "status": {
+                                "type": "string",
+                                "description": "pending, in_progress, completed, failed, cancelled",
+                            },
+                            "priority": {"type": "string", "description": "high, medium, low"},
                         },
                         "required": ["content"],
                     },
                 },
                 "todo_id": {
                     "type": "string",
-                    "description": "For update action: the ID of the todo to update",
+                    "description": "For update: the task ID to update",
                 },
             },
             "required": ["session_id", "action"],
         }
 
     def validate_args(self, **kwargs: Any) -> bool:
-        """Validate tool arguments."""
         session_id = kwargs.get("session_id")
         if not session_id or not isinstance(session_id, str):
             return False
-
         action = kwargs.get("action")
         if action not in {"replace", "add", "update"}:
             return False
-
-        if action == "update":
-            todo_id = kwargs.get("todo_id")
-            if not todo_id:
-                return False
-
+        if action == "update" and not kwargs.get("todo_id"):
+            return False
         return True
+
+    def consume_pending_events(self) -> List[Dict[str, Any]]:
+        """Consume and return any pending SSE events from the last execute()."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
 
     async def execute(
         self,
@@ -379,85 +174,115 @@ class TodoWriteTool(AgentTool):
         todo_id: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
-        """
-        Execute the todowrite tool.
+        self._pending_events.clear()
 
-        Args:
-            session_id: The session identifier
-            action: Action to perform (replace, add, update)
-            todos: List of todo items (for replace and add actions)
-            todo_id: ID of todo to update (for update action)
-            **kwargs: Additional arguments
+        if not self._session_factory:
+            return json.dumps({"error": "Task storage not configured"})
 
-        Returns:
-            JSON string containing the result
-        """
-        storage = get_todo_storage()
+        from src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository import (
+            SqlAgentTaskRepository,
+        )
+
         todos = todos or []
+        result: Dict[str, Any] = {}
 
-        if action == "replace":
-            # Replace entire todo list
-            todo_items = []
-            for todo_data in todos:
-                # Generate ID if not provided
-                if "id" not in todo_data:
-                    todo_data["id"] = str(uuid.uuid4())
-                todo_items.append(TodoItem.from_dict(todo_data))
+        async with self._session_factory() as session:
+            repo = SqlAgentTaskRepository(session)
 
-            storage.set(session_id, todo_items)
-            result = {
-                "success": True,
-                "action": "replace",
-                "session_id": session_id,
-                "total_count": len(todo_items),
-                "message": f"Replaced todo list with {len(todo_items)} items",
-            }
+            if action == "replace":
+                task_items = []
+                for i, td in enumerate(todos):
+                    task = AgentTask(
+                        id=td.get("id", str(uuid.uuid4())),
+                        conversation_id=session_id,
+                        content=td.get("content", ""),
+                        status=TaskStatus(td.get("status", "pending")),
+                        priority=TaskPriority(td.get("priority", "medium")),
+                        order_index=i,
+                    )
+                    if task.validate():
+                        task_items.append(task)
 
-        elif action == "add":
-            # Add new todos to existing list
-            added_count = 0
-            for todo_data in todos:
-                # Generate ID if not provided
-                if "id" not in todo_data:
-                    todo_data["id"] = str(uuid.uuid4())
-                todo_item = TodoItem.from_dict(todo_data)
-                if todo_item.validate():
-                    storage.add(session_id, todo_item)
-                    added_count += 1
+                await repo.save_all(session_id, task_items)
+                await session.commit()
 
-            result = {
-                "success": True,
-                "action": "add",
-                "session_id": session_id,
-                "added_count": added_count,
-                "total_count": len(storage.get(session_id)),
-                "message": f"Added {added_count} new todos",
-            }
-
-        elif action == "update":
-            # Update a specific todo
-            if not todo_id:
+                self._pending_events.append({
+                    "type": "task_list_updated",
+                    "conversation_id": session_id,
+                    "tasks": [t.to_dict() for t in task_items],
+                })
                 result = {
-                    "success": False,
-                    "action": "update",
-                    "error": "todo_id is required for update action",
-                }
-            else:
-                # Extract updates from first todo in list
-                updates = {}
-                if todos and len(todos) > 0:
-                    updates = {k: v for k, v in todos[0].items() if k != "id"}
-
-                success = storage.update(session_id, todo_id, updates)
-                result = {
-                    "success": success,
-                    "action": "update",
-                    "session_id": session_id,
-                    "todo_id": todo_id,
-                    "message": f"Updated todo {todo_id}" if success else f"Todo {todo_id} not found",
+                    "success": True,
+                    "action": "replace",
+                    "total_count": len(task_items),
+                    "message": f"Replaced task list with {len(task_items)} items",
                 }
 
-        logger.info(f"todowrite: {action} action completed for session {session_id}")
+            elif action == "add":
+                existing = await repo.find_by_conversation(session_id)
+                next_order = max((t.order_index for t in existing), default=-1) + 1
+                added = []
+                for i, td in enumerate(todos):
+                    task = AgentTask(
+                        id=td.get("id", str(uuid.uuid4())),
+                        conversation_id=session_id,
+                        content=td.get("content", ""),
+                        status=TaskStatus(td.get("status", "pending")),
+                        priority=TaskPriority(td.get("priority", "medium")),
+                        order_index=next_order + i,
+                    )
+                    if task.validate():
+                        await repo.save(task)
+                        added.append(task)
+                await session.commit()
+
+                all_tasks = await repo.find_by_conversation(session_id)
+                self._pending_events.append({
+                    "type": "task_list_updated",
+                    "conversation_id": session_id,
+                    "tasks": [t.to_dict() for t in all_tasks],
+                })
+                result = {
+                    "success": True,
+                    "action": "add",
+                    "added_count": len(added),
+                    "total_count": len(all_tasks),
+                    "message": f"Added {len(added)} new tasks",
+                }
+
+            elif action == "update":
+                if not todo_id:
+                    result = {"success": False, "error": "todo_id required for update"}
+                else:
+                    updates = {}
+                    if todos and len(todos) > 0:
+                        updates = {k: v for k, v in todos[0].items() if k != "id"}
+                    updated = await repo.update(todo_id, **updates)
+                    await session.commit()
+
+                    if updated:
+                        self._pending_events.append({
+                            "type": "task_updated",
+                            "conversation_id": session_id,
+                            "task_id": todo_id,
+                            "status": updated.status.value,
+                            "content": updated.content,
+                        })
+                        result = {
+                            "success": True,
+                            "action": "update",
+                            "todo_id": todo_id,
+                            "message": f"Updated task {todo_id}",
+                        }
+                    else:
+                        result = {
+                            "success": False,
+                            "action": "update",
+                            "todo_id": todo_id,
+                            "message": f"Task {todo_id} not found",
+                        }
+
+        logger.info(f"todowrite: {action} completed for {session_id}")
         return json.dumps(result, indent=2)
 
 
@@ -466,11 +291,11 @@ class TodoWriteTool(AgentTool):
 # =============================================================================
 
 
-def create_todoread_tool() -> TodoReadTool:
-    """Create a todoread tool instance."""
-    return TodoReadTool()
+def create_todoread_tool(session_factory: Optional[Callable] = None) -> TodoReadTool:
+    """Create a TodoReadTool instance."""
+    return TodoReadTool(session_factory=session_factory)
 
 
-def create_todowrite_tool() -> TodoWriteTool:
-    """Create a todowrite tool instance."""
-    return TodoWriteTool()
+def create_todowrite_tool(session_factory: Optional[Callable] = None) -> TodoWriteTool:
+    """Create a TodoWriteTool instance."""
+    return TodoWriteTool(session_factory=session_factory)

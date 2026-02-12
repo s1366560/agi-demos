@@ -117,6 +117,8 @@ import type {
   ChainStepCompletedEventData,
   ChainCompletedEventData,
   BackgroundLaunchedEventData,
+  TaskListUpdatedEventData,
+  TaskUpdatedEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -919,6 +921,13 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'background_launched':
         handler.onBackgroundLaunched?.(event as AgentEvent<BackgroundLaunchedEventData>);
+        break;
+      // Task list events
+      case 'task_list_updated':
+        handler.onTaskListUpdated?.(event as AgentEvent<TaskListUpdatedEventData>);
+        break;
+      case 'task_updated':
+        handler.onTaskUpdated?.(event as AgentEvent<TaskUpdatedEventData>);
         break;
     }
   }

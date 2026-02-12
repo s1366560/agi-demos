@@ -630,6 +630,29 @@ class AgentArtifactCloseEvent(AgentDomainEvent):
 
 
 # =========================================================================
+# Task List Events
+# =========================================================================
+
+
+class AgentTaskListUpdatedEvent(AgentDomainEvent):
+    """Event: Full task list replaced for a conversation."""
+
+    event_type: AgentEventType = AgentEventType.TASK_LIST_UPDATED
+    conversation_id: str
+    tasks: List[Dict[str, Any]]
+
+
+class AgentTaskUpdatedEvent(AgentDomainEvent):
+    """Event: Single task status/content changed."""
+
+    event_type: AgentEventType = AgentEventType.TASK_UPDATED
+    conversation_id: str
+    task_id: str
+    status: str
+    content: Optional[str] = None
+
+
+# =========================================================================
 # Event Type Utilities
 # =========================================================================
 

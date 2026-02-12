@@ -1226,6 +1226,31 @@ class SessionProcessor:
                     exc_info=True,
                 )
 
+            # Emit pending task SSE events from todowrite tool
+            if tool_name == "todowrite" and hasattr(tool_def, "consume_pending_events"):
+                try:
+                    for task_event in tool_def.consume_pending_events():
+                        from src.domain.events.agent_events import (
+                            AgentTaskListUpdatedEvent,
+                            AgentTaskUpdatedEvent,
+                        )
+
+                        event_type = task_event.get("type")
+                        if event_type == "task_list_updated":
+                            yield AgentTaskListUpdatedEvent(
+                                conversation_id=task_event["conversation_id"],
+                                tasks=task_event["tasks"],
+                            )
+                        elif event_type == "task_updated":
+                            yield AgentTaskUpdatedEvent(
+                                conversation_id=task_event["conversation_id"],
+                                task_id=task_event["task_id"],
+                                status=task_event["status"],
+                                content=task_event.get("content"),
+                            )
+                except Exception as task_err:
+                    logger.error(f"Task event emission failed: {task_err}", exc_info=True)
+
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)
 

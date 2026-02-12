@@ -1,16 +1,10 @@
 /**
- * RightPanel - Modern side panel combining Plans and Sandbox
+ * RightPanel - Side panel with Tasks and Sandbox tabs
  *
  * Features:
- * - Tabbed interface for Plan and Sandbox
- * - PlanEditor integration for Plan Mode
- * - Integrated Terminal and Remote Desktop
- * - Tool execution output viewer
+ * - Tasks tab: agent-managed task checklist (DB-persistent, SSE-streamed)
+ * - Sandbox tab: terminal and remote desktop
  * - Draggable resize support
- * - Modern, clean design
- *
- * Refactored: Extracted ResizeHandle and PlanContent into separate modules
- * for better separation of concerns and reusability.
  */
 
 import { useState, useCallback, memo } from 'react';
@@ -21,33 +15,27 @@ import { LazyTabs, LazyButton, LazyBadge } from '@/components/ui/lazyAntd';
 
 import { ResizeHandle } from './RightPanelComponents';
 import { SandboxSection } from './SandboxSection';
+import { TaskList } from './TaskList';
 
-import type { WorkPlan, ExecutionPlan } from '../../types/agent';
+import type { AgentTask } from '../../types/agent';
 
-export type RightPanelTab = 'plan' | 'sandbox';
+export type RightPanelTab = 'tasks' | 'sandbox';
 
 export interface RightPanelProps {
-  workPlan: WorkPlan | null;
-  executionPlan: ExecutionPlan | null;
+  tasks?: AgentTask[];
   sandboxId?: string | null;
   onClose?: () => void;
   onFileClick?: (filePath: string) => void;
   collapsed?: boolean;
-  /** Width of the panel (controlled by parent) */
   width?: number;
-  /** Callback when width changes during resize */
   onWidthChange?: (width: number) => void;
-  /** Minimum width */
   minWidth?: number;
-  /** Maximum width */
   maxWidth?: number;
 }
 
-// Memoized RightPanel to prevent unnecessary re-renders (rerender-memo)
 export const RightPanel = memo<RightPanelProps>(
   ({
-    workPlan,
-    executionPlan,
+    tasks = [],
     sandboxId,
     onClose,
     collapsed,
@@ -56,12 +44,11 @@ export const RightPanel = memo<RightPanelProps>(
     minWidth = 280,
     maxWidth = 600,
   }) => {
-    const [activeTab, setActiveTab] = useState<RightPanelTab>('plan');
+    const [activeTab, setActiveTab] = useState<RightPanelTab>('tasks');
 
-    const hasPlan = !!(workPlan || executionPlan);
+    const hasTasks = tasks.length > 0;
     const hasSandbox = !!sandboxId;
 
-    // Handle resize with constraints
     const handleResize = useCallback(
       (delta: number) => {
         if (!onWidthChange) return;
@@ -73,19 +60,15 @@ export const RightPanel = memo<RightPanelProps>(
 
     const tabItems = [
       {
-        key: 'plan' as RightPanelTab,
+        key: 'tasks' as RightPanelTab,
         label: (
           <div className="flex items-center gap-2">
             <ListTodo size={16} />
-            <span>Plan</span>
-            {hasPlan && <LazyBadge status="processing" className="ml-1" />}
+            <span>Tasks</span>
+            {hasTasks && <LazyBadge status="processing" className="ml-1" />}
           </div>
         ),
-        children: (
-          <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">
-            {hasPlan ? 'Plan view is being refactored.' : 'No active plan.'}
-          </div>
-        ),
+        children: <TaskList tasks={tasks} />,
       },
       {
         key: 'sandbox' as RightPanelTab,
@@ -96,11 +79,7 @@ export const RightPanel = memo<RightPanelProps>(
             {hasSandbox && <LazyBadge status="success" className="ml-1" />}
           </div>
         ),
-        children: (
-          <SandboxSection
-            sandboxId={sandboxId || null}
-          />
-        ),
+        children: <SandboxSection sandboxId={sandboxId || null} />,
       },
     ];
 
@@ -114,17 +93,15 @@ export const RightPanel = memo<RightPanelProps>(
         style={{ '--panel-width': `${width}px` } as React.CSSProperties}
         data-testid="right-panel"
       >
-        {/* Resize Handle - only show if onWidthChange is provided */}
         {onWidthChange ? (
           <ResizeHandle onResize={handleResize} direction="horizontal" position="left" />
         ) : null}
 
-        {/* Content */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
             <div className="flex items-center gap-2">
-              {activeTab === 'plan' ? (
+              {activeTab === 'tasks' ? (
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-100 to-violet-100 dark:from-purple-900/30 dark:to-violet-900/20 flex items-center justify-center">
                   <ListTodo size={16} className="text-purple-600 dark:text-purple-400" />
                 </div>
@@ -134,7 +111,7 @@ export const RightPanel = memo<RightPanelProps>(
                 </div>
               )}
               <h2 className="font-semibold text-slate-900 dark:text-slate-100">
-                {activeTab === 'plan' ? 'Work Plan' : 'Sandbox'}
+                {activeTab === 'tasks' ? 'Tasks' : 'Sandbox'}
               </h2>
             </div>
             <div className="flex items-center gap-1">
@@ -164,7 +141,6 @@ export const RightPanel = memo<RightPanelProps>(
             }}
           />
 
-          {/* Styles */}
           <style>{`
           [data-testid="right-panel"] {
             width: var(--panel-width, 360px);

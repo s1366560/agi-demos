@@ -9,6 +9,7 @@
  */
 
 import type {
+  AgentTask,
   TimelineEvent,
   ToolCall,
   ClarificationAskedEventData,
@@ -128,6 +129,10 @@ export interface ConversationState {
   /** Whether the conversation is in Plan Mode (read-only analysis) */
   isPlanMode: boolean;
 
+  // ===== Agent Tasks =====
+  /** Agent-managed task checklist for this conversation */
+  tasks: AgentTask[];
+
   // ===== HITL (Human-In-The-Loop) State =====
   /** Pending clarification request */
   pendingClarification: ClarificationAskedEventData | null;
@@ -178,6 +183,9 @@ export function createDefaultConversationState(): ConversationState {
 
     // Plan Mode
     isPlanMode: false,
+
+    // Tasks
+    tasks: [],
 
     // HITL
     pendingClarification: null,

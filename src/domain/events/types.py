@@ -184,6 +184,12 @@ class AgentEventType(str, Enum):
     # =========================================================================
     CANCELLED = "cancelled"
 
+    # =========================================================================
+    # Task list events (agent todo tracking)
+    # =========================================================================
+    TASK_LIST_UPDATED = "task_list_updated"
+    TASK_UPDATED = "task_updated"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -274,6 +280,9 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.ARTIFACT_OPEN: EventCategory.AGENT,
     AgentEventType.ARTIFACT_UPDATE: EventCategory.AGENT,
     AgentEventType.ARTIFACT_CLOSE: EventCategory.AGENT,
+    # Task list events
+    AgentEventType.TASK_LIST_UPDATED: EventCategory.AGENT,
+    AgentEventType.TASK_UPDATED: EventCategory.AGENT,
 }
 
 

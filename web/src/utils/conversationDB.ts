@@ -142,6 +142,7 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     pendingHITLSummary: stored.pendingHITLSummary as ConversationState['pendingHITLSummary'],
     costTracking: stored.costTracking as ConversationState['costTracking'],
     suggestions: (stored as any).suggestions ?? [],
+    tasks: (stored as any).tasks ?? [],
   };
 }
 

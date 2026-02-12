@@ -1394,3 +1394,37 @@ class PromptTemplateModel(IdGeneratorMixin, Base):
             "tenant_id", "title", name="uq_tenant_template_title"
         ),
     )
+
+
+# ===== AGENT TASK MODEL =====
+
+
+class AgentTaskModel(IdGeneratorMixin, Base):
+    """Persistent task items managed by agent TodoRead/TodoWrite tools."""
+
+    __tablename__ = "agent_tasks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True,
+    )
+    priority: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="medium",
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True,
+    )
+
+    __table_args__ = (
+        Index("ix_agent_tasks_conv_status", "conversation_id", "status"),
+    )

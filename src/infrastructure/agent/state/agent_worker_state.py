@@ -546,6 +546,19 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create HITL tools: {e}")
 
+    # 9. Add Todo Tools (DB-persistent task tracking)
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as todo_session_factory,
+        )
+        from src.infrastructure.agent.tools.todo_tools import TodoReadTool, TodoWriteTool
+
+        tools["todoread"] = TodoReadTool(session_factory=todo_session_factory)
+        tools["todowrite"] = TodoWriteTool(session_factory=todo_session_factory)
+        logger.info(f"Agent Worker: Todo tools added for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create todo tools: {e}")
+
     return tools
 
 

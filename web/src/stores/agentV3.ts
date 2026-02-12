@@ -1093,7 +1093,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           try {
             // Parallelize independent API calls (async-parallel)
             // Include recovery info in execution status check
-            const [response, execStatus, _contextStatusResult, planModeResult] = await Promise.all([
+            const [response, execStatus, _contextStatusResult, planModeResult, taskListResult] = await Promise.all([
               agentService.getConversationMessages(
                 conversationId,
                 projectId,
@@ -1119,6 +1119,15 @@ export const useAgentV3Store = create<AgentV3State>()(
                 logger.debug(`[AgentV3] getMode failed:`, e);
                 return null;
               }),
+              // Fetch tasks for conversation
+              (async () => {
+                const { httpClient } = await import('../services/client/httpClient');
+                const res = await httpClient.get(`/agent/plan/tasks/${conversationId}`);
+                return res as any;
+              })().catch((e) => {
+                logger.debug(`[AgentV3] fetchTasks failed:`, e);
+                return null;
+              }),
             ]);
 
             // Update plan mode from API response
@@ -1126,6 +1135,11 @@ export const useAgentV3Store = create<AgentV3State>()(
               const isPlan = planModeResult.mode === 'plan';
               set({ isPlanMode: isPlan });
               get().updateConversationState(conversationId, { isPlanMode: isPlan });
+            }
+
+            // Update tasks from API response
+            if (taskListResult && Array.isArray(taskListResult.tasks)) {
+              get().updateConversationState(conversationId, { tasks: taskListResult.tasks });
             }
 
             if (get().activeConversationId !== conversationId) {
