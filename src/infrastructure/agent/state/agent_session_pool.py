@@ -296,7 +296,9 @@ async def get_or_create_tool_definitions(
         logger.info(f"Agent Session Pool: Converting {len(tools)} tools (hash={tools_hash})")
         start_time = time.time()
 
-        definitions = _convert_tools_to_definitions(tools)
+        from src.infrastructure.agent.core.tool_converter import convert_tools
+
+        definitions = convert_tools(tools)
 
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"Agent Session Pool: Tool conversion took {elapsed_ms:.1f}ms")
@@ -304,72 +306,6 @@ async def get_or_create_tool_definitions(
         _tool_definitions_cache[tools_hash] = definitions
         return definitions
 
-
-def _convert_tools_to_definitions(tools: Dict[str, Any]) -> List[Any]:
-    """Convert tool instances to ToolDefinition format.
-
-    This is the same logic as ReActAgent._convert_tools() but extracted
-    for caching purposes.
-
-    Args:
-        tools: Dictionary of tool name -> tool instance
-
-    Returns:
-        List of ToolDefinition objects
-    """
-    from src.infrastructure.agent.core.processor import ToolDefinition
-
-    definitions = []
-
-    for name, tool in tools.items():
-        # Extract tool metadata
-        description = getattr(tool, "description", f"Tool: {name}")
-
-        # Get parameters schema
-        parameters = {"type": "object", "properties": {}, "required": []}
-        if hasattr(tool, "get_parameters_schema"):
-            parameters = tool.get_parameters_schema()
-        elif hasattr(tool, "args_schema"):
-            schema = tool.args_schema
-            if hasattr(schema, "model_json_schema"):
-                parameters = schema.model_json_schema()
-
-        # Create execute wrapper with captured variables
-        def make_execute_wrapper(tool_instance, tool_name):
-            async def execute_wrapper(**kwargs):
-                """Wrapper to execute tool."""
-                try:
-                    if hasattr(tool_instance, "execute"):
-                        result = tool_instance.execute(**kwargs)
-                        if hasattr(result, "__await__"):
-                            return await result
-                        return result
-                    elif hasattr(tool_instance, "ainvoke"):
-                        return await tool_instance.ainvoke(kwargs)
-                    elif hasattr(tool_instance, "_arun"):
-                        return await tool_instance._arun(**kwargs)
-                    elif hasattr(tool_instance, "_run"):
-                        return tool_instance._run(**kwargs)
-                    elif hasattr(tool_instance, "run"):
-                        return tool_instance.run(**kwargs)
-                    else:
-                        raise ValueError(f"Tool {tool_name} has no execute method")
-                except Exception as e:
-                    return f"Error executing tool {tool_name}: {e!s}"
-
-            return execute_wrapper
-
-        definitions.append(
-            ToolDefinition(
-                name=name,
-                description=description,
-                parameters=parameters,
-                execute=make_execute_wrapper(tool, name),
-                _tool_instance=tool,
-            )
-        )
-
-    return definitions
 
 
 def invalidate_tool_definitions_cache(tools_hash: Optional[str] = None) -> int:
