@@ -456,46 +456,6 @@ class TestLoopExecution:
 # ============================================================================
 
 
-@pytest.mark.unit
-class TestWorkPlanIntegration:
-    """Test work plan integration."""
-
-    async def test_emits_work_plan_event(
-        self, loop, mock_work_plan_generator, sample_messages, sample_tools, context
-    ):
-        """Test that work plan event is emitted."""
-        mock_work_plan_generator.set_plan({
-            "id": "plan-1",
-            "steps": [{"description": "Step 1"}],
-        })
-        loop._llm_invoker.set_events([
-            make_step_finish(1, "stop")
-        ])
-
-        events = []
-        async for event in loop.run(sample_messages, sample_tools, context):
-            events.append(event)
-
-        assert any(e.event_type == AgentEventType.WORK_PLAN for e in events)
-
-    async def test_no_work_plan_when_disabled(
-        self, mock_llm_invoker, sample_messages, sample_tools, context
-    ):
-        """Test no work plan event when disabled."""
-        config = LoopConfig(enable_work_plan=False)
-        mock_llm_invoker.set_events([
-            make_step_finish(1, "stop")
-        ])
-
-        loop = ReActLoop(llm_invoker=mock_llm_invoker, config=config)
-
-        events = []
-        async for event in loop.run(sample_messages, sample_tools, context):
-            events.append(event)
-
-        assert not any(e.event_type == AgentEventType.WORK_PLAN for e in events)
-
-
 # ============================================================================
 # Test Tool Execution
 # ============================================================================

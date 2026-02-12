@@ -33,7 +33,6 @@ from src.domain.events.agent_events import (
     AgentStatusEvent,
     AgentStepEndEvent,
     AgentStepStartEvent,
-    AgentWorkPlanEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -277,7 +276,6 @@ class ReActLoop:
                 work_plan = self._work_plan_generator.generate(user_query, tools)
                 if work_plan:
                     self._work_plan = work_plan
-                    yield AgentWorkPlanEvent(plan=work_plan)
 
         try:
             result = LoopResult.CONTINUE

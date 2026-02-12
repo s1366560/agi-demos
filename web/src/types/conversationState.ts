@@ -10,8 +10,6 @@
 
 import type {
   TimelineEvent,
-  WorkPlan,
-  ExecutionPlan,
   ToolCall,
   ClarificationAskedEventData,
   DecisionAskedEventData,
@@ -126,13 +124,9 @@ export interface ConversationState {
   /** Stack of pending tool names */
   pendingToolsStack: string[];
 
-  // ===== Plan State =====
-  /** Current work plan */
-  workPlan: WorkPlan | null;
-  /** Whether in plan mode */
+  // ===== Plan Mode =====
+  /** Whether the conversation is in Plan Mode (read-only analysis) */
   isPlanMode: boolean;
-  /** Execution plan for plan mode */
-  executionPlan: ExecutionPlan | null;
 
   // ===== HITL (Human-In-The-Loop) State =====
   /** Pending clarification request */
@@ -182,10 +176,8 @@ export function createDefaultConversationState(): ConversationState {
     activeToolCalls: new Map(),
     pendingToolsStack: [],
 
-    // Plan
-    workPlan: null,
+    // Plan Mode
     isPlanMode: false,
-    executionPlan: null,
 
     // HITL
     pendingClarification: null,

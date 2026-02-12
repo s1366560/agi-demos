@@ -22,7 +22,6 @@ from src.domain.events.agent_events import (
     AgentStepEndEvent,
     AgentStepStartEvent,
     AgentThoughtEvent,
-    AgentWorkPlanEvent,
 )
 from src.infrastructure.agent.events.converter import (
     EventConverter,
@@ -213,24 +212,6 @@ class TestEventConverterBasic:
 @pytest.mark.unit
 class TestEventConverterWorkPlan:
     """Test work plan and step event conversion."""
-
-    def test_convert_work_plan_event(self, converter):
-        """Test converting AgentWorkPlanEvent."""
-        plan = {
-            "steps": [
-                {"index": 0, "description": "Search memories"},
-                {"index": 1, "description": "Analyze results"},
-            ],
-            "total_steps": 2,
-        }
-        event = AgentWorkPlanEvent(plan=plan, timestamp=time.time())
-
-        result = converter.convert(event)
-
-        assert result is not None
-        assert result["type"] == AgentEventType.WORK_PLAN.value
-        # Data should be the plan directly
-        assert result["data"] == plan
 
     def test_convert_step_start_event(self, converter):
         """Test converting AgentStepStartEvent."""

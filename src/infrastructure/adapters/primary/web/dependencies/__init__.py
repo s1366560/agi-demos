@@ -4,6 +4,8 @@ import logging
 
 from fastapi import Request
 
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     create_api_key,
     create_user,
@@ -98,4 +100,5 @@ __all__ = [
     "get_workflow_engine",
     "get_graph_service",
     "get_graphiti_client",  # Legacy alias
+    "get_db",
 ]

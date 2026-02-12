@@ -8,7 +8,6 @@ export { SuggestionChips } from './SuggestionChips';
 export { ShortcutOverlay } from './ShortcutOverlay';
 export { PromptTemplateLibrary } from './PromptTemplateLibrary';
 export { ChatSearch } from './ChatSearch';
-export { PlanProgressBar } from './PlanProgressBar';
 export { VoiceWaveform } from './VoiceWaveform';
 export { AgentStatePill } from './AgentStatePill';
 export { BranchIndicator } from './BranchIndicator';

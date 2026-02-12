@@ -32,12 +32,6 @@ from src.domain.exceptions.repository_exceptions import (
 )
 from src.domain.llm_providers.llm_types import RateLimitError as LLMRateLimitError
 from src.domain.llm_providers.models import NoActiveProviderError
-from src.domain.model.agent.plan import (
-    AlreadyInPlanModeError,
-    InvalidPlanStateError,
-    NotInPlanModeError,
-    PlanNotFoundError,
-)
 from src.domain.model.sandbox.exceptions import (
     SandboxConnectionError,
     SandboxError,
@@ -383,81 +377,6 @@ async def sandbox_error_handler(request: Request, exc: SandboxError) -> JSONResp
 
 
 # ==============================================================================
-# Agent/Plan Exception Handlers
-# ==============================================================================
-
-
-async def plan_not_found_handler(request: Request, exc: PlanNotFoundError) -> JSONResponse:
-    """Handle plan not found - 404."""
-    error_id = str(uuid.uuid4())
-    logger.warning(
-        "Plan not found: %s - error_id=%s, path=%s",
-        str(exc),
-        error_id,
-        request.url.path,
-    )
-    return ErrorResponse(
-        status_code=404,
-        error_type="PlanNotFound",
-        message=str(exc),
-        error_id=error_id,
-    ).to_response()
-
-
-async def invalid_plan_state_handler(request: Request, exc: InvalidPlanStateError) -> JSONResponse:
-    """Handle invalid plan state - 409 Conflict."""
-    error_id = str(uuid.uuid4())
-    logger.warning(
-        "Invalid plan state: %s - error_id=%s, path=%s",
-        str(exc),
-        error_id,
-        request.url.path,
-    )
-    return ErrorResponse(
-        status_code=409,
-        error_type="InvalidPlanState",
-        message=str(exc),
-        error_id=error_id,
-    ).to_response()
-
-
-async def already_in_plan_mode_handler(
-    request: Request, exc: AlreadyInPlanModeError
-) -> JSONResponse:
-    """Handle already in plan mode - 409 Conflict."""
-    error_id = str(uuid.uuid4())
-    logger.warning(
-        "Already in plan mode: %s - error_id=%s, path=%s",
-        str(exc),
-        error_id,
-        request.url.path,
-    )
-    return ErrorResponse(
-        status_code=409,
-        error_type="AlreadyInPlanMode",
-        message=str(exc),
-        error_id=error_id,
-    ).to_response()
-
-
-async def not_in_plan_mode_handler(request: Request, exc: NotInPlanModeError) -> JSONResponse:
-    """Handle not in plan mode - 400 Bad Request."""
-    error_id = str(uuid.uuid4())
-    logger.warning(
-        "Not in plan mode: %s - error_id=%s, path=%s",
-        str(exc),
-        error_id,
-        request.url.path,
-    )
-    return ErrorResponse(
-        status_code=400,
-        error_type="NotInPlanMode",
-        message=str(exc),
-        error_id=error_id,
-    ).to_response()
-
-
-# ==============================================================================
 # LLM/Provider Exception Handlers
 # ==============================================================================
 
@@ -632,12 +551,6 @@ def configure_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(SandboxStateTransitionError, sandbox_state_transition_handler)
     app.add_exception_handler(SandboxHealthCheckError, sandbox_health_check_handler)
     app.add_exception_handler(SandboxError, sandbox_error_handler)
-
-    # Agent/Plan exceptions
-    app.add_exception_handler(PlanNotFoundError, plan_not_found_handler)
-    app.add_exception_handler(InvalidPlanStateError, invalid_plan_state_handler)
-    app.add_exception_handler(AlreadyInPlanModeError, already_in_plan_mode_handler)
-    app.add_exception_handler(NotInPlanModeError, not_in_plan_mode_handler)
 
     # LLM/Provider exceptions
     app.add_exception_handler(LLMRateLimitError, llm_rate_limit_handler)

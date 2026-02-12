@@ -14,19 +14,15 @@ from .schemas import (
     CreateConversationRequest,
     DecisionResponseRequest,
     DoomLoopResponseRequest,
-    EnterPlanModeRequest,
     EnvVarResponseRequest,
     EventReplayResponse,
     ExecutionStatsResponse,
     ExecutionStatusResponse,
-    ExitPlanModeRequest,
     HITLRequestResponse,
     HumanInteractionResponse,
     PatternsListResponse,
     PatternStepResponse,
     PendingHITLResponse,
-    PlanModeStatusResponse,
-    PlanResponse,
     RecoveryInfo,
     ResetPatternsResponse,
     TenantAgentConfigResponse,
@@ -35,7 +31,6 @@ from .schemas import (
     ToolInfo,
     ToolsListResponse,
     UpdateConversationTitleRequest,
-    UpdatePlanRequest,
     UpdateTenantAgentConfigRequest,
     WorkflowPatternResponse,
     WorkflowStatusResponse,
@@ -52,9 +47,9 @@ router.include_router(tools.router)
 router.include_router(patterns.router)
 router.include_router(config.router)
 router.include_router(hitl.router, prefix="/hitl")
-router.include_router(plans.router)
 router.include_router(events.router)
 router.include_router(templates.router)
+router.include_router(plans.router)
 
 __all__ = [
     "router",
@@ -66,19 +61,15 @@ __all__ = [
     "CreateConversationRequest",
     "DecisionResponseRequest",
     "DoomLoopResponseRequest",
-    "EnterPlanModeRequest",
     "EnvVarResponseRequest",
     "EventReplayResponse",
     "ExecutionStatsResponse",
     "ExecutionStatusResponse",
-    "ExitPlanModeRequest",
     "HITLRequestResponse",
     "HumanInteractionResponse",
     "PatternStepResponse",
     "PatternsListResponse",
     "PendingHITLResponse",
-    "PlanModeStatusResponse",
-    "PlanResponse",
     "RecoveryInfo",
     "ResetPatternsResponse",
     "TenantAgentConfigResponse",
@@ -87,7 +78,6 @@ __all__ = [
     "ToolInfo",
     "ToolsListResponse",
     "UpdateConversationTitleRequest",
-    "UpdatePlanRequest",
     "UpdateTenantAgentConfigRequest",
     "WorkflowPatternResponse",
     "WorkflowStatusResponse",

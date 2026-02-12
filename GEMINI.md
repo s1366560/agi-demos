@@ -104,3 +104,10 @@ docker-compose up -d
 -   Update relevant documentation.
 -   Add test coverage for new features.
 -   Refer to `AGENTS.md` for detailed development specifications.
+
+### Database Session in API Endpoints:
+-   The global `DIContainer` at `request.app.state.container` has `db=None`. **Never** use it to create services that need DB access.
+-   Use `get_container_with_db(request, db)` (from `routers/agent/utils.py`) to create a per-request scoped container.
+-   Or use `Depends(get_db)` in dependency functions to build services with a real `AsyncSession`.
+-   Repositories always take `AsyncSession` as their first constructor argument.
+-   See `AGENTS.md` "DI Container & DB Session Patterns" section for full details and examples.

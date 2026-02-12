@@ -19,7 +19,6 @@ from .rules import (
     default_ruleset,
     evaluate_rules,
     explore_mode_ruleset,
-    plan_mode_ruleset,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,8 +138,9 @@ class PermissionManager:
 
         # Apply mode-specific ruleset
         if mode == AgentPermissionMode.PLAN:
-            self.mode_rules = plan_mode_ruleset()
-            logger.info("Permission mode set to PLAN (read-only + plan editing)")
+            # Plan mode ruleset removed during refactoring - use explore mode as fallback
+            self.mode_rules = explore_mode_ruleset()
+            logger.info("Permission mode set to PLAN (using read-only rules)")
         elif mode == AgentPermissionMode.EXPLORE:
             self.mode_rules = explore_mode_ruleset()
             logger.info("Permission mode set to EXPLORE (pure read-only)")

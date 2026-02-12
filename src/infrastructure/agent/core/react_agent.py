@@ -23,7 +23,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Plan Mode detection
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.events.agent_events import (
@@ -37,11 +36,11 @@ from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..permission import PermissionManager
+from ..planning.plan_detector import PlanDetector
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
 from ..routing import SubAgentOrchestrator, SubAgentOrchestratorConfig
 from ..routing.hybrid_router import HybridRouter
 from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
-from .plan_mode_executor import PlanModeExecutor
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
@@ -49,8 +48,6 @@ from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
-
-    from ..planning import HybridPlanModeDetector
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +115,6 @@ class ReActAgent:
         agent_mode: str = "default",
         # Project root for custom rules loading
         project_root: Optional[Path] = None,
-        # Plan Mode detection
-        plan_mode_detector: Optional["HybridPlanModeDetector"] = None,
         # Artifact service for rich output handling
         artifact_service: Optional["ArtifactService"] = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
@@ -142,6 +137,8 @@ class ReActAgent:
         _cached_tool_definitions: Optional[List[Any]] = None,
         _cached_system_prompt_manager: Optional[Any] = None,
         _cached_subagent_router: Optional[Any] = None,
+        # Plan Mode detection
+        plan_detector: Optional[PlanDetector] = None,
     ):
         """
         Initialize ReAct Agent.
@@ -202,11 +199,11 @@ class ReActAgent:
         self.agent_mode = agent_mode  # Store agent mode for skill filtering
         # Always use sandbox workspace path, never expose host filesystem
         self.project_root = project_root or DEFAULT_SANDBOX_WORKSPACE
-        self.plan_mode_detector = plan_mode_detector  # Plan Mode detection
         self.artifact_service = artifact_service  # Artifact service for rich outputs
         self._llm_client = llm_client  # LLM client for unified resilience
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
+        self._plan_detector = plan_detector or PlanDetector()
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -345,15 +342,6 @@ class ReActAgent:
             temperature=temperature,
             max_tokens=max_tokens,
             max_steps=max_steps,
-            llm_client=self._llm_client,
-        )
-
-        # Plan Mode executor
-        self._plan_mode_executor = PlanModeExecutor(
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
-            permission_manager=self.permission_manager,
             llm_client=self._llm_client,
         )
 
@@ -589,6 +577,7 @@ class ReActAgent:
         abort_signal: Optional[asyncio.Event] = None,
         forced_skill_name: Optional[str] = None,
         context_summary_data: Optional[Dict[str, Any]] = None,
+        plan_mode: bool = False,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
@@ -628,56 +617,22 @@ class ReActAgent:
             f"user: {user_id}, message: {user_message[:50]}..."
         )
 
-        # Check for Plan Mode triggering
-        if self.plan_mode_detector:
-            try:
-                detection_result = await self.plan_mode_detector.detect(
-                    query=user_message,
-                    conversation_context=conversation_context,
-                )
-
-                # Emit plan_mode_triggered event
-                yield {
-                    "type": "plan_mode_triggered",
-                    "data": {
-                        "method": detection_result.method,
-                        "confidence": detection_result.confidence,
-                        "should_trigger": detection_result.should_trigger,
-                    },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-
-                # If Plan Mode is triggered, execute it
-                if detection_result.should_trigger:
-                    logger.info(
-                        f"[ReActAgent] Plan Mode triggered: method={detection_result.method}, "
-                        f"confidence={detection_result.confidence}"
-                    )
-                    async for event in self._plan_mode_executor.execute_plan_mode(
-                        conversation_id=conversation_id,
-                        user_message=user_message,
-                        project_id=project_id,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                        conversation_context=conversation_context,
-                        detection_result=detection_result,
-                        get_current_tools_fn=self._get_current_tools,
-                    ):
-                        yield event
-                    return  # Plan Mode completed, exit early
-            except Exception as e:
-                # Plan Mode detection/execution failed, fall back to regular ReAct
-                logger.warning(
-                    f"[ReActAgent] Plan Mode failed with error: {e}, falling back to regular ReAct"
-                )
-                yield {
-                    "type": "plan_mode_failed",
-                    "data": {
-                        "error": str(e),
-                        "fallback": "react",
-                    },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
+        # Plan Mode detection: suggest plan mode for complex queries
+        suggestion = self._plan_detector.detect(user_message)
+        if suggestion.should_suggest:
+            yield {
+                "type": "plan_suggested",
+                "data": {
+                    "plan_id": "",  # Will be set by PlanCoordinator
+                    "conversation_id": conversation_id,
+                    "reason": suggestion.reason,
+                    "confidence": suggestion.confidence,
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            logger.info(
+                f"[ReActAgent] Plan Mode suggested (confidence={suggestion.confidence:.2f})"
+            )
 
         # Check for SubAgent routing (L3)
         # When enable_subagent_as_tool is True, skip pre-routing and let the LLM
@@ -838,6 +793,19 @@ class ReActAgent:
                         f"(skill={matched_skill.name}): {e}"
                     )
 
+        # Determine agent mode: plan mode overrides default
+        effective_mode = "plan" if plan_mode else (
+            self.agent_mode if self.agent_mode in ["build", "plan"] else "build"
+        )
+
+        # Set permission manager mode to enforce tool restrictions
+        from src.infrastructure.agent.permission.manager import AgentPermissionMode
+
+        if effective_mode == "plan":
+            self.permission_manager.set_mode(AgentPermissionMode.PLAN)
+        else:
+            self.permission_manager.set_mode(AgentPermissionMode.BUILD)
+
         # Build system prompt
         # Inject skill into prompt: mandatory for forced, recommendation for matched
         system_prompt = await self._build_system_prompt(
@@ -845,7 +813,7 @@ class ReActAgent:
             conversation_context,
             matched_skill=matched_skill if should_inject_prompt else None,
             subagent=None,
-            mode=self.agent_mode if self.agent_mode in ["build", "plan"] else "build",
+            mode=effective_mode,
             current_step=1,  # Initial step
             project_id=project_id,
             tenant_id=tenant_id,

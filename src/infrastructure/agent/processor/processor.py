@@ -57,7 +57,6 @@ from src.domain.events.agent_events import (
     AgentTextStartEvent,
     AgentThoughtDeltaEvent,
     AgentThoughtEvent,
-    AgentWorkPlanEvent,
 )
 from src.infrastructure.adapters.secondary.sandbox.artifact_integration import (
     extract_artifacts_from_mcp_result,
@@ -295,12 +294,6 @@ class SessionProcessor:
         self._pending_tool_args: Dict[str, str] = {}  # call_id -> accumulated raw args
         self._abort_event: Optional[asyncio.Event] = None
 
-        # Work plan tracking
-        self._work_plan_id: Optional[str] = None
-        self._work_plan_steps: List[Dict[str, Any]] = []
-        self._current_plan_step: int = 0
-        self._tool_to_step_mapping: Dict[str, int] = {}  # tool_name -> step_number
-
         # Langfuse observability context
         self._langfuse_context: Optional[Dict[str, Any]] = None
 
@@ -370,22 +363,9 @@ class SessionProcessor:
         self._step_count = 0
         self._langfuse_context = langfuse_context  # Store for use in _process_step
 
-        # Reset work plan tracking
-        self._work_plan_id = str(uuid.uuid4())
-        self._work_plan_steps = []
-        self._current_plan_step = 0
-        self._tool_to_step_mapping = {}
-
         # Emit start event
         yield AgentStartEvent()
         self._state = ProcessorState.THINKING
-
-        # Generate and emit work plan based on available tools and user query
-        user_query = self._extract_user_query(messages)
-        if user_query and self.tools:
-            work_plan_data = await self._generate_work_plan(user_query, messages)
-            if work_plan_data:
-                yield AgentWorkPlanEvent(plan=work_plan_data)
 
         try:
             result = ProcessorResult.CONTINUE
@@ -551,191 +531,6 @@ class SessionProcessor:
         """Classify tool into a category based on its description."""
         return classify_tool_by_description(tool_name, tool_def.description)
 
-    async def _generate_work_plan(
-        self,
-        user_query: str,
-        messages: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Generate a work plan based on user query and available tools.
-
-        This creates a simple work plan that shows the expected execution flow
-        to the user, improving transparency of the ReAct agent's process.
-
-        Uses semantic classification of tools based on their descriptions,
-        supporting dynamic tool addition via MCP or Skills.
-
-        Args:
-            user_query: The user's query
-            messages: Full conversation context
-
-        Returns:
-            Work plan data dictionary for SSE event, or None if no plan needed
-        """
-        if not self.tools:
-            return None
-
-        # Classify all available tools by their semantic purpose
-        tool_categories = {}
-        for tool_name, tool_def in self.tools.items():
-            category = self._classify_tool_by_description(tool_name, tool_def)
-            if category not in tool_categories:
-                tool_categories[category] = []
-            tool_categories[category].append(tool_name)
-
-        # Create a simple plan based on common tool patterns
-        steps = []
-        step_number = 0
-
-        # Analyze query to predict likely tool usage
-        query_lower = user_query.lower()
-
-        # Pattern matching for common workflows
-        needs_search = any(kw in query_lower for kw in ["搜索", "search", "查找", "find", "查询"])
-        needs_scrape = any(
-            kw in query_lower for kw in ["抓取", "scrape", "获取网页", "网站", "url", "http"]
-        )
-        needs_summary = any(
-            kw in query_lower for kw in ["总结", "summarize", "summary", "概括", "归纳"]
-        )
-        needs_memory = any(kw in query_lower for kw in ["记忆", "memory", "记录", "知识"])
-        needs_graph = any(kw in query_lower for kw in ["图谱", "graph", "实体", "entity", "关系"])
-        needs_code = any(kw in query_lower for kw in ["代码", "code", "执行", "run", "python"])
-
-        # Build steps based on detected needs and categorized tools
-        if needs_search and "search" in tool_categories:
-            search_tools = tool_categories["search"]
-            steps.append(
-                {
-                    "step_number": step_number,
-                    "description": "搜索相关信息",
-                    "required_tools": search_tools,
-                    "status": "pending",
-                }
-            )
-            # Map all search tools to this step
-            for tool_name in search_tools:
-                self._tool_to_step_mapping[tool_name] = step_number
-            step_number += 1
-
-        if needs_scrape and "scrape" in tool_categories:
-            scrape_tools = tool_categories["scrape"]
-            steps.append(
-                {
-                    "step_number": step_number,
-                    "description": "获取网页内容",
-                    "required_tools": scrape_tools,
-                    "status": "pending",
-                }
-            )
-            # Map all scrape tools to this step
-            for tool_name in scrape_tools:
-                self._tool_to_step_mapping[tool_name] = step_number
-            step_number += 1
-
-        if needs_memory and "memory" in tool_categories:
-            memory_tools = tool_categories["memory"]
-            steps.append(
-                {
-                    "step_number": step_number,
-                    "description": "搜索记忆库",
-                    "required_tools": memory_tools,
-                    "status": "pending",
-                }
-            )
-            # Map all memory tools to this step
-            for tool_name in memory_tools:
-                self._tool_to_step_mapping[tool_name] = step_number
-            step_number += 1
-
-        if needs_graph:
-            if "entity" in tool_categories:
-                entity_tools = tool_categories["entity"]
-                steps.append(
-                    {
-                        "step_number": step_number,
-                        "description": "查询知识图谱实体",
-                        "required_tools": entity_tools,
-                        "status": "pending",
-                    }
-                )
-                # Map all entity lookup tools to this step
-                for tool_name in entity_tools:
-                    self._tool_to_step_mapping[tool_name] = step_number
-                step_number += 1
-
-            if "graph" in tool_categories:
-                graph_tools = tool_categories["graph"]
-                steps.append(
-                    {
-                        "step_number": step_number,
-                        "description": "执行图谱查询",
-                        "required_tools": graph_tools,
-                        "status": "pending",
-                    }
-                )
-                # Map all graph query tools to this step
-                for tool_name in graph_tools:
-                    self._tool_to_step_mapping[tool_name] = step_number
-                step_number += 1
-
-        if needs_code and "code" in tool_categories:
-            code_tools = tool_categories["code"]
-            steps.append(
-                {
-                    "step_number": step_number,
-                    "description": "执行代码",
-                    "required_tools": code_tools,
-                    "status": "pending",
-                }
-            )
-            # Map all code execution tools to this step
-            for tool_name in code_tools:
-                self._tool_to_step_mapping[tool_name] = step_number
-            step_number += 1
-
-        if needs_summary and "summary" in tool_categories:
-            summary_tools = tool_categories["summary"]
-            steps.append(
-                {
-                    "step_number": step_number,
-                    "description": "总结分析结果",
-                    "required_tools": summary_tools,
-                    "status": "pending",
-                }
-            )
-            # Map all summary tools to this step
-            for tool_name in summary_tools:
-                self._tool_to_step_mapping[tool_name] = step_number
-            step_number += 1
-
-        # Always add a final synthesis step
-        steps.append(
-            {
-                "step_number": step_number,
-                "description": "生成最终回复",
-                "required_tools": [],
-                "status": "pending",
-            }
-        )
-
-        # If no specific tools detected (only final step), don't generate a work plan
-        # Simple conversations don't need execution plans - this makes the UI cleaner
-        if len(steps) == 1:  # Only final step (no tool usage expected)
-            self._work_plan_steps = []
-            return None  # Don't show execution plan for simple conversations
-
-        self._work_plan_steps = steps
-
-        return {
-            "plan_id": self._work_plan_id,
-            "conversation_id": "",  # Will be set by caller
-            "status": "in_progress",
-            "steps": steps,
-            "current_step": 0,
-            "total_steps": len(steps),
-        }
-
     async def _process_step(
         self,
         session_id: str,
@@ -753,11 +548,7 @@ class SessionProcessor:
         """
         logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
 
-        # Get step description from work plan if available
         step_description = f"Step {self._step_count}"
-        if self._work_plan_steps and self._current_plan_step < len(self._work_plan_steps):
-            step_info = self._work_plan_steps[self._current_plan_step]
-            step_description = step_info.get("description", step_description)
 
         # Emit step start with meaningful description
         yield AgentStepStartEvent(step_index=self._step_count, description=step_description)
@@ -947,14 +738,6 @@ class SessionProcessor:
                             # Generate unique execution_id for act/observe matching
                             tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
 
-                            # Get step number from tool-to-step mapping
-                            step_number = self._tool_to_step_mapping.get(tool_name)
-
-                            # Update work plan step status
-                            if step_number is not None and step_number < len(self._work_plan_steps):
-                                self._work_plan_steps[step_number]["status"] = "running"
-                                self._current_plan_step = step_number
-
                             yield AgentActEvent(
                                 tool_name=tool_name,
                                 tool_input=arguments,
@@ -962,15 +745,6 @@ class SessionProcessor:
                                 status="running",
                                 tool_execution_id=tool_part.tool_execution_id,
                             )
-                            # Add step_number to the event data for frontend
-                            if step_number is not None:
-                                # Re-emit with step_number in data
-                                yield AgentStepStartEvent(
-                                    step_index=step_number,
-                                    description=self._work_plan_steps[step_number].get(
-                                        "description", ""
-                                    ),
-                                )
 
                             # Execute tool
                             async for tool_event in self._execute_tool(
@@ -1429,13 +1203,6 @@ class SessionProcessor:
             tool_part.output = self._sanitize_tool_output(output_str)
             tool_part.end_time = end_time
 
-            # Update work plan step status to completed
-            step_number = self._tool_to_step_mapping.get(tool_name)
-            if step_number is not None and step_number < len(self._work_plan_steps):
-                self._work_plan_steps[step_number]["status"] = "completed"
-                # Emit step_end event
-                yield AgentStepEndEvent(step_index=step_number, status="completed")
-
             yield AgentObserveEvent(
                 tool_name=tool_name,
                 result=sse_result,
@@ -1465,13 +1232,6 @@ class SessionProcessor:
             tool_part.status = ToolState.ERROR
             tool_part.error = str(e)
             tool_part.end_time = time.time()
-
-            # Update work plan step status to failed
-            step_number = self._tool_to_step_mapping.get(tool_name)
-            if step_number is not None and step_number < len(self._work_plan_steps):
-                self._work_plan_steps[step_number]["status"] = "failed"
-                # Emit step_end event with failed status
-                yield AgentStepEndEvent(step_index=step_number, status="failed")
 
             yield AgentObserveEvent(
                 tool_name=tool_name,

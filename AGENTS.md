@@ -418,6 +418,72 @@ class EntityService:
         return await self._entity_repo.find_by_id(entity_id)
 ```
 
+**CRITICAL: DI Container & DB Session Patterns**
+
+The application uses a **global** `DIContainer` instance at `request.app.state.container` initialized at startup with `db=None`. This global container is for singletons (Neo4j client, Redis, graph service) that do NOT need per-request DB sessions. **NEVER** use the global container to create services that require a DB session -- the session will be `None` and cause `AttributeError: 'NoneType' object has no attribute 'execute'`.
+
+Two patterns exist for accessing the database in API endpoints:
+
+**Pattern A: Direct DB injection (preferred for most endpoints)**
+```python
+from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Depends, Request
+from src.infrastructure.adapters.secondary.persistence.database import get_db
+from .utils import get_container_with_db
+
+@router.get("/items")
+async def list_items(
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # Per-request session
+):
+    container = get_container_with_db(request, db)  # Scoped DIContainer with real session
+    service = container.some_service()  # Has db access
+    return await service.list()
+```
+
+`get_container_with_db(request, db)` creates a new `DIContainer` with the request's DB session while preserving graph_service and redis_client from the global container. Defined in `src/infrastructure/adapters/primary/web/routers/agent/utils.py`.
+
+**Pattern B: Dependency function (for focused services)**
+```python
+# In dependencies/__init__.py
+async def get_plan_coordinator(
+    db: AsyncSession = Depends(get_db),
+):
+    """Builds service directly with per-request DB session."""
+    return PlanCoordinator(
+        plan_repo=SqlPlanRepository(db),
+        workplan_repo=SqlWorkPlanRepository(db),
+    )
+
+# In router
+@router.post("/plans")
+async def create_plan(
+    coordinator=Depends(get_plan_coordinator),  # FastAPI chains Depends(get_db)
+):
+    return await coordinator.create(...)
+```
+
+**Key rules:**
+| Rule | Detail |
+|------|--------|
+| `request.app.state.container` | Global, `_db=None`. Only use for singletons (neo4j_client, graph_service, redis) |
+| `get_container_with_db(request, db)` | Creates scoped DIContainer with real session. Use in endpoints needing full container |
+| `Depends(get_db)` | Provides per-request `AsyncSession` via `async_session_factory()`. Auto-closed after request |
+| `DIContainer.with_db(db)` | Alternative: `request.app.state.container.with_db(db)` returns a cloned container with session |
+| Repository constructors | Always take `AsyncSession` as first arg: `SqlXxxRepository(db)` |
+| Commit responsibility | Caller (endpoint) is responsible for `await db.commit()`. Sessions auto-close but do NOT auto-commit |
+
+**Common mistake:**
+```python
+# WRONG - global container has db=None
+def get_my_service(request: Request):
+    return request.app.state.container.my_service()  # my_service's repo will have _session=None
+
+# CORRECT - inject per-request session
+async def get_my_service(db: AsyncSession = Depends(get_db)):
+    return MyService(repo=SqlMyRepository(db))
+```
+
 ### TypeScript/React (Frontend)
 
 **Formatting & Linting:**
@@ -703,3 +769,4 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | **Zustand useShallow** | Object selectors MUST use `useShallow` to prevent infinite re-renders |
 | **Never modify DB directly** | Always use Alembic migrations |
 | **Alembic autogenerate** | Always use `--autogenerate`, then review generated migration |
+| **DB session in endpoints** | Never use global container (`request.app.state.container`) for DB-dependent services. Use `get_container_with_db(request, db)` or `Depends(get_db)` for per-request sessions |

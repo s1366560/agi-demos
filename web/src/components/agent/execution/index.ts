@@ -1,4 +1,3 @@
-export { WorkPlanProgress } from './WorkPlanProgress';
 export { ToolExecutionLive } from './ToolExecutionLive';
 export { ReasoningLog } from './ReasoningLog';
 export { FinalReport } from './FinalReport';
@@ -11,7 +10,6 @@ export { SimpleExecutionView } from './SimpleExecutionView';
 export { ActivityTimeline } from './ActivityTimeline';
 export { TokenUsageChart } from './TokenUsageChart';
 export { ToolCallVisualization } from './ToolCallVisualization';
-export type { StepStatus, WorkPlanStep, WorkPlanProgressProps } from './WorkPlanProgress';
 export type { ToolExecutionStatus, ToolExecutionLiveProps } from './ToolExecutionLive';
 export type { ReasoningStep, ReasoningLogProps } from './ReasoningLog';
 export type { FinalReportProps } from './FinalReport';

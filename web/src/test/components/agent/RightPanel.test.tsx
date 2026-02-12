@@ -3,7 +3,6 @@
  *
  * Test coverage for:
  * - ResizeHandle component (extracted from RightPanel)
- * - PlanContent component (extracted from RightPanel)
  * - RightPanel (refactored to use extracted components)
  */
 
@@ -39,16 +38,6 @@ vi.mock('antd', () => ({
   Spin: () => <div data-testid="spin">Loading...</div>,
 }));
 
-// Mock stores before importing components
-vi.mock('@/stores/agent/planModeStore', () => ({
-  usePlanModeStore: vi.fn(() => ({
-    planModeStatus: null,
-    currentPlan: null,
-    planLoading: false,
-    planError: null,
-  })),
-}));
-
 vi.mock('@/stores/sandbox', () => ({
   useSandboxStore: vi.fn(() => ({
     activeSandboxId: null,
@@ -68,23 +57,9 @@ vi.mock('@/components/agent/SandboxSection', () => ({
   ),
 }));
 
-// Mock PlanEditor to avoid complex dependencies
-vi.mock('@/components/agent/PlanEditor', () => ({
-  PlanEditor: ({ plan, isLoading }: any) => (
-    <div data-testid="plan-editor" data-loading={isLoading}>
-      <div data-testid="plan-id">{plan?.id}</div>
-      Plan Editor Mock
-    </div>
-  ),
-}));
-
 // Import components after mocking
 import { RightPanel } from '@/components/agent/RightPanel';
-import { PlanContent } from '@/components/agent/rightPanel/PlanContent';
 import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
-
-// Types for test data
-import type { WorkPlan, ExecutionPlan } from '@/types/agent';
 
 describe('ResizeHandle (Extracted Component)', () => {
   it('should render resize handle with correct classes', () => {
@@ -160,99 +135,6 @@ describe('ResizeHandle (Extracted Component)', () => {
     fireEvent(handle, event);
 
     expect(event.preventDefault).toHaveBeenCalled();
-  });
-});
-
-describe('PlanContent (Extracted Component)', () => {
-  beforeEach(() => {
-    // Reset mocks before each test
-    vi.clearAllMocks();
-  });
-
-  it('should show empty state when no plans', () => {
-    const { container } = render(<PlanContent workPlan={null} executionPlan={null} />);
-
-    expect(screen.getByText('No active plan')).toBeInTheDocument();
-  });
-
-  it('should display execution plan steps', () => {
-    const executionPlan: ExecutionPlan = {
-      id: 'plan-1',
-      status: 'in_progress',
-      steps: [
-        { description: 'Step 1', expected_output: 'Output 1' },
-        { description: 'Step 2', expected_output: 'Output 2' },
-      ],
-      current_step_index: 1,
-    } as any;
-
-    const { container } = render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
-
-    expect(screen.getByText('Execution Plan')).toBeInTheDocument();
-    expect(screen.getByText('Step 1')).toBeInTheDocument();
-    expect(screen.getByText('Step 2')).toBeInTheDocument();
-  });
-
-  it('should display work plan steps', () => {
-    const workPlan: WorkPlan = {
-      id: 'plan-2',
-      status: 'active',
-      steps: [
-        { description: 'Task 1', expected_output: 'Result 1' },
-        { description: 'Task 2', expected_output: 'Result 2' },
-      ],
-      current_step_index: 0,
-    } as any;
-
-    const { container } = render(<PlanContent workPlan={workPlan} executionPlan={null} />);
-
-    expect(screen.getByText('Work Plan')).toBeInTheDocument();
-    expect(screen.getByText('Task 1')).toBeInTheDocument();
-  });
-
-  it('should show correct progress percentage', () => {
-    const executionPlan: ExecutionPlan = {
-      id: 'plan-1',
-      steps: [
-        { description: 'Step 1' },
-        { description: 'Step 2' },
-        { description: 'Step 3' },
-        { description: 'Step 4' },
-      ],
-      current_step_index: 2,
-    } as any;
-
-    render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
-
-    // 2 completed out of 4 = 50%
-    expect(screen.getByText('50%')).toBeInTheDocument();
-  });
-
-  it('should show completed step with checkmark', () => {
-    const executionPlan: ExecutionPlan = {
-      id: 'plan-1',
-      steps: [{ description: 'Completed Step' }, { description: 'Pending Step' }],
-      current_step_index: 1,
-    } as any;
-
-    render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
-
-    // Completed step should have emerald color class
-    const stepElements = screen.getAllByText(/Step/);
-    expect(stepElements[0]).toBeInTheDocument();
-  });
-
-  it('should show current step with play icon', () => {
-    const executionPlan: ExecutionPlan = {
-      id: 'plan-1',
-      steps: [{ description: 'Completed Step' }, { description: 'Current Step' }],
-      current_step_index: 1,
-    } as any;
-
-    render(<PlanContent workPlan={null} executionPlan={executionPlan} />);
-
-    // Current step should be present
-    expect(screen.getByText('Current Step')).toBeInTheDocument();
   });
 });
 

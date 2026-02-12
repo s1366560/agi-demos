@@ -9,16 +9,12 @@
  *   timeline={timeline}
  *   isStreaming={false}
  *   isLoading={false}
- *   planModeStatus={null}
- *   onViewPlan={handleViewPlan}
- *   onExitPlanMode={handleExitPlanMode}
  * />
  * ```
  *
  * ### Compound Components (Custom rendering)
  * ```tsx
  * <MessageArea timeline={timeline} ...>
- *   <MessageArea.PlanBanner />
  *   <MessageArea.ScrollIndicator />
  *   <MessageArea.Content />
  *   <MessageArea.ScrollButton />
@@ -47,18 +43,16 @@ import { useConversationsStore } from '../../stores/agent/conversationsStore';
 import { AgentStatePill } from './chat/AgentStatePill';
 import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
 import { useMarkdownPlugins } from './chat/markdownPlugins';
-import { PlanProgressBar } from './chat/PlanProgressBar';
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ThinkingBlock } from './chat/ThinkingBlock';
 import { MessageBubble } from './MessageBubble';
-import { PlanModeBanner } from './PlanModeBanner';
 import { MARKDOWN_PROSE_CLASSES } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
 import type { TimelineStep } from './timeline/ExecutionTimeline';
 import type { SubAgentGroup } from './timeline/SubAgentTimeline';
-import type { TimelineEvent, PlanModeStatus } from '../../types/agent';
+import type { TimelineEvent } from '../../types/agent';
 
 // Import and re-export types from separate file
 export type {
@@ -69,7 +63,6 @@ export type {
   MessageAreaScrollIndicatorProps,
   MessageAreaScrollButtonProps,
   MessageAreaContentProps,
-  MessageAreaPlanBannerProps,
   MessageAreaStreamingContentProps,
   MessageAreaCompound,
 } from './message/types';
@@ -401,9 +394,6 @@ interface _MessageAreaRootProps {
   isStreaming: boolean;
   isThinkingStreaming?: boolean;
   isLoading: boolean;
-  planModeStatus: PlanModeStatus | null;
-  onViewPlan: () => void;
-  onExitPlanMode: () => void;
   hasEarlierMessages?: boolean;
   onLoadEarlier?: () => void;
   isLoadingEarlier?: boolean;
@@ -428,9 +418,6 @@ interface _MessageAreaContextValue {
   isStreaming: boolean;
   isThinkingStreaming?: boolean;
   isLoading: boolean;
-  planModeStatus: PlanModeStatus | null;
-  onViewPlan: () => void;
-  onExitPlanMode: () => void;
   hasEarlierMessages: boolean;
   onLoadEarlier?: () => void;
   isLoadingEarlier: boolean;
@@ -464,10 +451,6 @@ interface _MessageAreaContentProps {
   className?: string;
 }
 
-interface _MessageAreaPlanBannerProps {
-  className?: string;
-}
-
 interface _MessageAreaStreamingContentProps {
   className?: string;
 }
@@ -479,7 +462,6 @@ interface _MessageAreaCompound extends React.FC<_MessageAreaRootProps> {
   ScrollIndicator: React.FC<_MessageAreaScrollIndicatorProps>;
   ScrollButton: React.FC<_MessageAreaScrollButtonProps>;
   Content: React.FC<_MessageAreaContentProps>;
-  PlanBanner: React.FC<_MessageAreaPlanBannerProps>;
   StreamingContent: React.FC<_MessageAreaStreamingContentProps>;
   Root: React.FC<_MessageAreaRootProps>;
 }
@@ -493,7 +475,6 @@ const EMPTY_SYMBOL = Symbol('MessageAreaEmpty');
 const SCROLL_INDICATOR_SYMBOL = Symbol('MessageAreaScrollIndicator');
 const SCROLL_BUTTON_SYMBOL = Symbol('MessageAreaScrollButton');
 const CONTENT_SYMBOL = Symbol('MessageAreaContent');
-const PLAN_BANNER_SYMBOL = Symbol('MessageAreaPlanBanner');
 const STREAMING_CONTENT_SYMBOL = Symbol('MessageAreaStreamingContent');
 
 // ========================================
@@ -539,9 +520,6 @@ function ScrollButtonMarker(_props: _MessageAreaScrollButtonProps) {
 function ContentMarker(_props: _MessageAreaContentProps) {
   return null;
 }
-function PlanBannerMarker(_props: _MessageAreaPlanBannerProps) {
-  return null;
-}
 function StreamingContentMarker(_props: _MessageAreaStreamingContentProps) {
   return null;
 }
@@ -552,7 +530,6 @@ function StreamingContentMarker(_props: _MessageAreaStreamingContentProps) {
 (ScrollIndicatorMarker as any)[SCROLL_INDICATOR_SYMBOL] = true;
 (ScrollButtonMarker as any)[SCROLL_BUTTON_SYMBOL] = true;
 (ContentMarker as any)[CONTENT_SYMBOL] = true;
-(PlanBannerMarker as any)[PLAN_BANNER_SYMBOL] = true;
 (StreamingContentMarker as any)[STREAMING_CONTENT_SYMBOL] = true;
 
 // Set display names for testing
@@ -561,7 +538,6 @@ function StreamingContentMarker(_props: _MessageAreaStreamingContentProps) {
 (ScrollIndicatorMarker as any).displayName = 'MessageAreaScrollIndicator';
 (ScrollButtonMarker as any).displayName = 'MessageAreaScrollButton';
 (ContentMarker as any).displayName = 'MessageAreaContent';
-(PlanBannerMarker as any).displayName = 'MessageAreaPlanBanner';
 (StreamingContentMarker as any).displayName = 'MessageAreaStreamingContent';
 
 // ========================================
@@ -719,9 +695,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     isStreaming,
     isThinkingStreaming: _propIsThinkingStreaming,
     isLoading,
-    planModeStatus,
-    onViewPlan,
-    onExitPlanMode,
     hasEarlierMessages = false,
     onLoadEarlier,
     isLoadingEarlier: propIsLoadingEarlier = false,
@@ -770,9 +743,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       (child: any) => child?.type?.[SCROLL_BUTTON_SYMBOL]
     ) as any;
     const contentChild = childrenArray.find((child: any) => child?.type?.[CONTENT_SYMBOL]) as any;
-    const planBannerChild = childrenArray.find(
-      (child: any) => child?.type?.[PLAN_BANNER_SYMBOL]
-    ) as any;
     const streamingContentChild = childrenArray.find(
       (child: any) => child?.type?.[STREAMING_CONTENT_SYMBOL]
     ) as any;
@@ -784,7 +754,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       scrollIndicatorChild ||
       scrollButtonChild ||
       contentChild ||
-      planBannerChild ||
       streamingContentChild;
 
     // In legacy mode, include all sections by default
@@ -794,7 +763,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const includeScrollIndicator = hasSubComponents ? !!scrollIndicatorChild : true;
     const includeScrollButton = hasSubComponents ? !!scrollButtonChild : true;
     const includeContent = hasSubComponents ? !!contentChild : true;
-    const includePlanBanner = hasSubComponents ? !!planBannerChild : true;
     const includeStreamingContent = hasSubComponents ? !!streamingContentChild : true;
 
     // Pagination state refs
@@ -824,9 +792,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       isStreaming,
       isThinkingStreaming,
       isLoading,
-      planModeStatus,
-      onViewPlan,
-      onExitPlanMode,
       hasEarlierMessages,
       onLoadEarlier,
       isLoadingEarlier: propIsLoadingEarlier,
@@ -1212,17 +1177,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     return (
       <MessageAreaContext.Provider value={contextValue}>
         <div className="h-full w-full relative flex flex-col overflow-hidden">
-          {/* Plan Mode Banner */}
-          {includePlanBanner && planModeStatus?.is_in_plan_mode && (
-            <div className="flex-shrink-0">
-              <PlanModeBanner
-                status={planModeStatus}
-                onViewPlan={onViewPlan}
-                onExit={onExitPlanMode}
-              />
-            </div>
-          )}
-
           {/* Loading state */}
           {includeLoading && showLoadingState && (
             <InternalLoading context={contextValue} {...loadingChild?.props} />
@@ -1421,9 +1375,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   />
                 )}
 
-                {/* Plan progress bar for multi-step plans */}
-                {isStreaming && <PlanProgressBar className="mb-4" />}
-
                 {/* Agent state transition pill */}
                 {isStreaming && <AgentStatePill className="mb-4" />}
 
@@ -1515,7 +1466,6 @@ MessageAreaCompound.Empty = EmptyMarker;
 MessageAreaCompound.ScrollIndicator = ScrollIndicatorMarker;
 MessageAreaCompound.ScrollButton = ScrollButtonMarker;
 MessageAreaCompound.Content = ContentMarker;
-MessageAreaCompound.PlanBanner = PlanBannerMarker;
 MessageAreaCompound.StreamingContent = StreamingContentMarker;
 MessageAreaCompound.Root = MessageAreaMemo;
 

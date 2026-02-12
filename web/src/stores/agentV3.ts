@@ -3,10 +3,8 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 
 import { agentService } from '../services/agentService';
-import { planService } from '../services/planService';
 import {
   Message,
-  WorkPlan,
   Conversation,
   AgentStreamHandler,
   ToolCall,
@@ -15,7 +13,6 @@ import {
   ActEventData,
   ObserveEventData,
   UserMessageEvent,
-  ExecutionPlan,
   PermissionAskedEventData,
   DoomLoopDetectedEventData,
 } from '../types/agent';
@@ -443,10 +440,8 @@ interface AgentV3State {
   >;
   pendingToolsStack: string[]; // Track order of tool executions
 
-  // Plan State (for active conversation - backward compatibility)
-  workPlan: WorkPlan | null;
+  // Plan Mode State
   isPlanMode: boolean;
-  executionPlan: ExecutionPlan | null;
 
   // UI State
   showPlanPanel: boolean;
@@ -495,7 +490,6 @@ interface AgentV3State {
   respondToEnvVar: (requestId: string, values: Record<string, string>) => Promise<void>;
   respondToPermission: (requestId: string, granted: boolean) => Promise<void>;
   loadPendingHITL: (conversationId: string) => Promise<void>;
-  togglePlanMode: () => Promise<void>;
   clearError: () => void;
   togglePinEvent: (eventId: string) => void;
 }
@@ -535,9 +529,7 @@ export const useAgentV3Store = create<AgentV3State>()(
         activeToolCalls: new Map(),
         pendingToolsStack: [],
 
-        workPlan: null,
         isPlanMode: false,
-        executionPlan: null,
 
         showPlanPanel: false,
         showHistorySidebar: false,
@@ -628,11 +620,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 ...(updates.pendingToolsStack !== undefined && {
                   pendingToolsStack: updates.pendingToolsStack,
                 }),
-                ...(updates.workPlan !== undefined && { workPlan: updates.workPlan }),
                 ...(updates.isPlanMode !== undefined && { isPlanMode: updates.isPlanMode }),
-                ...(updates.executionPlan !== undefined && {
-                  executionPlan: updates.executionPlan,
-                }),
                 ...(updates.pendingClarification !== undefined && {
                   pendingClarification: updates.pendingClarification,
                 }),
@@ -724,9 +712,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             isThinkingStreaming: convState.isThinkingStreaming,
             activeToolCalls: convState.activeToolCalls,
             pendingToolsStack: convState.pendingToolsStack,
-            workPlan: convState.workPlan,
             isPlanMode: convState.isPlanMode,
-            executionPlan: convState.executionPlan,
             pendingClarification: convState.pendingClarification,
             pendingDecision: convState.pendingDecision,
             pendingEnvVarRequest: convState.pendingEnvVarRequest,
@@ -750,9 +736,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             isThinkingStreaming,
             activeToolCalls,
             pendingToolsStack,
-            workPlan,
             isPlanMode,
-            executionPlan,
             pendingClarification,
             pendingDecision,
             pendingEnvVarRequest,
@@ -796,9 +780,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               isThinkingStreaming,
               activeToolCalls,
               pendingToolsStack,
-              workPlan,
               isPlanMode,
-              executionPlan,
               pendingClarification,
               pendingDecision,
               pendingEnvVarRequest,
@@ -857,9 +839,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 isThinkingStreaming: newState.isThinkingStreaming,
                 activeToolCalls: newState.activeToolCalls,
                 pendingToolsStack: newState.pendingToolsStack,
-                workPlan: newState.workPlan,
                 isPlanMode: newState.isPlanMode,
-                executionPlan: newState.executionPlan,
                 pendingClarification: newState.pendingClarification,
                 pendingDecision: newState.pendingDecision,
                 pendingEnvVarRequest: newState.pendingEnvVarRequest,
@@ -889,9 +869,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             isThinkingStreaming: false,
             activeToolCalls: new Map(),
             pendingToolsStack: [],
-            workPlan: null,
             isPlanMode: false,
-            executionPlan: null,
             pendingClarification: null,
             pendingDecision: null,
             pendingEnvVarRequest: null,
@@ -1047,8 +1025,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 currentThought: '',
                 streamingThought: '',
                 isThinkingStreaming: false,
-                workPlan: null,
-                executionPlan: null,
+                isPlanMode: false,
                 agentState: 'idle',
                 isStreaming: false,
                 error: null,
@@ -1093,8 +1070,7 @@ export const useAgentV3Store = create<AgentV3State>()(
             currentThought: cachedState?.currentThought || '',
             streamingThought: '',
             isThinkingStreaming: false,
-            workPlan: cachedState?.workPlan || null,
-            executionPlan: cachedState?.executionPlan || null,
+            isPlanMode: cachedState?.isPlanMode || false,
             agentState: cachedState?.agentState || 'idle',
             hasEarlier: cachedState?.hasEarlier || false,
             earliestTimeUs: cachedState?.earliestTimeUs || null,
@@ -1117,17 +1093,12 @@ export const useAgentV3Store = create<AgentV3State>()(
           try {
             // Parallelize independent API calls (async-parallel)
             // Include recovery info in execution status check
-            const [response, planStatus, execStatus, _contextStatusResult] = await Promise.all([
+            const [response, execStatus, _contextStatusResult, planModeResult] = await Promise.all([
               agentService.getConversationMessages(
                 conversationId,
                 projectId,
                 200 // Load latest 200 messages
               ) as Promise<any>,
-              // Use catch to prevent one failure from blocking others
-              planService.getPlanModeStatus(conversationId).catch((e) => {
-                logger.warn(`[AgentV3] getPlanModeStatus failed:`, e);
-                return null;
-              }),
               agentService.getExecutionStatus(conversationId, true, lastKnownTimeUs).catch((e) => {
                 logger.warn(`[AgentV3] getExecutionStatus failed:`, e);
                 return null;
@@ -1140,7 +1111,22 @@ export const useAgentV3Store = create<AgentV3State>()(
                 logger.warn(`[AgentV3] fetchContextStatus failed:`, e);
                 return null;
               }),
+              // Fetch plan mode status from API
+              (async () => {
+                const { planService } = await import('../services/planService');
+                return planService.getMode(conversationId);
+              })().catch((e) => {
+                logger.debug(`[AgentV3] getMode failed:`, e);
+                return null;
+              }),
             ]);
+
+            // Update plan mode from API response
+            if (planModeResult && planModeResult.mode) {
+              const isPlan = planModeResult.mode === 'plan';
+              set({ isPlanMode: isPlan });
+              get().updateConversationState(conversationId, { isPlanMode: isPlan });
+            }
 
             if (get().activeConversationId !== conversationId) {
               logger.debug('Conversation changed during load, ignoring result');
@@ -1220,7 +1206,6 @@ export const useAgentV3Store = create<AgentV3State>()(
               hasEarlier: response.has_more ?? false,
               earliestTimeUs: firstTimeUs,
               earliestCounter: firstCounter,
-              isPlanMode: planStatus?.is_in_plan_mode ?? false,
             };
 
             set((state) => {
@@ -1253,8 +1238,6 @@ export const useAgentV3Store = create<AgentV3State>()(
                 hasEarlier: response.has_more ?? false,
                 earliestTimeUs: firstTimeUs,
                 earliestCounter: firstCounter,
-                // Set plan mode if successfully fetched
-                ...(planStatus ? { isPlanMode: planStatus.is_in_plan_mode } : {}),
               };
             });
 
@@ -1714,32 +1697,6 @@ export const useAgentV3Store = create<AgentV3State>()(
 
         setLeftSidebarWidth: (width: number) => set({ leftSidebarWidth: width }),
         setRightPanelWidth: (width: number) => set({ rightPanelWidth: width }),
-
-        togglePlanMode: async () => {
-          const { isPlanMode, activeConversationId } = get();
-          if (!activeConversationId) return;
-
-          try {
-            if (isPlanMode) {
-              const status = await planService.getPlanModeStatus(activeConversationId);
-              if (status.current_plan_id) {
-                await planService.exitPlanMode({
-                  conversation_id: activeConversationId,
-                  plan_id: status.current_plan_id,
-                });
-              }
-              set({ isPlanMode: false });
-            } else {
-              await planService.enterPlanMode({
-                conversation_id: activeConversationId,
-                title: 'Plan',
-              });
-              set({ isPlanMode: true });
-            }
-          } catch (error) {
-            console.error('Failed to toggle plan mode', error);
-          }
-        },
 
         clearError: () => set({ error: null }),
 

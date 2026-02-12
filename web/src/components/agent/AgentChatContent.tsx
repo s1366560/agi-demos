@@ -23,7 +23,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { GripHorizontal, Download, ChevronDown, GitCompareArrows } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { usePlanModeStore } from '@/stores/agent/planModeStore';
 import { useAgentV3Store } from '@/stores/agentV3';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
@@ -111,7 +110,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     isLoadingHistory,
     isLoadingEarlier,
     isStreaming,
-    isPlanMode,
     // HITL state now rendered inline in timeline via InlineHITLCard
     // pendingClarification, pendingDecision, pendingEnvVarRequest removed
     doomLoopDetected,
@@ -123,7 +121,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     createNewConversation,
     sendMessage,
     abortStream,
-    togglePlanMode,
     // HITL response methods still available but not used directly
     // respondToClarification, respondToDecision, respondToEnvVar
     loadPendingHITL,
@@ -138,7 +135,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       isLoadingHistory: state.isLoadingHistory,
       isLoadingEarlier: state.isLoadingEarlier,
       isStreaming: state.isStreaming,
-      isPlanMode: state.isPlanMode,
       doomLoopDetected: state.doomLoopDetected,
       hasEarlier: state.hasEarlier,
       loadConversations: state.loadConversations,
@@ -148,7 +144,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       createNewConversation: state.createNewConversation,
       sendMessage: state.sendMessage,
       abortStream: state.abortStream,
-      togglePlanMode: state.togglePlanMode,
       loadPendingHITL: state.loadPendingHITL,
       clearError: state.clearError,
       error: state.error,
@@ -177,7 +172,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     [navigate, basePath, customBasePath, queryProjectId]
   );
 
-  const { planModeStatus, exitPlanMode } = usePlanModeStore();
   const {
     activeSandboxId,
     setProjectId,
@@ -229,12 +223,31 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     () => !localStorage.getItem('memstack_onboarding_complete'),
   );
 
-  // Cmd+F to open chat search, / to focus input
+  // Cmd+F to open chat search, / to focus input, Shift+Tab to toggle plan mode
   useEffect(() => {
     const handleKeyShortcut = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         setChatSearchVisible((v) => !v);
+        return;
+      }
+
+      // Shift+Tab to toggle Plan Mode
+      if (e.shiftKey && e.key === 'Tab') {
+        e.preventDefault();
+        // Use dynamic import to avoid stale closure
+        const store = useAgentV3Store.getState();
+        const convId = store.activeConversationId;
+        if (!convId) return;
+        const newMode = store.isPlanMode ? 'build' : 'plan';
+        import('@/services/planService').then(({ planService }) => {
+          planService.switchMode(convId, newMode as 'plan' | 'build').then(() => {
+            useAgentV3Store.getState().updateConversationState(convId, {
+              isPlanMode: newMode === 'plan',
+            });
+            useAgentV3Store.setState({ isPlanMode: newMode === 'plan' });
+          }).catch(console.error);
+        });
         return;
       }
 
@@ -375,23 +388,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     ]
   );
 
-  const handleViewPlan = useCallback(() => {
-    // No-op: right panel removed
-  }, []);
-
-  const handleExitPlanMode = useCallback(async () => {
-    if (!activeConversationId || !planModeStatus?.current_plan_id) return;
-    try {
-      await exitPlanMode(activeConversationId, planModeStatus.current_plan_id, false);
-      togglePlanMode();
-    } catch (error) {
-      notification?.error({
-        message: t('agent.notifications.planModeExitFailed.title'),
-        description: t('agent.notifications.planModeExitFailed.description'),
-      });
-    }
-  }, [activeConversationId, planModeStatus, exitPlanMode, togglePlanMode, t, notification]);
-
   // Memoized components
   const messageArea = useMemo(
     () =>
@@ -408,9 +404,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
           timeline={timeline}
           isStreaming={isStreaming}
           isLoading={isLoadingHistory}
-          planModeStatus={planModeStatus}
-          onViewPlan={handleViewPlan}
-          onExitPlanMode={handleExitPlanMode}
           hasEarlierMessages={hasEarlier}
           onLoadEarlier={() => {
             if (activeConversationId && projectId) {
@@ -429,9 +422,6 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       isLoadingHistory,
       isLoadingEarlier,
       activeConversationId,
-      planModeStatus,
-      handleViewPlan,
-      handleExitPlanMode,
       handleNewConversation,
       handleSend,
       handleResumeConversation,
@@ -494,7 +484,24 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     [layoutMode, splitRatio, setSplitRatio]
   );
 
-  // Chat column content (reused across modes)
+  // Plan Mode toggle
+  const isPlanMode = useAgentV3Store((s) => s.isPlanMode);
+
+  const handleTogglePlanMode = useCallback(async () => {
+    if (!activeConversationId) return;
+    const newMode = isPlanMode ? 'build' : 'plan';
+    try {
+      const { planService } = await import('@/services/planService');
+      await planService.switchMode(activeConversationId, newMode);
+      useAgentV3Store.getState().updateConversationState(activeConversationId, {
+        isPlanMode: newMode === 'plan',
+      });
+      useAgentV3Store.setState({ isPlanMode: newMode === 'plan' });
+    } catch (err) {
+      console.error('Failed to switch plan mode:', err);
+    }
+  }, [activeConversationId, isPlanMode]);
+
   const chatColumn = (
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
       {headerExtra && (
@@ -531,10 +538,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
           onSend={handleSend}
           onAbort={abortStream}
           isStreaming={isStreaming}
-          isPlanMode={isPlanMode}
-          onTogglePlanMode={togglePlanMode}
           disabled={isLoadingHistory}
           projectId={projectId || undefined}
+          onTogglePlanMode={handleTogglePlanMode}
+          isPlanMode={isPlanMode}
         />
       </div>
     </div>
@@ -737,7 +744,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
     );
   }
 
-  // Chat mode (default): classic layout with optional right panel
+  // Chat mode (default): classic layout
   return (
     <div
       className={`flex h-full w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-950 dark:to-slate-900/50 ${className}`}
@@ -751,7 +758,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative" aria-label="Chat">
+      <main
+        className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative"
+        aria-label="Chat"
+      >
         {chatColumn}
         {statusBarWithLayout}
       </main>

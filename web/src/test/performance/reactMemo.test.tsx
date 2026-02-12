@@ -5,7 +5,6 @@
  * These components should only re-render when their props change.
  *
  * Target components:
- * - WorkPlanProgress
  * - TopNavigation
  * - ExecutionStatsCard
  * - Other pure components
@@ -18,10 +17,8 @@ import '@testing-library/jest-dom/vitest';
 import { createElement } from 'react';
 
 // Import components to test
-import { WorkPlanProgress } from '../../components/agent/execution/WorkPlanProgress';
 import { ExecutionStatsCard } from '../../components/agent/ExecutionStatsCard';
 import { TopNavigation } from '../../components/agent/layout/TopNavigation';
-import { WorkPlanCard } from '../../components/agent/WorkPlanCard';
 import * as containment from '../../styles/containment';
 
 // Render count tracking utility
@@ -50,79 +47,6 @@ export function withRenderTracking<P extends object>(
     return createElement(Component, props);
   };
 }
-
-describe('React.memo - WorkPlanProgress', () => {
-  beforeEach(() => {
-    resetRenderCounts();
-  });
-
-  it('should be wrapped with React.memo', () => {
-    // displayName is set when using React.memo with a named function
-    expect(WorkPlanProgress.displayName).toBe('WorkPlanProgress');
-  });
-
-  it('should re-render when currentStep changes', () => {
-    const TrackedWorkPlanProgress = withRenderTracking(WorkPlanProgress, 'WorkPlanProgress');
-
-    const { rerender } = render(<TrackedWorkPlanProgress currentStep={1} totalSteps={3} />);
-
-    const initialRenderCount = getRenderCount('WorkPlanProgress');
-    expect(initialRenderCount).toBeGreaterThanOrEqual(1);
-
-    // Re-render with different currentStep - this should cause a re-render
-    rerender(<TrackedWorkPlanProgress currentStep={2} totalSteps={3} />);
-
-    const secondRenderCount = getRenderCount('WorkPlanProgress');
-    expect(secondRenderCount).toBeGreaterThan(initialRenderCount);
-  });
-
-  it('should re-render when currentStep changes', () => {
-    const TrackedWorkPlanProgress = withRenderTracking(WorkPlanProgress, 'WorkPlanProgress');
-
-    const { rerender } = render(<TrackedWorkPlanProgress currentStep={1} totalSteps={3} />);
-
-    const initialRenderCount = getRenderCount('WorkPlanProgress');
-    expect(initialRenderCount).toBe(1);
-
-    // Re-render with different currentStep
-    rerender(<TrackedWorkPlanProgress currentStep={2} totalSteps={3} />);
-
-    const secondRenderCount = getRenderCount('WorkPlanProgress');
-    expect(secondRenderCount).toBeGreaterThan(initialRenderCount);
-  });
-
-  it('should re-render when totalSteps changes', () => {
-    const TrackedWorkPlanProgress = withRenderTracking(WorkPlanProgress, 'WorkPlanProgress');
-
-    const { rerender } = render(<TrackedWorkPlanProgress currentStep={1} totalSteps={3} />);
-
-    const initialRenderCount = getRenderCount('WorkPlanProgress');
-    expect(initialRenderCount).toBe(1);
-
-    // Re-render with different totalSteps
-    rerender(<TrackedWorkPlanProgress currentStep={1} totalSteps={5} />);
-
-    const secondRenderCount = getRenderCount('WorkPlanProgress');
-    expect(secondRenderCount).toBeGreaterThan(initialRenderCount);
-  });
-
-  it('should render correctly with all props', () => {
-    render(
-      <WorkPlanProgress
-        currentStep={2}
-        totalSteps={4}
-        stepLabels={['Step 1', 'Step 2', 'Step 3', 'Step 4']}
-        progress={50}
-        statusMessage="Processing..."
-        compact={false}
-      />
-    );
-
-    expect(screen.getByText('Work Plan')).toBeInTheDocument();
-    expect(screen.getByText('Processing...')).toBeInTheDocument();
-    expect(screen.getByText('Step 2 of 4')).toBeInTheDocument();
-  });
-});
 
 describe('React.memo - TopNavigation', () => {
   beforeEach(() => {
@@ -265,24 +189,7 @@ describe('React.memo - ExecutionStatsCard', () => {
   });
 });
 
-describe('React.memo - WorkPlanCard', () => {
-  beforeEach(() => {
-    resetRenderCounts();
-  });
-
-  it('should be wrapped with React.memo', () => {
-    expect(WorkPlanCard.displayName).toBe('WorkPlanCard');
-  });
-});
-
 describe('CSS Containment Integration', () => {
-  it('should apply card-optimized class to WorkPlanProgress', () => {
-    const { container } = render(<WorkPlanProgress currentStep={1} totalSteps={3} />);
-
-    const cardElement = container.querySelector('.card-optimized');
-    expect(cardElement).toBeInTheDocument();
-  });
-
   it('should apply card-optimized class to ExecutionStatsCard', () => {
     const { container } = render(
       <ExecutionStatsCard

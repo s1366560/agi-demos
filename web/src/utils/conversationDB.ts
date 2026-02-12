@@ -35,9 +35,6 @@ interface SerializedConversationState {
   isThinkingStreaming: boolean;
   activeToolCalls: Array<[string, unknown]>;
   pendingToolsStack: string[];
-  workPlan: unknown;
-  isPlanMode: boolean;
-  executionPlan: unknown;
   pendingClarification: unknown;
   pendingDecision: unknown;
   pendingEnvVarRequest: unknown;
@@ -106,9 +103,6 @@ function serializeState(
     isThinkingStreaming: false,
     activeToolCalls: state.activeToolCalls ? Array.from(state.activeToolCalls.entries()) : [],
     pendingToolsStack: [],
-    workPlan: state.workPlan || null,
-    isPlanMode: state.isPlanMode || false,
-    executionPlan: state.executionPlan || null,
     pendingClarification: state.pendingClarification || null,
     pendingDecision: state.pendingDecision || null,
     pendingEnvVarRequest: state.pendingEnvVarRequest || null,
@@ -139,9 +133,7 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     isThinkingStreaming: stored.isThinkingStreaming,
     activeToolCalls: new Map(stored.activeToolCalls || []) as ConversationState['activeToolCalls'],
     pendingToolsStack: stored.pendingToolsStack,
-    workPlan: stored.workPlan as ConversationState['workPlan'],
-    isPlanMode: stored.isPlanMode,
-    executionPlan: stored.executionPlan as ConversationState['executionPlan'],
+    isPlanMode: (stored as any).isPlanMode ?? false,
     pendingClarification: stored.pendingClarification as ConversationState['pendingClarification'],
     pendingDecision: stored.pendingDecision as ConversationState['pendingDecision'],
     pendingEnvVarRequest: stored.pendingEnvVarRequest as ConversationState['pendingEnvVarRequest'],

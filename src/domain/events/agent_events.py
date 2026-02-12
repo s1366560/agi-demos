@@ -93,12 +93,7 @@ class AgentThoughtDeltaEvent(AgentDomainEvent):
     delta: str
 
 
-# === Work Plan Events ===
-
-
-class AgentWorkPlanEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.WORK_PLAN
-    plan: Dict[str, Any]  # Using Dict for now as Plan is complex
+# === Step Events ===
 
 
 class AgentStepStartEvent(AgentDomainEvent):
@@ -410,137 +405,6 @@ class AgentSkillFallbackEvent(AgentDomainEvent):
     error: Optional[str] = None
 
 
-# === Plan Mode Events ===
-
-
-class AgentPlanModeEnterEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.PLAN_MODE_ENTER
-    conversation_id: str
-    plan_id: str
-    plan_title: str
-
-
-class AgentPlanModeExitEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.PLAN_MODE_EXIT
-    conversation_id: str
-    plan_id: str
-    plan_status: str
-    approved: bool
-
-
-class AgentPlanCreatedEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.PLAN_CREATED
-    plan_id: str
-    title: str
-    conversation_id: str
-
-
-class AgentPlanUpdatedEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.PLAN_UPDATED
-    plan_id: str
-    content: str
-    version: int
-
-
-class AgentPlanStatusChangedEvent(AgentDomainEvent):
-    event_type: AgentEventType = AgentEventType.PLAN_STATUS_CHANGED
-    plan_id: str
-    old_status: str
-    new_status: str
-
-
-class AgentPlanExecutionStartEvent(AgentDomainEvent):
-    """Event emitted when plan execution starts."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_EXECUTION_START
-    plan_id: str
-    total_steps: int
-    user_query: str
-
-
-class AgentPlanExecutionCompleteEvent(AgentDomainEvent):
-    """Event emitted when plan execution completes."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_EXECUTION_COMPLETE
-    plan_id: str
-    total_duration_ms: int
-    steps_completed: int
-    steps_failed: int
-    final_status: str
-
-
-class AgentPlanStepReadyEvent(AgentDomainEvent):
-    """Event emitted when a step is ready to execute."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_STEP_READY
-    plan_id: str
-    step_id: str
-    step_number: int
-    description: str
-    tool_name: str
-
-
-class AgentPlanStepCompleteEvent(AgentDomainEvent):
-    """Event emitted when a step completes."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_STEP_COMPLETE
-    plan_id: str
-    step_id: str
-    status: str
-    result: Optional[str] = None
-    error: Optional[str] = None
-
-
-class AgentPlanStepSkippedEvent(AgentDomainEvent):
-    """Event emitted when a step is skipped."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_STEP_SKIPPED
-    plan_id: str
-    step_id: str
-    reason: str
-
-
-class AgentPlanSnapshotCreatedEvent(AgentDomainEvent):
-    """Event emitted when a plan snapshot is created."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_SNAPSHOT_CREATED
-    plan_id: str
-    snapshot_id: str
-    snapshot_name: str
-    snapshot_type: str
-
-
-class AgentPlanRollbackEvent(AgentDomainEvent):
-    """Event emitted when a plan is rolled back to a snapshot."""
-
-    event_type: AgentEventType = AgentEventType.PLAN_ROLLBACK
-    plan_id: str
-    snapshot_id: str
-    reason: str
-
-
-class AgentReflectionCompleteEvent(AgentDomainEvent):
-    """Event emitted when reflection completes."""
-
-    event_type: AgentEventType = AgentEventType.REFLECTION_COMPLETE
-    reflection_id: str
-    plan_id: str
-    assessment: str
-    recommended_action: str
-    summary: str
-    has_adjustments: bool
-    adjustment_count: int
-
-
-class AgentAdjustmentAppliedEvent(AgentDomainEvent):
-    """Event emitted when adjustments are applied to a plan."""
-
-    event_type: AgentEventType = AgentEventType.ADJUSTMENT_APPLIED
-    plan_id: str
-    adjustment_count: int
-    adjustments: List[Dict[str, Any]]
-
-
 # === Title Generation Events ===
 
 
@@ -786,7 +650,6 @@ def get_event_type_docstring() -> str:
         AgentErrorEvent,
         AgentThoughtEvent,
         AgentThoughtDeltaEvent,
-        AgentWorkPlanEvent,
         AgentStepStartEvent,
         AgentStepEndEvent,
         AgentStepFinishEvent,
@@ -810,20 +673,6 @@ def get_event_type_docstring() -> str:
         AgentSkillExecutionStartEvent,
         AgentSkillExecutionCompleteEvent,
         AgentSkillFallbackEvent,
-        AgentPlanModeEnterEvent,
-        AgentPlanModeExitEvent,
-        AgentPlanCreatedEvent,
-        AgentPlanUpdatedEvent,
-        AgentPlanStatusChangedEvent,
-        AgentPlanExecutionStartEvent,
-        AgentPlanExecutionCompleteEvent,
-        AgentPlanStepReadyEvent,
-        AgentPlanStepCompleteEvent,
-        AgentPlanStepSkippedEvent,
-        AgentPlanSnapshotCreatedEvent,
-        AgentPlanRollbackEvent,
-        AgentReflectionCompleteEvent,
-        AgentAdjustmentAppliedEvent,
         AgentTitleGeneratedEvent,
         AgentSandboxCreatedEvent,
         AgentSandboxTerminatedEvent,

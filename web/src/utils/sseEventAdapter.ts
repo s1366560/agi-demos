@@ -774,11 +774,6 @@ export function sseEventToTimeline(
     case 'context_compressed':
     case 'context_status':
     case 'context_summary_generated':
-    case 'plan_mode_enter':
-    case 'plan_mode_exit':
-    case 'plan_created':
-    case 'plan_updated':
-    case 'plan_status_changed':
     case 'title_generated':
     case 'thought_delta':
       return null;

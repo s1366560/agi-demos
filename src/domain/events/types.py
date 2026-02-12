@@ -53,9 +53,8 @@ class AgentEventType(str, Enum):
     THOUGHT_DELTA = "thought_delta"
 
     # =========================================================================
-    # Work plan events (multi-level thinking)
+    # Plan & WorkPlan progress events
     # =========================================================================
-    WORK_PLAN = "work_plan"
     STEP_START = "step_start"
     STEP_END = "step_end"
     STEP_FINISH = "step_finish"
@@ -137,24 +136,6 @@ class AgentEventType(str, Enum):
     SKILL_EXECUTION_START = "skill_execution_start"
     SKILL_EXECUTION_COMPLETE = "skill_execution_complete"
     SKILL_FALLBACK = "skill_fallback"
-
-    # =========================================================================
-    # Plan Mode events
-    # =========================================================================
-    PLAN_MODE_ENTER = "plan_mode_enter"
-    PLAN_MODE_EXIT = "plan_mode_exit"
-    PLAN_CREATED = "plan_created"
-    PLAN_UPDATED = "plan_updated"
-    PLAN_STATUS_CHANGED = "plan_status_changed"
-    PLAN_EXECUTION_START = "plan_execution_start"
-    PLAN_EXECUTION_COMPLETE = "plan_execution_complete"
-    PLAN_STEP_READY = "plan_step_ready"
-    PLAN_STEP_COMPLETE = "plan_step_complete"
-    PLAN_STEP_SKIPPED = "plan_step_skipped"
-    PLAN_SNAPSHOT_CREATED = "plan_snapshot_created"
-    PLAN_ROLLBACK = "plan_rollback"
-    REFLECTION_COMPLETE = "reflection_complete"
-    ADJUSTMENT_APPLIED = "adjustment_applied"
 
     # =========================================================================
     # Title generation events
@@ -253,7 +234,6 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.TEXT_START: EventCategory.AGENT,
     AgentEventType.TEXT_DELTA: EventCategory.AGENT,
     AgentEventType.TEXT_END: EventCategory.AGENT,
-    AgentEventType.WORK_PLAN: EventCategory.AGENT,
     AgentEventType.STEP_START: EventCategory.AGENT,
     AgentEventType.STEP_END: EventCategory.AGENT,
     AgentEventType.STEP_FINISH: EventCategory.AGENT,

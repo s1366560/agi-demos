@@ -44,10 +44,8 @@ if TYPE_CHECKING:
     from src.application.services.workflow_learner import WorkflowLearner
     from src.application.use_cases.agent import (
         ExecuteStepUseCase,
-        PlanWorkUseCase,
         SynthesizeResultsUseCase,
     )
-    from src.domain.ports.repositories.agent_repository import WorkPlanRepository
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ class AgentService(AgentServicePort):
     Multi-Level Thinking:
     - Complex queries are broken down into work plans
     - Each step is executed with task-level thinking
-    - Real-time SSE events for work_plan, step_start, step_end
+    - Real-time SSE events for step_start, step_end
     """
 
     def __init__(
@@ -72,11 +70,9 @@ class AgentService(AgentServicePort):
         graph_service: GraphServicePort,
         llm: LLMClient,
         neo4j_client,
-        plan_work_use_case: "PlanWorkUseCase | None" = None,
         execute_step_use_case: "ExecuteStepUseCase | None" = None,
         synthesize_results_use_case: "SynthesizeResultsUseCase | None" = None,
         workflow_learner: "WorkflowLearner | None" = None,
-        work_plan_repository: "WorkPlanRepository | None" = None,
         skill_repository=None,
         skill_service: "SkillService | None" = None,
         subagent_repository=None,
@@ -98,11 +94,9 @@ class AgentService(AgentServicePort):
             graph_service: Graph service for knowledge graph operations
             llm: LangChain chat model for LLM calls
             neo4j_client: Neo4j client for direct graph database access
-            plan_work_use_case: Optional use case for work-level planning
             execute_step_use_case: Optional use case for executing steps
             synthesize_results_use_case: Optional use case for synthesizing results
             workflow_learner: Optional service for learning workflow patterns
-            work_plan_repository: Optional repository for work plan data
             skill_repository: Optional repository for skills (L2 layer)
             skill_service: Optional SkillService for progressive skill loading
             subagent_repository: Optional repository for subagents (L3 layer)
@@ -119,11 +113,9 @@ class AgentService(AgentServicePort):
         self._graph_service = graph_service
         self._llm = llm
         self._neo4j_client = neo4j_client
-        self._plan_work_uc = plan_work_use_case
         self._execute_step_uc = execute_step_use_case
         self._synthesize_uc = synthesize_results_use_case
         self._workflow_learner = workflow_learner
-        self._work_plan_repo = work_plan_repository
         self._skill_repo = skill_repository
         self._skill_service = skill_service
         self._subagent_repo = subagent_repository
@@ -158,7 +150,6 @@ class AgentService(AgentServicePort):
             agent_execution_event_repo=self._agent_execution_event_repo,
             tool_execution_record_repo=self._tool_execution_record_repo,
             execution_checkpoint_repo=self._execution_checkpoint_repo,
-            work_plan_repo=self._work_plan_repo,
         )
         self._runtime = AgentRuntimeBootstrapper()
         self._tool_discovery = ToolDiscoveryService(

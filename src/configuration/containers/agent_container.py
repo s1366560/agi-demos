@@ -17,7 +17,6 @@ from src.application.use_cases.agent import (
     GetConversationUseCase,
     LearnPattern,
     ListConversationsUseCase,
-    PlanWorkUseCase,
     SynthesizeResultsUseCase,
 )
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -38,15 +37,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_
 )
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_execution_repository import (
-    SqlPlanExecutionRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
-    SqlPlanRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_snapshot_repository import (
-    SqlPlanSnapshotRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
     SqlSkillRepository,
@@ -74,9 +64,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_vari
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_work_plan_repository import (
-    SqlWorkPlanRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SqlWorkflowPatternRepository,
@@ -136,10 +123,6 @@ class AgentContainer:
         """Get SqlExecutionCheckpointRepository for execution checkpoint persistence."""
         return SqlExecutionCheckpointRepository(self._db)
 
-    def work_plan_repository(self) -> SqlWorkPlanRepository:
-        """Get SqlWorkPlanRepository for work plan persistence."""
-        return SqlWorkPlanRepository(self._db)
-
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         """Get SqlWorkflowPatternRepository for workflow pattern persistence."""
         return SqlWorkflowPatternRepository(self._db)
@@ -192,18 +175,6 @@ class AgentContainer:
     def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
         """Get SqlSubAgentTemplateRepository for template marketplace."""
         return SqlSubAgentTemplateRepository(self._db)
-
-    def plan_repository(self) -> SqlPlanRepository:
-        """Get SqlPlanRepository for plan document persistence."""
-        return SqlPlanRepository(self._db)
-
-    def plan_execution_repository(self) -> SqlPlanExecutionRepository:
-        """Get SqlPlanExecutionRepository for unified plan execution persistence."""
-        return SqlPlanExecutionRepository(self._db)
-
-    def plan_snapshot_repository(self) -> SqlPlanSnapshotRepository:
-        """Get SqlPlanSnapshotRepository for plan snapshot persistence."""
-        return SqlPlanSnapshotRepository(self._db)
 
     # === Attachment & Artifact ===
 
@@ -303,11 +274,9 @@ class AgentContainer:
             graph_service=self._graph_service,
             llm=llm,
             neo4j_client=neo4j_client,
-            plan_work_use_case=self.plan_work_use_case(llm),
             execute_step_use_case=self.execute_step_use_case(llm),
             synthesize_results_use_case=self.synthesize_results_use_case(llm),
             workflow_learner=self.workflow_learner(),
-            work_plan_repository=self.work_plan_repository(),
             skill_repository=self.skill_repository(),
             skill_service=self.skill_service(),
             subagent_repository=self.subagent_repository(),
@@ -367,12 +336,6 @@ class AgentContainer:
 
         return get_artifact_extractor()
 
-    def work_plan_generator(self, llm):
-        """Get WorkPlanGenerator for generating agent work plans."""
-        from src.infrastructure.agent.planning.work_plan_generator import WorkPlanGenerator
-
-        return WorkPlanGenerator(llm_client=llm)
-
     def react_loop(self, llm, tools: dict):
         """Get ReActLoop for core reasoning loop."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
@@ -426,13 +389,6 @@ class AgentContainer:
 
     # === Multi-Level Thinking Use Cases ===
 
-    def plan_work_use_case(self, llm) -> PlanWorkUseCase:
-        """Get PlanWorkUseCase with dependencies injected."""
-        return PlanWorkUseCase(
-            work_plan_repository=self.work_plan_repository(),
-            llm=llm,
-        )
-
     def execute_step_use_case(self, llm) -> ExecuteStepUseCase:
         """Get ExecuteStepUseCase with dependencies injected."""
         from src.infrastructure.agent.tools import (
@@ -454,7 +410,6 @@ class AgentContainer:
         }
 
         return ExecuteStepUseCase(
-            work_plan_repository=self.work_plan_repository(),
             llm=llm,
             tools=tools,
         )
@@ -484,151 +439,4 @@ class AgentContainer:
         return ComposeToolsUseCase(
             tool_composition_repository=self.tool_composition_repository(),
             llm=llm,
-        )
-
-    # === Plan Mode Use Cases ===
-
-    def enter_plan_mode_use_case(self):
-        """Get EnterPlanModeUseCase for entering Plan Mode."""
-        from src.application.use_cases.agent.enter_plan_mode import EnterPlanModeUseCase
-
-        return EnterPlanModeUseCase(
-            plan_repository=self.plan_repository(),
-            conversation_repository=self.conversation_repository(),
-        )
-
-    def exit_plan_mode_use_case(self):
-        """Get ExitPlanModeUseCase for exiting Plan Mode."""
-        from src.application.use_cases.agent.exit_plan_mode import ExitPlanModeUseCase
-
-        return ExitPlanModeUseCase(
-            plan_repository=self.plan_repository(),
-            conversation_repository=self.conversation_repository(),
-        )
-
-    def update_plan_use_case(self):
-        """Get UpdatePlanUseCase for updating plan content."""
-        from src.application.use_cases.agent.update_plan import UpdatePlanUseCase
-
-        return UpdatePlanUseCase(plan_repository=self.plan_repository())
-
-    def get_plan_use_case(self):
-        """Get GetPlanUseCase for retrieving plans."""
-        from src.application.use_cases.agent.get_plan import GetPlanUseCase
-
-        return GetPlanUseCase(plan_repository=self.plan_repository())
-
-    def generate_plan_execution_use_case(self, llm):
-        """Get GeneratePlanExecutionUseCase for unified plan execution generation."""
-        from src.application.use_cases.agent.generate_plan_execution import (
-            GeneratePlanExecutionUseCase,
-        )
-        from src.infrastructure.agent.planning.plan_generator import PlanGenerator
-
-        plan_generator = PlanGenerator(
-            llm_client=llm,
-            available_tools=[],
-        )
-
-        return GeneratePlanExecutionUseCase(
-            plan_execution_repository=self.plan_execution_repository(),
-            plan_generator=plan_generator,
-        )
-
-    def execute_plan_use_case(self, llm):
-        """Get ExecutePlanUseCase for unified plan execution."""
-        from src.application.use_cases.agent.execute_plan import ExecutePlanUseCase
-
-        return ExecutePlanUseCase(
-            plan_execution_repository=self.plan_execution_repository(),
-            plan_snapshot_repository=self.plan_snapshot_repository(),
-            plan_mode_orchestrator=self.plan_mode_orchestrator(llm),
-        )
-
-    # === Plan Mode Detection ===
-
-    def plan_mode_cache(self):
-        """Get LLMResponseCache for Plan Mode detection."""
-        from src.infrastructure.agent.planning import LLMResponseCache
-
-        if not self._settings or not self._settings.plan_mode_cache_enabled:
-            return None
-
-        return LLMResponseCache(
-            max_size=self._settings.plan_mode_cache_max_size,
-            default_ttl=self._settings.plan_mode_cache_ttl,
-        )
-
-    def fast_heuristic_detector(self):
-        """Get FastHeuristicDetector for Plan Mode Layer 1 & 2."""
-        from src.infrastructure.agent.planning import FastHeuristicDetector
-
-        return FastHeuristicDetector(
-            high_threshold=self._settings.plan_mode_heuristic_threshold_high,
-            low_threshold=self._settings.plan_mode_heuristic_threshold_low,
-            min_length=self._settings.plan_mode_min_length,
-        )
-
-    def llm_classifier(self, llm):
-        """Get LLMClassifier for Plan Mode Layer 3."""
-        from src.infrastructure.agent.planning import LLMClassifier
-
-        return LLMClassifier(
-            llm_client=llm,
-            confidence_threshold=self._settings.plan_mode_llm_confidence_threshold,
-        )
-
-    def hybrid_plan_mode_detector(self, llm):
-        """Get HybridPlanModeDetector for Plan Mode detection."""
-        from src.infrastructure.agent.planning import HybridPlanModeDetector
-
-        return HybridPlanModeDetector(
-            heuristic_detector=self.fast_heuristic_detector(),
-            llm_classifier=self.llm_classifier(llm),
-            cache=self.plan_mode_cache(),
-            enabled=self._settings.plan_mode_enabled if self._settings else False,
-        )
-
-    def plan_mode_orchestrator(self, llm):
-        """Get PlanModeOrchestrator for plan execution workflow."""
-        from src.infrastructure.agent.planning.plan_adjuster import PlanAdjuster
-        from src.infrastructure.agent.planning.plan_executor import PlanExecutor
-        from src.infrastructure.agent.planning.plan_generator import PlanGenerator
-        from src.infrastructure.agent.planning.plan_mode_orchestrator import (
-            PlanModeOrchestrator,
-        )
-        from src.infrastructure.agent.planning.plan_reflector import PlanReflector
-
-        plan_generator = PlanGenerator(
-            llm_client=llm,
-            available_tools=[],
-        )
-
-        class DummySessionProcessor:
-            async def execute_tool(
-                self, tool_name: str, tool_input: dict, conversation_id: str
-            ) -> str:
-                return f"Executed {tool_name}"
-
-        plan_executor = PlanExecutor(
-            session_processor=DummySessionProcessor(),
-            event_emitter=None,
-            parallel_execution=False,
-            max_parallel_steps=3,
-        )
-
-        plan_reflector = PlanReflector(
-            llm_client=llm,
-            max_tokens=2048,
-        )
-
-        plan_adjuster = PlanAdjuster()
-
-        return PlanModeOrchestrator(
-            plan_generator=plan_generator,
-            plan_executor=plan_executor,
-            plan_reflector=plan_reflector,
-            plan_adjuster=plan_adjuster,
-            event_emitter=None,
-            max_reflection_cycles=3,
         )

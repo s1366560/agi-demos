@@ -113,7 +113,6 @@ class ProjectAgentConfig:
     # Feature Flags
     enable_skills: bool = True
     enable_subagents: bool = True
-    enable_plan_mode: bool = True
 
 
 @dataclass
@@ -229,6 +228,9 @@ class ProjectReActAgent:
 
         # Latency tracking for percentiles
         self._latencies: List[float] = []
+
+        # Optional plan repository for Plan Mode awareness
+        self._plan_repo: Optional[Any] = None
 
     @property
     def is_initialized(self) -> bool:
@@ -606,6 +608,7 @@ class ProjectReActAgent:
         file_metadata: Optional[List[Dict[str, Any]]] = None,
         forced_skill_name: Optional[str] = None,
         context_summary_data: Optional[Dict[str, Any]] = None,
+        plan_mode: bool = False,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute a chat request using the project agent.
@@ -702,6 +705,9 @@ class ProjectReActAgent:
                 f"conversation={conversation_id}, user={user_id}"
             )
 
+            # Plan Mode check: use parameter from caller (set from conversation.current_mode)
+            is_plan_mode = plan_mode
+
             # Execute ReActAgent stream
             async for event in self._react_agent.stream(
                 conversation_id=conversation_id,
@@ -715,6 +721,7 @@ class ProjectReActAgent:
                 attachment_metadata=file_metadata,
                 forced_skill_name=forced_skill_name,
                 context_summary_data=context_summary_data,
+                plan_mode=is_plan_mode,
             ):
                 event_count += 1
 

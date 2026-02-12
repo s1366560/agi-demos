@@ -41,6 +41,8 @@ class ProjectChatRequest:
     max_steps: Optional[int] = None
     # Cached context summary from previous turns (serialized dict)
     context_summary_data: Optional[Dict[str, Any]] = None
+    # Whether conversation is in Plan Mode (read-only analysis)
+    plan_mode: bool = False
 
 
 @dataclass(frozen=True)

@@ -256,17 +256,17 @@ export type AgentEventType =
   | 'context_compressed' // Context window compression occurred
   | 'context_status' // Context health status update
   | 'context_summary_generated' // Summary cache saved (internal)
-  // Plan mode events
-  | 'plan_mode_enter' // Entered plan mode
-  | 'plan_mode_exit' // Exited plan mode
-  | 'plan_created' // Plan created
-  | 'plan_updated' // Plan updated
-  | 'plan_status_changed' // Plan status changed
-  | 'plan_execution_start' // Plan execution started
-  | 'plan_step_complete' // Plan step completed
-  | 'plan_execution_complete' // Plan execution completed
-  | 'reflection_complete' // Reflection completed
-  | 'adjustment_applied' // Adjustment applied
+  // Plan mode events (deprecated - plan mode system removed, kept for SSE compatibility)
+  | 'plan_mode_enter'
+  | 'plan_mode_exit'
+  | 'plan_created'
+  | 'plan_updated'
+  | 'plan_status_changed'
+  | 'plan_execution_start'
+  | 'plan_step_complete'
+  | 'plan_execution_complete'
+  | 'reflection_complete'
+  | 'adjustment_applied'
   // Permission events
   | 'permission_asked' // Permission asked
   | 'permission_replied' // Permission replied
@@ -297,6 +297,22 @@ export type AgentEventType =
   | 'plan_step_skipped' // Plan step skipped
   | 'plan_snapshot_created' // Plan snapshot created
   | 'plan_rollback' // Plan rolled back to snapshot
+  // Plan Mode change event
+  | 'plan_mode_changed' // Plan Mode toggled on/off
+  // Plan Mode HITL events (legacy)
+  | 'plan_suggested' // Agent suggests Plan Mode
+  | 'plan_exploration_started' // Exploration phase started
+  | 'plan_exploration_completed' // Exploration phase completed
+  | 'plan_draft_created' // Plan draft generated
+  | 'plan_approved' // User approved plan
+  | 'plan_rejected' // User rejected plan
+  | 'plan_cancelled' // Plan cancelled
+  | 'workplan_created' // WorkPlan decomposed from plan
+  | 'workplan_step_started' // WorkPlan step execution started
+  | 'workplan_step_completed' // WorkPlan step completed
+  | 'workplan_step_failed' // WorkPlan step failed
+  | 'workplan_completed' // All WorkPlan steps completed
+  | 'workplan_failed' // WorkPlan execution failed
   // System events
   | 'start' // Stream started
   | 'status' // Status update
@@ -941,23 +957,26 @@ export interface AgentStreamHandler {
   onContextStatus?: (event: AgentEvent<ContextStatusEventData>) => void;
   // Title generation handlers
   onTitleGenerated?: (event: AgentEvent<TitleGeneratedEventData>) => void;
-  // Plan Mode handlers
-  onPlanModeEnter?: (event: AgentEvent<PlanModeEnterEventData>) => void;
-  onPlanModeExit?: (event: AgentEvent<PlanModeExitEventData>) => void;
-  onPlanCreated?: (event: AgentEvent<PlanCreatedEventData>) => void;
-  onPlanUpdated?: (event: AgentEvent<PlanUpdatedEventData>) => void;
-  // Plan Mode execution handlers
+  // Plan Mode execution handlers (deprecated - kept for backward compatibility)
   onPlanExecutionStart?: (event: AgentEvent<PlanExecutionStartEvent>) => void;
   onPlanExecutionComplete?: (event: AgentEvent<PlanExecutionCompleteEvent>) => void;
   onReflectionComplete?: (event: AgentEvent<ReflectionCompleteEvent>) => void;
-  // Extended Plan Mode handlers (full coverage)
-  onPlanStatusChanged?: (event: AgentEvent<PlanStatusChangedEventData>) => void;
-  onPlanStepReady?: (event: AgentEvent<PlanStepReadyEventData>) => void;
-  onPlanStepComplete?: (event: AgentEvent<PlanStepCompleteEventData>) => void;
-  onPlanStepSkipped?: (event: AgentEvent<PlanStepSkippedEventData>) => void;
-  onPlanSnapshotCreated?: (event: AgentEvent<PlanSnapshotCreatedEventData>) => void;
-  onPlanRollback?: (event: AgentEvent<PlanRollbackEventData>) => void;
-  onAdjustmentApplied?: (event: AgentEvent<AdjustmentAppliedEventData>) => void;
+  // Plan Mode change handler
+  onPlanModeChanged?: (event: AgentEvent<Record<string, unknown>>) => void;
+  // Plan Mode HITL handlers (legacy, kept for backward compatibility)
+  onPlanSuggested?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanExplorationStarted?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanExplorationCompleted?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanDraftCreated?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanApproved?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanRejected?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanCancelled?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onWorkPlanCreated?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onWorkPlanStepStarted?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onWorkPlanStepCompleted?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onWorkPlanStepFailed?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onWorkPlanCompleted?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onWorkPlanFailed?: (event: AgentEvent<Record<string, unknown>>) => void;
   // Permission handlers
   onPermissionAsked?: (event: AgentEvent<PermissionAskedEventData>) => void;
   onPermissionReplied?: (event: AgentEvent<PermissionRepliedEventData>) => void;

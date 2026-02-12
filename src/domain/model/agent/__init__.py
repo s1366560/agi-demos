@@ -2,7 +2,6 @@
 
 This module contains domain entities organized into bounded context subpackages:
 - conversation/: Conversations, messages, and attachments
-- planning/: Plans, steps, snapshots, and execution
 - execution/: Agent execution cycles, checkpoints, and results
 - skill/: Skills, permissions, tools, and compositions
 - hitl/: Human-in-the-Loop requests and types
@@ -60,26 +59,6 @@ from src.domain.model.agent.hitl import (
     HITLRequestType,
 )
 
-# Planning bounded context
-from src.domain.model.agent.planning import (
-    AlreadyInPlanModeError,
-    ExecutionMode,
-    InvalidPlanStateError,
-    NotInPlanModeError,
-    Plan,
-    PlanDocumentStatus,
-    PlanExecution,
-    PlanExecutionStatus,  # type alias
-    PlanExecutionStep,  # type alias
-    PlanNotFoundError,
-    PlanSnapshot,
-    PlanStatus,
-    PlanStep,
-    StepState,
-    StepStatus,
-    WorkPlan,
-)
-
 # Skill bounded context
 from src.domain.model.agent.skill import (
     EnvVarScope,
@@ -110,9 +89,6 @@ __all__ = [
     "AgentEventType",
     "ExecutionCheckpoint",
     "CheckpointType",
-    "WorkPlan",
-    "PlanStep",
-    "PlanStatus",
     "ThoughtLevel",
     "WorkflowPattern",
     "ToolComposition",
@@ -127,20 +103,8 @@ __all__ = [
     "SubAgent",
     "AgentModel",
     "AgentTrigger",
-    # Plan Mode (Agent Mode System)
-    "Plan",
-    "PlanDocumentStatus",
+    # Agent Mode
     "AgentMode",
-    "InvalidPlanStateError",
-    "PlanNotFoundError",
-    "AlreadyInPlanModeError",
-    "NotInPlanModeError",
-    # Unified Plan Execution (New - replaces WorkPlan + ExecutionPlan)
-    "PlanExecution",
-    "PlanExecutionStep",
-    "PlanExecutionStatus",
-    "ExecutionMode",
-    "StepStatus",
     # Tool Environment Variables
     "ToolEnvironmentVariable",
     "EnvVarScope",
@@ -153,9 +117,6 @@ __all__ = [
     "ExecutionPlanStatus",
     "ExecutionStep",
     "ExecutionStepStatus",
-    # Plan Snapshot
-    "PlanSnapshot",
-    "StepState",
     # Reflection Result
     "AdjustmentType",
     "ReflectionAssessment",

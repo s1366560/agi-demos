@@ -28,11 +28,9 @@ import {
   MessageArea,
   MessageBubble as AgentMessageBubble,
   InputBar as AgentInputBar,
-  ExecutionPlanViewer,
 } from '../../components/agent';
 import { IdleState, FloatingInputBar, MarkdownContent } from '../../components/agent/chat';
 import {
-  WorkPlanProgress,
   ToolExecutionLive,
   ReasoningLog,
   FinalReport,
@@ -70,7 +68,7 @@ import { MaterialIcon } from '../../components/agent/shared';
 // - InputArea -> InputBar (not exported as InputArea)
 // - ThinkingChain exists but is not exported from barrel
 // - ToolCard exists but is not exported from barrel
-// - PlanViewer -> ExecutionPlanViewer
+// - PlanViewer -> removed (ExecutionPlanViewer deleted)
 // - ExecutionDetailsPanel exists but is not exported from barrel
 
 // Test 9: Individual component imports (not through barrel) to verify components exist
@@ -145,8 +143,8 @@ describe('Barrel Exports', () => {
   });
 
   describe('Agent Execution Barrel', () => {
-    it('exports WorkPlanProgress component', () => {
-      expect(WorkPlanProgress).toBeDefined();
+    it.skip('exports WorkPlanProgress component (removed in plan redesign)', () => {
+      expect(true).toBe(true);
     });
 
     it('exports ToolExecutionLive component', () => {
@@ -229,8 +227,8 @@ describe('Barrel Exports', () => {
       expect(AgentInputBar).toBeDefined();
     });
 
-    it('exports ExecutionPlanViewer component (renamed from PlanViewer)', () => {
-      expect(ExecutionPlanViewer).toBeDefined();
+    it.skip('exports ExecutionPlanViewer component (removed in plan redesign)', () => {
+      expect(true).toBe(true);
     });
 
     // NOTE: ThinkingChain, ToolCard, and ExecutionDetailsPanel exist but are not exported from the barrel

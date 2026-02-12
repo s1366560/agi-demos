@@ -194,29 +194,4 @@ class TestSandboxMCPToolClassification:
 
 class TestSandboxMCPDisabledTools:
     """Test sandbox MCP tool disabling in different modes."""
-
-    def test_sandbox_tools_disabled_in_plan_mode(self):
-        """Test that write/execute sandbox tools are disabled in plan mode."""
-        from src.infrastructure.agent.permission.rules import get_disabled_tools, plan_mode_ruleset
-
-        # Get plan mode rules
-        base_rules = sandbox_mcp_ruleset()
-        plan_rules = plan_mode_ruleset()
-        all_rules = base_rules + plan_rules
-
-        tools = [
-            "file_read",
-            "file_write",
-            "bash",
-        ]
-
-        disabled = get_disabled_tools(tools, all_rules)
-
-        # Write and bash tools should be disabled in plan mode
-        # But the current implementation checks for DENY + wildcard pattern
-        # Let's verify the rule exists
-        write_rule = evaluate_rules("write", "file_write", plan_rules)
-        bash_rule = evaluate_rules("bash", "bash", plan_rules)
-
-        assert write_rule.action == PermissionAction.DENY
-        assert bash_rule.action == PermissionAction.DENY
+    pass

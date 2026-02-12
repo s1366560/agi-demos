@@ -10,7 +10,6 @@ export { MessageArea } from './MessageArea';
 export { MessageBubble } from './MessageBubble';
 export { InputBar } from './InputBar';
 export { RightPanel } from './RightPanel';
-export { PlanModeBanner } from './PlanModeBanner';
 export { SandboxSection } from './SandboxSection';
 
 // ProjectReActAgent Lifecycle Status Bar
@@ -34,10 +33,6 @@ export { CostTracker, CostTrackerCompact, CostTrackerPanel } from './CostTracker
 export { ExecutionStatsCard } from './ExecutionStatsCard';
 export { ExecutionTimelineChart } from './ExecutionTimelineChart';
 export { AgentProgressBar } from './AgentProgressBar';
-export { PlanEditor } from './PlanEditor';
-export { PlanModeViewer } from './PlanModeViewer';
-export { ExecutionPlanProgress } from './ExecutionPlanProgress';
-export { ExecutionPlanViewer } from './ExecutionPlanViewer';
 export { StepAdjustmentModal } from './StepAdjustmentModal';
 export { CodeExecutorResultCard } from './CodeExecutorResultCard';
 export { FileDownloadButton } from './FileDownloadButton';
@@ -50,7 +45,6 @@ export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
 export { IdleState, FloatingInputBar } from './chat';
 export { TimelineEventItem } from './TimelineEventItem';
 export {
-  WorkPlanProgress,
   ToolExecutionLive,
   ReasoningLog,
   FinalReport,
@@ -61,6 +55,5 @@ export { MaterialIcon } from './shared';
 
 // Types
 export type { StarterTile } from './chat';
-export type { StepStatus, WorkPlanStep } from './execution';
 export type { SidebarConversationStatus, Conversation } from './layout';
 export type { PatternStatus, WorkflowPattern } from './patterns';

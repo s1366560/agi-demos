@@ -288,21 +288,11 @@ class ExecutionPlan(Entity):
         return None
 
     def create_snapshot(self, name: str, description: str | None = None) -> Any:
-        """Create a snapshot of current plan state for rollback."""
-        from src.domain.model.agent.planning.plan_snapshot import PlanSnapshot, StepState
-
-        step_states: dict[str, StepState] = {}
-        for step in self.steps:
-            step_states[step.step_id] = StepState.from_execution_step(step)
-
-        return PlanSnapshot(
-            plan_id=self.id,
-            name=name,
-            step_states=step_states,
-            description=description,
-            auto_created=True,
-            snapshot_type="last_step",
-        )
+        """Create a snapshot of current plan state for rollback.
+        
+        Note: Plan snapshot system is being refactored.
+        """
+        raise NotImplementedError("Plan snapshot system is being refactored")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert plan to dictionary for serialization."""

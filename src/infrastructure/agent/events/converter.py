@@ -27,7 +27,6 @@ from src.domain.events.agent_events import (
     AgentStepEndEvent,
     AgentStepStartEvent,
     AgentThoughtEvent,
-    AgentWorkPlanEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,12 +135,6 @@ class EventConverter:
         # DOOM_LOOP_DETECTED: rename to 'doom_loop' for frontend
         if event_type == AgentEventType.DOOM_LOOP_DETECTED:
             event_dict["type"] = "doom_loop"
-
-        # WORK_PLAN: data should be the plan directly
-        if event_type == AgentEventType.WORK_PLAN and isinstance(
-            domain_event, AgentWorkPlanEvent
-        ):
-            event_dict["data"] = domain_event.plan
 
         # STEP_START: rename step_index to step_number
         if event_type == AgentEventType.STEP_START and isinstance(

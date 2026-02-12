@@ -79,13 +79,6 @@ import type {
   PermissionAskedEventData,
   PermissionRepliedEventData,
   CostUpdateEventData,
-  PlanStatusChangedEventData,
-  PlanStepReadyEventData,
-  PlanStepCompleteEventData,
-  PlanStepSkippedEventData,
-  PlanSnapshotCreatedEventData,
-  PlanRollbackEventData,
-  AdjustmentAppliedEventData,
   SandboxEventData,
   CompleteEventData,
   TitleGeneratedEventData,
@@ -99,10 +92,6 @@ import type {
   SkillFallbackEventData,
   ContextCompressedEventData,
   ContextStatusEventData,
-  PlanModeEnterEventData,
-  PlanModeExitEventData,
-  PlanCreatedEventData,
-  PlanUpdatedEventData,
   PlanExecutionStartEvent,
   PlanExecutionCompleteEvent,
   ReflectionCompleteEvent,
@@ -789,18 +778,51 @@ class AgentServiceImpl implements AgentService {
       case 'context_status':
         handler.onContextStatus?.(event as AgentEvent<ContextStatusEventData>);
         break;
-      // Plan Mode events
+      // Plan Mode events (legacy no-ops)
       case 'plan_mode_enter':
-        handler.onPlanModeEnter?.(event as AgentEvent<PlanModeEnterEventData>);
-        break;
       case 'plan_mode_exit':
-        handler.onPlanModeExit?.(event as AgentEvent<PlanModeExitEventData>);
-        break;
       case 'plan_created':
-        handler.onPlanCreated?.(event as AgentEvent<PlanCreatedEventData>);
-        break;
       case 'plan_updated':
-        handler.onPlanUpdated?.(event as AgentEvent<PlanUpdatedEventData>);
+        break;
+      // Plan Mode HITL events
+      case 'plan_suggested':
+        handler.onPlanSuggested?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'plan_exploration_started':
+        handler.onPlanExplorationStarted?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'plan_exploration_completed':
+        handler.onPlanExplorationCompleted?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'plan_draft_created':
+        handler.onPlanDraftCreated?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'plan_approved':
+        handler.onPlanApproved?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'plan_rejected':
+        handler.onPlanRejected?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'plan_cancelled':
+        handler.onPlanCancelled?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'workplan_created':
+        handler.onWorkPlanCreated?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'workplan_step_started':
+        handler.onWorkPlanStepStarted?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'workplan_step_completed':
+        handler.onWorkPlanStepCompleted?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'workplan_step_failed':
+        handler.onWorkPlanStepFailed?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'workplan_completed':
+        handler.onWorkPlanCompleted?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'workplan_failed':
+        handler.onWorkPlanFailed?.(event as AgentEvent<Record<string, unknown>>);
         break;
       // Plan Mode execution events
       case 'plan_execution_start':
@@ -809,30 +831,20 @@ class AgentServiceImpl implements AgentService {
       case 'plan_execution_complete':
         handler.onPlanExecutionComplete?.(event as AgentEvent<PlanExecutionCompleteEvent>);
         break;
+      case 'plan_mode_changed':
+        handler.onPlanModeChanged?.(event as AgentEvent<Record<string, unknown>>);
+        break;
       case 'reflection_complete':
         handler.onReflectionComplete?.(event as AgentEvent<ReflectionCompleteEvent>);
         break;
-      // Extended Plan Mode events
+      // Extended Plan Mode events (no-op: plan mode system removed)
       case 'plan_status_changed':
-        handler.onPlanStatusChanged?.(event as AgentEvent<PlanStatusChangedEventData>);
-        break;
       case 'plan_step_ready':
-        handler.onPlanStepReady?.(event as AgentEvent<PlanStepReadyEventData>);
-        break;
       case 'plan_step_complete':
-        handler.onPlanStepComplete?.(event as AgentEvent<PlanStepCompleteEventData>);
-        break;
       case 'plan_step_skipped':
-        handler.onPlanStepSkipped?.(event as AgentEvent<PlanStepSkippedEventData>);
-        break;
       case 'plan_snapshot_created':
-        handler.onPlanSnapshotCreated?.(event as AgentEvent<PlanSnapshotCreatedEventData>);
-        break;
       case 'plan_rollback':
-        handler.onPlanRollback?.(event as AgentEvent<PlanRollbackEventData>);
-        break;
       case 'adjustment_applied':
-        handler.onAdjustmentApplied?.(event as AgentEvent<AdjustmentAppliedEventData>);
         break;
       // Doom loop events
       case 'doom_loop_detected':

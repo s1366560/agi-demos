@@ -27,7 +27,6 @@ from src.application.use_cases.agent import (
     GetConversationUseCase,
     LearnPattern,
     ListConversationsUseCase,
-    PlanWorkUseCase,
     SynthesizeResultsUseCase,
 )
 from src.application.use_cases.memory.create_memory import (
@@ -80,15 +79,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_plan_execution_repository import (
-    SqlPlanExecutionRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import (
-    SqlPlanRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_plan_snapshot_repository import (
-    SqlPlanSnapshotRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
     SqlProjectSandboxRepository,
 )
@@ -115,9 +105,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_vari
 )
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_work_plan_repository import (
-    SqlWorkPlanRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SqlWorkflowPatternRepository,
@@ -335,9 +322,6 @@ class DIContainer:
     def execution_checkpoint_repository(self) -> SqlExecutionCheckpointRepository:
         return self._agent.execution_checkpoint_repository()
 
-    def work_plan_repository(self) -> SqlWorkPlanRepository:
-        return self._agent.work_plan_repository()
-
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         return self._agent.workflow_pattern_repository()
 
@@ -370,15 +354,6 @@ class DIContainer:
 
     def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
         return self._agent.subagent_template_repository()
-
-    def plan_repository(self) -> SqlPlanRepository:
-        return self._agent.plan_repository()
-
-    def plan_execution_repository(self) -> SqlPlanExecutionRepository:
-        return self._agent.plan_execution_repository()
-
-    def plan_snapshot_repository(self) -> SqlPlanSnapshotRepository:
-        return self._agent.plan_snapshot_repository()
 
     def attachment_repository(self):
         return self._agent.attachment_repository()
@@ -416,9 +391,6 @@ class DIContainer:
     def artifact_extractor(self):
         return self._agent.artifact_extractor()
 
-    def work_plan_generator(self, llm):
-        return self._agent.work_plan_generator(llm)
-
     def react_loop(self, llm, tools: dict):
         return self._agent.react_loop(llm, tools)
 
@@ -443,9 +415,6 @@ class DIContainer:
     def chat_use_case(self, llm) -> ChatUseCase:
         return self._agent.chat_use_case(llm)
 
-    def plan_work_use_case(self, llm) -> PlanWorkUseCase:
-        return self._agent.plan_work_use_case(llm)
-
     def execute_step_use_case(self, llm) -> ExecuteStepUseCase:
         return self._agent.execute_step_use_case(llm)
 
@@ -463,36 +432,3 @@ class DIContainer:
 
     def compose_tools_use_case(self, llm) -> ComposeToolsUseCase:
         return self._agent.compose_tools_use_case(llm)
-
-    def enter_plan_mode_use_case(self):
-        return self._agent.enter_plan_mode_use_case()
-
-    def exit_plan_mode_use_case(self):
-        return self._agent.exit_plan_mode_use_case()
-
-    def update_plan_use_case(self):
-        return self._agent.update_plan_use_case()
-
-    def get_plan_use_case(self):
-        return self._agent.get_plan_use_case()
-
-    def generate_plan_execution_use_case(self, llm):
-        return self._agent.generate_plan_execution_use_case(llm)
-
-    def execute_plan_use_case(self, llm):
-        return self._agent.execute_plan_use_case(llm)
-
-    def plan_mode_cache(self):
-        return self._agent.plan_mode_cache()
-
-    def fast_heuristic_detector(self):
-        return self._agent.fast_heuristic_detector()
-
-    def llm_classifier(self, llm):
-        return self._agent.llm_classifier(llm)
-
-    def hybrid_plan_mode_detector(self, llm):
-        return self._agent.hybrid_plan_mode_detector(llm)
-
-    def plan_mode_orchestrator(self, llm):
-        return self._agent.plan_mode_orchestrator(llm)

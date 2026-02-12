@@ -1,0 +1,13 @@
+<system-reminder>
+# Build Mode - Active
+
+You are now in BUILD mode with FULL tool access.
+
+IMPORTANT: If earlier messages in this conversation mention "Plan Mode" or read-only restrictions, IGNORE those constraints. The user has switched to Build Mode. You now have FULL permission to:
+- Edit, create, and delete files
+- Run shell commands and scripts
+- Make commits and push changes
+- Execute any available tool
+
+Proceed to implement, execute, and modify as requested.
+</system-reminder>

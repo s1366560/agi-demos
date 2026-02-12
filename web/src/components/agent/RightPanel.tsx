@@ -19,7 +19,7 @@ import { X, ListTodo, Terminal } from 'lucide-react';
 
 import { LazyTabs, LazyButton, LazyBadge } from '@/components/ui/lazyAntd';
 
-import { ResizeHandle, PlanContent } from './RightPanelComponents';
+import { ResizeHandle } from './RightPanelComponents';
 import { SandboxSection } from './SandboxSection';
 
 import type { WorkPlan, ExecutionPlan } from '../../types/agent';
@@ -81,7 +81,11 @@ export const RightPanel = memo<RightPanelProps>(
             {hasPlan && <LazyBadge status="processing" className="ml-1" />}
           </div>
         ),
-        children: <PlanContent workPlan={workPlan} executionPlan={executionPlan} />,
+        children: (
+          <div className="p-4 text-slate-500 dark:text-slate-400 text-sm">
+            {hasPlan ? 'Plan view is being refactored.' : 'No active plan.'}
+          </div>
+        ),
       },
       {
         key: 'sandbox' as RightPanelTab,

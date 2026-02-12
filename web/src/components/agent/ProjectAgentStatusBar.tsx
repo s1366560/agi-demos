@@ -211,7 +211,7 @@ const tierConfig: Record<
  * This component now uses the useUnifiedAgentStatus hook which consolidates:
  * - Lifecycle state (from useAgentLifecycleState via WebSocket)
  * - Execution state (from agentV3 store)
- * - Plan mode state (from planModeStore)
+ * - Plan mode state (deprecated)
  * - Streaming state (from streamingStore)
  * - Sandbox connection (from sandboxStore)
  * - Pool instance state (from poolService - when enabled)

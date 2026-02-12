@@ -21,7 +21,7 @@ from src.domain.ports.repositories.agent_repository import (
 )
 
 if TYPE_CHECKING:
-    from src.domain.ports.repositories.work_plan_repository import WorkPlanRepositoryPort
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +36,12 @@ class ConversationManager:
         agent_execution_event_repo: Optional[AgentExecutionEventRepository] = None,
         tool_execution_record_repo: Optional[ToolExecutionRecordRepository] = None,
         execution_checkpoint_repo: Optional[ExecutionCheckpointRepository] = None,
-        work_plan_repo: "Optional[WorkPlanRepositoryPort]" = None,
     ) -> None:
         self._conversation_repo = conversation_repo
         self._execution_repo = execution_repo
         self._agent_execution_event_repo = agent_execution_event_repo
         self._tool_execution_record_repo = tool_execution_record_repo
         self._execution_checkpoint_repo = execution_checkpoint_repo
-        self._work_plan_repo = work_plan_repo
 
     async def create_conversation(
         self,
@@ -133,9 +131,6 @@ class ConversationManager:
 
         if self._execution_checkpoint_repo:
             await self._execution_checkpoint_repo.delete_by_conversation(conversation_id)
-
-        if self._work_plan_repo:
-            await self._work_plan_repo.delete_by_conversation(conversation_id)
 
         await self._execution_repo.delete_by_conversation(conversation_id)
 

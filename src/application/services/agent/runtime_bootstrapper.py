@@ -69,6 +69,7 @@ class AgentRuntimeBootstrapper:
             correlation_id=correlation_id,
             forced_skill_name=forced_skill_name,
             context_summary_data=context_summary_data,
+            plan_mode=conversation.is_in_plan_mode,
         )
 
         await register_project(conversation.tenant_id, conversation.project_id)
@@ -139,6 +140,15 @@ class AgentRuntimeBootstrapper:
 
             agent = ProjectReActAgent(agent_config)
             await agent.initialize()
+
+            # Inject plan repository for Plan Mode awareness
+            try:
+                from src.configuration.di_container import get_container
+
+                container = get_container()
+                agent._plan_repo = container._agent.plan_repository()
+            except Exception:
+                pass  # Plan Mode awareness is optional
 
             result = await execute_project_chat(agent, request)
 

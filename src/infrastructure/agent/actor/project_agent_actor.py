@@ -92,6 +92,16 @@ class ProjectAgentActor:
 
             self._agent = ProjectReActAgent(agent_config)
             success = await self._agent.initialize(force_refresh=force_refresh)
+
+            # Inject plan repository for Plan Mode awareness
+            try:
+                from src.configuration.di_container import get_container
+
+                container = get_container()
+                self._agent._plan_repo = container._agent.plan_repository()
+            except Exception:
+                pass  # Plan Mode awareness is optional
+
             status = "initialized" if success else "error"
 
             return {"status": status, "cached": False}

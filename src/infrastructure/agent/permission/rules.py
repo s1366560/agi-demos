@@ -161,54 +161,6 @@ def default_ruleset() -> List[PermissionRule]:
         PermissionRule("read", "*.env.example", PermissionAction.ALLOW),
         # Deny question tool by default (requires explicit enable)
         PermissionRule("question", "*", PermissionAction.DENY),
-        # Plan tools require ask by default
-        PermissionRule("plan_enter", "*", PermissionAction.ASK),
-        PermissionRule("plan_exit", "*", PermissionAction.ASK),
-        PermissionRule("plan_update", "*", PermissionAction.ALLOW),
-    ]
-
-
-def plan_mode_ruleset() -> List[PermissionRule]:
-    """
-    Get the permission ruleset for Plan Mode.
-
-    In Plan Mode, the agent has:
-    - Read-only access to the codebase
-    - Plan editing capability
-    - No file modification capability
-
-    Returns:
-        List of permission rules for Plan Mode
-    """
-    return [
-        # Deny all file modifications
-        PermissionRule("edit", "*", PermissionAction.DENY),
-        PermissionRule("write", "*", PermissionAction.DENY),
-        PermissionRule("patch", "*", PermissionAction.DENY),
-        PermissionRule("multiedit", "*", PermissionAction.DENY),
-        PermissionRule("bash", "*", PermissionAction.DENY),  # No shell access
-        PermissionRule("code_executor", "*", PermissionAction.DENY),
-        # Deny entering plan mode again (already in it)
-        PermissionRule("plan_enter", "*", PermissionAction.DENY),
-        # Allow plan operations
-        PermissionRule("plan_update", "*", PermissionAction.ALLOW),
-        PermissionRule("plan_exit", "*", PermissionAction.ALLOW),
-        # Allow read operations
-        PermissionRule("read", "*", PermissionAction.ALLOW),
-        PermissionRule("glob", "*", PermissionAction.ALLOW),
-        PermissionRule("grep", "*", PermissionAction.ALLOW),
-        # Allow memory and entity operations (read-only)
-        PermissionRule("memory_search", "*", PermissionAction.ALLOW),
-        PermissionRule("entity_lookup", "*", PermissionAction.ALLOW),
-        PermissionRule("episode_retrieval", "*", PermissionAction.ALLOW),
-        PermissionRule("graph_query", "*", PermissionAction.ALLOW),
-        # Allow web search and clarification
-        PermissionRule("web_search", "*", PermissionAction.ALLOW),
-        PermissionRule("web_scrape", "*", PermissionAction.ALLOW),
-        PermissionRule("ask_clarification", "*", PermissionAction.ALLOW),
-        PermissionRule("ask_decision", "*", PermissionAction.ALLOW),
-        # Deny memory creation (read-only mode)
-        PermissionRule("memory_create", "*", PermissionAction.DENY),
     ]
 
 
@@ -233,10 +185,6 @@ def explore_mode_ruleset() -> List[PermissionRule]:
         PermissionRule("multiedit", "*", PermissionAction.DENY),
         PermissionRule("bash", "*", PermissionAction.DENY),
         PermissionRule("code_executor", "*", PermissionAction.DENY),
-        # Deny all plan operations (this is a SubAgent)
-        PermissionRule("plan_enter", "*", PermissionAction.DENY),
-        PermissionRule("plan_exit", "*", PermissionAction.DENY),
-        PermissionRule("plan_update", "*", PermissionAction.DENY),
         # Allow read operations
         PermissionRule("read", "*", PermissionAction.ALLOW),
         PermissionRule("glob", "*", PermissionAction.ALLOW),

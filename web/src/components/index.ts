@@ -38,7 +38,6 @@ export {
   MessageBubble,
   InputBar,
   RightPanel,
-  PlanModeBanner,
   SandboxSection,
 } from './agent';
 

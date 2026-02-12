@@ -477,9 +477,7 @@ class Conversation(Base):
 
     # Plan Mode support
     current_mode: Mapped[str] = mapped_column(String(20), default="build", nullable=False)
-    current_plan_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("plan_documents.id", use_alter=True), nullable=True
-    )
+    current_plan_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     parent_conversation_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("conversations.id"), nullable=True, index=True
     )
@@ -492,9 +490,6 @@ class Conversation(Base):
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
     user: Mapped["User"] = relationship(foreign_keys=[user_id])
     messages: Mapped[List["Message"]] = relationship(
-        back_populates="conversation", cascade="all, delete-orphan"
-    )
-    active_work_plan: Mapped[Optional["WorkPlan"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )
 
@@ -590,32 +585,6 @@ class AgentExecution(Base):
 
     conversation: Mapped["Conversation"] = relationship(foreign_keys=[conversation_id])
     message: Mapped["Message"] = relationship(back_populates="executions")
-
-
-class WorkPlan(Base):
-    """Work plan for multi-level thinking support."""
-
-    __tablename__ = "work_plans"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(
-        String, ForeignKey("conversations.id"), nullable=False
-    )
-    status: Mapped[str] = mapped_column(String(20), default="planning", nullable=False)
-    steps: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
-    current_step_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    completed_step_indices: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
-    workflow_pattern_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), onupdate=func.now(), nullable=True
-    )
-
-    conversation: Mapped["Conversation"] = relationship(
-        back_populates="active_work_plan", foreign_keys=[conversation_id]
-    )
-
-    __table_args__ = (Index("ix_work_plans_conv_status", "conversation_id", "status"),)
 
 
 class ToolExecutionRecord(Base):
@@ -1133,154 +1102,6 @@ class MCPServer(Base):
     # Relationships
     tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
     project: Mapped["Project"] = relationship(foreign_keys=[project_id])
-
-
-class PlanDocument(Base):
-    """
-    Plan document for Plan Mode.
-
-    Represents a planning document created during Plan Mode that captures
-    exploration results, design decisions, and implementation steps.
-
-    This is different from WorkPlan which tracks multi-step task execution.
-    PlanDocument is the Markdown document edited in Plan Mode.
-    """
-
-    __tablename__ = "plan_documents"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(
-        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    title: Mapped[str] = mapped_column(String(500), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(20), default="draft", nullable=False
-    )  # draft, reviewing, approved, archived
-    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), onupdate=func.now(), nullable=True
-    )
-
-    # Relationships
-    conversation: Mapped["Conversation"] = relationship(
-        foreign_keys=[conversation_id],
-        backref="plan_documents",
-    )
-
-
-class PlanExecutionRecord(Base):
-    """
-    Unified plan execution record for multi-level thinking and Plan Mode.
-
-    This table replaces work_plans and provides a unified model for:
-    - Multi-level thinking workflow execution
-    - Plan Mode execution with dependencies and reflection
-
-    Supports pause/resume and rollback capabilities through snapshots.
-    """
-
-    __tablename__ = "plan_executions"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    conversation_id: Mapped[str] = mapped_column(
-        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    plan_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("plan_documents.id", ondelete="SET NULL"), nullable=True
-    )
-
-    # Execution config
-    execution_mode: Mapped[str] = mapped_column(
-        String(20), default="sequential", nullable=False
-    )  # sequential, parallel
-    max_parallel_steps: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
-
-    # Status
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending", nullable=False
-    )  # pending, running, paused, completed, failed, cancelled
-
-    # Reflection config
-    reflection_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    max_reflection_cycles: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
-    current_reflection_cycle: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
-    # Steps (JSONB storage)
-    steps: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
-    current_step_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    completed_step_indices: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
-    failed_step_indices: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
-
-    # Metadata
-    workflow_pattern_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), onupdate=func.now(), nullable=True
-    )
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    # Relationships
-    conversation: Mapped["Conversation"] = relationship(
-        foreign_keys=[conversation_id],
-        backref="plan_executions",
-    )
-    plan: Mapped["PlanDocument"] = relationship(
-        foreign_keys=[plan_id],
-        backref="executions",
-    )
-
-    # Indexes for common queries
-    __table_args__ = (
-        Index("ix_plan_executions_conversation_status", "conversation_id", "status"),
-        Index("ix_plan_executions_plan_id", "plan_id"),
-        Index("ix_plan_executions_status", "status"),
-    )
-
-
-class PlanSnapshotRecord(Base):
-    """
-    Plan execution snapshot for rollback support.
-
-    Stores the complete state of a plan execution at a specific point in time,
-    enabling rollback to previous states when reflection indicates adjustments are needed.
-    """
-
-    __tablename__ = "plan_snapshots"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    execution_id: Mapped[str] = mapped_column(
-        String, ForeignKey("plan_executions.id", ondelete="CASCADE"), nullable=False
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # Snapshot data
-    step_states: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-
-    # Metadata
-    auto_created: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    snapshot_type: Mapped[str] = mapped_column(
-        String(50), default="auto", nullable=False
-    )  # auto, manual, pre_reflection, post_adjustment
-    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    # Relationships
-    execution: Mapped["PlanExecutionRecord"] = relationship(
-        foreign_keys=[execution_id],
-        backref="snapshots",
-    )
-
-    # Indexes
-    __table_args__ = (Index("ix_plan_snapshots_execution_created", "execution_id", "created_at"),)
 
 
 class ProjectSandbox(Base):

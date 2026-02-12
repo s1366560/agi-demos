@@ -440,7 +440,8 @@ Use these tools in order: {tools}"""
         """
         if mode == PromptMode.PLAN:
             return await self._load_file("reminders/plan_mode.txt")
-        # BUILD mode doesn't need a special reminder by default
+        if mode == PromptMode.BUILD:
+            return await self._load_file("reminders/build_mode.txt")
         return None
 
     async def _load_custom_rules(self) -> str:

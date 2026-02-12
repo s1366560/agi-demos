@@ -35,12 +35,6 @@ vi.mock('../../services/agentService', () => ({
   },
 }));
 
-vi.mock('../../services/planService', () => ({
-  planService: {
-    getPlanModeStatus: vi.fn(() => Promise.resolve({ is_in_plan_mode: false, current_plan: null })),
-  },
-}));
-
 describe('agentV3 Store - Timeline Field', () => {
   beforeEach(() => {
     // Reset store before each test

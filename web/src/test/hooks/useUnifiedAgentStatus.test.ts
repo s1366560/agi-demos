@@ -21,10 +21,6 @@ vi.mock('../../stores/agentV3', () => ({
   useAgentV3Store: vi.fn(),
 }));
 
-vi.mock('../../stores/agent/planModeStore', () => ({
-  usePlanModeStore: vi.fn(),
-}));
-
 vi.mock('../../stores/agent/streamingStore', () => ({
   useStreamingStore: vi.fn(),
 }));
@@ -38,12 +34,11 @@ vi.mock('../../hooks/useAgentLifecycleState', () => ({
   useAgentLifecycleState: vi.fn(),
 }));
 
-import { usePlanModeStore } from '../../stores/agent/planModeStore';
 import { useStreamingStore } from '../../stores/agent/streamingStore';
 import { useAgentV3Store } from '../../stores/agentV3';
 import { useSandboxStore } from '../../stores/sandbox';
 
-import type { PlanModeStatus, LifecycleStateData } from '../../types/agent';
+import type { LifecycleStateData } from '../../types/agent';
 
 describe('useUnifiedAgentStatus - TDD RED Phase', () => {
   const mockProjectId = 'test-project-123';
@@ -55,10 +50,6 @@ describe('useUnifiedAgentStatus - TDD RED Phase', () => {
     isStreaming: false,
     activeToolCalls: new Map(),
     timeline: [],
-  };
-
-  const defaultPlanModeState = {
-    planModeStatus: null,
   };
 
   const defaultStreamingState = {
@@ -86,11 +77,6 @@ describe('useUnifiedAgentStatus - TDD RED Phase', () => {
   const setupMocks = (lifecycleState: LifecycleStateData | null = defaultLifecycleState) => {
     vi.mocked(useAgentV3Store).mockImplementation((selector) => {
       const state = defaultAgentV3State;
-      return selector(state);
-    });
-
-    vi.mocked(usePlanModeStore).mockImplementation((selector) => {
-      const state = defaultPlanModeState;
       return selector(state);
     });
 
@@ -266,65 +252,6 @@ describe('useUnifiedAgentStatus - TDD RED Phase', () => {
       );
 
       expect(result.current.status.lifecycle).toBe('ready');
-    });
-  });
-
-  describe('Plan Mode Integration', () => {
-    it('should reflect plan mode status from planModeStore', () => {
-      const mockPlanModeStatus: PlanModeStatus = {
-        is_in_plan_mode: true,
-        current_mode: 'plan',
-        current_plan_id: 'plan-123',
-        plan: null,
-      };
-
-      vi.mocked(usePlanModeStore).mockImplementation((selector) => {
-        const state = {
-          planModeStatus: mockPlanModeStatus,
-        };
-        return selector(state);
-      });
-
-      const { result } = renderHook(() =>
-        useUnifiedAgentStatus({ projectId: mockProjectId, tenantId: mockTenantId, enabled: false })
-      );
-
-      expect(result.current.status.planMode.isActive).toBe(true);
-      expect(result.current.status.planMode.currentMode).toBe('plan');
-    });
-
-    it('should show inactive plan mode when not in plan mode', () => {
-      vi.mocked(usePlanModeStore).mockImplementation((selector) => {
-        const state = {
-          planModeStatus: {
-            is_in_plan_mode: false,
-            current_mode: 'build',
-            current_plan_id: null,
-            plan: null,
-          },
-        };
-        return selector(state);
-      });
-
-      const { result } = renderHook(() =>
-        useUnifiedAgentStatus({ projectId: mockProjectId, tenantId: mockTenantId, enabled: false })
-      );
-
-      expect(result.current.status.planMode.isActive).toBe(false);
-      expect(result.current.status.planMode.currentMode).toBe('build');
-    });
-
-    it('should handle null planModeStatus gracefully', () => {
-      vi.mocked(usePlanModeStore).mockImplementation((selector) => {
-        const state = { planModeStatus: null };
-        return selector(state);
-      });
-
-      const { result } = renderHook(() =>
-        useUnifiedAgentStatus({ projectId: mockProjectId, tenantId: mockTenantId, enabled: false })
-      );
-
-      expect(result.current.status.planMode.isActive).toBe(false);
     });
   });
 

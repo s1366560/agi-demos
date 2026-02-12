@@ -4,7 +4,7 @@
  * This hook consolidates agent state from multiple sources:
  * - Lifecycle state (from useAgentLifecycleState via WebSocket)
  * - Execution state (from agentV3 store)
- * - Plan mode state (from planModeStore)
+ * - Plan mode state (deprecated)
  * - Streaming state (from streamingStore)
  * - Sandbox connection (from sandboxStore)
  *
@@ -15,13 +15,12 @@
 
 import { useMemo } from 'react';
 
-import { usePlanModeStore } from '../stores/agent/planModeStore';
 import { useAgentV3Store } from '../stores/agentV3';
 import { useSandboxStore } from '../stores/sandbox';
 
 import { useAgentLifecycleState } from './useAgentLifecycleState';
 
-import type { LifecycleStateData, PlanModeStatus } from '../types/agent';
+import type { LifecycleStateData } from '../types/agent';
 
 /**
  * Project Agent Lifecycle State (matches LifecycleState with 'uninitialized' added)
@@ -69,7 +68,7 @@ export interface UnifiedAgentStatus {
   /** Execution state (from agentV3 store) */
   agentState: 'idle' | 'thinking' | 'preparing' | 'acting' | 'observing' | 'awaiting_input' | 'retrying';
 
-  /** Plan mode status */
+  /** Plan mode status (deprecated - always inactive) */
   planMode: {
     isActive: boolean;
     currentMode?: 'build' | 'plan' | 'explore';
@@ -167,20 +166,13 @@ function deriveLifecycleState(
 }
 
 /**
- * Derive plan mode info from plan mode status
+ * Derive plan mode info (deprecated - always returns inactive)
  */
-function derivePlanModeInfo(planModeStatus: PlanModeStatus | null): {
+function derivePlanModeInfo(): {
   isActive: boolean;
   currentMode?: 'build' | 'plan' | 'explore';
 } {
-  if (!planModeStatus) {
-    return { isActive: false };
-  }
-
-  return {
-    isActive: planModeStatus.is_in_plan_mode,
-    currentMode: planModeStatus.current_mode,
-  };
+  return { isActive: false };
 }
 
 /**
@@ -279,8 +271,6 @@ export function useUnifiedAgentStatus({
   const activeToolCalls = useAgentV3Store((s) => s.activeToolCalls);
   const timeline = useAgentV3Store((s) => s.timeline);
 
-  const planModeStatus = usePlanModeStore((s) => s.planModeStatus);
-
   const activeSandboxId = useSandboxStore((s) => s.activeSandboxId);
 
   // WebSocket-based lifecycle state (replaces HTTP polling)
@@ -299,7 +289,7 @@ export function useUnifiedAgentStatus({
     () => ({
       lifecycle: deriveLifecycleState(lifecycleState),
       agentState,
-      planMode: derivePlanModeInfo(planModeStatus),
+      planMode: derivePlanModeInfo(),
       resources: deriveResources(lifecycleState, activeToolCalls, timeline.length),
       toolStats: deriveToolStats(lifecycleState),
       skillStats: deriveSkillStats(lifecycleState),
@@ -308,7 +298,6 @@ export function useUnifiedAgentStatus({
     [
       lifecycleState,
       agentState,
-      planModeStatus,
       activeToolCalls,
       timeline.length,
       isLifecycleConnected,

@@ -212,85 +212,6 @@ def make_message_execution_status(
     )
 
 
-def make_plan_execution(
-    execution_id: str = "plan-exec-1",
-    conversation_id: str = "conv-1",
-    plan_id: str | None = None,
-    status: str = "pending",
-) -> dict:
-    """Factory for creating plan execution domain objects."""
-    from src.domain.model.agent.plan_execution import (
-        ExecutionMode,
-        ExecutionStatus,
-        PlanExecution,
-    )
-
-    return PlanExecution(
-        id=execution_id,
-        conversation_id=conversation_id,
-        plan_id=plan_id,
-        steps=[],
-        current_step_index=0,
-        completed_step_indices=[],
-        failed_step_indices=[],
-        status=ExecutionStatus(status),
-        execution_mode=ExecutionMode.SEQUENTIAL,
-        max_parallel_steps=3,
-        reflection_enabled=True,
-        max_reflection_cycles=3,
-        current_reflection_cycle=0,
-        workflow_pattern_id=None,
-        metadata={},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-        started_at=None,
-        completed_at=None,
-    )
-
-
-def make_plan(
-    plan_id: str = "plan-1",
-    conversation_id: str = "conv-1",
-    title: str = "Test Plan",
-    content: str = "# Test Plan\n\nTest content",
-    status: str = "draft",
-) -> dict:
-    """Factory for creating plan domain objects."""
-    from src.domain.model.agent.plan import Plan, PlanDocumentStatus
-
-    return Plan(
-        id=plan_id,
-        conversation_id=conversation_id,
-        title=title,
-        content=content,
-        status=PlanDocumentStatus(status),
-        version=1,
-        metadata={},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    )
-
-
-def make_plan_snapshot(
-    snapshot_id: str = "snap-1",
-    execution_id: str = "plan-exec-1",
-    name: str = "Initial Snapshot",
-) -> dict:
-    """Factory for creating plan snapshot domain objects."""
-    from src.domain.model.agent.plan_snapshot import PlanSnapshot
-
-    return PlanSnapshot(
-        id=snapshot_id,
-        plan_id=execution_id,
-        name=name,
-        step_states={},
-        description=None,
-        auto_created=True,
-        snapshot_type="auto",
-        created_at=datetime.now(timezone.utc),
-    )
-
-
 def make_project_sandbox(
     association_id: str = "ps-1",
     project_id: str = "proj-1",
@@ -520,26 +441,6 @@ def make_tool_environment_variable(
         is_required=True,
         is_secret=True,
         scope=EnvVarScope.TENANT,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    )
-
-
-def make_work_plan(
-    plan_id: str = "wp-1",
-    conversation_id: str = "conv-1",
-    status: str = "planning",
-) -> dict:
-    """Factory for creating work plan domain objects."""
-    from src.domain.model.agent import PlanStatus, WorkPlan
-
-    return WorkPlan(
-        id=plan_id,
-        conversation_id=conversation_id,
-        status=PlanStatus(status),
-        steps=[],
-        current_step_index=0,
-        workflow_pattern_id=None,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )

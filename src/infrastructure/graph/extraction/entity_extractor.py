@@ -3,7 +3,7 @@ Entity extractor using LLM for extracting entities from text.
 
 This module provides:
 - LLM-based entity extraction with structured output
-- Entity deduplication using vector similarity
+- Entity deduplication using hash + vector similarity
 - Support for custom entity types
 """
 
@@ -12,6 +12,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
+from src.infrastructure.graph.dedup import HashDeduplicator
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 from src.infrastructure.graph.extraction.prompts import (
     ENTITY_EXTRACTION_SYSTEM_PROMPT,
@@ -43,6 +44,7 @@ class EntityExtractor:
         embedding_service: EmbeddingService,
         model: Optional[str] = None,
         temperature: float = 0.0,
+        use_hash_dedup: bool = True,
     ):
         """
         Initialize entity extractor.
@@ -52,11 +54,14 @@ class EntityExtractor:
             embedding_service: Service for generating embeddings
             model: Optional model name override
             temperature: Temperature for LLM (0.0 for deterministic)
+            use_hash_dedup: Enable SHA256 hash deduplication before vector dedup
         """
         self._llm_client = llm_client
         self._embedding_service = embedding_service
         self._model = model
         self._temperature = temperature
+        self._use_hash_dedup = use_hash_dedup
+        self._hash_deduplicator = HashDeduplicator() if use_hash_dedup else None
 
     async def extract(
         self,
@@ -145,6 +150,10 @@ class EntityExtractor:
         """
         Extract entities and deduplicate against existing entities.
 
+        Deduplication strategy (two-pass):
+        1. Hash-based exact deduplication (fast, SHA256)
+        2. Vector-based semantic deduplication (slower, similarity threshold)
+
         Args:
             content: Text to extract entities from
             existing_entities: List of existing entities to check for duplicates
@@ -178,17 +187,40 @@ class EntityExtractor:
             return [], {}
 
         if not existing_entities:
+            # Still deduplicate within new entities
+            if self._hash_deduplicator:
+                new_entities = self._hash_deduplicator.dedupe(new_entities)
             return new_entities, {}
 
-        # Deduplicate
-        unique_entities, duplicate_map = await self._deduplicate_entities(
-            new_entities=new_entities,
+        # Pass 1: Hash-based exact deduplication (fast)
+        duplicate_map: Dict[str, str] = {}
+        entities_after_hash: List[EntityNode] = new_entities
+
+        if self._hash_deduplicator:
+            entities_after_hash, hash_duplicate_map = self._hash_deduplicator.dedupe_against(
+                new_entities=new_entities,
+                existing_entities=existing_entities,
+            )
+            duplicate_map.update(hash_duplicate_map)
+
+            if not entities_after_hash:
+                # All entities were exact duplicates
+                logger.info(f"All {len(new_entities)} entities were exact duplicates (hash-based)")
+                return [], duplicate_map
+
+        # Pass 2: Vector-based semantic deduplication (slower)
+        unique_entities, vector_duplicate_map = await self._deduplicate_entities(
+            new_entities=entities_after_hash,
             existing_entities=existing_entities,
             similarity_threshold=similarity_threshold,
         )
+        duplicate_map.update(vector_duplicate_map)
 
         logger.info(
-            f"Deduplication result: {len(unique_entities)} unique, {len(duplicate_map)} duplicates"
+            f"Deduplication result: {len(unique_entities)} unique, "
+            f"{len(duplicate_map)} total duplicates "
+            f"(hash: {len(duplicate_map) - len(vector_duplicate_map)}, "
+            f"vector: {len(vector_duplicate_map)})"
         )
 
         return unique_entities, duplicate_map
@@ -356,17 +388,7 @@ class EntityExtractor:
                 stack.append("[")
             elif char == "[" and stack:
                 stack.append("[")
-            elif char == "}" and stack and stack[-1] == "{":
-                stack.pop()
-                if not stack and start_idx is not None:
-                    json_str = text[start_idx : i + 1]
-                    try:
-                        data = json.loads(json_str)
-                        json_objects.append(data)
-                    except json.JSONDecodeError:
-                        pass
-                    start_idx = None
-            elif char == "]" and stack and stack[-1] == "[":
+            elif (char == "}" and stack and stack[-1] == "{") or (char == "]" and stack and stack[-1] == "["):
                 stack.pop()
                 if not stack and start_idx is not None:
                     json_str = text[start_idx : i + 1]

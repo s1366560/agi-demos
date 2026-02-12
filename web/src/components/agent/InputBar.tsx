@@ -17,13 +17,11 @@ import {
   Send,
   Square,
   Paperclip,
-  Wand2,
   X,
   FileText,
   Image as ImageIcon,
   File,
   Upload,
-  Sparkles,
   AlertCircle,
   RotateCw,
   Zap,
@@ -32,6 +30,7 @@ import {
   MicOff,
   MessageSquare,
   Terminal,
+  ListChecks,
 } from 'lucide-react';
 
 import type { FileMetadata } from '@/services/sandboxUploadService';
@@ -55,10 +54,10 @@ interface InputBarProps {
   onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => void;
   onAbort: () => void;
   isStreaming: boolean;
-  isPlanMode: boolean;
-  onTogglePlanMode: () => void;
   disabled?: boolean;
   projectId?: string;
+  onTogglePlanMode?: () => void;
+  isPlanMode?: boolean;
 }
 
 const getFileIcon = (mimeType: string) => {
@@ -75,7 +74,7 @@ const formatSize = (bytes: number) => {
 };
 
 export const InputBar = memo<InputBarProps>(
-  ({ onSend, onAbort, isStreaming, isPlanMode, onTogglePlanMode, disabled, projectId }) => {
+  ({ onSend, onAbort, isStreaming, disabled, projectId, onTogglePlanMode, isPlanMode }) => {
     const { t } = useTranslation();
     const [content, setContent] = useState('');
     const [inputMode, setInputMode] = useState<'chat' | 'command'>('chat');
@@ -456,6 +455,19 @@ export const InputBar = memo<InputBarProps>(
 
     return (
       <div className="h-full flex flex-col p-4">
+        {/* Plan Mode indicator */}
+        {isPlanMode && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-sm">
+            <ListChecks size={14} />
+            <span className="font-medium">
+              {t('agent.inputBar.planModeLabel', 'Plan Mode')}
+            </span>
+            <span className="text-blue-500 dark:text-blue-400 text-xs">
+              {t('agent.inputBar.planModeHint', 'Read-only analysis. Agent will plan without making changes.')}
+            </span>
+          </div>
+        )}
+
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -493,16 +505,6 @@ export const InputBar = memo<InputBarProps>(
               <div className="flex flex-col items-center gap-2 text-primary">
                 <Upload size={28} strokeWidth={1.5} />
                 <span className="text-sm font-medium">{t('agent.inputBar.dropToUpload', 'Drop files to upload')}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Plan Mode Badge */}
-          {isPlanMode && (
-            <div className="px-4 pt-3 flex-shrink-0">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 rounded-full text-xs font-medium">
-                <Sparkles size={12} />
-                {t('agent.inputBar.planModeActive', 'Plan Mode Active')}
               </div>
             </div>
           )}
@@ -575,16 +577,12 @@ export const InputBar = memo<InputBarProps>(
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               aria-label={
-                isPlanMode
-                  ? t('agent.inputBar.planPlaceholder', 'Describe what you want to plan in detail...')
-                  : inputMode === 'command'
+                inputMode === 'command'
                     ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
                     : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
               placeholder={
-                isPlanMode
-                  ? t('agent.inputBar.planPlaceholder', 'Describe what you want to plan in detail...')
-                  : inputMode === 'command'
+                inputMode === 'command'
                     ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
                     : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
@@ -665,6 +663,32 @@ export const InputBar = memo<InputBarProps>(
 
               <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1.5" />
 
+              {onTogglePlanMode && (
+                <LazyTooltip
+                  title={
+                    isPlanMode
+                      ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode (Shift+Tab)')
+                      : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode (Shift+Tab)')
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={onTogglePlanMode}
+                    disabled={isStreaming}
+                    className={`
+                      flex items-center justify-center h-8 w-8 rounded-lg transition-all
+                      ${
+                        isPlanMode
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 disabled:opacity-40'
+                      }
+                    `}
+                  >
+                    <ListChecks size={16} />
+                  </button>
+                </LazyTooltip>
+              )}
+
               <LazyTooltip
                 title={
                   inputMode === 'command'
@@ -689,25 +713,6 @@ export const InputBar = memo<InputBarProps>(
                     ? <MessageSquare size={16} />
                     : <Terminal size={16} />}
                 </button>
-              </LazyTooltip>
-
-              <LazyTooltip title={isPlanMode ? t('agent.inputBar.exitPlanMode', 'Exit Plan Mode') : t('agent.inputBar.enterPlanMode', 'Enter Plan Mode')}>
-                <LazyButton
-                  type="text"
-                  size="small"
-                  onClick={onTogglePlanMode}
-                  className={`
-                    flex items-center gap-1.5 h-8 px-2.5 rounded-lg transition-all
-                    ${
-                      isPlanMode
-                        ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
-                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
-                    }
-                  `}
-                >
-                  <Wand2 size={16} />
-                  <span className="text-sm font-medium">{t('agent.inputBar.plan', 'Plan')}</span>
-                </LazyButton>
               </LazyTooltip>
             </div>
 

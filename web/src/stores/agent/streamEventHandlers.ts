@@ -16,20 +16,14 @@ import type {
   AgentStreamHandler,
   AgentEvent,
   ThoughtEventData,
-  WorkPlanEventData,
-  StepStartEventData,
   CompleteEventData,
   ClarificationAskedEventData,
   DecisionAskedEventData,
   EnvVarRequestedEventData,
   PermissionAskedEventData,
   CostUpdateEventData,
-  WorkPlan,
-  ExecutionPlan,
   ToolCall,
   ActDeltaEventData,
-  PlanExecutionStartEvent,
-  PlanExecutionCompleteEvent,
   ReflectionCompleteEvent,
   ArtifactReadyEventData,
   ArtifactErrorEventData,
@@ -152,110 +146,43 @@ export function createStreamEventHandlers(
       updateConversationState(handlerConversationId, stateUpdates);
     },
 
-    onWorkPlan: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
-      const workPlanEvent: AgentEvent<WorkPlanEventData> = event as AgentEvent<WorkPlanEventData>;
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, workPlanEvent);
-
-      const newWorkPlan: WorkPlan = {
-        id: event.data.plan_id,
-        conversation_id: event.data.conversation_id,
-        status: event.data.status,
-        steps: event.data.steps.map((s) => ({
-          step_number: s.step_number,
-          description: s.description,
-          thought_prompt: '',
-          required_tools: [],
-          expected_output: s.expected_output,
-          dependencies: [],
-        })),
-        current_step_index: event.data.current_step,
-        created_at: new Date().toISOString(),
-      };
-
-      updateConversationState(handlerConversationId, {
-        workPlan: newWorkPlan,
-        timeline: updatedTimeline,
-      });
+    onWorkPlan: (_event) => {
+      // Legacy work_plan events - no-op
     },
 
-    onStepStart: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
-      const stepStartEvent: AgentEvent<StepStartEventData> =
-        event as AgentEvent<StepStartEventData>;
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, stepStartEvent);
-
-      const updates: Partial<ConversationState> = { timeline: updatedTimeline };
-      if (convState.workPlan) {
-        updates.workPlan = {
-          ...convState.workPlan,
-          current_step_index: event.data.current_step,
-        };
-        updates.agentState = 'acting';
-      }
-      updateConversationState(handlerConversationId, updates);
-    },
+    onStepStart: (_event) => {},
 
     onStepEnd: (_event) => {},
 
-    onPlanExecutionStart: (event) => {
-      const { updateConversationState, getConversationState } = get();
+    onPlanExecutionStart: (_event) => {},
 
-      const executionPlanEvent: AgentEvent<PlanExecutionStartEvent> = event;
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, executionPlanEvent);
+    onPlanExecutionComplete: (_event) => {},
 
-      const eventData = (event as any).data || {};
-      const newExecutionPlan: ExecutionPlan = {
-        id: eventData.plan_id || `plan-${Date.now()}`,
-        conversation_id: handlerConversationId,
-        user_query: eventData.user_query || '',
-        steps: [],
-        status: 'executing',
-        reflection_enabled: true,
-        max_reflection_cycles: 3,
-        completed_steps: [],
-        failed_steps: [],
-        progress_percentage: 0,
-        is_complete: false,
-      };
-
-      updateConversationState(handlerConversationId, {
-        executionPlan: newExecutionPlan,
-        timeline: updatedTimeline,
-      });
+    // Plan Mode change handler
+    onPlanModeChanged: (event) => {
+      const data = event.data as { mode: string; conversation_id: string };
+      const { updateConversationState } = get();
+      const isPlanMode = data.mode === 'plan';
+      updateConversationState(handlerConversationId, { isPlanMode });
+      if (handlerConversationId === get().activeConversationId) {
+        set({ isPlanMode });
+      }
     },
 
-    onPlanExecutionComplete: (event) => {
-      const { updateConversationState, getConversationState } = get();
-
-      const executionPlanEvent: AgentEvent<PlanExecutionCompleteEvent> = event;
-      const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, executionPlanEvent);
-
-      const eventData = (event as any).data || {};
-
-      const updatedExecutionPlan = convState.executionPlan
-        ? {
-            ...convState.executionPlan,
-            status: eventData.status || convState.executionPlan.status,
-            completed_steps: Array(eventData.completed_steps || 0).fill(''),
-            failed_steps: Array(eventData.failed_steps || 0).fill(''),
-            progress_percentage:
-              (eventData.completed_steps || 0) / (convState.executionPlan.steps.length || 1),
-            is_complete: eventData.status === 'completed' || eventData.status === 'failed',
-          }
-        : null;
-
-      updateConversationState(handlerConversationId, {
-        executionPlan: updatedExecutionPlan,
-        timeline: updatedTimeline,
-      });
-    },
+    // Legacy plan handlers - no-op (kept for backward SSE compatibility)
+    onPlanSuggested: (_event) => {},
+    onPlanExplorationStarted: (_event) => {},
+    onPlanExplorationCompleted: (_event) => {},
+    onPlanDraftCreated: (_event) => {},
+    onPlanApproved: (_event) => {},
+    onPlanCancelled: (_event) => {},
+    onPlanRejected: (_event) => {},
+    onWorkPlanCreated: (_event) => {},
+    onWorkPlanStepStarted: (_event) => {},
+    onWorkPlanStepCompleted: (_event) => {},
+    onWorkPlanStepFailed: (_event) => {},
+    onWorkPlanCompleted: (_event) => {},
+    onWorkPlanFailed: (_event) => {},
 
     onReflectionComplete: (event) => {
       const { updateConversationState, getConversationState } = get();

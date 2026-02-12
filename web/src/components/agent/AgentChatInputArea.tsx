@@ -33,10 +33,6 @@ export interface AgentChatInputAreaProps {
   isStreaming: boolean;
   /** Whether input is disabled */
   disabled?: boolean;
-  /** Whether in plan mode */
-  isPlanMode?: boolean;
-  /** Callback to toggle plan mode (required by InputBar) */
-  onTogglePlanMode: () => void;
   /** Minimum height constraint */
   minHeight?: typeof INPUT_MIN_HEIGHT;
   /** Maximum height constraint */
@@ -57,8 +53,6 @@ export const AgentChatInputArea = ({
   onAbort,
   isStreaming,
   disabled = false,
-  isPlanMode = false,
-  onTogglePlanMode,
   minHeight = 140,
   maxHeight = 400,
   projectId,
@@ -88,8 +82,6 @@ export const AgentChatInputArea = ({
         onSend={onSend}
         onAbort={onAbort}
         isStreaming={isStreaming}
-        isPlanMode={isPlanMode}
-        onTogglePlanMode={onTogglePlanMode}
         disabled={disabled}
         projectId={projectId}
       />

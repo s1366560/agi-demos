@@ -85,37 +85,25 @@ class Conversation(Entity):
 
     # Plan Mode methods
 
-    def enter_plan_mode(self, plan_id: str) -> None:
+    def enter_plan_mode(self, plan_id: Optional[str] = None) -> None:
         """
-        Switch to Plan Mode with the given plan.
+        Switch to Plan Mode (read-only analysis mode).
 
         Args:
-            plan_id: The Plan entity ID to associate
+            plan_id: Optional plan ID (deprecated, kept for compatibility)
 
         Raises:
-            AlreadyInPlanModeError: If already in Plan Mode
+            RuntimeError: If already in Plan Mode
         """
-        from src.domain.model.agent.planning.plan import AlreadyInPlanModeError
-
         if self.current_mode == AgentMode.PLAN:
-            raise AlreadyInPlanModeError(self.id)
+            raise RuntimeError(f"Conversation {self.id} is already in Plan Mode")
 
         self.current_mode = AgentMode.PLAN
         self.current_plan_id = plan_id
         self.updated_at = datetime.now(timezone.utc)
 
     def exit_plan_mode(self) -> None:
-        """
-        Exit Plan Mode and return to Build Mode.
-
-        Raises:
-            NotInPlanModeError: If not currently in Plan Mode
-        """
-        from src.domain.model.agent.planning.plan import NotInPlanModeError
-
-        if self.current_mode != AgentMode.PLAN:
-            raise NotInPlanModeError(self.id)
-
+        """Exit Plan Mode and return to Build Mode."""
         self.current_mode = AgentMode.BUILD
         self.current_plan_id = None
         self.updated_at = datetime.now(timezone.utc)

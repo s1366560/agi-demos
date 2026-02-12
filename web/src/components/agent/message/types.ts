@@ -4,13 +4,13 @@
  * Defines the type system for the compound MessageArea component.
  */
 
-import type { TimelineEvent, PlanModeStatus } from '../../../types/agent';
+import type { TimelineEvent } from '../../../types/agent';
 
 // ========================================
 // Domain Types (re-exported for convenience)
 // ========================================
 
-export type { TimelineEvent, PlanModeStatus };
+export type { TimelineEvent };
 
 // ========================================
 // Context Types
@@ -46,12 +46,6 @@ export interface MessageAreaContextValue {
   isThinkingStreaming?: boolean;
   /** Initial loading state */
   isLoading: boolean;
-  /** Plan mode status */
-  planModeStatus: PlanModeStatus | null;
-  /** View plan callback */
-  onViewPlan: () => void;
-  /** Exit plan mode callback */
-  onExitPlanMode: () => void;
   /** Whether there are earlier messages to load */
   hasEarlierMessages: boolean;
   /** Load earlier messages callback */
@@ -86,12 +80,6 @@ export interface MessageAreaRootProps {
   isThinkingStreaming?: boolean;
   /** Initial loading state */
   isLoading: boolean;
-  /** Plan mode status */
-  planModeStatus: PlanModeStatus | null;
-  /** View plan callback */
-  onViewPlan: () => void;
-  /** Exit plan mode callback */
-  onExitPlanMode: () => void;
   /** Whether there are earlier messages to load */
   hasEarlierMessages?: boolean;
   /** Load earlier messages callback */
@@ -169,14 +157,6 @@ export interface MessageAreaContentProps {
 }
 
 /**
- * Props for PlanBanner sub-component
- */
-export interface MessageAreaPlanBannerProps {
-  /** Optional custom class name */
-  className?: string;
-}
-
-/**
  * Props for StreamingContent sub-component
  */
 export interface MessageAreaStreamingContentProps {
@@ -202,8 +182,6 @@ export interface MessageAreaCompound extends React.FC<MessageAreaRootProps> {
   ScrollButton: React.FC<MessageAreaScrollButtonProps>;
   /** Message list content */
   Content: React.FC<MessageAreaContentProps>;
-  /** Plan mode banner */
-  PlanBanner: React.FC<MessageAreaPlanBannerProps>;
   /** Streaming content bubble */
   StreamingContent: React.FC<MessageAreaStreamingContentProps>;
   /** Root component alias */

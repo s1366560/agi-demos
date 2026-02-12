@@ -67,6 +67,7 @@ async def execute_project_chat(
             file_metadata=request.file_metadata,
             forced_skill_name=request.forced_skill_name,
             context_summary_data=request.context_summary_data,
+            plan_mode=request.plan_mode,
         ):
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
